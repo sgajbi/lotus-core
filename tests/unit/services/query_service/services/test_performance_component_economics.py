@@ -1,10 +1,14 @@
 import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
     PerformanceComponentEconomicsRequest,
+)
+from src.services.query_service.app.read_models import (
+    PerformanceEconomicsCashflowReadRecord,
+    PerformanceEconomicsCostReadRecord,
+    PerformanceEconomicsTransactionReadRecord,
 )
 from src.services.query_service.app.services.performance_component_economics import (
     build_performance_component_economics_response,
@@ -27,8 +31,8 @@ def _transaction(
     transaction_date: datetime | None = None,
     gross_transaction_amount: str = "125.0000",
     trade_fee: str | None = "2.5000",
-    costs: list[SimpleNamespace] | None = None,
-    cashflow: SimpleNamespace | None = None,
+    costs: list[PerformanceEconomicsCostReadRecord] | None = None,
+    cashflow: PerformanceEconomicsCashflowReadRecord | None = None,
     withholding_tax_amount: str | None = None,
     other_interest_deductions_amount: str | None = None,
     net_interest_amount: str | None = None,
@@ -38,8 +42,8 @@ def _transaction(
     transaction_fx_rate: str | None = None,
     fx_contract_id: str | None = None,
     updated_at: datetime | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
+) -> PerformanceEconomicsTransactionReadRecord:
+    return PerformanceEconomicsTransactionReadRecord(
         transaction_id=transaction_id,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         security_id=security_id,
@@ -49,7 +53,7 @@ def _transaction(
         transaction_date=transaction_date or datetime(2026, 5, 10, 14, tzinfo=UTC),
         gross_transaction_amount=Decimal(gross_transaction_amount),
         trade_fee=Decimal(trade_fee) if trade_fee is not None else None,
-        costs=costs,
+        costs=tuple(costs or ()),
         cashflow=cashflow,
         withholding_tax_amount=(
             Decimal(withholding_tax_amount) if withholding_tax_amount is not None else None
@@ -82,17 +86,53 @@ def _transaction(
     )
 
 
+def _cost(
+    *,
+    amount: str,
+    currency: str,
+    fee_type: str | None = None,
+    updated_at: datetime | None = None,
+) -> PerformanceEconomicsCostReadRecord:
+    return PerformanceEconomicsCostReadRecord(
+        fee_type=fee_type,
+        amount=Decimal(amount),
+        currency=currency,
+        updated_at=updated_at,
+    )
+
+
+def _cashflow(
+    *,
+    amount: str,
+    currency: str,
+    classification: str = "DIVIDEND",
+    timing: str = "EOD",
+    is_position_flow: bool = True,
+    is_portfolio_flow: bool = False,
+    updated_at: datetime | None = None,
+) -> PerformanceEconomicsCashflowReadRecord:
+    return PerformanceEconomicsCashflowReadRecord(
+        amount=Decimal(amount),
+        currency=currency,
+        classification=classification,
+        timing=timing,
+        is_position_flow=is_position_flow,
+        is_portfolio_flow=is_portfolio_flow,
+        updated_at=updated_at,
+    )
+
+
 def test_performance_component_economics_rows_preserve_source_figures() -> None:
     rows = build_performance_component_economics_rows(
         [
             _transaction(
                 transaction_id="TXN-DIV-001",
                 costs=[
-                    SimpleNamespace(amount=Decimal("1.2500"), currency="USD"),
-                    SimpleNamespace(amount=Decimal("1.2500"), currency="USD"),
+                    _cost(amount="1.2500", currency="USD"),
+                    _cost(amount="1.2500", currency="USD"),
                 ],
-                cashflow=SimpleNamespace(
-                    amount=Decimal("100.0000"),
+                cashflow=_cashflow(
+                    amount="100.0000",
                     currency="usd",
                     classification="DIVIDEND",
                     timing="EOD",
@@ -140,9 +180,9 @@ def test_performance_component_economics_totals_group_domain_figures() -> None:
                 transaction_id="TXN-DIV-001",
                 currency="EUR",
                 trade_currency="USD",
-                costs=[SimpleNamespace(amount=Decimal("2.5000"), currency="USD")],
-                cashflow=SimpleNamespace(
-                    amount=Decimal("100.0000"),
+                costs=[_cost(amount="2.5000", currency="USD")],
+                cashflow=_cashflow(
+                    amount="100.0000",
                     currency="EUR",
                     classification="DIVIDEND",
                     timing="EOD",
@@ -183,14 +223,14 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     transaction = _transaction(
         transaction_id="TXN-DIV-001",
         costs=[
-            SimpleNamespace(
-                amount=Decimal("2.5000"),
+            _cost(
+                amount="2.5000",
                 currency="USD",
                 updated_at=datetime(2026, 5, 10, 17, tzinfo=UTC),
             )
         ],
-        cashflow=SimpleNamespace(
-            amount=Decimal("100.0000"),
+        cashflow=_cashflow(
+            amount="100.0000",
             currency="USD",
             classification="DIVIDEND",
             timing="EOD",
@@ -250,8 +290,8 @@ def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_curren
             _transaction(
                 transaction_id="TXN-MIXED-FEE-001",
                 costs=[
-                    SimpleNamespace(amount=Decimal("1.0000"), currency="USD"),
-                    SimpleNamespace(amount=Decimal("2.0000"), currency="EUR"),
+                    _cost(amount="1.0000", currency="USD"),
+                    _cost(amount="2.0000", currency="EUR"),
                 ],
             )
         ]
@@ -283,19 +323,19 @@ def test_performance_component_economics_deduplicates_fee_component_identity() -
             _transaction(
                 transaction_id="TXN-DUP-FEE-001",
                 costs=[
-                    SimpleNamespace(
+                    _cost(
                         fee_type=" brokerage ",
-                        amount=Decimal("1.0000"),
+                        amount="1.0000",
                         currency="usd",
                     ),
-                    SimpleNamespace(
+                    _cost(
                         fee_type="BROKERAGE",
-                        amount=Decimal("1.0000"),
+                        amount="1.0000",
                         currency="USD",
                     ),
-                    SimpleNamespace(
+                    _cost(
                         fee_type="exchange_fee",
-                        amount=Decimal("2.0000"),
+                        amount="2.0000",
                         currency="USD",
                     ),
                 ],
@@ -333,7 +373,7 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
 
             async def list_performance_component_economics_evidence(
                 self, **kwargs: object
-            ) -> list[SimpleNamespace]:
+            ) -> list[PerformanceEconomicsTransactionReadRecord]:
                 calls.append(("performance_component_economics", kwargs))
                 return [
                     _transaction(transaction_id="TXN-DIV-001"),

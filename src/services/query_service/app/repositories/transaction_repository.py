@@ -20,6 +20,11 @@ from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager, joinedload
 
+from ..read_models import (
+    PerformanceEconomicsCashflowReadRecord,
+    PerformanceEconomicsCostReadRecord,
+    PerformanceEconomicsTransactionReadRecord,
+)
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
@@ -98,6 +103,63 @@ def _performance_component_economics_after_key_predicate(
             transaction_date_expr == transaction_date,
             Transaction.transaction_id > transaction_id,
         ),
+    )
+
+
+def _performance_economics_cashflow_record(
+    cashflow: Cashflow | None,
+) -> PerformanceEconomicsCashflowReadRecord | None:
+    if cashflow is None:
+        return None
+    return PerformanceEconomicsCashflowReadRecord(
+        amount=cashflow.amount,
+        currency=cashflow.currency,
+        classification=cashflow.classification,
+        timing=cashflow.timing,
+        is_position_flow=cashflow.is_position_flow,
+        is_portfolio_flow=cashflow.is_portfolio_flow,
+        updated_at=cashflow.updated_at,
+    )
+
+
+def _performance_economics_cost_record(
+    cost: TransactionCost,
+) -> PerformanceEconomicsCostReadRecord:
+    return PerformanceEconomicsCostReadRecord(
+        fee_type=cost.fee_type,
+        amount=cost.amount,
+        currency=cost.currency,
+        updated_at=cost.updated_at,
+    )
+
+
+def _performance_economics_transaction_record(
+    transaction: Transaction,
+) -> PerformanceEconomicsTransactionReadRecord:
+    return PerformanceEconomicsTransactionReadRecord(
+        transaction_id=transaction.transaction_id,
+        portfolio_id=transaction.portfolio_id,
+        security_id=transaction.security_id,
+        transaction_type=transaction.transaction_type,
+        currency=transaction.currency,
+        trade_currency=transaction.trade_currency,
+        transaction_date=transaction.transaction_date,
+        gross_transaction_amount=transaction.gross_transaction_amount,
+        trade_fee=transaction.trade_fee,
+        withholding_tax_amount=transaction.withholding_tax_amount,
+        other_interest_deductions_amount=transaction.other_interest_deductions_amount,
+        net_interest_amount=transaction.net_interest_amount,
+        realized_capital_pnl_local=transaction.realized_capital_pnl_local,
+        realized_fx_pnl_local=transaction.realized_fx_pnl_local,
+        realized_total_pnl_local=transaction.realized_total_pnl_local,
+        realized_capital_pnl_base=transaction.realized_capital_pnl_base,
+        realized_fx_pnl_base=transaction.realized_fx_pnl_base,
+        realized_total_pnl_base=transaction.realized_total_pnl_base,
+        transaction_fx_rate=transaction.transaction_fx_rate,
+        fx_contract_id=transaction.fx_contract_id,
+        cashflow=_performance_economics_cashflow_record(transaction.cashflow),
+        costs=tuple(_performance_economics_cost_record(cost) for cost in transaction.costs),
+        updated_at=transaction.updated_at,
     )
 
 
@@ -578,7 +640,7 @@ class TransactionRepository:
         transaction_types: list[str] | None = None,
         after_key: tuple[str, str, str] | tuple[()] = (),
         limit: int | None = None,
-    ) -> List[Transaction]:
+    ) -> list[PerformanceEconomicsTransactionReadRecord]:
         ranked_cashflows = (
             select(
                 Cashflow.id.label("id"),
@@ -638,7 +700,10 @@ class TransactionRepository:
             stmt = stmt.limit(limit)
 
         results = await self.db.execute(stmt)
-        return list(results.scalars().unique().all())
+        return [
+            _performance_economics_transaction_record(transaction)
+            for transaction in results.scalars().unique().all()
+        ]
 
     async def get_latest_evidence_timestamp(
         self,

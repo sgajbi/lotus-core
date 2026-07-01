@@ -15,13 +15,16 @@ from ..dtos.reference_integration_dto import (
     PerformanceComponentEconomicsTotal,
     ReferencePageMetadata,
 )
+from ..read_models import (
+    PerformanceEconomicsCostReadRecord,
+    PerformanceEconomicsTransactionReadRecord,
+)
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
-from .transaction_cost_curve import transaction_fee_amount, unique_transaction_cost_components
 
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
 _ComponentPredicate = Callable[[PerformanceComponentEconomicsRow], bool]
@@ -141,7 +144,7 @@ async def resolve_performance_component_economics_response(
 
 
 def build_performance_component_economics_rows(
-    transactions: list[Any],
+    transactions: list[PerformanceEconomicsTransactionReadRecord],
 ) -> list[PerformanceComponentEconomicsRow]:
     return [_performance_component_economics_row(transaction) for transaction in transactions]
 
@@ -151,7 +154,7 @@ def build_performance_component_economics_response(
     portfolio_id: str,
     request: PerformanceComponentEconomicsRequest,
     rows: list[PerformanceComponentEconomicsRow],
-    transactions: list[Any],
+    transactions: list[PerformanceEconomicsTransactionReadRecord],
     portfolio_base_currency: str,
     request_scope_fingerprint: str | None = None,
     has_more: bool = False,
@@ -272,8 +275,10 @@ def build_performance_component_economics_totals(
     ]
 
 
-def _performance_component_economics_row(transaction: Any) -> PerformanceComponentEconomicsRow:
-    cashflow = getattr(transaction, "cashflow", None)
+def _performance_component_economics_row(
+    transaction: PerformanceEconomicsTransactionReadRecord,
+) -> PerformanceComponentEconomicsRow:
+    cashflow = transaction.cashflow
     trade_fee_components = _transaction_fee_components(transaction)
     trade_fee_currency = _transaction_fee_currency(trade_fee_components)
     return PerformanceComponentEconomicsRow(
@@ -290,50 +295,30 @@ def _performance_component_economics_row(transaction: Any) -> PerformanceCompone
         ),
         trade_fee_currency=trade_fee_currency,
         trade_fee_components=trade_fee_components,
-        cashflow_amount=(
-            decimal_or_zero(getattr(cashflow, "amount", None)) if cashflow is not None else None
-        ),
+        cashflow_amount=(decimal_or_zero(cashflow.amount) if cashflow is not None else None),
         cashflow_currency=(
-            str(getattr(cashflow, "currency")).strip().upper() if cashflow is not None else None
+            str(cashflow.currency).strip().upper() if cashflow is not None else None
         ),
         cashflow_classification=(
-            str(getattr(cashflow, "classification")).strip().upper()
-            if cashflow is not None
-            else None
+            str(cashflow.classification).strip().upper() if cashflow is not None else None
         ),
-        cashflow_timing=(
-            str(getattr(cashflow, "timing")).strip().upper() if cashflow is not None else None
-        ),
-        is_position_flow=(
-            bool(getattr(cashflow, "is_position_flow")) if cashflow is not None else None
-        ),
-        is_portfolio_flow=(
-            bool(getattr(cashflow, "is_portfolio_flow")) if cashflow is not None else None
-        ),
-        withholding_tax_amount=decimal_or_zero(
-            getattr(transaction, "withholding_tax_amount", None)
-        ),
+        cashflow_timing=(str(cashflow.timing).strip().upper() if cashflow is not None else None),
+        is_position_flow=bool(cashflow.is_position_flow) if cashflow is not None else None,
+        is_portfolio_flow=bool(cashflow.is_portfolio_flow) if cashflow is not None else None,
+        withholding_tax_amount=decimal_or_zero(transaction.withholding_tax_amount),
         other_interest_deductions_amount=decimal_or_zero(
-            getattr(transaction, "other_interest_deductions_amount", None)
+            transaction.other_interest_deductions_amount
         ),
-        net_interest_amount=decimal_or_zero(getattr(transaction, "net_interest_amount", None)),
-        realized_capital_pnl_local=decimal_or_zero(
-            getattr(transaction, "realized_capital_pnl_local", None)
-        ),
-        realized_fx_pnl_local=decimal_or_zero(getattr(transaction, "realized_fx_pnl_local", None)),
-        realized_total_pnl_local=decimal_or_zero(
-            getattr(transaction, "realized_total_pnl_local", None)
-        ),
+        net_interest_amount=decimal_or_zero(transaction.net_interest_amount),
+        realized_capital_pnl_local=decimal_or_zero(transaction.realized_capital_pnl_local),
+        realized_fx_pnl_local=decimal_or_zero(transaction.realized_fx_pnl_local),
+        realized_total_pnl_local=decimal_or_zero(transaction.realized_total_pnl_local),
         realized_pnl_local_currency=_transaction_trade_currency(transaction),
-        realized_capital_pnl_base=decimal_or_zero(
-            getattr(transaction, "realized_capital_pnl_base", None)
-        ),
-        realized_fx_pnl_base=decimal_or_zero(getattr(transaction, "realized_fx_pnl_base", None)),
-        realized_total_pnl_base=decimal_or_zero(
-            getattr(transaction, "realized_total_pnl_base", None)
-        ),
-        transaction_fx_rate=getattr(transaction, "transaction_fx_rate", None),
-        fx_contract_id=getattr(transaction, "fx_contract_id", None),
+        realized_capital_pnl_base=decimal_or_zero(transaction.realized_capital_pnl_base),
+        realized_fx_pnl_base=decimal_or_zero(transaction.realized_fx_pnl_base),
+        realized_total_pnl_base=decimal_or_zero(transaction.realized_total_pnl_base),
+        transaction_fx_rate=transaction.transaction_fx_rate,
+        fx_contract_id=transaction.fx_contract_id,
         source_lineage={
             "source_system": "transactions",
             "source_table": "transactions,cashflows,transaction_costs",
@@ -352,33 +337,32 @@ def _append_total(
         grouped[(component_family, currency)].append(amount)
 
 
-def _latest_performance_evidence_timestamp(transactions: list[Any]):
-    evidence_rows: list[Any] = []
+def _latest_performance_evidence_timestamp(
+    transactions: list[PerformanceEconomicsTransactionReadRecord],
+):
+    evidence_rows: list[object] = []
     for transaction in transactions:
         evidence_rows.append(transaction)
-        cashflow = getattr(transaction, "cashflow", None)
-        if cashflow is not None:
-            evidence_rows.append(cashflow)
-        evidence_rows.extend(getattr(transaction, "costs", None) or [])
+        if transaction.cashflow is not None:
+            evidence_rows.append(transaction.cashflow)
+        evidence_rows.extend(transaction.costs)
     return latest_reference_evidence_timestamp(evidence_rows)
 
 
 def _transaction_fee_components(
-    transaction: Any,
+    transaction: PerformanceEconomicsTransactionReadRecord,
 ) -> list[PerformanceComponentEconomicsFeeComponent]:
     costs = [
         cost
-        for cost in unique_transaction_cost_components(transaction)
-        if decimal_or_zero(getattr(cost, "amount", None)) > 0
+        for cost in _unique_transaction_cost_components(transaction)
+        if decimal_or_zero(cost.amount) > 0
     ]
     if costs:
         grouped: dict[str, list[Decimal]] = defaultdict(list)
         for cost in costs:
             grouped[
-                normalize_currency_code(
-                    getattr(cost, "currency", None) or _transaction_trade_currency(transaction)
-                )
-            ].append(decimal_or_zero(getattr(cost, "amount", None)))
+                normalize_currency_code(cost.currency or _transaction_trade_currency(transaction))
+            ].append(decimal_or_zero(cost.amount))
         return [
             PerformanceComponentEconomicsFeeComponent(
                 currency=currency,
@@ -388,7 +372,7 @@ def _transaction_fee_components(
             for currency, amounts in sorted(grouped.items())
         ]
 
-    trade_fee = transaction_fee_amount(transaction)
+    trade_fee = _transaction_fee_amount(transaction)
     if trade_fee <= 0:
         return []
     return [
@@ -410,11 +394,49 @@ def _transaction_fee_currency(
     return ""
 
 
-def _transaction_trade_currency(transaction: Any) -> str:
-    trade_currency = getattr(transaction, "trade_currency", None)
+def _unique_transaction_cost_components(
+    transaction: PerformanceEconomicsTransactionReadRecord,
+) -> list[PerformanceEconomicsCostReadRecord]:
+    unique_costs: list[PerformanceEconomicsCostReadRecord] = []
+    observed_keys: set[tuple[str, str, str]] = set()
+    for index, cost in enumerate(transaction.costs):
+        component_key = _transaction_cost_component_identity(
+            transaction=transaction,
+            cost=cost,
+            fallback_sequence=index,
+        )
+        if component_key in observed_keys:
+            continue
+        observed_keys.add(component_key)
+        unique_costs.append(cost)
+    return unique_costs
+
+
+def _transaction_cost_component_identity(
+    *,
+    transaction: PerformanceEconomicsTransactionReadRecord,
+    cost: PerformanceEconomicsCostReadRecord,
+    fallback_sequence: int,
+) -> tuple[str, str, str]:
+    fee_type = str(cost.fee_type or "").strip().lower()
+    cost_currency = cost.currency or transaction.trade_currency or transaction.currency
+    if fee_type and cost_currency:
+        return ("component", fee_type, normalize_currency_code(cost_currency))
+    return ("anonymous", str(fallback_sequence), "")
+
+
+def _transaction_fee_amount(transaction: PerformanceEconomicsTransactionReadRecord) -> Decimal:
+    costs = _unique_transaction_cost_components(transaction)
+    if costs:
+        return sum((decimal_or_zero(cost.amount) for cost in costs), Decimal("0"))
+    return decimal_or_zero(transaction.trade_fee)
+
+
+def _transaction_trade_currency(transaction: PerformanceEconomicsTransactionReadRecord) -> str:
+    trade_currency = transaction.trade_currency
     if trade_currency:
         return normalize_currency_code(trade_currency)
-    return normalize_currency_code(getattr(transaction, "currency"))
+    return normalize_currency_code(transaction.currency)
 
 
 def _observed_component_families(rows: list[PerformanceComponentEconomicsRow]) -> list[str]:
