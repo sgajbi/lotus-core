@@ -39,7 +39,7 @@ groups:
           summary: "Lotus Core ingestion failure rate above 3% (1h)"
 
       - alert: LotusCoreIngestionQueueLatencyP95Critical
-        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_latency_seconds_bucket{service="ingestion_service",path=~"/ingest/.*"}[10m]))) > 5
+        expr: histogram_quantile(0.95, sum by (le) (rate(http_request_latency_seconds_bucket{service="ingestion_service",endpoint_template=~"/ingest/.*"}[10m]))) > 5
         for: 10m
         labels:
           severity: critical

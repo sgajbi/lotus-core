@@ -548,20 +548,20 @@ def observe_portfolio_supportability(
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
     "HTTP requests total",
-    labelnames=("service", "method", "path", "status"),
+    labelnames=("service", "method", "endpoint_template", "status"),
 )
 
 HTTP_REQUEST_LATENCY_SECONDS = Histogram(
     "http_request_latency_seconds",
     "HTTP request latency in seconds",
-    labelnames=("service", "method", "path"),
+    labelnames=("service", "method", "endpoint_template"),
     buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
 
 
-def http_request_timer(service: str, method: str, path: str):
+def http_request_timer(service: str, method: str, endpoint_template: str):
     """Context manager for timing an HTTP request handler."""
-    return HTTP_REQUEST_LATENCY_SECONDS.labels(service, method, path).time()
+    return HTTP_REQUEST_LATENCY_SECONDS.labels(service, method, endpoint_template).time()
 
 
 def observe_financial_reconciliation_run(

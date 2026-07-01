@@ -66,12 +66,14 @@ def test_standard_http_metrics_use_route_template_for_dynamic_paths():
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200
-    observed_paths = [call.kwargs["path"] for call in latency_metric.labels.call_args_list]
+    observed_paths = [
+        call.kwargs["endpoint_template"] for call in latency_metric.labels.call_args_list
+    ]
     assert observed_paths == [
         "/portfolios/{portfolio_id}/positions/{security_id}",
         "/portfolios/{portfolio_id}/positions/{security_id}",
     ]
-    assert {call.kwargs["path"] for call in request_metric.labels.call_args_list} == {
+    assert {call.kwargs["endpoint_template"] for call in request_metric.labels.call_args_list} == {
         "/portfolios/{portfolio_id}/positions/{security_id}"
     }
 
@@ -114,7 +116,7 @@ def test_standard_health_app_exposes_shared_observability_contract():
         == {
             "service": "worker_service_web",
             "method": "GET",
-            "path": "/health/live",
+            "endpoint_template": "/health/live",
         }
         for call in latency_metric.labels.call_args_list
     )
@@ -123,7 +125,7 @@ def test_standard_health_app_exposes_shared_observability_contract():
         == {
             "service": "worker_service_web",
             "method": "GET",
-            "path": "/health/live",
+            "endpoint_template": "/health/live",
             "status": "200",
         }
         for call in request_metric.labels.call_args_list

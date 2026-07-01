@@ -17,8 +17,9 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
    page-token, or raw-path drilldown belongs in structured logs, audit records, support APIs, or
    queryable operational tables, not production metric labels.
 7. HTTP request metrics use FastAPI route templates such as
-   `/portfolios/{portfolio_id}/positions` and fall back to a fixed unmatched bucket for routes that
-   do not resolve.
+   `/portfolios/{portfolio_id}/positions` under the `endpoint_template` label and fall back to a
+   fixed unmatched bucket for routes that do not resolve. Do not use a raw or free-form `path`
+   label.
 8. API services and health-only worker web apps use the standard HTTP bootstrap so `/metrics`,
    `/health/live`, and `/health/ready` responses carry correlation, request, trace, and
    `traceparent` headers and emit route-template HTTP metrics.
@@ -38,13 +39,18 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `unavailable`, `timeout`, and `error`; readiness state is bounded to `ready` or `not_ready`.
     Raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, and correlation IDs
     must not be metric labels.
+11. Metric vocabulary is governed by `portfolio_common.observability_contracts` and enforced by
+    `make metric-vocabulary-guard`. New metric labels must be added to
+    `TELEMETRY_METRIC_ALLOWED_LABELS`, must not appear in
+    `TELEMETRY_METRIC_FORBIDDEN_LABELS`, and service-local metrics outside
+    `portfolio_common.monitoring` must be registered in `SERVICE_LOCAL_METRIC_OWNERS`.
 
 ## Current Gaps
 
 The initial quality baseline records observability as a documentation and gate gap. The shared
-monitoring unit guard now rejects `portfolio_id` and `security_id` as production Prometheus metric
-labels. The shared HTTP bootstrap and web-backed worker runtime now enforce the configured metrics
-access policy, and shared readiness checks now emit bounded dependency outcome/latency telemetry.
-Future slices should add automated checks for additional high-cardinality identifiers, correlation
-ID propagation, sensitive logging, health/readiness completeness, and inventory enforcement that
+monitoring guard now rejects forbidden production Prometheus labels and unowned service-local
+metric definitions. The shared HTTP bootstrap and web-backed worker runtime now enforce the
+configured metrics access policy, and shared readiness checks now emit bounded dependency
+outcome/latency telemetry. Future slices should add automated checks for correlation ID
+propagation, sensitive logging, health/readiness completeness, and inventory enforcement that
 prevents new runtime web apps from bypassing the shared metrics policy.

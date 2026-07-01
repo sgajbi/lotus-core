@@ -231,7 +231,7 @@ def configure_standard_http_app(
         labels = {
             "service": service_name,
             "method": request.method,
-            "path": route_template,
+            "endpoint_template": route_template,
         }
         HTTP_REQUEST_LATENCY_SECONDS.labels(**labels).observe(elapsed)
         HTTP_REQUESTS_TOTAL.labels(status=str(response.status_code), **labels).inc()

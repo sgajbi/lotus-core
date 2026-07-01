@@ -49,6 +49,19 @@ The dependency status label uses only `ok`, `unavailable`, `timeout`, or `error`
 exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation IDs as health
 metric labels.
 
+## Metric Vocabulary Guard
+
+Metric labels are governed by `portfolio_common.observability_contracts` and enforced by:
+
+```powershell
+make metric-vocabulary-guard
+```
+
+HTTP request metrics use `endpoint_template` for FastAPI route templates. Do not use raw `path`,
+portfolio/account/client/security identifiers, request/correlation/trace identifiers, payload
+fields, stack traces, or raw exception text as Prometheus labels. Service-local metrics outside the
+shared `portfolio_common.monitoring` registry must be listed in `SERVICE_LOCAL_METRIC_OWNERS`.
+
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
 `X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same
