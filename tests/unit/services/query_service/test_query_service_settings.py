@@ -14,6 +14,7 @@ from src.services.query_service.app.settings import (
 def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
     for name in (
         "ENTERPRISE_POLICY_VERSION",
         "ENTERPRISE_ENFORCE_AUTHZ",
@@ -44,6 +45,40 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     assert settings.enterprise_max_write_payload_bytes == 1_048_576
     assert settings.enterprise_feature_flags == {}
     assert settings.enterprise_capability_rules == {}
+
+
+def test_query_service_settings_enable_production_security_profile(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
+    for name in (
+        "ENTERPRISE_ENFORCE_AUTHZ",
+        "ENTERPRISE_ENFORCE_READ_AUTHZ",
+        "ENTERPRISE_AUDIT_READS",
+        "ENTERPRISE_REQUIRE_CAPABILITY_RULES",
+        "ENTERPRISE_ENFORCE_RUNTIME_CONFIG",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = load_query_service_settings()
+
+    assert settings.enterprise_enforce_authz is True
+    assert settings.enterprise_enforce_read_authz is True
+    assert settings.enterprise_audit_reads is True
+    assert settings.enterprise_require_capability_rules is True
+    assert settings.enterprise_enforce_runtime_config is True
+
+
+def test_query_service_settings_allow_explicit_production_security_opt_out(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+
+    settings = load_query_service_settings()
+
+    assert settings.enterprise_enforce_authz is False
+    assert settings.enterprise_enforce_read_authz is False
+    assert settings.enterprise_audit_reads is False
+    assert settings.enterprise_require_capability_rules is False
+    assert settings.enterprise_enforce_runtime_config is False
 
 
 def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) -> None:

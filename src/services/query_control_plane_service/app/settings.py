@@ -8,6 +8,7 @@ from portfolio_common.runtime_settings import env_bool as shared_env_bool
 from portfolio_common.runtime_settings import env_int as shared_env_int
 from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
 from portfolio_common.runtime_settings import env_str as shared_env_str
+from portfolio_common.runtime_settings import production_security_profile_enabled
 
 QUERY_CONTROL_PLANE_SERVICE_NAME = "query control plane service"
 
@@ -56,13 +57,22 @@ class QueryControlPlaneSettings:
 
 
 def load_query_control_plane_settings() -> QueryControlPlaneSettings:
+    production_security_profile = production_security_profile_enabled(
+        service_name=QUERY_CONTROL_PLANE_SERVICE_NAME
+    )
     return QueryControlPlaneSettings(
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
-        enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", False),
-        enterprise_enforce_read_authz=env_bool("ENTERPRISE_ENFORCE_READ_AUTHZ", False),
-        enterprise_audit_reads=env_bool("ENTERPRISE_AUDIT_READS", False),
-        enterprise_require_capability_rules=env_bool("ENTERPRISE_REQUIRE_CAPABILITY_RULES", False),
-        enterprise_enforce_runtime_config=env_bool("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", False),
+        enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", production_security_profile),
+        enterprise_enforce_read_authz=env_bool(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ", production_security_profile
+        ),
+        enterprise_audit_reads=env_bool("ENTERPRISE_AUDIT_READS", production_security_profile),
+        enterprise_require_capability_rules=env_bool(
+            "ENTERPRISE_REQUIRE_CAPABILITY_RULES", production_security_profile
+        ),
+        enterprise_enforce_runtime_config=env_bool(
+            "ENTERPRISE_ENFORCE_RUNTIME_CONFIG", production_security_profile
+        ),
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
         enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90, minimum=1),
         enterprise_max_write_payload_bytes=env_int(

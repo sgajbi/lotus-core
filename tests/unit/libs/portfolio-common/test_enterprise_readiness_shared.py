@@ -6,8 +6,8 @@ from fastapi import Request
 from fastapi.responses import Response
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
-    create_default_enterprise_readiness_runtime,
     build_enterprise_audit_middleware,
+    create_default_enterprise_readiness_runtime,
     redact_sensitive,
 )
 
@@ -20,6 +20,7 @@ class _Settings:
     enterprise_enforce_read_authz: bool = False
     enterprise_audit_reads: bool = False
     enterprise_require_capability_rules: bool = False
+    enterprise_enforce_runtime_config: bool = False
     enterprise_secret_rotation_days: int = 90
     enterprise_max_write_payload_bytes: int = 1_048_576
     enterprise_feature_flags: dict[str, object] | None = None
@@ -58,6 +59,7 @@ def _runtime(
         enterprise_require_capability_rules=(
             require_capability_rules or settings.enterprise_require_capability_rules
         ),
+        enterprise_enforce_runtime_config=settings.enterprise_enforce_runtime_config,
         enterprise_secret_rotation_days=settings.enterprise_secret_rotation_days,
         enterprise_max_write_payload_bytes=(
             max_payload_bytes
@@ -112,6 +114,7 @@ def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
         enterprise_enforce_read_authz=True,
         enterprise_audit_reads=True,
         enterprise_require_capability_rules=True,
+        enterprise_enforce_runtime_config=True,
     )
     runtime = EnterpriseReadinessRuntime(
         service_name="lotus-core-test",
@@ -125,6 +128,7 @@ def test_runtime_uses_typed_settings_for_enterprise_flags() -> None:
     assert runtime.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false") is True
     assert runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false") is True
     assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", "false") is True
 
 
 def test_runtime_uses_typed_settings_for_enterprise_integer_knobs() -> None:
@@ -145,6 +149,7 @@ def test_runtime_uses_typed_settings_for_enterprise_integer_knobs() -> None:
 
 
 def test_default_enterprise_runtime_loads_shared_env_settings(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "policy-env")
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "primary-key")
@@ -164,6 +169,29 @@ def test_default_enterprise_runtime_loads_shared_env_settings(monkeypatch) -> No
     assert runtime.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576) == 2048
     assert runtime.required_capability("GET", "/portfolios/P1") == "portfolios.read"
     assert "missing_primary_key_id" not in runtime.validate_enterprise_runtime_config()
+
+
+def test_default_enterprise_runtime_uses_production_security_profile(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
+    monkeypatch.delenv("ENTERPRISE_ENFORCE_AUTHZ", raising=False)
+    monkeypatch.delenv("ENTERPRISE_ENFORCE_READ_AUTHZ", raising=False)
+    monkeypatch.delenv("ENTERPRISE_AUDIT_READS", raising=False)
+    monkeypatch.delenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", raising=False)
+    monkeypatch.delenv("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", raising=False)
+    monkeypatch.delenv("ENTERPRISE_PRIMARY_KEY_ID", raising=False)
+
+    runtime = create_default_enterprise_readiness_runtime(
+        service_name="test-service",
+        logger=Mock(),
+    )
+
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_AUTHZ", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_AUDIT_READS", "false") is True
+    assert runtime.env_enabled("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false") is True
+    with pytest.raises(RuntimeError, match="missing_primary_key_id"):
+        runtime.validate_enterprise_runtime_config()
 
 
 def test_feature_flags_fail_closed_for_invalid_shapes() -> None:
