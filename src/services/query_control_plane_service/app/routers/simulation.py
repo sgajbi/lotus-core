@@ -11,7 +11,13 @@ from src.services.query_service.app.dtos.simulation_dto import (
     SimulationSessionCreateRequest,
     SimulationSessionResponse,
 )
-from src.services.query_service.app.services.simulation_service import SimulationService
+from src.services.query_service.app.services.simulation_service import (
+    SimulationChangeNotFoundError,
+    SimulationMutationInvalidError,
+    SimulationPortfolioNotFoundError,
+    SimulationService,
+    SimulationSessionNotFoundError,
+)
 
 from .response_helpers import problem_example, problem_response, raise_problem
 
@@ -61,22 +67,23 @@ SIMULATION_INTERNAL_ERROR_EXAMPLE = problem_example(
 )
 
 
-def _raise_simulation_mutation_error(exc: ValueError) -> None:
-    detail = str(exc)
-    if "not found" in detail.lower():
-        raise_problem(
-            status_code=status.HTTP_404_NOT_FOUND,
-            title="Simulation resource not found",
-            detail="Simulation resource was not found.",
-            error_code="QCP_SIMULATION_RESOURCE_NOT_FOUND",
-            metadata={"source_product": "SimulationSession"},
-        )
+def _raise_simulation_resource_not_found(exc: Exception) -> None:
+    raise_problem(
+        status_code=status.HTTP_404_NOT_FOUND,
+        title="Simulation resource not found",
+        detail="Simulation resource was not found.",
+        error_code="QCP_SIMULATION_RESOURCE_NOT_FOUND",
+        metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
+    )
+
+
+def _raise_simulation_mutation_invalid(exc: Exception) -> None:
     raise_problem(
         status_code=status.HTTP_400_BAD_REQUEST,
         title="Simulation mutation is invalid",
         detail="Simulation mutation request is invalid for the current session state.",
         error_code="QCP_SIMULATION_MUTATION_INVALID",
-        metadata={"source_product": "SimulationSession"},
+        metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
     )
 
 
@@ -124,7 +131,7 @@ async def create_simulation_session(
 ):
     try:
         return await service.create_session(request)
-    except ValueError as exc:
+    except SimulationPortfolioNotFoundError as exc:
         raise_problem(
             status_code=status.HTTP_404_NOT_FOUND,
             title="Simulation portfolio not found",
@@ -163,7 +170,7 @@ async def get_simulation_session(
 ):
     try:
         return await service.get_session(session_id)
-    except ValueError as exc:
+    except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
 
@@ -191,7 +198,7 @@ async def close_simulation_session(
 ):
     try:
         return await service.close_session(session_id)
-    except ValueError as exc:
+    except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
 
@@ -225,8 +232,10 @@ async def add_simulation_changes(
     try:
         payload = [item.model_dump() for item in request.changes]
         return await service.add_changes(session_id, payload)
-    except ValueError as exc:
-        _raise_simulation_mutation_error(exc)
+    except SimulationSessionNotFoundError as exc:
+        _raise_simulation_resource_not_found(exc)
+    except SimulationMutationInvalidError as exc:
+        _raise_simulation_mutation_invalid(exc)
 
 
 @router.delete(
@@ -259,8 +268,10 @@ async def delete_simulation_change(
 ):
     try:
         return await service.delete_change(session_id, change_id)
-    except ValueError as exc:
-        _raise_simulation_mutation_error(exc)
+    except (SimulationSessionNotFoundError, SimulationChangeNotFoundError) as exc:
+        _raise_simulation_resource_not_found(exc)
+    except SimulationMutationInvalidError as exc:
+        _raise_simulation_mutation_invalid(exc)
 
 
 @router.get(
@@ -288,7 +299,7 @@ async def get_projected_positions(
 ):
     try:
         return await service.get_projected_positions(session_id)
-    except ValueError as exc:
+    except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
 
@@ -317,5 +328,5 @@ async def get_projected_summary(
 ):
     try:
         return await service.get_projected_summary(session_id)
-    except ValueError as exc:
+    except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
