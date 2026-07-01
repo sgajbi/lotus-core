@@ -544,6 +544,13 @@ Most relevant current governance:
     unpublished record-key evidence where possible, requeue retryable rows to `PENDING`, mark rows
     at or above max-attempt policy `FAILED`, and keep stale-job reset as a crash/unknown-failure
     safety net rather than the primary recovery path for observed dispatch failures.
+54. Inline analytics export jobs must have an explicit execution budget separate from stale
+    in-flight reuse detection. `LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS` bounds
+    current `inline_job_execution` dataset collection and result materialization. Observed timeout
+    or request cancellation must transition the durable analytics export job to `failed` with
+    bounded reason text, preserve existing response contracts, and keep a future async export
+    runner as a separate lifecycle-mode change rather than an implicit background task using a
+    request-scoped database session.
 
 ## Context Maintenance Rule
 

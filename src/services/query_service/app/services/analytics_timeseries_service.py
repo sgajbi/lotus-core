@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -128,6 +129,13 @@ class AnalyticsInputError(RuntimeError):
 
 logger = logging.getLogger(__name__)
 
+ANALYTICS_EXPORT_EXECUTION_TIMEOUT_MESSAGE = (
+    "Analytics export execution exceeded configured timeout."
+)
+ANALYTICS_EXPORT_CANCELLATION_MESSAGE = (
+    "Analytics export execution was cancelled before completion."
+)
+
 
 @dataclass(frozen=True)
 class _PositionPageSupportInputs:
@@ -159,6 +167,9 @@ class AnalyticsTimeseriesService:
         self._page_token_secret = settings.page_token_secret
         self._analytics_export_stale_timeout_minutes = (
             settings.analytics_export_stale_timeout_minutes
+        )
+        self._analytics_export_execution_timeout_seconds = (
+            settings.analytics_export_execution_timeout_seconds
         )
 
     def _request_fingerprint(self, payload: dict) -> str:
@@ -1268,13 +1279,13 @@ class AnalyticsTimeseriesService:
 
         started = perf_counter()
         try:
-            data_rows, page_depth = await self._collect_export_dataset(request)
-            row = await self._complete_export_job_with_result(
-                job_id=job_id,
-                request=request,
-                request_fingerprint=request_fingerprint,
-                data_rows=data_rows,
-                page_depth=page_depth,
+            row = await asyncio.wait_for(
+                self._execute_export_job(
+                    job_id=job_id,
+                    request=request,
+                    request_fingerprint=request_fingerprint,
+                ),
+                timeout=self._analytics_export_execution_timeout_seconds,
             )
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "completed").inc()
             return analytics_export_job_response(
@@ -1282,6 +1293,26 @@ class AnalyticsTimeseriesService:
                 lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
                 disposition="created",
             )
+        except TimeoutError:
+            row = await self._mark_export_job_failed(
+                job_id,
+                error_message=ANALYTICS_EXPORT_EXECUTION_TIMEOUT_MESSAGE,
+            )
+            ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
+            return analytics_export_job_response(
+                row,
+                lifecycle_mode=self._EXPORT_LIFECYCLE_MODE,
+                disposition="created",
+            )
+        except asyncio.CancelledError:
+            await asyncio.shield(
+                self._mark_export_job_failed(
+                    job_id,
+                    error_message=ANALYTICS_EXPORT_CANCELLATION_MESSAGE,
+                )
+            )
+            ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
+            raise
         except AnalyticsInputError as exc:
             row = await self._mark_export_job_failed(job_id, error_message=str(exc))
             ANALYTICS_EXPORT_JOBS_TOTAL.labels(request.dataset_type, "failed").inc()
@@ -1306,6 +1337,22 @@ class AnalyticsTimeseriesService:
             ANALYTICS_EXPORT_JOB_DURATION_SECONDS.labels(request.dataset_type).observe(
                 perf_counter() - started
             )
+
+    async def _execute_export_job(
+        self,
+        *,
+        job_id: str,
+        request: AnalyticsExportCreateRequest,
+        request_fingerprint: str,
+    ) -> object:
+        data_rows, page_depth = await self._collect_export_dataset(request)
+        return await self._complete_export_job_with_result(
+            job_id=job_id,
+            request=request,
+            request_fingerprint=request_fingerprint,
+            data_rows=data_rows,
+            page_depth=page_depth,
+        )
 
     async def _collect_export_dataset(
         self, request: AnalyticsExportCreateRequest
