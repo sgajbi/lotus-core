@@ -609,11 +609,12 @@ async def test_scheduler_dispatches_claimed_jobs(
         value={
             "event_type": None,
             "schema_version": None,
+            "correlation_id": "corr-1",
+            "traceparent": None,
             "portfolio_id": "P1",
             "security_id": "S1",
             "valuation_date": "2025-08-11",
             "epoch": 1,
-            "correlation_id": "corr-1",
         },
         headers=[("correlation_id", b"corr-1")],
     )
@@ -642,11 +643,12 @@ async def test_scheduler_omits_empty_correlation_header(
         value={
             "event_type": None,
             "schema_version": None,
+            "correlation_id": None,
+            "traceparent": None,
             "portfolio_id": "P2",
             "security_id": "S2",
             "valuation_date": "2025-08-12",
             "epoch": 3,
-            "correlation_id": None,
         },
         headers=[],
     )
