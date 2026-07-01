@@ -773,10 +773,10 @@ Local evidence captured on 2026-06-05 after CR-1034:
   `make quality-unit-collection-gate` collected `3376/3386` tests with 10 manifest deselects;
   focused manifest/workflow governance tests passed with 22 tests; `make
   quality-workflow-governance-gate` passed with 12 tests.
-- CR-1170 focused evidence: focused OpenAPI/workflow/Spectral tests passed with 21 tests; scoped
-  Ruff lint and format checks passed; `python scripts/openapi_quality_gate.py` passed;
-  `make quality-openapi-spectral-gate` generated 14 service artifacts and reported no
-  warn-or-higher Spectral results; workflow YAML parse passed.
+- CR-1170 focused evidence: focused OpenAPI/workflow/Spectral tests passed with 22 tests;
+  `python scripts/openapi_quality_gate.py` passed; `make quality-openapi-spectral-gate` generated
+  14 service artifacts and reported no warn-or-higher Spectral results; `make
+  quality-workflow-governance-gate` passed with 12 tests.
 - CR-1171 focused evidence: `make architecture-guard` passed; `make quality-import-boundary-gate`
   passed with 2 kept contracts; focused architecture boundary tests passed with 2 tests; scoped
   Ruff lint and format checks passed.
