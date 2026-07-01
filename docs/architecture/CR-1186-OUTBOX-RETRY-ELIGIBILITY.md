@@ -60,9 +60,9 @@ slice.
 
 ## Remaining Follow-Up
 
-- Run the Docker-backed outbox integration tests and migration smoke in GitHub CI or a local Docker
-  environment.
-- Add pending-waiting metrics and operator diagnostics alongside the broader #670 failed-outbox
-  recovery workflow.
-- Define any max-elapsed retry budget as part of a shared platform retry profile before enforcing
-  it in the dispatcher.
+- Docker-backed outbox integration proof was added later in
+  [CR-1245](./CR-1245-OUTBOX-RETRY-BUDGET-TELEMETRY.md).
+- Pending-waiting and retry-eligible metrics plus optional elapsed retry budget behavior were added
+  later in [CR-1245](./CR-1245-OUTBOX-RETRY-BUDGET-TELEMETRY.md).
+- Protected route-level retry-state diagnostics remain a future option if operators need more than
+  metrics; they should be added through QCP support views without exposing raw outbox payloads.
