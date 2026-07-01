@@ -2,8 +2,8 @@
 
 ## Objective
 
-Begin GitHub issue #496 by adding a shared redaction layer for structured logs and CI/test console
-output.
+Fix GitHub issue #496 locally by adding a shared redaction layer for structured logs and CI/test
+console output.
 
 ## Expected Improvement
 
@@ -34,8 +34,14 @@ credential-bearing URL values are present.
 ## Validation
 
 - `python -m pytest tests/unit/libs/portfolio-common/test_logging_utils.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py::test_redact_sensitive_masks_nested_values tests/unit/test_support/test_output_control.py -q`
-- `python -m ruff check src/libs/portfolio-common/portfolio_common/logging_utils.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py tests/test_support/output_control.py tests/unit/libs/portfolio-common/test_logging_utils.py tests/unit/test_support/test_output_control.py`
+- Result: 20 passed.
+- `python -m ruff check src/libs/portfolio-common/portfolio_common/logging_utils.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py tests/test_support/output_control.py tests/unit/libs/portfolio-common/test_logging_utils.py tests/unit/test_support/test_output_control.py --ignore E501,I001`
+- Result: passed.
 - `python -m ruff format --check src/libs/portfolio-common/portfolio_common/logging_utils.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py tests/test_support/output_control.py tests/unit/libs/portfolio-common/test_logging_utils.py tests/unit/test_support/test_output_control.py`
+- Result: 5 files already formatted.
+- `make security-audit`
+- Result: passed; dependency consistency was clean and `pip-audit` reported no known
+  vulnerabilities, with expected local editable Lotus package PyPI skips.
 
 ## Documentation And Wiki Decision
 
@@ -45,6 +51,6 @@ command change.
 
 ## Follow-Up
 
-Issue #496 remains open pending PR, GitHub CI, and QA evidence. Broader follow-up should extend the
-redaction policy to DLQ/replay payload storage and add static checks for direct secret-bearing
-console output in scripts.
+Issue #496 is fixed locally pending PR, GitHub CI, and QA evidence. Broader follow-up should extend
+static checks for direct secret-bearing console output in scripts. DLQ and durable replay/payload
+storage redaction are handled by separate issue-backed slices, including CR-1174 and CR-1176.
