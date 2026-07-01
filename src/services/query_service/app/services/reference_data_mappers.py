@@ -30,6 +30,7 @@ from ..dtos.reference_integration_dto import (
     SeriesPoint,
     SustainabilityPreferenceProfileEntry,
 )
+from ..read_models import PortfolioTaxLotReadRecord
 from ..repositories.identifier_normalization import normalize_security_id
 from .integration_value_normalization import (
     as_decimal,
@@ -210,7 +211,7 @@ def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
     )
 
 
-def portfolio_tax_lot_record(row: Any, *, local_currency: str | None) -> PortfolioTaxLotRecord:
+def portfolio_tax_lot_record(row: PortfolioTaxLotReadRecord) -> PortfolioTaxLotRecord:
     open_quantity = as_decimal(row.open_quantity)
     return PortfolioTaxLotRecord(
         portfolio_id=row.portfolio_id,
@@ -222,7 +223,7 @@ def portfolio_tax_lot_record(row: Any, *, local_currency: str | None) -> Portfol
         acquisition_date=row.acquisition_date,
         cost_basis_base=as_decimal(row.lot_cost_base),
         cost_basis_local=as_decimal(row.lot_cost_local),
-        local_currency=local_currency,
+        local_currency=row.local_currency,
         tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
         source_transaction_id=row.source_transaction_id,
         source_lineage={

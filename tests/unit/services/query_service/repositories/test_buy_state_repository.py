@@ -1,9 +1,11 @@
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.repositories.buy_state_repository import BuyStateRepository
 
 pytestmark = pytest.mark.asyncio
@@ -20,6 +22,25 @@ def _mock_result(*, scalar_one_or_none=None, scalars_all=None, first=None, all_r
     if all_rows is not None:
         result.all = lambda: all_rows
     return result
+
+
+def _position_lot_row() -> SimpleNamespace:
+    return SimpleNamespace(
+        portfolio_id="PORT-1",
+        security_id=" SEC-1 ",
+        instrument_id=" INST-1 ",
+        lot_id="LOT-1",
+        open_quantity=Decimal("100.0000000000"),
+        original_quantity=Decimal("150.0000000000"),
+        acquisition_date=date(2026, 3, 25),
+        lot_cost_base=Decimal("15005.5000000000"),
+        lot_cost_local=Decimal("15005.5000000000"),
+        source_transaction_id="TXN-1",
+        source_system="OMS_PRIMARY",
+        calculation_policy_id="BUY_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+        updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+    )
 
 
 async def test_portfolio_exists_true():
@@ -83,7 +104,7 @@ async def test_get_buy_cash_linkage_returns_tuple():
 
 async def test_list_portfolio_tax_lots_returns_rows_with_currency():
     db = AsyncMock()
-    db.execute.return_value = _mock_result(all_rows=[(SimpleNamespace(lot_id="LOT-1"), "USD")])
+    db.execute.return_value = _mock_result(all_rows=[(_position_lot_row(), "USD")])
     repo = BuyStateRepository(db)
 
     rows = await repo.list_portfolio_tax_lots(
@@ -96,7 +117,25 @@ async def test_list_portfolio_tax_lots_returns_rows_with_currency():
         limit=251,
     )
 
-    assert rows == [(SimpleNamespace(lot_id="LOT-1"), "USD")]
+    assert rows == [
+        PortfolioTaxLotReadRecord(
+            portfolio_id="PORT-1",
+            security_id=" SEC-1 ",
+            instrument_id=" INST-1 ",
+            lot_id="LOT-1",
+            open_quantity=Decimal("100.0000000000"),
+            original_quantity=Decimal("150.0000000000"),
+            acquisition_date=date(2026, 3, 25),
+            lot_cost_base=Decimal("15005.5000000000"),
+            lot_cost_local=Decimal("15005.5000000000"),
+            source_transaction_id="TXN-1",
+            source_system="OMS_PRIMARY",
+            calculation_policy_id="BUY_DEFAULT_POLICY",
+            calculation_policy_version="1.0.0",
+            local_currency="USD",
+            updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+        )
+    ]
     executed_stmt = db.execute.call_args.args[0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True})).lower()
     assert "trim(position_lot_state.security_id) in ('sec-1')" in compiled_query
