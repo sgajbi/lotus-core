@@ -8,6 +8,7 @@ from prometheus_client import REGISTRY, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.operations_dto import FailedOutboxRequeueRequest
+from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
 from src.services.query_service.app.repositories.operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
@@ -1394,7 +1395,10 @@ async def test_requeue_failed_outbox_event_returns_governed_recovery_response(
         confirm_payload_contract_reviewed=True,
     )
 
-    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+    with (
+        patch.object(operations_service_module, "datetime", _FixedDateTime),
+        patch.object(operations_service_module, "observe_outbox_recovery_attempt") as observe,
+    ):
         response = await service.requeue_failed_outbox_event(outbox_id=701, request=request)
 
     assert response.outbox_id == 701
@@ -1414,6 +1418,89 @@ async def test_requeue_failed_outbox_event_returns_governed_recovery_response(
         correlation_id="incident-20260314-outbox-701",
         confirm_payload_contract_reviewed=True,
         requested_at=FIXED_GENERATED_AT,
+    )
+    observe.assert_called_once_with(
+        "requeue_failed_outbox",
+        "REQUEUED",
+        "outbox_row_requeued_for_dispatch",
+    )
+
+
+async def test_requeue_failed_outbox_event_observes_rejected_recovery(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.requeue_failed_outbox_event.side_effect = OutboxRecoveryRejected(
+        "Payload contract review confirmation is required before requeue.",
+        metadata={"reason": "payload_contract_review_required"},
+    )
+    request = FailedOutboxRequeueRequest(
+        requested_by="ops.sre",
+        reason="Retry requested before payload contract review.",
+        correlation_id="incident-20260314-outbox-701",
+        confirm_payload_contract_reviewed=False,
+    )
+
+    with (
+        patch.object(operations_service_module, "datetime", _FixedDateTime),
+        patch.object(operations_service_module, "observe_outbox_recovery_attempt") as observe,
+        pytest.raises(OutboxRecoveryRejected),
+    ):
+        await service.requeue_failed_outbox_event(outbox_id=701, request=request)
+
+    observe.assert_called_once_with(
+        "requeue_failed_outbox",
+        "REJECTED",
+        "payload_contract_review_required",
+    )
+
+
+async def test_requeue_failed_outbox_event_observes_not_found(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.requeue_failed_outbox_event.side_effect = ValueError("missing")
+    request = FailedOutboxRequeueRequest(
+        requested_by="ops.sre",
+        reason="Incident recovery after payload contract review.",
+        correlation_id="incident-20260314-outbox-701",
+        confirm_payload_contract_reviewed=True,
+    )
+
+    with (
+        patch.object(operations_service_module, "datetime", _FixedDateTime),
+        patch.object(operations_service_module, "observe_outbox_recovery_attempt") as observe,
+        pytest.raises(ValueError),
+    ):
+        await service.requeue_failed_outbox_event(outbox_id=701, request=request)
+
+    observe.assert_called_once_with(
+        "requeue_failed_outbox",
+        "NOT_FOUND",
+        "outbox_row_not_found",
+    )
+
+
+async def test_requeue_failed_outbox_event_observes_unexpected_error(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    mock_ops_repo.requeue_failed_outbox_event.side_effect = RuntimeError("database unavailable")
+    request = FailedOutboxRequeueRequest(
+        requested_by="ops.sre",
+        reason="Incident recovery after payload contract review.",
+        correlation_id="incident-20260314-outbox-701",
+        confirm_payload_contract_reviewed=True,
+    )
+
+    with (
+        patch.object(operations_service_module, "datetime", _FixedDateTime),
+        patch.object(operations_service_module, "observe_outbox_recovery_attempt") as observe,
+        pytest.raises(RuntimeError),
+    ):
+        await service.requeue_failed_outbox_event(outbox_id=701, request=request)
+
+    observe.assert_called_once_with(
+        "requeue_failed_outbox",
+        "ERROR",
+        "unexpected_error",
     )
 
 

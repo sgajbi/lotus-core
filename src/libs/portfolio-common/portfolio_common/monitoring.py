@@ -127,6 +127,12 @@ _OUTBOX_BATCH_SECONDS = Histogram(
     buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0),
 )
 
+_OUTBOX_RECOVERY_ATTEMPTS = Counter(
+    "outbox_recovery_attempts_total",
+    "Number of governed failed-outbox recovery command attempts by bounded outcome.",
+    labelnames=("recovery_action", "outcome", "reason"),
+)
+
 _CONTROL_QUEUE_PENDING = Gauge(
     "control_queue_pending",
     "Total number of pending rows in durable control queues.",
@@ -173,6 +179,15 @@ def set_outbox_oldest_pending_age_seconds(age_seconds: float) -> None:
 def outbox_batch_timer():
     """Context manager that observes outbox batch duration."""
     return _OUTBOX_BATCH_SECONDS.time()
+
+
+def observe_outbox_recovery_attempt(
+    recovery_action: str,
+    outcome: str,
+    reason: str,
+    count: int = 1,
+) -> None:
+    _OUTBOX_RECOVERY_ATTEMPTS.labels(recovery_action, outcome, reason).inc(count)
 
 
 def set_control_queue_pending(queue: str, total_pending: int) -> None:

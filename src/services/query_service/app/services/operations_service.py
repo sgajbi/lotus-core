@@ -4,6 +4,7 @@ from typing import TypeVar
 
 from portfolio_common.database_models import FinancialReconciliationRun, PipelineStageState
 from portfolio_common.logging_utils import redact_sensitive_text
+from portfolio_common.monitoring import observe_outbox_recovery_attempt
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
     UNKNOWN,
@@ -41,6 +42,7 @@ from ..dtos.operations_dto import (
     SupportJobRecord,
     SupportOverviewResponse,
 )
+from ..operations_errors import OutboxRecoveryRejected
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.operations_models import (
     MissingHistoricalFxDependencySummary,
@@ -1048,17 +1050,44 @@ class OperationsService:
         request: FailedOutboxRequeueRequest,
     ) -> FailedOutboxRequeueResponse:
         requested_at = datetime.now(timezone.utc)
-        audit, event = await self.repo.requeue_failed_outbox_event(
-            outbox_id=outbox_id,
-            requested_by=request.requested_by.strip(),
-            reason=_source_safe_outbox_recovery_reason(request.reason),
-            correlation_id=(
-                request.correlation_id.strip() if request.correlation_id is not None else None
-            ),
-            confirm_payload_contract_reviewed=request.confirm_payload_contract_reviewed,
-            requested_at=requested_at,
-        )
+        try:
+            audit, event = await self.repo.requeue_failed_outbox_event(
+                outbox_id=outbox_id,
+                requested_by=request.requested_by.strip(),
+                reason=_source_safe_outbox_recovery_reason(request.reason),
+                correlation_id=(
+                    request.correlation_id.strip() if request.correlation_id is not None else None
+                ),
+                confirm_payload_contract_reviewed=request.confirm_payload_contract_reviewed,
+                requested_at=requested_at,
+            )
+        except OutboxRecoveryRejected as exc:
+            observe_outbox_recovery_attempt(
+                "requeue_failed_outbox",
+                "REJECTED",
+                _outbox_recovery_metric_reason(exc.metadata.get("reason")),
+            )
+            raise
+        except ValueError:
+            observe_outbox_recovery_attempt(
+                "requeue_failed_outbox",
+                "NOT_FOUND",
+                "outbox_row_not_found",
+            )
+            raise
+        except Exception:
+            observe_outbox_recovery_attempt(
+                "requeue_failed_outbox",
+                "ERROR",
+                "unexpected_error",
+            )
+            raise
         completed_at = audit.completed_at or requested_at
+        observe_outbox_recovery_attempt(
+            "requeue_failed_outbox",
+            "REQUEUED",
+            "outbox_row_requeued_for_dispatch",
+        )
         return FailedOutboxRequeueResponse(
             outbox_id=event.id,
             audit_id=audit.id,
@@ -1540,3 +1569,9 @@ class OperationsService:
 
 def _source_safe_outbox_recovery_reason(reason: str) -> str:
     return redact_sensitive_text(reason.strip())[:MAX_OUTBOX_RECOVERY_REASON_LENGTH]
+
+
+def _outbox_recovery_metric_reason(value: object) -> str:
+    if isinstance(value, str) and value:
+        return value
+    return "recovery_rejected"
