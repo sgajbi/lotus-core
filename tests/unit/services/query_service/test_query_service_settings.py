@@ -26,11 +26,13 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
         "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES",
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         "ENTERPRISE_CAPABILITY_RULES_JSON",
+        "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
     settings = load_query_service_settings()
 
+    assert settings.analytics_export_execution_timeout_seconds == 300
     assert settings.enterprise_policy_version == "1.0.0"
     assert settings.enterprise_enforce_authz is False
     assert settings.enterprise_enforce_read_authz is False
@@ -55,6 +57,7 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
     monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "45")
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
+    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv(
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         '{"query.advanced":{"tenant-a":{"ops":true,"*":false}}}',
@@ -75,6 +78,7 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     assert settings.enterprise_primary_key_id == "kms-key-1"
     assert settings.enterprise_secret_rotation_days == 45
     assert settings.enterprise_max_write_payload_bytes == 2048
+    assert settings.analytics_export_execution_timeout_seconds == 45
     assert settings.enterprise_feature_flags == {
         "query.advanced": {"tenant-a": {"ops": True, "*": False}}
     }
@@ -94,9 +98,12 @@ def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypat
 
 def test_query_service_settings_strict_rejects_invalid_integer(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "not-an-int")
+    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "not-an-int")
 
-    with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_SECRET_ROTATION_DAYS"):
+    with pytest.raises(
+        QueryServiceConfigurationError,
+        match="LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
+    ):
         load_query_service_settings()
 
 

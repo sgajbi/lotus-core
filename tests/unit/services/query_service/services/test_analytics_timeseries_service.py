@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ from src.services.query_service.app.services.analytics_timeseries_service import
 def make_service() -> AnalyticsTimeseriesService:
     service = AnalyticsTimeseriesService(MagicMock(spec=AsyncSession))
     service._analytics_export_stale_timeout_minutes = 15  # pylint: disable=protected-access
+    service._analytics_export_execution_timeout_seconds = 300  # pylint: disable=protected-access
     return service
 
 
@@ -3255,6 +3257,122 @@ async def test_create_export_job_marks_failed_on_input_error() -> None:
     assert response.status == "failed"
     assert response.disposition == "created"
     assert response.result_available is False
+
+
+@pytest.mark.asyncio
+async def test_create_export_job_marks_failed_on_execution_timeout() -> None:
+    service = make_service()
+    service._analytics_export_execution_timeout_seconds = 1  # pylint: disable=protected-access
+    row = SimpleNamespace(
+        job_id="aexp_timeout",
+        dataset_type="position_timeseries",
+        portfolio_id="P1",
+        status="accepted",
+        request_fingerprint="fp-timeout",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=None,
+        completed_at=None,
+    )
+    failed_messages: list[str] = []
+
+    async def _mark_failed(*_args, **kwargs):
+        row.status = "failed"
+        row.error_message = kwargs["error_message"]
+        failed_messages.append(kwargs["error_message"])
+
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=None),
+        create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
+        mark_running=AsyncMock(
+            side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")
+        ),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(side_effect=_mark_failed),
+    )
+
+    async def _slow_collect(_request):
+        await asyncio.sleep(5)
+        return [], 0
+
+    service._collect_export_dataset = AsyncMock(  # pylint: disable=protected-access
+        side_effect=_slow_collect
+    )
+
+    response = await service.create_export_job(
+        AnalyticsExportCreateRequest(
+            dataset_type="position_timeseries",
+            portfolio_id="P1",
+            position_timeseries_request=PositionAnalyticsTimeseriesRequest(
+                as_of_date="2025-12-31",
+                period="one_month",
+            ),
+        )
+    )
+
+    assert response.status == "failed"
+    assert response.error_message == "Analytics export execution exceeded configured timeout."
+    assert failed_messages == ["Analytics export execution exceeded configured timeout."]
+    service.export_repo.mark_completed.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_export_job_marks_failed_on_request_cancellation() -> None:
+    service = make_service()
+    row = SimpleNamespace(
+        job_id="aexp_cancelled",
+        dataset_type="portfolio_timeseries",
+        portfolio_id="P1",
+        status="accepted",
+        request_fingerprint="fp-cancelled",
+        result_format="json",
+        compression="none",
+        result_row_count=None,
+        error_message=None,
+        created_at=datetime(2026, 3, 1, tzinfo=UTC),
+        started_at=None,
+        completed_at=None,
+    )
+    failed_messages: list[str] = []
+
+    async def _mark_failed(*_args, **kwargs):
+        row.status = "failed"
+        row.error_message = kwargs["error_message"]
+        failed_messages.append(kwargs["error_message"])
+
+    service.export_repo = SimpleNamespace(
+        get_latest_by_fingerprint=AsyncMock(return_value=None),
+        create_job=AsyncMock(return_value=row),
+        get_job=AsyncMock(return_value=row),
+        mark_running=AsyncMock(
+            side_effect=lambda *_args, **_kwargs: setattr(row, "status", "running")
+        ),
+        mark_completed=AsyncMock(),
+        mark_failed=AsyncMock(side_effect=_mark_failed),
+    )
+    service._collect_export_dataset = AsyncMock(  # pylint: disable=protected-access
+        side_effect=asyncio.CancelledError()
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await service.create_export_job(
+            AnalyticsExportCreateRequest(
+                dataset_type="portfolio_timeseries",
+                portfolio_id="P1",
+                portfolio_timeseries_request=PortfolioAnalyticsTimeseriesRequest(
+                    as_of_date="2025-12-31",
+                    period="one_month",
+                ),
+            )
+        )
+
+    assert row.status == "failed"
+    assert failed_messages == ["Analytics export execution was cancelled before completion."]
+    service.export_repo.mark_completed.assert_not_awaited()
 
 
 @pytest.mark.asyncio
