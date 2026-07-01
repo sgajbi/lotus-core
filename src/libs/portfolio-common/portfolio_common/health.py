@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from typing import Awaitable, Callable
 
 from confluent_kafka.admin import AdminClient
@@ -15,6 +16,21 @@ from .db import AsyncSessionLocal
 logger = logging.getLogger(__name__)
 
 DependencyCheck = Callable[[], Awaitable[bool]]
+
+READINESS_OK = "ok"
+READINESS_UNAVAILABLE = "unavailable"
+READINESS_TIMEOUT = "timeout"
+READINESS_ERROR = "error"
+
+
+@dataclass(frozen=True)
+class DependencyReadinessResult:
+    dependency_name: str
+    status: str
+
+    @property
+    def is_ready(self) -> bool:
+        return self.status == READINESS_OK
 
 
 class LiveHealthResponse(BaseModel):
@@ -39,7 +55,7 @@ class NotReadyHealthDetail(BaseModel):
     )
     dependencies: dict[str, str] = Field(
         description="Dependency-level readiness results keyed by dependency name.",
-        examples=[{"database": "ok", "kafka": "unavailable"}],
+        examples=[{"database": "ok", "kafka": "timeout"}],
     )
 
 
@@ -66,9 +82,47 @@ async def check_kafka_health() -> bool:
         return False
 
 
+async def _run_dependency_check(
+    dependency_name: str,
+    check: DependencyCheck,
+    *,
+    timeout_seconds: float,
+) -> DependencyReadinessResult:
+    try:
+        is_ready = await asyncio.wait_for(check(), timeout=timeout_seconds)
+    except TimeoutError:
+        logger.warning(
+            "Health Check: %s readiness check timed out after %.2f seconds.",
+            dependency_name,
+            timeout_seconds,
+        )
+        return DependencyReadinessResult(dependency_name, READINESS_TIMEOUT)
+    except Exception:
+        logger.exception("Health Check: %s readiness check failed.", dependency_name)
+        return DependencyReadinessResult(dependency_name, READINESS_ERROR)
+
+    status_value = READINESS_OK if is_ready else READINESS_UNAVAILABLE
+    return DependencyReadinessResult(dependency_name, status_value)
+
+
+def _coerce_dependency_result(
+    dependency_name: str,
+    result: DependencyReadinessResult | BaseException,
+) -> DependencyReadinessResult:
+    if isinstance(result, DependencyReadinessResult):
+        return result
+    logger.error(
+        "Health Check: %s readiness isolation failed.",
+        dependency_name,
+        exc_info=(type(result), result, result.__traceback__),
+    )
+    return DependencyReadinessResult(dependency_name, READINESS_ERROR)
+
+
 def create_health_router(
     *dependencies: str,
     readiness_cache_ttl_seconds: float = 5.0,
+    readiness_dependency_timeout_seconds: float = 5.0,
 ) -> APIRouter:
     """
     Creates a standardized health check router.
@@ -79,6 +133,9 @@ def create_health_router(
         readiness_cache_ttl_seconds: Per-process cache duration for dependency
                        readiness results. Keeps probe storms from repeatedly
                        forcing expensive dependency metadata checks.
+        readiness_dependency_timeout_seconds: Per-dependency timeout budget for
+                       readiness checks. Keeps one slow dependency from hanging
+                       the whole readiness response.
 
     Returns:
         A FastAPI APIRouter with /live and /ready endpoints.
@@ -87,6 +144,7 @@ def create_health_router(
 
     dep_map = {"db": ("database", check_db_health), "kafka": ("kafka", check_kafka_health)}
     readiness_cache_ttl_seconds = max(0.0, readiness_cache_ttl_seconds)
+    readiness_dependency_timeout_seconds = max(0.001, readiness_dependency_timeout_seconds)
     cached_until = 0.0
     cached_all_ok = False
     cached_dep_status: dict[str, str] | None = None
@@ -129,7 +187,7 @@ def create_health_router(
                         "example": {
                             "detail": {
                                 "status": "not_ready",
-                                "dependencies": {"database": "ok", "kafka": "unavailable"},
+                                "dependencies": {"database": "ok", "kafka": "timeout"},
                             }
                         }
                     }
@@ -148,14 +206,25 @@ def create_health_router(
             all_ok = cached_all_ok
             dep_status = dict(cached_dep_status)
         else:
-            results = await asyncio.gather(*[check() for _, check in resolved_dependencies])
+            raw_results = await asyncio.gather(
+                *[
+                    _run_dependency_check(
+                        dependency_name,
+                        check,
+                        timeout_seconds=readiness_dependency_timeout_seconds,
+                    )
+                    for dependency_name, check in resolved_dependencies
+                ],
+                return_exceptions=True,
+            )
+            results = [
+                _coerce_dependency_result(dependency_name, result)
+                for (dependency_name, _), result in zip(resolved_dependencies, raw_results)
+            ]
 
-            all_ok = all(results)
+            all_ok = all(result.is_ready for result in results)
 
-            dep_status = {
-                dependency_name: "ok" if results[i] else "unavailable"
-                for i, (dependency_name, _) in enumerate(resolved_dependencies)
-            }
+            dep_status = {result.dependency_name: result.status for result in results}
             if readiness_cache_ttl_seconds > 0:
                 cached_all_ok = all_ok
                 cached_dep_status = dict(dep_status)

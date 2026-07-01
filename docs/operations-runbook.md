@@ -22,6 +22,21 @@ python scripts\migration_contract_check.py --mode alembic-sql
 3. The baseline should ratchet from report-only to regression-only once collection and tool
    availability are stable.
 
+## Health And Readiness
+
+Shared `/health/ready` endpoints use dependency-aware readiness through `portfolio_common.health`.
+Dependency status values are:
+
+| Status | Meaning |
+| --- | --- |
+| `ok` | Dependency responded within the readiness budget. |
+| `unavailable` | Dependency check completed and reported unavailable. |
+| `timeout` | Dependency check exceeded its per-check readiness timeout. |
+| `error` | Dependency check raised an unexpected exception after readiness isolation. |
+
+Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
+503 with the dependency status map in `detail.dependencies`.
+
 ## Escalation
 
 Treat new collection failures, new architecture-boundary violations, new security findings, and new
