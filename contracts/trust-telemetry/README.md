@@ -10,6 +10,11 @@ The current first-wave snapshot is:
 2. `dpm-source-readiness.telemetry.v1.json`
    Runtime trust proof for `lotus-core:DpmSourceReadiness:v1`.
 
+Active source-product declaration in `contracts/domain-data-products/lotus-core-products.v1.json`
+does not imply mesh certification. Products without a repo-owned trust telemetry snapshot and
+current platform certification evidence must be described as active/implemented/validated only at
+the evidence level they actually satisfy.
+
 Validate locally with:
 
 ```powershell

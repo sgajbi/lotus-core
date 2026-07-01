@@ -119,6 +119,35 @@ def test_mesh_wiki_explains_core_source_authority_for_non_engineering_audiences(
     assert "flowchart LR" in wiki
 
 
+def test_mesh_wiki_distinguishes_active_products_from_mesh_certification() -> None:
+    wiki = _read("wiki/Mesh-Data-Products.md")
+    trust_readme = _read("contracts/trust-telemetry/README.md")
+    repo_context = _read("REPOSITORY-ENGINEERING-CONTEXT.md")
+    normalized_wiki = _single_line(wiki)
+    normalized_context = _single_line(repo_context)
+
+    assert "live-certified" not in wiki
+    assert "## Proof Posture" in wiki
+    assert "### Proof Status Boundary" in wiki
+    assert "| Active declaration |" in wiki
+    assert "| Implemented / CI-backed |" in wiki
+    assert "| Live validator proof |" in wiki
+    assert "| Repo-owned trust telemetry coverage |" in wiki
+    assert "| Mesh certification |" in wiki
+    assert "Catalog inclusion alone is not mesh certification." in wiki
+    assert "not blanket mesh certification for every active source product" in normalized_wiki
+    assert "Current repo-owned snapshots cover `PortfolioStateSnapshot:v1`" in wiki
+    assert "`DpmSourceReadiness:v1` only" in wiki
+    assert "hand-authoring broad certification claims" in normalized_wiki
+
+    assert "PortfolioStateSnapshot:v1" in trust_readme
+    assert "DpmSourceReadiness:v1" in trust_readme
+    assert "Active source-product declaration" in trust_readme
+    assert "does not imply mesh certification" in trust_readme
+    assert "trust telemetry proof currently covers exactly" in normalized_context
+    assert "Active source-product declaration, local implementation proof" in normalized_context
+
+
 def test_external_treasury_source_products_preserve_fail_closed_non_claims() -> None:
     catalog = _read("docs/architecture/RFC-0083-source-data-product-catalog.md")
     wiki = _read("wiki/Mesh-Data-Products.md")
