@@ -48,7 +48,7 @@ class TransactionType(str, Enum):
     RIGHTS_REFUND = "RIGHTS_REFUND"
     RIGHTS_SHARE_DELIVERY = "RIGHTS_SHARE_DELIVERY"
     ADJUSTMENT = "ADJUSTMENT"
-    OTHER = "OTHER"  # Catch-all for any other transaction types not explicitly defined
+    OTHER = "OTHER"  # Migration-only; not production-booking allowed in transaction registry.
 
     @classmethod
     def list(cls):
