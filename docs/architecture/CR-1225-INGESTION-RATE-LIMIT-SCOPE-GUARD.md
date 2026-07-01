@@ -63,7 +63,8 @@ operator truth is authored in `docs/operations/ingestion-api-gold-standard.md`, 
 
 ## Remaining Follow-Up
 
-- Keep issue #684 open for PR/CI/QA evidence and platform-ingress validation of the concrete
-  gateway policy.
+- CR-1254 adds the concrete `lotus-core-ingestion-write-global-v1` gateway policy contract and
+  endpoint-coverage guard.
+- Keep issue #684 open for PR/CI/QA evidence and platform-ingress runtime validation.
 - Consider a Redis/shared-store token bucket if Lotus chooses service-owned global enforcement
   instead of gateway-owned enforcement.

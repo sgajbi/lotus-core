@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "control_id": "lotus-core.ingestion.write-rate-limit.global.v1",
+  "policy_id": "lotus-core-ingestion-write-global-v1",
+  "owner": "lotus-platform-gateway",
+  "producer_repository": "lotus-core",
+  "service": "ingestion_service",
+  "effective_scope": "global_service",
+  "required_runtime_scope_values": [
+    "upstream_gateway",
+    "local_process_with_upstream_gateway"
+  ],
+  "required_runtime_env": {
+    "LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE": [
+      "upstream_gateway",
+      "local_process_with_upstream_gateway"
+    ],
+    "LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID": "lotus-core-ingestion-write-global-v1"
+  },
+  "rolling_window": {
+    "window_seconds": 60,
+    "max_requests": 120,
+    "max_records": 10000,
+    "record_count_source": "request payload record count where available, otherwise minimum one record per request"
+  },
+  "required_endpoint_templates": [
+    "/ingest/benchmark-assignments",
+    "/ingest/benchmark-compositions",
+    "/ingest/benchmark-definitions",
+    "/ingest/benchmark-return-series",
+    "/ingest/business-dates",
+    "/ingest/client-income-needs-schedules",
+    "/ingest/client-restriction-profiles",
+    "/ingest/client-tax-profiles",
+    "/ingest/client-tax-rule-sets",
+    "/ingest/fx-rates",
+    "/ingest/index-price-series",
+    "/ingest/index-return-series",
+    "/ingest/indices",
+    "/ingest/instrument-eligibility",
+    "/ingest/instruments",
+    "/ingest/liquidity-reserve-requirements",
+    "/ingest/mandate-bindings",
+    "/ingest/market-prices",
+    "/ingest/model-portfolio-targets",
+    "/ingest/model-portfolios",
+    "/ingest/planned-withdrawal-schedules",
+    "/ingest/portfolio-bundle",
+    "/ingest/portfolios",
+    "/ingest/reference/cash-accounts",
+    "/ingest/reference/classification-taxonomy",
+    "/ingest/reference/instrument-lookthrough-components",
+    "/ingest/risk-free-series",
+    "/ingest/sustainability-preferences",
+    "/ingest/transaction",
+    "/ingest/transactions",
+    "/ingest/uploads/commit",
+    "/reprocess/transactions"
+  ],
+  "source_safe_observability": {
+    "denial_metric": "ingestion_write_rate_limit_denials_total",
+    "required_labels": [
+      "endpoint",
+      "reason",
+      "enforcement_scope"
+    ],
+    "forbidden_labels": [
+      "portfolio_id",
+      "account_id",
+      "client_id",
+      "security_id",
+      "request_id",
+      "correlation_id",
+      "trace_id",
+      "payload"
+    ]
+  },
+  "validation": {
+    "repo_guard": "make ingestion-gateway-rate-limit-policy-guard",
+    "platform_runtime_validation_required": true,
+    "platform_runtime_validation_status": "pending_platform_ingress_environment",
+    "notes": "lotus-core owns the contract and local validation. lotus-platform owns the concrete ingress implementation and post-merge runtime proof for this policy id."
+  }
+}

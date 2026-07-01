@@ -10,6 +10,7 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `When:` recommended operational usage context.
 - Validation gate: `python scripts/ingestion_endpoint_contract_gate.py`
 - Rate-limit scope truth gate: `make ingestion-rate-limit-scope-guard`
+- Gateway rate-limit policy gate: `make ingestion-gateway-rate-limit-policy-guard`
 
 ## Operations authorization
 
@@ -42,6 +43,12 @@ This runbook summarizes the ingestion operations controls expected for productio
   `local_process_with_upstream_gateway`.
 - Gateway-backed scopes require `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID`; the ingestion
   service fails startup when a gateway-backed scope is selected without that policy identifier.
+- The governed gateway policy ID is `lotus-core-ingestion-write-global-v1`. The repo-owned
+  contract is
+  `contracts/operational-controls/ingestion-write-rate-limit-gateway-policy.v1.json`.
+- `make ingestion-gateway-rate-limit-policy-guard` verifies that the contract keeps the
+  gateway-backed scope values, default budgets, bounded denial labels, and all locally
+  rate-limited ingestion endpoint templates in sync.
 - `make ingestion-rate-limit-scope-guard` verifies the runtime contract and documentation continue
   to distinguish the default `local_process` safety guard from gateway-backed global enforcement
   claims.
@@ -55,7 +62,8 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `LOTUS_CORE_INGEST_RATE_LIMIT_MAX_RECORDS` (default: `10000`)
   - `LOTUS_CORE_INGEST_RATE_LIMIT_ENFORCEMENT_SCOPE` (`local_process`, `upstream_gateway`,
     `local_process_with_upstream_gateway`; default: `local_process`)
-  - `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID` (required for gateway-backed scopes)
+  - `LOTUS_CORE_INGEST_RATE_LIMIT_GATEWAY_POLICY_ID` (required for gateway-backed scopes; use
+    `lotus-core-ingestion-write-global-v1` for the governed global write-ingress policy)
 
 ## High-value operations endpoints
 
