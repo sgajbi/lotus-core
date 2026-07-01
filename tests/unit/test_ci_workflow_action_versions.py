@@ -9,9 +9,7 @@ GOVERNED_RUNTIME_WORKFLOWS = (
 
 ALL_WORKFLOWS = tuple(Path(".github/workflows").glob("*.yml"))
 
-APPROVED_NON_BLOCKING_JOBS = {
-    (Path(".github/workflows/pr-merge-gate.yml"), "lotus-core-validation-report"),
-}
+APPROVED_NON_BLOCKING_JOBS: set[tuple[Path, str]] = set()
 
 APPROVED_REPORT_ONLY_STEPS = {
     (
@@ -190,6 +188,32 @@ def test_continue_on_error_is_limited_to_documented_report_only_scope() -> None:
 
     assert unexpected_non_blocking_jobs == []
     assert unexpected_non_blocking_steps == []
+
+
+def test_pr_merge_gate_lotus_core_validation_is_blocking_with_platform_contracts() -> None:
+    workflow_path = Path(".github/workflows/pr-merge-gate.yml")
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+    job = workflow["jobs"]["lotus-core-validation-report"]
+    steps = job["steps"]
+    step_by_name = {
+        step.get("name", f"uses:{step.get('uses', '<unnamed>')}"): step for step in steps
+    }
+
+    assert job["name"] == "PR Merge Gate / Lotus Core Validation Gate"
+    assert job.get("continue-on-error") is None
+    assert job["env"]["LOTUS_PLATFORM_ROOT"] == "${{ github.workspace }}/lotus-platform"
+
+    platform_checkout = step_by_name["Check out lotus-platform validation contracts"]
+    assert platform_checkout["uses"] == "actions/checkout@v6"
+    assert platform_checkout["with"]["repository"] == "sgajbi/lotus-platform"
+    assert platform_checkout["with"]["path"] == "lotus-platform"
+    assert platform_checkout["with"]["persist-credentials"] is False
+
+    validation_step = step_by_name["Run lotus-core app validation gate"]
+    assert validation_step["run"] == "make lotus-core-validate"
+    assert "set +e" not in workflow_path.read_text(encoding="utf-8")
+    assert "exit 0" not in workflow_path.read_text(encoding="utf-8")
+    assert "report-only rollout preserves evidence" not in workflow_path.read_text(encoding="utf-8")
 
 
 def test_quality_baseline_runs_workflow_governance_gate() -> None:
