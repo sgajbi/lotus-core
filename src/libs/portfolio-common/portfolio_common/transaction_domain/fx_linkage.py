@@ -1,10 +1,12 @@
+from typing import cast
+
 from portfolio_common.events import TransactionEvent
 
 from .control_code_normalization import normalize_transaction_control_code
+from .fx_models import FX_BUSINESS_TRANSACTION_TYPES
 
 FX_DEFAULT_POLICY_ID = "FX_DEFAULT_POLICY"
 FX_DEFAULT_POLICY_VERSION = "1.0.0"
-FX_BUSINESS_TRANSACTION_TYPES = {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}
 FX_CONTRACT_COMPONENT_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
@@ -99,7 +101,7 @@ def _resolve_fx_contract_id(
     far_leg_group_id: str | None,
 ) -> str | None:
     if event.fx_contract_id:
-        return event.fx_contract_id
+        return cast(str, event.fx_contract_id)
     if _requires_swap_contract_id(transaction_type, component_type):
         return f"FXC-{far_leg_group_id}"
     if _requires_forward_contract_id(transaction_type, component_type):
@@ -117,7 +119,7 @@ def _requires_forward_contract_id(transaction_type: str, component_type: str) ->
 
 def _resolve_fx_cash_leg_role(event: TransactionEvent, component_type: str) -> str | None:
     if event.fx_cash_leg_role:
-        return event.fx_cash_leg_role
+        return cast(str, event.fx_cash_leg_role)
     if component_type == "FX_CASH_SETTLEMENT_BUY":
         return "BUY"
     if component_type == "FX_CASH_SETTLEMENT_SELL":

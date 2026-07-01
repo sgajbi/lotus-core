@@ -2163,3 +2163,7 @@ health before that claim is defensible.
      fallback signing remains explicit and behavior-pinned, while supported transfer,
      corporate-action, and rights sign sets now fail focused conformance tests if they drift from
      the canonical registry.
+343. Continued validated GitHub issue #474 by deriving FX business transaction-type validation and
+     linkage sets from the canonical transaction type registry. FX validation and metadata
+     enrichment now share one registry-derived set for `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP`,
+     preventing copy-pasted FX type drift between validation and linkage enrichment.

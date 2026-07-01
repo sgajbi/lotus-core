@@ -192,6 +192,9 @@ Current repository posture:
     Cashflow transfer-sign sets are registry-derived for production-booking transfer,
     corporate-action, and rights transaction types; keep current fallback-signed exceptions such as
     `CASH_IN_LIEU` explicit and behavior-tested before changing lifecycle semantics.
+    FX business transaction types for validation and linkage enrichment are registry-derived;
+    keep FX component types separate because they describe component rows rather than booking
+    transaction types.
 
 ## Architecture And Module Map
 
