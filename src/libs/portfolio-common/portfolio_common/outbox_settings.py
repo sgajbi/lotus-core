@@ -24,21 +24,25 @@ def _normalize_non_negative_default(default: int) -> int:
 
 def _env_positive_int(name: str, default: int) -> int:
     safe_default = _normalize_positive_default(default)
-    return shared_env_int(
-        name,
-        safe_default,
-        service_name=OUTBOX_RUNTIME_SERVICE_NAME,
-        minimum=1,
+    return int(
+        shared_env_int(
+            name,
+            safe_default,
+            service_name=OUTBOX_RUNTIME_SERVICE_NAME,
+            minimum=1,
+        )
     )
 
 
 def _env_non_negative_int(name: str, default: int) -> int:
     safe_default = _normalize_non_negative_default(default)
-    return shared_env_int(
-        name,
-        safe_default,
-        service_name=OUTBOX_RUNTIME_SERVICE_NAME,
-        minimum=0,
+    return int(
+        shared_env_int(
+            name,
+            safe_default,
+            service_name=OUTBOX_RUNTIME_SERVICE_NAME,
+            minimum=0,
+        )
     )
 
 
@@ -46,6 +50,7 @@ def _env_non_negative_int(name: str, default: int) -> int:
 class OutboxRuntimeSettings:
     poll_interval_seconds: int
     batch_size: int
+    claim_lease_seconds: int
     max_retries: int
     retry_initial_delay_seconds: int
     retry_max_delay_seconds: int
@@ -59,6 +64,7 @@ def get_outbox_runtime_settings(
     *,
     poll_interval_default: int = 5,
     batch_size_default: int = 50,
+    claim_lease_default: int = 60,
     max_retries_default: int = 3,
     retry_initial_delay_default: int = 5,
     retry_max_delay_default: int = 300,
@@ -83,6 +89,10 @@ def get_outbox_runtime_settings(
         batch_size=_env_positive_int(
             "OUTBOX_DISPATCHER_BATCH_SIZE",
             batch_size_default,
+        ),
+        claim_lease_seconds=_env_positive_int(
+            "OUTBOX_DISPATCHER_CLAIM_LEASE_SECONDS",
+            claim_lease_default,
         ),
         max_retries=_env_positive_int("OUTBOX_DISPATCHER_MAX_RETRIES", max_retries_default),
         retry_initial_delay_seconds=retry_initial_delay_seconds,

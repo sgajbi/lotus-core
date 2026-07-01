@@ -121,6 +121,187 @@ def test_dispatcher_processes_and_updates_pending_events(
     session.close()
 
 
+def test_dispatcher_commits_claim_before_publish_and_clears_it_on_success(db_engine, clean_db):
+    """
+    GIVEN a pending outbox event
+    WHEN the dispatcher publishes it
+    THEN Kafka publish observes a committed claim lease and the final success clears the claim.
+    """
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    producer = MagicMock(spec=KafkaProducer)
+    pending_deliveries: list[dict[str, object]] = []
+    observed_claims: list[tuple[str, str | None, object]] = []
+
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="ClaimBoundaryTest",
+                aggregate_id=f"claim-boundary-{uuid.uuid4()}",
+                status="PENDING",
+                event_type="TestEvent",
+                payload="{}",
+                topic="claim-boundary.topic",
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    def _publish_message(**kwargs):
+        with test_session_factory() as session:
+            observed_claims.append(
+                session.execute(
+                    text(
+                        "SELECT status, claim_token, claim_expires_at "
+                        "FROM outbox_events WHERE id = :id"
+                    ),
+                    {"id": int(kwargs["outbox_id"])},
+                ).one()
+            )
+        pending_deliveries.append(kwargs)
+
+    def _flush(timeout=10):
+        for queued in pending_deliveries:
+            queued["on_delivery"](queued["outbox_id"], True, None)
+        pending_deliveries.clear()
+
+    producer.publish_message.side_effect = _publish_message
+    producer.flush.side_effect = _flush
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=producer,
+        db_session_factory=test_session_factory,
+        claim_lease_seconds=30,
+    )
+    dispatcher._process_batch_sync()
+
+    assert len(observed_claims) == 1
+    status_during_publish, claim_token_during_publish, claim_expires_at = observed_claims[0]
+    assert status_during_publish == "PENDING"
+    assert claim_token_during_publish
+    assert claim_expires_at is not None
+
+    with test_session_factory() as session:
+        status, claim_token, claim_expires_at, processed_at = session.execute(
+            text(
+                "SELECT status, claim_token, claim_expires_at, processed_at "
+                "FROM outbox_events WHERE id = :id"
+            ),
+            {"id": event_id},
+        ).one()
+
+    assert status == "PROCESSED"
+    assert claim_token is None
+    assert claim_expires_at is None
+    assert processed_at is not None
+
+
+def test_dispatcher_reclaims_expired_claim(db_engine, clean_db, smart_mock_kafka_producer):
+    """
+    GIVEN a pending outbox event with an expired claim lease
+    WHEN the dispatcher runs
+    THEN the row is reclaimed, published, and finalized successfully.
+    """
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    expired_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="ExpiredClaimTest",
+                aggregate_id=f"expired-claim-{uuid.uuid4()}",
+                status="PENDING",
+                event_type="TestEvent",
+                payload="{}",
+                topic="expired-claim.topic",
+                claim_token="expired-token",
+                claim_expires_at=expired_at,
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    dispatcher = OutboxDispatcher(
+        kafka_producer=smart_mock_kafka_producer,
+        db_session_factory=test_session_factory,
+    )
+    dispatcher._process_batch_sync()
+
+    smart_mock_kafka_producer.publish_message.assert_called_once()
+    with test_session_factory() as session:
+        status, claim_token, claim_expires_at = session.execute(
+            text("SELECT status, claim_token, claim_expires_at FROM outbox_events WHERE id = :id"),
+            {"id": event_id},
+        ).one()
+
+    assert status == "PROCESSED"
+    assert claim_token is None
+    assert claim_expires_at is None
+
+
+def test_dispatcher_does_not_update_result_after_claim_is_reclaimed(db_engine, clean_db):
+    """
+    GIVEN a dispatcher loses the claim token before delivery results are persisted
+    WHEN Kafka reports success for the old claim
+    THEN the old dispatcher must not mark the reclaimed row PROCESSED.
+    """
+    test_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
+    producer = MagicMock(spec=KafkaProducer)
+    pending_deliveries: list[dict[str, object]] = []
+    replacement_claim = f"replacement-{uuid.uuid4()}"
+
+    with test_session_factory() as session:
+        with session.begin():
+            event = OutboxEvent(
+                aggregate_type="ClaimFenceTest",
+                aggregate_id=f"claim-fence-{uuid.uuid4()}",
+                status="PENDING",
+                event_type="TestEvent",
+                payload="{}",
+                topic="claim-fence.topic",
+            )
+            session.add(event)
+            session.flush()
+            event_id = event.id
+
+    def _publish_message(**kwargs):
+        with test_session_factory() as session:
+            with session.begin():
+                session.execute(
+                    text(
+                        "UPDATE outbox_events "
+                        "SET claim_token = :claim_token, claim_expires_at = :claim_expires_at "
+                        "WHERE id = :id"
+                    ),
+                    {
+                        "claim_token": replacement_claim,
+                        "claim_expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+                        "id": int(kwargs["outbox_id"]),
+                    },
+                )
+        pending_deliveries.append(kwargs)
+
+    def _flush(timeout=10):
+        for queued in pending_deliveries:
+            queued["on_delivery"](queued["outbox_id"], True, None)
+        pending_deliveries.clear()
+
+    producer.publish_message.side_effect = _publish_message
+    producer.flush.side_effect = _flush
+
+    dispatcher = OutboxDispatcher(kafka_producer=producer, db_session_factory=test_session_factory)
+    dispatcher._process_batch_sync()
+
+    with test_session_factory() as session:
+        status, claim_token, processed_at = session.execute(
+            text("SELECT status, claim_token, processed_at FROM outbox_events WHERE id = :id"),
+            {"id": event_id},
+        ).one()
+
+    assert status == "PENDING"
+    assert claim_token == replacement_claim
+    assert processed_at is None
+
+
 def test_dispatcher_propagates_correlation_id(db_engine, clean_db, smart_mock_kafka_producer):
     """
     GIVEN multiple pending events, one with a correlation_id and one without

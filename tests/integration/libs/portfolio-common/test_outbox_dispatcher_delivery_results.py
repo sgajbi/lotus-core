@@ -84,7 +84,7 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
     with test_session_factory() as session:
         rows = session.execute(
             text(
-                "SELECT id, status, retry_count, next_attempt_at "
+                "SELECT id, status, retry_count, next_attempt_at, claim_token, claim_expires_at "
                 "FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
             ),
             {"ids": ids},
@@ -96,6 +96,8 @@ async def test_marks_only_success_on_delivery(db_engine, clean_db, mock_kafka_pr
     assert rows[1].retry_count is not None and rows[1].retry_count >= 1
     assert rows[1].next_attempt_at is not None
     assert rows[2].status == "PROCESSED"
+    assert all(row.claim_token is None for row in rows)
+    assert all(row.claim_expires_at is None for row in rows)
 
 
 # --- NEW TEST ---
@@ -148,12 +150,17 @@ async def test_increments_retry_count_from_null(db_engine, clean_db):
     # ASSERT
     with test_session_factory() as session:
         result = session.execute(
-            text("SELECT retry_count, next_attempt_at FROM outbox_events WHERE id = :id"),
+            text(
+                "SELECT retry_count, next_attempt_at, claim_token, claim_expires_at "
+                "FROM outbox_events WHERE id = :id"
+            ),
             {"id": event_id},
         ).one_or_none()
 
     assert result.retry_count == 1
     assert result.next_attempt_at is not None
+    assert result.claim_token is None
+    assert result.claim_expires_at is None
 
 
 async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_engine, clean_db):
@@ -211,7 +218,7 @@ async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_eng
     with test_session_factory() as session:
         rows = session.execute(
             text(
-                "SELECT id, status, retry_count, next_attempt_at "
+                "SELECT id, status, retry_count, next_attempt_at, claim_token, claim_expires_at "
                 "FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
             ),
             {"ids": ids},
@@ -220,6 +227,8 @@ async def test_synchronous_publish_failure_does_not_abort_accounted_batch(db_eng
     assert [row.status for row in rows] == ["PROCESSED", "PENDING", "PROCESSED"]
     assert rows[1].retry_count == 1
     assert rows[1].next_attempt_at is not None
+    assert all(row.claim_token is None for row in rows)
+    assert all(row.claim_expires_at is None for row in rows)
 
 
 async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, clean_db):
@@ -265,7 +274,7 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
     with test_session_factory() as session:
         rows = session.execute(
             text(
-                "SELECT id, status, retry_count, next_attempt_at "
+                "SELECT id, status, retry_count, next_attempt_at, claim_token, claim_expires_at "
                 "FROM outbox_events WHERE id = ANY(:ids) ORDER BY id"
             ),
             {"ids": ids},
@@ -274,3 +283,5 @@ async def test_flush_timeout_without_callbacks_is_accounted_as_retry(db_engine, 
     assert [row.status for row in rows] == ["PROCESSED", "PENDING"]
     assert rows[1].retry_count == 1
     assert rows[1].next_attempt_at is not None
+    assert all(row.claim_token is None for row in rows)
+    assert all(row.claim_expires_at is None for row in rows)
