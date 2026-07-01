@@ -30,14 +30,24 @@ from .routers import (
     uploads,
 )
 from .services.ingestion_job_lifecycle import IngestionIdempotencyConflictError
+from .settings import get_ingestion_service_settings
 
 SERVICE_PREFIX = "ING"
 SERVICE_NAME = "ingestion_service"
+UPLOAD_MULTIPART_OVERHEAD_BYTES = 64 * 1024
+UPLOAD_WRITE_ENDPOINTS = frozenset({"/ingest/uploads/preview", "/ingest/uploads/commit"})
 setup_logging()
 logger = logging.getLogger(__name__)
 validate_default_enterprise_runtime_config(service_name=SERVICE_NAME, logger=logger)
 
 app_state = {}
+
+
+def _ingestion_write_payload_budget(request: Request, default_max_bytes: int) -> int:
+    if request.method == "POST" and request.url.path in UPLOAD_WRITE_ENDPOINTS:
+        upload_max_bytes = get_ingestion_service_settings().adapter_mode.upload_max_bytes
+        return max(default_max_bytes, upload_max_bytes + UPLOAD_MULTIPART_OVERHEAD_BYTES)
+    return default_max_bytes
 
 
 @asynccontextmanager
@@ -93,7 +103,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.middleware("http")(
-    build_default_enterprise_audit_middleware(service_name=SERVICE_NAME, logger=logger)
+    build_default_enterprise_audit_middleware(
+        service_name=SERVICE_NAME,
+        logger=logger,
+        max_write_payload_bytes_resolver=_ingestion_write_payload_budget,
+    )
 )
 configure_standard_http_app(
     app,

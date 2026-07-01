@@ -4,7 +4,7 @@ from datetime import date
 
 from portfolio_common.database_models import CashAccountMaster, Instrument, Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import TransactionEvent, event_business_payload
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,9 +14,6 @@ logger = logging.getLogger(__name__)
 
 _TRANSACTION_EVENT_ONLY_FIELDS = frozenset(
     {
-        "event_type",
-        "schema_version",
-        "correlation_id",
         "epoch",
         "brokerage",
         "stamp_duty",
@@ -29,7 +26,12 @@ _TRANSACTION_EVENT_ONLY_FIELDS = frozenset(
 
 def transaction_event_to_record_values(event: TransactionEvent) -> dict[str, object]:
     """Map a validated transaction event to transaction-table values."""
-    return event.model_dump(exclude=_TRANSACTION_EVENT_ONLY_FIELDS, exclude_none=True)
+    payload = event_business_payload(event, mode="python")
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _TRANSACTION_EVENT_ONLY_FIELDS and value is not None
+    }
 
 
 class TransactionDBRepository:

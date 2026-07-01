@@ -27,6 +27,7 @@ from portfolio_common.source_data_security import source_data_capability_rules
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
 MiddlewareCallable = Callable[[Request, MiddlewareNext], Awaitable[Response]]
 AuditEmitter = Callable[..., None]
+MaxWritePayloadBytesResolver = Callable[[Request, int], int]
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 READ_AUDIT_METHODS = {"GET", "HEAD"}
@@ -351,6 +352,7 @@ def build_default_enterprise_audit_middleware(
     *,
     service_name: str,
     logger: logging.Logger,
+    max_write_payload_bytes_resolver: MaxWritePayloadBytesResolver | None = None,
 ) -> MiddlewareCallable:
     runtime = create_default_enterprise_readiness_runtime(
         service_name=service_name,
@@ -359,6 +361,7 @@ def build_default_enterprise_audit_middleware(
     return build_enterprise_audit_middleware(
         runtime=runtime,
         audit_emitter=runtime.emit_audit_event,
+        max_write_payload_bytes_resolver=max_write_payload_bytes_resolver,
     )
 
 
@@ -481,11 +484,17 @@ def build_enterprise_audit_middleware(
     *,
     runtime: EnterpriseReadinessRuntime,
     audit_emitter: AuditEmitter,
+    max_write_payload_bytes_resolver: MaxWritePayloadBytesResolver | None = None,
 ) -> MiddlewareCallable:
     async def middleware(request: Request, call_next: MiddlewareNext) -> Response:
         max_write_payload_bytes = runtime.env_integer(
             "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576
         )
+        if max_write_payload_bytes_resolver is not None:
+            max_write_payload_bytes = max_write_payload_bytes_resolver(
+                request,
+                max_write_payload_bytes,
+            )
         try:
             content_length = int(request.headers.get("content-length", "0"))
         except ValueError:

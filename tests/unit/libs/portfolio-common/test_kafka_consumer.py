@@ -73,7 +73,10 @@ def create_mock_message(
     mock_msg = MagicMock()
     mock_msg.error.return_value = error
     mock_msg.topic.return_value = topic
-    mock_msg.key.return_value = key.encode("utf-8") if key else None
+    if isinstance(key, bytes):
+        mock_msg.key.return_value = key
+    else:
+        mock_msg.key.return_value = key.encode("utf-8") if key else None
     mock_msg.value.return_value = json.dumps(value).encode("utf-8")
     mock_msg.headers.return_value = headers or []
     mock_msg.partition.return_value = partition
@@ -626,6 +629,48 @@ async def test_dlq_payload_and_headers_preserve_traceparent(
     assert dict(call_args["headers"])["traceparent"] == TRACEPARENT.encode("utf-8")
 
 
+async def test_dlq_payload_treats_invalid_traceparent_bytes_as_absent(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message(
+        "key-invalid-trace",
+        {"data": "value-invalid-trace"},
+        headers=[("correlation_id", b"corr-trace"), ("traceparent", b"\xff\xfe")],
+    )
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(mock_msg, ValueError("Test Error"))
+
+    assert result is True
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert call_args["value"]["traceparent"] is None
+    assert "traceparent" not in dict(call_args["headers"])
+
+
+async def test_dlq_publish_uses_bytes_safe_key_text(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message(b"\xff\xfe", {"data": "value-binary-key"})
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(mock_msg, ValueError("Test Error"))
+
+    assert result is True
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert call_args["key"] == "hex:fffe"
+    assert call_args["value"]["original_key"] == "hex:fffe"
+
+
+async def test_failure_budget_key_uses_bytes_safe_key_text(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(b"\xff\xfe", {"data": "value-binary-key"})
+
+    assert test_consumer._failure_message_key(mock_msg) == (
+        "topic=test-topic|group=test-group|partition=0|offset=42|key=hex:fffe"
+    )
+
+
 async def test_dlq_success_emits_standard_consumer_metric(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -920,6 +965,26 @@ async def test_message_correlation_context_sets_traceparent_from_header(
         with test_consumer._message_correlation_context(mock_msg) as correlation_id:
             assert correlation_id == "corr-header"
             assert traceparent_var.get() == TRACEPARENT
+    finally:
+        traceparent_var.reset(trace_token)
+        correlation_id_var.reset(corr_token)
+
+
+async def test_message_correlation_context_ignores_invalid_traceparent_bytes(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-invalid-trace-context",
+        {"data": "value-invalid-trace-context"},
+        headers=[("correlation_id", b"corr-header"), ("traceparent", b"\xff\xfe")],
+    )
+
+    corr_token = correlation_id_var.set("<not-set>")
+    trace_token = traceparent_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(mock_msg) as correlation_id:
+            assert correlation_id == "corr-header"
+            assert traceparent_var.get() == "<not-set>"
     finally:
         traceparent_var.reset(trace_token)
         correlation_id_var.reset(corr_token)

@@ -20,6 +20,7 @@ from .publish_errors import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+UPLOAD_READ_CHUNK_BYTES = 64 * 1024
 
 UPLOAD_INVALID_EXAMPLE = {"detail": "Unsupported upload file format. Expected CSV or XLSX."}
 UPLOAD_ADAPTER_DISABLED_EXAMPLE = {
@@ -55,18 +56,25 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 
 
 async def _read_bounded_upload_content(file: UploadFile) -> bytes:
-    content = await file.read()
     max_bytes = get_ingestion_service_settings().adapter_mode.upload_max_bytes
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail={
-                "code": "INGESTION_UPLOAD_TOO_LARGE",
-                "message": "Bulk upload payload exceeds the configured byte limit.",
-                "max_bytes": max_bytes,
-            },
-        )
-    return content
+    chunks: list[bytes] = []
+    total_bytes = 0
+    while True:
+        chunk = await file.read(UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail={
+                    "code": "INGESTION_UPLOAD_TOO_LARGE",
+                    "message": "Bulk upload payload exceeds the configured byte limit.",
+                    "max_bytes": max_bytes,
+                },
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 @router.post(
