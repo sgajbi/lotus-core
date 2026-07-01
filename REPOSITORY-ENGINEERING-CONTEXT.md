@@ -590,6 +590,12 @@ Most relevant current governance:
     deterministic clock/ID providers, expiry calculation, version increments, commit/refresh, and
     rollback decisions. Do not reintroduce repository-owned commits, rollbacks, UUID generation, or
     clock reads when adding simulation audit, idempotency, replay, or lifecycle evidence.
+56. Outbox dispatch uses leased claims and fenced result updates. Do not publish to Kafka or wait
+    for producer flush while holding row locks from `FOR UPDATE SKIP LOCKED`. Claim `PENDING`
+    outbox rows in a short transaction with `claim_token` and `claim_expires_at`, publish and flush
+    outside the transaction, then update results only when the persisted `claim_token` still
+    matches. Expired claims are reclaimable; stale delivery callbacks from a lost claim must not
+    mark reclaimed rows `PROCESSED` or alter retry state.
 
 ## Context Maintenance Rule
 

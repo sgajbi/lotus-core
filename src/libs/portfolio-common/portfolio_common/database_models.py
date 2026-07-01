@@ -1824,6 +1824,8 @@ class OutboxEvent(Base):
     retry_count = Column(Integer, default=0, nullable=False)
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    claim_token = Column(String(64), nullable=True)
+    claim_expires_at = Column(DateTime(timezone=True), nullable=True)
     last_failure_reason_code = Column(String, nullable=True)
     last_failure_category = Column(String, nullable=True)
     last_failure_message = Column(String, nullable=True)
@@ -1846,6 +1848,17 @@ class OutboxEvent(Base):
             "status",
             "next_attempt_at",
             "created_at",
+        ),
+        Index(
+            "ix_outbox_events_status_claim_next_attempt_created_at",
+            "status",
+            "claim_expires_at",
+            "next_attempt_at",
+            "created_at",
+        ),
+        Index(
+            "ix_outbox_events_claim_token",
+            "claim_token",
         ),
         Index(
             "ix_outbox_events_status_last_failure_at",
