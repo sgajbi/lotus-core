@@ -48,3 +48,18 @@ def test_health_dependency_metrics_use_bounded_labels():
     )
     assert monitoring.HEALTH_READINESS_STATE._labelnames == ("service", "state")
     assert monitoring.HEALTH_READINESS_STATES == ("ready", "not_ready")
+
+
+def test_kafka_consumer_metrics_use_bounded_labels():
+    assert monitoring.KAFKA_CONSUMER_EVENTS_TOTAL._labelnames == (
+        "service",
+        "topic",
+        "group_id",
+        "outcome",
+        "reason",
+    )
+    assert monitoring.KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS._labelnames == (
+        "service",
+        "topic",
+        "group_id",
+    )

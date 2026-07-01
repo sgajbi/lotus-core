@@ -157,7 +157,12 @@ Current repository posture:
     `TELEMETRY_METRIC_ALLOWED_LABELS`, must not be listed in `TELEMETRY_METRIC_FORBIDDEN_LABELS`,
     and service-local metrics outside `portfolio_common.monitoring` must be registered in
     `SERVICE_LOCAL_METRIC_OWNERS` with an owning service.
-32. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+32. Kafka consumers inheriting `portfolio_common.kafka_consumer.BaseConsumer` emit the standard
+    `kafka_consumer_events_total` and `kafka_consumer_processing_duration_seconds` metrics. Keep
+    processing attempts, success, retryable/terminal failure, DLQ, commit, poll, critical-exit, and
+    shutdown telemetry on the shared consumer boundary; add service-local metrics only as
+    registered extensions when the shared fleet-level metrics are insufficient.
+33. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
@@ -172,7 +177,7 @@ Current repository posture:
     maps application/service failures, prefer typed service exceptions and router type dispatch
     over substring checks against exception message text; keep human-readable details bounded and
     stable in the problem-details mapper.
-33. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
+34. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
@@ -185,12 +190,12 @@ Current repository posture:
     defense in depth, not as global service-level enforcement, unless a gateway-backed scope and
     gateway policy ID are configured. `make monetary-float-guard` uses token-aware money-like
     matching and currently has zero active findings and zero allowlisted suppressions.
-34. Service runtime import correctness is now part of the architecture guard. Service code under
+35. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
-35. Canonical transaction-type classification now starts in
+36. Canonical transaction-type classification now starts in
     `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
     cashflow, position, query, validation, or RFC target work must be classified there first.
     `OTHER` is migration-only and not production-booking allowed. Redemption and

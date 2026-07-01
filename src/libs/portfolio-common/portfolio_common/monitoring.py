@@ -63,6 +63,19 @@ KAFKA_PUBLISH_LATENCY_SECONDS = Histogram(
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
 
+KAFKA_CONSUMER_EVENTS_TOTAL = Counter(
+    "kafka_consumer_events_total",
+    "Standard Kafka consumer lifecycle and processing events.",
+    labelnames=("service", "topic", "group_id", "outcome", "reason"),
+)
+
+KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS = Histogram(
+    "kafka_consumer_processing_duration_seconds",
+    "Kafka consumer message processing duration in seconds.",
+    labelnames=("service", "topic", "group_id"),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
 HEALTH_DEPENDENCY_CHECKS_TOTAL = Counter(
     "health_dependency_check_total",
     "Health dependency check outcomes by service, dependency, and bounded status.",
@@ -104,6 +117,29 @@ def observe_kafka_consume_error(topic: str, error: str, count: int = 1) -> None:
 def kafka_publish_timer(topic: str):
     """Context manager that observes Kafka publish latency for a topic."""
     return KAFKA_PUBLISH_LATENCY_SECONDS.labels(topic).time()
+
+
+def observe_kafka_consumer_event(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    outcome: str,
+    reason: str,
+) -> None:
+    KAFKA_CONSUMER_EVENTS_TOTAL.labels(service, topic, group_id, outcome, reason).inc()
+
+
+def observe_kafka_consumer_processing_duration(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    duration_seconds: float,
+) -> None:
+    KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS.labels(service, topic, group_id).observe(
+        max(0.0, duration_seconds)
+    )
 
 
 def observe_health_dependency_check(

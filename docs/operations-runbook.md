@@ -62,6 +62,20 @@ portfolio/account/client/security identifiers, request/correlation/trace identif
 fields, stack traces, or raw exception text as Prometheus labels. Service-local metrics outside the
 shared `portfolio_common.monitoring` registry must be listed in `SERVICE_LOCAL_METRIC_OWNERS`.
 
+## Kafka Consumer Metrics
+
+Consumers that inherit `portfolio_common.kafka_consumer.BaseConsumer` emit standard Prometheus
+telemetry:
+
+| Metric | Labels | Purpose |
+| --- | --- | --- |
+| `kafka_consumer_events_total` | `service`, `topic`, `group_id`, `outcome`, `reason` | Count processing attempts, successes, retryable failures, terminal failures, DLQ outcomes, commit failures, poll errors, critical loop exits, and shutdown failures. |
+| `kafka_consumer_processing_duration_seconds` | `service`, `topic`, `group_id` | Track processing duration for every consumed message. |
+
+Use these for worker fleet dashboards and incident triage. Keep message keys, offsets, payload
+fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
+metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-through.
+
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
 `X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same

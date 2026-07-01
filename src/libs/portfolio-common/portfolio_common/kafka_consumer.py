@@ -30,6 +30,10 @@ from .logging_utils import (
     redact_sensitive_text,
     traceparent_var,
 )
+from .monitoring import (
+    observe_kafka_consumer_event,
+    observe_kafka_consumer_processing_duration,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,6 +330,7 @@ class BaseConsumer(ABC):
             ).inc()
 
         if not self._producer or not self.dlq_topic:
+            self._record_consumer_event("dlq_failed", "dlq_unconfigured")
             return False
 
         try:
@@ -357,11 +362,13 @@ class BaseConsumer(ABC):
                 error_reason_code=error_reason_code,
                 correlation_id=message_correlation_id,
             )
+            self._record_consumer_event("dlq_published", error_reason_code)
             logger.warning(
                 f"Message with key '{dlq_payload['original_key']}' sent to DLQ '{self.dlq_topic}'."
             )
             return True
         except Exception as e:
+            self._record_consumer_event("dlq_failed", "dlq_publish_error")
             logger.error(f"FATAL: Could not send message to DLQ. Error: {e}", exc_info=True)
             return False
 
@@ -491,22 +498,26 @@ class BaseConsumer(ABC):
         The main consumer loop. Polls for messages, processes them, handles errors,
         and commits offsets.
         """
-        self._initialize_consumer()
-        loop = asyncio.get_running_loop()
-        logger.info(f"Starting to consume messages from topic '{self.topic}'...")
-        while self._running:
-            msg = await loop.run_in_executor(None, self._consumer.poll, 1.0)
+        try:
+            self._initialize_consumer()
+            loop = asyncio.get_running_loop()
+            logger.info(f"Starting to consume messages from topic '{self.topic}'...")
+            while self._running:
+                msg = await loop.run_in_executor(None, self._consumer.poll, 1.0)
 
-            if msg is None:
-                continue
-            if self._should_skip_polled_message(msg):
-                if not self._running:
-                    break
-                continue
+                if msg is None:
+                    continue
+                if self._should_skip_polled_message(msg):
+                    if not self._running:
+                        break
+                    continue
 
-            await self._process_polled_message(msg, loop)
-
-        self.shutdown()
+                await self._process_polled_message(msg, loop)
+        except Exception:
+            self._record_consumer_event("critical_loop_exit", "unhandled_exception")
+            raise
+        finally:
+            self.shutdown()
 
     async def _process_polled_message(
         self,
@@ -517,6 +528,9 @@ class BaseConsumer(ABC):
         traceparent_token = None
         start_time = time.monotonic()
         processed_successfully = False
+        processing_outcome = "success"
+        processing_reason = "processed"
+        self._record_consumer_event("processing_attempt", "message_polled")
         try:
             corr_id = self._resolve_message_correlation_id(msg)
             token = correlation_id_var.set(corr_id)
@@ -529,14 +543,23 @@ class BaseConsumer(ABC):
 
         except RetryableConsumerError as e:
             # For transient errors, we log and do NOT commit, allowing Kafka to redeliver.
+            processing_outcome = "retryable_failure"
+            processing_reason = "retryable_consumer_error"
             self._log_retryable_processing_error(e)
 
         except Exception as e:
             # For terminal errors (poison pills), we send to DLQ and then commit.
+            processing_outcome = "terminal_failure"
+            processing_reason = classify_dlq_reason_code(e)
             await self._handle_terminal_processing_error(msg, e)
 
         finally:
-            self._record_processing_metrics(start_time, processed_successfully)
+            self._record_processing_metrics(
+                start_time,
+                processed_successfully,
+                outcome=processing_outcome,
+                reason=processing_reason,
+            )
             if token:
                 correlation_id_var.reset(token)
             if traceparent_token:
@@ -553,6 +576,7 @@ class BaseConsumer(ABC):
         return True
 
     def _handle_fatal_consumer_error(self, error: object) -> None:
+        self._record_consumer_event("poll_error", "fatal")
         logger.error(
             f"Fatal consumer error on topic {self.topic}: {error}. Shutting down.",
             exc_info=True,
@@ -560,6 +584,7 @@ class BaseConsumer(ABC):
         self._running = False
 
     def _handle_nonfatal_consumer_error(self, error: object) -> None:
+        self._record_consumer_event("poll_error", "nonfatal")
         logger.warning(f"Non-fatal consumer error on topic {self.topic}: {error}.")
 
     async def _dispatch_message_for_processing(
@@ -588,11 +613,26 @@ class BaseConsumer(ABC):
         else:
             self._log_dlq_publication_failed(msg)
 
-    def _record_processing_metrics(self, start_time: float, processed_successfully: bool) -> None:
+    def _record_processing_metrics(
+        self,
+        start_time: float,
+        processed_successfully: bool,
+        *,
+        outcome: str,
+        reason: str,
+    ) -> None:
+        elapsed = time.monotonic() - start_time
+        self._record_consumer_event(outcome, reason)
+        observe_kafka_consumer_processing_duration(
+            service=self._metric_service_label(),
+            topic=self.topic,
+            group_id=self._consumer_config["group.id"],
+            duration_seconds=elapsed,
+        )
         if not self._metrics:
             return
         labels = self._metric_labels()
-        self._metrics["latency"].labels(**labels).observe(time.monotonic() - start_time)
+        self._metrics["latency"].labels(**labels).observe(elapsed)
         if processed_successfully:
             self._metrics["processed"].labels(**labels).inc()
 
@@ -602,10 +642,29 @@ class BaseConsumer(ABC):
             "consumer_group": self._consumer_config["group.id"],
         }
 
+    def _metric_service_label(self) -> str:
+        try:
+            service_name = getattr(self, "service_name")
+        except Exception:
+            service_name = None
+        if isinstance(service_name, str) and service_name:
+            return service_name
+        return self.service_prefix
+
+    def _record_consumer_event(self, outcome: str, reason: str) -> None:
+        observe_kafka_consumer_event(
+            service=self._metric_service_label(),
+            topic=self.topic,
+            group_id=self._consumer_config["group.id"],
+            outcome=outcome,
+            reason=reason,
+        )
+
     def _commit_after_dlq_publication(self, msg: Message) -> None:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
         except Exception as commit_error:
+            self._record_consumer_event("commit_failed", "dlq_publication")
             logger.warning(
                 (
                     "Offset commit failed after successful DLQ publication; "
@@ -620,6 +679,7 @@ class BaseConsumer(ABC):
             self._consumer.commit(message=msg, asynchronous=False)
             return True
         except Exception as commit_error:
+            self._record_consumer_event("commit_failed", "successful_processing")
             logger.warning(
                 (
                     "Offset commit failed after successful processing; "
@@ -675,6 +735,7 @@ class BaseConsumer(ABC):
         try:
             wakeup()
         except Exception:
+            self._record_consumer_event("shutdown_failed", "consumer_wakeup")
             logger.warning(
                 "Consumer wakeup failed during shutdown.",
                 exc_info=True,
@@ -687,6 +748,7 @@ class BaseConsumer(ABC):
         try:
             self._consumer.close()
         except Exception:
+            self._record_consumer_event("shutdown_failed", "consumer_close")
             logger.error(
                 "Consumer close failed during shutdown.",
                 exc_info=True,
@@ -699,6 +761,7 @@ class BaseConsumer(ABC):
         try:
             undelivered_count = self._producer.flush(timeout=5)
             if undelivered_count:
+                self._record_consumer_event("shutdown_failed", "dlq_flush_undelivered")
                 logger.error(
                     "DLQ producer flush left undelivered messages during shutdown.",
                     extra={
@@ -707,6 +770,7 @@ class BaseConsumer(ABC):
                     },
                 )
         except Exception:
+            self._record_consumer_event("shutdown_failed", "dlq_flush")
             logger.error(
                 "DLQ producer flush failed during shutdown.",
                 exc_info=True,
