@@ -17,7 +17,10 @@ except ImportError:  # pragma: no cover - compatibility with python-json-logger 
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="<not-set>")
 request_id_var: ContextVar[str] = ContextVar("request_id", default="<not-set>")
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="<not-set>")
+traceparent_var: ContextVar[str] = ContextVar("traceparent", default="<not-set>")
 REDACTED_VALUE = "***REDACTED***"
+_TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+_TRACEPARENT_PATTERN = re.compile(r"^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$")
 _SENSITIVE_KEY_TOKENS = (
     "authorization",
     "password",
@@ -52,6 +55,36 @@ def normalize_lineage_value(value: str | None) -> str | None:
     if not normalized or normalized.lower() == "<not-set>":
         return None
     return normalized
+
+
+def normalize_trace_id(value: str | None) -> str | None:
+    normalized = normalize_lineage_value(value)
+    if normalized is None:
+        return None
+    candidate = normalized.lower()
+    return candidate if _TRACE_ID_PATTERN.fullmatch(candidate) else None
+
+
+def normalize_traceparent(value: str | None) -> str | None:
+    normalized = normalize_lineage_value(value)
+    if normalized is None:
+        return None
+    candidate = normalized.lower()
+    return candidate if _TRACEPARENT_PATTERN.fullmatch(candidate) else None
+
+
+def trace_id_from_traceparent(value: str | None) -> str | None:
+    traceparent = normalize_traceparent(value)
+    if traceparent is None:
+        return None
+    return traceparent.split("-", 3)[1]
+
+
+def traceparent_from_trace_id(value: str | None) -> str | None:
+    trace_id = normalize_trace_id(value)
+    if trace_id is None:
+        return None
+    return f"00-{trace_id}-0000000000000001-01"
 
 
 def redact_sensitive(value: Any) -> Any:
@@ -113,6 +146,7 @@ class CorrelationIdFilter(logging.Filter):
         record.correlation_id = normalize_lineage_value(correlation_id_var.get())
         record.request_id = normalize_lineage_value(request_id_var.get())
         record.trace_id = normalize_lineage_value(trace_id_var.get())
+        record.traceparent = normalize_traceparent(traceparent_var.get())
         record.service = os.getenv("SERVICE_NAME", "lotus-core-service")
         record.environment = os.getenv("ENVIRONMENT", "local")
         return True

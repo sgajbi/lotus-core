@@ -1,5 +1,4 @@
 import logging
-import re
 import time
 from dataclasses import dataclass
 from hmac import compare_digest
@@ -16,14 +15,18 @@ from portfolio_common.logging_utils import (
     correlation_id_var,
     generate_correlation_id,
     normalize_lineage_value,
+    normalize_trace_id,
+    normalize_traceparent,
     request_id_var,
+    trace_id_from_traceparent,
     trace_id_var,
+    traceparent_from_trace_id,
+    traceparent_var,
 )
 from portfolio_common.metrics_settings import load_metrics_runtime_settings
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
 
-_TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 METRICS_INTERNAL_OPEN_MODE = "internal_open"
 METRICS_PROTECTED_SCRAPE_MODE = "protected_scrape"
@@ -95,14 +98,6 @@ def configure_metrics_access_policy(
         ):
             return _metrics_forbidden_response(metrics_access_policy)
         return await call_next(request)
-
-
-def normalize_trace_id(value: str | None) -> str | None:
-    normalized = normalize_lineage_value(value)
-    if normalized is None:
-        return None
-    candidate = normalized.lower()
-    return candidate if _TRACE_ID_PATTERN.fullmatch(candidate) else None
 
 
 def http_metric_path_template(request: Request) -> str:
@@ -192,26 +187,35 @@ def configure_standard_http_app(
             request.headers.get("X-Correlation-Id") or request.headers.get("X-Correlation-ID")
         )
         request_id = normalize_lineage_value(request.headers.get("X-Request-Id"))
-        trace_id = normalize_trace_id(request.headers.get("X-Trace-Id"))
+        traceparent = normalize_traceparent(request.headers.get("traceparent"))
+        trace_id = trace_id_from_traceparent(traceparent) or normalize_trace_id(
+            request.headers.get("X-Trace-Id")
+        )
         if not correlation_id:
             correlation_id = id_generator(service_prefix)
         if not request_id:
             request_id = id_generator("REQ")
         if not trace_id:
             trace_id = uuid4().hex
+        if not traceparent:
+            traceparent = (
+                traceparent_from_trace_id(trace_id) or f"00-{trace_id}-0000000000000001-01"
+            )
 
         correlation_token = correlation_id_var.set(correlation_id)
         request_token = request_id_var.set(request_id)
         trace_token = trace_id_var.set(trace_id)
+        traceparent_token = traceparent_var.set(traceparent)
         response = await call_next(request)
         response.headers["X-Correlation-ID"] = correlation_id
         response.headers["X-Correlation-Id"] = correlation_id
         response.headers["X-Request-Id"] = request_id
         response.headers["X-Trace-Id"] = trace_id
-        response.headers["traceparent"] = f"00-{trace_id}-0000000000000001-01"
+        response.headers["traceparent"] = traceparent
         correlation_id_var.reset(correlation_token)
         request_id_var.reset(request_token)
         trace_id_var.reset(trace_token)
+        traceparent_var.reset(traceparent_token)
         return response
 
     @app.middleware("http")

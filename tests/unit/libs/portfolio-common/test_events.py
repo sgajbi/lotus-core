@@ -184,6 +184,7 @@ def test_transaction_event_accepts_governed_envelope_metadata() -> None:
             "event_type": "TransactionPersisted",
             "schema_version": "1.0.0",
             "correlation_id": "corr-transaction-envelope",
+            "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
         }
     )
 
@@ -192,3 +193,4 @@ def test_transaction_event_accepts_governed_envelope_metadata() -> None:
     assert event.event_type == "TransactionPersisted"
     assert event.schema_version == "1.0.0"
     assert event.correlation_id == "corr-transaction-envelope"
+    assert event.traceparent == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"

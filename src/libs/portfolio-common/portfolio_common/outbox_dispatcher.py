@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.db import SessionLocal
 from portfolio_common.kafka_utils import KafkaProducer
-from portfolio_common.logging_utils import redact_sensitive_text
+from portfolio_common.logging_utils import normalize_traceparent, redact_sensitive_text
 from portfolio_common.monitoring import (
     observe_outbox_failed,
     observe_outbox_published,
@@ -43,6 +43,7 @@ class _ClaimedOutboxEvent:
     payload: object
     topic: str
     correlation_id: str | None
+    traceparent: str | None
     retry_count: int | None
     created_at: datetime
     claim_token: str
@@ -247,6 +248,7 @@ class OutboxDispatcher:
                             payload=event.payload,
                             topic=event.topic,
                             correlation_id=event.correlation_id,
+                            traceparent=_payload_traceparent(event.payload),
                             retry_count=event.retry_count,
                             created_at=_as_utc(event.created_at),
                             claim_token=claim_token,
@@ -395,7 +397,8 @@ class OutboxDispatcher:
                 observe_outbox_published(event.aggregate_type, event.topic)
             else:
                 logger.warning(
-                    "OutboxDispatcher: Skipped success update because claim token no longer owns row.",
+                    "OutboxDispatcher: Skipped success update because claim token no longer "
+                    "owns row.",
                     extra={"outbox_id": event.id},
                 )
         logger.info(f"OutboxDispatcher: Marked {updated_count} events as PROCESSED in DB.")
@@ -440,7 +443,8 @@ class OutboxDispatcher:
             )
             if result.rowcount != 1:
                 logger.warning(
-                    "OutboxDispatcher: Skipped retry update because claim token no longer owns row.",
+                    "OutboxDispatcher: Skipped retry update because claim token no longer "
+                    "owns row.",
                     extra={"outbox_id": event.id},
                 )
                 continue
@@ -491,7 +495,8 @@ class OutboxDispatcher:
             )
             if result.rowcount != 1:
                 logger.warning(
-                    "OutboxDispatcher: Skipped terminal update because claim token no longer owns row.",
+                    "OutboxDispatcher: Skipped terminal update because claim token no longer "
+                    "owns row.",
                     extra={"outbox_id": event.id},
                 )
                 continue
@@ -596,15 +601,31 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _event_headers(event: _ClaimedOutboxEvent) -> list[tuple[str, bytes]]:
-    if not event.correlation_id:
-        return []
-    return [("correlation_id", event.correlation_id.encode("utf-8"))]
+    headers: list[tuple[str, bytes]] = []
+    if event.correlation_id:
+        headers.append(("correlation_id", event.correlation_id.encode("utf-8")))
+    traceparent = normalize_traceparent(event.traceparent)
+    if traceparent:
+        headers.append(("traceparent", traceparent.encode("utf-8")))
+    return headers
 
 
 def _event_payload(event: _ClaimedOutboxEvent):
     if isinstance(event.payload, dict):
         return event.payload
     return json.loads(cast(str | bytes | bytearray, event.payload))
+
+
+def _payload_traceparent(payload: object) -> str | None:
+    if isinstance(payload, dict):
+        return normalize_traceparent(payload.get("traceparent"))  # type: ignore[arg-type]
+    try:
+        decoded = json.loads(cast(str | bytes | bytearray, payload))
+    except (TypeError, ValueError):
+        return None
+    if isinstance(decoded, dict):
+        return normalize_traceparent(decoded.get("traceparent"))  # type: ignore[arg-type]
+    return None
 
 
 def _mark_callbackless_events_failed(

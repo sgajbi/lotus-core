@@ -123,6 +123,29 @@ def test_standard_health_app_exposes_shared_observability_contract():
     )
 
 
+def test_standard_http_app_preserves_incoming_traceparent_context():
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    traceparent = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+    response = TestClient(app).get("/lineage", headers={"traceparent": traceparent})
+
+    assert response.status_code == 200
+    assert response.headers["traceparent"] == traceparent
+    assert response.headers["X-Trace-Id"] == "0123456789abcdef0123456789abcdef"
+
+
 def test_metrics_access_policy_defaults_to_internal_open(monkeypatch):
     monkeypatch.delenv("LOTUS_METRICS_ACCESS_TOKEN", raising=False)
 
