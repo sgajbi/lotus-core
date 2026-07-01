@@ -496,10 +496,12 @@ def test_calculate_transfer_classification_for_ca_expansion_types(
 
 
 @pytest.mark.parametrize(
-    ("quantity", "expected_sign"),
+    ("transaction_type", "quantity", "expected_sign"),
     [
-        (Decimal("10"), Decimal("1")),
-        (Decimal("-10"), Decimal("-1")),
+        ("RIGHTS_ADJUSTMENT", Decimal("10"), Decimal("1")),
+        ("RIGHTS_ADJUSTMENT", Decimal("-10"), Decimal("-1")),
+        ("CASH_IN_LIEU", Decimal("10"), Decimal("1")),
+        ("CASH_IN_LIEU", Decimal("-10"), Decimal("-1")),
     ],
 )
 @patch(
@@ -508,6 +510,7 @@ def test_calculate_transfer_classification_for_ca_expansion_types(
 def test_calculate_transfer_fallback_sign_uses_quantity_for_unmapped_transfer_type(
     mock_metric,
     base_transaction_event: TransactionEvent,
+    transaction_type: str,
     quantity: Decimal,
     expected_sign: Decimal,
 ):
@@ -517,7 +520,7 @@ def test_calculate_transfer_fallback_sign_uses_quantity_for_unmapped_transfer_ty
     """
     event = base_transaction_event.model_copy(
         update={
-            "transaction_type": "RIGHTS_ADJUSTMENT",  # intentionally not in in/out sign maps
+            "transaction_type": transaction_type,
             "quantity": quantity,
             "trade_fee": Decimal("0"),
         }
