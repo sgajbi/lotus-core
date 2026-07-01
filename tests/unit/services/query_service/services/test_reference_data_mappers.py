@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
+from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_definition_response,
@@ -231,7 +232,7 @@ def test_instrument_eligibility_records_map_found_and_missing_rows() -> None:
 
 def test_portfolio_tax_lot_record_maps_lot_state_row() -> None:
     lot = portfolio_tax_lot_record(
-        SimpleNamespace(
+        PortfolioTaxLotReadRecord(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             security_id=" eq_us_aapl ",
             instrument_id=" EQ_US_AAPL ",
@@ -245,8 +246,9 @@ def test_portfolio_tax_lot_record_maps_lot_state_row() -> None:
             source_system=None,
             calculation_policy_id="BUY_DEFAULT_POLICY",
             calculation_policy_version=None,
-        ),
-        local_currency="USD",
+            local_currency="USD",
+            updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+        )
     )
 
     assert lot.security_id == "eq_us_aapl"

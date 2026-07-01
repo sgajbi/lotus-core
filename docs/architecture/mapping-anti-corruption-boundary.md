@@ -19,6 +19,12 @@ change without silently changing downstream banking evidence.
 - Source-data response envelopes must preserve product identity, version, runtime metadata,
   supportability, paging, and source lineage.
 
+Current typed read-record precedent:
+
+- `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` from `query_service.app.read_models`.
+  `BuyStateRepository` converts SQLAlchemy `PositionLotState` rows and transaction trade-currency
+  joins into that record before the source-data service or mapper sees the data.
+
 ## Conformance Gate
 
 `make test-boundary-mapping-conformance` runs the current mapper conformance suite. The suite is
@@ -30,7 +36,7 @@ Current coverage:
 - JSON payload to governed `TransactionEvent`;
 - transaction event to persistence record values;
 - unknown and missing transaction event field rejection;
-- portfolio tax-lot row mapping to `PortfolioTaxLotWindow:v1` source-data envelope.
+- typed portfolio tax-lot read-record mapping to `PortfolioTaxLotWindow:v1` source-data envelope.
 
 ## Follow-Up Scope
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -12,6 +11,7 @@ from portfolio_common.logging_utils import correlation_id_var
 from pydantic import ValidationError
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from services.ingestion_service.app.services.ingestion_service import IngestionService
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     transaction_event_to_record_values,
@@ -169,7 +169,7 @@ def test_transaction_event_mapping_rejects_unknown_and_missing_fields() -> None:
 
 def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -> None:
     lot = portfolio_tax_lot_record(
-        SimpleNamespace(
+        PortfolioTaxLotReadRecord(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             security_id=" eq_us_aapl ",
             instrument_id=" EQ_US_AAPL ",
@@ -183,8 +183,9 @@ def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -
             source_system="OMS_PRIMARY",
             calculation_policy_id="BUY_DEFAULT_POLICY",
             calculation_policy_version="1.0.0",
-        ),
-        local_currency="USD",
+            local_currency="USD",
+            updated_at=datetime(2026, 3, 31, 8, 0, tzinfo=UTC),
+        )
     )
 
     response = PortfolioTaxLotWindowResponse(

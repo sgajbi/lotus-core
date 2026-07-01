@@ -1,8 +1,8 @@
 import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 
+from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
 )
@@ -22,8 +22,9 @@ def _tax_lot_row(
     lot_id: str = "LOT-AAPL-001",
     acquisition_date: date = date(2026, 3, 25),
     updated_at: datetime = datetime(2026, 4, 10, 9, tzinfo=UTC),
-) -> SimpleNamespace:
-    return SimpleNamespace(
+    local_currency: str | None = "USD",
+) -> PortfolioTaxLotReadRecord:
+    return PortfolioTaxLotReadRecord(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         security_id=security_id,
         instrument_id=security_id,
@@ -37,6 +38,7 @@ def _tax_lot_row(
         source_system="front_office_portfolio_seed",
         calculation_policy_id="BUY_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
+        local_currency=local_currency,
         updated_at=updated_at,
     )
 
@@ -97,7 +99,7 @@ def test_portfolio_tax_lot_next_page_token_payload_uses_last_page_lot() -> None:
     assert portfolio_tax_lot_next_page_token_payload(
         request_scope=scope,
         has_more=True,
-        page_rows=[(_tax_lot_row(lot_id="LOT-A"), "USD"), (_tax_lot_row(lot_id="LOT-B"), "USD")],
+        page_rows=[_tax_lot_row(lot_id="LOT-A"), _tax_lot_row(lot_id="LOT-B")],
     ) == {
         "scope_fingerprint": scope.request_fingerprint,
         "last_acquisition_date": "2026-03-25",
@@ -107,7 +109,7 @@ def test_portfolio_tax_lot_next_page_token_payload_uses_last_page_lot() -> None:
         portfolio_tax_lot_next_page_token_payload(
             request_scope=scope,
             has_more=False,
-            page_rows=[(_tax_lot_row(), "USD")],
+            page_rows=[_tax_lot_row()],
         )
         is None
     )
@@ -131,8 +133,8 @@ def test_portfolio_tax_lot_page_token_encodes_payload() -> None:
             request_scope=scope,
             has_more=True,
             page_rows=[
-                (_tax_lot_row(lot_id="LOT-A"), "USD"),
-                (_tax_lot_row(lot_id="LOT-B"), "USD"),
+                _tax_lot_row(lot_id="LOT-A"),
+                _tax_lot_row(lot_id="LOT-B"),
             ],
             encode_page_token=encode,
         )
@@ -162,7 +164,7 @@ def test_portfolio_tax_lot_page_token_suppresses_terminal_page() -> None:
         portfolio_tax_lot_page_token(
             request_scope=scope,
             has_more=False,
-            page_rows=[(_tax_lot_row(), "USD")],
+            page_rows=[_tax_lot_row()],
             encode_page_token=encode,
         )
         is None
@@ -183,11 +185,11 @@ def test_resolve_portfolio_tax_lot_window_response_orchestrates_repository_reads
 
             async def list_portfolio_tax_lots(
                 self, **kwargs: object
-            ) -> list[tuple[SimpleNamespace, str]]:
+            ) -> list[PortfolioTaxLotReadRecord]:
                 calls.append(("tax_lots", kwargs))
                 return [
-                    (_tax_lot_row(lot_id="LOT-A"), "USD"),
-                    (_tax_lot_row(lot_id="LOT-B"), "USD"),
+                    _tax_lot_row(lot_id="LOT-A"),
+                    _tax_lot_row(lot_id="LOT-B"),
                 ]
 
             async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
@@ -276,7 +278,7 @@ def test_build_portfolio_tax_lot_window_response_marks_partial_page_degraded() -
             page={"page_size": 1},
         ),
         request_scope_fingerprint="scope-123",
-        page_rows=[(_tax_lot_row(), "USD")],
+        page_rows=[_tax_lot_row()],
         has_more=True,
         next_page_token="token-2",
     )
@@ -304,7 +306,7 @@ def test_build_portfolio_tax_lot_window_response_marks_complete_ready_page() -> 
             page={"page_size": 25},
         ),
         request_scope_fingerprint="scope-123",
-        page_rows=[(_tax_lot_row(), "USD")],
+        page_rows=[_tax_lot_row()],
         has_more=False,
         next_page_token=None,
     )
@@ -330,7 +332,7 @@ def test_build_portfolio_tax_lot_window_response_reports_missing_requested_secur
             security_ids=["EQ_US_AAPL", "UNKNOWN_SEC"],
         ),
         request_scope_fingerprint="scope-123",
-        page_rows=[(_tax_lot_row(), "USD")],
+        page_rows=[_tax_lot_row()],
         has_more=False,
         next_page_token=None,
     )
@@ -372,8 +374,8 @@ def test_build_portfolio_tax_lot_window_response_degrades_missing_instrument_ref
         ),
         request_scope_fingerprint="scope-123",
         page_rows=[
-            (_tax_lot_row(security_id="EQ_US_AAPL"), "USD"),
-            (_tax_lot_row(security_id="ORPHAN_SEC", lot_id="LOT-ORPHAN-001"), "USD"),
+            _tax_lot_row(security_id="EQ_US_AAPL"),
+            _tax_lot_row(security_id="ORPHAN_SEC", lot_id="LOT-ORPHAN-001"),
         ],
         has_more=False,
         next_page_token=None,

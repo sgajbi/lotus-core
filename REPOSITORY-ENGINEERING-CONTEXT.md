@@ -105,7 +105,10 @@ Current repository posture:
 22. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
-    transaction event and portfolio tax-lot source-data mappings.
+    transaction event and portfolio tax-lot source-data mappings. `PortfolioTaxLotWindow:v1` now
+    uses `PortfolioTaxLotReadRecord` as the typed repository-to-source-data boundary; extend this
+    pattern before adding new high-value source-data mappers that would otherwise accept raw ORM
+    rows or tuple-shaped SQL results.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

@@ -11,6 +11,7 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowSupportability,
     ReferencePageMetadata,
 )
+from ..read_models import PortfolioTaxLotReadRecord
 from ..repositories.identifier_normalization import normalize_security_id
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .reference_data_mappers import portfolio_tax_lot_record
@@ -78,11 +79,11 @@ def portfolio_tax_lot_next_page_token_payload(
     *,
     request_scope: PortfolioTaxLotWindowRequestScope,
     has_more: bool,
-    page_rows: list[tuple[Any, str | None]],
+    page_rows: list[PortfolioTaxLotReadRecord],
 ) -> dict[str, str] | None:
     if not has_more or not page_rows:
         return None
-    last_lot = page_rows[-1][0]
+    last_lot = page_rows[-1]
     return {
         "scope_fingerprint": request_scope.request_fingerprint,
         "last_acquisition_date": last_lot.acquisition_date.isoformat(),
@@ -94,7 +95,7 @@ def portfolio_tax_lot_page_token(
     *,
     request_scope: PortfolioTaxLotWindowRequestScope,
     has_more: bool,
-    page_rows: list[tuple[Any, str | None]],
+    page_rows: list[PortfolioTaxLotReadRecord],
     encode_page_token: Callable[[dict[str, str]], str],
 ) -> str | None:
     payload = portfolio_tax_lot_next_page_token_payload(
@@ -160,7 +161,7 @@ def build_portfolio_tax_lot_window_response(
     portfolio_id: str,
     request: PortfolioTaxLotWindowRequest,
     request_scope_fingerprint: str,
-    page_rows: list[tuple[Any, str | None]],
+    page_rows: list[PortfolioTaxLotReadRecord],
     has_more: bool,
     next_page_token: str | None,
     known_instrument_security_ids: set[str] | None = None,
@@ -195,33 +196,28 @@ def build_portfolio_tax_lot_window_response(
         **source_product_runtime_metadata_without_as_of_date(
             request.as_of_date,
             data_quality_status=supportability_context.data_quality_status,
-            latest_evidence_timestamp=latest_reference_evidence_timestamp(
-                [lot for lot, _ in page_rows]
-            ),
+            latest_evidence_timestamp=latest_reference_evidence_timestamp(page_rows),
         ),
     )
 
 
-def _portfolio_tax_lot_records(page_rows: list[tuple[Any, str | None]]) -> list[Any]:
-    return [
-        portfolio_tax_lot_record(lot, local_currency=local_currency)
-        for lot, local_currency in page_rows
-    ]
+def _portfolio_tax_lot_records(page_rows: list[PortfolioTaxLotReadRecord]) -> list[Any]:
+    return [portfolio_tax_lot_record(lot) for lot in page_rows]
 
 
-def _portfolio_tax_lot_security_ids(page_rows: list[tuple[Any, str | None]]) -> list[str]:
+def _portfolio_tax_lot_security_ids(page_rows: list[PortfolioTaxLotReadRecord]) -> list[str]:
     return list(
         dict.fromkeys(
             normalized
-            for lot, _local_currency in page_rows
-            if (normalized := normalize_security_id(getattr(lot, "security_id", None)))
+            for lot in page_rows
+            if (normalized := normalize_security_id(lot.security_id))
         )
     )
 
 
 def _missing_tax_lot_instrument_security_ids(
     *,
-    page_rows: list[tuple[Any, str | None]],
+    page_rows: list[PortfolioTaxLotReadRecord],
     known_instrument_security_ids: set[str],
 ) -> list[str]:
     normalized_known_security_ids = {

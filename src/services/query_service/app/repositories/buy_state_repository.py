@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..read_models import PortfolioTaxLotReadRecord
 from .identifier_normalization import normalize_security_id
 
 
@@ -62,6 +63,29 @@ def _append_optional_filter(filters: list, predicate) -> None:
         filters.append(predicate)
 
 
+def _portfolio_tax_lot_read_record(
+    lot: PositionLotState,
+    local_currency: str | None,
+) -> PortfolioTaxLotReadRecord:
+    return PortfolioTaxLotReadRecord(
+        portfolio_id=lot.portfolio_id,
+        security_id=lot.security_id,
+        instrument_id=lot.instrument_id,
+        lot_id=lot.lot_id,
+        open_quantity=lot.open_quantity,
+        original_quantity=lot.original_quantity,
+        acquisition_date=lot.acquisition_date,
+        lot_cost_base=lot.lot_cost_base,
+        lot_cost_local=lot.lot_cost_local,
+        source_transaction_id=lot.source_transaction_id,
+        source_system=lot.source_system,
+        calculation_policy_id=lot.calculation_policy_id,
+        calculation_policy_version=lot.calculation_policy_version,
+        local_currency=local_currency,
+        updated_at=lot.updated_at,
+    )
+
+
 class BuyStateRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -97,7 +121,7 @@ class BuyStateRepository:
         lot_status_filter: str | None,
         after_sort_key: tuple[date, str] | None,
         limit: int,
-    ) -> list[tuple[PositionLotState, str | None]]:
+    ) -> list[PortfolioTaxLotReadRecord]:
         normalized_security_ids = _normalized_security_ids(security_ids)
         if security_ids and not normalized_security_ids:
             return []
@@ -129,7 +153,8 @@ class BuyStateRepository:
             )
             .limit(limit)
         )
-        return list((await self.db.execute(stmt)).all())
+        rows = (await self.db.execute(stmt)).all()
+        return [_portfolio_tax_lot_read_record(lot, currency) for lot, currency in rows]
 
     async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
         normalized_security_ids = _normalized_security_ids(security_ids)
