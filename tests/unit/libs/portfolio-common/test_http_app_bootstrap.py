@@ -1,3 +1,4 @@
+import re
 from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
@@ -13,6 +14,8 @@ from portfolio_common.http_app_bootstrap import (
     resolve_metrics_access_policy,
 )
 from starlette.requests import Request
+
+TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 
 def test_normalize_trace_id_accepts_valid_hex_trace_id():
@@ -96,8 +99,12 @@ def test_standard_health_app_exposes_shared_observability_contract():
     assert response.status_code == 200
     assert response.headers["X-Correlation-ID"] == "WRK-id"
     assert response.headers["X-Request-Id"] == "REQ-id"
-    assert response.headers["X-Trace-Id"]
-    assert "traceparent" in response.headers
+    trace_id = response.headers["X-Trace-Id"]
+    traceparent = response.headers["traceparent"]
+    assert trace_id
+    assert TRACEPARENT_PATTERN.fullmatch(traceparent)
+    assert traceparent.startswith(f"00-{trace_id}-")
+    assert traceparent.split("-")[2] != "0000000000000001"
     assert "/metrics" in schema["paths"]
     assert schema["paths"]["/metrics"]["get"]["responses"]["200"]["content"] == {
         "text/plain": {"schema": {"type": "string"}}
@@ -144,6 +151,32 @@ def test_standard_http_app_preserves_incoming_traceparent_context():
     assert response.status_code == 200
     assert response.headers["traceparent"] == traceparent
     assert response.headers["X-Trace-Id"] == "0123456789abcdef0123456789abcdef"
+
+
+def test_standard_http_app_derives_w3c_traceparent_from_trace_id_header():
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    trace_id = "0123456789abcdef0123456789abcdef"
+    response = TestClient(app).get("/lineage", headers={"X-Trace-Id": trace_id})
+
+    assert response.status_code == 200
+    assert response.headers["X-Trace-Id"] == trace_id
+    traceparent = response.headers["traceparent"]
+    assert TRACEPARENT_PATTERN.fullmatch(traceparent)
+    assert traceparent.startswith(f"00-{trace_id}-")
+    assert traceparent.split("-")[2] != "0000000000000001"
 
 
 def test_metrics_access_policy_defaults_to_internal_open(monkeypatch):

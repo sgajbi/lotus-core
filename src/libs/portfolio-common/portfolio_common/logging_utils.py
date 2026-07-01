@@ -2,6 +2,7 @@
 import logging
 import os
 import re
+import secrets
 import sys
 import uuid
 from contextvars import ContextVar
@@ -20,7 +21,11 @@ trace_id_var: ContextVar[str] = ContextVar("trace_id", default="<not-set>")
 traceparent_var: ContextVar[str] = ContextVar("traceparent", default="<not-set>")
 REDACTED_VALUE = "***REDACTED***"
 _TRACE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
-_TRACEPARENT_PATTERN = re.compile(r"^00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}$")
+_SPAN_ID_PATTERN = re.compile(r"^[0-9a-f]{16}$")
+_TRACE_FLAGS_PATTERN = re.compile(r"^[0-9a-f]{2}$")
+_TRACEPARENT_PATTERN = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$")
+_ZERO_TRACE_ID = "0" * 32
+_ZERO_SPAN_ID = "0" * 16
 _SENSITIVE_KEY_TOKENS = (
     "authorization",
     "password",
@@ -62,7 +67,19 @@ def normalize_trace_id(value: str | None) -> str | None:
     if normalized is None:
         return None
     candidate = normalized.lower()
+    if candidate == _ZERO_TRACE_ID:
+        return None
     return candidate if _TRACE_ID_PATTERN.fullmatch(candidate) else None
+
+
+def normalize_span_id(value: str | None) -> str | None:
+    normalized = normalize_lineage_value(value)
+    if normalized is None:
+        return None
+    candidate = normalized.lower()
+    if candidate == _ZERO_SPAN_ID:
+        return None
+    return candidate if _SPAN_ID_PATTERN.fullmatch(candidate) else None
 
 
 def normalize_traceparent(value: str | None) -> str | None:
@@ -70,7 +87,13 @@ def normalize_traceparent(value: str | None) -> str | None:
     if normalized is None:
         return None
     candidate = normalized.lower()
-    return candidate if _TRACEPARENT_PATTERN.fullmatch(candidate) else None
+    match = _TRACEPARENT_PATTERN.fullmatch(candidate)
+    if match is None:
+        return None
+    trace_id, span_id, _trace_flags = match.groups()
+    if trace_id == _ZERO_TRACE_ID or span_id == _ZERO_SPAN_ID:
+        return None
+    return candidate
 
 
 def trace_id_from_traceparent(value: str | None) -> str | None:
@@ -80,11 +103,27 @@ def trace_id_from_traceparent(value: str | None) -> str | None:
     return traceparent.split("-", 3)[1]
 
 
-def traceparent_from_trace_id(value: str | None) -> str | None:
+def generate_span_id() -> str:
+    span_id = secrets.token_hex(8)
+    while span_id == _ZERO_SPAN_ID:
+        span_id = secrets.token_hex(8)
+    return span_id
+
+
+def traceparent_from_trace_id(
+    value: str | None,
+    *,
+    span_id: str | None = None,
+    trace_flags: str = "01",
+) -> str | None:
     trace_id = normalize_trace_id(value)
     if trace_id is None:
         return None
-    return f"00-{trace_id}-0000000000000001-01"
+    normalized_span_id = normalize_span_id(span_id) or generate_span_id()
+    normalized_trace_flags = trace_flags.strip().lower()
+    if _TRACE_FLAGS_PATTERN.fullmatch(normalized_trace_flags) is None:
+        normalized_trace_flags = "01"
+    return f"00-{trace_id}-{normalized_span_id}-{normalized_trace_flags}"
 
 
 def redact_sensitive(value: Any) -> Any:

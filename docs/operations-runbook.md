@@ -37,6 +37,13 @@ Dependency status values are:
 Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
 503 with the dependency status map in `detail.dependencies`.
 
+Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
+`X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
+`X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same
+trace id and a fresh non-zero span id. When no trace header is supplied, the bootstrap generates both
+the trace id and non-zero span id. This supports trace-context propagation across Lotus services but
+does not by itself prove OpenTelemetry export or APM collector integration.
+
 ## Ingestion Retry Recovery Responses
 
 `POST /ingestion/jobs/{job_id}/retry` preserves stable HTTP statuses and application `code` values,

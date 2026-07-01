@@ -1,16 +1,26 @@
 import json
 import logging
+import re
 
 from portfolio_common.logging_utils import (
     CorrelationIdFilter,
     RedactingJsonFormatter,
     correlation_id_var,
+    generate_span_id,
     normalize_lineage_value,
+    normalize_span_id,
+    normalize_trace_id,
+    normalize_traceparent,
     redact_sensitive,
     redact_sensitive_text,
     request_id_var,
     trace_id_var,
+    traceparent_from_trace_id,
 )
+
+TRACE_ID = "0123456789abcdef0123456789abcdef"
+SPAN_ID = "0123456789abcdef"
+TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 
 def test_normalize_lineage_value_converts_sentinels_to_none():
@@ -24,6 +34,36 @@ def test_normalize_lineage_value_converts_sentinels_to_none():
 def test_normalize_lineage_value_preserves_real_lineage():
     assert normalize_lineage_value("corr-123") == "corr-123"
     assert normalize_lineage_value("  corr-123  ") == "corr-123"
+
+
+def test_trace_context_normalizers_reject_invalid_w3c_ids():
+    assert normalize_trace_id("0" * 32) is None
+    assert normalize_span_id("0" * 16) is None
+    assert normalize_traceparent(f"00-{'0' * 32}-{SPAN_ID}-01") is None
+    assert normalize_traceparent(f"00-{TRACE_ID}-{'0' * 16}-01") is None
+    assert normalize_traceparent(f"00-{TRACE_ID}-{SPAN_ID}-zz") is None
+
+
+def test_traceparent_from_trace_id_preserves_supplied_valid_span_context():
+    assert (
+        traceparent_from_trace_id(TRACE_ID.upper(), span_id=SPAN_ID.upper(), trace_flags="00")
+        == f"00-{TRACE_ID}-{SPAN_ID}-00"
+    )
+
+
+def test_traceparent_from_trace_id_generates_nonzero_span_context():
+    traceparent = traceparent_from_trace_id(TRACE_ID)
+
+    assert traceparent is not None
+    assert TRACEPARENT_PATTERN.fullmatch(traceparent)
+    assert traceparent.split("-")[2] != "0000000000000000"
+
+
+def test_generate_span_id_returns_w3c_nonzero_span_id():
+    span_id = generate_span_id()
+
+    assert normalize_span_id(span_id) == span_id
+    assert span_id != "0000000000000000"
 
 
 def test_correlation_id_filter_normalizes_sentinel_lineage_values():

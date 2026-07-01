@@ -109,7 +109,10 @@ When app-local runtime is unhealthy, check this order:
 Runtime-facing API services and worker health web apps expose `/health/live`, `/health/ready`, and
 `/metrics`. Health responses include `X-Correlation-ID`, `X-Request-Id`, `X-Trace-Id`, and
 `traceparent` headers so incident triage can tie probe behavior to request logs and route-template
-HTTP metrics.
+HTTP metrics. Valid incoming W3C `traceparent` headers are preserved. Requests with only
+`X-Trace-Id`, or no trace headers, receive a W3C-shaped `traceparent` with a fresh non-zero span id.
+This is propagation context for Lotus diagnostics; it is not a standalone claim that OpenTelemetry
+export or an APM collector is configured.
 
 ## Database-first diagnostics
 

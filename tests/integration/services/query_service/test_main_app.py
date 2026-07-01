@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 import httpx
@@ -12,6 +13,8 @@ from portfolio_common.source_data_security import (
 from src.services.query_service.app.main import app, lifespan
 
 pytestmark = pytest.mark.asyncio
+
+TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")
 
 SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
     "tenant_id",
@@ -222,9 +225,10 @@ async def test_middleware_replaces_invalid_trace_id(async_test_client):
     assert response.headers["X-Request-Id"] == "req-123"
     assert response.headers["X-Trace-Id"] != "trace-123"
     assert len(response.headers["X-Trace-Id"]) == 32
-    assert response.headers["traceparent"].startswith(
-        f"00-{response.headers['X-Trace-Id']}-0000000000000001-01"
-    )
+    traceparent = response.headers["traceparent"]
+    assert TRACEPARENT_PATTERN.fullmatch(traceparent)
+    assert traceparent.startswith(f"00-{response.headers['X-Trace-Id']}-")
+    assert traceparent.split("-")[2] != "0000000000000001"
 
 
 async def test_global_exception_handler_returns_standard_payload(async_test_client):
