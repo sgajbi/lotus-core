@@ -355,6 +355,74 @@ async def test_run_loop_retryable_error_does_not_commit(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_not_called()
     test_consumer._send_to_dlq_async.assert_not_called()
+    assert (
+        test_consumer._retryable_failure_attempts[
+            "topic=test-topic|group=test-group|partition=0|offset=42|key=key_retry"
+        ][0]
+        == 1
+    )
+
+
+async def test_run_loop_retryable_max_attempts_exhaustion_sends_to_dlq_and_commits(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-retry-exhausted", {"data": "value-retry-exhausted"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._retryable_failure_max_attempts = 1
+
+    async def retryable_failure(*args, **kwargs):
+        test_consumer.shutdown()
+        raise RetryableConsumerError("DB connection dropped!")
+
+    test_consumer.process_message_mock.side_effect = retryable_failure
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+
+    with (
+        patch("portfolio_common.kafka_consumer.logger.error") as mock_error,
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+    ):
+        await test_consumer.run()
+
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    assert test_consumer._retryable_failure_attempts == {}
+    assert (
+        "retryable_exhausted",
+        "retryable_budget_exhausted",
+    ) in _consumer_event_outcomes(event_metric)
+    exhausted_logs = [
+        call
+        for call in mock_error.call_args_list
+        if call.kwargs["extra"]["event_name"] == "kafka.consumer.retryable_failure_budget_exhausted"
+    ]
+    assert len(exhausted_logs) == 1
+    log_extra = exhausted_logs[0].kwargs["extra"]
+    assert log_extra["reason_code"] == "retryable_budget_exhausted"
+    assert log_extra["failure_attempts"] == 1
+    assert log_extra["max_failure_attempts"] == 1
+
+
+async def test_run_loop_retryable_elapsed_budget_exhaustion_sends_to_dlq(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-retry-elapsed", {"data": "value-retry-elapsed"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    test_consumer._retryable_failure_max_elapsed_seconds = 5
+    test_consumer._retryable_failure_attempts[
+        "topic=test-topic|group=test-group|partition=0|offset=42|key=key-retry-elapsed"
+    ] = (2, 0.0)
+
+    async def retryable_failure(*args, **kwargs):
+        test_consumer.shutdown()
+        raise RetryableConsumerError("dependency still unavailable")
+
+    test_consumer.process_message_mock.side_effect = retryable_failure
+    test_consumer._send_to_dlq_async = AsyncMock(return_value=True)
+
+    await test_consumer.run()
+
+    test_consumer._send_to_dlq_async.assert_awaited_once_with(mock_msg, ANY)
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
 
 
 async def test_run_loop_retryable_error_emits_standard_consumer_metrics(
