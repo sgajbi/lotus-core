@@ -50,7 +50,7 @@ tested modules.
 | Transaction-cost component identity | Improving | CR-1199 enforces normalized `transaction_costs` component identity and reuses the same grain in cost-curve and performance-economics source products |
 | Cash-balance account-id provenance | Improving | CR-1200 validates transaction-derived cash-account fallback mappings against active/effective cash-account master data and exposes response-level provenance |
 | Instrument reference integrity | Improving | CR-1201 defers product cost processing when instrument master data is missing, before cost and lot-state writes |
-| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, selected integration source-data discovery, mandate-scoped source-route, benchmark reference, instrument enrichment, and benchmark market-series failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples; CR-1217 adds `make qcp-problem-details-guard` to prevent direct router `HTTPException` and raw `detail=str(...)` regressions |
+| Query-control-plane error contracts | Improving | CR-1191 adds shared problem-details error payloads, migrates representative core-snapshot, analytics-input, simulation, operations-support, portfolio source-evidence, selected integration source-data discovery, mandate-scoped source-route, benchmark reference, instrument enrichment, and benchmark market-series failures away from raw bare `detail` responses, and now keeps migrated `application/problem+json` OpenAPI examples distinct from legacy `application/json` bare-detail examples; CR-1217 adds `make qcp-problem-details-guard` to prevent direct router `HTTPException` and raw `detail=str(...)` regressions; CR-1242 replaces simulation-router exception-message classification with typed service exceptions and type-based problem-details mapping |
 | Ingestion rate-limit enforcement scope | Improving | CR-1196 makes ingestion write rate-limit scope explicit, startup-validates gateway-backed global enforcement claims, and adds bounded denial metrics/logs; CR-1225 blocks scope/documentation drift through `make ingestion-rate-limit-scope-guard` so local-process enforcement cannot be reworded as gateway-backed global control |
 | Lookup selector scalability | Improving | CR-1193 routes portfolio, instrument, and currency selector endpoints through bounded service/repository lookup methods instead of router-owned full-catalog scans |
 | Transaction cost curve source reads | Improving | CR-1194 makes `TransactionCostCurve:v1` cursor paging source-read bounded through grouped keyset selection and page-key-scoped transaction evidence reads |
@@ -115,6 +115,14 @@ enforced guard. `make qcp-problem-details-guard` now scans active
 `query_control_plane_service` router files and fails direct FastAPI/Starlette `HTTPException`
 usage or raw `detail=str(...)` payloads before the same defect class reaches runtime, OpenAPI, or
 downstream clients. No API behavior changed.
+
+Current continuation: CR-1242 removes the remaining simulation-router message-text classification
+from the issue #677 path. Simulation service failures now use typed exception classes for missing
+portfolio, session, change, and invalid mutation conditions, while routers map exception types to
+stable QCP problem-details responses. Route paths, statuses, DTOs, OpenAPI success contracts,
+database schema, Kafka topics, and success behavior are preserved. Focused proof passed with 49
+simulation service and QCP router tests, `make qcp-problem-details-guard`, scoped Ruff, and scoped
+mypy.
 
 Current continuation: CR-1218 fixes GitHub issue #594 for direct ingestion publish routers.
 Kafka publish dependency failures now return HTTP 503 with `Retry-After`, dependency=`kafka`,
@@ -2185,3 +2193,7 @@ health before that claim is defensible.
      the canonical transaction registry. Supported-type coverage, transfer sign sets, cash
      instrument routing, and no-cashflow-rule exceptions now follow registry semantics while
      preserving the existing dry-run payload matrix.
+348. Continued validated GitHub issue #677 by replacing simulation-router exception-message
+     classification with typed simulation service errors and type-based QCP problem-details
+     mapping. Focused simulation service and QCP router proof passed with 49 tests, and the
+     repo-native QCP problem-details guard passed.

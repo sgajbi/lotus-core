@@ -37,6 +37,26 @@ class _NormalizedSimulationChange:
     change: Any
 
 
+class SimulationServiceError(ValueError):
+    """Base class for simulation service errors mapped by control-plane routers."""
+
+
+class SimulationPortfolioNotFoundError(SimulationServiceError):
+    pass
+
+
+class SimulationSessionNotFoundError(SimulationServiceError):
+    pass
+
+
+class SimulationChangeNotFoundError(SimulationServiceError):
+    pass
+
+
+class SimulationMutationInvalidError(SimulationServiceError):
+    pass
+
+
 class SimulationService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -58,13 +78,13 @@ class SimulationService:
     async def get_session(self, session_id: str) -> SimulationSessionResponse:
         session = await self.repo.get_session(session_id)
         if session is None:
-            raise ValueError(f"Simulation session {session_id} not found")
+            raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
         return SimulationSessionResponse(session=session)
 
     async def close_session(self, session_id: str) -> SimulationSessionResponse:
         session = await self.repo.get_session(session_id)
         if session is None:
-            raise ValueError(f"Simulation session {session_id} not found")
+            raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
         session = await self.repo.close_session(session)
         return SimulationSessionResponse(session=session)
 
@@ -87,7 +107,7 @@ class SimulationService:
 
         deleted = await self.repo.delete_change(session, change_id)
         if not deleted:
-            raise ValueError(f"Simulation change {change_id} not found")
+            raise SimulationChangeNotFoundError(f"Simulation change {change_id} not found")
 
         rows = await self.repo.get_changes(session_id)
         return SimulationChangesResponse(
@@ -99,7 +119,7 @@ class SimulationService:
     async def get_projected_positions(self, session_id: str) -> ProjectedPositionsResponse:
         session = await self.repo.get_session(session_id)
         if session is None:
-            raise ValueError(f"Simulation session {session_id} not found")
+            raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
 
         baseline = await self._projected_baseline(session.portfolio_id)
         changes = await self.repo.get_changes(session_id)
@@ -141,11 +161,11 @@ class SimulationService:
     @staticmethod
     def _validate_session_active(session_id: str, session) -> None:
         if session is None:
-            raise ValueError(f"Simulation session {session_id} not found")
+            raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
         if session.status != "ACTIVE":
-            raise ValueError(f"Simulation session {session_id} is not active")
+            raise SimulationMutationInvalidError(f"Simulation session {session_id} is not active")
         if session.expires_at is not None and session.expires_at < datetime.now(timezone.utc):
-            raise ValueError(f"Simulation session {session_id} is expired")
+            raise SimulationMutationInvalidError(f"Simulation session {session_id} is expired")
 
     async def _projected_baseline(self, portfolio_id: str) -> _ProjectedBaseline:
         baseline_results = await self.position_repo.get_latest_positions_by_portfolio(portfolio_id)
@@ -196,7 +216,7 @@ class SimulationService:
         for change in changes:
             security_id = normalize_security_id(change.security_id)
             if not security_id:
-                raise ValueError("Simulation change is missing security_id")
+                raise SimulationMutationInvalidError("Simulation change is missing security_id")
             normalized_changes.append(
                 _NormalizedSimulationChange(security_id=security_id, change=change)
             )
@@ -279,7 +299,7 @@ class SimulationService:
 
     async def _ensure_portfolio_exists(self, portfolio_id: str) -> None:
         if not await self.position_repo.portfolio_exists(portfolio_id):
-            raise ValueError(f"Portfolio with id {portfolio_id} not found")
+            raise SimulationPortfolioNotFoundError(f"Portfolio with id {portfolio_id} not found")
 
     @staticmethod
     def _to_change_record(row) -> SimulationChangeRecord:

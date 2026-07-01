@@ -158,7 +158,10 @@ Current repository posture:
     integration-source helper and assert `QCP_INTEGRATION_SOURCE_NOT_FOUND` with source product,
     portfolio ID, and `not_found` reason metadata at unit, ASGI, and OpenAPI layers.
     `make qcp-problem-details-guard` now prevents active QCP routers from reintroducing direct
-    FastAPI/Starlette `HTTPException` calls or raw `detail=str(...)` payloads.
+    FastAPI/Starlette `HTTPException` calls or raw `detail=str(...)` payloads. When a QCP route
+    maps application/service failures, prefer typed service exceptions and router type dispatch
+    over substring checks against exception message text; keep human-readable details bounded and
+    stable in the problem-details mapper.
 32. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when

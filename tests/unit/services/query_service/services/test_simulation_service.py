@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.services.query_service.app.dtos.simulation_dto import SimulationSessionCreateRequest
-from src.services.query_service.app.services.simulation_service import SimulationService
+from src.services.query_service.app.services.simulation_service import (
+    SimulationChangeNotFoundError,
+    SimulationMutationInvalidError,
+    SimulationPortfolioNotFoundError,
+    SimulationService,
+    SimulationSessionNotFoundError,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -98,7 +104,7 @@ async def test_create_session_raises_when_portfolio_missing(mock_dependencies):
     position_repo.portfolio_exists.return_value = False
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="Portfolio with id P404 not found"):
+    with pytest.raises(SimulationPortfolioNotFoundError, match="Portfolio with id P404 not found"):
         await service.create_session(
             SimulationSessionCreateRequest(
                 portfolio_id="P404",
@@ -210,7 +216,7 @@ async def test_get_session_raises_when_not_found(mock_dependencies):
     repo.get_session.return_value = None
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(SimulationSessionNotFoundError, match="not found"):
         await service.get_session("S404")
 
 
@@ -229,7 +235,7 @@ async def test_close_session_raises_when_not_found(mock_dependencies):
     repo.get_session.return_value = None
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(SimulationSessionNotFoundError, match="not found"):
         await service.close_session("S404")
 
 
@@ -252,7 +258,7 @@ async def test_add_changes_raises_when_session_inactive(mock_dependencies):
     repo.get_session.return_value.status = "CLOSED"
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="not active"):
+    with pytest.raises(SimulationMutationInvalidError, match="not active"):
         await service.add_changes("S1", [{"security_id": "SEC_AAPL_US", "transaction_type": "BUY"}])
 
 
@@ -261,7 +267,7 @@ async def test_add_changes_raises_when_session_expired(mock_dependencies):
     repo.get_session.return_value.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="expired"):
+    with pytest.raises(SimulationMutationInvalidError, match="expired"):
         await service.add_changes("S1", [{"security_id": "SEC_AAPL_US", "transaction_type": "BUY"}])
 
 
@@ -270,7 +276,7 @@ async def test_delete_change_raises_when_change_missing(mock_dependencies):
     repo.delete_change.return_value = False
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(SimulationChangeNotFoundError, match="not found"):
         await service.delete_change("S1", "C404")
 
 
@@ -279,7 +285,7 @@ async def test_projected_positions_raises_when_session_missing(mock_dependencies
     repo.get_session.return_value = None
     service = SimulationService(AsyncMock())
 
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(SimulationSessionNotFoundError, match="not found"):
         await service.get_projected_positions("S404")
 
 
@@ -476,7 +482,7 @@ async def test_get_projected_summary_computes_baseline_and_delta(mock_dependenci
 
 
 async def test_validate_session_active_raises_when_session_missing():
-    with pytest.raises(ValueError, match="not found"):
+    with pytest.raises(SimulationSessionNotFoundError, match="not found"):
         SimulationService._validate_session_active("S404", None)
 
 

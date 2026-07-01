@@ -11,6 +11,12 @@ from src.services.query_control_plane_service.app.routers.simulation import (
     SimulationService,
     get_simulation_service,
 )
+from src.services.query_service.app.services.simulation_service import (
+    SimulationChangeNotFoundError,
+    SimulationMutationInvalidError,
+    SimulationPortfolioNotFoundError,
+    SimulationSessionNotFoundError,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -90,7 +96,9 @@ async def test_get_simulation_session_success(async_test_client):
 
 async def test_create_simulation_session_unknown_portfolio_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.create_session.side_effect = ValueError("Portfolio with id P404 not found")
+    mock_service.create_session.side_effect = SimulationPortfolioNotFoundError(
+        "Portfolio with id P404 not found"
+    )
 
     response = await client.post(
         "/simulation-sessions", json={"portfolio_id": "P404", "created_by": "tester"}
@@ -106,7 +114,7 @@ async def test_create_simulation_session_unknown_portfolio_maps_to_404(async_tes
 
 async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_session.side_effect = ValueError("not found")
+    mock_service.get_session.side_effect = SimulationSessionNotFoundError("not found")
 
     response = await client.get("/simulation-sessions/S404")
 
@@ -120,7 +128,7 @@ async def test_get_simulation_session_not_found_maps_to_404(async_test_client):
 
 async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
     client, mock_service = async_test_client
-    mock_service.add_changes.side_effect = ValueError("session expired")
+    mock_service.add_changes.side_effect = SimulationMutationInvalidError("session expired")
 
     response = await client.post(
         "/simulation-sessions/S1/changes",
@@ -139,7 +147,9 @@ async def test_add_simulation_changes_validation_maps_to_400(async_test_client):
 
 async def test_add_simulation_changes_missing_session_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.add_changes.side_effect = ValueError("Simulation session S404 not found")
+    mock_service.add_changes.side_effect = SimulationSessionNotFoundError(
+        "Simulation session S404 not found"
+    )
 
     response = await client.post(
         "/simulation-sessions/S404/changes",
@@ -251,7 +261,7 @@ async def test_create_simulation_session_unexpected_error_maps_to_500(async_test
 
 async def test_close_simulation_session_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.close_session.side_effect = ValueError("not found")
+    mock_service.close_session.side_effect = SimulationSessionNotFoundError("not found")
 
     response = await client.delete("/simulation-sessions/S404")
     _assert_problem_details(
@@ -287,7 +297,7 @@ async def test_close_simulation_session_success(async_test_client):
 
 async def test_delete_simulation_change_validation_maps_to_400(async_test_client):
     client, mock_service = async_test_client
-    mock_service.delete_change.side_effect = ValueError("invalid")
+    mock_service.delete_change.side_effect = SimulationMutationInvalidError("invalid")
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
     _assert_problem_details(
@@ -300,7 +310,9 @@ async def test_delete_simulation_change_validation_maps_to_400(async_test_client
 
 async def test_delete_simulation_change_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.delete_change.side_effect = ValueError("Simulation change C404 not found")
+    mock_service.delete_change.side_effect = SimulationChangeNotFoundError(
+        "Simulation change C404 not found"
+    )
 
     response = await client.delete("/simulation-sessions/S1/changes/C404")
 
@@ -347,7 +359,7 @@ async def test_delete_simulation_change_success(async_test_client):
 
 async def test_get_projected_positions_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_projected_positions.side_effect = ValueError("not found")
+    mock_service.get_projected_positions.side_effect = SimulationSessionNotFoundError("not found")
 
     response = await client.get("/simulation-sessions/S404/projected-positions")
     _assert_problem_details(
@@ -360,7 +372,7 @@ async def test_get_projected_positions_not_found_maps_to_404(async_test_client):
 
 async def test_get_projected_summary_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
-    mock_service.get_projected_summary.side_effect = ValueError("not found")
+    mock_service.get_projected_summary.side_effect = SimulationSessionNotFoundError("not found")
 
     response = await client.get("/simulation-sessions/S404/projected-summary")
     _assert_problem_details(
