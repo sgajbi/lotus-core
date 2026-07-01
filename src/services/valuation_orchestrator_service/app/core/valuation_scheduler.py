@@ -21,6 +21,13 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
+from portfolio_common.scheduler_dispatch_recovery import (
+    DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
+    DISPATCH_PUBLISH_FAILURE_PHASE,
+    SchedulerDispatchError,
+    dispatch_failure_reason,
+    present_job_ids,
+)
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 from ..repositories.valuation_repository import ValuationRepository
@@ -568,14 +575,36 @@ class ValuationScheduler:
         self,
         *,
         queued_count: int,
+        published_jobs: list[PortfolioValuationJob],
+        published_record_keys: list[str],
+        remaining_jobs: list[PortfolioValuationJob],
         remaining_record_keys: list[str],
         cause: Exception,
     ) -> None:
-        self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
+        undelivered_count = self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
+        if undelivered_count:
+            affected_record_keys = [*published_record_keys, *remaining_record_keys]
+            affected_keys = ", ".join(affected_record_keys)
+            raise SchedulerDispatchError(
+                message=(
+                    "Delivery confirmation timed out while recovering from valuation dispatch "
+                    f"failure. Affected job keys: {affected_keys}."
+                ),
+                recovery_job_ids=present_job_ids([*published_jobs, *remaining_jobs]),
+                recovery_record_keys=tuple(affected_record_keys),
+                published_record_keys=tuple(published_record_keys),
+                failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
+            ) from cause
         remaining_keys = ", ".join(remaining_record_keys)
-        raise RuntimeError(
-            "Failed to dispatch valuation jobs after "
-            f"{queued_count} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+        raise SchedulerDispatchError(
+            message=(
+                "Failed to dispatch valuation jobs after "
+                f"{queued_count} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
+            ),
+            recovery_job_ids=present_job_ids(remaining_jobs),
+            recovery_record_keys=tuple(remaining_record_keys),
+            published_record_keys=tuple(published_record_keys),
+            failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
         ) from cause
 
     def _confirm_dispatched_jobs(self, record_keys: list[str]) -> None:
@@ -583,9 +612,15 @@ class ValuationScheduler:
         if not undelivered_count:
             return
         affected_keys = ", ".join(record_keys)
-        raise RuntimeError(
-            "Delivery confirmation timed out while dispatching valuation jobs. "
-            f"Affected job keys: {affected_keys}."
+        raise SchedulerDispatchError(
+            message=(
+                "Delivery confirmation timed out while dispatching valuation jobs. "
+                f"Affected job keys: {affected_keys}."
+            ),
+            recovery_job_ids=(),
+            recovery_record_keys=tuple(record_keys),
+            published_record_keys=tuple(record_keys),
+            failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
         )
 
     async def _dispatch_jobs(self, jobs: List[PortfolioValuationJob]):
@@ -602,11 +637,46 @@ class ValuationScheduler:
             except Exception as exc:
                 self._raise_dispatch_failure(
                     queued_count=idx,
+                    published_jobs=jobs[:idx],
+                    published_record_keys=record_keys[:idx],
+                    remaining_jobs=jobs[idx:],
                     remaining_record_keys=record_keys[idx:],
                     cause=exc,
                 )
-        self._confirm_dispatched_jobs(record_keys)
+        try:
+            self._confirm_dispatched_jobs(record_keys)
+        except SchedulerDispatchError as exc:
+            raise SchedulerDispatchError(
+                message=exc.message,
+                recovery_job_ids=present_job_ids(jobs),
+                recovery_record_keys=exc.recovery_record_keys,
+                published_record_keys=exc.published_record_keys,
+                failure_phase=exc.failure_phase,
+            ) from exc
         logger.info(f"Successfully flushed {len(jobs)} valuation jobs.")
+
+    async def _recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
+        if not failure.recovery_job_ids:
+            logger.warning(
+                "Valuation scheduler dispatch failure had no durable job ids to recover.",
+                extra={
+                    "failure_phase": failure.failure_phase,
+                    "record_keys": list(failure.recovery_record_keys),
+                    "published_record_keys": list(failure.published_record_keys),
+                },
+            )
+            return
+        async for db in get_async_db_session():
+            async with db.begin():
+                repo = ValuationRepository(db)
+                await repo.recover_dispatch_failed_jobs(
+                    list(failure.recovery_job_ids),
+                    max_attempts=self._max_attempts,
+                    failure_reason=dispatch_failure_reason(
+                        failure_phase=failure.failure_phase,
+                        record_keys=failure.recovery_record_keys,
+                    ),
+                )
 
     async def _claim_and_dispatch_ready_jobs(self) -> None:
         for _ in range(self._dispatch_rounds_per_poll):
@@ -617,7 +687,11 @@ class ValuationScheduler:
                     claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
             if not claimed_jobs:
                 break
-            await self._dispatch_jobs(claimed_jobs)
+            try:
+                await self._dispatch_jobs(claimed_jobs)
+            except SchedulerDispatchError as exc:
+                await self._recover_dispatch_failure(exc)
+                raise
             if len(claimed_jobs) < self._batch_size:
                 break
 
