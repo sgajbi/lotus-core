@@ -4,6 +4,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from portfolio_common.enterprise_readiness import (
+    build_default_enterprise_audit_middleware,
+    validate_default_enterprise_runtime_config,
+)
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.kafka_utils import get_kafka_producer
@@ -31,6 +35,7 @@ SERVICE_PREFIX = "ING"
 SERVICE_NAME = "ingestion_service"
 setup_logging()
 logger = logging.getLogger(__name__)
+validate_default_enterprise_runtime_config(service_name=SERVICE_NAME, logger=logger)
 
 app_state = {}
 
@@ -86,6 +91,9 @@ app = FastAPI(
     version="0.5.0",
     contact={"name": "Lotus Platform Engineering"},
     lifespan=lifespan,
+)
+app.middleware("http")(
+    build_default_enterprise_audit_middleware(service_name=SERVICE_NAME, logger=logger)
 )
 configure_standard_http_app(
     app,

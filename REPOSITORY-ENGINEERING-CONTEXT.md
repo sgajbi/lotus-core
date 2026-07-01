@@ -659,6 +659,17 @@ Most relevant current governance:
     optional elapsed terminal budget when configured above zero. Operator metrics must preserve the
     split between total pending, retry-eligible pending, retry-waiting pending, terminal failed, and
     published outcomes without high-cardinality or payload-derived labels.
+58. FastAPI app security control coverage is governed by
+    `contracts/security/security-control-coverage.v1.json` and enforced by
+    `make security-control-coverage-guard` through `make lint`. Every active `main.py` or `web.py`
+    FastAPI app under `src/services/**/app/` must be listed in the matrix and use the shared HTTP
+    bootstrap for secure response headers, fail-closed CORS, metrics access policy, correlation and
+    trace headers, and safe unhandled-error responses. Business/operator HTTP apps must install
+    enterprise audit/authorization middleware; health-only worker apps must be explicitly
+    classified as health-only. Ingestion upload APIs are bounded by
+    `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` and return `INGESTION_UPLOAD_TOO_LARGE` for oversized
+    payloads. The guard is static repo evidence only; live ingress, IAM, WAF, network, and
+    penetration-test proof remain separate higher-lane evidence.
 
 ## Context Maintenance Rule
 

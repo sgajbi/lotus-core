@@ -6670,6 +6670,34 @@ async def test_upload_preview_rejects_unsupported_file_format(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_upload_preview_rejects_payload_above_configured_limit(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    monkeypatch,
+):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "16")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={
+            "file": (
+                "transactions.csv",
+                b"transaction_id,portfolio_id\nT1,P1",
+                "text/csv",
+            )
+        },
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == {
+        "code": "INGESTION_UPLOAD_TOO_LARGE",
+        "message": "Bulk upload payload exceeds the configured byte limit.",
+        "max_bytes": 16,
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
 async def test_upload_commit_transactions_csv_partial(
     async_test_client: httpx.AsyncClient, mock_kafka_producer: MagicMock
 ):

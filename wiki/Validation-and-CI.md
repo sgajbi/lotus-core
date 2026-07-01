@@ -30,6 +30,7 @@
 - `make quality-openapi-spectral-gate`
 - `make quality-wiki-docs-gate`
 - `make architecture-guard`
+- `make security-control-coverage-guard`
 
 ## Guard-to-contract mapping
 
@@ -57,6 +58,9 @@
   to compare authored and published pages
 - `make architecture-guard`
   protects layering and repository boundary posture
+- `make security-control-coverage-guard`
+  protects the FastAPI app security-control matrix for standard bootstrap, secure headers, CORS,
+  metrics access, auth/audit, payload limits, upload limits, allowlists, and safe errors
 
 ## What the gates protect
 
@@ -69,6 +73,7 @@
 - wiki source publication readiness
 - architecture boundaries
 - production-readiness closure evidence
+- FastAPI security-control coverage
 
 ## Reading path when a gate fails
 
@@ -84,6 +89,10 @@
   update repo-local `wiki/` source first, keep `_Sidebar.md` aligned with every publishable page,
   and run the optional published-wiki parity check only against a generated or cloned publication
   target
+- security-control coverage failure:
+  update `contracts/security/security-control-coverage.v1.json` and the app bootstrap together;
+  do not add a matrix entry that claims live ingress, IAM, or WAF evidence without separate runtime
+  proof
 
 ## Related references
 

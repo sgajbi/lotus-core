@@ -34,6 +34,25 @@ It is enforced through:
   `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
 - source-data security profiles in
   `src/libs/portfolio-common/portfolio_common/source_data_security.py`
+- FastAPI app security-control coverage in
+  `contracts/security/security-control-coverage.v1.json`
+
+## HTTP app security controls
+
+`make security-control-coverage-guard` checks that every FastAPI app is listed in the governed
+matrix and has implementation anchors for:
+
+- shared HTTP bootstrap
+- secure response headers
+- deny-by-default CORS
+- metrics access policy
+- enterprise auth/audit middleware on business and operator APIs
+- unauthenticated health and metrics allowlist
+- payload limits and ingestion upload byte limits where relevant
+- safe unhandled-error responses
+
+This is static repository evidence. Live ingress, IAM, WAF, network policy, and penetration-test
+proof remain separate higher-lane evidence.
 
 ## Security posture to remember
 
@@ -45,6 +64,8 @@ It is enforced through:
   compatibility behavior or undocumented aliases
 - duplicated service-local authorization or audit logic is a regression when the shared
   enterprise-readiness layer already owns it
+- new FastAPI apps must be added to the security-control matrix in the same slice as their
+  bootstrap path, or `make lint` will fail
 
 ## Operating rule
 

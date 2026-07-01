@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from portfolio_common.http_app_bootstrap import (
     METRICS_INTERNAL_OPEN_MODE,
     METRICS_PROTECTED_SCRAPE_MODE,
+    SECURE_RESPONSE_HEADERS,
     UNMATCHED_ROUTE_TEMPLATE,
     configure_standard_http_app,
     create_standard_health_app,
@@ -153,6 +154,84 @@ def test_standard_http_app_preserves_incoming_traceparent_context():
     assert response.status_code == 200
     assert response.headers["traceparent"] == traceparent
     assert response.headers["X-Trace-Id"] == "0123456789abcdef0123456789abcdef"
+
+
+def test_standard_http_app_adds_secure_response_headers():
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app).get("/lineage")
+
+    assert response.status_code == 200
+    for header, value in SECURE_RESPONSE_HEADERS.items():
+        assert response.headers[header] == value
+
+
+def test_standard_http_app_cors_defaults_to_no_browser_origin_access(monkeypatch):
+    monkeypatch.delenv("LOTUS_HTTP_CORS_ALLOW_ORIGINS", raising=False)
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app).options(
+        "/lineage",
+        headers={
+            "Origin": "https://workbench.dev.lotus",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_standard_http_app_allows_configured_cors_origin():
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+        cors_allow_origins=("https://workbench.dev.lotus",),
+    )
+
+    response = TestClient(app).options(
+        "/lineage",
+        headers={
+            "Origin": "https://workbench.dev.lotus",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://workbench.dev.lotus"
 
 
 def test_standard_http_app_derives_w3c_traceparent_from_trace_id_header():

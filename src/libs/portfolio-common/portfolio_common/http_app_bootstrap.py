@@ -2,13 +2,14 @@ import logging
 import time
 from dataclasses import dataclass
 from hmac import compare_digest
-from typing import Any
+from typing import Any, Sequence
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, status
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from starlette.middleware.cors import CORSMiddleware
 
 from portfolio_common.health import create_health_router
 from portfolio_common.logging_utils import (
@@ -26,11 +27,22 @@ from portfolio_common.logging_utils import (
 from portfolio_common.metrics_settings import load_metrics_runtime_settings
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
+from portfolio_common.runtime_settings import env_str
 
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 METRICS_INTERNAL_OPEN_MODE = "internal_open"
 METRICS_PROTECTED_SCRAPE_MODE = "protected_scrape"
 _METRICS_POLICY_CONFIGURED_STATE_KEY = "lotus_metrics_access_policy_configured"
+_SECURITY_HEADERS_CONFIGURED_STATE_KEY = "lotus_secure_response_headers_configured"
+_CORS_POLICY_CONFIGURED_STATE_KEY = "lotus_cors_policy_configured"
+HTTP_CORS_ALLOW_ORIGINS_ENV = "LOTUS_HTTP_CORS_ALLOW_ORIGINS"
+
+SECURE_RESPONSE_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
 
 
 @dataclass(frozen=True)
@@ -98,6 +110,62 @@ def configure_metrics_access_policy(
         ):
             return _metrics_forbidden_response(metrics_access_policy)
         return await call_next(request)
+
+
+def _normalized_csv_values(raw_value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in raw_value.split(",") if item.strip())
+
+
+def resolve_cors_allow_origins(
+    cors_allow_origins: Sequence[str] | None = None,
+) -> tuple[str, ...]:
+    if cors_allow_origins is not None:
+        return tuple(origin.strip() for origin in cors_allow_origins if origin.strip())
+    return _normalized_csv_values(env_str(HTTP_CORS_ALLOW_ORIGINS_ENV, ""))
+
+
+def configure_cors_policy(
+    app: FastAPI,
+    *,
+    cors_allow_origins: Sequence[str] | None = None,
+) -> tuple[str, ...]:
+    if getattr(app.state, _CORS_POLICY_CONFIGURED_STATE_KEY, False):
+        return tuple(getattr(app.state, "lotus_cors_allow_origins", ()))
+    origins = resolve_cors_allow_origins(cors_allow_origins)
+    setattr(app.state, _CORS_POLICY_CONFIGURED_STATE_KEY, True)
+    setattr(app.state, "lotus_cors_allow_origins", origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Actor-Id",
+            "X-Correlation-ID",
+            "X-Correlation-Id",
+            "X-Request-Id",
+            "X-Role",
+            "X-Service-Identity",
+            "X-Tenant-Id",
+            "traceparent",
+        ],
+    )
+    return origins
+
+
+def configure_secure_response_headers(app: FastAPI) -> None:
+    if getattr(app.state, _SECURITY_HEADERS_CONFIGURED_STATE_KEY, False):
+        return
+    setattr(app.state, _SECURITY_HEADERS_CONFIGURED_STATE_KEY, True)
+
+    @app.middleware("http")
+    async def add_secure_response_headers(request: Request, call_next):
+        response = await call_next(request)
+        for header, value in SECURE_RESPONSE_HEADERS.items():
+            response.headers.setdefault(header, value)
+        return response
 
 
 def http_metric_path_template(request: Request) -> str:
@@ -170,12 +238,25 @@ def configure_standard_http_app(
     logger: logging.Logger,
     id_generator=generate_correlation_id,
     metrics_access_token: str | None = None,
+    cors_allow_origins: Sequence[str] | None = None,
 ) -> None:
     metrics_access_policy = resolve_metrics_access_policy(metrics_access_token)
+    configured_cors_origins = configure_cors_policy(
+        app,
+        cors_allow_origins=cors_allow_origins,
+    )
+    configure_secure_response_headers(app)
     Instrumentator().instrument(app).expose(app)
     logger.info(
         "Prometheus metrics exposed at /metrics",
         extra={"metrics_access_mode": metrics_access_policy.mode},
+    )
+    logger.info(
+        "HTTP CORS policy configured.",
+        extra={
+            "cors_allow_origin_count": len(configured_cors_origins),
+            "cors_policy_mode": "explicit_origins" if configured_cors_origins else "deny_browser",
+        },
     )
 
     configure_standard_openapi(app, service_name=service_name)
@@ -289,6 +370,7 @@ def create_standard_health_app(
     logger: logging.Logger | None = None,
     id_generator=generate_correlation_id,
     metrics_access_token: str | None = None,
+    cors_allow_origins: Sequence[str] | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title=title,
@@ -303,6 +385,7 @@ def create_standard_health_app(
         logger=app_logger,
         id_generator=id_generator,
         metrics_access_token=metrics_access_token,
+        cors_allow_origins=cors_allow_origins,
     )
     include_routers(app, create_health_router(*dependencies, service_name=service_name))
     return app

@@ -15,6 +15,7 @@ from portfolio_common.logging_utils import (
     normalize_lineage_value,
     redact_sensitive,
 )
+from portfolio_common.runtime_settings import env_bool, env_int, env_json_map, env_str
 from portfolio_common.source_data_security import source_data_capability_rules
 
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
@@ -29,6 +30,20 @@ REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
 
 
 class EnterpriseSettings(Protocol):
+    enterprise_policy_version: str
+    enterprise_primary_key_id: str
+    enterprise_enforce_authz: bool
+    enterprise_enforce_read_authz: bool
+    enterprise_audit_reads: bool
+    enterprise_require_capability_rules: bool
+    enterprise_secret_rotation_days: int
+    enterprise_max_write_payload_bytes: int
+    enterprise_feature_flags: dict[str, Any]
+    enterprise_capability_rules: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class DefaultEnterpriseSettings:
     enterprise_policy_version: str
     enterprise_primary_key_id: str
     enterprise_enforce_authz: bool
@@ -242,6 +257,94 @@ class EnterpriseReadinessRuntime:
                 }
             },
         )
+
+
+def load_default_enterprise_settings(*, service_name: str) -> DefaultEnterpriseSettings:
+    return DefaultEnterpriseSettings(
+        enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
+        enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
+        enterprise_enforce_authz=env_bool(
+            "ENTERPRISE_ENFORCE_AUTHZ",
+            False,
+            service_name=service_name,
+        ),
+        enterprise_enforce_read_authz=env_bool(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ",
+            False,
+            service_name=service_name,
+        ),
+        enterprise_audit_reads=env_bool(
+            "ENTERPRISE_AUDIT_READS",
+            False,
+            service_name=service_name,
+        ),
+        enterprise_require_capability_rules=env_bool(
+            "ENTERPRISE_REQUIRE_CAPABILITY_RULES",
+            False,
+            service_name=service_name,
+        ),
+        enterprise_secret_rotation_days=env_int(
+            "ENTERPRISE_SECRET_ROTATION_DAYS",
+            90,
+            service_name=service_name,
+            minimum=1,
+        ),
+        enterprise_max_write_payload_bytes=env_int(
+            "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES",
+            1_048_576,
+            service_name=service_name,
+            minimum=1,
+        ),
+        enterprise_feature_flags=env_json_map(
+            "ENTERPRISE_FEATURE_FLAGS_JSON",
+            service_name=service_name,
+        ),
+        enterprise_capability_rules=env_json_map(
+            "ENTERPRISE_CAPABILITY_RULES_JSON",
+            service_name=service_name,
+        ),
+    )
+
+
+def create_default_enterprise_readiness_runtime(
+    *,
+    service_name: str,
+    logger: logging.Logger,
+) -> EnterpriseReadinessRuntime:
+    return EnterpriseReadinessRuntime(
+        service_name=service_name,
+        load_settings=lambda: load_default_enterprise_settings(service_name=service_name),
+        env_bool=lambda name, default: env_bool(name, default, service_name=service_name),
+        env_int=lambda name, default: env_int(name, default, service_name=service_name),
+        logger=logger,
+    )
+
+
+def validate_default_enterprise_runtime_config(
+    *,
+    service_name: str,
+    logger: logging.Logger,
+) -> list[str]:
+    runtime = create_default_enterprise_readiness_runtime(
+        service_name=service_name,
+        logger=logger,
+    )
+    return runtime.validate_enterprise_runtime_config()
+
+
+def build_default_enterprise_audit_middleware(
+    *,
+    service_name: str,
+    logger: logging.Logger,
+) -> MiddlewareCallable:
+    runtime = create_default_enterprise_readiness_runtime(
+        service_name=service_name,
+        logger=logger,
+    )
+    return build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=runtime.emit_audit_event,
+    )
 
 
 def _dict_value(value: dict[str, Any], key: str) -> dict[str, Any]:
