@@ -9,7 +9,8 @@ Date: 2026-06-21
 
 ## Finding
 
-`lotus-idea` high-cash source-adapter work needs a Core-owned cash-weight fact. The existing
+GitHub issue #437 was valid for the live runtime observed on 2026-06-23: `lotus-idea` high-cash
+source-adapter work needs a Core-owned cash-weight fact. The existing
 cash-balances response exposed cash-account balances and cash totals, but not a source-owned cash
 weight. Without this field, downstream consumers would have to reconstruct Core-owned portfolio
 facts from cash totals and AUM locally, creating methodology drift and weakening source-product
@@ -42,6 +43,8 @@ Focused behavior proof:
 
 - `python -m pytest tests\unit\services\query_service\services\test_cash_balance_service.py tests\integration\services\query_service\test_cash_balances_router.py tests\integration\services\query_service\test_main_app.py::test_openapi_describes_reporting_and_enhanced_discovery_contracts tests\integration\services\query_service\test_main_app.py::test_openapi_exposes_holdings_as_of_runtime_supportability_metadata tests\unit\test_domain_data_product_contracts.py tests\unit\scripts\test_source_data_product_contract_guard.py -q`
 - Result: `41 passed`
+- Revalidated for issue #437 on 2026-07-01 with the same route/OpenAPI/domain-product selection:
+  `47 passed`
 
 Focused static proof:
 
