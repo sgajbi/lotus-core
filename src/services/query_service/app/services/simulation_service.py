@@ -1,10 +1,12 @@
 # src/services/query_service/app/services/simulation_service.py
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,9 +59,25 @@ class SimulationMutationInvalidError(SimulationServiceError):
     pass
 
 
+def _default_clock() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _default_id_generator() -> str:
+    return str(uuid4())
+
+
 class SimulationService:
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        id_generator: Callable[[], str] | None = None,
+    ):
         self.db = db
+        self._clock = clock or _default_clock
+        self._id_generator = id_generator or _default_id_generator
         self.repo = SimulationRepository(db)
         self.position_repo = PositionRepository(db)
         self.instrument_repo = InstrumentRepository(db)
@@ -68,11 +86,15 @@ class SimulationService:
         self, request: SimulationSessionCreateRequest
     ) -> SimulationSessionResponse:
         await self._ensure_portfolio_exists(request.portfolio_id)
+        now = self._clock()
         session = await self.repo.create_session(
+            session_id=self._id_generator(),
             portfolio_id=request.portfolio_id,
             created_by=request.created_by,
-            ttl_hours=request.ttl_hours,
+            created_at=now,
+            expires_at=now + timedelta(hours=request.ttl_hours),
         )
+        await self._commit_and_refresh(session)
         return SimulationSessionResponse(session=session)
 
     async def get_session(self, session_id: str) -> SimulationSessionResponse:
@@ -85,7 +107,9 @@ class SimulationService:
         session = await self.repo.get_session(session_id)
         if session is None:
             raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
+        session.version += 1
         session = await self.repo.close_session(session)
+        await self._commit_and_refresh(session)
         return SimulationSessionResponse(session=session)
 
     async def add_changes(
@@ -93,8 +117,14 @@ class SimulationService:
     ) -> SimulationChangesResponse:
         session = await self.repo.get_session(session_id)
         self._validate_session_active(session_id, session)
+        assert session is not None
 
-        session, rows = await self.repo.add_changes(session, changes)
+        session.version += 1
+        session, rows = await self.repo.add_changes(
+            session,
+            [self._change_payload_with_id(item) for item in changes],
+        )
+        await self._commit_and_refresh(session, *rows)
         return SimulationChangesResponse(
             session_id=session.session_id,
             version=session.version,
@@ -104,11 +134,15 @@ class SimulationService:
     async def delete_change(self, session_id: str, change_id: str) -> SimulationChangesResponse:
         session = await self.repo.get_session(session_id)
         self._validate_session_active(session_id, session)
+        assert session is not None
 
         deleted = await self.repo.delete_change(session, change_id)
         if not deleted:
+            await self.db.rollback()
             raise SimulationChangeNotFoundError(f"Simulation change {change_id} not found")
 
+        session.version += 1
+        await self._commit_and_refresh(session)
         rows = await self.repo.get_changes(session_id)
         return SimulationChangesResponse(
             session_id=session.session_id,
@@ -158,14 +192,25 @@ class SimulationService:
             amount=getattr(change, "amount", None),
         )
 
-    @staticmethod
-    def _validate_session_active(session_id: str, session) -> None:
+    def _validate_session_active(self, session_id: str, session) -> None:
         if session is None:
             raise SimulationSessionNotFoundError(f"Simulation session {session_id} not found")
         if session.status != "ACTIVE":
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is not active")
-        if session.expires_at is not None and session.expires_at < datetime.now(timezone.utc):
+        if session.expires_at is not None and session.expires_at < self._clock():
             raise SimulationMutationInvalidError(f"Simulation session {session_id} is expired")
+
+    def _change_payload_with_id(self, item: dict[str, Any]) -> dict[str, Any]:
+        return {**item, "change_id": self._id_generator()}
+
+    async def _commit_and_refresh(self, *entities: Any) -> None:
+        try:
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
+        for entity in entities:
+            await self.db.refresh(entity)
 
     async def _projected_baseline(self, portfolio_id: str) -> _ProjectedBaseline:
         baseline_results = await self.position_repo.get_latest_positions_by_portfolio(portfolio_id)

@@ -33,6 +33,7 @@ tested modules.
 | Source-batch lineage semantics | Improving | CR-1189 stops selected source-data products from populating upstream `source_batch_fingerprint` with request/snapshot fingerprints when true source-batch evidence is unavailable; CR-1220 extends the correction to the remaining active products found in this pass and adds source-data contract guard coverage to block request/snapshot fingerprints from reentering source-batch lineage |
 | Reference-data source observation lineage | Improving | CR-1205 adds a shared source-observation DTO contract for benchmark/index/risk-free/classification ingestion families while preserving legacy aliases and storage columns |
 | Reference-data ingestion unit of work | Improving | CR-1185 removes commit ownership from the low-level reference-data upsert staging helper, preserves existing single-table commit behavior through an explicit wrapper, and adds source-batch commit/rollback orchestration |
+| Simulation unit of work | Improving | CR-1243 moves simulation session commits, rollbacks, UUID generation, clock selection, and version mutation out of the repository adapter and into the application service while preserving route and response behavior |
 | Outbox retry eligibility | Improving | CR-1186 adds durable `next_attempt_at` retry eligibility, bounded exponential outbox retry scheduling, and claim filtering so retryable publish failures are not immediately reselected before their retry window matures |
 | Outbox failure evidence | Improving | CR-1187 persists source-safe last-failure reason code, category, redacted bounded message, and failure timestamp on retryable and terminal outbox delivery failures; CR-1221 exposes protected QCP failed-row diagnostics through `GET /support/outbox/failed-events` without raw outbox payloads; CR-1222 adds governed QCP requeue through `POST /support/outbox/failed-events/{outbox_id}/requeue` with durable recovery audit evidence and blind-requeue rejection; CR-1223 exposes source-safe recovery history through `GET /support/outbox/recovery-audits`; CR-1224 adds bounded `outbox_recovery_attempts_total` metrics for accepted, rejected, not-found, and unexpected-error recovery attempts |
 | Event contract validation | Improving | CR-1178 changes governed event models from unknown-field drop behavior to fail-closed `extra_forbidden` validation, explicitly preserves outbox envelope metadata, and keeps DLQ validation-error evidence source-safe |
@@ -123,6 +124,13 @@ stable QCP problem-details responses. Route paths, statuses, DTOs, OpenAPI succe
 database schema, Kafka topics, and success behavior are preserved. Focused proof passed with 49
 simulation service and QCP router tests, `make qcp-problem-details-guard`, scoped Ruff, and scoped
 mypy.
+
+Current continuation: CR-1243 fixes GitHub issue #667 by making `SimulationRepository` stage
+simulation persistence only. `SimulationService` now owns deterministic ID and clock providers,
+expiry calculation, version increments, commit/refresh, and rollback on missing-change delete.
+Route paths, statuses, DTOs, OpenAPI contracts, database schema, Kafka topics, and projected
+position behavior are preserved. Focused repository/service/router proof passed with 57 tests,
+scoped Ruff, and scoped mypy.
 
 Current continuation: CR-1218 fixes GitHub issue #594 for direct ingestion publish routers.
 Kafka publish dependency failures now return HTTP 503 with `Retry-After`, dependency=`kafka`,
@@ -2197,3 +2205,8 @@ health before that claim is defensible.
      classification with typed simulation service errors and type-based QCP problem-details
      mapping. Focused simulation service and QCP router proof passed with 49 tests, and the
      repo-native QCP problem-details guard passed.
+349. Fixed validated GitHub issue #667 by moving simulation session unit-of-work ownership and
+     deterministic providers out of `SimulationRepository` and into `SimulationService`.
+     Repository tests now prove staging-only behavior, service tests prove deterministic clock/ID
+     injection plus commit/rollback/refresh ownership, and focused simulation proof passed with 57
+     tests.

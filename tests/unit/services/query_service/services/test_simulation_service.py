@@ -88,21 +88,34 @@ def mock_dependencies():
 async def test_create_session_returns_session_response(mock_dependencies):
     repo, _, _ = mock_dependencies
     repo.create_session.return_value = repo.get_session.return_value
+    db = AsyncMock()
+    fixed_now = datetime(2026, 7, 1, 8, 30, tzinfo=timezone.utc)
 
-    service = SimulationService(AsyncMock())
+    service = SimulationService(
+        db,
+        clock=lambda: fixed_now,
+        id_generator=lambda: "SIM-SESSION-1",
+    )
     request = SimulationSessionCreateRequest(portfolio_id="P1", created_by="tester", ttl_hours=24)
     response = await service.create_session(request)
 
     repo.create_session.assert_awaited_once_with(
-        portfolio_id="P1", created_by="tester", ttl_hours=24
+        session_id="SIM-SESSION-1",
+        portfolio_id="P1",
+        created_by="tester",
+        created_at=fixed_now,
+        expires_at=fixed_now + timedelta(hours=24),
     )
+    db.commit.assert_awaited_once()
+    db.refresh.assert_awaited_once_with(repo.get_session.return_value)
     assert response.session.session_id == "S1"
 
 
 async def test_create_session_raises_when_portfolio_missing(mock_dependencies):
     repo, position_repo, _ = mock_dependencies
     position_repo.portfolio_exists.return_value = False
-    service = SimulationService(AsyncMock())
+    db = AsyncMock()
+    service = SimulationService(db)
 
     with pytest.raises(SimulationPortfolioNotFoundError, match="Portfolio with id P404 not found"):
         await service.create_session(
@@ -114,6 +127,7 @@ async def test_create_session_raises_when_portfolio_missing(mock_dependencies):
         )
 
     repo.create_session.assert_not_awaited()
+    db.commit.assert_not_awaited()
 
 
 async def test_projected_positions_applies_change_delta(mock_dependencies):
@@ -171,13 +185,16 @@ async def test_projected_positions_reads_baseline_and_changes_sequentially(mock_
 async def test_delete_change_returns_updated_changes(mock_dependencies):
     repo, _, _ = mock_dependencies
     repo.delete_change.return_value = True
+    db = AsyncMock()
 
-    service = SimulationService(AsyncMock())
+    service = SimulationService(db)
     response = await service.delete_change("S1", "C1")
 
     assert response.session_id == "S1"
-    assert response.version == 2
+    assert response.version == 3
     assert len(response.changes) == 1
+    db.commit.assert_awaited_once()
+    db.refresh.assert_awaited_once_with(repo.get_session.return_value)
 
 
 async def test_add_changes_returns_versioned_change_records(mock_dependencies):
@@ -199,7 +216,8 @@ async def test_add_changes_returns_versioned_change_records(mock_dependencies):
         )
     ]
     repo.add_changes.return_value = (repo.get_session.return_value, added_rows)
-    service = SimulationService(AsyncMock())
+    db = AsyncMock()
+    service = SimulationService(db, id_generator=lambda: "SIM-CHG-0009")
 
     response = await service.add_changes(
         "S1", [{"security_id": "SEC_MSFT_US", "transaction_type": "BUY", "quantity": 12}]
@@ -207,8 +225,12 @@ async def test_add_changes_returns_versioned_change_records(mock_dependencies):
 
     repo.add_changes.assert_awaited_once()
     assert response.session_id == "S1"
-    assert response.version == 2
+    assert response.version == 3
     assert response.changes[0].change_id == "C9"
+    added_payload = repo.add_changes.await_args.args[1]
+    assert added_payload[0]["change_id"] == "SIM-CHG-0009"
+    db.commit.assert_awaited_once()
+    assert db.refresh.await_count == 2
 
 
 async def test_get_session_raises_when_not_found(mock_dependencies):
@@ -243,14 +265,19 @@ async def test_close_session_returns_closed_session(mock_dependencies):
     repo, _, _ = mock_dependencies
     session_attrs = dict(repo.get_session.return_value.__dict__)
     session_attrs["status"] = "CLOSED"
+    session_attrs["version"] = 3
     closed = SimpleNamespace(**session_attrs)
     repo.close_session.return_value = closed
-    service = SimulationService(AsyncMock())
+    db = AsyncMock()
+    service = SimulationService(db)
 
     response = await service.close_session("S1")
 
     assert response.session.status == "CLOSED"
+    assert response.session.version == 3
     repo.close_session.assert_awaited_once()
+    db.commit.assert_awaited_once()
+    db.refresh.assert_awaited_once_with(closed)
 
 
 async def test_add_changes_raises_when_session_inactive(mock_dependencies):
@@ -274,10 +301,14 @@ async def test_add_changes_raises_when_session_expired(mock_dependencies):
 async def test_delete_change_raises_when_change_missing(mock_dependencies):
     repo, _, _ = mock_dependencies
     repo.delete_change.return_value = False
-    service = SimulationService(AsyncMock())
+    db = AsyncMock()
+    service = SimulationService(db)
 
     with pytest.raises(SimulationChangeNotFoundError, match="not found"):
         await service.delete_change("S1", "C404")
+
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 async def test_projected_positions_raises_when_session_missing(mock_dependencies):
@@ -483,7 +514,7 @@ async def test_get_projected_summary_computes_baseline_and_delta(mock_dependenci
 
 async def test_validate_session_active_raises_when_session_missing():
     with pytest.raises(SimulationSessionNotFoundError, match="not found"):
-        SimulationService._validate_session_active("S404", None)
+        SimulationService(AsyncMock())._validate_session_active("S404", None)
 
 
 @pytest.mark.parametrize(
