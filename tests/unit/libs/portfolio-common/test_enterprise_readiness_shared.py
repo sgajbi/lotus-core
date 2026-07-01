@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.responses import Response
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
+    create_default_enterprise_readiness_runtime,
     build_enterprise_audit_middleware,
     redact_sensitive,
 )
@@ -141,6 +142,28 @@ def test_runtime_uses_typed_settings_for_enterprise_integer_knobs() -> None:
 
     assert runtime.env_integer("ENTERPRISE_SECRET_ROTATION_DAYS", 90) == 30
     assert runtime.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576) == 2048
+
+
+def test_default_enterprise_runtime_loads_shared_env_settings(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "policy-env")
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "primary-key")
+    monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
+    monkeypatch.setenv(
+        "ENTERPRISE_CAPABILITY_RULES_JSON",
+        '{"GET /portfolios": "portfolios.read"}',
+    )
+
+    runtime = create_default_enterprise_readiness_runtime(
+        service_name="test-service",
+        logger=Mock(),
+    )
+
+    assert runtime.enterprise_policy_version() == "policy-env"
+    assert runtime.env_enabled("ENTERPRISE_ENFORCE_READ_AUTHZ", "false") is True
+    assert runtime.env_integer("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576) == 2048
+    assert runtime.required_capability("GET", "/portfolios/P1") == "portfolios.read"
+    assert "missing_primary_key_id" not in runtime.validate_enterprise_runtime_config()
 
 
 def test_feature_flags_fail_closed_for_invalid_shapes() -> None:

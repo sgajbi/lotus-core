@@ -1,0 +1,147 @@
+{
+  "schema_version": "security-control-coverage.v1",
+  "owning_repository": "lotus-core",
+  "control_boundary": "Static contract coverage for lotus-core FastAPI app bootstrap and service-level security controls. This contract proves controls are installed or explicitly scoped; it is not live ingress, IAM, or penetration-test evidence.",
+  "default_local_posture": {
+    "cors_policy": "deny_browser_cross_origin_unless_LOTUS_HTTP_CORS_ALLOW_ORIGINS_is_set",
+    "enterprise_authz": "default_disabled_for_local_compatibility",
+    "enterprise_audit": "write_audit_middleware_installed_on_business_http_apps",
+    "metrics_access": "internal_open_unless_LOTUS_METRICS_ACCESS_TOKEN_is_set",
+    "strict_config": "local_fallback_unless_LOTUS_CORE_STRICT_CONFIG_VALIDATION_or_non_local_ENVIRONMENT_enables_fail_closed_validation"
+  },
+  "required_shared_controls": [
+    "standard_http_bootstrap",
+    "secure_response_headers",
+    "cors_policy",
+    "metrics_access_policy",
+    "safe_unhandled_error_response"
+  ],
+  "apps": [
+    {
+      "service_name": "cashflow_calculator_service_web",
+      "app_path": "src/services/calculators/cashflow_calculator_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "cost_calculator_service_web",
+      "app_path": "src/services/calculators/cost_calculator_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "event_replay_service",
+      "app_path": "src/services/event_replay_service/app/main.py",
+      "app_kind": "operator_api",
+      "auth_audit_control": "enterprise_middleware",
+      "payload_limit_control": "enterprise_middleware",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "financial_reconciliation_service",
+      "app_path": "src/services/financial_reconciliation_service/app/main.py",
+      "app_kind": "operator_api",
+      "auth_audit_control": "enterprise_middleware",
+      "payload_limit_control": "enterprise_middleware",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "ingestion_service",
+      "app_path": "src/services/ingestion_service/app/main.py",
+      "app_kind": "business_api",
+      "auth_audit_control": "enterprise_middleware",
+      "payload_limit_control": "enterprise_middleware",
+      "upload_limit_control": "ingestion_upload_max_bytes",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "persistence_service_web",
+      "app_path": "src/services/persistence_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "pipeline_orchestrator_service_web",
+      "app_path": "src/services/pipeline_orchestrator_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "portfolio_aggregation_service_web",
+      "app_path": "src/services/portfolio_aggregation_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "position_calculator_web",
+      "app_path": "src/services/calculators/position_calculator/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "position_valuation_calculator_web",
+      "app_path": "src/services/calculators/position_valuation_calculator/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "query_control_plane_service",
+      "app_path": "src/services/query_control_plane_service/app/main.py",
+      "app_kind": "business_api",
+      "auth_audit_control": "enterprise_middleware",
+      "payload_limit_control": "enterprise_middleware",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "query_service",
+      "app_path": "src/services/query_service/app/main.py",
+      "app_kind": "business_api",
+      "auth_audit_control": "enterprise_middleware",
+      "payload_limit_control": "enterprise_middleware",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "timeseries_generator_service_web",
+      "app_path": "src/services/timeseries_generator_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    },
+    {
+      "service_name": "valuation_orchestrator_service_web",
+      "app_path": "src/services/valuation_orchestrator_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+    }
+  ]
+}

@@ -144,6 +144,36 @@ make structured-log-guard
 
 It is also part of `make lint`.
 
+## Security Control Coverage Guard
+
+HTTP security control coverage is governed by
+`contracts/security/security-control-coverage.v1.json` and enforced by:
+
+```powershell
+make security-control-coverage-guard
+```
+
+This guard must pass when adding a FastAPI app, changing an app bootstrap path, or changing shared
+HTTP security behavior. It checks that every FastAPI app is listed in the matrix and that required
+controls have implementation anchors for secure response headers, deny-by-default CORS, metrics
+access policy, safe unhandled-error responses, auth/audit middleware, payload limits, and upload
+limits where relevant.
+
+Operational knobs:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `LOTUS_HTTP_CORS_ALLOW_ORIGINS` | empty | Comma-separated browser origins allowed by the shared CORS middleware. Empty means browser cross-origin requests are denied. |
+| `LOTUS_METRICS_ACCESS_TOKEN` | empty | When set, `/metrics` requires `Authorization: Bearer <token>`. |
+| `ENTERPRISE_ENFORCE_AUTHZ` | `false` | Enables write authorization checks in enterprise middleware. |
+| `ENTERPRISE_ENFORCE_READ_AUTHZ` | `false` | Enables read authorization checks in enterprise middleware. |
+| `ENTERPRISE_REQUIRE_CAPABILITY_RULES` | `false` | Requires a capability mapping for protected routes. |
+| `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` | `1048576` | Rejects oversized write requests in enterprise middleware. |
+| `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` | `5242880` | Rejects oversized bulk upload files with `INGESTION_UPLOAD_TOO_LARGE`. |
+
+The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
+penetration-test evidence remain separate higher-lane proof.
+
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
 `X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same

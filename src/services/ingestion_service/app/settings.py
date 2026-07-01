@@ -277,6 +277,7 @@ class IngestionRuntimePolicySettings:
 class IngestionAdapterModeSettings:
     portfolio_bundle_enabled: bool
     upload_apis_enabled: bool
+    upload_max_bytes: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,6 +371,11 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
         adapter_mode=IngestionAdapterModeSettings(
             portfolio_bundle_enabled=_env_bool("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", True),
             upload_apis_enabled=_env_bool("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", True),
+            upload_max_bytes=_env_int(
+                "LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES",
+                5_242_880,
+                minimum=1,
+            ),
         ),
         ops_auth=IngestionOpsAuthSettings(
             token_required=_env_bool("LOTUS_CORE_INGEST_OPS_TOKEN_REQUIRED", True),

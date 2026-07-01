@@ -24,6 +24,7 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
     assert settings.ops_auth.auth_mode == "token_or_jwt"
     assert settings.rate_limit.enforcement_scope == "local_process"
     assert settings.rate_limit.gateway_policy_id == ""
+    assert settings.adapter_mode.upload_max_bytes == 5_242_880
 
 
 def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
@@ -71,11 +72,13 @@ def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "local")
     monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")
     monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "0")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "1024")
 
     settings = load_ingestion_service_settings()
 
     assert settings.adapter_mode.portfolio_bundle_enabled is False
     assert settings.adapter_mode.upload_apis_enabled is False
+    assert settings.adapter_mode.upload_max_bytes == 1024
 
 
 def test_load_ingestion_service_settings_invalid_rate_limit_scope_falls_back(monkeypatch):

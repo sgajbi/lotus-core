@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from ..adapter_mode import require_upload_adapter_enabled
 from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
+from ..settings import get_ingestion_service_settings
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.ingestion_service import IngestionPublishError
 from ..services.upload_ingestion_service import (
@@ -23,6 +24,13 @@ router = APIRouter()
 UPLOAD_INVALID_EXAMPLE = {"detail": "Unsupported upload file format. Expected CSV or XLSX."}
 UPLOAD_ADAPTER_DISABLED_EXAMPLE = {
     "detail": "Bulk upload adapter mode is disabled in this environment."
+}
+UPLOAD_TOO_LARGE_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_UPLOAD_TOO_LARGE",
+        "message": "Bulk upload payload exceeds the configured byte limit.",
+        "max_bytes": 5242880,
+    }
 }
 INGESTION_MODE_BLOCKS_WRITES_EXAMPLE = {
     "detail": {
@@ -46,6 +54,21 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 )
 
 
+async def _read_bounded_upload_content(file: UploadFile) -> bytes:
+    content = await file.read()
+    max_bytes = get_ingestion_service_settings().adapter_mode.upload_max_bytes
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail={
+                "code": "INGESTION_UPLOAD_TOO_LARGE",
+                "message": "Bulk upload payload exceeds the configured byte limit.",
+                "max_bytes": max_bytes,
+            },
+        )
+    return content
+
+
 @router.post(
     "/ingest/uploads/preview",
     response_model=UploadPreviewResponse,
@@ -58,6 +81,10 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
         status.HTTP_410_GONE: {
             "description": "Bulk upload adapter mode disabled for this environment.",
             "content": {"application/json": {"example": UPLOAD_ADAPTER_DISABLED_EXAMPLE}},
+        },
+        status.HTTP_413_CONTENT_TOO_LARGE: {
+            "description": "Upload payload exceeds the configured byte limit.",
+            "content": {"application/json": {"example": UPLOAD_TOO_LARGE_EXAMPLE}},
         },
     },
     tags=["Bulk Uploads"],
@@ -90,7 +117,7 @@ async def preview_upload(
     _: None = Depends(require_upload_adapter_enabled),
     upload_service: UploadIngestionService = Depends(get_upload_ingestion_service),
 ):
-    content = await file.read()
+    content = await _read_bounded_upload_content(file)
     response = upload_service.preview_upload(
         entity_type=entity_type,
         filename=file.filename or "upload.csv",
@@ -131,6 +158,10 @@ async def preview_upload(
             "description": "Bulk upload adapter mode disabled for this environment.",
             "content": {"application/json": {"example": UPLOAD_ADAPTER_DISABLED_EXAMPLE}},
         },
+        status.HTTP_413_CONTENT_TOO_LARGE: {
+            "description": "Upload payload exceeds the configured byte limit.",
+            "content": {"application/json": {"example": UPLOAD_TOO_LARGE_EXAMPLE}},
+        },
     },
     tags=["Bulk Uploads"],
     summary="Commit validated bulk upload data",
@@ -168,7 +199,7 @@ async def commit_upload(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
         ) from exc
-    content = await file.read()
+    content = await _read_bounded_upload_content(file)
     try:
         enforce_ingestion_write_rate_limit(
             endpoint="/ingest/uploads/commit",
