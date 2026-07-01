@@ -2,6 +2,13 @@
 
 Status: Active health report on 2026-06-02.
 
+## Active Issue-Driven Guard Notes
+
+- CR-1254 adds an ingestion gateway rate-limit policy contract and
+  `make ingestion-gateway-rate-limit-policy-guard`, keeping scaled deployment rate-limit evidence
+  synchronized with guarded ingestion endpoint templates, default budgets, and bounded denial
+  labels.
+
 ## Current Direction
 
 The refactor is active but not complete. Recent work has reduced query-service transaction

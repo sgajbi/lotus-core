@@ -70,9 +70,11 @@ enforcement scope in the error message and observability evidence.
 
 ## Follow-Up
 
-Issue #684 remains open for PR/CI/QA evidence and platform-ingress validation of the concrete
-gateway policy. A future shared-store token-bucket adapter, such as Redis-backed enforcement, can be
-added as a separate slice if Lotus chooses service-owned global enforcement instead of gateway-owned
-global enforcement. CR-1225 adds the deterministic `make ingestion-rate-limit-scope-guard` to keep
-the implementation and documentation from drifting back into gateway-backed global enforcement
-claims while the default limiter remains `local_process`.
+Issue #684 remains open for PR/CI/QA evidence and platform-ingress runtime validation. CR-1225 adds
+the deterministic `make ingestion-rate-limit-scope-guard` to keep the implementation and
+documentation from drifting back into gateway-backed global enforcement claims while the default
+limiter remains `local_process`. CR-1254 adds the concrete
+`lotus-core-ingestion-write-global-v1` gateway policy contract and endpoint-coverage guard. A future
+shared-store token-bucket adapter, such as Redis-backed enforcement, can be added as a separate
+slice if Lotus chooses service-owned global enforcement instead of gateway-owned global
+enforcement.

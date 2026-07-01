@@ -198,8 +198,13 @@ Current repository posture:
     semantics. Ingestion write rate-limit scope truth is guarded by
     `make ingestion-rate-limit-scope-guard`; `local_process` must remain documented as per-process
     defense in depth, not as global service-level enforcement, unless a gateway-backed scope and
-    gateway policy ID are configured. `make monetary-float-guard` uses token-aware money-like
-    matching and currently has zero active findings and zero allowlisted suppressions.
+    gateway policy ID are configured. Gateway-backed ingestion write limiting now has a
+    repo-owned policy contract at
+    `contracts/operational-controls/ingestion-write-rate-limit-gateway-policy.v1.json`. The
+    `make ingestion-gateway-rate-limit-policy-guard` target keeps the policy ID, endpoint coverage,
+    default budgets, bounded denial labels, and platform-runtime validation boundary synchronized.
+    `make monetary-float-guard` uses token-aware money-like matching and currently has zero active
+    findings and zero allowlisted suppressions.
 36. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root

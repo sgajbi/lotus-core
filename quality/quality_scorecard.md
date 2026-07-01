@@ -2,6 +2,13 @@
 
 Status: Initial scorecard baseline on 2026-06-02.
 
+## Active Issue-Driven Guard Notes
+
+- CR-1254 adds the governed ingestion gateway rate-limit policy
+  `lotus-core-ingestion-write-global-v1` and validates it with
+  `make ingestion-gateway-rate-limit-policy-guard`, so scaled-service rate-limit truth is tied to
+  the same endpoint, budget, and observability evidence used by the local limiter.
+
 | Category | Current Baseline | Target Direction |
 | --- | --- | --- |
 | Python code size | 1,040 files / 213,290 lines under `src` and `tests` | Reduce generated/duplicated quality surface and split large modules |
