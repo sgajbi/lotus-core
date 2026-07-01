@@ -2153,3 +2153,8 @@ health before that claim is defensible.
      types fail closed before cost fields are populated, and focused cost/registry tests passed
      with 10 tests. Cost-engine production-booking enum values now need both registry approval and
      an explicit strategy.
+341. Continued validated GitHub issue #474 by deriving query projected-position transaction
+     quantity/cash effect sets from the canonical transaction type registry. This removes one
+     query-local duplicated rule table and adds exact conformance coverage so future
+     production-booking transaction types with `position_effect` semantics cannot drift silently
+     from projected-position math.
