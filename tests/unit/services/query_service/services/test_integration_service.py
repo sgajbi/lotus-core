@@ -34,6 +34,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
+from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.integration_policy import (
     canonical_consumer_system,
     load_policy,
@@ -91,18 +92,38 @@ def buy_state_repository_with_tax_lots(
     portfolio_exists: bool = True,
     known_instrument_security_ids: set[str] | None = None,
 ) -> SimpleNamespace:
+    tax_lot_rows = [
+        PortfolioTaxLotReadRecord(
+            portfolio_id=row.portfolio_id,
+            security_id=row.security_id,
+            instrument_id=row.instrument_id,
+            lot_id=row.lot_id,
+            open_quantity=row.open_quantity,
+            original_quantity=row.original_quantity,
+            acquisition_date=row.acquisition_date,
+            lot_cost_base=row.lot_cost_base,
+            lot_cost_local=row.lot_cost_local,
+            source_transaction_id=row.source_transaction_id,
+            source_system=row.source_system,
+            calculation_policy_id=row.calculation_policy_id,
+            calculation_policy_version=row.calculation_policy_version,
+            local_currency=local_currency,
+            updated_at=row.updated_at,
+        )
+        for row, local_currency in rows
+    ]
     known_security_ids = (
         known_instrument_security_ids
         if known_instrument_security_ids is not None
         else {
             str(row.security_id).strip()
-            for row, _local_currency in rows
+            for row in tax_lot_rows
             if getattr(row, "security_id", None)
         }
     )
     return SimpleNamespace(
         portfolio_exists=AsyncMock(return_value=portfolio_exists),
-        list_portfolio_tax_lots=AsyncMock(return_value=rows),
+        list_portfolio_tax_lots=AsyncMock(return_value=tax_lot_rows),
         list_known_instrument_security_ids=AsyncMock(return_value=known_security_ids),
     )
 

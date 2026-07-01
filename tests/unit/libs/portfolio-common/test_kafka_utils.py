@@ -68,12 +68,20 @@ def test_delivery_report_handles_success(MockProducer):
     mock_msg = MagicMock()
     mock_msg.topic.return_value = "t"
     mock_msg.key.return_value = b"k"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 12
     err = None  # Error is None on success
 
     # ACT & ASSERT
     with patch("portfolio_common.kafka_utils.logger") as mock_logger:
         callback(err, mock_msg)
-        mock_logger.info.assert_called_with("Message delivered with key 'k'", extra=ANY)
+        mock_logger.info.assert_called_with("Kafka message delivered.", extra=ANY)
+        extra = mock_logger.info.call_args.kwargs["extra"]
+        assert extra["event_name"] == "kafka.producer.delivery_succeeded"
+        assert extra["reason_code"] == "delivery_acknowledged"
+        assert extra["topic"] == "t"
+        assert extra["partition"] == 0
+        assert extra["offset"] == 12
 
 
 @patch("portfolio_common.kafka_utils.Producer")
@@ -92,6 +100,8 @@ def test_delivery_report_handles_failure(MockProducer):
     mock_msg = MagicMock()
     mock_msg.topic.return_value = "t"
     mock_msg.key.return_value = b"k"
+    mock_msg.partition.return_value = 0
+    mock_msg.offset.return_value = 12
     # A KafkaException object is passed on failure
     err = MagicMock()
     err.__str__.return_value = "Mock Kafka Error"
@@ -99,9 +109,14 @@ def test_delivery_report_handles_failure(MockProducer):
     # ACT & ASSERT
     with patch("portfolio_common.kafka_utils.logger") as mock_logger:
         callback(err, mock_msg)
-        mock_logger.error.assert_called_with(
-            "Message delivery failed for topic t key b'k': Mock Kafka Error"
-        )
+        mock_logger.error.assert_called_with("Kafka message delivery failed.", extra=ANY)
+        extra = mock_logger.error.call_args.kwargs["extra"]
+        assert extra["event_name"] == "kafka.producer.delivery_failed"
+        assert extra["reason_code"] == "delivery_error"
+        assert extra["topic"] == "t"
+        assert extra["partition"] == 0
+        assert extra["offset"] == 12
+        assert extra["error_type"] == "MagicMock"
 
 
 @patch("portfolio_common.kafka_utils.Producer")

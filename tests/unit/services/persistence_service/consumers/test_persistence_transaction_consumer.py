@@ -1,4 +1,5 @@
 # tests/unit/services/persistence_service/consumers/test_persistence_transaction_consumer.py
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,6 +18,7 @@ from src.services.persistence_service.app.repositories.transaction_db_repo impor
 
 # Mark all tests in this file as asyncio
 pytestmark = pytest.mark.asyncio
+TRANSACTION_CONSUMER_LOGGER = "src.services.persistence_service.app.consumers.transaction_consumer"
 
 
 @pytest.fixture
@@ -214,6 +216,7 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_ins
     mock_dependencies: dict,
     caplog: pytest.LogCaptureFixture,
 ):
+    caplog.set_level(logging.WARNING, logger=TRANSACTION_CONSUMER_LOGGER)
     mock_repo = mock_dependencies["repo"]
     mock_repo.check_portfolio_exists.return_value = True
     mock_repo.check_instrument_exists.return_value = False
@@ -239,6 +242,7 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_cas
     mock_dependencies: dict,
     caplog: pytest.LogCaptureFixture,
 ):
+    caplog.set_level(logging.WARNING, logger=TRANSACTION_CONSUMER_LOGGER)
     mock_repo = mock_dependencies["repo"]
     event = valid_transaction_event.model_copy(
         update={
