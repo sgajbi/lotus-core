@@ -32,6 +32,8 @@ It is enforced through:
 - generated `x-lotus-source-data-security` route metadata
 - shared enterprise-readiness helpers in
   `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
+- shared production-security profile selection in
+  `src/libs/portfolio-common/portfolio_common/runtime_settings.py`
 - source-data security profiles in
   `src/libs/portfolio-common/portfolio_common/source_data_security.py`
 - FastAPI app security-control coverage in
@@ -54,6 +56,22 @@ matrix and has implementation anchors for:
 This is static repository evidence. Live ingress, IAM, WAF, network policy, and penetration-test
 proof remain separate higher-lane evidence.
 
+## Production security profile
+
+Production-like Core environments default service-local enterprise controls to fail closed.
+`prod`, `production`, `preprod`, `pre-prod`, `pre-production`, `staging`, `stage`, and `uat`
+enable:
+
+- write authorization
+- read authorization
+- read audit emission
+- capability-rule enforcement
+- runtime configuration enforcement
+
+Local, dev, and test environments remain opt-in. A temporary production-profile opt-out must be
+explicit through `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` and should be treated as deployment
+posture evidence, not as a code default.
+
 ## Security posture to remember
 
 - operator-facing support and evidence routes are intentionally governed and may carry stricter
@@ -64,6 +82,8 @@ proof remain separate higher-lane evidence.
   compatibility behavior or undocumented aliases
 - duplicated service-local authorization or audit logic is a regression when the shared
   enterprise-readiness layer already owns it
+- production-like deployments should not depend on hand-written per-service auth/audit defaults;
+  use the shared production-security profile helper
 - new FastAPI apps must be added to the security-control matrix in the same slice as their
   bootstrap path, or `make lint` will fail
 

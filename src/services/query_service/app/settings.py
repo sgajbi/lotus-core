@@ -9,6 +9,7 @@ from portfolio_common.runtime_settings import env_bool as shared_env_bool
 from portfolio_common.runtime_settings import env_int as shared_env_int
 from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
 from portfolio_common.runtime_settings import env_str as shared_env_str
+from portfolio_common.runtime_settings import production_security_profile_enabled
 
 QUERY_SERVICE_NAME = "query service"
 
@@ -66,6 +67,9 @@ class QueryServiceSettings:
 
 
 def load_query_service_settings() -> QueryServiceSettings:
+    production_security_profile = production_security_profile_enabled(
+        service_name=QUERY_SERVICE_NAME
+    )
     return QueryServiceSettings(
         lotus_core_policy_version=env_str("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
         integration_snapshot_policy_json=env_str("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", ""),
@@ -79,11 +83,17 @@ def load_query_service_settings() -> QueryServiceSettings:
         ),
         has_database_url=bool(os.getenv("HOST_DATABASE_URL") or os.getenv("DATABASE_URL")),
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
-        enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", False),
-        enterprise_enforce_read_authz=env_bool("ENTERPRISE_ENFORCE_READ_AUTHZ", False),
-        enterprise_audit_reads=env_bool("ENTERPRISE_AUDIT_READS", False),
-        enterprise_require_capability_rules=env_bool("ENTERPRISE_REQUIRE_CAPABILITY_RULES", False),
-        enterprise_enforce_runtime_config=env_bool("ENTERPRISE_ENFORCE_RUNTIME_CONFIG", False),
+        enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", production_security_profile),
+        enterprise_enforce_read_authz=env_bool(
+            "ENTERPRISE_ENFORCE_READ_AUTHZ", production_security_profile
+        ),
+        enterprise_audit_reads=env_bool("ENTERPRISE_AUDIT_READS", production_security_profile),
+        enterprise_require_capability_rules=env_bool(
+            "ENTERPRISE_REQUIRE_CAPABILITY_RULES", production_security_profile
+        ),
+        enterprise_enforce_runtime_config=env_bool(
+            "ENTERPRISE_ENFORCE_RUNTIME_CONFIG", production_security_profile
+        ),
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
         enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90, minimum=1),
         enterprise_max_write_payload_bytes=env_int(

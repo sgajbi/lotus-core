@@ -27,7 +27,7 @@ tested modules.
 | Lint baseline | Clean | `python -m ruff check . --statistics` reports zero findings |
 | Format baseline | Clean | `python -m ruff format --check .` reports 1,070 files already formatted after CR-865 |
 | Typecheck baseline | Clean for configured scope | `make typecheck` reports no issues in 42 source files after CR-869 |
-| Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875; CR-1263 adds `make security-control-coverage-guard` for FastAPI app auth/audit, secure headers, CORS, metrics access, payload, upload, and safe-error control coverage |
+| Security baseline | Clean and enforced | Bandit reports 0 findings and is enforced by `make quality-bandit-gate` plus the quality-baseline Bandit security job after CR-875; CR-1263 adds `make security-control-coverage-guard` for FastAPI app auth/audit, secure headers, CORS, metrics access, payload, upload, and safe-error control coverage; CR-1265 adds shared production-security defaults for service-local enterprise authz, read authz, read audit, capability-rule, and runtime-config enforcement |
 | Production-source dead-code baseline | Clean and enforced | `make quality-vulture-source-gate` reports no high-confidence Vulture findings under production `src` after CR-876 |
 | Dependency-usage baseline | Clean and enforced | `make quality-deptry-source-gate` reports no production-source dependency issues after CR-878 |
 | Maintainability baseline | No D/E/F modules and enforced | `make quality-maintainability-gate` reports no source modules below C after CR-879; CR-883 removed shared OpenAPI enrichment from the C-ranked hotspot list |

@@ -126,11 +126,18 @@ readiness proof and keeps the published capability requirement aligned with the 
 
 `query_service` and `query_control_plane_service` now use typed service settings plus the shared
 `portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
-limits, optional write authorization checks, capability-rule matching, feature-flag lookup,
-sensitive audit metadata redaction, write audit event emission, opt-in read audit event emission
-when `ENTERPRISE_AUDIT_READS=true`, opt-in read authorization when
-`ENTERPRISE_ENFORCE_READ_AUTHZ=true`, and strict capability-rule enforcement when
-`ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`.
+limits, write authorization checks, capability-rule matching, feature-flag lookup, sensitive audit
+metadata redaction, write audit event emission, read audit event emission, read authorization, and
+strict capability-rule enforcement.
+
+Local/dev/test environments remain opt-in for read authorization, read auditing, capability-rule
+enforcement, and runtime-config enforcement. Production-like environments now use the shared
+production security profile in `portfolio_common.runtime_settings`: `prod`, `production`,
+`preprod`, `pre-prod`, `pre-production`, `staging`, `stage`, and `uat` default
+`ENTERPRISE_ENFORCE_AUTHZ`, `ENTERPRISE_ENFORCE_READ_AUTHZ`, `ENTERPRISE_AUDIT_READS`,
+`ENTERPRISE_REQUIRE_CAPABILITY_RULES`, and `ENTERPRISE_ENFORCE_RUNTIME_CONFIG` to true unless
+`LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` is set explicitly. This makes service-local
+production posture fail closed while preserving local developer compatibility.
 
 The shared runtime now derives default read capability rules directly from the source-data product
 catalog and security profiles. Each catalog route receives `GET` and `POST` read capability rules
@@ -146,19 +153,17 @@ and service-specific patch points remain stable. The shared helper removes dupli
 logic and gives future runtime security work one implementation point, but it does not by itself
 claim production entitlement enforcement closure.
 
-Read auditing is intentionally disabled by default until platform ingress and gateway policy decide
-the production audit volume and storage posture. When enabled, the middleware records the route path,
-status code, actor, tenant, role, correlation id, and access type without copying request bodies or
-query-string values into audit metadata.
+Read auditing records the route path, status code, actor, tenant, role, correlation id, and access
+type without copying request bodies or query-string values into audit metadata. It remains opt-in in
+local/dev/test environments and default-on in the production security profile.
 
-Read authorization is also disabled by default. When enabled, GET and HEAD requests must provide the
-same actor, tenant, role, correlation, and service identity context required for write authorization,
-and catalog-backed source-data `POST` requests must provide the same context when they match a
-governed source-data product capability rule. Requests may also be checked against
-`ENTERPRISE_CAPABILITY_RULES_JSON` entries such as `GET /integration/portfolios`, but source-data
-products already have catalog-derived defaults. This is service-policy support; full production
-entitlement closure still requires gateway/platform ingress policy proof and affected-consumer
-validation.
+Read authorization requires GET and HEAD requests to provide the same actor, tenant, role,
+correlation, and service identity context required for write authorization. Catalog-backed
+source-data `POST` requests must provide the same context when they match a governed source-data
+product capability rule. Requests may also be checked against `ENTERPRISE_CAPABILITY_RULES_JSON`
+entries such as `GET /integration/portfolios`, but source-data products already have
+catalog-derived defaults. This is service-policy support; full production entitlement closure still
+requires gateway/platform ingress policy proof and affected-consumer validation.
 
 When production policy requires explicit entitlement rules, `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`
 can be enabled alongside read or write authorization. In that mode, any protected request without a

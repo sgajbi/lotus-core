@@ -69,6 +69,11 @@ Current repo truth:
    platform vocabulary and validator.
 7. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
    [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
+8. Production-like deployments default to the governed service-local enterprise security profile:
+   write authorization, read authorization, read auditing, capability-rule enforcement, and
+   runtime configuration enforcement are on unless explicitly overridden through
+   `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false`. This does not replace gateway/platform ingress
+   and IAM proof.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use
@@ -235,6 +240,8 @@ Important current core truths:
    are all active and enforced by repo-native guards
 5. app-local runtime support is still valid here, but cross-cutting platform ownership lives in
    `lotus-platform`
+6. production-like environments use the shared production security profile for service-local
+   enterprise auth/audit defaults; local/dev/test environments remain opt-in
 
 Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wiki/API-Surface.md).
 

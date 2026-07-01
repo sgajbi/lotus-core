@@ -16,6 +16,7 @@ from portfolio_common.logging_utils import (
     redact_sensitive,
 )
 from portfolio_common.runtime_settings import env_bool, env_int, env_json_map, env_str
+from portfolio_common.runtime_settings import production_security_profile_enabled
 from portfolio_common.source_data_security import source_data_capability_rules
 
 MiddlewareNext = Callable[[Request], Awaitable[Response]]
@@ -36,6 +37,7 @@ class EnterpriseSettings(Protocol):
     enterprise_enforce_read_authz: bool
     enterprise_audit_reads: bool
     enterprise_require_capability_rules: bool
+    enterprise_enforce_runtime_config: bool
     enterprise_secret_rotation_days: int
     enterprise_max_write_payload_bytes: int
     enterprise_feature_flags: dict[str, Any]
@@ -50,6 +52,7 @@ class DefaultEnterpriseSettings:
     enterprise_enforce_read_authz: bool
     enterprise_audit_reads: bool
     enterprise_require_capability_rules: bool
+    enterprise_enforce_runtime_config: bool
     enterprise_secret_rotation_days: int
     enterprise_max_write_payload_bytes: int
     enterprise_feature_flags: dict[str, Any]
@@ -70,6 +73,7 @@ class EnterpriseReadinessRuntime:
             "ENTERPRISE_ENFORCE_READ_AUTHZ": "enterprise_enforce_read_authz",
             "ENTERPRISE_AUDIT_READS": "enterprise_audit_reads",
             "ENTERPRISE_REQUIRE_CAPABILITY_RULES": "enterprise_require_capability_rules",
+            "ENTERPRISE_ENFORCE_RUNTIME_CONFIG": "enterprise_enforce_runtime_config",
         }.get(name)
         if settings_attr:
             return bool(getattr(self.load_settings(), settings_attr))
@@ -260,27 +264,33 @@ class EnterpriseReadinessRuntime:
 
 
 def load_default_enterprise_settings(*, service_name: str) -> DefaultEnterpriseSettings:
+    production_security_profile = production_security_profile_enabled(service_name=service_name)
     return DefaultEnterpriseSettings(
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
         enterprise_primary_key_id=env_str("ENTERPRISE_PRIMARY_KEY_ID", ""),
         enterprise_enforce_authz=env_bool(
             "ENTERPRISE_ENFORCE_AUTHZ",
-            False,
+            production_security_profile,
             service_name=service_name,
         ),
         enterprise_enforce_read_authz=env_bool(
             "ENTERPRISE_ENFORCE_READ_AUTHZ",
-            False,
+            production_security_profile,
             service_name=service_name,
         ),
         enterprise_audit_reads=env_bool(
             "ENTERPRISE_AUDIT_READS",
-            False,
+            production_security_profile,
             service_name=service_name,
         ),
         enterprise_require_capability_rules=env_bool(
             "ENTERPRISE_REQUIRE_CAPABILITY_RULES",
-            False,
+            production_security_profile,
+            service_name=service_name,
+        ),
+        enterprise_enforce_runtime_config=env_bool(
+            "ENTERPRISE_ENFORCE_RUNTIME_CONFIG",
+            production_security_profile,
             service_name=service_name,
         ),
         enterprise_secret_rotation_days=env_int(

@@ -42,8 +42,11 @@ Full production runtime closure still requires:
 
 1. lotus-performance affected downstream consumer PR Merge Gate after in-flight benchmark-exposure
    work is committed or parked,
-2. full gateway/platform authorization and entitlement proof when opt-in service-policy controls
-   move to production enforcement,
+2. full gateway/platform authorization and entitlement proof for ingress, IAM, network, and
+   affected-consumer behavior. Service-local enterprise authorization, read authorization, read
+   auditing, capability-rule checks, and runtime-config validation now default on for
+   production-like `lotus-core` environments through the shared production security profile, but
+   that local posture does not replace gateway/platform proof,
 3. full cross-service event replay proof when event payload behavior changes beyond the centrally
    guarded outbox envelope.
 

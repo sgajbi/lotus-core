@@ -8,7 +8,18 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 STRICT_CONFIG_VALIDATION_ENV = "LOTUS_CORE_STRICT_CONFIG_VALIDATION"
+PRODUCTION_SECURITY_PROFILE_ENV = "LOTUS_CORE_PRODUCTION_SECURITY_PROFILE"
 LOCAL_CONFIG_ENVIRONMENTS = {"", "local", "dev", "development", "test"}
+PRODUCTION_SECURITY_ENVIRONMENTS = {
+    "prod",
+    "production",
+    "preprod",
+    "pre-prod",
+    "pre-production",
+    "staging",
+    "stage",
+    "uat",
+}
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
 FALSY_ENV_VALUES = {"0", "false", "no", "off"}
 
@@ -23,6 +34,27 @@ def strict_config_validation_enabled() -> bool:
         return raw.strip().lower() in TRUTHY_ENV_VALUES
     environment = os.getenv("ENVIRONMENT", "local").strip().lower()
     return environment not in LOCAL_CONFIG_ENVIRONMENTS
+
+
+def production_security_profile_enabled(*, service_name: str) -> bool:
+    raw = os.getenv(PRODUCTION_SECURITY_PROFILE_ENV)
+    if raw is not None:
+        normalized = raw.strip().lower()
+        if normalized in TRUTHY_ENV_VALUES:
+            return True
+        if normalized in FALSY_ENV_VALUES:
+            return False
+        return bool(
+            invalid_env_setting(
+                name=PRODUCTION_SECURITY_PROFILE_ENV,
+                raw=raw,
+                default=False,
+                reason="expected boolean value",
+                service_name=service_name,
+            )
+        )
+    environment = os.getenv("ENVIRONMENT", "local").strip().lower()
+    return environment in PRODUCTION_SECURITY_ENVIRONMENTS
 
 
 def env_bool(name: str, default: bool, *, service_name: str) -> bool:
