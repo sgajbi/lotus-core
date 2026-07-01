@@ -184,6 +184,39 @@ class IngestionJobRecordStatusResponse(BaseModel):
     )
 
 
+class IngestionJobBookkeepingRepairResponse(BaseModel):
+    job_id: str = Field(
+        description="Ingestion job identifier repaired by the governed bookkeeping command.",
+        examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
+    )
+    previous_status: IngestionJobStatus = Field(
+        description="Job status observed before the repair action.",
+        examples=["accepted"],
+    )
+    repaired_status: IngestionJobStatus = Field(
+        description="Job status after the repair action.",
+        examples=["queued"],
+    )
+    recovery_action: str = Field(
+        description="Governed operator action that performed the repair.",
+        examples=["repair_ingestion_job_bookkeeping"],
+    )
+    supportability_reason_code: str = Field(
+        description="Stable reason code that made the repair action eligible.",
+        examples=["POST_PUBLISH_BOOKKEEPING_FAILED"],
+    )
+    retry_safe: bool = Field(
+        description=(
+            "False when client retry could duplicate already completed publish or persist work."
+        ),
+        examples=[False],
+    )
+    message: str = Field(
+        description="Source-safe repair outcome summary.",
+        examples=["Ingestion job bookkeeping repaired from accepted to queued."],
+    )
+
+
 class IngestionIdempotencyDiagnosticItemResponse(BaseModel):
     idempotency_key: str = Field(
         description="Client-supplied idempotency key.",

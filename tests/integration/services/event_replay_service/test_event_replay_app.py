@@ -116,6 +116,7 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     list_failures = schema["paths"]["/ingestion/jobs/{job_id}/failures"]["get"]
     get_records = schema["paths"]["/ingestion/jobs/{job_id}/records"]["get"]
     retry_job = schema["paths"]["/ingestion/jobs/{job_id}/retry"]["post"]
+    repair_bookkeeping = schema["paths"]["/ingestion/jobs/{job_id}/bookkeeping/repair"]["post"]
     health_summary = schema["paths"]["/ingestion/health/summary"]["get"]
     health_lag = schema["paths"]["/ingestion/health/lag"]["get"]
     consumer_lag = schema["paths"]["/ingestion/health/consumer-lag"]["get"]
@@ -238,6 +239,12 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
     assert retry_job["summary"] == "Retry a failed ingestion job"
     assert "full or partial payload replay" in retry_job["description"]
     assert retry_body_schema["$ref"].endswith("/IngestionRetryRequest")
+    repair_example = repair_bookkeeping["responses"]["200"]["content"]["application/json"][
+        "example"
+    ]
+    assert repair_bookkeeping["summary"] == "Repair post-publish ingestion job bookkeeping"
+    assert repair_example["recovery_action"] == "repair_ingestion_job_bookkeeping"
+    assert repair_example["retry_safe"] is False
     assert "retry_unsupported" in retry_conflict_examples
     assert "partial_retry_unsupported" in retry_conflict_examples
     assert "retry_blocked" in retry_conflict_examples

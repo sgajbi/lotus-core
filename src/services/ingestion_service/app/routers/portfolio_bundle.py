@@ -163,6 +163,7 @@ async def ingest_portfolio_bundle(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=accepted_count,
         )
 
     logger.info(

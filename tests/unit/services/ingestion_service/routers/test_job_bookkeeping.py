@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.services.ingestion_service.app.routers.job_bookkeeping import (
+    post_publish_bookkeeping_failure_detail,
     raise_post_publish_bookkeeping_failure,
 )
 
@@ -22,10 +23,38 @@ async def test_raise_post_publish_bookkeeping_failure_records_non_terminal_obser
         )
 
     assert exc_info.value.status_code == 500
-    assert exc_info.value.detail["code"] == "INGESTION_JOB_BOOKKEEPING_FAILED"
-    assert exc_info.value.detail["job_id"] == "job_123"
+    assert exc_info.value.detail == {
+        "code": "INGESTION_JOB_BOOKKEEPING_FAILED",
+        "message": "Ingestion work completed, but job bookkeeping did not complete afterward.",
+        "job_id": "job_123",
+        "publish_state": "published",
+        "work_state": "published",
+        "published_record_count": None,
+        "retry_safe": False,
+        "recovery_action": "repair_ingestion_job_bookkeeping",
+        "recovery_path": "ingestion_job_bookkeeping_repair",
+        "supportability_reason_code": "POST_PERSIST_BOOKKEEPING_FAILED",
+        "remediation": (
+            "Inspect the job failure history, confirm published or persisted work, then run the "
+            "governed bookkeeping repair action before client retry."
+        ),
+    }
     ingestion_job_service.record_failure_observation.assert_awaited_once_with(
         "job_123",
         "queue state write failed",
         failure_phase="persist_bookkeeping",
     )
+
+
+async def test_post_publish_bookkeeping_failure_detail_reports_publish_state_and_count():
+    detail = post_publish_bookkeeping_failure_detail(
+        job_id="job_456",
+        failure_phase="queue_bookkeeping",
+        published_record_count=3,
+    )
+
+    assert detail["publish_state"] == "published"
+    assert detail["work_state"] == "published"
+    assert detail["published_record_count"] == 3
+    assert detail["retry_safe"] is False
+    assert detail["supportability_reason_code"] == "POST_PUBLISH_BOOKKEEPING_FAILED"

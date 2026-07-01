@@ -149,6 +149,7 @@ async def ingest_business_dates(
     await _mark_business_date_job_queued(
         ingestion_job_service=ingestion_job_service,
         job_id=job_result.job.job_id,
+        published_record_count=num_dates,
     )
 
     logger.info("Business dates successfully queued.", extra={"num_dates": num_dates})
@@ -295,6 +296,7 @@ async def _mark_business_date_job_queued(
     *,
     ingestion_job_service: IngestionJobService,
     job_id: str,
+    published_record_count: int,
 ) -> None:
     try:
         await ingestion_job_service.mark_queued(job_id)
@@ -303,6 +305,7 @@ async def _mark_business_date_job_queued(
             ingestion_job_service=ingestion_job_service,
             job_id=job_id,
             failure_reason=str(exc),
+            published_record_count=published_record_count,
         )
 
 

@@ -142,6 +142,7 @@ async def ingest_instruments(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=num_instruments,
         )
 
     logger.info("Instruments successfully queued.", extra={"num_instruments": num_instruments})

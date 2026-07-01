@@ -30,6 +30,7 @@
         "GET /ingestion/jobs/{job_id}/records",
         "GET /ingestion/ops/control",
         "POST /ingestion/dlq/consumer-events/{event_id}/replay",
+        "POST /ingestion/jobs/{job_id}/bookkeeping/repair",
         "POST /ingestion/jobs/{job_id}/retry",
         "PUT /ingestion/ops/control"
       ]

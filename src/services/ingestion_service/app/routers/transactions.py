@@ -220,6 +220,7 @@ async def ingest_transactions(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=num_transactions,
         )
 
     logger.info("Transactions successfully queued.", extra={"num_transactions": num_transactions})

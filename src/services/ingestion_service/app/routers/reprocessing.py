@@ -166,6 +166,7 @@ async def reprocess_transactions(
             ingestion_job_service=ingestion_job_service,
             job_id=job_result.job.job_id,
             failure_reason=str(exc),
+            published_record_count=num_to_reprocess,
         )
 
     logger.info(f"Successfully queued {num_to_reprocess} reprocessing requests.")
