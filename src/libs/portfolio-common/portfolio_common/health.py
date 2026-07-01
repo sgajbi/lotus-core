@@ -18,11 +18,13 @@ from .monitoring import observe_health_dependency_check, set_health_readiness_st
 logger = logging.getLogger(__name__)
 
 DependencyCheck = Callable[[], Awaitable[bool]]
+DependencyConfigurationCheck = Callable[[], bool]
 
 READINESS_OK = "ok"
 READINESS_UNAVAILABLE = "unavailable"
 READINESS_TIMEOUT = "timeout"
 READINESS_ERROR = "error"
+READINESS_MISCONFIGURED = "misconfigured"
 
 
 @dataclass(frozen=True)
@@ -102,14 +104,62 @@ async def check_kafka_health() -> bool:
         return False
 
 
+def _database_dependency_configured() -> bool:
+    try:
+        from .db import get_async_database_url
+
+        return bool(get_async_database_url().strip())
+    except Exception:
+        return False
+
+
+def _kafka_dependency_configured() -> bool:
+    return bool(KAFKA_BOOTSTRAP_SERVERS.strip())
+
+
+def _dependency_readiness_result(
+    *,
+    service_name: str,
+    dependency_name: str,
+    status_value: str,
+    started_at: float,
+) -> DependencyReadinessResult:
+    observe_health_dependency_check(
+        service=service_name,
+        dependency=dependency_name,
+        status=status_value,
+        duration_seconds=time.perf_counter() - started_at,
+    )
+    return DependencyReadinessResult(dependency_name, status_value)
+
+
 async def _run_dependency_check(
     dependency_name: str,
     check: DependencyCheck,
     *,
+    configuration_check: DependencyConfigurationCheck,
     service_name: str,
     timeout_seconds: float,
 ) -> DependencyReadinessResult:
     started_at = time.perf_counter()
+    if not configuration_check():
+        log_operation_event(
+            logger,
+            logging.ERROR,
+            "Health dependency check is misconfigured.",
+            event_name="health.dependency_check.misconfigured",
+            operation="health.readiness",
+            status="misconfigured",
+            reason_code="dependency_misconfigured",
+            dependency=dependency_name,
+        )
+        return _dependency_readiness_result(
+            service_name=service_name,
+            dependency_name=dependency_name,
+            status_value=READINESS_MISCONFIGURED,
+            started_at=started_at,
+        )
+
     try:
         is_ready = await asyncio.wait_for(check(), timeout=timeout_seconds)
     except TimeoutError:
@@ -124,13 +174,12 @@ async def _run_dependency_check(
             dependency=dependency_name,
             timeout_seconds=timeout_seconds,
         )
-        observe_health_dependency_check(
-            service=service_name,
-            dependency=dependency_name,
-            status=READINESS_TIMEOUT,
-            duration_seconds=time.perf_counter() - started_at,
+        return _dependency_readiness_result(
+            service_name=service_name,
+            dependency_name=dependency_name,
+            status_value=READINESS_TIMEOUT,
+            started_at=started_at,
         )
-        return DependencyReadinessResult(dependency_name, READINESS_TIMEOUT)
     except Exception:
         log_operation_event(
             logger,
@@ -143,22 +192,20 @@ async def _run_dependency_check(
             dependency=dependency_name,
             exc_info=True,
         )
-        observe_health_dependency_check(
-            service=service_name,
-            dependency=dependency_name,
-            status=READINESS_ERROR,
-            duration_seconds=time.perf_counter() - started_at,
+        return _dependency_readiness_result(
+            service_name=service_name,
+            dependency_name=dependency_name,
+            status_value=READINESS_ERROR,
+            started_at=started_at,
         )
-        return DependencyReadinessResult(dependency_name, READINESS_ERROR)
 
     status_value = READINESS_OK if is_ready else READINESS_UNAVAILABLE
-    observe_health_dependency_check(
-        service=service_name,
-        dependency=dependency_name,
-        status=status_value,
-        duration_seconds=time.perf_counter() - started_at,
+    return _dependency_readiness_result(
+        service_name=service_name,
+        dependency_name=dependency_name,
+        status_value=status_value,
+        started_at=started_at,
     )
-    return DependencyReadinessResult(dependency_name, status_value)
 
 
 def _coerce_dependency_result(
@@ -214,7 +261,10 @@ def create_health_router(
     """
     router = APIRouter(tags=["Health"])
 
-    dep_map = {"db": ("database", check_db_health), "kafka": ("kafka", check_kafka_health)}
+    dep_map = {
+        "db": ("database", check_db_health, _database_dependency_configured),
+        "kafka": ("kafka", check_kafka_health, _kafka_dependency_configured),
+    }
     readiness_cache_ttl_seconds = max(0.0, readiness_cache_ttl_seconds)
     readiness_dependency_timeout_seconds = max(0.001, readiness_dependency_timeout_seconds)
     cached_until = 0.0
@@ -271,7 +321,9 @@ def create_health_router(
         nonlocal cached_all_ok, cached_dep_status, cached_until
 
         resolved_dependencies = [
-            (dep_map[dep][0], dep_map[dep][1]) for dep in dependencies if dep in dep_map
+            (dep_map[dep][0], dep_map[dep][1], dep_map[dep][2])
+            for dep in dependencies
+            if dep in dep_map
         ]
         now = time.monotonic()
         if readiness_cache_ttl_seconds > 0 and cached_dep_status is not None and now < cached_until:
@@ -283,10 +335,11 @@ def create_health_router(
                     _run_dependency_check(
                         dependency_name,
                         check,
+                        configuration_check=configuration_check,
                         service_name=service_name,
                         timeout_seconds=readiness_dependency_timeout_seconds,
                     )
-                    for dependency_name, check in resolved_dependencies
+                    for dependency_name, check, configuration_check in resolved_dependencies
                 ],
                 return_exceptions=True,
             )
@@ -296,7 +349,7 @@ def create_health_router(
                     result,
                     service_name=service_name,
                 )
-                for (dependency_name, _), result in zip(resolved_dependencies, raw_results)
+                for (dependency_name, _, _), result in zip(resolved_dependencies, raw_results)
             ]
 
             all_ok = all(result.is_ready for result in results)

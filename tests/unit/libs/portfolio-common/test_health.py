@@ -177,6 +177,41 @@ async def test_readiness_probe_classifies_kafka_timeout(monkeypatch):
     }
 
 
+async def test_readiness_probe_classifies_kafka_misconfiguration(monkeypatch):
+    observe_health_dependency_check = MagicMock()
+
+    async def _kafka_should_not_run():
+        raise AssertionError("Kafka readiness probe should not run when config is empty.")
+
+    monkeypatch.setattr(health_module, "KAFKA_BOOTSTRAP_SERVERS", "")
+    monkeypatch.setattr(health_module, "check_kafka_health", _kafka_should_not_run)
+    monkeypatch.setattr(
+        health_module,
+        "observe_health_dependency_check",
+        observe_health_dependency_check,
+    )
+
+    router = health_module.create_health_router(
+        "kafka",
+        service_name="event_replay_service",
+        readiness_cache_ttl_seconds=0,
+    )
+    readiness_probe = _readiness_endpoint(router)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await readiness_probe()
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "status": "not_ready",
+        "dependencies": {"kafka": "misconfigured"},
+    }
+    observe_health_dependency_check.assert_called_once()
+    assert observe_health_dependency_check.call_args.kwargs["service"] == "event_replay_service"
+    assert observe_health_dependency_check.call_args.kwargs["dependency"] == "kafka"
+    assert observe_health_dependency_check.call_args.kwargs["status"] == "misconfigured"
+
+
 async def test_readiness_probe_classifies_dependency_exception(monkeypatch):
     observe_health_dependency_check = MagicMock()
     set_health_readiness_state = MagicMock()
