@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -9,8 +9,13 @@ from portfolio_common.control_code_normalization import (
     normalize_transaction_control_code,
 )
 from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
-FX_BUSINESS_TRANSACTION_TYPES = {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}
+FX_BUSINESS_TRANSACTION_TYPES = frozenset(
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed and definition.lifecycle_family == "fx"
+)
 FX_COMPONENT_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",
@@ -84,7 +89,7 @@ class FxCanonicalTransaction(BaseModel):
     )
     @classmethod
     def _normalize_currency_code(cls, value: object) -> str:
-        return normalize_currency_code(value)
+        return cast(str, normalize_currency_code(value))
 
     @field_validator(
         "transaction_type",
@@ -94,7 +99,7 @@ class FxCanonicalTransaction(BaseModel):
     )
     @classmethod
     def _normalize_transaction_control_code(cls, value: str | None) -> str:
-        return normalize_transaction_control_code(value)
+        return cast(str, normalize_transaction_control_code(value))
 
     economic_event_id: Optional[str] = Field(
         default=None, description="Economic event id shared by all FX components."
@@ -128,7 +133,7 @@ class FxCanonicalTransaction(BaseModel):
     )
     @classmethod
     def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
-        return normalize_optional_transaction_control_code(value)
+        return cast(str | None, normalize_optional_transaction_control_code(value))
 
     fx_contract_id: Optional[str] = Field(
         default=None, description="Stable FX contract identifier."

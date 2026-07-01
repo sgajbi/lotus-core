@@ -1,4 +1,8 @@
 import pytest
+from portfolio_common.transaction_domain.fx_linkage import (
+    FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
+)
+from portfolio_common.transaction_domain.fx_models import FX_BUSINESS_TRANSACTION_TYPES
 from portfolio_common.transaction_type_registry import (
     MIGRATION_ONLY,
     TARGET_NOT_IMPLEMENTED,
@@ -100,6 +104,17 @@ def test_cashflow_transfer_sign_rule_tables_match_registry_effects() -> None:
 
     assert TRANSFER_INFLOW_TRANSACTION_TYPES == registry_inflows
     assert TRANSFER_OUTFLOW_TRANSACTION_TYPES == registry_outflows
+
+
+def test_fx_business_transaction_types_are_registry_derived_once() -> None:
+    registry_fx_business_types = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed and definition.lifecycle_family == "fx"
+    }
+
+    assert FX_BUSINESS_TRANSACTION_TYPES == registry_fx_business_types
+    assert FX_LINKAGE_BUSINESS_TRANSACTION_TYPES is FX_BUSINESS_TRANSACTION_TYPES
 
 
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:
