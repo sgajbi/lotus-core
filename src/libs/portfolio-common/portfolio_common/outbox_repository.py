@@ -5,12 +5,16 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
-from portfolio_common.logging_utils import normalize_lineage_value
+from portfolio_common.logging_utils import (
+    normalize_lineage_value,
+    normalize_traceparent,
+    traceparent_var,
+)
 
 logger = logging.getLogger(__name__)
 
 EVENT_SCHEMA_VERSION = "1.0.0"
-EVENT_ENVELOPE_FIELDS = ("event_type", "schema_version", "correlation_id")
+EVENT_ENVELOPE_FIELDS = ("event_type", "schema_version", "correlation_id", "traceparent")
 
 
 class OutboxRepository:
@@ -31,6 +35,7 @@ class OutboxRepository:
         payload: Dict[str, Any],
         topic: str,
         correlation_id: Optional[str] = None,
+        traceparent: Optional[str] = None,
     ) -> OutboxEvent:
         """
         Create a new outbox event in PENDING status.
@@ -44,6 +49,9 @@ class OutboxRepository:
             raise TypeError("payload must be a dict (will be serialized by SQLAlchemy JSON type)")
 
         correlation_id = normalize_lineage_value(correlation_id)
+        traceparent = normalize_traceparent(traceparent) or normalize_traceparent(
+            traceparent_var.get()
+        )
 
         event = OutboxEvent(
             aggregate_type=aggregate_type,
@@ -54,6 +62,7 @@ class OutboxRepository:
                 payload=payload,
                 event_type=event_type,
                 correlation_id=correlation_id,
+                traceparent=traceparent,
             ),
             topic=topic,
             correlation_id=correlation_id,
@@ -79,6 +88,7 @@ def build_outbox_payload(
     payload: Dict[str, Any],
     event_type: str,
     correlation_id: Optional[str],
+    traceparent: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return an auditable Kafka payload without mutating the caller-owned domain payload."""
     if not isinstance(payload, dict):
@@ -86,6 +96,7 @@ def build_outbox_payload(
 
     enriched_payload = dict(payload)
     normalized_correlation_id = normalize_lineage_value(correlation_id)
+    normalized_traceparent = normalize_traceparent(traceparent)
     _require_matching_payload_metadata(enriched_payload, "event_type", event_type)
     _require_matching_payload_metadata(enriched_payload, "schema_version", EVENT_SCHEMA_VERSION)
     if normalized_correlation_id is not None:
@@ -94,10 +105,17 @@ def build_outbox_payload(
             "correlation_id",
             normalized_correlation_id,
         )
+    if normalized_traceparent is not None:
+        _require_matching_payload_metadata(
+            enriched_payload,
+            "traceparent",
+            normalized_traceparent,
+        )
 
     enriched_payload["event_type"] = event_type
     enriched_payload["schema_version"] = EVENT_SCHEMA_VERSION
     enriched_payload["correlation_id"] = normalized_correlation_id
+    enriched_payload["traceparent"] = normalized_traceparent
     return enriched_payload
 
 

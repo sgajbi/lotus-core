@@ -52,21 +52,27 @@ class CoreEventModel(BaseModel):
     event_type: Optional[str] = Field(None)
     schema_version: Optional[str] = Field(None)
     correlation_id: Optional[str] = Field(None)
+    traceparent: Optional[str] = Field(None)
 
 
 GOVERNED_EVENT_SCHEMA_FIELDS = frozenset({"event_type", "schema_version"})
-GOVERNED_EVENT_ENVELOPE_FIELDS = frozenset({*GOVERNED_EVENT_SCHEMA_FIELDS, "correlation_id"})
+GOVERNED_EVENT_ENVELOPE_FIELDS = frozenset(
+    {*GOVERNED_EVENT_SCHEMA_FIELDS, "correlation_id", "traceparent"}
+)
 
 
 def event_business_payload(
     event: BaseModel,
     *,
     include_correlation_id: bool = False,
+    include_traceparent: bool = False,
     mode: str = "python",
 ) -> dict[str, Any]:
     exclude = set(GOVERNED_EVENT_SCHEMA_FIELDS)
     if not include_correlation_id:
         exclude.add("correlation_id")
+    if not include_traceparent:
+        exclude.add("traceparent")
     return event.model_dump(mode=mode, exclude=exclude)
 
 

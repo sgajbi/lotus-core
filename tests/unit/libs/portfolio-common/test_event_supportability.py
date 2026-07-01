@@ -142,6 +142,7 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
             "event_type": definition.event_type,
             "schema_version": "1.0.0",
             "correlation_id": "corr-123",
+            "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
         }
 
         parsed = model_cls.model_validate(payload)

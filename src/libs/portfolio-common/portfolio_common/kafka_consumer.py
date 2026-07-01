@@ -25,8 +25,10 @@ from .logging_utils import (
     correlation_id_var,
     generate_correlation_id,
     normalize_lineage_value,
+    normalize_traceparent,
     redact_sensitive,
     redact_sensitive_text,
+    traceparent_var,
 )
 
 logger = logging.getLogger(__name__)
@@ -237,6 +239,13 @@ class BaseConsumer(ABC):
 
         return corr_id
 
+    def _get_message_header_traceparent(self, msg: Message) -> Optional[str]:
+        if msg.headers():
+            for key, value in msg.headers():
+                if key == "traceparent":
+                    return normalize_traceparent(value.decode("utf-8") if value else None)
+        return None
+
     @contextmanager
     def _message_correlation_context(
         self,
@@ -251,6 +260,7 @@ class BaseConsumer(ABC):
         """
         current = correlation_id_var.get()
         token = None
+        traceparent_token = None
         resolved = self._resolve_context_correlation_id(
             msg,
             current,
@@ -259,10 +269,16 @@ class BaseConsumer(ABC):
         )
         if normalize_lineage_value(current) is None:
             token = correlation_id_var.set(resolved)
+        if normalize_traceparent(traceparent_var.get()) is None:
+            traceparent = self._get_message_header_traceparent(msg)
+            if traceparent is not None:
+                traceparent_token = traceparent_var.set(traceparent)
 
         try:
             yield resolved
         finally:
+            if traceparent_token is not None:
+                traceparent_var.reset(traceparent_token)
             if token is not None:
                 correlation_id_var.reset(token)
 
@@ -314,6 +330,9 @@ class BaseConsumer(ABC):
 
         try:
             correlation_id = normalize_lineage_value(correlation_id_var.get())
+            traceparent = normalize_traceparent(
+                traceparent_var.get()
+            ) or self._get_message_header_traceparent(msg)
             message_correlation_id = normalize_lineage_value(
                 self._get_message_header_correlation_id(msg)
             )
@@ -323,8 +342,13 @@ class BaseConsumer(ABC):
                 error,
                 error_reason_code=error_reason_code,
                 correlation_id=correlation_id,
+                traceparent=traceparent,
             )
-            dlq_headers = self._build_dlq_headers(msg, correlation_id=correlation_id)
+            dlq_headers = self._build_dlq_headers(
+                msg,
+                correlation_id=correlation_id,
+                traceparent=traceparent,
+            )
             self._publish_dlq_message(msg, payload=dlq_payload, headers=dlq_headers)
             self._confirm_dlq_delivery()
             await self._record_consumer_dlq_event(
@@ -348,9 +372,11 @@ class BaseConsumer(ABC):
         *,
         error_reason_code: str,
         correlation_id: str | None,
+        traceparent: str | None,
     ) -> dict[str, object]:
         return {
             "correlation_id": correlation_id,
+            "traceparent": traceparent,
             "original_topic": msg.topic(),
             "original_key": self._message_key_text(msg),
             "original_value": self._redacted_message_value_text(msg),
@@ -365,10 +391,14 @@ class BaseConsumer(ABC):
         msg: Message,
         *,
         correlation_id: str | None,
+        traceparent: str | None = None,
     ) -> list[tuple[str, bytes]]:
         dlq_headers = [_redacted_dlq_header(header) for header in msg.headers() or []]
         if correlation_id:
             dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
+        normalized_traceparent = normalize_traceparent(traceparent)
+        if normalized_traceparent:
+            dlq_headers.append(("traceparent", normalized_traceparent.encode("utf-8")))
         return dlq_headers
 
     def _publish_dlq_message(
@@ -484,11 +514,15 @@ class BaseConsumer(ABC):
         loop: asyncio.AbstractEventLoop,
     ) -> None:
         token = None
+        traceparent_token = None
         start_time = time.monotonic()
         processed_successfully = False
         try:
             corr_id = self._resolve_message_correlation_id(msg)
             token = correlation_id_var.set(corr_id)
+            traceparent = self._get_message_header_traceparent(msg)
+            if traceparent:
+                traceparent_token = traceparent_var.set(traceparent)
 
             await self._dispatch_message_for_processing(msg, loop)
             processed_successfully = self._commit_after_successful_processing(msg)
@@ -505,6 +539,8 @@ class BaseConsumer(ABC):
             self._record_processing_metrics(start_time, processed_successfully)
             if token:
                 correlation_id_var.reset(token)
+            if traceparent_token:
+                traceparent_var.reset(traceparent_token)
 
     def _should_skip_polled_message(self, msg: Message) -> bool:
         error = msg.error()

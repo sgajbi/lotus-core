@@ -12,7 +12,12 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
-from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
+from portfolio_common.logging_utils import (
+    correlation_id_var,
+    normalize_lineage_value,
+    normalize_traceparent,
+    traceparent_var,
+)
 from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
 
 from ..DTOs.business_date_dto import BusinessDate
@@ -43,9 +48,12 @@ class IngestionService:
     def _get_headers(self, idempotency_key: str | None = None):
         """Constructs Kafka headers with the current correlation ID."""
         corr_id = normalize_lineage_value(correlation_id_var.get())
+        traceparent = normalize_traceparent(traceparent_var.get())
         headers: list[tuple[str, bytes]] = []
         if corr_id:
             headers.append(("correlation_id", corr_id.encode("utf-8")))
+        if traceparent:
+            headers.append(("traceparent", traceparent.encode("utf-8")))
         if idempotency_key:
             headers.append(("idempotency_key", idempotency_key.encode("utf-8")))
         return headers or None

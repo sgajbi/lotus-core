@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.events import CashflowCalculatedEvent
+from portfolio_common.logging_utils import traceparent_var
 from portfolio_common.outbox_repository import EVENT_SCHEMA_VERSION, OutboxRepository
+
+TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 pytestmark = pytest.mark.asyncio
 
@@ -58,6 +61,7 @@ async def test_create_outbox_event_success(
         "event_type": "TestEvent",
         "schema_version": EVENT_SCHEMA_VERSION,
         "correlation_id": "corr-123",
+        "traceparent": None,
     }
     assert added_object.status == "PENDING"
     assert event_details["payload"] == {"data": "value"}
@@ -97,6 +101,40 @@ async def test_create_outbox_event_normalizes_sentinel_correlation(
 
     assert event.correlation_id is None
     assert event.payload["correlation_id"] is None
+    assert event.payload["traceparent"] is None
+
+
+async def test_create_outbox_event_captures_traceparent_context(
+    repository: OutboxRepository,
+) -> None:
+    token = traceparent_var.set(TRACEPARENT)
+    try:
+        event = await repository.create_outbox_event(
+            aggregate_type="portfolio",
+            aggregate_id="P1",
+            event_type="evt",
+            payload={"x": 1},
+            topic="topic-1",
+            correlation_id="corr-123",
+        )
+    finally:
+        traceparent_var.reset(token)
+
+    assert event.payload["traceparent"] == TRACEPARENT
+
+
+async def test_create_outbox_event_rejects_conflicting_payload_traceparent(
+    repository: OutboxRepository,
+) -> None:
+    with pytest.raises(ValueError, match="payload traceparent"):
+        await repository.create_outbox_event(
+            aggregate_type="portfolio",
+            aggregate_id="P1",
+            event_type="ExpectedEvent",
+            payload={"traceparent": "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"},
+            topic="topic-1",
+            traceparent=TRACEPARENT,
+        )
 
 
 async def test_create_outbox_event_rejects_conflicting_payload_event_type(

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.kafka_utils import KafkaProducer
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 
 from src.services.ingestion_service.app.DTOs.portfolio_bundle_dto import (
     PortfolioBundleIngestionRequest,
@@ -15,6 +15,8 @@ from src.services.ingestion_service.app.services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
 )
+
+TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 pytestmark = pytest.mark.asyncio
 
@@ -256,6 +258,36 @@ async def test_publish_with_correlation_id(
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     headers = dict(call_args["headers"])
     assert headers["correlation_id"] == b"test-corr-id-123"
+
+
+async def test_publish_with_traceparent_header(
+    ingestion_service: IngestionService, mock_kafka_producer: MagicMock
+):
+    portfolios = [
+        Portfolio(
+            portfolio_id="P1",
+            base_currency="USD",
+            open_date=date(2025, 1, 1),
+            risk_exposure="a",
+            investment_time_horizon="b",
+            portfolio_type="c",
+            booking_center_code="d",
+            client_id="e",
+            status="f",
+        )
+    ]
+    correlation_token = correlation_id_var.set("test-corr-id-123")
+    traceparent_token = traceparent_var.set(TRACEPARENT)
+    try:
+        await ingestion_service.publish_portfolios(portfolios)
+    finally:
+        traceparent_var.reset(traceparent_token)
+        correlation_id_var.reset(correlation_token)
+
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    headers = dict(call_args["headers"])
+    assert headers["correlation_id"] == b"test-corr-id-123"
+    assert headers["traceparent"] == TRACEPARENT.encode("utf-8")
 
 
 async def test_publish_with_idempotency_key(

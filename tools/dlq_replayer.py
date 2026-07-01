@@ -16,7 +16,7 @@ if project_root not in sys.path:
 from confluent_kafka import Message
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.kafka_utils import get_kafka_producer, KafkaProducer
-from portfolio_common.logging_utils import setup_logging
+from portfolio_common.logging_utils import normalize_traceparent, setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ class DLQReplayConsumer(BaseConsumer):
             original_value_str = dlq_data.get("original_value")
             original_value = json.loads(original_value_str)
             correlation_id = dlq_data.get("correlation_id")
+            traceparent = normalize_traceparent(dlq_data.get("traceparent"))
 
             if not all([original_topic, original_key, original_value]):
                 logger.error(
@@ -60,6 +61,8 @@ class DLQReplayConsumer(BaseConsumer):
             )
 
             headers = [("correlation_id", (correlation_id or "").encode("utf-8"))]
+            if traceparent:
+                headers.append(("traceparent", traceparent.encode("utf-8")))
 
             self._producer.publish_message(
                 topic=original_topic,

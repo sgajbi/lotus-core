@@ -16,6 +16,8 @@ from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
+TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+
 
 @pytest.fixture
 def smart_mock_kafka_producer() -> MagicMock:
@@ -302,7 +304,9 @@ def test_dispatcher_does_not_update_result_after_claim_is_reclaimed(db_engine, c
     assert processed_at is None
 
 
-def test_dispatcher_propagates_correlation_id(db_engine, clean_db, smart_mock_kafka_producer):
+def test_dispatcher_propagates_correlation_id_and_traceparent(
+    db_engine, clean_db, smart_mock_kafka_producer
+):
     """
     GIVEN multiple pending events, one with a correlation_id and one without
     WHEN the OutboxDispatcher runs
@@ -323,7 +327,7 @@ def test_dispatcher_propagates_correlation_id(db_engine, clean_db, smart_mock_ka
                     aggregate_id=agg_id_1,
                     status="PENDING",
                     event_type="EventWithCorrId",
-                    payload="{}",
+                    payload={"traceparent": TRACEPARENT},
                     topic="test.topic",
                     correlation_id=existing_corr_id,
                 )
@@ -358,6 +362,7 @@ def test_dispatcher_propagates_correlation_id(db_engine, clean_db, smart_mock_ka
     )
     headers_with_id = {key: value for key, value in call_with_id.kwargs["headers"]}
     assert headers_with_id["correlation_id"] == existing_corr_id.encode("utf-8")
+    assert headers_with_id["traceparent"] == TRACEPARENT.encode("utf-8")
 
     # Check call for the event that DID NOT have a correlation ID
     call_without_id = next(

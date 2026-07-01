@@ -14,6 +14,7 @@ from portfolio_common.kafka_utils import KafkaProducer
 from tools.dlq_replayer import DLQReplayConsumer
 
 pytestmark = pytest.mark.asyncio
+TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 
 def _kafka_bootstrap_host() -> str:
@@ -89,6 +90,7 @@ async def test_dlq_replayer_consumes_and_republishes(
         "original_value": json.dumps(original_value),
         "error_reason": "Test-induced failure",
         "correlation_id": correlation_id,
+        "traceparent": TRACEPARENT,
     }
 
     setup_producer = KafkaProducer(bootstrap_servers=kafka_bootstrap_host)
@@ -119,6 +121,7 @@ async def test_dlq_replayer_consumes_and_republishes(
     assert call_args["key"] == original_key
     assert call_args["value"] == original_value
     assert ("correlation_id", correlation_id.encode("utf-8")) in call_args["headers"]
+    assert ("traceparent", TRACEPARENT.encode("utf-8")) in call_args["headers"]
 
 
 async def test_dlq_replayer_skips_malformed_message(

@@ -88,15 +88,24 @@ both direct instrument ingress and derived instrument events from cost processin
 
 1. `event_type`,
 2. `schema_version`,
-3. `correlation_id`.
+3. `correlation_id`,
+4. `traceparent`.
 
 The repository rejects payload metadata that conflicts with the outbox row metadata. Producers should
 continue passing domain payloads and let the repository add the supportability envelope; this keeps
 event metadata consistent without duplicating envelope code in each service.
 
-All shared event models inherit from `CoreEventModel`, which keeps `from_attributes=True` and
-explicitly ignores extra fields. This makes event consumers intentionally tolerant of the governed
-outbox envelope metadata instead of relying on implicit Pydantic defaults.
+All shared event models inherit from `CoreEventModel`, which keeps `from_attributes=True`, accepts
+the governed envelope metadata above, and rejects non-governed extra fields. This makes event
+consumers intentionally tolerant of canonical outbox supportability metadata while still failing
+closed on unsupported payload drift.
+
+Async trace context uses W3C `traceparent` as the canonical event/Kafka trace carrier. Standard HTTP
+bootstrap preserves incoming valid `traceparent`, outbox creation stores it as governed envelope
+metadata, outbox dispatch publishes it as a Kafka header, shared consumers load it into context, DLQ
+publication preserves it in payload and headers, and DLQ replay republishes it with the replayed
+message. Existing `correlation_id` remains the Lotus operator correlation key and is not replaced by
+trace context.
 
 ## Supportability Surfaces
 

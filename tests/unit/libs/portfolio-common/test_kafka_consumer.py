@@ -9,10 +9,11 @@ from portfolio_common.kafka_consumer import (
     RetryableConsumerError,
     classify_dlq_reason_code,
 )
-from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
+TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
 
 
 # A concrete implementation of the abstract BaseConsumer for testing
@@ -323,6 +324,24 @@ async def test_dlq_payload_is_correct(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_dlq_payload_and_headers_preserve_traceparent(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message(
+        "key-trace",
+        {"data": "value-trace"},
+        headers=[("correlation_id", b"corr-trace"), ("traceparent", TRACEPARENT.encode("utf-8"))],
+    )
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(mock_msg, ValueError("Test Error"))
+
+    assert result is True
+    call_args = mock_kafka_producer.publish_message.call_args.kwargs
+    assert call_args["value"]["traceparent"] == TRACEPARENT
+    assert dict(call_args["headers"])["traceparent"] == TRACEPARENT.encode("utf-8")
+
+
 async def test_dlq_payload_and_headers_are_redacted(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -583,6 +602,26 @@ async def test_message_correlation_context_uses_header_before_fallback(
             assert correlation_id_var.get() == "corr-header"
     finally:
         correlation_id_var.reset(token)
+
+
+async def test_message_correlation_context_sets_traceparent_from_header(
+    test_consumer: ConcreteTestConsumer,
+):
+    mock_msg = create_mock_message(
+        "key-trace-context",
+        {"data": "value-trace-context"},
+        headers=[("correlation_id", b"corr-header"), ("traceparent", TRACEPARENT.encode("utf-8"))],
+    )
+
+    corr_token = correlation_id_var.set("<not-set>")
+    trace_token = traceparent_var.set("<not-set>")
+    try:
+        with test_consumer._message_correlation_context(mock_msg) as correlation_id:
+            assert correlation_id == "corr-header"
+            assert traceparent_var.get() == TRACEPARENT
+    finally:
+        traceparent_var.reset(trace_token)
+        correlation_id_var.reset(corr_token)
 
 
 async def test_message_correlation_context_can_prefer_fallback(
