@@ -35,6 +35,9 @@ downstream operational and analytics-input contracts.
 `cash_account_masters` is the governed cash-account identity source for cash-balance account rows.
 Transaction settlement cash-account strings can support fallback mapping only after they validate
 against active/effective cash-account master rows for the same portfolio and cash instrument.
+Raw transaction persistence may land unresolved settlement cash-account references only as
+provisional source-batch ordering evidence; downstream lifecycle processing and source-data
+products must block or degrade those rows until governed cash-account master data exists.
 
 `instruments` is the governed instrument identity source for product transaction cost processing and
 new BUY lot-state writes. Product transactions whose instrument master has not arrived are

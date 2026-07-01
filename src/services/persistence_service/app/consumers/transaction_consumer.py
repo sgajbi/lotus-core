@@ -8,6 +8,9 @@ from portfolio_common.logging_utils import log_operation_event
 from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry, retry_if_exception_type, stop_after_delay, wait_fixed
 
+from ..policies.transaction_cash_account_policy import (
+    decide_transaction_cash_account_reference,
+)
 from ..policies.transaction_instrument_policy import (
     decide_transaction_instrument_reference,
 )
@@ -73,6 +76,31 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
                 reason_code=instrument_decision.reason_code,
                 policy_id=instrument_decision.policy_id,
                 downstream_lifecycle_blocked=instrument_decision.downstream_lifecycle_blocked,
+            )
+
+        cash_account_exists = None
+        if (event.settlement_cash_account_id or "").strip():
+            cash_account_exists = await repo.check_active_cash_account_exists(
+                portfolio_id=event.portfolio_id,
+                cash_account_id=event.settlement_cash_account_id or "",
+                cash_security_id=event.settlement_cash_instrument_id,
+                as_of_date=(event.settlement_date or event.transaction_date).date(),
+            )
+        cash_account_decision = decide_transaction_cash_account_reference(
+            settlement_cash_account_id=event.settlement_cash_account_id,
+            cash_account_exists=cash_account_exists,
+        )
+        if cash_account_decision.reason_code is not None:
+            log_operation_event(
+                logger,
+                logging.WARNING,
+                "Transaction raw landing has unresolved settlement cash-account reference.",
+                event_name="persistence.transaction.cash_account_reference",
+                operation="transaction_persistence",
+                status=cash_account_decision.status,
+                reason_code=cash_account_decision.reason_code,
+                policy_id=cash_account_decision.policy_id,
+                downstream_lifecycle_blocked=(cash_account_decision.downstream_lifecycle_blocked),
             )
 
         await repo.create_or_update_transaction(event)

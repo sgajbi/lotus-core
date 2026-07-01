@@ -79,11 +79,11 @@ Focused static proof:
 
 ## Residual Risk
 
-This slice hardens the query-side read boundary. A future ingestion-side reference-integrity slice
-should validate or persist deterministic orphan evidence at transaction ingestion time when
-settlement cash-account references are supplied before cash-account master data arrives.
+This slice hardened the query-side read boundary. CR-1256 continues the same issue by adding
+transaction-persistence policy evidence for unresolved settlement cash-account references when they
+first land as raw transaction evidence.
 
-Issue #673 remains open for PR/CI/QA evidence.
+Issue #673 remains open for PR/CI/QA evidence and post-merge wiki publication.
 
 ## Bank-Buyable Control Movement
 
