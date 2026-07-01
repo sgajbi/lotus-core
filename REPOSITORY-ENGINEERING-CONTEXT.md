@@ -686,6 +686,13 @@ Most relevant current governance:
     hand-written production defaults; use the shared profile helper so query service, query control
     plane, and future business/operator HTTP apps remain consistent. This is service-local proof;
     gateway/platform ingress and IAM closure still require higher-lane evidence.
+61. Cost-calculator FX processing uses the shared canonical FX baseline helper. `FX_SPOT`,
+    `FX_FORWARD`, and `FX_SWAP` must route through
+    `portfolio_common.transaction_domain.build_fx_baseline_processing_update(...)` after canonical
+    FX validation instead of service-local pending strategies or duplicated realized-P&L mode
+    branches. Baseline engine and consumer paths support `NONE` and `UPSTREAM_PROVIDED`
+    `fx_realized_pnl_mode`; `CASH_LOT_COST_METHOD` remains an explicit future extension that must
+    not be simulated without a governed cash-lot ledger, methodology, and tests.
 
 ## Context Maintenance Rule
 
