@@ -3,6 +3,9 @@ from portfolio_common.transaction_domain.fx_linkage import (
     FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
 )
 from portfolio_common.transaction_domain.fx_models import FX_BUSINESS_TRANSACTION_TYPES
+from portfolio_common.transaction_domain.portfolio_flow_guardrails import (
+    PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES,
+)
 from portfolio_common.transaction_type_registry import (
     MIGRATION_ONLY,
     TARGET_NOT_IMPLEMENTED,
@@ -12,6 +15,7 @@ from portfolio_common.transaction_type_registry import (
     get_transaction_type_definition,
     is_production_booking_transaction_type,
     is_registered_transaction_type,
+    production_transaction_types_for_lifecycle_families,
     require_registered_transaction_type,
 )
 
@@ -114,7 +118,27 @@ def test_fx_business_transaction_types_are_registry_derived_once() -> None:
     }
 
     assert FX_BUSINESS_TRANSACTION_TYPES == registry_fx_business_types
+    assert FX_BUSINESS_TRANSACTION_TYPES == production_transaction_types_for_lifecycle_families(
+        "fx"
+    )
     assert FX_LINKAGE_BUSINESS_TRANSACTION_TYPES is FX_BUSINESS_TRANSACTION_TYPES
+
+
+def test_portfolio_flow_no_auto_generate_types_are_registry_derived() -> None:
+    registry_portfolio_flow_types = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in {"cash_movement", "expense", "transfer"}
+    }
+
+    assert PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES == registry_portfolio_flow_types
+    assert (
+        PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES
+        == production_transaction_types_for_lifecycle_families(
+            "cash_movement", "expense", "transfer"
+        )
+    )
 
 
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:

@@ -511,6 +511,22 @@ def is_production_booking_transaction_type(code: str) -> bool:
     return bool(definition and definition.production_booking_allowed)
 
 
+def production_transaction_types_for_lifecycle_families(
+    *lifecycle_families: str,
+) -> frozenset[str]:
+    normalized_families = frozenset(
+        str(lifecycle_family or "").strip().lower()
+        for lifecycle_family in lifecycle_families
+        if str(lifecycle_family or "").strip()
+    )
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in normalized_families
+    )
+
+
 def require_registered_transaction_type(code: str) -> TransactionTypeDefinition:
     normalized = str(code or "").strip().upper()
     definition = TRANSACTION_TYPE_REGISTRY.get(normalized)

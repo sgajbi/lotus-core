@@ -195,6 +195,9 @@ Current repository posture:
     FX business transaction types for validation and linkage enrichment are registry-derived;
     keep FX component types separate because they describe component rows rather than booking
     transaction types.
+    Portfolio-flow no-auto-generate guardrail sets are registry-derived from production-booking
+    `cash_movement`, `expense`, and `transfer` lifecycle families through the shared lifecycle
+    selector.
 
 ## Architecture And Module Map
 
