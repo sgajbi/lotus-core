@@ -182,7 +182,11 @@ Current repository posture:
     `KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS` to a positive value to stop the consumer with
     `DlqPublicationBudgetExhausted` and bounded `dlq_failure_budget_exhausted` telemetry after
     repeated DLQ failure for the same topic/group/partition/offset/key. Do not claim durable local
-    quarantine unless a separate service-owned quarantine store exists.
+    quarantine unless a separate service-owned quarantine store exists. Retryable consumer failures
+    default to uncommitted redelivery; operators can set
+    `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or
+    `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS` to route repeatedly retryable messages
+    to DLQ after a bounded in-process budget, committing only after DLQ success.
 33. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

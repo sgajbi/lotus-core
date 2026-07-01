@@ -48,6 +48,7 @@ tested modules.
 | Event DLQ topic governance | Improving | CR-1190 extends the RFC-0083 runtime contract guard to discover `BaseConsumer` DLQ topic wiring, reject unresolved or uncataloged DLQ topics, and catalog `dlq.persistence_service` as a governed direct Kafka DLQ topic |
 | DLQ/replay correlation diagnostics | Improving | CR-1206 adds correlation-or-reason diagnostics to consumer DLQ and replay-audit records, exposes alternate lookup keys in replay responses, and hardens ingestion rate-limit metric registration against duplicate-import CI failures |
 | DLQ failure containment | Improving | CR-1261 adds default-disabled DLQ publication failure budgeting to `BaseConsumer`; configured consumers now stop with bounded source-safe logs/metrics after repeated DLQ publication failure for the same topic/group/partition/offset/key while preserving no-commit offset behavior |
+| Retryable consumer exhaustion | Improving | CR-1262 adds default-disabled max-attempt and max-elapsed retryable failure budgets to `BaseConsumer`; exhausted retryable messages route to DLQ and commit only after DLQ publication succeeds |
 | Mandatory replay audit | Improving | CR-1207 removes best-effort replay-audit recording from ingestion retry and consumer-DLQ replay paths, adds `INGESTION_REPLAY_AUDIT_WRITE_FAILED`, and keeps replay outcomes unacknowledged when audit persistence fails |
 | Scheduler dispatch recovery | Improving | CR-1229 adds immediate durable recovery for valuation and aggregation jobs claimed into `PROCESSING` when scheduler Kafka publish or delivery-confirmation fails, preserving published/unpublished record-key evidence and applying max-attempt policy instead of waiting for stale-job reset |
 | Analytics export execution bounds | Improving | CR-1230 adds configurable `LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS`, bounds inline analytics export collection/materialization, and records durable failed jobs with bounded reason text when timeout or request cancellation is observed |
@@ -2277,3 +2278,9 @@ health before that claim is defensible.
      topic/group/partition/offset/key; offsets remain uncommitted, and source-safe logs/metrics
      expose `dlq_failure_budget_exhausted` for alerting. Focused shared-consumer/config tests
      passed with 68 tests, scoped Ruff lint/format passed, and new helpers are A-ranked.
+356. Fixed validated GitHub issue #592 by adding default-disabled retryable failure budgets to the
+     shared `BaseConsumer`. Operators can configure max attempts and/or max elapsed seconds for
+     repeatedly retryable messages; exhausted retryable messages emit bounded telemetry, publish to
+     DLQ, and commit only after DLQ publication succeeds. Focused shared-consumer/config tests
+     passed with 72 tests, scoped Ruff lint/format passed, and retryable budget helpers are
+     A-ranked.

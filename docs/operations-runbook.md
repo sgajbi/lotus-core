@@ -97,6 +97,28 @@ This is controlled fail-fast, not durable local quarantine. Restart only after t
 topic permissions, or producer path is restored, or after a governed service-specific quarantine
 plan is in place.
 
+## Kafka Consumer Retryable Failure Budgets
+
+`RetryableConsumerError` keeps the offset uncommitted by default so transient dependency or
+reference-data gaps can recover through Kafka redelivery.
+
+Operators can bound repeated retryable redelivery with:
+
+```text
+KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS=<positive integer>
+KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS=<positive integer>
+```
+
+Default `0` disables each budget and preserves existing behavior. With a positive attempt or
+elapsed budget, the shared consumer tracks retryable failures for the same
+topic/group/partition/offset/key. When either budget is exhausted, the consumer emits
+`kafka.consumer.retryable_failure_budget_exhausted`, routes the message to DLQ, and commits the
+offset only after DLQ publication succeeds.
+
+The attempt/elapsed counters are in-process. Durable exhaustion evidence starts when the message is
+successfully written to DLQ. Cross-restart durable attempt accounting requires a service-owned
+attempt store and must not be claimed from these shared settings alone.
+
 ## Structured Operational Logs
 
 Operational logs in guarded health, Kafka, outbox, ingestion, query, replay, and scheduler paths

@@ -17,6 +17,8 @@ from pydantic import ValidationError
 
 from .config import (
     KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS,
+    KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS,
+    KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS,
     get_kafka_consumer_runtime_overrides,
 )
 from .database_models import ConsumerDlqEvent
@@ -207,6 +209,11 @@ class BaseConsumer(ABC):
         self._running = True
         self._dlq_failure_attempts: dict[str, int] = {}
         self._dlq_failure_max_attempts = KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS
+        self._retryable_failure_attempts: dict[str, tuple[int, float]] = {}
+        self._retryable_failure_max_attempts = KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS
+        self._retryable_failure_max_elapsed_seconds = (
+            KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS
+        )
 
         if self.dlq_topic:
             self._producer = get_kafka_producer()
@@ -582,13 +589,17 @@ class BaseConsumer(ABC):
                 traceparent_token = traceparent_var.set(traceparent)
 
             await self._dispatch_message_for_processing(msg, loop)
+            self._clear_retryable_failure_attempts(msg)
             processed_successfully = self._commit_after_successful_processing(msg)
 
         except RetryableConsumerError as e:
-            # For transient errors, we log and do NOT commit, allowing Kafka to redeliver.
-            processing_outcome = "retryable_failure"
-            processing_reason = "retryable_consumer_error"
-            self._log_retryable_processing_error(e)
+            retry_exhausted = await self._handle_retryable_processing_error(msg, e)
+            if retry_exhausted:
+                processing_outcome = "retryable_exhausted"
+                processing_reason = "retryable_budget_exhausted"
+            else:
+                processing_outcome = "retryable_failure"
+                processing_reason = "retryable_consumer_error"
 
         except Exception as e:
             # For terminal errors (poison pills), we send to DLQ and then commit.
@@ -662,6 +673,92 @@ class BaseConsumer(ABC):
             error_type=type(error).__name__,
         )
 
+    async def _handle_retryable_processing_error(
+        self,
+        msg: Message,
+        error: RetryableConsumerError,
+    ) -> bool:
+        attempts, elapsed_seconds = self._record_retryable_failure_attempt(msg)
+        if not self._retryable_failure_budget_exhausted(attempts, elapsed_seconds):
+            self._log_retryable_processing_error(error)
+            return False
+        await self._recover_exhausted_retryable_failure(
+            msg,
+            error,
+            attempts=attempts,
+            elapsed_seconds=elapsed_seconds,
+        )
+        return True
+
+    def _record_retryable_failure_attempt(self, msg: Message) -> tuple[int, float]:
+        message_key = self._failure_message_key(msg)
+        now = time.monotonic()
+        attempts, first_seen = self._retryable_failure_attempts.get(message_key, (0, now))
+        attempts += 1
+        self._retryable_failure_attempts[message_key] = (attempts, first_seen)
+        return attempts, now - first_seen
+
+    def _retryable_failure_budget_exhausted(
+        self,
+        attempts: int,
+        elapsed_seconds: float,
+    ) -> bool:
+        attempt_budget_exhausted = (
+            self._retryable_failure_max_attempts > 0
+            and attempts >= self._retryable_failure_max_attempts
+        )
+        elapsed_budget_exhausted = (
+            self._retryable_failure_max_elapsed_seconds > 0
+            and elapsed_seconds >= self._retryable_failure_max_elapsed_seconds
+        )
+        return attempt_budget_exhausted or elapsed_budget_exhausted
+
+    async def _recover_exhausted_retryable_failure(
+        self,
+        msg: Message,
+        error: RetryableConsumerError,
+        *,
+        attempts: int,
+        elapsed_seconds: float,
+    ) -> None:
+        self._log_retryable_failure_budget_exhausted(
+            msg,
+            error,
+            attempts=attempts,
+            elapsed_seconds=elapsed_seconds,
+        )
+        dlq_succeeded = await self._send_to_dlq_async(msg, error)
+        if dlq_succeeded:
+            self._clear_retryable_failure_attempts(msg)
+            self._clear_dlq_failure_attempts(msg)
+            self._commit_after_dlq_publication(msg)
+            return
+        self._handle_dlq_publication_failed(msg, error)
+
+    def _log_retryable_failure_budget_exhausted(
+        self,
+        msg: Message,
+        error: RetryableConsumerError,
+        *,
+        attempts: int,
+        elapsed_seconds: float,
+    ) -> None:
+        self._log_consumer_event(
+            logging.ERROR,
+            "Kafka retryable message failure budget exhausted; routing message to DLQ.",
+            event_name="kafka.consumer.retryable_failure_budget_exhausted",
+            status="failed",
+            reason_code="retryable_budget_exhausted",
+            original_topic=msg.topic(),
+            original_partition=_message_attr_or_unknown(msg, "partition"),
+            original_offset=_message_attr_or_unknown(msg, "offset"),
+            failure_attempts=attempts,
+            elapsed_seconds=round(elapsed_seconds, 6),
+            max_failure_attempts=self._retryable_failure_max_attempts,
+            max_elapsed_seconds=self._retryable_failure_max_elapsed_seconds,
+            error_type=type(error).__name__,
+        )
+
     async def _handle_terminal_processing_error(self, msg: Message, error: Exception) -> None:
         self._log_consumer_event(
             logging.ERROR,
@@ -675,6 +772,7 @@ class BaseConsumer(ABC):
         dlq_succeeded = await self._send_to_dlq_async(msg, error)
         if dlq_succeeded:
             self._clear_dlq_failure_attempts(msg)
+            self._clear_retryable_failure_attempts(msg)
             self._commit_after_dlq_publication(msg)
         else:
             self._handle_dlq_publication_failed(msg, error)
@@ -788,7 +886,13 @@ class BaseConsumer(ABC):
     def _clear_dlq_failure_attempts(self, msg: Message) -> None:
         self._dlq_failure_attempts.pop(self._dlq_failure_message_key(msg), None)
 
+    def _clear_retryable_failure_attempts(self, msg: Message) -> None:
+        self._retryable_failure_attempts.pop(self._failure_message_key(msg), None)
+
     def _dlq_failure_message_key(self, msg: Message) -> str:
+        return self._failure_message_key(msg)
+
+    def _failure_message_key(self, msg: Message) -> str:
         partition = _message_attr_or_unknown(msg, "partition")
         offset = _message_attr_or_unknown(msg, "offset")
         original_key = self._message_key_text(msg) or "unkeyed"

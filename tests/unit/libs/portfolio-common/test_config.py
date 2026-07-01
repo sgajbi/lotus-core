@@ -169,6 +169,36 @@ def test_invalid_dlq_failure_budget_falls_back_to_disabled(monkeypatch):
     importlib.reload(config_module)
 
 
+def test_retryable_failure_budget_env_values_are_non_negative(monkeypatch):
+    monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS", "4")
+    monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS", "900")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS == 4
+    assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS == 900
+    monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS")
+    monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS")
+    importlib.reload(config_module)
+
+
+def test_invalid_retryable_failure_budget_values_fall_back_to_disabled(monkeypatch):
+    monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS", "-1")
+    monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS", "bad")
+
+    import portfolio_common.config as config_module
+
+    reloaded = importlib.reload(config_module)
+
+    assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS == 0
+    assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS == 0
+    monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS")
+    monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS")
+    importlib.reload(config_module)
+
+
 def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):
     monkeypatch.setenv("KAFKA_TRANSACTIONS_PERSISTED_TOPIC", "custom.transactions.persisted")
 
