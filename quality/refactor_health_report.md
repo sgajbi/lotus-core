@@ -2172,3 +2172,8 @@ health before that claim is defensible.
      transaction types from registry `cash_movement`, `expense`, and `transfer` families. The
      portfolio-flow cash-entry guardrail keeps existing behavior while future lifecycle-family
      additions must be classified once in the registry.
+345. Continued validated GitHub issue #474 by deriving auto-generated adjustment cash-leg
+     eligibility from registry-classified production trade and income transaction types with
+     required direct cash-leg settlement. The transaction-specific resolver formulas remain
+     explicit, and conformance coverage now fails if eligibility and implemented resolver coverage
+     diverge.

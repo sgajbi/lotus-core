@@ -1,4 +1,8 @@
 import pytest
+from portfolio_common.transaction_domain.adjustment_cash_leg import (
+    AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES,
+    _adjustment_resolvers,
+)
 from portfolio_common.transaction_domain.fx_linkage import (
     FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
 )
@@ -56,6 +60,7 @@ def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> N
         | CASH_POSITION_DELTA_TRANSACTION_TYPES
         | POSITION_TRANSFER_TRANSACTION_TYPES
         | POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES
+        | AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES
         | SAME_INSTRUMENT_CORPORATE_ACTION_TYPES
         | SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES
         | POSITION_INCREASE_TRANSACTION_TYPES
@@ -139,6 +144,20 @@ def test_portfolio_flow_no_auto_generate_types_are_registry_derived() -> None:
             "cash_movement", "expense", "transfer"
         )
     )
+
+
+def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_implemented() -> None:
+    registry_auto_generate_types = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in {"trade", "income"}
+        and definition.cash_effect in {"inflow", "outflow"}
+        and definition.settlement_behavior == "requires_cash_leg"
+    }
+
+    assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == registry_auto_generate_types
+    assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == frozenset(_adjustment_resolvers())
 
 
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:

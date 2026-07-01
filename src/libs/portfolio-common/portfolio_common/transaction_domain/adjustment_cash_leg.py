@@ -1,20 +1,23 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable
+from typing import Callable, cast
 
 from portfolio_common.events import TransactionEvent
+from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
 from .control_code_normalization import normalize_transaction_control_code
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
-AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = {
-    "BUY",
-    "SELL",
-    "DIVIDEND",
-    "INTEREST",
-}
+AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = frozenset(
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed
+    and definition.lifecycle_family in {"trade", "income"}
+    and definition.cash_effect in {"inflow", "outflow"}
+    and definition.settlement_behavior == "requires_cash_leg"
+)
 
 AdjustmentResolver = Callable[[TransactionEvent, Decimal], tuple[Decimal, str, str]]
 
@@ -97,11 +100,11 @@ def _resolve_interest_adjustment(
 
 def _resolve_net_interest_amount(event: TransactionEvent, fee: Decimal) -> Decimal:
     if event.net_interest_amount is not None:
-        return event.net_interest_amount
+        return cast(Decimal, event.net_interest_amount)
     deductions = (event.withholding_tax_amount or Decimal(0)) + (
         event.other_interest_deductions_amount or Decimal(0)
     )
-    return event.gross_transaction_amount - deductions - fee
+    return cast(Decimal, event.gross_transaction_amount - deductions - fee)
 
 
 def _resolve_interest_movement_direction(event: TransactionEvent) -> str:

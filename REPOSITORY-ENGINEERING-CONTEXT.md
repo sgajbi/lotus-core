@@ -198,6 +198,9 @@ Current repository posture:
     Portfolio-flow no-auto-generate guardrail sets are registry-derived from production-booking
     `cash_movement`, `expense`, and `transfer` lifecycle families through the shared lifecycle
     selector.
+    Auto-generated adjustment cash-leg eligibility is registry-derived from production-booking
+    trade and income transaction types with direct inflow/outflow cash effects and required cash-leg
+    settlement; amount, direction, and reason formulas remain explicit resolver behavior.
 
 ## Architecture And Module Map
 
