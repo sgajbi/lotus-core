@@ -104,6 +104,17 @@ def _transaction_validation_error(payload: dict) -> Exception:
     return exc_info.value
 
 
+def _consumer_event_outcomes(metric_mock: MagicMock) -> list[tuple[str, str]]:
+    return [(call.kwargs["outcome"], call.kwargs["reason"]) for call in metric_mock.call_args_list]
+
+
+def _assert_standard_metric_labels(metric_mock: MagicMock) -> None:
+    for call in metric_mock.call_args_list:
+        assert call.kwargs["service"] == "SVC"
+        assert call.kwargs["topic"] == "test-topic"
+        assert call.kwargs["group_id"] == "test-group"
+
+
 async def test_run_loop_success_path(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):
@@ -147,6 +158,37 @@ async def test_run_loop_failure_sends_to_dlq_and_commits(
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
     test_consumer._send_to_dlq_async.assert_awaited_once()
+
+
+async def test_run_loop_success_emits_standard_consumer_metrics(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-standard-success", {"data": "value-success"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch(
+            "portfolio_common.kafka_consumer.observe_kafka_consumer_processing_duration"
+        ) as duration_metric,
+    ):
+        await test_consumer.run()
+
+    assert ("processing_attempt", "message_polled") in _consumer_event_outcomes(event_metric)
+    assert ("success", "processed") in _consumer_event_outcomes(event_metric)
+    _assert_standard_metric_labels(event_metric)
+    duration_metric.assert_called_once()
+    assert duration_metric.call_args.kwargs == {
+        "service": "SVC",
+        "topic": "test-topic",
+        "group_id": "test-group",
+        "duration_seconds": ANY,
+    }
 
 
 async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
@@ -218,6 +260,34 @@ async def test_run_loop_retryable_error_does_not_commit(
     test_consumer._send_to_dlq_async.assert_not_called()
 
 
+async def test_run_loop_retryable_error_emits_standard_consumer_metrics(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-retry-metrics", {"data": "value-retry-metrics"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise RetryableConsumerError("DB connection dropped!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch(
+            "portfolio_common.kafka_consumer.observe_kafka_consumer_processing_duration"
+        ) as duration_metric,
+    ):
+        await test_consumer.run()
+
+    assert ("processing_attempt", "message_polled") in _consumer_event_outcomes(event_metric)
+    assert ("retryable_failure", "retryable_consumer_error") in _consumer_event_outcomes(
+        event_metric
+    )
+    _assert_standard_metric_labels(event_metric)
+    duration_metric.assert_called_once()
+
+
 async def test_run_loop_commit_failure_does_not_send_to_dlq(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):
@@ -238,6 +308,29 @@ async def test_run_loop_commit_failure_does_not_send_to_dlq(
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
     test_consumer._send_to_dlq_async.assert_not_awaited()
     assert "Offset commit failed after successful processing" in mock_warning.call_args.args[0]
+
+
+async def test_run_loop_commit_failure_emits_standard_consumer_metric(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    mock_msg = create_mock_message("key-commit-metrics", {"data": "value-commit-metrics"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.commit.side_effect = RuntimeError("commit failed")
+
+    async def process_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = process_and_stop
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch("portfolio_common.kafka_consumer.logger.warning"),
+    ):
+        await test_consumer.run()
+
+    assert ("commit_failed", "successful_processing") in _consumer_event_outcomes(event_metric)
+    assert ("success", "processed") in _consumer_event_outcomes(event_metric)
+    _assert_standard_metric_labels(event_metric)
 
 
 async def test_run_loop_fatal_consumer_error_stops_without_processing(
@@ -277,6 +370,24 @@ async def test_run_loop_nonfatal_consumer_error_skips_message(
     mock_confluent_consumer.commit.assert_called_once_with(message=valid_msg, asynchronous=False)
     warning_messages = [call.args[0] for call in mock_warning.call_args_list]
     assert any("Non-fatal consumer error" in message for message in warning_messages)
+
+
+async def test_run_loop_poll_errors_emit_standard_consumer_metrics(
+    test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
+):
+    fatal_error = MagicMock()
+    fatal_error.fatal.return_value = True
+    fatal_msg = create_mock_message("key-fatal-metric", {"data": "value"}, error=fatal_error)
+    mock_confluent_consumer.poll.return_value = fatal_msg
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch("portfolio_common.kafka_consumer.logger.error"),
+    ):
+        await test_consumer.run()
+
+    assert ("poll_error", "fatal") in _consumer_event_outcomes(event_metric)
+    _assert_standard_metric_labels(event_metric)
 
 
 async def test_dlq_payload_is_correct(
@@ -340,6 +451,23 @@ async def test_dlq_payload_and_headers_preserve_traceparent(
     call_args = mock_kafka_producer.publish_message.call_args.kwargs
     assert call_args["value"]["traceparent"] == TRACEPARENT
     assert dict(call_args["headers"])["traceparent"] == TRACEPARENT.encode("utf-8")
+
+
+async def test_dlq_success_emits_standard_consumer_metric(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-dlq-metrics", {"data": "value"})
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    with patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric:
+        result = await test_consumer._send_to_dlq_async(
+            mock_msg,
+            ValueError("validation failed"),
+        )
+
+    assert result is True
+    assert ("dlq_published", "VALIDATION_ERROR") in _consumer_event_outcomes(event_metric)
+    _assert_standard_metric_labels(event_metric)
 
 
 async def test_dlq_payload_and_headers_are_redacted(
@@ -665,6 +793,26 @@ async def test_dlq_flush_timeout_does_not_record_event(
     assert "Could not send message to DLQ" in mock_log_error.call_args.args[0]
 
 
+async def test_dlq_failure_emits_standard_consumer_metric(
+    test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
+):
+    mock_msg = create_mock_message("key-dlq-failure-metrics", {"data": "value"})
+    mock_kafka_producer.flush.return_value = 1
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch("portfolio_common.kafka_consumer.logger.error"),
+    ):
+        result = await test_consumer._send_to_dlq_async(
+            mock_msg,
+            RuntimeError("downstream timeout"),
+        )
+
+    assert result is False
+    assert ("dlq_failed", "dlq_publish_error") in _consumer_event_outcomes(event_metric)
+    _assert_standard_metric_labels(event_metric)
+
+
 async def test_dlq_publish_exception_does_not_record_event(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
@@ -861,3 +1009,24 @@ async def test_shutdown_logs_close_and_flush_failures_without_raising(
     assert mock_log_error.call_count == 2
     assert "Consumer close failed during shutdown." == mock_log_error.call_args_list[0].args[0]
     assert "DLQ producer flush failed during shutdown." == mock_log_error.call_args_list[1].args[0]
+
+
+async def test_shutdown_failures_emit_standard_consumer_metrics(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    test_consumer._consumer = mock_confluent_consumer
+    mock_confluent_consumer.close.side_effect = RuntimeError("close failed")
+    mock_kafka_producer.flush.side_effect = RuntimeError("flush failed")
+
+    with (
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_event") as event_metric,
+        patch("portfolio_common.kafka_consumer.logger.error"),
+    ):
+        test_consumer.shutdown()
+
+    outcomes = _consumer_event_outcomes(event_metric)
+    assert ("shutdown_failed", "consumer_close") in outcomes
+    assert ("shutdown_failed", "dlq_flush") in outcomes
+    _assert_standard_metric_labels(event_metric)

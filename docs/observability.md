@@ -44,6 +44,11 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `TELEMETRY_METRIC_ALLOWED_LABELS`, must not appear in
     `TELEMETRY_METRIC_FORBIDDEN_LABELS`, and service-local metrics outside
     `portfolio_common.monitoring` must be registered in `SERVICE_LOCAL_METRIC_OWNERS`.
+12. Kafka consumers that inherit `BaseConsumer` emit standard lifecycle and processing telemetry:
+    `kafka_consumer_events_total{service,topic,group_id,outcome,reason}` and
+    `kafka_consumer_processing_duration_seconds{service,topic,group_id}`. The shared class owns
+    processing attempts, success, retryable failure, terminal failure, DLQ success/failure, commit
+    failure, poll error, critical loop exit, and shutdown-failure outcomes.
 
 ## Current Gaps
 
@@ -51,6 +56,7 @@ The initial quality baseline records observability as a documentation and gate g
 monitoring guard now rejects forbidden production Prometheus labels and unowned service-local
 metric definitions. The shared HTTP bootstrap and web-backed worker runtime now enforce the
 configured metrics access policy, and shared readiness checks now emit bounded dependency
-outcome/latency telemetry. Future slices should add automated checks for correlation ID
-propagation, sensitive logging, health/readiness completeness, and inventory enforcement that
-prevents new runtime web apps from bypassing the shared metrics policy.
+outcome/latency telemetry. Shared `BaseConsumer` paths now emit standard Kafka consumer lifecycle
+and processing metrics. Future slices should add automated checks for correlation ID propagation,
+sensitive logging, health/readiness completeness, and inventory enforcement that prevents new
+runtime web apps from bypassing the shared metrics policy.

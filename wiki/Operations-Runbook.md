@@ -129,6 +129,16 @@ request/correlation/trace IDs, payload fields, stack traces, and raw exception t
 Prometheus labels. Service-local metrics must either move to `portfolio_common.monitoring` or be
 registered with an owner in `SERVICE_LOCAL_METRIC_OWNERS`.
 
+Kafka consumers inheriting `BaseConsumer` emit:
+
+- `kafka_consumer_events_total{service,topic,group_id,outcome,reason}`
+- `kafka_consumer_processing_duration_seconds{service,topic,group_id}`
+
+Use these for worker fleet dashboards and incident triage across processing attempts, successes,
+retryable failures, terminal failures, DLQ outcomes, commit failures, poll errors, critical loop
+exits, and shutdown failures. Keep message keys, offsets, payload fields, raw exception text,
+portfolio/security IDs, request/correlation IDs, and trace IDs out of metric labels.
+
 ## Database-first diagnostics
 
 Prefer API diagnostics first, but go to the database when:
