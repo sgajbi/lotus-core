@@ -16,13 +16,17 @@ from src.services.event_replay_service.app.application.replay_payload_dispatcher
 from src.services.event_replay_service.app.routers.ingestion_operations import (
     _assert_ingestion_retry_allowed,
     _block_duplicate_ingestion_job_retry,
+    _bookkeeping_repair_phase_or_http_error,
+    _bookkeeping_repair_response,
     _consumer_dlq_not_replayable_response,
     _consumer_dlq_replay_candidate_or_response,
     _filter_payload_by_record_keys,
     _mark_consumer_dlq_replay_replayed,
+    _mark_ingestion_job_queued_for_bookkeeping_repair,
     _mark_ingestion_job_retry_replayed,
     _publish_ingestion_job_retry,
     _record_mandatory_replay_audit,
+    _required_ingestion_job_for_bookkeeping_repair,
     _required_job_replay_context,
     _retry_payload_or_http_error,
 )
@@ -253,6 +257,100 @@ async def test_mandatory_replay_audit_failure_raises_governed_error() -> None:
         "replay_status": "replayed",
         "replay_fingerprint": "fp-456",
     }
+
+
+@pytest.mark.asyncio
+async def test_bookkeeping_repair_requires_existing_job() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.get_job = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _required_ingestion_job_for_bookkeeping_repair(
+            ingestion_job_service=ingestion_job_service,
+            job_id="job-missing",
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == {
+        "code": "INGESTION_JOB_NOT_FOUND",
+        "message": "Ingestion job 'job-missing' was not found.",
+    }
+
+
+def test_bookkeeping_repair_phase_requires_failure_evidence_and_eligible_status() -> None:
+    failures = [SimpleNamespace(failure_phase="queue_bookkeeping")]
+
+    assert (
+        _bookkeeping_repair_phase_or_http_error(
+            failures=failures,
+            job_id="job-123",
+            previous_status="accepted",
+        )
+        == "queue_bookkeeping"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _bookkeeping_repair_phase_or_http_error(
+            failures=[],
+            job_id="job-123",
+            previous_status="accepted",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE",
+        "message": "Ingestion job is not eligible for bookkeeping repair.",
+        "job_id": "job-123",
+        "status": "accepted",
+    }
+
+    with pytest.raises(HTTPException) as status_exc_info:
+        _bookkeeping_repair_phase_or_http_error(
+            failures=failures,
+            job_id="job-123",
+            previous_status="failed",
+        )
+
+    assert status_exc_info.value.status_code == 409
+    assert status_exc_info.value.detail["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_bookkeeping_repair_mark_queued_failure_uses_governed_error() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_queued = AsyncMock(side_effect=RuntimeError("db down"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _mark_ingestion_job_queued_for_bookkeeping_repair(
+            ingestion_job_service=ingestion_job_service,
+            job_id="job-123",
+            previous_status="accepted",
+        )
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
+        "message": "Ingestion job bookkeeping repair did not complete.",
+        "job_id": "job-123",
+        "recovery_action": "repair_ingestion_job_bookkeeping",
+    }
+
+
+def test_bookkeeping_repair_response_maps_supportability_reason() -> None:
+    response = _bookkeeping_repair_response(
+        job_id="job-123",
+        previous_status="accepted",
+        repaired_status="queued",
+        bookkeeping_phase="queue_bookkeeping",
+    )
+
+    assert response.job_id == "job-123"
+    assert response.previous_status == "accepted"
+    assert response.repaired_status == "queued"
+    assert response.recovery_action == "repair_ingestion_job_bookkeeping"
+    assert response.supportability_reason_code == "POST_PUBLISH_BOOKKEEPING_FAILED"
+    assert response.retry_safe is False
+    assert response.message == "Ingestion job bookkeeping repaired from accepted to queued."
 
 
 @pytest.mark.asyncio

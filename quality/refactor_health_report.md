@@ -2263,3 +2263,9 @@ health before that claim is defensible.
      poll error, critical-loop-exit, shutdown-failure, and processing-duration metrics by default,
      while existing injected service-local metrics remain optional extensions. Focused shared
      consumer and metric-vocabulary proof passed with 53 tests.
+354. Continued validated GitHub issue #446 by extracting the ingestion bookkeeping repair route
+     boundary into focused helpers for required-job lookup, repair eligibility, queue mutation
+     failure mapping, and response assembly. Focused helper and event replay app integration tests
+     passed with 41 tests; scoped Ruff lint/format passed; Radon now reports every function in
+     `ingestion_operations.py` as A-ranked, with `repair_ingestion_job_bookkeeping` reduced to
+     `A (3)` and the large route module still honestly tracked as `B (12.86)` maintainability.
