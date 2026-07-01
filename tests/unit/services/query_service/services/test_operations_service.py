@@ -14,6 +14,7 @@ from src.services.query_service.app.repositories.operations_models import (
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
+from src.services.query_service.app.dtos.operations_dto import FailedOutboxRequeueRequest
 from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.load_run_progress_builder import (
     _ceiling_division,
@@ -1356,6 +1357,63 @@ async def test_get_failed_outbox_events_returns_source_safe_operator_records(
         correlation_id="corr-outbox-701",
         reason_code="kafka_delivery_timeout",
         as_of=response.generated_at_utc,
+    )
+
+
+async def test_requeue_failed_outbox_event_returns_governed_recovery_response(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    requested_at = datetime(2026, 3, 14, 10, 55, tzinfo=timezone.utc)
+    audit = type(
+        "OutboxRecoveryAuditStub",
+        (),
+        {
+            "id": 42,
+            "requested_by": "ops.sre",
+            "reason": "Kafka delivery timeout cleared; token=***REDACTED***",
+            "correlation_id": "incident-20260314-outbox-701",
+            "requested_at": requested_at,
+            "completed_at": requested_at,
+        },
+    )()
+    event = type(
+        "OutboxEventStub",
+        (),
+        {
+            "id": 701,
+            "retry_count": 0,
+            "next_attempt_at": requested_at,
+        },
+    )()
+    mock_ops_repo.requeue_failed_outbox_event.return_value = (audit, event)
+
+    request = FailedOutboxRequeueRequest(
+        requested_by=" ops.sre ",
+        reason="Kafka delivery timeout cleared; token=secret contract inspected.",
+        correlation_id=" incident-20260314-outbox-701 ",
+        confirm_payload_contract_reviewed=True,
+    )
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.requeue_failed_outbox_event(outbox_id=701, request=request)
+
+    assert response.outbox_id == 701
+    assert response.audit_id == 42
+    assert response.prior_status == "FAILED"
+    assert response.new_status == "PENDING"
+    assert response.outcome == "REQUEUED"
+    assert response.requested_by == "ops.sre"
+    assert "secret" not in response.reason
+    assert response.correlation_id == "incident-20260314-outbox-701"
+    assert response.retry_count == 0
+    assert response.next_attempt_at == requested_at
+    mock_ops_repo.requeue_failed_outbox_event.assert_awaited_once_with(
+        outbox_id=701,
+        requested_by="ops.sre",
+        reason="Kafka delivery timeout cleared; token=***REDACTED***",
+        correlation_id="incident-20260314-outbox-701",
+        confirm_payload_contract_reviewed=True,
+        requested_at=FIXED_GENERATED_AT,
     )
 
 

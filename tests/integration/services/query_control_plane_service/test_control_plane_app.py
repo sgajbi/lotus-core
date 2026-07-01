@@ -412,6 +412,9 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "/support/portfolios/{portfolio_id}/analytics-export-jobs"
     ]["get"]
     failed_outbox_events = schema["paths"]["/support/outbox/failed-events"]["get"]
+    failed_outbox_requeue = schema["paths"]["/support/outbox/failed-events/{outbox_id}/requeue"][
+        "post"
+    ]
     reconciliation_runs = schema["paths"]["/support/portfolios/{portfolio_id}/reconciliation-runs"][
         "get"
     ]
@@ -596,6 +599,23 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert "terminally failed outbox rows" in failed_outbox_events["description"]
     assert "raw event payload is intentionally excluded" in failed_outbox_events["description"]
     assert "operator recovery evidence" in failed_outbox_events["description"]
+    outbox_requeue_id = next(
+        parameter
+        for parameter in failed_outbox_requeue["parameters"]
+        if parameter["name"] == "outbox_id"
+    )
+    assert outbox_requeue_id["description"] == "Durable outbox row identifier to requeue."
+    assert "controlled recovery workflow" in failed_outbox_requeue["description"]
+    assert "payload-contract review confirmation" in failed_outbox_requeue["description"]
+    assert (
+        "actor, reason, correlation, prior status, new status"
+        in failed_outbox_requeue["description"]
+    )
+    outbox_requeue_rejected = failed_outbox_requeue["responses"]["409"]["content"][
+        "application/problem+json"
+    ]["example"]
+    assert outbox_requeue_rejected["error_code"] == "QCP_OUTBOX_RECOVERY_REJECTED"
+    assert outbox_requeue_rejected["metadata"]["resource"] == "failed_outbox_requeue"
     assert "fleet-health baselining" in calculator_slos["description"]
     assert (
         "valuation, aggregation, replay, or export-job listings" in calculator_slos["description"]
@@ -662,6 +682,8 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     analytics_export_job_record = components["AnalyticsExportJobRecord"]
     failed_outbox_events_schema = components["FailedOutboxEventListResponse"]
     failed_outbox_event_record = components["FailedOutboxEventRecord"]
+    failed_outbox_requeue_request = components["FailedOutboxRequeueRequest"]
+    failed_outbox_requeue_response = components["FailedOutboxRequeueResponse"]
 
     assert calculator_slo["properties"]["valuation"]["description"] == (
         "Valuation calculator SLO snapshot for this portfolio."
@@ -946,6 +968,15 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
     assert failed_outbox_event_record["properties"]["recommended_recovery_action"][
         "description"
     ].startswith("Operator recovery hint")
+    assert failed_outbox_requeue_request["properties"]["confirm_payload_contract_reviewed"][
+        "description"
+    ].startswith("Must be true")
+    assert failed_outbox_requeue_response["properties"]["audit_id"]["description"] == (
+        "Durable outbox recovery audit row identifier."
+    )
+    assert failed_outbox_requeue_response["properties"]["retry_count"]["description"].startswith(
+        "Retry count after requeue"
+    )
     reprocessing_slo = components["ReprocessingSloBucket"]
     calculator_bucket = components["CalculatorSloBucket"]
     assert reprocessing_slo["properties"]["stale_reprocessing_keys"]["description"].startswith(

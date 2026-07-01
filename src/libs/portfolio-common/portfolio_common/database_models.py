@@ -1855,6 +1855,41 @@ class OutboxEvent(Base):
     )
 
 
+class OutboxRecoveryAudit(Base):
+    __tablename__ = "outbox_recovery_audit"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    outbox_id = Column(Integer, ForeignKey("outbox_events.id"), nullable=False, index=True)
+    recovery_action = Column(String, nullable=False)
+    requested_by = Column(String, nullable=False)
+    reason = Column(String, nullable=False)
+    correlation_id = Column(String, nullable=True, index=True)
+    prior_status = Column(String, nullable=False)
+    new_status = Column(String, nullable=False)
+    outcome = Column(String, nullable=False, index=True)
+    outcome_message = Column(String, nullable=True)
+    prior_retry_count = Column(Integer, nullable=False)
+    prior_last_failure_reason_code = Column(String, nullable=True)
+    prior_last_failure_category = Column(String, nullable=True)
+    prior_last_failure_message = Column(String, nullable=True)
+    prior_last_failure_at = Column(DateTime(timezone=True), nullable=True)
+    requested_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_outbox_recovery_audit_outbox_requested_at",
+            "outbox_id",
+            "requested_at",
+        ),
+        Index(
+            "ix_outbox_recovery_audit_outcome_requested_at",
+            "outcome",
+            "requested_at",
+        ),
+    )
+
+
 class PortfolioAggregationJob(Base):
     """
     Tracks portfolio-date pairs that require aggregation.

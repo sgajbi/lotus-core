@@ -113,6 +113,17 @@ The endpoint intentionally returns source-safe failure metadata only. It does no
 outbox payload, and it marks terminal rows as not requeue-safe until a governed recovery workflow
 records actor, reason, correlation, status-transition, and outcome evidence.
 
+After payload-contract review confirms the failed event is safe to retry, use the governed recovery
+command:
+
+```text
+POST /support/outbox/failed-events/{outbox_id}/requeue
+```
+
+The request must include `requested_by`, a source-safe `reason`, optional `correlation_id`, and
+`confirm_payload_contract_reviewed=true`. The command records `outbox_recovery_audit` evidence and
+rejects blind requeue attempts or rows that are no longer terminal `FAILED`.
+
 Use this page together with:
 
 - [Operations Runbook](Operations-Runbook)

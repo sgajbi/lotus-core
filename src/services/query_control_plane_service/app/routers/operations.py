@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import Awaitable, Optional, TypeVar
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,8 @@ from src.services.query_service.app.dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     CalculatorSloResponse,
     FailedOutboxEventListResponse,
+    FailedOutboxRequeueRequest,
+    FailedOutboxRequeueResponse,
     LineageKeyListResponse,
     LineageResponse,
     LoadRunProgressResponse,
@@ -23,6 +25,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     SupportJobListResponse,
     SupportOverviewResponse,
 )
+from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
 from src.services.query_service.app.services.operations_service import OperationsService
 from src.services.query_service.app.support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
@@ -65,6 +68,26 @@ RECONCILIATION_FINDINGS_NOT_FOUND_RESPONSE_EXAMPLE = problem_example(
     error_code="QCP_OPERATIONS_NOT_FOUND",
     instance="/support/portfolios/PORT-OPS-001/reconciliation-runs/recon_1234567890abcdef/findings",
     metadata={**OPERATIONS_METADATA, "resource": "reconciliation_findings"},
+)
+OUTBOX_RECOVERY_REJECTED_RESPONSE_EXAMPLE = problem_example(
+    status_code=status.HTTP_409_CONFLICT,
+    title="Outbox recovery rejected",
+    detail="Payload contract review confirmation is required before requeue.",
+    error_code="QCP_OUTBOX_RECOVERY_REJECTED",
+    instance="/support/outbox/failed-events/701/requeue",
+    metadata={
+        **OPERATIONS_METADATA,
+        "resource": "failed_outbox_requeue",
+        "outcome": "REJECTED",
+    },
+)
+OUTBOX_RECOVERY_NOT_FOUND_RESPONSE_EXAMPLE = problem_example(
+    status_code=status.HTTP_404_NOT_FOUND,
+    title="Operations support resource not found",
+    detail="Requested failed outbox row was not found.",
+    error_code="QCP_OPERATIONS_NOT_FOUND",
+    instance="/support/outbox/failed-events/701/requeue",
+    metadata={**OPERATIONS_METADATA, "resource": "failed_outbox_requeue"},
 )
 T = TypeVar("T")
 
@@ -147,6 +170,46 @@ async def execute_operations_call(
             detail=unexpected_detail,
             error_code="QCP_OPERATIONS_UNEXPECTED_ERROR",
             metadata=OPERATIONS_METADATA,
+        )
+
+
+async def execute_outbox_recovery_call(
+    operation: Awaitable[T],
+    *,
+    log_message: str,
+    unexpected_detail: str,
+    log_args: tuple[object, ...],
+) -> T:
+    try:
+        return await operation
+    except OutboxRecoveryRejected as exc:
+        raise_problem(
+            status_code=status.HTTP_409_CONFLICT,
+            title="Outbox recovery rejected",
+            detail=exc.message,
+            error_code="QCP_OUTBOX_RECOVERY_REJECTED",
+            metadata={
+                **OPERATIONS_METADATA,
+                "resource": "failed_outbox_requeue",
+                **exc.metadata,
+            },
+        )
+    except ValueError:
+        raise_problem(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Operations support resource not found",
+            detail="Requested failed outbox row was not found.",
+            error_code="QCP_OPERATIONS_NOT_FOUND",
+            metadata={**OPERATIONS_METADATA, "resource": "failed_outbox_requeue"},
+        )
+    except Exception:
+        logger.exception(log_message, *log_args)
+        raise_problem(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Operations support request failed",
+            detail=unexpected_detail,
+            error_code="QCP_OPERATIONS_UNEXPECTED_ERROR",
+            metadata={**OPERATIONS_METADATA, "resource": "failed_outbox_requeue"},
         )
 
 
@@ -828,6 +891,53 @@ async def get_failed_outbox_events(
         log_message="Failed to list failed outbox rows",
         unexpected_detail="An unexpected server error occurred while listing failed outbox rows.",
         log_args=(),
+    )
+
+
+@router.post(
+    "/support/outbox/failed-events/{outbox_id}/requeue",
+    response_model=FailedOutboxRequeueResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: problem_response(
+            "Failed outbox row was not found.",
+            OUTBOX_RECOVERY_NOT_FOUND_RESPONSE_EXAMPLE,
+        ),
+        status.HTTP_409_CONFLICT: problem_response(
+            "Outbox recovery request was rejected.",
+            OUTBOX_RECOVERY_REJECTED_RESPONSE_EXAMPLE,
+        ),
+    },
+    summary="Requeue one failed outbox row through a governed recovery workflow",
+    description=(
+        "What: Move one terminal failed outbox row back to pending through a controlled recovery "
+        "workflow.\n"
+        "How: Require operator identity, source-safe reason, optional incident correlation, and "
+        "explicit payload-contract review confirmation before resetting dispatcher eligibility. "
+        "The recovery audit records actor, reason, correlation, prior status, new status, and "
+        "outcome evidence.\n"
+        "When: Use only after failed-row diagnostics show that the publish failure is no longer "
+        "active and the event payload is safe to retry. This is an operator recovery command, not "
+        "a business or front-office analytics API."
+    ),
+)
+async def requeue_failed_outbox_event(
+    outbox_id: int = Path(
+        ...,
+        ge=1,
+        description="Durable outbox row identifier to requeue.",
+        examples=[701],
+    ),
+    request: FailedOutboxRequeueRequest = Body(
+        ...,
+        description="Governed failed-outbox requeue request.",
+    ),
+    service: OperationsService = Depends(get_operations_service),
+):
+    return await execute_outbox_recovery_call(
+        service.requeue_failed_outbox_event(outbox_id=outbox_id, request=request),
+        log_message="Failed to requeue failed outbox row %s",
+        unexpected_detail="An unexpected server error occurred while requeueing failed outbox row.",
+        log_args=(outbox_id,),
     )
 
 

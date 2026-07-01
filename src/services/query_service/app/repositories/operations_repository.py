@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     OutboxEvent,
+    OutboxRecoveryAudit,
     PipelineStageState,
     Portfolio,
     PortfolioAggregationJob,
@@ -99,6 +100,13 @@ from .operations_support_job_queries import (
     latest_valuation_job_lateral,
     support_job_priority,
 )
+from ..operations_errors import OutboxRecoveryRejected
+
+OUTBOX_REQUEUE_ACTION = "requeue_failed_outbox"
+OUTBOX_REQUEUE_REJECTED = "REJECTED"
+OUTBOX_REQUEUE_OUTCOME = "REQUEUED"
+OUTBOX_TERMINAL_FAILURE_STATUS = "FAILED"
+OUTBOX_PENDING_STATUS = "PENDING"
 
 
 class OperationsRepository:
@@ -1049,6 +1057,130 @@ class OperationsRepository:
             .limit(limit)
         )
         return list((await self.db.execute(stmt)).scalars().all())
+
+    async def requeue_failed_outbox_event(
+        self,
+        *,
+        outbox_id: int,
+        requested_by: str,
+        reason: str,
+        correlation_id: Optional[str],
+        confirm_payload_contract_reviewed: bool,
+        requested_at: datetime,
+    ) -> tuple[OutboxRecoveryAudit, OutboxEvent]:
+        result = await self.db.execute(
+            select(OutboxEvent).where(OutboxEvent.id == outbox_id).with_for_update()
+        )
+        event = result.scalar_one_or_none()
+        if event is None:
+            raise ValueError("Outbox event was not found.")
+
+        if not confirm_payload_contract_reviewed:
+            audit = self._record_outbox_recovery_audit(
+                event=event,
+                requested_by=requested_by,
+                reason=reason,
+                correlation_id=correlation_id,
+                new_status=event.status,
+                outcome=OUTBOX_REQUEUE_REJECTED,
+                outcome_message="payload_contract_review_required",
+                requested_at=requested_at,
+                completed_at=requested_at,
+            )
+            await self.db.flush()
+            await self.db.commit()
+            raise OutboxRecoveryRejected(
+                "Payload contract review confirmation is required before requeue.",
+                metadata={
+                    "outbox_id": outbox_id,
+                    "audit_id": audit.id,
+                    "outcome": OUTBOX_REQUEUE_REJECTED,
+                    "reason": "payload_contract_review_required",
+                },
+            )
+
+        if event.status != OUTBOX_TERMINAL_FAILURE_STATUS:
+            audit = self._record_outbox_recovery_audit(
+                event=event,
+                requested_by=requested_by,
+                reason=reason,
+                correlation_id=correlation_id,
+                new_status=event.status,
+                outcome=OUTBOX_REQUEUE_REJECTED,
+                outcome_message="outbox_row_not_terminal_failed",
+                requested_at=requested_at,
+                completed_at=requested_at,
+            )
+            await self.db.flush()
+            await self.db.commit()
+            raise OutboxRecoveryRejected(
+                "Only terminal FAILED outbox rows can be requeued.",
+                metadata={
+                    "outbox_id": outbox_id,
+                    "audit_id": audit.id,
+                    "outcome": OUTBOX_REQUEUE_REJECTED,
+                    "prior_status": event.status,
+                    "reason": "outbox_row_not_terminal_failed",
+                },
+            )
+
+        audit = self._record_outbox_recovery_audit(
+            event=event,
+            requested_by=requested_by,
+            reason=reason,
+            correlation_id=correlation_id,
+            new_status=OUTBOX_PENDING_STATUS,
+            outcome=OUTBOX_REQUEUE_OUTCOME,
+            outcome_message="outbox_row_requeued_for_dispatch",
+            requested_at=requested_at,
+            completed_at=requested_at,
+        )
+        event.status = OUTBOX_PENDING_STATUS
+        event.retry_count = 0
+        event.last_attempted_at = None
+        event.next_attempt_at = requested_at
+        event.processed_at = None
+        event.last_failure_reason_code = None
+        event.last_failure_category = None
+        event.last_failure_message = None
+        event.last_failure_at = None
+        await self.db.flush()
+        await self.db.commit()
+        return audit, event
+
+    def _record_outbox_recovery_audit(
+        self,
+        *,
+        event: OutboxEvent,
+        requested_by: str,
+        reason: str,
+        correlation_id: Optional[str],
+        new_status: str,
+        outcome: str,
+        outcome_message: str,
+        requested_at: datetime,
+        completed_at: datetime,
+    ) -> OutboxRecoveryAudit:
+        audit = OutboxRecoveryAudit(
+            outbox_id=event.id,
+            recovery_action=OUTBOX_REQUEUE_ACTION,
+            requested_by=requested_by,
+            reason=reason,
+            correlation_id=correlation_id,
+            prior_status=event.status,
+            new_status=new_status,
+            outcome=outcome,
+            outcome_message=outcome_message,
+            prior_retry_count=event.retry_count or 0,
+            prior_last_failure_reason_code=event.last_failure_reason_code,
+            prior_last_failure_category=event.last_failure_category,
+            prior_last_failure_message=event.last_failure_message,
+            prior_last_failure_at=event.last_failure_at,
+            requested_at=requested_at,
+            completed_at=completed_at,
+        )
+        self.db.add(audit)
+        return audit
 
     async def get_reconciliation_runs_count(
         self,
