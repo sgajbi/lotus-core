@@ -30,6 +30,12 @@ from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logi
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.enums import (
     transaction_type as cost_transaction_type,
 )
+from src.services.calculators.cost_calculator_service.app.cost_engine.processing.sorter import (
+    _CASH_INFLOW_TRANSACTION_TYPES as COST_SORT_CASH_INFLOW_TRANSACTION_TYPES,
+)
+from src.services.calculators.cost_calculator_service.app.cost_engine.processing.sorter import (
+    _CASH_OUTFLOW_TRANSACTION_TYPES as COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES,
+)
 from src.services.calculators.position_calculator.app.core.position_logic import (
     CASH_POSITION_DELTA_TRANSACTION_TYPES,
     POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES,
@@ -57,6 +63,8 @@ def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> N
     local_rule_table_types = (
         TRANSFER_INFLOW_TRANSACTION_TYPES
         | TRANSFER_OUTFLOW_TRANSACTION_TYPES
+        | COST_SORT_CASH_INFLOW_TRANSACTION_TYPES
+        | COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES
         | CASH_POSITION_DELTA_TRANSACTION_TYPES
         | POSITION_TRANSFER_TRANSACTION_TYPES
         | POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES
@@ -158,6 +166,30 @@ def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_imple
 
     assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == registry_auto_generate_types
     assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == frozenset(_adjustment_resolvers())
+
+
+def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:
+    assert COST_SORT_CASH_INFLOW_TRANSACTION_TYPES <= {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and (
+            definition.position_effect in {"increase", "cash_increase"}
+            or definition.cash_effect == "inflow"
+        )
+    }
+    assert COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES <= {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and (
+            definition.position_effect in {"decrease", "cash_decrease"}
+            or definition.cash_effect == "outflow"
+        )
+    }
+    assert (
+        COST_SORT_CASH_INFLOW_TRANSACTION_TYPES & COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES == set()
+    )
 
 
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:

@@ -2177,3 +2177,7 @@ health before that claim is defensible.
      required direct cash-leg settlement. The transaction-specific resolver formulas remain
      explicit, and conformance coverage now fails if eligibility and implemented resolver coverage
      diverge.
+346. Continued validated GitHub issue #474 by conformance-guarding the cost-engine sorter cash
+     dependency transaction-type sets against the canonical registry. The guard preserves current
+     cash-row trade-label inversion while preventing unregistered, target-only, migration-only, or
+     directionally incompatible transaction types from entering the sorter rule table.
