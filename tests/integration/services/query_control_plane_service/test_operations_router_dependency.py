@@ -845,6 +845,80 @@ async def test_analytics_export_jobs_unexpected_maps_to_500(async_test_client):
     assert "analytics export jobs" in response.json()["detail"].lower()
 
 
+async def test_failed_outbox_events_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_failed_outbox_events.return_value = {
+        "generated_at_utc": "2026-03-14T10:50:00Z",
+        "total": 1,
+        "skip": 5,
+        "limit": 10,
+        "items": [
+            {
+                "outbox_id": 701,
+                "aggregate_type": "portfolio",
+                "aggregate_id": "PB_SG_GLOBAL_BAL_001",
+                "event_type": "PortfolioValuationCompleted",
+                "topic": "portfolio.valuation.completed",
+                "status": "FAILED",
+                "correlation_id": "corr-outbox-701",
+                "retry_count": 3,
+                "last_attempted_at": "2026-03-14T10:35:00Z",
+                "next_attempt_at": None,
+                "last_failure_reason_code": "kafka_delivery_timeout",
+                "last_failure_category": "event_publish_delivery",
+                "last_failure_message": "Kafka delivery timed out before acknowledgement.",
+                "last_failure_at": "2026-03-14T10:35:00Z",
+                "created_at": "2026-03-14T10:30:00Z",
+                "processed_at": None,
+                "retry_safe": False,
+                "recommended_recovery_action": "inspect_payload_contract_before_requeue",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/outbox/failed-events"
+        "?aggregate_type=portfolio&aggregate_id=PB_SG_GLOBAL_BAL_001"
+        "&event_type=PortfolioValuationCompleted"
+        "&topic=portfolio.valuation.completed"
+        "&correlation_id=corr-outbox-701"
+        "&reason_code=kafka_delivery_timeout"
+        "&skip=5&limit=10"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["outbox_id"] == 701
+    assert body["items"][0]["aggregate_id"] == "PB_SG_GLOBAL_BAL_001"
+    assert body["items"][0]["last_failure_reason_code"] == "kafka_delivery_timeout"
+    assert body["items"][0]["retry_safe"] is False
+    assert (
+        body["items"][0]["recommended_recovery_action"] == "inspect_payload_contract_before_requeue"
+    )
+    assert "payload" not in body["items"][0]
+    mock_service.get_failed_outbox_events.assert_awaited_once_with(
+        skip=5,
+        limit=10,
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+    )
+
+
+async def test_failed_outbox_events_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_failed_outbox_events.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/outbox/failed-events?reason_code=kafka_delivery_timeout")
+
+    assert response.status_code == 500
+    assert "failed outbox" in response.json()["detail"].lower()
+
+
 async def test_lineage_keys_unexpected_maps_to_500(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_lineage_keys.side_effect = RuntimeError("boom")

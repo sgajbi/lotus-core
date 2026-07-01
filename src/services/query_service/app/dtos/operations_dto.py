@@ -1817,6 +1817,124 @@ class ReprocessingJobListResponse(SupportJobListResponse, SourceDataProductRunti
     product_version: Literal["v1"] = product_version_field()
 
 
+class FailedOutboxEventRecord(BaseModel):
+    outbox_id: int = Field(
+        ...,
+        description="Durable outbox row identifier for operator investigation.",
+        examples=[701],
+    )
+    aggregate_type: str = Field(
+        ...,
+        description="Aggregate family associated with the outbox event.",
+        examples=["portfolio"],
+    )
+    aggregate_id: str = Field(
+        ...,
+        description="Aggregate identifier used for Kafka partition affinity.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    )
+    event_type: str = Field(
+        ...,
+        description="Governed event type stored on the failed outbox row.",
+        examples=["PortfolioValuationCompleted"],
+    )
+    topic: str = Field(
+        ...,
+        description="Kafka topic targeted by the failed outbox row.",
+        examples=["portfolio.valuation.completed"],
+    )
+    status: Literal["FAILED"] = Field(
+        ...,
+        description="Terminal outbox status for this operator diagnostic row.",
+        examples=["FAILED"],
+    )
+    correlation_id: Optional[str] = Field(
+        None,
+        description="Correlation identifier captured on the outbox row, when available.",
+        examples=["corr-outbox-701"],
+    )
+    retry_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of delivery attempts consumed by the outbox dispatcher.",
+        examples=[3],
+    )
+    last_attempted_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp of the most recent delivery attempt.",
+        examples=["2026-03-14T10:35:00Z"],
+    )
+    next_attempt_at: Optional[datetime] = Field(
+        None,
+        description="Next retry eligibility timestamp. Terminal failed rows should be null.",
+        examples=[None],
+    )
+    last_failure_reason_code: Optional[str] = Field(
+        None,
+        description="Source-safe machine-readable delivery failure reason code.",
+        examples=["kafka_delivery_timeout"],
+    )
+    last_failure_category: Optional[str] = Field(
+        None,
+        description="Source-safe delivery failure category.",
+        examples=["event_publish_delivery"],
+    )
+    last_failure_message: Optional[str] = Field(
+        None,
+        description=(
+            "Bounded, redacted delivery failure message. Raw payloads, stack traces, secrets, "
+            "and client data are not exposed by this operator view."
+        ),
+        examples=["Kafka delivery timed out before acknowledgement."],
+    )
+    last_failure_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the latest structured failure evidence was recorded.",
+        examples=["2026-03-14T10:35:00Z"],
+    )
+    created_at: datetime = Field(
+        ...,
+        description="UTC timestamp when the outbox row was created.",
+        examples=["2026-03-14T10:30:00Z"],
+    )
+    processed_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the row was processed, if ever successful.",
+        examples=[None],
+    )
+    retry_safe: bool = Field(
+        ...,
+        description=(
+            "False for terminal failed rows in this read-only diagnostic view. A separate "
+            "governed requeue workflow must validate poison-event risk before retry."
+        ),
+        examples=[False],
+    )
+    recommended_recovery_action: Literal["inspect_payload_contract_before_requeue"] = Field(
+        ...,
+        description=(
+            "Operator recovery hint. This view is diagnostic evidence; controlled requeue must "
+            "record actor, reason, correlation, prior status, new status, and outcome evidence."
+        ),
+        examples=["inspect_payload_contract_before_requeue"],
+    )
+
+
+class FailedOutboxEventListResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this failed outbox snapshot was generated.",
+        examples=["2026-03-14T10:50:00Z"],
+    )
+    total: int = Field(..., ge=0, description="Total failed outbox rows matching the filter.")
+    skip: int = Field(..., ge=0, description="Pagination offset.", examples=[0])
+    limit: int = Field(..., ge=1, description="Pagination limit.", examples=[100])
+    items: list[FailedOutboxEventRecord] = Field(
+        default_factory=list,
+        description="Source-safe failed outbox rows for operator triage.",
+    )
+
+
 class AnalyticsExportJobRecord(BaseModel):
     job_id: str = Field(
         ...,

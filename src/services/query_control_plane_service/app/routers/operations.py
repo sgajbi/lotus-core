@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     CalculatorSloResponse,
+    FailedOutboxEventListResponse,
     LineageKeyListResponse,
     LineageResponse,
     LoadRunProgressResponse,
@@ -761,6 +762,72 @@ async def get_analytics_export_jobs(
             "An unexpected server error occurred while listing analytics export jobs."
         ),
         log_args=(portfolio_id,),
+    )
+
+
+@router.get(
+    "/support/outbox/failed-events",
+    response_model=FailedOutboxEventListResponse,
+    summary="List failed outbox rows for operator recovery triage",
+    description=(
+        "What: List terminally failed outbox rows with source-safe failure metadata.\n"
+        "How: Query durable `outbox_events` failure evidence with pagination and optional "
+        "aggregate, topic, event-type, correlation, and reason-code filters. The raw event payload "
+        "is intentionally excluded from this response.\n"
+        "When: Use during event-publication incidents to identify failed rows before a governed "
+        "requeue or payload-contract investigation. This is operator recovery evidence, not a "
+        "business source-data or front-office analytics contract."
+    ),
+)
+async def get_failed_outbox_events(
+    aggregate_type: Optional[str] = Query(
+        None,
+        description="Optional outbox aggregate type filter.",
+        examples=["portfolio"],
+    ),
+    aggregate_id: Optional[str] = Query(
+        None,
+        description="Optional outbox aggregate identifier filter.",
+        examples=["PB_SG_GLOBAL_BAL_001"],
+    ),
+    event_type: Optional[str] = Query(
+        None,
+        description="Optional governed event type filter.",
+        examples=["PortfolioValuationCompleted"],
+    ),
+    topic: Optional[str] = Query(
+        None,
+        description="Optional Kafka topic filter.",
+        examples=["portfolio.valuation.completed"],
+    ),
+    correlation_id: Optional[str] = Query(
+        None,
+        description="Optional correlation identifier filter.",
+        examples=["corr-outbox-701"],
+    ),
+    reason_code: Optional[str] = Query(
+        None,
+        description="Optional source-safe failure reason code filter.",
+        examples=["kafka_delivery_timeout"],
+    ),
+    skip: int = Query(0, ge=0, description="Pagination offset.", examples=[0]),
+    limit: int = Query(100, ge=1, le=1000, description="Pagination limit.", examples=[100]),
+    service: OperationsService = Depends(get_operations_service),
+):
+    return await execute_operations_call(
+        service.get_failed_outbox_events(
+            skip=skip,
+            limit=limit,
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            event_type=event_type,
+            topic=topic,
+            correlation_id=correlation_id,
+            reason_code=reason_code,
+        ),
+        log_message="Failed to list failed outbox rows",
+        unexpected_detail="An unexpected server error occurred while listing failed outbox rows.",
+        log_args=(),
     )
 
 

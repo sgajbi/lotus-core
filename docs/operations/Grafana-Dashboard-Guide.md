@@ -65,6 +65,8 @@ Use this section as the operator watchlist.
 
 - `Durable Outbox Failures`
   - Non-zero means there are terminally failed outbox rows stored in the database.
+  - Use `GET /support/outbox/failed-events` to inspect source-safe failed-row evidence without
+    exposing raw event payloads.
 - `Replay Stale Skip Rate`
   - Elevated values mean stale work is still colliding with live epoch-fenced state.
 - `Valuation Failure Rate`
@@ -127,8 +129,10 @@ Use this section for control-plane completion.
 1. Check `Pending Outbox`.
 2. Check `Oldest Outbox Age`.
 3. Check `Durable Outbox Failures`.
-4. Check `Outbox Backlog and Publish Pressure`.
-5. Check `Outbox Publication by Topic` to identify the starving topic.
+4. If failures are non-zero, inspect `GET /support/outbox/failed-events` with topic,
+   correlation, or reason-code filters before considering requeue.
+5. Check `Outbox Backlog and Publish Pressure`.
+6. Check `Outbox Publication by Topic` to identify the starving topic.
 
 ### Workflow: Valuation Is Not Converging
 

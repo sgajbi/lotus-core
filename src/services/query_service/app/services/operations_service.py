@@ -16,6 +16,8 @@ from ..dtos.operations_dto import (
     AnalyticsExportJobListResponse,
     AnalyticsExportJobRecord,
     CalculatorSloResponse,
+    FailedOutboxEventListResponse,
+    FailedOutboxEventRecord,
     LineageKeyListResponse,
     LineageKeyRecord,
     LineageResponse,
@@ -965,6 +967,71 @@ class OperationsService:
                     ),
                 )
                 for job in jobs
+            ],
+        )
+
+    async def get_failed_outbox_events(
+        self,
+        *,
+        skip: int,
+        limit: int,
+        aggregate_type: str | None = None,
+        aggregate_id: str | None = None,
+        event_type: str | None = None,
+        topic: str | None = None,
+        correlation_id: str | None = None,
+        reason_code: str | None = None,
+    ) -> FailedOutboxEventListResponse:
+        generated_at_utc = datetime.now(timezone.utc)
+        total, events = await self._read_count_and_page(
+            self.repo.get_failed_outbox_events_count(
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
+                event_type=event_type,
+                topic=topic,
+                correlation_id=correlation_id,
+                reason_code=reason_code,
+                as_of=generated_at_utc,
+            ),
+            self.repo.get_failed_outbox_events(
+                skip=skip,
+                limit=limit,
+                aggregate_type=aggregate_type,
+                aggregate_id=aggregate_id,
+                event_type=event_type,
+                topic=topic,
+                correlation_id=correlation_id,
+                reason_code=reason_code,
+                as_of=generated_at_utc,
+            ),
+        )
+        return FailedOutboxEventListResponse(
+            generated_at_utc=generated_at_utc,
+            total=total,
+            skip=skip,
+            limit=limit,
+            items=[
+                FailedOutboxEventRecord(
+                    outbox_id=event.id,
+                    aggregate_type=event.aggregate_type,
+                    aggregate_id=event.aggregate_id,
+                    event_type=event.event_type,
+                    topic=event.topic,
+                    status="FAILED",
+                    correlation_id=event.correlation_id,
+                    retry_count=event.retry_count or 0,
+                    last_attempted_at=event.last_attempted_at,
+                    next_attempt_at=event.next_attempt_at,
+                    last_failure_reason_code=event.last_failure_reason_code,
+                    last_failure_category=event.last_failure_category,
+                    last_failure_message=event.last_failure_message,
+                    last_failure_at=event.last_failure_at,
+                    created_at=event.created_at,
+                    processed_at=event.processed_at,
+                    retry_safe=False,
+                    recommended_recovery_action="inspect_payload_contract_before_requeue",
+                )
+                for event in events
             ],
         )
 

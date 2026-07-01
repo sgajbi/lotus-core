@@ -1281,6 +1281,84 @@ async def test_get_analytics_export_jobs(service: OperationsService, mock_ops_re
     )
 
 
+async def test_get_failed_outbox_events_returns_source_safe_operator_records(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    created_at = datetime(2026, 3, 14, 10, 30, tzinfo=timezone.utc)
+    failed_at = datetime(2026, 3, 14, 10, 35, tzinfo=timezone.utc)
+    mock_ops_repo.get_failed_outbox_events_count.return_value = 1
+    mock_ops_repo.get_failed_outbox_events.return_value = [
+        type(
+            "FailedOutboxEventStub",
+            (),
+            {
+                "id": 701,
+                "aggregate_type": "portfolio",
+                "aggregate_id": "PB_SG_GLOBAL_BAL_001",
+                "event_type": "PortfolioValuationCompleted",
+                "topic": "portfolio.valuation.completed",
+                "status": "FAILED",
+                "correlation_id": "corr-outbox-701",
+                "retry_count": 3,
+                "last_attempted_at": failed_at,
+                "next_attempt_at": None,
+                "last_failure_reason_code": "kafka_delivery_timeout",
+                "last_failure_category": "event_publish_delivery",
+                "last_failure_message": "Kafka delivery timed out before acknowledgement.",
+                "last_failure_at": failed_at,
+                "created_at": created_at,
+                "processed_at": None,
+                "payload": {"client_id": "should-not-leak"},
+            },
+        )()
+    ]
+
+    response = await service.get_failed_outbox_events(
+        skip=0,
+        limit=20,
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+    )
+
+    assert response.generated_at_utc.tzinfo == timezone.utc
+    assert response.total == 1
+    assert response.items[0].outbox_id == 701
+    assert response.items[0].aggregate_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.items[0].last_failure_reason_code == "kafka_delivery_timeout"
+    assert response.items[0].last_failure_message == (
+        "Kafka delivery timed out before acknowledgement."
+    )
+    assert response.items[0].retry_safe is False
+    assert (
+        response.items[0].recommended_recovery_action == "inspect_payload_contract_before_requeue"
+    )
+    assert not hasattr(response.items[0], "payload")
+    mock_ops_repo.get_failed_outbox_events_count.assert_awaited_once_with(
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+        as_of=response.generated_at_utc,
+    )
+    mock_ops_repo.get_failed_outbox_events.assert_awaited_once_with(
+        skip=0,
+        limit=20,
+        aggregate_type="portfolio",
+        aggregate_id="PB_SG_GLOBAL_BAL_001",
+        event_type="PortfolioValuationCompleted",
+        topic="portfolio.valuation.completed",
+        correlation_id="corr-outbox-701",
+        reason_code="kafka_delivery_timeout",
+        as_of=response.generated_at_utc,
+    )
+
+
 async def test_get_valuation_jobs_forwards_job_id_filter(
     service: OperationsService, mock_ops_repo: AsyncMock
 ):
