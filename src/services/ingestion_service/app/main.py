@@ -114,7 +114,7 @@ async def ingestion_idempotency_conflict_handler(
     )
 
 
-health_router = create_health_router("kafka")
+health_router = create_health_router("kafka", service_name=SERVICE_NAME)
 include_routers(
     app,
     health_router,

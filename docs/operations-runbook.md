@@ -37,6 +37,18 @@ Dependency status values are:
 Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
 503 with the dependency status map in `detail.dependencies`.
 
+Shared readiness checks also emit Prometheus dependency telemetry:
+
+| Metric | Labels | Purpose |
+| --- | --- | --- |
+| `health_dependency_check_total` | `service`, `dependency`, `status` | Count fresh dependency-check outcomes. |
+| `health_dependency_check_duration_seconds` | `service`, `dependency` | Track dependency-check latency. |
+| `health_readiness_state` | `service`, `state` | Expose the current service readiness posture. |
+
+The dependency status label uses only `ok`, `unavailable`, `timeout`, or `error`. Do not add raw
+exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation IDs as health
+metric labels.
+
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
 `X-Trace-Id` is supplied, the shared HTTP bootstrap emits a W3C-shaped `traceparent` with the same

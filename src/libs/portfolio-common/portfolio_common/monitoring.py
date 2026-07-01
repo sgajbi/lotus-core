@@ -63,6 +63,27 @@ KAFKA_PUBLISH_LATENCY_SECONDS = Histogram(
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
 
+HEALTH_DEPENDENCY_CHECKS_TOTAL = Counter(
+    "health_dependency_check_total",
+    "Health dependency check outcomes by service, dependency, and bounded status.",
+    labelnames=("service", "dependency", "status"),
+)
+
+HEALTH_DEPENDENCY_CHECK_DURATION_SECONDS = Histogram(
+    "health_dependency_check_duration_seconds",
+    "Health dependency check latency in seconds by service and dependency.",
+    labelnames=("service", "dependency"),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
+)
+
+HEALTH_READINESS_STATE = Gauge(
+    "health_readiness_state",
+    "Current readiness state for a service. ready=1 for the active state, 0 otherwise.",
+    labelnames=("service", "state"),
+)
+
+HEALTH_READINESS_STATES = ("ready", "not_ready")
+
 
 def observe_kafka_published(topic: str, count: int = 1) -> None:
     KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(topic).inc(count)
@@ -83,6 +104,27 @@ def observe_kafka_consume_error(topic: str, error: str, count: int = 1) -> None:
 def kafka_publish_timer(topic: str):
     """Context manager that observes Kafka publish latency for a topic."""
     return KAFKA_PUBLISH_LATENCY_SECONDS.labels(topic).time()
+
+
+def observe_health_dependency_check(
+    *,
+    service: str,
+    dependency: str,
+    status: str,
+    duration_seconds: float,
+) -> None:
+    HEALTH_DEPENDENCY_CHECKS_TOTAL.labels(service, dependency, status).inc()
+    HEALTH_DEPENDENCY_CHECK_DURATION_SECONDS.labels(service, dependency).observe(
+        max(0.0, duration_seconds)
+    )
+
+
+def set_health_readiness_state(*, service: str, state: str) -> None:
+    normalized_state = state if state in HEALTH_READINESS_STATES else "not_ready"
+    for candidate in HEALTH_READINESS_STATES:
+        HEALTH_READINESS_STATE.labels(service, candidate).set(
+            1 if candidate == normalized_state else 0
+        )
 
 
 # --------------------------------------------------------------------------------------

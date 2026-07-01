@@ -146,7 +146,11 @@ Current repository posture:
     through `portfolio_common.health`. Preserve the per-dependency timeout pattern and explicit
     `ok`, `unavailable`, `timeout`, and `error` status vocabulary when adding database, Kafka, or
     future dependency probes. Readiness can return HTTP 503 with dependency detail without changing
-    route paths or the top-level ready/not-ready contract.
+    route paths or the top-level ready/not-ready contract. Dependency telemetry must use the shared
+    `health_dependency_check_total`, `health_dependency_check_duration_seconds`, and
+    `health_readiness_state` metrics with only service, dependency, status, and readiness-state
+    labels; keep raw exception text, business identifiers, request IDs, correlation IDs, and trace
+    IDs out of Prometheus labels.
 31. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,

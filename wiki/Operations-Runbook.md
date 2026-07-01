@@ -114,6 +114,15 @@ HTTP metrics. Valid incoming W3C `traceparent` headers are preserved. Requests w
 This is propagation context for Lotus diagnostics; it is not a standalone claim that OpenTelemetry
 export or an APM collector is configured.
 
+Readiness dependency checks emit bounded Prometheus telemetry:
+
+- `health_dependency_check_total{service,dependency,status}`
+- `health_dependency_check_duration_seconds{service,dependency}`
+- `health_readiness_state{service,state}`
+
+Use these for dependency flapping and latency trends. Keep portfolio, security, request,
+correlation, trace, and raw exception details in logs or support APIs, not metric labels.
+
 ## Database-first diagnostics
 
 Prefer API diagnostics first, but go to the database when:

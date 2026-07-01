@@ -34,3 +34,17 @@ def test_outbox_recovery_metric_uses_bounded_operator_labels():
         "outcome",
         "reason",
     )
+
+
+def test_health_dependency_metrics_use_bounded_labels():
+    assert monitoring.HEALTH_DEPENDENCY_CHECKS_TOTAL._labelnames == (
+        "service",
+        "dependency",
+        "status",
+    )
+    assert monitoring.HEALTH_DEPENDENCY_CHECK_DURATION_SECONDS._labelnames == (
+        "service",
+        "dependency",
+    )
+    assert monitoring.HEALTH_READINESS_STATE._labelnames == ("service", "state")
+    assert monitoring.HEALTH_READINESS_STATES == ("ready", "not_ready")

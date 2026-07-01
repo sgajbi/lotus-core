@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .db import AsyncSessionLocal
+from .monitoring import observe_health_dependency_check, set_health_readiness_state
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +87,10 @@ async def _run_dependency_check(
     dependency_name: str,
     check: DependencyCheck,
     *,
+    service_name: str,
     timeout_seconds: float,
 ) -> DependencyReadinessResult:
+    started_at = time.perf_counter()
     try:
         is_ready = await asyncio.wait_for(check(), timeout=timeout_seconds)
     except TimeoutError:
@@ -96,18 +99,38 @@ async def _run_dependency_check(
             dependency_name,
             timeout_seconds,
         )
+        observe_health_dependency_check(
+            service=service_name,
+            dependency=dependency_name,
+            status=READINESS_TIMEOUT,
+            duration_seconds=time.perf_counter() - started_at,
+        )
         return DependencyReadinessResult(dependency_name, READINESS_TIMEOUT)
     except Exception:
         logger.exception("Health Check: %s readiness check failed.", dependency_name)
+        observe_health_dependency_check(
+            service=service_name,
+            dependency=dependency_name,
+            status=READINESS_ERROR,
+            duration_seconds=time.perf_counter() - started_at,
+        )
         return DependencyReadinessResult(dependency_name, READINESS_ERROR)
 
     status_value = READINESS_OK if is_ready else READINESS_UNAVAILABLE
+    observe_health_dependency_check(
+        service=service_name,
+        dependency=dependency_name,
+        status=status_value,
+        duration_seconds=time.perf_counter() - started_at,
+    )
     return DependencyReadinessResult(dependency_name, status_value)
 
 
 def _coerce_dependency_result(
     dependency_name: str,
     result: DependencyReadinessResult | BaseException,
+    *,
+    service_name: str,
 ) -> DependencyReadinessResult:
     if isinstance(result, DependencyReadinessResult):
         return result
@@ -116,11 +139,18 @@ def _coerce_dependency_result(
         dependency_name,
         exc_info=(type(result), result, result.__traceback__),
     )
+    observe_health_dependency_check(
+        service=service_name,
+        dependency=dependency_name,
+        status=READINESS_ERROR,
+        duration_seconds=0.0,
+    )
     return DependencyReadinessResult(dependency_name, READINESS_ERROR)
 
 
 def create_health_router(
     *dependencies: str,
+    service_name: str = "lotus-core-service",
     readiness_cache_ttl_seconds: float = 5.0,
     readiness_dependency_timeout_seconds: float = 5.0,
 ) -> APIRouter:
@@ -130,6 +160,7 @@ def create_health_router(
     Args:
         *dependencies: A list of strings ('db', 'kafka') specifying which
                        dependencies to check for the readiness probe.
+        service_name: Stable low-cardinality service label for health metrics.
         readiness_cache_ttl_seconds: Per-process cache duration for dependency
                        readiness results. Keeps probe storms from repeatedly
                        forcing expensive dependency metadata checks.
@@ -211,6 +242,7 @@ def create_health_router(
                     _run_dependency_check(
                         dependency_name,
                         check,
+                        service_name=service_name,
                         timeout_seconds=readiness_dependency_timeout_seconds,
                     )
                     for dependency_name, check in resolved_dependencies
@@ -218,7 +250,11 @@ def create_health_router(
                 return_exceptions=True,
             )
             results = [
-                _coerce_dependency_result(dependency_name, result)
+                _coerce_dependency_result(
+                    dependency_name,
+                    result,
+                    service_name=service_name,
+                )
                 for (dependency_name, _), result in zip(resolved_dependencies, raw_results)
             ]
 
@@ -229,6 +265,11 @@ def create_health_router(
                 cached_all_ok = all_ok
                 cached_dep_status = dict(dep_status)
                 cached_until = time.monotonic() + readiness_cache_ttl_seconds
+
+        set_health_readiness_state(
+            service=service_name,
+            state="ready" if all_ok else "not_ready",
+        )
 
         if all_ok:
             return {"status": "ready", "dependencies": dep_status}

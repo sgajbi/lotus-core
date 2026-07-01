@@ -84,13 +84,14 @@ async def test_worker_runtime_metrics_endpoint_uses_shared_token_policy():
     )
 
     client = TestClient(web_app)
+    client.get("/not-found")
     denied_response = client.get("/metrics")
     allowed_response = client.get("/metrics", headers={"Authorization": "Bearer scrape-secret"})
 
     assert denied_response.status_code == 403
     assert denied_response.json()["detail"]["code"] == "METRICS_ACCESS_DENIED"
     assert allowed_response.status_code == 200
-    assert "http_requests_total{" in allowed_response.text
+    assert "http_request_latency_seconds" in allowed_response.text
 
 
 @pytest.mark.asyncio

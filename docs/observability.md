@@ -31,12 +31,20 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
    endpoint outside a private scrape boundary must configure `LOTUS_METRICS_ACCESS_TOKEN` through
    the common metrics settings layer and send `Authorization: Bearer <token>` from authorized
    scrapers. Web-backed worker runtime metrics use the same policy.
+10. Shared readiness checks emit bounded dependency telemetry:
+    `health_dependency_check_total{service,dependency,status}`,
+    `health_dependency_check_duration_seconds{service,dependency}`, and
+    `health_readiness_state{service,state}`. Status values reuse the readiness vocabulary `ok`,
+    `unavailable`, `timeout`, and `error`; readiness state is bounded to `ready` or `not_ready`.
+    Raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, and correlation IDs
+    must not be metric labels.
 
 ## Current Gaps
 
 The initial quality baseline records observability as a documentation and gate gap. The shared
 monitoring unit guard now rejects `portfolio_id` and `security_id` as production Prometheus metric
 labels. The shared HTTP bootstrap and web-backed worker runtime now enforce the configured metrics
-access policy. Future slices should add automated checks for additional high-cardinality
-identifiers, correlation ID propagation, sensitive logging, health/readiness completeness, and
-inventory enforcement that prevents new runtime web apps from bypassing the shared metrics policy.
+access policy, and shared readiness checks now emit bounded dependency outcome/latency telemetry.
+Future slices should add automated checks for additional high-cardinality identifiers, correlation
+ID propagation, sensitive logging, health/readiness completeness, and inventory enforcement that
+prevents new runtime web apps from bypassing the shared metrics policy.
