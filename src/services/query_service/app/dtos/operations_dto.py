@@ -2033,6 +2033,113 @@ class FailedOutboxRequeueResponse(BaseModel):
     )
 
 
+class OutboxRecoveryAuditRecord(BaseModel):
+    audit_id: int = Field(
+        ...,
+        description="Durable outbox recovery audit row identifier.",
+        examples=[42],
+    )
+    outbox_id: int = Field(
+        ...,
+        description="Durable outbox row identifier associated with this recovery attempt.",
+        examples=[701],
+    )
+    recovery_action: str = Field(
+        ...,
+        description="Governed recovery action requested for the outbox row.",
+        examples=["requeue_failed_outbox"],
+    )
+    requested_by: str = Field(
+        ...,
+        description="Operator, automation principal, or support workflow that requested recovery.",
+        examples=["ops.sre"],
+    )
+    reason: str = Field(
+        ...,
+        description="Source-safe reason captured for the recovery audit.",
+        examples=["Kafka delivery timeout cleared; payload contract inspected and still valid."],
+    )
+    correlation_id: Optional[str] = Field(
+        None,
+        description="Incident, trace, or operator correlation identifier for this recovery action.",
+        examples=["incident-20260314-outbox-701"],
+    )
+    prior_status: str = Field(
+        ...,
+        description="Outbox status before the recovery attempt.",
+        examples=["FAILED"],
+    )
+    new_status: str = Field(
+        ...,
+        description="Outbox status recorded as the recovery outcome.",
+        examples=["PENDING"],
+    )
+    outcome: str = Field(
+        ...,
+        description="Durable recovery outcome recorded for this attempt.",
+        examples=["REQUEUED"],
+    )
+    outcome_message: Optional[str] = Field(
+        None,
+        description="Stable source-safe outcome message for support triage.",
+        examples=["outbox_row_requeued_for_dispatch"],
+    )
+    prior_retry_count: int = Field(
+        ...,
+        ge=0,
+        description="Retry count captured before the recovery attempt changed dispatcher state.",
+        examples=[3],
+    )
+    prior_last_failure_reason_code: Optional[str] = Field(
+        None,
+        description="Source-safe failure reason code captured before recovery.",
+        examples=["kafka_delivery_timeout"],
+    )
+    prior_last_failure_category: Optional[str] = Field(
+        None,
+        description="Source-safe failure category captured before recovery.",
+        examples=["event_publish_delivery"],
+    )
+    prior_last_failure_message: Optional[str] = Field(
+        None,
+        description=(
+            "Bounded, redacted failure message captured before recovery. Raw payloads, stack "
+            "traces, secrets, and client data are not exposed by this operator view."
+        ),
+        examples=["Kafka delivery timed out before acknowledgement."],
+    )
+    prior_last_failure_at: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the prior failure evidence was recorded.",
+        examples=["2026-03-14T10:35:00Z"],
+    )
+    requested_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when the recovery action was requested.",
+        examples=["2026-03-14T10:55:00Z"],
+    )
+    completed_at_utc: Optional[datetime] = Field(
+        None,
+        description="UTC timestamp when the recovery action completed or was rejected.",
+        examples=["2026-03-14T10:55:00Z"],
+    )
+
+
+class OutboxRecoveryAuditListResponse(BaseModel):
+    generated_at_utc: datetime = Field(
+        ...,
+        description="UTC timestamp when this outbox recovery audit snapshot was generated.",
+        examples=["2026-03-14T11:00:00Z"],
+    )
+    total: int = Field(..., ge=0, description="Total recovery audit rows matching the filter.")
+    skip: int = Field(..., ge=0, description="Pagination offset.", examples=[0])
+    limit: int = Field(..., ge=1, description="Pagination limit.", examples=[100])
+    items: list[OutboxRecoveryAuditRecord] = Field(
+        default_factory=list,
+        description="Source-safe outbox recovery audit rows for operator support workflows.",
+    )
+
+
 class AnalyticsExportJobRecord(BaseModel):
     job_id: str = Field(
         ...,

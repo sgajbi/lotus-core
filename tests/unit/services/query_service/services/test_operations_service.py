@@ -7,6 +7,7 @@ from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLET
 from prometheus_client import REGISTRY, generate_latest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dtos.operations_dto import FailedOutboxRequeueRequest
 from src.services.query_service.app.repositories.operations_models import (
     ExportJobHealthSummary,
     JobHealthSummary,
@@ -14,7 +15,6 @@ from src.services.query_service.app.repositories.operations_models import (
     ReconciliationFindingSummary,
     ReprocessingHealthSummary,
 )
-from src.services.query_service.app.dtos.operations_dto import FailedOutboxRequeueRequest
 from src.services.query_service.app.services import operations_service as operations_service_module
 from src.services.query_service.app.services.load_run_progress_builder import (
     _ceiling_division,
@@ -1414,6 +1414,77 @@ async def test_requeue_failed_outbox_event_returns_governed_recovery_response(
         correlation_id="incident-20260314-outbox-701",
         confirm_payload_contract_reviewed=True,
         requested_at=FIXED_GENERATED_AT,
+    )
+
+
+async def test_get_outbox_recovery_audits_returns_source_safe_history(
+    service: OperationsService, mock_ops_repo: AsyncMock
+):
+    requested_at = datetime(2026, 3, 14, 10, 55, tzinfo=timezone.utc)
+    failed_at = datetime(2026, 3, 14, 10, 35, tzinfo=timezone.utc)
+    audit = type(
+        "OutboxRecoveryAuditStub",
+        (),
+        {
+            "id": 42,
+            "outbox_id": 701,
+            "recovery_action": "requeue_failed_outbox",
+            "requested_by": "ops.sre",
+            "reason": "Kafka delivery timeout cleared; payload contract inspected.",
+            "correlation_id": "incident-20260314-outbox-701",
+            "prior_status": "FAILED",
+            "new_status": "PENDING",
+            "outcome": "REQUEUED",
+            "outcome_message": "outbox_row_requeued_for_dispatch",
+            "prior_retry_count": 3,
+            "prior_last_failure_reason_code": "kafka_delivery_timeout",
+            "prior_last_failure_category": "event_publish_delivery",
+            "prior_last_failure_message": "Kafka delivery timed out before acknowledgement.",
+            "prior_last_failure_at": failed_at,
+            "requested_at": requested_at,
+            "completed_at": requested_at,
+        },
+    )()
+    mock_ops_repo.get_outbox_recovery_audits_count.return_value = 1
+    mock_ops_repo.get_outbox_recovery_audits.return_value = [audit]
+
+    with patch.object(operations_service_module, "datetime", _FixedDateTime):
+        response = await service.get_outbox_recovery_audits(
+            skip=0,
+            limit=20,
+            outbox_id=701,
+            outcome="REQUEUED",
+            correlation_id="incident-20260314-outbox-701",
+            requested_by="ops.sre",
+            recovery_action="requeue_failed_outbox",
+        )
+
+    assert response.generated_at_utc == FIXED_GENERATED_AT
+    assert response.total == 1
+    assert response.items[0].audit_id == 42
+    assert response.items[0].outcome == "REQUEUED"
+    assert response.items[0].prior_last_failure_reason_code == "kafka_delivery_timeout"
+    assert response.items[0].prior_last_failure_message == (
+        "Kafka delivery timed out before acknowledgement."
+    )
+    assert not hasattr(response.items[0], "payload")
+    mock_ops_repo.get_outbox_recovery_audits_count.assert_awaited_once_with(
+        outbox_id=701,
+        outcome="REQUEUED",
+        correlation_id="incident-20260314-outbox-701",
+        requested_by="ops.sre",
+        recovery_action="requeue_failed_outbox",
+        as_of=FIXED_GENERATED_AT,
+    )
+    mock_ops_repo.get_outbox_recovery_audits.assert_awaited_once_with(
+        skip=0,
+        limit=20,
+        outbox_id=701,
+        outcome="REQUEUED",
+        correlation_id="incident-20260314-outbox-701",
+        requested_by="ops.sre",
+        recovery_action="requeue_failed_outbox",
+        as_of=FIXED_GENERATED_AT,
     )
 
 

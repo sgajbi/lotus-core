@@ -920,6 +920,72 @@ async def test_failed_outbox_events_unexpected_maps_to_500(async_test_client):
     assert "failed outbox" in response.json()["detail"].lower()
 
 
+async def test_get_outbox_recovery_audits_success(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_outbox_recovery_audits.return_value = {
+        "generated_at_utc": "2026-03-14T11:00:00Z",
+        "total": 1,
+        "skip": 5,
+        "limit": 10,
+        "items": [
+            {
+                "audit_id": 42,
+                "outbox_id": 701,
+                "recovery_action": "requeue_failed_outbox",
+                "requested_by": "ops.sre",
+                "reason": "Kafka delivery timeout cleared; payload contract inspected.",
+                "correlation_id": "incident-20260314-outbox-701",
+                "prior_status": "FAILED",
+                "new_status": "PENDING",
+                "outcome": "REQUEUED",
+                "outcome_message": "outbox_row_requeued_for_dispatch",
+                "prior_retry_count": 3,
+                "prior_last_failure_reason_code": "kafka_delivery_timeout",
+                "prior_last_failure_category": "event_publish_delivery",
+                "prior_last_failure_message": "Kafka delivery timed out before acknowledgement.",
+                "prior_last_failure_at": "2026-03-14T10:35:00Z",
+                "requested_at_utc": "2026-03-14T10:55:00Z",
+                "completed_at_utc": "2026-03-14T10:55:00Z",
+            }
+        ],
+    }
+
+    response = await client.get(
+        "/support/outbox/recovery-audits"
+        "?outbox_id=701&outcome=REQUEUED"
+        "&correlation_id=incident-20260314-outbox-701"
+        "&requested_by=ops.sre&recovery_action=requeue_failed_outbox"
+        "&skip=5&limit=10"
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["audit_id"] == 42
+    assert body["items"][0]["outcome"] == "REQUEUED"
+    assert body["items"][0]["prior_last_failure_reason_code"] == "kafka_delivery_timeout"
+    assert "payload" not in body["items"][0]
+    mock_service.get_outbox_recovery_audits.assert_awaited_once_with(
+        skip=5,
+        limit=10,
+        outbox_id=701,
+        outcome="REQUEUED",
+        correlation_id="incident-20260314-outbox-701",
+        requested_by="ops.sre",
+        recovery_action="requeue_failed_outbox",
+    )
+
+
+async def test_get_outbox_recovery_audits_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.get_outbox_recovery_audits.side_effect = RuntimeError("boom")
+
+    response = await client.get("/support/outbox/recovery-audits?outcome=REQUEUED")
+
+    assert response.status_code == 500
+    assert "recovery audit" in response.json()["detail"].lower()
+
+
 async def test_requeue_failed_outbox_event_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.requeue_failed_outbox_event.return_value = {

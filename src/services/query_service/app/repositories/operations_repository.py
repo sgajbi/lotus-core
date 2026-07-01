@@ -21,6 +21,7 @@ from portfolio_common.database_models import (
 from sqlalchemy import and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..operations_errors import OutboxRecoveryRejected
 from .identifier_normalization import normalize_security_id
 from .operations_analytics_export_queries import (
     analytics_export_job_priority,
@@ -100,7 +101,6 @@ from .operations_support_job_queries import (
     latest_valuation_job_lateral,
     support_job_priority,
 )
-from ..operations_errors import OutboxRecoveryRejected
 
 OUTBOX_REQUEUE_ACTION = "requeue_failed_outbox"
 OUTBOX_REQUEUE_REJECTED = "REJECTED"
@@ -1181,6 +1181,83 @@ class OperationsRepository:
         )
         self.db.add(audit)
         return audit
+
+    def _outbox_recovery_audits_stmt(
+        self,
+        *,
+        outbox_id: Optional[int] = None,
+        outcome: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        recovery_action: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ):
+        stmt = select(OutboxRecoveryAudit)
+        if outbox_id is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.outbox_id == outbox_id)
+        if outcome is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.outcome == outcome)
+        if correlation_id is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.correlation_id == correlation_id)
+        if requested_by is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.requested_by == requested_by)
+        if recovery_action is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.recovery_action == recovery_action)
+        if as_of is not None:
+            stmt = stmt.where(OutboxRecoveryAudit.requested_at <= as_of)
+        return stmt
+
+    async def get_outbox_recovery_audits_count(
+        self,
+        *,
+        outbox_id: Optional[int] = None,
+        outcome: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        recovery_action: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> int:
+        base_stmt = self._outbox_recovery_audits_stmt(
+            outbox_id=outbox_id,
+            outcome=outcome,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            recovery_action=recovery_action,
+            as_of=as_of,
+        ).subquery()
+        return int(
+            (await self.db.execute(select(func.count()).select_from(base_stmt))).scalar_one() or 0
+        )
+
+    async def get_outbox_recovery_audits(
+        self,
+        *,
+        skip: int,
+        limit: int,
+        outbox_id: Optional[int] = None,
+        outcome: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        requested_by: Optional[str] = None,
+        recovery_action: Optional[str] = None,
+        as_of: Optional[datetime] = None,
+    ) -> list[OutboxRecoveryAudit]:
+        stmt = self._outbox_recovery_audits_stmt(
+            outbox_id=outbox_id,
+            outcome=outcome,
+            correlation_id=correlation_id,
+            requested_by=requested_by,
+            recovery_action=recovery_action,
+            as_of=as_of,
+        )
+        stmt = (
+            stmt.order_by(
+                OutboxRecoveryAudit.requested_at.desc(),
+                OutboxRecoveryAudit.id.desc(),
+            )
+            .offset(skip)
+            .limit(limit)
+        )
+        return list((await self.db.execute(stmt)).scalars().all())
 
     async def get_reconciliation_runs_count(
         self,

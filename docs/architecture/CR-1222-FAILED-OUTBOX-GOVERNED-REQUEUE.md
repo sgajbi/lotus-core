@@ -78,6 +78,6 @@ updated because an operator recovery command changed platform truth.
 
 - Add Docker-backed integrated proof that dispatcher-created terminal failed rows can be requeued
   through QCP and later processed by the dispatcher.
-- Consider listing recent `outbox_recovery_audit` rows if operators need post-recovery history in
-  QCP beyond direct database inspection.
+- CR-1223 adds QCP recovery-audit listing so operators can review `outbox_recovery_audit` history
+  without direct database inspection.
 - Consider failed-row age and recovery outcome metrics after the audit table has real runtime use.
