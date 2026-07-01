@@ -970,6 +970,8 @@ def test_foreign_currency_cash_deposit_preserves_base_fx_basis() -> None:
         ("MERGER_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
         ("EXCHANGE_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
         ("REPLACEMENT_OUT", Decimal("10"), Decimal("1000"), Decimal("90"), Decimal("9000")),
+        ("SPIN_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
+        ("DEMERGER_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
         ("MERGER_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
         ("EXCHANGE_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),
         ("REPLACEMENT_IN", Decimal("10"), Decimal("1000"), Decimal("110"), Decimal("11000")),

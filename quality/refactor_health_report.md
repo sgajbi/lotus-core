@@ -2143,3 +2143,8 @@ health before that claim is defensible.
      conversion/exercise types. Focused registry tests passed with 7 tests and now fail when a
      cost enum or representative local transaction-type rule table adds a type without registry
      classification.
+339. Continued validated GitHub issue #474 by fixing the first concrete drift exposed by the
+     registry: `SPIN_IN` and `DEMERGER_IN` now behave as position transfer inflows instead of
+     outflows in the position calculator. Focused position and registry-conformance tests passed
+     with 20 tests and now fail if registry-classified inflow target-security legs drift from the
+     position rule table.

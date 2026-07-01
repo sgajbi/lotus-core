@@ -183,6 +183,8 @@ Current repository posture:
     `OTHER` is migration-only and not production-booking allowed. Redemption and
     conversion/exercise target types are known but not implemented until dedicated runtime slices
     add validation, cost, position, cashflow, supportability, and downstream compatibility proof.
+    `SPIN_IN` and `DEMERGER_IN` are position transfer inflows; keep position rule tables aligned
+    with registry-classified target-security inflow legs.
 
 ## Architecture And Module Map
 
