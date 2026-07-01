@@ -7,11 +7,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from openpyxl import Workbook
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
@@ -6696,6 +6697,39 @@ async def test_upload_preview_rejects_payload_above_configured_limit(
         "max_bytes": 16,
     }
     mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_allows_upload_budget_above_generic_write_cap(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "16")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "2048")
+    csv_content = b"transaction_id,portfolio_id\nT1,P1"
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.csv", csv_content, "text/csv")},
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["total_rows"] == 1
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_read_bounded_upload_content_stops_after_stream_exceeds_limit(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "16")
+    upload = SimpleNamespace(read=AsyncMock(side_effect=[b"a" * 10, b"b" * 7]))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await uploads_router._read_bounded_upload_content(upload)
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail["code"] == "INGESTION_UPLOAD_TOO_LARGE"
+    assert exc_info.value.detail["max_bytes"] == 16
+    assert upload.read.await_count == 2
 
 
 async def test_upload_commit_transactions_csv_partial(

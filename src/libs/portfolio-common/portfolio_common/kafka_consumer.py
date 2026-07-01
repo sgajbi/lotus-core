@@ -143,6 +143,24 @@ def _message_attr_or_unknown(msg: Message, attr_name: str) -> str:
     return str(value) if value is not None else "unknown"
 
 
+def _decode_optional_utf8(value: bytes | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _message_bytes_text(value: bytes | None) -> str | None:
+    if value is None:
+        return None
+    decoded = _decode_optional_utf8(value)
+    if decoded is not None:
+        return decoded
+    return f"hex:{value.hex()}"
+
+
 def _source_safe_error_traceback(error: Exception) -> str:
     if isinstance(error, ValidationError):
         return f"{error.__class__.__name__}: {_source_safe_error_reason(error)}"
@@ -269,7 +287,7 @@ class BaseConsumer(ABC):
         if msg.headers():
             for key, value in msg.headers():
                 if key == "correlation_id":
-                    corr_id = value.decode("utf-8") if value else None
+                    corr_id = _decode_optional_utf8(value) if value else None
                     break
 
         return corr_id
@@ -278,7 +296,7 @@ class BaseConsumer(ABC):
         if msg.headers():
             for key, value in msg.headers():
                 if key == "traceparent":
-                    return normalize_traceparent(value.decode("utf-8") if value else None)
+                    return normalize_traceparent(_decode_optional_utf8(value) if value else None)
         return None
 
     @contextmanager
@@ -444,7 +462,11 @@ class BaseConsumer(ABC):
         correlation_id: str | None,
         traceparent: str | None = None,
     ) -> list[tuple[str, bytes]]:
-        dlq_headers = [_redacted_dlq_header(header) for header in msg.headers() or []]
+        dlq_headers = [
+            _redacted_dlq_header(header)
+            for header in msg.headers() or []
+            if header[0].strip().lower() != "traceparent"
+        ]
         if correlation_id:
             dlq_headers.append(("correlation_id", correlation_id.encode("utf-8")))
         normalized_traceparent = normalize_traceparent(traceparent)
@@ -478,8 +500,7 @@ class BaseConsumer(ABC):
             )
 
     def _message_key_text(self, msg: Message) -> str | None:
-        key = msg.key()
-        return key.decode("utf-8") if key else None
+        return _message_bytes_text(msg.key())
 
     def _redacted_message_value_text(self, msg: Message) -> str:
         raw_value = msg.value().decode("utf-8")

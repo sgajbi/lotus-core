@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
+    transaction_event_to_record_values,
 )
 
 
@@ -75,6 +76,30 @@ async def test_create_or_update_transaction_persists_aggregated_trade_fee() -> N
     assert persisted.trade_fee == Decimal("5.00")
     assert not hasattr(persisted, "brokerage")
     db.execute.assert_awaited_once()
+
+
+def test_transaction_event_to_record_values_excludes_traceparent_envelope() -> None:
+    event = TransactionEvent(
+        transaction_id="TX_TRACEPARENT_001",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date="2026-05-28T10:00:00Z",
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        correlation_id="corr-transaction",
+        traceparent="00-0123456789abcdef0123456789abcdef-0123456789abcdef-01",
+    )
+
+    values = transaction_event_to_record_values(event)
+
+    assert "correlation_id" not in values
+    assert "traceparent" not in values
+    assert values["transaction_id"] == "TX_TRACEPARENT_001"
 
 
 @pytest.mark.asyncio
