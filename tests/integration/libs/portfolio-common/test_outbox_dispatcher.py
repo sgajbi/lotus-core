@@ -644,7 +644,7 @@ def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_
     """
     GIVEN pending and terminal FAILED outbox rows with different ages
     WHEN the dispatcher refreshes its gauges
-    THEN it should publish pending count, failed count, and oldest pending age.
+    THEN it should publish pending, retry-eligible, retry-waiting, failed, and age gauges.
     """
     TestSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
     now = datetime.now(timezone.utc)
@@ -669,6 +669,7 @@ def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_
                         payload="{}",
                         topic="gauge.topic",
                         created_at=now - timedelta(minutes=1),
+                        next_attempt_at=now + timedelta(minutes=5),
                     ),
                     OutboxEvent(
                         aggregate_type="GaugeTest",
@@ -695,6 +696,16 @@ def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_
     )
     monkeypatch.setattr(
         outbox_dispatcher_module,
+        "set_outbox_retry_eligible_pending",
+        lambda value: observed.__setitem__("retry_eligible", float(value)),
+    )
+    monkeypatch.setattr(
+        outbox_dispatcher_module,
+        "set_outbox_retry_waiting_pending",
+        lambda value: observed.__setitem__("retry_waiting", float(value)),
+    )
+    monkeypatch.setattr(
+        outbox_dispatcher_module,
         "set_outbox_oldest_pending_age_seconds",
         lambda value: observed.__setitem__("oldest_age", float(value)),
     )
@@ -706,6 +717,8 @@ def test_dispatcher_reads_pending_failed_and_oldest_age_gauges(db_engine, clean_
     dispatcher._read_pending_gauge()
 
     assert observed["pending"] == 2.0
+    assert observed["retry_eligible"] == 1.0
+    assert observed["retry_waiting"] == 1.0
     assert observed["failed"] == 1.0
     assert 540.0 <= observed["oldest_age"] <= 660.0
 

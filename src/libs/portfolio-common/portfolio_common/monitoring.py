@@ -111,6 +111,16 @@ _OUTBOX_PENDING = Gauge(
     "Total number of PENDING outbox events in the database",
 )
 
+_OUTBOX_RETRY_ELIGIBLE_PENDING = Gauge(
+    "outbox_events_retry_eligible_pending",
+    "Total number of PENDING outbox events eligible for immediate dispatch or retry.",
+)
+
+_OUTBOX_RETRY_WAITING_PENDING = Gauge(
+    "outbox_events_retry_waiting_pending",
+    "Total number of PENDING outbox events waiting for a future retry eligibility timestamp.",
+)
+
 _OUTBOX_FAILED_STORED = Gauge(
     "outbox_events_failed_stored",
     "Total number of terminal FAILED outbox events in the database",
@@ -166,6 +176,14 @@ def observe_outbox_retried(aggregate_type: str, topic: str, count: int = 1) -> N
 
 def set_outbox_pending(total_pending: int) -> None:
     _OUTBOX_PENDING.set(total_pending)
+
+
+def set_outbox_retry_eligible_pending(total_pending: int) -> None:
+    _OUTBOX_RETRY_ELIGIBLE_PENDING.set(total_pending)
+
+
+def set_outbox_retry_waiting_pending(total_pending: int) -> None:
+    _OUTBOX_RETRY_WAITING_PENDING.set(total_pending)
 
 
 def set_outbox_failed_stored(total_failed: int) -> None:

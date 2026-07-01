@@ -596,6 +596,12 @@ Most relevant current governance:
     outside the transaction, then update results only when the persisted `claim_token` still
     matches. Expired claims are reclaimable; stale delivery callbacks from a lost claim must not
     mark reclaimed rows `PROCESSED` or alter retry state.
+57. Outbox retry policy must keep retry state explicit and observable. Retryable failures persist
+    `next_attempt_at`; claim queries must skip rows waiting for a future retry window; max attempts
+    remain the default terminal budget; `OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS` is an
+    optional elapsed terminal budget when configured above zero. Operator metrics must preserve the
+    split between total pending, retry-eligible pending, retry-waiting pending, terminal failed, and
+    published outcomes without high-cardinality or payload-derived labels.
 
 ## Context Maintenance Rule
 

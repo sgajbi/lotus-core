@@ -23,6 +23,8 @@ from portfolio_common.monitoring import (
     set_outbox_failed_stored,
     set_outbox_oldest_pending_age_seconds,
     set_outbox_pending,
+    set_outbox_retry_eligible_pending,
+    set_outbox_retry_waiting_pending,
 )
 from portfolio_common.outbox_settings import get_outbox_runtime_settings
 
@@ -42,6 +44,7 @@ class _ClaimedOutboxEvent:
     topic: str
     correlation_id: str | None
     retry_count: int | None
+    created_at: datetime
     claim_token: str
     claim_expires_at: datetime
 
@@ -62,6 +65,7 @@ class OutboxDispatcher:
         db_session_factory: Optional[sessionmaker] = None,
         max_retries: Optional[int] = None,
         claim_lease_seconds: Optional[int] = None,
+        retry_max_elapsed_seconds: Optional[int] = None,
         retry_initial_delay_seconds: Optional[int] = None,
         retry_max_delay_seconds: Optional[int] = None,
         retry_jitter_seconds: Optional[int] = None,
@@ -86,6 +90,11 @@ class OutboxDispatcher:
             max(1, int(claim_lease_seconds))
             if claim_lease_seconds is not None
             else runtime_settings.claim_lease_seconds
+        )
+        self._retry_max_elapsed_seconds = (
+            max(0, int(retry_max_elapsed_seconds))
+            if retry_max_elapsed_seconds is not None
+            else runtime_settings.retry_max_elapsed_seconds
         )
         self._retry_initial_delay_seconds = (
             max(1, int(retry_initial_delay_seconds))
@@ -120,6 +129,26 @@ class OutboxDispatcher:
                 .filter(OutboxEvent.status == "PENDING")
                 .one()
             )
+            now = datetime.now(timezone.utc)
+            retry_eligible_total = (
+                s.query(func.count(OutboxEvent.id))
+                .filter(OutboxEvent.status == "PENDING")
+                .filter(
+                    or_(
+                        OutboxEvent.next_attempt_at.is_(None),
+                        OutboxEvent.next_attempt_at <= now,
+                    )
+                )
+                .scalar()
+                or 0
+            )
+            retry_waiting_total = (
+                s.query(func.count(OutboxEvent.id))
+                .filter(OutboxEvent.status == "PENDING")
+                .filter(OutboxEvent.next_attempt_at > now)
+                .scalar()
+                or 0
+            )
             failed_total = (
                 s.query(func.count(OutboxEvent.id))
                 .filter(OutboxEvent.status == TERMINAL_FAILURE_STATUS)
@@ -127,13 +156,15 @@ class OutboxDispatcher:
                 or 0
             )
             set_outbox_pending(int(pending_total))
+            set_outbox_retry_eligible_pending(int(retry_eligible_total))
+            set_outbox_retry_waiting_pending(int(retry_waiting_total))
             set_outbox_failed_stored(int(failed_total))
             if oldest_pending_created_at is None:
                 set_outbox_oldest_pending_age_seconds(0.0)
             else:
                 age_seconds = max(
                     0.0,
-                    (datetime.now(timezone.utc) - oldest_pending_created_at).total_seconds(),
+                    (now - _as_utc(oldest_pending_created_at)).total_seconds(),
                 )
                 set_outbox_oldest_pending_age_seconds(age_seconds)
 
@@ -217,6 +248,7 @@ class OutboxDispatcher:
                             topic=event.topic,
                             correlation_id=event.correlation_id,
                             retry_count=event.retry_count,
+                            created_at=_as_utc(event.created_at),
                             claim_token=claim_token,
                             claim_expires_at=claim_expires_at,
                         )
@@ -302,15 +334,31 @@ class OutboxDispatcher:
         events_to_process: list[_ClaimedOutboxEvent],
         delivery_ack: Dict[int, bool],
     ) -> tuple[list[int], list[int], list[int]]:
+        now = datetime.now(timezone.utc)
         success_ids = _delivery_ids_by_outcome(delivery_ack, successful=True)
         failure_ids = _delivery_ids_by_outcome(delivery_ack, successful=False)
         terminal_failure_ids = [
             event.id
             for event in events_to_process
-            if event.id in failure_ids and (event.retry_count or 0) + 1 >= self._max_retries
+            if event.id in failure_ids
+            and (
+                (event.retry_count or 0) + 1 >= self._max_retries
+                or self._retry_elapsed_budget_exhausted(event, now=now)
+            )
         ]
         retryable_failure_ids = _retryable_failure_ids(failure_ids, terminal_failure_ids)
         return success_ids, retryable_failure_ids, terminal_failure_ids
+
+    def _retry_elapsed_budget_exhausted(
+        self,
+        event: _ClaimedOutboxEvent,
+        *,
+        now: datetime,
+    ) -> bool:
+        if self._retry_max_elapsed_seconds <= 0:
+            return False
+        retry_window_seconds = (now - _as_utc(event.created_at)).total_seconds()
+        return retry_window_seconds >= self._retry_max_elapsed_seconds
 
     def _mark_successes(
         self,
@@ -539,6 +587,12 @@ def _failure_reason_code(reason: str) -> str:
 def _source_safe_failure_message(reason: str) -> str:
     redacted = redact_sensitive_text(str(reason or "unknown error"))
     return str(redacted[:MAX_FAILURE_MESSAGE_LENGTH])
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _event_headers(event: _ClaimedOutboxEvent) -> list[tuple[str, bytes]]:

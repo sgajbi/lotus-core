@@ -52,6 +52,7 @@ class OutboxRuntimeSettings:
     batch_size: int
     claim_lease_seconds: int
     max_retries: int
+    retry_max_elapsed_seconds: int
     retry_initial_delay_seconds: int
     retry_max_delay_seconds: int
     retry_jitter_seconds: int
@@ -66,6 +67,7 @@ def get_outbox_runtime_settings(
     batch_size_default: int = 50,
     claim_lease_default: int = 60,
     max_retries_default: int = 3,
+    retry_max_elapsed_default: int = 0,
     retry_initial_delay_default: int = 5,
     retry_max_delay_default: int = 300,
     retry_jitter_default: int = 0,
@@ -95,6 +97,10 @@ def get_outbox_runtime_settings(
             claim_lease_default,
         ),
         max_retries=_env_positive_int("OUTBOX_DISPATCHER_MAX_RETRIES", max_retries_default),
+        retry_max_elapsed_seconds=_env_non_negative_int(
+            "OUTBOX_DISPATCHER_RETRY_MAX_ELAPSED_SECONDS",
+            retry_max_elapsed_default,
+        ),
         retry_initial_delay_seconds=retry_initial_delay_seconds,
         retry_max_delay_seconds=retry_max_delay_seconds,
         retry_jitter_seconds=_env_non_negative_int(
