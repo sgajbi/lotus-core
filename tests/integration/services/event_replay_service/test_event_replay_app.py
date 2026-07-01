@@ -255,6 +255,10 @@ async def test_openapi_describes_event_replay_operational_parameters(async_test_
         == "INGESTION_RETRY_BOOKKEEPING_FAILED"
     )
     assert (
+        retry_500_examples["retry_publish_failed"]["value"]["detail"]["code"]
+        == "INGESTION_RETRY_PUBLISH_FAILED"
+    )
+    assert (
         retry_500_examples["replay_audit_write_failed"]["value"]["detail"]["code"]
         == "INGESTION_REPLAY_AUDIT_WRITE_FAILED"
     )

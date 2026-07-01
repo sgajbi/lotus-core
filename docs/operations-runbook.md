@@ -37,6 +37,24 @@ Dependency status values are:
 Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
 503 with the dependency status map in `detail.dependencies`.
 
+## Ingestion Retry Recovery Responses
+
+`POST /ingestion/jobs/{job_id}/retry` preserves stable HTTP statuses and application `code` values,
+and retry failure details now also include:
+
+| Field | Meaning |
+| --- | --- |
+| `outcome` | Stable retry recovery outcome for operator automation and support triage. |
+| `remediation` | Source-safe next action guidance for the operator. |
+| `recovery_path` | Recovery workflow identifier; ingestion job retry uses `ingestion_job_retry`. |
+
+Current retry outcomes are `not_found`, `retry_unsupported`, `partial_retry_unsupported`,
+`retry_blocked`, `duplicate_blocked`, `publish_failed`, `bookkeeping_failed`, and
+`audit_write_failed`.
+
+Publish and bookkeeping failures keep raw downstream exception details out of the primary client
+message. Use replay audit records and ingestion job failure history for detailed incident evidence.
+
 ## Escalation
 
 Treat new collection failures, new architecture-boundary violations, new security findings, and new

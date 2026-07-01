@@ -464,6 +464,9 @@ INGESTION_JOB_NOT_FOUND_EXAMPLE = {
     "detail": {
         "code": "INGESTION_JOB_NOT_FOUND",
         "message": "Ingestion job 'job_01J5S0J6D3BAVMK2E1V0WQ7MCC' was not found.",
+        "outcome": "not_found",
+        "remediation": "Verify the ingestion job id from the operations job list before retrying.",
+        "recovery_path": "ingestion_job_retry",
     }
 }
 
@@ -474,6 +477,12 @@ INGESTION_JOB_RETRY_UNSUPPORTED_EXAMPLE = {
             "Ingestion job 'job_01J5S0J6D3BAVMK2E1V0WQ7MCC' does not have stored request "
             "payload and cannot be retried."
         ),
+        "outcome": "retry_unsupported",
+        "remediation": (
+            "Recover the source batch from upstream records; this job has no durable replay "
+            "payload."
+        ),
+        "recovery_path": "ingestion_job_retry",
     }
 }
 
@@ -481,6 +490,11 @@ INGESTION_JOB_PARTIAL_RETRY_UNSUPPORTED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED",
         "message": "Partial retry is not supported for endpoint '/ingest/market-prices'.",
+        "outcome": "partial_retry_unsupported",
+        "remediation": (
+            "Retry the full stored payload or use an endpoint with governed partial retry support."
+        ),
+        "recovery_path": "ingestion_job_retry",
     }
 }
 
@@ -488,6 +502,11 @@ INGESTION_JOB_RETRY_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RETRY_BLOCKED",
         "message": "Retries are blocked while ingestion is paused.",
+        "outcome": "retry_blocked",
+        "remediation": (
+            "Resume ingestion operations mode or wait for the replay window to permit retries."
+        ),
+        "recovery_path": "ingestion_job_retry",
     }
 }
 
@@ -495,6 +514,27 @@ INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
         "message": "Retry blocked because an equivalent deterministic replay already succeeded.",
+        "outcome": "duplicate_blocked",
+        "remediation": (
+            "Inspect the existing replay audit before forcing any manual recovery action."
+        ),
+        "recovery_path": "ingestion_job_retry",
+        "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
+    }
+}
+
+INGESTION_JOB_RETRY_PUBLISH_FAILED_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_RETRY_PUBLISH_FAILED",
+        "message": (
+            "Ingestion job retry could not be published to the downstream ingestion pipeline."
+        ),
+        "outcome": "publish_failed",
+        "remediation": (
+            "Check ingestion publisher health and retry after the downstream publish path recovers."
+        ),
+        "recovery_path": "ingestion_job_retry",
+        "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
         "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
     }
 }
@@ -502,9 +542,13 @@ INGESTION_JOB_RETRY_DUPLICATE_BLOCKED_EXAMPLE = {
 INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_RETRY_BOOKKEEPING_FAILED",
-        "message": (
-            "Replay publish succeeded but post-publish bookkeeping failed: queue state write failed"
+        "message": ("Replay publish succeeded but post-publish bookkeeping did not complete."),
+        "outcome": "bookkeeping_failed",
+        "remediation": (
+            "Inspect replay audit state and job queue state before retrying or reconciling "
+            "manually."
         ),
+        "recovery_path": "ingestion_job_retry",
         "replay_audit_id": "replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P",
         "replay_fingerprint": "c5b0faeb7de60bc111f109624e58d0ad6206634be5fef4d4455cdac629df4f3f",
     }
@@ -514,6 +558,10 @@ INGESTION_REPLAY_AUDIT_WRITE_FAILED_EXAMPLE = {
     "detail": {
         "code": "INGESTION_REPLAY_AUDIT_WRITE_FAILED",
         "message": "Replay audit could not be recorded; replay outcome was not acknowledged.",
+        "outcome": "audit_write_failed",
+        "remediation": (
+            "Do not assume replay completion; restore replay audit persistence and retry safely."
+        ),
         "recovery_path": "ingestion_job_retry",
         "event_id": "job:job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
         "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
@@ -538,6 +586,53 @@ INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
 
 
 _RetryPayloadFilter = Callable[[dict[str, Any], set[str]], dict[str, Any]]
+
+INGESTION_JOB_RETRY_RECOVERY_PATH = "ingestion_job_retry"
+
+
+def _ingestion_job_retry_problem_detail(
+    *,
+    code: str,
+    message: str,
+    outcome: str,
+    remediation: str,
+    **extra: Any,
+) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "outcome": outcome,
+        "remediation": remediation,
+        "recovery_path": INGESTION_JOB_RETRY_RECOVERY_PATH,
+    }
+    detail.update({key: value for key, value in extra.items() if value is not None})
+    return detail
+
+
+INGESTION_JOB_RETRY_REMEDIATIONS = {
+    "not_found": "Verify the ingestion job id from the operations job list before retrying.",
+    "retry_unsupported": (
+        "Recover the source batch from upstream records; this job has no durable replay payload."
+    ),
+    "partial_retry_unsupported": (
+        "Retry the full stored payload or use an endpoint with governed partial retry support."
+    ),
+    "retry_blocked": (
+        "Resume ingestion operations mode or wait for the replay window to permit retries."
+    ),
+    "duplicate_blocked": (
+        "Inspect the existing replay audit before forcing any manual recovery action."
+    ),
+    "publish_failed": (
+        "Check ingestion publisher health and retry after the downstream publish path recovers."
+    ),
+    "bookkeeping_failed": (
+        "Inspect replay audit state and job queue state before retrying or reconciling manually."
+    ),
+    "audit_write_failed": (
+        "Do not assume replay completion; restore replay audit persistence and retry safely."
+    ),
+}
 
 
 def get_replay_payload_dispatcher(
@@ -680,7 +775,19 @@ async def _record_mandatory_replay_audit(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_REPLAY_AUDIT_WRITE_FAILED",
+                message="Replay audit could not be recorded; replay outcome was not acknowledged.",
+                outcome="audit_write_failed",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["audit_write_failed"],
+                recovery_path=recovery_path,
+                event_id=event_id,
+                job_id=job_id,
+                replay_status=replay_status,
+                replay_fingerprint=replay_fingerprint,
+            )
+            if recovery_path == INGESTION_JOB_RETRY_RECOVERY_PATH
+            else {
                 "code": "INGESTION_REPLAY_AUDIT_WRITE_FAILED",
                 "message": (
                     "Replay audit could not be recorded; replay outcome was not acknowledged."
@@ -992,6 +1099,9 @@ async def get_ingestion_job_records(
             "content": {
                 "application/json": {
                     "examples": {
+                        "retry_publish_failed": {
+                            "value": INGESTION_JOB_RETRY_PUBLISH_FAILED_EXAMPLE
+                        },
                         "retry_bookkeeping_failed": {
                             "value": INGESTION_JOB_RETRY_BOOKKEEPING_FAILED_EXAMPLE
                         },
@@ -1078,21 +1188,25 @@ async def _required_job_replay_context(job_id: str, ingestion_job_service: Inges
     if context is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found.",
-            },
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_JOB_NOT_FOUND",
+                message=f"Ingestion job '{job_id}' was not found.",
+                outcome="not_found",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
+            ),
         )
     if context.request_payload is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "INGESTION_JOB_RETRY_UNSUPPORTED",
-                "message": (
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_JOB_RETRY_UNSUPPORTED",
+                message=(
                     f"Ingestion job '{job_id}' does not have stored request payload and "
                     "cannot be retried."
                 ),
-            },
+                outcome="retry_unsupported",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["retry_unsupported"],
+            ),
         )
     return context
 
@@ -1111,7 +1225,12 @@ def _retry_payload_or_http_error(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "INGESTION_PARTIAL_RETRY_UNSUPPORTED", "message": str(exc)},
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_PARTIAL_RETRY_UNSUPPORTED",
+                message=str(exc),
+                outcome="partial_retry_unsupported",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["partial_retry_unsupported"],
+            ),
         ) from exc
 
 
@@ -1129,7 +1248,12 @@ async def _assert_ingestion_retry_allowed(
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "INGESTION_RETRY_BLOCKED", "message": str(exc)},
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_RETRY_BLOCKED",
+                message=str(exc),
+                outcome="retry_blocked",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["retry_blocked"],
+            ),
         ) from exc
 
 
@@ -1143,10 +1267,10 @@ async def _record_ingestion_job_retry_audit(
     dry_run: bool,
     replay_reason: str,
     requested_by: str | None,
-) -> None:
-    await _record_mandatory_replay_audit(
+) -> str:
+    return await _record_mandatory_replay_audit(
         ingestion_job_service=ingestion_job_service,
-        recovery_path="ingestion_job_retry",
+        recovery_path=INGESTION_JOB_RETRY_RECOVERY_PATH,
         event_id=f"job:{job_id}",
         replay_fingerprint=replay_fingerprint,
         correlation_id=None,
@@ -1219,13 +1343,15 @@ async def _block_duplicate_ingestion_job_retry(
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
-                "message": (
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_RETRY_DUPLICATE_BLOCKED",
+                message=(
                     "Retry blocked because an equivalent deterministic replay already succeeded."
                 ),
-                "replay_fingerprint": replay_fingerprint,
-            },
+                outcome="duplicate_blocked",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["duplicate_blocked"],
+                replay_fingerprint=replay_fingerprint,
+            ),
         )
 
 
@@ -1248,7 +1374,7 @@ async def _publish_ingestion_job_retry(
             replay_payload_dispatcher=replay_payload_dispatcher,
         )
     except Exception as exc:
-        await _record_ingestion_job_retry_audit(
+        replay_audit_id = await _record_ingestion_job_retry_audit(
             ingestion_job_service=ingestion_job_service,
             job_id=job_id,
             context=context,
@@ -1264,7 +1390,20 @@ async def _publish_ingestion_job_retry(
             failure_phase="retry_publish",
             failed_record_keys=retry_request.record_keys,
         )
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_RETRY_PUBLISH_FAILED",
+                message=(
+                    "Ingestion job retry could not be published to the downstream ingestion "
+                    "pipeline."
+                ),
+                outcome="publish_failed",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["publish_failed"],
+                replay_audit_id=replay_audit_id,
+                replay_fingerprint=replay_fingerprint,
+            ),
+        ) from exc
 
 
 async def _mark_ingestion_job_retry_replayed(
@@ -1309,12 +1448,14 @@ async def _mark_ingestion_job_retry_replayed(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_RETRY_BOOKKEEPING_FAILED",
-                "message": replay_reason,
-                "replay_audit_id": replay_audit_id,
-                "replay_fingerprint": replay_fingerprint,
-            },
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_RETRY_BOOKKEEPING_FAILED",
+                message="Replay publish succeeded but post-publish bookkeeping did not complete.",
+                outcome="bookkeeping_failed",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["bookkeeping_failed"],
+                replay_audit_id=replay_audit_id,
+                replay_fingerprint=replay_fingerprint,
+            ),
         ) from exc
 
 
@@ -1323,10 +1464,12 @@ async def _required_job_after_retry(job_id: str, ingestion_job_service: Ingestio
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found after retry.",
-            },
+            detail=_ingestion_job_retry_problem_detail(
+                code="INGESTION_JOB_NOT_FOUND",
+                message=f"Ingestion job '{job_id}' was not found after retry.",
+                outcome="not_found",
+                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
+            ),
         )
     return job
 
