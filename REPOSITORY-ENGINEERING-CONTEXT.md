@@ -585,6 +585,11 @@ Most relevant current governance:
     bounded reason text, preserve existing response contracts, and keep a future async export
     runner as a separate lifecycle-mode change rather than an implicit background task using a
     request-scoped database session.
+55. Simulation session mutations use an application-owned unit-of-work boundary. Repositories stage
+    session rows, change rows, status updates, and deletes only; `SimulationService` owns
+    deterministic clock/ID providers, expiry calculation, version increments, commit/refresh, and
+    rollback decisions. Do not reintroduce repository-owned commits, rollbacks, UUID generation, or
+    clock reads when adding simulation audit, idempotency, replay, or lifecycle evidence.
 
 ## Context Maintenance Rule
 
