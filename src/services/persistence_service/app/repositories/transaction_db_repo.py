@@ -1,10 +1,11 @@
 # services/persistence_service/app/repositories/transaction_db_repo.py
 import logging
+from datetime import date
 
-from portfolio_common.database_models import Instrument, Portfolio
+from portfolio_common.database_models import CashAccountMaster, Instrument, Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +48,42 @@ class TransactionDBRepository:
         if not normalized_security_id:
             return False
         stmt = select(exists().where(func.trim(Instrument.security_id) == normalized_security_id))
+        result = await self.db.execute(stmt)
+        return bool(result.scalar())
+
+    async def check_active_cash_account_exists(
+        self,
+        *,
+        portfolio_id: str,
+        cash_account_id: str,
+        cash_security_id: str | None,
+        as_of_date: date,
+    ) -> bool:
+        """Checks whether an active/effective cash account master backs a transaction reference."""
+        normalized_cash_account_id = cash_account_id.strip()
+        if not normalized_cash_account_id:
+            return False
+
+        conditions = [
+            CashAccountMaster.portfolio_id == portfolio_id,
+            CashAccountMaster.cash_account_id == normalized_cash_account_id,
+            func.upper(func.trim(CashAccountMaster.lifecycle_status)) == "ACTIVE",
+            or_(
+                CashAccountMaster.opened_on.is_(None),
+                CashAccountMaster.opened_on <= as_of_date,
+            ),
+            or_(
+                CashAccountMaster.closed_on.is_(None),
+                CashAccountMaster.closed_on >= as_of_date,
+            ),
+        ]
+        normalized_cash_security_id = (cash_security_id or "").strip()
+        if normalized_cash_security_id:
+            conditions.append(
+                func.trim(CashAccountMaster.security_id) == normalized_cash_security_id
+            )
+
+        stmt = select(exists().where(*conditions))
         result = await self.db.execute(stmt)
         return bool(result.scalar())
 

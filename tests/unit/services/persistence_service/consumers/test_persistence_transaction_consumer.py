@@ -132,6 +132,7 @@ async def test_process_message_success(
         # ASSERT
         mock_repo.create_or_update_transaction.assert_called_once()
         mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
+        mock_repo.check_active_cash_account_exists.assert_not_awaited()
         mock_outbox_repo.create_outbox_event.assert_called_once()
         assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
             "test-corr-id"
@@ -203,6 +204,7 @@ async def test_handle_persistence_retries_and_succeeds(
 
     # Verify the transaction was created only on the successful attempt
     mock_repo.check_instrument_exists.assert_awaited_once_with("SEC_UT_01")
+    mock_repo.check_active_cash_account_exists.assert_not_awaited()
     mock_repo.create_or_update_transaction.assert_awaited_once_with(valid_transaction_event)
 
 
@@ -228,4 +230,44 @@ async def test_handle_persistence_allows_provisional_raw_landing_for_missing_ins
     )
     assert warning.reason_code == "transaction_instrument_reference_pending"
     assert warning.policy_id == "raw_transaction_instrument_reference_policy_v1"
+    assert warning.downstream_lifecycle_blocked is True
+
+
+async def test_handle_persistence_allows_provisional_raw_landing_for_missing_cash_account(
+    transaction_consumer: TransactionPersistenceConsumer,
+    valid_transaction_event: TransactionEvent,
+    mock_dependencies: dict,
+    caplog: pytest.LogCaptureFixture,
+):
+    mock_repo = mock_dependencies["repo"]
+    event = valid_transaction_event.model_copy(
+        update={
+            "settlement_cash_account_id": " CASH-ACC-404 ",
+            "settlement_cash_instrument_id": " CASH_USD ",
+        }
+    )
+    mock_repo.check_portfolio_exists.return_value = True
+    mock_repo.check_instrument_exists.return_value = True
+    mock_repo.check_active_cash_account_exists.return_value = False
+
+    await transaction_consumer.handle_persistence(AsyncMock(), event)
+
+    mock_repo.check_active_cash_account_exists.assert_awaited_once_with(
+        portfolio_id="PORT_UT_01",
+        cash_account_id=" CASH-ACC-404 ",
+        cash_security_id=" CASH_USD ",
+        as_of_date=event.transaction_date.date(),
+    )
+    mock_repo.create_or_update_transaction.assert_awaited_once_with(event)
+    assert (
+        "Transaction raw landing has unresolved settlement cash-account reference." in caplog.text
+    )
+    warning = next(
+        record
+        for record in caplog.records
+        if record.message
+        == "Transaction raw landing has unresolved settlement cash-account reference."
+    )
+    assert warning.reason_code == "transaction_cash_account_reference_pending"
+    assert warning.policy_id == "raw_transaction_cash_account_reference_policy_v1"
     assert warning.downstream_lifecycle_blocked is True

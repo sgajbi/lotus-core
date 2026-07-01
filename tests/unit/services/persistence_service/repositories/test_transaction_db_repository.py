@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -97,5 +98,51 @@ async def test_check_instrument_exists_skips_blank_security_id() -> None:
     repo = TransactionDBRepository(db)
 
     assert await repo.check_instrument_exists("   ") is False
+
+    db.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_check_active_cash_account_exists_queries_active_effective_master() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar.return_value = True
+    db.execute.return_value = result
+    repo = TransactionDBRepository(db)
+
+    assert (
+        await repo.check_active_cash_account_exists(
+            portfolio_id="P1",
+            cash_account_id=" CASH-ACC-1 ",
+            cash_security_id=" CASH_USD ",
+            as_of_date=date(2026, 3, 27),
+        )
+        is True
+    )
+
+    stmt = db.execute.await_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "cash_account_masters.portfolio_id = 'P1'" in compiled_query
+    assert "cash_account_masters.cash_account_id = 'CASH-ACC-1'" in compiled_query
+    assert "upper(trim(cash_account_masters.lifecycle_status)) = 'ACTIVE'" in compiled_query
+    assert "cash_account_masters.opened_on <= '2026-03-27'" in compiled_query
+    assert "cash_account_masters.closed_on >= '2026-03-27'" in compiled_query
+    assert "trim(cash_account_masters.security_id) = 'CASH_USD'" in compiled_query
+
+
+@pytest.mark.asyncio
+async def test_check_active_cash_account_exists_skips_blank_cash_account_id() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    repo = TransactionDBRepository(db)
+
+    assert (
+        await repo.check_active_cash_account_exists(
+            portfolio_id="P1",
+            cash_account_id="   ",
+            cash_security_id="CASH_USD",
+            as_of_date=date(2026, 3, 27),
+        )
+        is False
+    )
 
     db.execute.assert_not_awaited()

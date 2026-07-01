@@ -529,10 +529,13 @@ Most relevant current governance:
     `holdings_as_of_cash_balances:<fingerprint>` snapshot identity for downstream lineage and replay.
     Cash-balance rows publish `cash_account_id_source`; transaction-derived fallback account ids
     must validate against active/effective `cash_account_masters`, and unresolved cash-security
-    fallback identity is `PARTIAL` quality rather than governed account evidence. `lotus-idea` is
-    an approved consumer for high-cash source evidence, but it must consume the field and source
-    identity instead of reconstructing cash weight from Core-owned portfolio facts. This evidence
-    is not liquidity advice, cash-deployment recommendation, performance methodology, risk
+    fallback identity is `PARTIAL` quality rather than governed account evidence. Raw transaction
+    persistence uses `raw_transaction_cash_account_reference_policy_v1`; unresolved settlement
+    cash-account references may land only as provisional raw evidence and must remain blocked or
+    degraded downstream until active/effective cash-account master data exists. `lotus-idea` is an
+    approved consumer for high-cash source evidence, but it must consume the field and source
+    identity instead of reconstructing cash weight from Core-owned portfolio facts. This evidence is
+    not liquidity advice, cash-deployment recommendation, performance methodology, risk
     methodology, or OMS acknowledgement.
 42. Cost-calculator product transaction processing requires instrument master data before
     cost-engine processing, transaction-cost persistence, BUY lot-state persistence, or processed
