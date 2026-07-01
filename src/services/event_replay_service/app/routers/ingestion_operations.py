@@ -970,6 +970,38 @@ async def repair_ingestion_job_bookkeeping(
     ),
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ):
+    job = await _required_ingestion_job_for_bookkeeping_repair(
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_id,
+    )
+    previous_status = str(_job_field(job, "status"))
+    failures = await ingestion_job_service.list_failures(job_id=job_id, limit=25)
+    bookkeeping_phase = _bookkeeping_repair_phase_or_http_error(
+        failures=failures,
+        job_id=job_id,
+        previous_status=previous_status,
+    )
+    if previous_status == "accepted":
+        await _mark_ingestion_job_queued_for_bookkeeping_repair(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_id,
+            previous_status=previous_status,
+        )
+    repaired = await ingestion_job_service.get_job(job_id)
+    repaired_status = str(_job_field(repaired or job, "status"))
+    return _bookkeeping_repair_response(
+        job_id=job_id,
+        previous_status=previous_status,
+        repaired_status=repaired_status,
+        bookkeeping_phase=bookkeeping_phase,
+    )
+
+
+async def _required_ingestion_job_for_bookkeeping_repair(
+    *,
+    ingestion_job_service: IngestionJobService,
+    job_id: str,
+) -> Any:
     job = await ingestion_job_service.get_job(job_id)
     if job is None:
         raise HTTPException(
@@ -979,9 +1011,15 @@ async def repair_ingestion_job_bookkeeping(
                 "message": f"Ingestion job '{job_id}' was not found.",
             },
         )
+    return job
 
-    previous_status = str(_job_field(job, "status"))
-    failures = await ingestion_job_service.list_failures(job_id=job_id, limit=25)
+
+def _bookkeeping_repair_phase_or_http_error(
+    *,
+    failures: list[Any],
+    job_id: str,
+    previous_status: str,
+) -> str:
     bookkeeping_phase = _first_bookkeeping_failure_phase(failures)
     if bookkeeping_phase is None or previous_status not in {"accepted", "queued"}:
         raise HTTPException(
@@ -993,26 +1031,40 @@ async def repair_ingestion_job_bookkeeping(
                 "status": previous_status,
             },
         )
+    return bookkeeping_phase
 
-    if previous_status == "accepted":
-        try:
-            await ingestion_job_service.mark_queued(job_id)
-        except Exception as exc:
-            logger.exception(
-                "Ingestion bookkeeping repair failed.",
-                extra={"job_id": job_id, "previous_status": previous_status},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={
-                    "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
-                    "message": "Ingestion job bookkeeping repair did not complete.",
-                    "job_id": job_id,
-                    "recovery_action": POST_BOOKKEEPING_REPAIR_ACTION,
-                },
-            ) from exc
-    repaired = await ingestion_job_service.get_job(job_id)
-    repaired_status = str(_job_field(repaired or job, "status"))
+
+async def _mark_ingestion_job_queued_for_bookkeeping_repair(
+    *,
+    ingestion_job_service: IngestionJobService,
+    job_id: str,
+    previous_status: str,
+) -> None:
+    try:
+        await ingestion_job_service.mark_queued(job_id)
+    except Exception as exc:
+        logger.exception(
+            "Ingestion bookkeeping repair failed.",
+            extra={"job_id": job_id, "previous_status": previous_status},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
+                "message": "Ingestion job bookkeeping repair did not complete.",
+                "job_id": job_id,
+                "recovery_action": POST_BOOKKEEPING_REPAIR_ACTION,
+            },
+        ) from exc
+
+
+def _bookkeeping_repair_response(
+    *,
+    job_id: str,
+    previous_status: str,
+    repaired_status: str,
+    bookkeeping_phase: str,
+) -> IngestionJobBookkeepingRepairResponse:
     return IngestionJobBookkeepingRepairResponse(
         job_id=job_id,
         previous_status=previous_status,
