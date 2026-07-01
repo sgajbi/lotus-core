@@ -78,6 +78,30 @@ def test_position_transfer_inflow_rule_table_matches_registry_inflow_effects() -
     assert POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES == registry_inflows
 
 
+def test_cashflow_transfer_sign_rule_tables_match_registry_effects() -> None:
+    transfer_signing_families = {"transfer", "corporate_action", "rights"}
+    fallback_signed_types = {"CASH_IN_LIEU"}
+    registry_inflows = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in transfer_signing_families
+        and definition.position_effect == "increase"
+        and code not in fallback_signed_types
+    } | {"RIGHTS_REFUND"}
+    registry_outflows = {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in transfer_signing_families
+        and definition.position_effect == "decrease"
+        and code not in fallback_signed_types
+    }
+
+    assert TRANSFER_INFLOW_TRANSACTION_TYPES == registry_inflows
+    assert TRANSFER_OUTFLOW_TRANSACTION_TYPES == registry_outflows
+
+
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:
     definition = require_registered_transaction_type("OTHER")
 

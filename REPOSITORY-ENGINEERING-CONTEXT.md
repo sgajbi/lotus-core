@@ -189,6 +189,9 @@ Current repository posture:
     types such as `OTHER`; production-booking cost enum values need explicit strategy mappings.
     Query projected-position quantity and cash-position effects are registry-derived from
     production-booking `position_effect` semantics and must not reintroduce local duplicated sets.
+    Cashflow transfer-sign sets are registry-derived for production-booking transfer,
+    corporate-action, and rights transaction types; keep current fallback-signed exceptions such as
+    `CASH_IN_LIEU` explicit and behavior-tested before changing lifecycle semantics.
 
 ## Architecture And Module Map
 

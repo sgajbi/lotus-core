@@ -2158,3 +2158,8 @@ health before that claim is defensible.
      query-local duplicated rule table and adds exact conformance coverage so future
      production-booking transaction types with `position_effect` semantics cannot drift silently
      from projected-position math.
+342. Continued validated GitHub issue #474 by deriving cashflow transfer-sign transaction-type
+     sets from registry lifecycle and `position_effect` semantics. Current `CASH_IN_LIEU`
+     fallback signing remains explicit and behavior-pinned, while supported transfer,
+     corporate-action, and rights sign sets now fail focused conformance tests if they drift from
+     the canonical registry.

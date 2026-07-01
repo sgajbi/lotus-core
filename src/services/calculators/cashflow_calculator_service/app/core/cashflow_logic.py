@@ -1,6 +1,6 @@
 import logging
 from decimal import Decimal
-from typing import Optional, Protocol
+from typing import Optional, Protocol, cast
 
 from portfolio_common.database_models import Cashflow
 from portfolio_common.events import TransactionEvent
@@ -9,39 +9,33 @@ from portfolio_common.transaction_fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,
 )
+from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from .enums import CashflowClassification
 
 logger = logging.getLogger(__name__)
 
-TRANSFER_INFLOW_TRANSACTION_TYPES = {
-    "TRANSFER_IN",
-    "MERGER_IN",
-    "EXCHANGE_IN",
-    "REPLACEMENT_IN",
-    "SPIN_IN",
-    "DEMERGER_IN",
-    "SPLIT",
-    "BONUS_ISSUE",
-    "STOCK_DIVIDEND",
-    "RIGHTS_ALLOCATE",
-    "RIGHTS_SHARE_DELIVERY",
-    "RIGHTS_REFUND",
-}
-TRANSFER_OUTFLOW_TRANSACTION_TYPES = {
-    "TRANSFER_OUT",
-    "MERGER_OUT",
-    "EXCHANGE_OUT",
-    "REPLACEMENT_OUT",
-    "SPIN_OFF",
-    "DEMERGER_OUT",
-    "REVERSE_SPLIT",
-    "CONSOLIDATION",
-    "RIGHTS_SUBSCRIBE",
-    "RIGHTS_OVERSUBSCRIBE",
-    "RIGHTS_SELL",
-    "RIGHTS_EXPIRE",
-}
+_TRANSFER_SIGNING_LIFECYCLE_FAMILIES = {"transfer", "corporate_action", "rights"}
+_TRANSFER_SIGNING_INFLOW_CASH_EFFECT_TYPES = {"RIGHTS_REFUND"}
+_TRANSFER_SIGNING_FALLBACK_TYPES = {"CASH_IN_LIEU"}
+
+
+def _transfer_signing_types_for_position_effect(position_effect: str) -> frozenset[str]:
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.lifecycle_family in _TRANSFER_SIGNING_LIFECYCLE_FAMILIES
+        and definition.position_effect == position_effect
+        and code not in _TRANSFER_SIGNING_FALLBACK_TYPES
+    )
+
+
+TRANSFER_INFLOW_TRANSACTION_TYPES = (
+    _transfer_signing_types_for_position_effect("increase")
+    | _TRANSFER_SIGNING_INFLOW_CASH_EFFECT_TYPES
+)
+TRANSFER_OUTFLOW_TRANSACTION_TYPES = _transfer_signing_types_for_position_effect("decrease")
 CLASSIFICATION_SIGN_FACTORS = {
     CashflowClassification.FX_BUY: 1,
     CashflowClassification.FX_SELL: -1,
@@ -68,8 +62,8 @@ def _base_cashflow_amount(transaction: TransactionEvent, transaction_type: str) 
     if transaction_type == "INTEREST":
         return _interest_cashflow_amount(transaction, trade_fee)
     if transaction_type in {"BUY", "FEE"}:
-        return transaction.gross_transaction_amount + trade_fee
-    return transaction.gross_transaction_amount - trade_fee
+        return cast(Decimal, transaction.gross_transaction_amount + trade_fee)
+    return cast(Decimal, transaction.gross_transaction_amount - trade_fee)
 
 
 def _interest_cashflow_amount(transaction: TransactionEvent, trade_fee: Decimal) -> Decimal:
@@ -77,8 +71,8 @@ def _interest_cashflow_amount(transaction: TransactionEvent, trade_fee: Decimal)
         transaction.other_interest_deductions_amount or Decimal(0)
     )
     if transaction.net_interest_amount is not None:
-        return transaction.net_interest_amount
-    return transaction.gross_transaction_amount - deductions - trade_fee
+        return cast(Decimal, transaction.net_interest_amount)
+    return cast(Decimal, transaction.gross_transaction_amount - deductions - trade_fee)
 
 
 def _signed_cashflow_amount(
