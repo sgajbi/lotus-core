@@ -189,9 +189,7 @@ def test_build_portfolio_readiness_response_ignores_future_pending_aggregation_f
     )
 
     assert response.reporting.status == "READY"
-    assert "AGGREGATION_BACKLOG_OPEN" not in {
-        reason.code for reason in response.reporting.reasons
-    }
+    assert "AGGREGATION_BACKLOG_OPEN" not in {reason.code for reason in response.reporting.reasons}
     assert response.supportability.state == "ready"
 
 
