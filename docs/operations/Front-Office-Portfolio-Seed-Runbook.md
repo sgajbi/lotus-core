@@ -27,6 +27,11 @@ performance, risk, or Workbench demo portfolios. The governed RFC-086 bank-day l
 `1000` portfolios is separate load/performance tooling and is not part of canonical Workbench
 runtime bring-up.
 
+The broad app-local `demo_data_loader` demo pack is also outside the canonical private-banking
+seed. Governed Workbench and platform QA startup must run `lotus-core` with
+`DEMO_DATA_PACK_ENABLED=false` so canonical `PB_SG_GLOBAL_BAL_001` evidence is produced only by
+`tools/front_office_portfolio_seed.py` and the source-only DPM candidate rows described here.
+
 ## Seeded Portfolio
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`

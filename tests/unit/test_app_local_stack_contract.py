@@ -51,9 +51,13 @@ def test_app_local_compose_keeps_local_overlay_services_available() -> None:
 def test_demo_data_loader_uses_internal_service_urls() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     demo_loader = compose["services"]["demo_data_loader"]
+    ingestion_service = compose["services"]["ingestion_service"]
     command = demo_loader["command"]
     depends_on = demo_loader["depends_on"]
 
+    assert ingestion_service["environment"]["ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES"] == (
+        "${ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES:-16777216}"
+    )
     assert "--ingestion-base-url http://ingestion_service:8000" in command
     assert "--query-base-url http://query_service:8001" in command
     assert "--query-control-plane-base-url http://query_control_plane_service:8002" in command

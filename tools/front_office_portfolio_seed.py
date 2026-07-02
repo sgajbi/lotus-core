@@ -2280,6 +2280,7 @@ def _verify_front_office_portfolio(
     gateway_base_url: str,
     expected: FrontOfficePortfolioExpectation,
     as_of_date: str,
+    start_date: str,
     end_date: str,
     wait_seconds: int,
     poll_interval_seconds: int,
@@ -2337,8 +2338,9 @@ def _verify_front_office_portfolio(
             _, performance_summary = _request_json(
                 "GET",
                 f"{gateway_base_url}/api/v1/workbench/{expected.portfolio_id}/performance/summary"
-                f"?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
-                f"&attribution_dimension=asset_class&detail_basis=NET&report_end_date={end_date}",
+                f"?period=EXPLICIT&chart_frequency=monthly&contribution_dimension=asset_class"
+                f"&attribution_dimension=asset_class&detail_basis=NET"
+                f"&report_start_date={start_date}&report_end_date={end_date}",
                 headers=FRONT_OFFICE_GATEWAY_CALLER_HEADERS,
             )
         except RuntimeError as exc:
@@ -2600,6 +2602,7 @@ def main() -> int:
             gateway_base_url=gateway_base_url,
             expected=FRONT_OFFICE_EXPECTATION,
             as_of_date=end_date.isoformat(),
+            start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
             wait_seconds=args.wait_seconds,
             poll_interval_seconds=args.poll_interval_seconds,

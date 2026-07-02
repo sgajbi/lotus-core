@@ -44,17 +44,21 @@ Current repository posture:
 14. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
 15. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
 16. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
-17. RFC-0086 repo-native domain-product declarations now live under
+17. app-local compose keeps the ingestion service write payload cap at 16 MiB through
+    `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` so the governed local `demo_data_loader` bundle can seed
+    through the HTTP write boundary; do not carry that local override into production ingress policy
+    without explicit approval,
+18. RFC-0086 repo-native domain-product declarations now live under
     `contracts/domain-data-products/` and are validated by `make domain-product-validate` when the
     sibling `lotus-platform` validator and vocabulary registries are available.
-18. RFC-0087 trust telemetry proof currently covers exactly `PortfolioStateSnapshot:v1` and
+19. RFC-0087 trust telemetry proof currently covers exactly `PortfolioStateSnapshot:v1` and
     `DpmSourceReadiness:v1` under `contracts/trust-telemetry/`; it is validated by
     `tests/unit/test_trust_telemetry.py` against the platform trust telemetry validator when
     `lotus-platform` is available. Active source-product declaration, local implementation proof,
     CI proof, live validator proof, trust telemetry coverage, and platform mesh certification are
     distinct statuses; do not describe every active Core source product as mesh certified unless
     current generated platform certification artifacts prove that exact product state.
-19. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
+20. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
     `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,

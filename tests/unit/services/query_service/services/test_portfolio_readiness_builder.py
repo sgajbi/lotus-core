@@ -169,6 +169,32 @@ def test_build_portfolio_readiness_response_marks_pending_for_backlog_and_snapsh
     }
 
 
+def test_build_portfolio_readiness_response_ignores_future_pending_aggregation_for_as_of_date():
+    response = build_portfolio_readiness_response(
+        _snapshot(
+            resolved_as_of_date=date(2026, 4, 10),
+            support_overview=_support_overview(
+                pending_aggregation_jobs=2,
+                oldest_pending_aggregation_date=date(2026, 4, 17),
+            ),
+            latest_booked_transaction_date=date(2026, 4, 10),
+            latest_booked_position_snapshot_date=date(2026, 4, 10),
+            snapshot_coverage=SnapshotValuationCoverageSummary(
+                snapshot_date=date(2026, 4, 10),
+                total_positions=3,
+                valued_positions=3,
+                unvalued_positions=0,
+            ),
+        )
+    )
+
+    assert response.reporting.status == "READY"
+    assert "AGGREGATION_BACKLOG_OPEN" not in {
+        reason.code for reason in response.reporting.reasons
+    }
+    assert response.supportability.state == "ready"
+
+
 def test_build_portfolio_readiness_response_marks_blocking_for_fx_and_controls():
     response = build_portfolio_readiness_response(
         _snapshot(
