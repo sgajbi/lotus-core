@@ -44,6 +44,11 @@ lotus-core startup includes a one-shot `demo_data_loader` container that:
 2. ingests a realistic multi-portfolio bundle (if not already present),
 3. verifies downstream positions/transactions/review outputs.
 
+The app-local ingestion service defaults `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` to 16 MiB so the
+canonical local demo pack can be posted through the same HTTP write boundary used by clients. Keep
+that override scoped to app-local compose unless a production ingress policy has been explicitly
+approved.
+
 ### Operational Commands
 
 ```bash

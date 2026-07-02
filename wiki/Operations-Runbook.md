@@ -83,6 +83,11 @@ clear known volatile replay fences for canonical seed topics when local Kafka of
 reset or reused, but it must not perform broad `processed_events` deletion. If broader local
 runtime state is polluted, reset the Docker-backed core runtime before reseeding.
 
+The app-local `demo_data_loader` demo pack is diagnostic/sample-data tooling and must not be part
+of canonical private-banking proof. Governed Workbench and platform QA startup set
+`DEMO_DATA_PACK_ENABLED=false`; canonical `PB_SG_GLOBAL_BAL_001` data must come from
+`tools/front_office_portfolio_seed.py`.
+
 The canonical seed includes planned withdrawal evidence for both the fixed contract as-of window
 and the current Workbench forward-liquidity horizon. After reseeding, `PortfolioCashflowProjection`
 should show at least one non-zero point for the canonical window and one non-zero current-horizon

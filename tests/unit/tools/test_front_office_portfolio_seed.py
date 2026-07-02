@@ -1367,8 +1367,9 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
         ),
         (
             "http://gateway.dev/api/v1/workbench/P1/performance/summary"
-            "?period=YTD&chart_frequency=monthly&contribution_dimension=asset_class"
-            "&attribution_dimension=asset_class&detail_basis=NET&report_end_date=2026-04-10"
+            "?period=EXPLICIT&chart_frequency=monthly&contribution_dimension=asset_class"
+            "&attribution_dimension=asset_class&detail_basis=NET"
+            "&report_start_date=2025-03-31&report_end_date=2026-04-10"
         ): (
             200,
             {
@@ -1403,6 +1404,7 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
             min_projected_cashflow_points=1,
         ),
         as_of_date="2026-04-10",
+        start_date="2025-03-31",
         end_date="2026-04-10",
         wait_seconds=1,
         poll_interval_seconds=1,
@@ -1418,6 +1420,8 @@ def test_front_office_seed_verification_counts_projected_transactions(monkeypatc
     assert any("include_projected=true" in url for url in requested_urls)
     assert all("income-summary/query" not in url for url in requested_urls)
     assert all("activity-summary/query" not in url for url in requested_urls)
+    assert any("period=EXPLICIT" in url for url in requested_urls)
+    assert any("report_start_date=2025-03-31" in url for url in requested_urls)
     assert any("report_end_date=2026-04-10" in url for url in requested_urls)
     assert gateway_header_calls == [FRONT_OFFICE_GATEWAY_CALLER_HEADERS]
 

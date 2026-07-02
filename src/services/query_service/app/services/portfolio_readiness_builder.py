@@ -350,9 +350,20 @@ def _reporting_control_reasons(
 
 def _reporting_backlog_reason(
     support_overview: SupportOverviewResponse,
+    resolved_as_of_date: date | None,
 ) -> PortfolioReadinessReason | None:
+    pending_jobs = support_overview.pending_aggregation_jobs
+    oldest_pending_date = support_overview.oldest_pending_aggregation_date
     if (
-        support_overview.pending_aggregation_jobs > 0
+        pending_jobs > 0
+        and resolved_as_of_date is not None
+        and oldest_pending_date is not None
+        and oldest_pending_date > resolved_as_of_date
+    ):
+        pending_jobs = 0
+
+    if (
+        pending_jobs > 0
         or support_overview.processing_aggregation_jobs > 0
         or support_overview.stale_processing_aggregation_jobs > 0
     ):
@@ -405,7 +416,10 @@ def _reporting_reasons(
     if missing_fx_reason := missing_fx_reasons.get("reporting"):
         reasons.append(missing_fx_reason)
     reasons.extend(_reporting_control_reasons(snapshot.support_overview))
-    if backlog_reason := _reporting_backlog_reason(snapshot.support_overview):
+    if backlog_reason := _reporting_backlog_reason(
+        snapshot.support_overview,
+        snapshot.resolved_as_of_date,
+    ):
         reasons.append(backlog_reason)
     reasons.extend(
         _reporting_dependency_reasons(
