@@ -175,6 +175,8 @@ def test_build_portfolio_readiness_response_ignores_future_pending_aggregation_f
             resolved_as_of_date=date(2026, 4, 10),
             support_overview=_support_overview(
                 pending_aggregation_jobs=2,
+                processing_aggregation_jobs=1,
+                stale_processing_aggregation_jobs=1,
                 oldest_pending_aggregation_date=date(2026, 4, 17),
             ),
             latest_booked_transaction_date=date(2026, 4, 10),
