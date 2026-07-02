@@ -353,6 +353,8 @@ def _reporting_backlog_reason(
     resolved_as_of_date: date | None,
 ) -> PortfolioReadinessReason | None:
     pending_jobs = support_overview.pending_aggregation_jobs
+    processing_jobs = support_overview.processing_aggregation_jobs
+    stale_processing_jobs = support_overview.stale_processing_aggregation_jobs
     oldest_pending_date = support_overview.oldest_pending_aggregation_date
     if (
         pending_jobs > 0
@@ -361,12 +363,10 @@ def _reporting_backlog_reason(
         and oldest_pending_date > resolved_as_of_date
     ):
         pending_jobs = 0
+        processing_jobs = 0
+        stale_processing_jobs = 0
 
-    if (
-        pending_jobs > 0
-        or support_overview.processing_aggregation_jobs > 0
-        or support_overview.stale_processing_aggregation_jobs > 0
-    ):
+    if pending_jobs > 0 or processing_jobs > 0 or stale_processing_jobs > 0:
         return _reason(
             code="AGGREGATION_BACKLOG_OPEN",
             domain="reporting",
