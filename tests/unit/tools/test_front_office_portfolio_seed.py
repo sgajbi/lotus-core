@@ -26,6 +26,7 @@ from tools.front_office_portfolio_seed import (
     _reprocess_front_office_transactions,
     _required_cross_currency_fx_windows,
     _should_reprocess_after_ingest,
+    _terminate_front_office_seed_cleanup_blockers,
     _validate_front_office_cash_transactions,
     _validate_front_office_internal_transaction_pairs,
     _verify_front_office_portfolio,
@@ -714,9 +715,13 @@ def test_front_office_cleanup_sql_removes_benchmark_seed_rows_deterministically(
 def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) -> None:
     calls: list[list[str]] = []
 
-    def fake_run(command, *, check):
+    def fake_run(command, *, check, capture_output=False, text=False):
         calls.append(command)
-        if len(calls) == 1:
+        if "pg_stat_activity" in command[-1]:
+            assert capture_output is True
+            assert text is True
+            return subprocess.CompletedProcess(command, 0, stdout="2\nt\nt\n", stderr="")
+        if len([call for call in calls if "pg_stat_activity" not in call[-1]]) == 1:
             raise subprocess.CalledProcessError(returncode=1, cmd=command)
         return subprocess.CompletedProcess(command, 0)
 
@@ -730,9 +735,46 @@ def test_front_office_cleanup_retries_transient_database_conflicts(monkeypatch) 
         max_business_date=date(2026, 4, 10),
     )
 
-    assert len(calls) == 2
-    assert calls[0] == calls[1]
+    cleanup_calls = [call for call in calls if "pg_stat_activity" not in call[-1]]
+    blocker_cleanup_calls = [call for call in calls if "pg_stat_activity" in call[-1]]
+    assert len(cleanup_calls) == 2
+    assert len(blocker_cleanup_calls) == 1
+    assert cleanup_calls[0] == cleanup_calls[1]
     assert "date > '2026-04-10'" in calls[0][-1]
+    assert "portfolio_aggregation_jobs" in blocker_cleanup_calls[0][-1]
+    assert "portfolio_valuation_jobs" in blocker_cleanup_calls[0][-1]
+
+
+def test_front_office_cleanup_blocker_termination_counts_matching_sessions(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run(command, *, check, capture_output, text):
+        calls.append(command)
+        assert check is False
+        assert capture_output is True
+        assert text is True
+        return subprocess.CompletedProcess(command, 0, stdout="3\nt\nt\nt\n", stderr="")
+
+    monkeypatch.setattr("tools.front_office_portfolio_seed.subprocess.run", fake_run)
+
+    terminated_count = _terminate_front_office_seed_cleanup_blockers(postgres_container="postgres")
+
+    assert terminated_count == 3
+    assert len(calls) == 1
+    assert calls[0][:8] == [
+        "docker",
+        "exec",
+        "postgres",
+        "psql",
+        "-U",
+        "user",
+        "-d",
+        "portfolio_db",
+    ]
+    assert "pg_terminate_backend(pid)" in calls[0][-1]
+    assert "state in ('active', 'idle in transaction')" in calls[0][-1]
+    assert "portfolio_aggregation_jobs" in calls[0][-1]
+    assert "portfolio_valuation_jobs" in calls[0][-1]
 
 
 def test_portfolio_seed_cleanup_sql_removes_portfolio_owned_state_before_reseed():
