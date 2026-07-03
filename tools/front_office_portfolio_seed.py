@@ -2263,14 +2263,91 @@ def _cleanup_existing_front_office_seed(
         except subprocess.CalledProcessError:
             if attempt >= max_attempts:
                 raise
+            terminated_sessions = _terminate_front_office_seed_cleanup_blockers(
+                postgres_container=postgres_container
+            )
             LOGGER.warning(
                 "Front-office seed cleanup hit a transient database conflict for %s; "
-                "retrying attempt %s of %s.",
+                "terminated %s conflicting Core database session(s); retrying attempt %s of %s.",
                 portfolio_id,
+                terminated_sessions,
                 attempt + 1,
                 max_attempts,
             )
             time.sleep(attempt * 2)
+
+
+def _terminate_front_office_seed_cleanup_blockers(*, postgres_container: str) -> int:
+    """
+    Best-effort local reseed recovery for workers touching queue tables during cleanup.
+
+    The canonical front-office reseed is a local/operator workflow. If background Core workers are
+    concurrently claiming valuation or aggregation jobs, PostgreSQL can deadlock against the
+    cleanup delete order. Terminate only active sessions whose current query is touching the seed
+    cleanup hot tables, then let the bounded cleanup retry recreate deterministic seed state.
+    """
+
+    sql = """
+select count(*)::int
+from pg_stat_activity
+where datname = current_database()
+  and pid <> pg_backend_pid()
+  and state in ('active', 'idle in transaction')
+  and (
+    query ilike '%portfolio_aggregation_jobs%'
+    or query ilike '%portfolio_valuation_jobs%'
+    or query ilike '%daily_position_snapshots%'
+    or query ilike '%portfolio_timeseries%'
+    or query ilike '%position_timeseries%'
+  );
+
+select pg_terminate_backend(pid)
+from pg_stat_activity
+where datname = current_database()
+  and pid <> pg_backend_pid()
+  and state in ('active', 'idle in transaction')
+  and (
+    query ilike '%portfolio_aggregation_jobs%'
+    or query ilike '%portfolio_valuation_jobs%'
+    or query ilike '%daily_position_snapshots%'
+    or query ilike '%portfolio_timeseries%'
+    or query ilike '%position_timeseries%'
+  );
+"""
+    command = [
+        "docker",
+        "exec",
+        postgres_container,
+        "psql",
+        "-U",
+        "user",
+        "-d",
+        "portfolio_db",
+        "-At",
+        "-c",
+        sql,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        LOGGER.warning(
+            "Unable to terminate possible front-office seed cleanup blockers before retry: %s",
+            result.stderr.strip() or f"psql exited {result.returncode}",
+        )
+        return 0
+    output_lines = (result.stdout or "0").strip().splitlines()
+    terminated_count = sum(1 for line in output_lines[1:] if line.strip().lower() == "t")
+    if terminated_count:
+        return terminated_count
+    first_line = output_lines[0]
+    try:
+        return int(first_line)
+    except ValueError:
+        LOGGER.warning(
+            "Unable to parse terminated front-office seed cleanup blocker count from psql "
+            "output: %s",
+            result.stdout.strip(),
+        )
+        return 0
 
 
 def _verify_front_office_portfolio(
