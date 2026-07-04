@@ -22,23 +22,26 @@ transaction domain data in the Lotus ecosystem.
    `docs/standards/application-layer-contract.md`.
 4. Services coordinate validation, read orchestration, conversion, and response assembly through
    focused helper modules when a path has not yet moved fully into an application package.
-5. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
+5. Protected domain, application, port, policy, and pure reducer modules must remain testable
+   without FastAPI, real databases, Kafka, Redis, cloud SDKs, or downstream clients; see
+   `docs/standards/testability-architecture-standard.md`.
+6. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
    providers and HTTP policy translation live in `app/dependencies.py`; see
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
-6. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
+7. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
    publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
-7. Transaction replay stays split across pure replay planning, reader ports, and publisher
+8. Transaction replay stays split across pure replay planning, reader ports, and publisher
    adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
-8. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
+9. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
    adapters, and pure dispatch planning; see
    `docs/standards/aggregation-scheduler-boundary-standard.md`.
-9. Position calculation rules and backdated replay decisions stay pure and separate from
+10. Position calculation rules and backdated replay decisions stay pure and separate from
    persistence, outbox, metrics, and epoch-fencing orchestration; see
    `docs/standards/position-reducer-boundary-standard.md`.
-10. Repositories own persistence access.
-11. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+11. Repositories own persistence access.
+12. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-12. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+13. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
