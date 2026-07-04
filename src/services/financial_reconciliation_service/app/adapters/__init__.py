@@ -1,0 +1,1 @@
+"""Financial reconciliation infrastructure adapters."""
