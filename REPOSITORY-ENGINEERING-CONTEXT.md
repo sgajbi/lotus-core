@@ -975,6 +975,17 @@ Most relevant current governance:
     runs `scripts/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
     helpers, buy/sell/transfer/corporate-action state helpers, and backdated replay decision
     helpers do not drift back into `position_logic.py`.
+80. Protected business logic modules must stay directly testable without FastAPI, real databases,
+    Kafka, Redis, cloud SDKs, or downstream clients. The repo-local standard lives at
+    `docs/standards/testability-architecture-standard.md`, and the machine-readable contract lives
+    at `docs/standards/testability-architecture-contract.json`. `make architecture-guard` runs
+    `scripts/testability_architecture_guard.py`, which currently protects domain, application,
+    ports, policy, and extracted pure reducer modules from runtime imports, runtime factory calls,
+    repository/dependency/router/consumer imports, and concrete client symbols. Runtime composition
+    belongs in approved composition roots such as `app/dependencies.py`, routers, consumers,
+    infrastructure/adapters/repositories, and shared infrastructure modules. When a legacy service
+    path is extracted into a use case, policy, port, or pure reducer, add that path to the
+    protected contract and prove it with fake-port tests.
 
 ## Context Maintenance Rule
 
