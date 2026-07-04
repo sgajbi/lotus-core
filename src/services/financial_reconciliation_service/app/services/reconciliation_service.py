@@ -8,10 +8,17 @@ from typing import Any
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.decimal_amounts import decimal_or_none, required_decimal
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
-from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
-from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
+from ..adapters.reconciliation_finding_mapper import reconciliation_finding_to_orm
+from ..domain.reconciliation_policies import (
+    DEFAULT_VALUE_TOLERANCE,
+    PositionValuationEvidence,
+    ReconciliationFinding,
+    build_reconciliation_summary,
+    position_valuation_reconciliation_findings,
+    requires_authoritative_fx_rate,
+)
 from ..domain.reconciliation_run_lifecycle_policy import (
     AutomaticBundleOutcome,
     ReconciliationRunLifecycleSnapshot,
@@ -28,7 +35,6 @@ from .runtime_providers import (
     UuidHexIdGenerator,
 )
 
-DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
 ZERO = Decimal("0")
 AUTHORITATIVE_PORTFOLIO_METRIC_NAMES = (
     "bod_market_value",
@@ -52,10 +58,6 @@ def _authoritative_metric_currencies(instrument: object, portfolio: object) -> t
     from_currency = (getattr(instrument, "currency", None) or "").strip()
     to_currency = (getattr(portfolio, "base_currency", None) or "").strip()
     return from_currency, to_currency
-
-
-def _requires_authoritative_fx_rate(from_currency: str, to_currency: str) -> bool:
-    return bool(from_currency and to_currency and from_currency != to_currency)
 
 
 def _add_authoritative_position_metrics(
@@ -257,7 +259,7 @@ class ReconciliationService:
         fx_cache: dict[tuple[str, str, date], Decimal],
     ) -> Decimal:
         from_currency, to_currency = _authoritative_metric_currencies(instrument, portfolio)
-        if not _requires_authoritative_fx_rate(from_currency, to_currency):
+        if not requires_authoritative_fx_rate(from_currency, to_currency):
             return Decimal("1")
 
         position_date = getattr(position_row, "date")
@@ -272,22 +274,6 @@ class ReconciliationService:
                 coerce_positive_fx_rate_or_none(fx_rate.rate) if fx_rate else None
             ) or ZERO
         return fx_cache[cache_key]
-
-    @staticmethod
-    def _expected_market_value_local(
-        *,
-        quantity: Decimal,
-        market_price: Decimal,
-        cost_basis_local: Decimal,
-        product_type: str | None,
-    ) -> Decimal:
-        valuation_price_local = resolve_valuation_unit_price(
-            market_price=market_price,
-            quantity=quantity,
-            cost_basis_local=cost_basis_local,
-            product_type=product_type,
-        )
-        return quantity * valuation_price_local
 
     @staticmethod
     def _automatic_dedupe_key(
@@ -496,106 +482,34 @@ class ReconciliationService:
             business_date=request.business_date,
             epoch=request.epoch,
         )
-        findings: list[FinancialReconciliationFinding] = []
+        domain_findings: list[ReconciliationFinding] = []
         examined = 0
         for snapshot, instrument, _portfolio in rows:
             examined += 1
-            quantity = required_decimal(snapshot.quantity, field_name="snapshot.quantity")
-            cost_basis_local = required_decimal(
-                snapshot.cost_basis_local,
-                field_name="snapshot.cost_basis_local",
-            )
-            market_price = coerce_positive_market_price_or_none(snapshot.market_price)
-            if market_price is None:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="position_valuation",
-                        finding_type="invalid_market_price",
-                        severity="ERROR",
+            domain_findings.extend(
+                position_valuation_reconciliation_findings(
+                    evidence=PositionValuationEvidence(
                         portfolio_id=snapshot.portfolio_id,
                         security_id=snapshot.security_id,
-                        transaction_id=None,
                         business_date=snapshot.date,
                         epoch=snapshot.epoch,
-                        expected_value={"market_price": ">0"},
-                        observed_value={"market_price": str(snapshot.market_price)},
-                        detail={
-                            "quantity": str(snapshot.quantity),
-                            "product_type": instrument.product_type,
-                        },
-                    )
+                        quantity=snapshot.quantity,
+                        market_price=snapshot.market_price,
+                        market_value_local=snapshot.market_value_local,
+                        cost_basis_local=snapshot.cost_basis_local,
+                        unrealized_gain_loss_local=snapshot.unrealized_gain_loss_local,
+                        product_type=instrument.product_type,
+                    ),
+                    tolerance=tolerance,
                 )
-                continue
-            expected_market_value_local = self._expected_market_value_local(
-                quantity=quantity,
-                market_price=market_price,
-                cost_basis_local=cost_basis_local,
-                product_type=instrument.product_type,
             )
-            expected_unrealized = expected_market_value_local - cost_basis_local
-            observed_market_value_local = required_decimal(
-                snapshot.market_value_local,
-                field_name="snapshot.market_value_local",
-            )
-            market_delta = observed_market_value_local - expected_market_value_local
-            if abs(market_delta) > tolerance:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="position_valuation",
-                        finding_type="market_value_local_mismatch",
-                        severity="ERROR",
-                        portfolio_id=snapshot.portfolio_id,
-                        security_id=snapshot.security_id,
-                        transaction_id=None,
-                        business_date=snapshot.date,
-                        epoch=snapshot.epoch,
-                        expected_value={"market_value_local": str(expected_market_value_local)},
-                        observed_value={
-                            "market_value_local": str(observed_market_value_local),
-                            "delta": str(market_delta),
-                        },
-                        detail={
-                            "quantity": str(snapshot.quantity),
-                            "market_price": str(snapshot.market_price),
-                            "product_type": instrument.product_type,
-                        },
-                    )
-                )
 
-            observed_unrealized = required_decimal(
-                snapshot.unrealized_gain_loss_local,
-                field_name="snapshot.unrealized_gain_loss_local",
-            )
-            unrealized_delta = observed_unrealized - expected_unrealized
-            if abs(unrealized_delta) > tolerance:
-                findings.append(
-                    self._build_finding(
-                        run_id=run.run_id,
-                        reconciliation_type="position_valuation",
-                        finding_type="unrealized_gain_loss_local_mismatch",
-                        severity="ERROR",
-                        portfolio_id=snapshot.portfolio_id,
-                        security_id=snapshot.security_id,
-                        transaction_id=None,
-                        business_date=snapshot.date,
-                        epoch=snapshot.epoch,
-                        expected_value={"unrealized_gain_loss_local": str(expected_unrealized)},
-                        observed_value={
-                            "unrealized_gain_loss_local": str(observed_unrealized),
-                            "delta": str(unrealized_delta),
-                        },
-                        detail={
-                            "market_value_local": str(observed_market_value_local),
-                            "cost_basis_local": str(snapshot.cost_basis_local),
-                            "product_type": instrument.product_type,
-                        },
-                    )
-                )
-
+        findings = self._persisted_findings(run_id=run.run_id, findings=domain_findings)
         await self.repository.add_findings(findings)
-        summary = self._summary(examined=examined, findings=findings)
+        summary = build_reconciliation_summary(
+            examined=examined,
+            findings=domain_findings,
+        ).as_dict()
         status = completed_reconciliation_run_status()
         await self.repository.mark_run_completed(run, status=status, summary=summary)
         observe_financial_reconciliation_run(
@@ -884,6 +798,21 @@ class ReconciliationService:
             "warning_count": warning_count,
             "passed": error_count == 0,
         }
+
+    def _persisted_findings(
+        self,
+        *,
+        run_id: str,
+        findings: list[ReconciliationFinding],
+    ) -> list[FinancialReconciliationFinding]:
+        return [
+            reconciliation_finding_to_orm(
+                finding,
+                run_id=run_id,
+                finding_id=f"finding-{self._id_generator.hex()}",
+            )
+            for finding in findings
+        ]
 
     def _build_finding(
         self,

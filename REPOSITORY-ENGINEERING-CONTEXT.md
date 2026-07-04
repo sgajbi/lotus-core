@@ -202,6 +202,10 @@ Current repository posture:
     requirements, while persistence helpers only consume policy-derived expected states. The
     current implemented lifecycle policies cover ingestion job mutations and financial
     reconciliation run completion/outcome posture.
+    Financial reconciliation position-valuation rules now also use pure domain policy/value
+    objects in `financial_reconciliation_service.app.domain.reconciliation_policies`; the
+    application service must load evidence, invoke the policy, and map domain findings to
+    persistence rows through `financial_reconciliation_service.app.adapters`.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but
