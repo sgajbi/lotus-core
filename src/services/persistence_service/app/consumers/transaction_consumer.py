@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
+from portfolio_common.event_mapping import outbox_event_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import log_operation_event
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,5 +114,5 @@ class TransactionPersistenceConsumer(GenericPersistenceConsumer):
             "aggregate_id": str(persisted_object.portfolio_id),
             "event_type": "RawTransactionPersisted",
             "topic": KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
-            "payload": persisted_object.model_dump(mode="json"),
+            "payload": outbox_event_payload(persisted_object),
         }
