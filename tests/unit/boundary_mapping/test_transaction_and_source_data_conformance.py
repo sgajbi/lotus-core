@@ -4,16 +4,21 @@ import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import correlation_id_var
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from services.ingestion_service.app.services.ingestion_service import IngestionService
-from src.services.persistence_service.app.repositories.transaction_db_repo import (
+from src.services.persistence_service.app.adapters.event_record_mapper import (
     transaction_event_to_record_values,
+)
+from src.services.persistence_service.app.adapters.persistence_event_adapter import (
+    decode_persistence_message_payload,
+    validate_persistence_event_payload,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import ReferencePageMetadata
 from src.services.query_service.app.dtos.reference_integration_portfolio_tax_lot_dto import (
@@ -63,6 +68,15 @@ def _json_default(value: object) -> str:
     if isinstance(value, Decimal):
         return str(value)
     raise TypeError(f"Unsupported JSON value: {value!r}")
+
+
+def _mock_kafka_message(payload: dict[str, Any]) -> MagicMock:
+    msg = MagicMock()
+    msg.topic.return_value = "transactions.raw.received"
+    msg.partition.return_value = 2
+    msg.offset.return_value = 41
+    msg.value.return_value = json.dumps(payload, default=_json_default).encode("utf-8")
+    return msg
 
 
 @pytest.mark.asyncio
@@ -172,6 +186,47 @@ def test_transaction_event_mapping_rejects_unknown_and_missing_fields() -> None:
     with pytest.raises(ValidationError) as missing_field_error:
         TransactionEvent.model_validate(missing_identifier_payload)
     assert any(error["loc"] == ("transaction_id",) for error in missing_field_error.value.errors())
+
+
+def test_persistence_message_adapter_preserves_event_identity_and_lineage() -> None:
+    payload = {
+        "transaction_id": "TXN-MAP-003",
+        "portfolio_id": "PORT-MAP-001",
+        "instrument_id": "EQ_US_AAPL",
+        "security_id": "EQ_US_AAPL",
+        "transaction_date": "2026-03-25T09:30:00+00:00",
+        "transaction_type": "BUY",
+        "quantity": "100.0000000000",
+        "price": "150.0550000000",
+        "gross_transaction_amount": "15005.5000000000",
+        "trade_currency": "USD",
+        "currency": "USD",
+        "correlation_id": "corr-boundary-003",
+    }
+
+    decoded = decode_persistence_message_payload(_mock_kafka_message(payload))
+    envelope = validate_persistence_event_payload(decoded, TransactionEvent)
+
+    assert decoded.event_id == "transactions.raw.received-2-41"
+    assert decoded.fallback_correlation_id == "corr-boundary-003"
+    assert envelope.event_id == "transactions.raw.received-2-41"
+    assert envelope.idempotency_key == "TXN-MAP-003"
+    assert envelope.portfolio_id == "PORT-MAP-001"
+    assert envelope.event.transaction_id == "TXN-MAP-003"
+    assert envelope.event.correlation_id == "corr-boundary-003"
+
+
+def test_persistence_message_adapter_uses_event_id_for_non_transaction_events() -> None:
+    class MinimalPersistenceEvent(BaseModel):
+        schema_version: str
+
+    decoded = decode_persistence_message_payload(
+        _mock_kafka_message({"schema_version": "minimal.v1"})
+    )
+    envelope = validate_persistence_event_payload(decoded, MinimalPersistenceEvent)
+
+    assert envelope.idempotency_key == "transactions.raw.received-2-41"
+    assert envelope.portfolio_id == "N/A"
 
 
 def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -> None:

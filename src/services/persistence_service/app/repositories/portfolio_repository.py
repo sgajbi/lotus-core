@@ -3,9 +3,11 @@ import logging
 
 from portfolio_common.cost_basis import normalize_cost_basis_method
 from portfolio_common.database_models import Portfolio as DBPortfolio
-from portfolio_common.events import PortfolioEvent, event_business_payload
+from portfolio_common.events import PortfolioEvent
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..adapters.event_record_mapper import event_business_record_values
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class PortfolioRepository:
         UPSERT (INSERT ... ON CONFLICT DO UPDATE).
         """
         try:
-            portfolio_data = event_business_payload(event)
+            portfolio_data = event_business_record_values(event)
             portfolio_data["cost_basis_method"] = normalize_cost_basis_method(
                 portfolio_data.get("cost_basis_method")
             ).value

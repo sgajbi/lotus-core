@@ -6,9 +6,11 @@ import pytest
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.persistence_service.app.adapters.event_record_mapper import (
+    transaction_event_to_record_values,
+)
 from src.services.persistence_service.app.repositories.transaction_db_repo import (
     TransactionDBRepository,
-    transaction_event_to_record_values,
 )
 
 
