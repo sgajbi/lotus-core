@@ -51,6 +51,11 @@ from ..application.consumer_dlq_replay_commands import (
 from ..application.ingestion_retry_commands import (
     IngestionRetryCommandService,
 )
+from ..application.ops_control_commands import (
+    OpsControlCommandError,
+    OpsControlCommandService,
+    OpsControlUpdateCommand,
+)
 from ..application.replay_command_errors import ReplayCommandError
 from ..application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
@@ -623,6 +628,12 @@ def get_bookkeeping_repair_command_service(
     ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BookkeepingRepairCommandService:
     return BookkeepingRepairCommandService(ingestion_job_service=ingestion_job_service)
+
+
+def get_ops_control_command_service(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> OpsControlCommandService:
+    return OpsControlCommandService(ingestion_job_service=ingestion_job_service)
 
 
 @router.get(
@@ -1714,26 +1725,19 @@ async def update_ingestion_ops_control(
             }
         }
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    command_service: OpsControlCommandService = Depends(get_ops_control_command_service),
 ):
-    if (
-        update_request.replay_window_start
-        and update_request.replay_window_end
-        and update_request.replay_window_start > update_request.replay_window_end
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail={
-                "code": "INGESTION_INVALID_REPLAY_WINDOW",
-                "message": "replay_window_start must be before replay_window_end.",
-            },
+    try:
+        return await command_service.update_ingestion_ops_control(
+            OpsControlUpdateCommand(
+                mode=update_request.mode,
+                replay_window_start=update_request.replay_window_start,
+                replay_window_end=update_request.replay_window_end,
+                updated_by=update_request.updated_by,
+            )
         )
-    return await ingestion_job_service.update_ops_mode(
-        mode=update_request.mode,
-        replay_window_start=update_request.replay_window_start,
-        replay_window_end=update_request.replay_window_end,
-        updated_by=update_request.updated_by,
-    )
+    except OpsControlCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 @router.get(
