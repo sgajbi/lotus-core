@@ -143,10 +143,13 @@ Current repository posture:
     `src/services/event_replay_service/app/routers/` bind HTTP requests, build API DTOs, and map
     `HTTPException` only; command and query orchestration belongs in
     `src/services/event_replay_service/app/application/`; runtime composition providers belong in
-    `src/services/event_replay_service/app/dependencies.py`. Do not rebuild replay payloads,
-    deterministic replay fingerprints, consumer-DLQ candidate selection, audit persistence,
-    retry/bookkeeping state transitions, or query envelope totals in the router. Add application
-    service tests first when extending ingestion operations.
+    `src/services/event_replay_service/app/dependencies.py`; OpenAPI/operator examples belong in
+    router-support modules such as `ingestion_operations_examples.py`, not inline in the main route
+    module. Do not rebuild replay payloads, deterministic replay fingerprints, consumer-DLQ
+    candidate selection, audit persistence, retry/bookkeeping state transitions, query envelope
+    totals, or large example catalogs in the router. Add application service tests first when
+    extending ingestion operations, and add router-support guard tests when moving API
+    documentation data.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
