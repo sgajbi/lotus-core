@@ -69,14 +69,44 @@
       ],
       "consumer_modules": [
         "src/services/ingestion_service/app/services/ingestion_service.py",
-        "src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py"
+        "src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py",
+        "src/services/portfolio_aggregation_service/app/core/aggregation_job_publisher.py"
       ],
       "guard_scripts": [
-        "scripts/event_publisher_port_guard.py"
+        "scripts/event_publisher_port_guard.py",
+        "scripts/aggregation_scheduler_boundary_guard.py"
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
         "docs/standards/event-publisher-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "aggregation.scheduler-runtime-ports",
+      "capability_family": "scheduler-runtime",
+      "owner_service": "portfolio_aggregation_service",
+      "port_module": "src/services/portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py",
+      "port_symbols": [
+        "AggregationSchedulerRepository",
+        "AggregationSchedulerRepositoryProvider",
+        "AggregationSchedulerMetricsSink",
+        "AggregationSchedulerClock"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_aggregation_service/app/infrastructure/aggregation_scheduler_adapters.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py"
+      ],
+      "guard_scripts": [
+        "scripts/aggregation_scheduler_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/aggregation-scheduler-boundary-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
       ],
       "status": "implemented-representative",
       "runtime_boundary": "design-modularity-only"

@@ -1,210 +1,250 @@
 import asyncio
-from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
-from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
     DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
 )
 
+from src.services.portfolio_aggregation_service.app.core.aggregation_job_publisher import (
+    AggregationJobDispatchMessage,
+    aggregation_job_record_key,
+    plan_aggregation_job_dispatch,
+)
 from src.services.portfolio_aggregation_service.app.core.aggregation_scheduler import (
     AggregationScheduler,
 )
-from src.services.portfolio_aggregation_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
-)
+from src.services.portfolio_aggregation_service.app.settings import AggregationRuntimeSettings
 
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.fixture
-def mock_kafka_producer() -> MagicMock:
-    mock = MagicMock(spec=KafkaProducer)
-    mock.flush.return_value = 0
-    return mock
+class FakeAggregationJobPublisher:
+    def __init__(self, *, fail_at: int | None = None, undelivered_count: int = 0) -> None:
+        self.fail_at = fail_at
+        self.undelivered_count = undelivered_count
+        self.published: list[AggregationJobDispatchMessage] = []
+        self.confirm_delivery_calls: list[int] = []
+
+    def publish_job_requested(self, message: AggregationJobDispatchMessage) -> None:
+        if self.fail_at is not None and len(self.published) == self.fail_at:
+            raise RuntimeError("broker timeout")
+        self.published.append(message)
+
+    def confirm_delivery(self, *, timeout_seconds: int) -> int:
+        self.confirm_delivery_calls.append(timeout_seconds)
+        return self.undelivered_count
 
 
-@pytest.fixture
-def scheduler(mock_kafka_producer: MagicMock) -> AggregationScheduler:
-    with patch(
-        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        return AggregationScheduler()
+class FakeAggregationRepository:
+    def __init__(self, *, claimed_jobs=None) -> None:
+        self.claimed_jobs = list(claimed_jobs or [])
+        self.queue_stats = {
+            "pending_count": 3,
+            "failed_count": 1,
+            "oldest_pending_created_at": datetime(2025, 8, 12, 0, 0, tzinfo=timezone.utc),
+        }
+        self.reset_calls: list[dict[str, int]] = []
+        self.claim_calls: list[int] = []
+        self.recovered: list[dict[str, object]] = []
+        self.poll_entered = asyncio.Event()
+
+    async def get_job_queue_stats(self):
+        return self.queue_stats
+
+    async def find_and_reset_stale_jobs(
+        self,
+        *,
+        timeout_minutes: int,
+        max_attempts: int,
+    ) -> int:
+        self.poll_entered.set()
+        self.reset_calls.append(
+            {
+                "timeout_minutes": timeout_minutes,
+                "max_attempts": max_attempts,
+            }
+        )
+        return 0
+
+    async def find_and_claim_eligible_jobs(self, batch_size: int):
+        self.claim_calls.append(batch_size)
+        return self.claimed_jobs
+
+    async def recover_dispatch_failed_jobs(
+        self,
+        job_ids: list[int],
+        *,
+        max_attempts: int,
+        failure_reason: str,
+    ) -> None:
+        self.recovered.append(
+            {
+                "job_ids": job_ids,
+                "max_attempts": max_attempts,
+                "failure_reason": failure_reason,
+            }
+        )
 
 
-async def test_scheduler_dispatches_claimed_jobs_with_correlation_header(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-    ]
+class FakeRepositoryProvider:
+    def __init__(self, repository: FakeAggregationRepository) -> None:
+        self.repository = repository
+        self.transaction_count = 0
 
-    await scheduler._dispatch_jobs(claimed_jobs)
+    async def run_in_transaction(self, operation):
+        self.transaction_count += 1
+        return await operation(self.repository)
 
-    mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-        key="P1|2025-08-11",
-        value={
-            "portfolio_id": "P1",
-            "aggregation_date": "2025-08-11",
-            "correlation_id": "corr-agg-1",
-        },
-        headers=[("correlation_id", b"corr-agg-1")],
+
+class FakeMetricsSink:
+    def __init__(self) -> None:
+        self.pending: list[int] = []
+        self.failed: list[int] = []
+        self.oldest_pending_age_seconds: list[float] = []
+
+    def set_pending(self, count: int) -> None:
+        self.pending.append(count)
+
+    def set_failed(self, count: int) -> None:
+        self.failed.append(count)
+
+    def set_oldest_pending_age_seconds(self, age_seconds: float) -> None:
+        self.oldest_pending_age_seconds.append(age_seconds)
+
+
+class FixedClock:
+    def now_utc(self) -> datetime:
+        return datetime(2025, 8, 12, 0, 2, tzinfo=timezone.utc)
+
+
+def _settings() -> AggregationRuntimeSettings:
+    return AggregationRuntimeSettings(
+        portfolio_aggregation_consumer_count=1,
+        aggregation_scheduler_poll_interval_seconds=60,
+        aggregation_scheduler_batch_size=17,
+        aggregation_scheduler_stale_timeout_minutes=13,
+        aggregation_scheduler_max_attempts=6,
     )
-    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
-async def test_scheduler_omits_empty_correlation_header(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            portfolio_id="P2",
-            aggregation_date=date(2025, 8, 12),
-            correlation_id=None,
-        ),
-    ]
-
-    await scheduler._dispatch_jobs(claimed_jobs)
-
-    mock_kafka_producer.publish_message.assert_called_once_with(
-        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-        key="P2|2025-08-12",
-        value={
-            "portfolio_id": "P2",
-            "aggregation_date": "2025-08-12",
-            "correlation_id": None,
-        },
-        headers=[],
+def _job(
+    *,
+    job_id: int | None = None,
+    portfolio_id: str = "P1",
+    aggregation_date: date = date(2025, 8, 11),
+    correlation_id: str | None = "corr-agg-1",
+) -> PortfolioAggregationJob:
+    return PortfolioAggregationJob(
+        id=job_id,
+        portfolio_id=portfolio_id,
+        aggregation_date=aggregation_date,
+        correlation_id=correlation_id,
     )
-    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
 
 
-async def test_scheduler_flushes_and_raises_with_remaining_keys_on_partial_dispatch_failure(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-        PortfolioAggregationJob(
+def _scheduler(
+    *,
+    repository: FakeAggregationRepository | None = None,
+    publisher: FakeAggregationJobPublisher | None = None,
+    settings: AggregationRuntimeSettings | None = None,
+    metrics_sink: FakeMetricsSink | None = None,
+) -> AggregationScheduler:
+    return AggregationScheduler(
+        settings=settings or _settings(),
+        repository_provider=FakeRepositoryProvider(repository or FakeAggregationRepository()),
+        metrics_sink=metrics_sink or FakeMetricsSink(),
+        clock=FixedClock(),
+        aggregation_job_publisher=publisher or FakeAggregationJobPublisher(),
+    )
+
+
+async def test_plan_aggregation_job_dispatch_builds_event_payload_key_and_header():
+    plan = plan_aggregation_job_dispatch([_job(portfolio_id="P1")])
+
+    assert len(plan.messages) == 1
+    message = plan.messages[0]
+    assert message.topic == KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
+    assert message.record_key == "P1|2025-08-11"
+    assert message.value == {
+        "portfolio_id": "P1",
+        "aggregation_date": "2025-08-11",
+        "correlation_id": "corr-agg-1",
+    }
+    assert message.headers == [("correlation_id", b"corr-agg-1")]
+
+
+async def test_plan_aggregation_job_dispatch_omits_empty_correlation_header():
+    plan = plan_aggregation_job_dispatch([_job(portfolio_id="P2", correlation_id=None)])
+
+    assert plan.messages[0].record_key == "P2|2025-08-11"
+    assert plan.messages[0].headers == []
+
+
+async def test_aggregation_job_record_key_uses_portfolio_and_business_date():
+    assert aggregation_job_record_key(_job(portfolio_id="P9")) == "P9|2025-08-11"
+
+
+async def test_scheduler_dispatch_no_jobs_skips_publisher_confirmation():
+    publisher = FakeAggregationJobPublisher()
+    scheduler = _scheduler(publisher=publisher)
+
+    await scheduler._dispatch_jobs([])
+
+    assert publisher.published == []
+    assert publisher.confirm_delivery_calls == []
+
+
+async def test_scheduler_dispatches_claimed_jobs_through_publisher_port():
+    publisher = FakeAggregationJobPublisher()
+    scheduler = _scheduler(publisher=publisher)
+
+    await scheduler._dispatch_jobs([_job(portfolio_id="P1")])
+
+    assert [message.record_key for message in publisher.published] == ["P1|2025-08-11"]
+    assert publisher.confirm_delivery_calls == [10]
+
+
+async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs():
+    publisher = FakeAggregationJobPublisher(fail_at=1)
+    scheduler = _scheduler(publisher=publisher)
+    jobs = [
+        _job(job_id=201, portfolio_id="P1"),
+        _job(
+            job_id=202,
             portfolio_id="P2",
             aggregation_date=date(2025, 8, 12),
             correlation_id="corr-agg-2",
         ),
     ]
-    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
-
-    with pytest.raises(RuntimeError, match="Remaining job keys: P2\\|2025-08-12"):
-        await scheduler._dispatch_jobs(claimed_jobs)
-
-    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
-
-
-async def test_scheduler_dispatch_failure_before_first_job_recovers_all_unpublished_jobs(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            id=101,
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-        PortfolioAggregationJob(
-            id=102,
-            portfolio_id="P2",
-            aggregation_date=date(2025, 8, 12),
-            correlation_id="corr-agg-2",
-        ),
-    ]
-    mock_kafka_producer.publish_message.side_effect = RuntimeError("broker unavailable")
-
-    with pytest.raises(
-        SchedulerDispatchError,
-        match="Remaining job keys: P1\\|2025-08-11, P2\\|2025-08-12",
-    ) as exc_info:
-        await scheduler._dispatch_jobs(claimed_jobs)
-
-    assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
-    assert exc_info.value.recovery_job_ids == (101, 102)
-    assert exc_info.value.recovery_record_keys == ("P1|2025-08-11", "P2|2025-08-12")
-    assert exc_info.value.published_record_keys == ()
-    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
-
-
-async def test_scheduler_partial_dispatch_failure_recovers_only_unpublished_jobs(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            id=201,
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-        PortfolioAggregationJob(
-            id=202,
-            portfolio_id="P2",
-            aggregation_date=date(2025, 8, 12),
-            correlation_id="corr-agg-2",
-        ),
-    ]
-    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
 
     with pytest.raises(SchedulerDispatchError) as exc_info:
-        await scheduler._dispatch_jobs(claimed_jobs)
+        await scheduler._dispatch_jobs(jobs)
 
     assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
     assert exc_info.value.recovery_job_ids == (202,)
     assert exc_info.value.recovery_record_keys == ("P2|2025-08-12",)
     assert exc_info.value.published_record_keys == ("P1|2025-08-11",)
+    assert [message.record_key for message in publisher.published] == ["P1|2025-08-11"]
 
 
-async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_jobs(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            id=211,
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-        PortfolioAggregationJob(
-            id=212,
-            portfolio_id="P2",
-            aggregation_date=date(2025, 8, 12),
-            correlation_id="corr-agg-2",
-        ),
+async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_jobs():
+    publisher = FakeAggregationJobPublisher(fail_at=1, undelivered_count=1)
+    scheduler = _scheduler(publisher=publisher)
+    jobs = [
+        _job(job_id=211, portfolio_id="P1"),
+        _job(job_id=212, portfolio_id="P2", aggregation_date=date(2025, 8, 12)),
     ]
-    mock_kafka_producer.publish_message.side_effect = [None, RuntimeError("broker timeout")]
-    mock_kafka_producer.flush.return_value = 1
 
     with pytest.raises(
         SchedulerDispatchError,
         match="Delivery confirmation timed out while recovering from aggregation dispatch failure",
     ) as exc_info:
-        await scheduler._dispatch_jobs(claimed_jobs)
+        await scheduler._dispatch_jobs(jobs)
 
     assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
     assert exc_info.value.recovery_job_ids == (211, 212)
@@ -212,43 +252,69 @@ async def test_scheduler_partial_dispatch_flush_timeout_recovers_all_claimed_job
     assert exc_info.value.published_record_keys == ("P1|2025-08-11",)
 
 
-async def test_scheduler_raises_on_flush_timeout(
-    scheduler: AggregationScheduler,
-    mock_kafka_producer: MagicMock,
-):
-    claimed_jobs = [
-        PortfolioAggregationJob(
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        ),
-    ]
-    mock_kafka_producer.flush.return_value = 1
+async def test_scheduler_raises_on_flush_timeout():
+    publisher = FakeAggregationJobPublisher(undelivered_count=1)
+    scheduler = _scheduler(publisher=publisher)
 
     with pytest.raises(
         SchedulerDispatchError,
         match="Delivery confirmation timed out while dispatching aggregation jobs",
     ) as exc_info:
-        await scheduler._dispatch_jobs(claimed_jobs)
+        await scheduler._dispatch_jobs([_job(job_id=301, portfolio_id="P1")])
 
     assert exc_info.value.failure_phase == DISPATCH_CONFIRMATION_TIMEOUT_PHASE
+    assert exc_info.value.recovery_job_ids == (301,)
     assert exc_info.value.recovery_record_keys == ("P1|2025-08-11",)
     assert exc_info.value.published_record_keys == ("P1|2025-08-11",)
 
 
+async def test_scheduler_run_poll_once_resets_stale_jobs_claims_batch_and_updates_metrics():
+    repository = FakeAggregationRepository(claimed_jobs=[])
+    metrics_sink = FakeMetricsSink()
+    scheduler = _scheduler(repository=repository, metrics_sink=metrics_sink)
+
+    await scheduler._run_poll_once()
+
+    assert repository.reset_calls == [{"timeout_minutes": 13, "max_attempts": 6}]
+    assert repository.claim_calls == [17]
+    assert metrics_sink.pending == [3, 3]
+    assert metrics_sink.failed == [1, 1]
+    assert metrics_sink.oldest_pending_age_seconds == [120.0, 120.0]
+
+
+async def test_scheduler_run_poll_once_recovers_dispatch_failure_before_next_poll():
+    repository = FakeAggregationRepository(claimed_jobs=[_job(job_id=401, portfolio_id="P1")])
+    publisher = FakeAggregationJobPublisher(fail_at=0)
+    scheduler = _scheduler(repository=repository, publisher=publisher)
+
+    with pytest.raises(SchedulerDispatchError):
+        await scheduler._run_poll_once()
+
+    assert repository.recovered == [
+        {
+            "job_ids": [401],
+            "max_attempts": 6,
+            "failure_reason": (
+                "Scheduler dispatch publish failed before queueing record keys: P1|2025-08-11"
+            ),
+        }
+    ]
+
+
 async def test_scheduler_reads_runtime_settings_from_environment(
-    mock_kafka_producer: MagicMock, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ):
     monkeypatch.setenv("AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS", "9")
     monkeypatch.setenv("AGGREGATION_SCHEDULER_BATCH_SIZE", "17")
     monkeypatch.setenv("AGGREGATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "13")
     monkeypatch.setenv("AGGREGATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
-    with patch(
-        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        scheduler = AggregationScheduler()
+    scheduler = AggregationScheduler(
+        repository_provider=FakeRepositoryProvider(FakeAggregationRepository()),
+        metrics_sink=FakeMetricsSink(),
+        clock=FixedClock(),
+        aggregation_job_publisher=FakeAggregationJobPublisher(),
+    )
 
     assert scheduler._poll_interval == 9
     assert scheduler._batch_size == 17
@@ -256,152 +322,21 @@ async def test_scheduler_reads_runtime_settings_from_environment(
     assert scheduler._max_attempts == 6
 
 
-async def test_scheduler_updates_queue_metrics():
-    repo = AsyncMock(spec=TimeseriesRepository)
-    repo.get_job_queue_stats.return_value = {
-        "pending_count": 3,
-        "failed_count": 1,
-        "oldest_pending_created_at": datetime(2025, 8, 12, 0, 0, tzinfo=timezone.utc),
-    }
-
-    with (
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
-            return_value=MagicMock(spec=KafkaProducer),
-        ),
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_pending"
-        ) as mock_set_pending,
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_failed_stored"
-        ) as mock_set_failed,
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.set_control_queue_oldest_pending_age_seconds"
-        ) as mock_set_oldest,
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.datetime"
-        ) as mock_datetime,
-    ):
-        scheduler = AggregationScheduler()
-        mock_datetime.now.return_value = datetime(2025, 8, 12, 0, 2, tzinfo=timezone.utc)
-        mock_datetime.side_effect = datetime
-
-        await scheduler._update_queue_metrics(repo)
-
-    mock_set_pending.assert_called_once_with("aggregation", 3)
-    mock_set_failed.assert_called_once_with("aggregation", 1)
-    mock_set_oldest.assert_called_once_with("aggregation", 120.0)
-
-
-async def test_scheduler_stop_interrupts_poll_sleep(
-    mock_kafka_producer: MagicMock,
-):
-    with patch(
-        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        scheduler = AggregationScheduler(poll_interval=60)
-
-    batch_started = asyncio.Event()
-    mock_repo = AsyncMock(spec=TimeseriesRepository)
-    mock_repo.find_and_claim_eligible_jobs.return_value = []
-
-    async def update_queue_metrics(repo):
-        batch_started.set()
-
-    class _DbSession:
-        @asynccontextmanager
-        async def begin(self):
-            yield self
-
-    mock_db_session = _DbSession()
-
-    async def get_session_gen():
-        yield mock_db_session
-
-    with (
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_async_db_session",
-            new=get_session_gen,
-        ),
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.TimeseriesRepository",
-            return_value=mock_repo,
-        ),
-        patch.object(scheduler, "_update_queue_metrics", side_effect=update_queue_metrics),
-    ):
-        task = asyncio.create_task(scheduler.run())
-        await batch_started.wait()
-        await asyncio.sleep(0)
-
-        scheduler.stop()
-
-        await asyncio.wait_for(task, timeout=0.2)
-
-
-async def test_scheduler_run_recovers_dispatch_failure_before_next_poll(
-    mock_kafka_producer: MagicMock,
-):
-    with patch(
-        "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_kafka_producer",
-        return_value=mock_kafka_producer,
-    ):
-        scheduler = AggregationScheduler(poll_interval=60)
-
-    batch_started = asyncio.Event()
-    mock_repo = AsyncMock(spec=TimeseriesRepository)
-    mock_repo.find_and_claim_eligible_jobs.return_value = [
-        PortfolioAggregationJob(
-            id=301,
-            portfolio_id="P1",
-            aggregation_date=date(2025, 8, 11),
-            correlation_id="corr-agg-1",
-        )
-    ]
-
-    async def update_queue_metrics(repo):
-        batch_started.set()
-
-    class _DbSession:
-        @asynccontextmanager
-        async def begin(self):
-            yield self
-
-    mock_db_session = _DbSession()
-
-    async def get_session_gen():
-        yield mock_db_session
-
-    dispatch_error = SchedulerDispatchError(
-        message="dispatch failed",
-        recovery_job_ids=(301,),
-        recovery_record_keys=("P1|2025-08-11",),
-        published_record_keys=(),
-        failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
+async def test_scheduler_stop_interrupts_poll_sleep():
+    repository = FakeAggregationRepository(claimed_jobs=[])
+    provider = FakeRepositoryProvider(repository)
+    scheduler = AggregationScheduler(
+        settings=_settings(),
+        repository_provider=provider,
+        metrics_sink=FakeMetricsSink(),
+        clock=FixedClock(),
+        aggregation_job_publisher=FakeAggregationJobPublisher(),
     )
 
-    with (
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.get_async_db_session",
-            new=get_session_gen,
-        ),
-        patch(
-            "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler.TimeseriesRepository",
-            return_value=mock_repo,
-        ),
-        patch.object(scheduler, "_update_queue_metrics", side_effect=update_queue_metrics),
-        patch.object(scheduler, "_dispatch_jobs", side_effect=dispatch_error),
-    ):
-        task = asyncio.create_task(scheduler.run())
-        await batch_started.wait()
-        await asyncio.sleep(0)
-        scheduler.stop()
-        await asyncio.wait_for(task, timeout=0.2)
+    task = asyncio.create_task(scheduler.run())
+    await repository.poll_entered.wait()
+    await asyncio.sleep(0)
 
-    mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
-        [301],
-        max_attempts=scheduler._max_attempts,
-        failure_reason=(
-            "Scheduler dispatch publish failed before queueing record keys: P1|2025-08-11"
-        ),
-    )
+    scheduler.stop()
+
+    await asyncio.wait_for(task, timeout=0.2)
