@@ -1,4 +1,4 @@
-.PHONY: install install-ci verify-dependencies compile-runtime-lock quality-ruff-gate quality-ruff-format-gate quality-import-boundary-gate quality-bandit-gate quality-vulture-source-gate quality-deptry-source-gate quality-maintainability-gate quality-complexity-gate quality-unit-collection-gate quality-integration-lite-collection-gate quality-workflow-governance-gate quality-openapi-spectral-gate quality-wiki-docs-gate lint typecheck architecture-guard monetary-float-guard structured-log-guard qcp-problem-details-guard metric-vocabulary-guard repository-output-shape-guard security-control-coverage-guard domain-layer-guard ingestion-store-port-guard ingestion-contract-gate ingestion-rate-limit-scope-guard config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard endpoint-consolidation-watchlist-guard domain-product-validate analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-boundary-mapping-conformance test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack lotus-core-validate test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci live-dpm-source-validate clean
+.PHONY: install install-ci verify-dependencies compile-runtime-lock quality-ruff-gate quality-ruff-format-gate quality-import-boundary-gate quality-bandit-gate quality-vulture-source-gate quality-deptry-source-gate quality-maintainability-gate quality-complexity-gate quality-unit-collection-gate quality-integration-lite-collection-gate quality-workflow-governance-gate quality-openapi-spectral-gate quality-wiki-docs-gate lint typecheck architecture-guard monetary-float-guard structured-log-guard qcp-problem-details-guard metric-vocabulary-guard repository-output-shape-guard security-control-coverage-guard domain-layer-guard ingestion-store-port-guard event-publisher-port-guard ingestion-contract-gate ingestion-rate-limit-scope-guard config-access-guard temporal-vocabulary-guard route-contract-family-guard source-data-product-contract-guard endpoint-consolidation-watchlist-guard domain-product-validate analytics-input-consumer-contract-guard event-runtime-contract-guard rfc0083-closure-guard no-alias-gate openapi-gate api-vocabulary-gate warning-gate migration-smoke migration-apply test test-fast test-medium test-heavy test-unit test-unit-db test-integration-lite test-integration-all test-ops-contract test-boundary-mapping-conformance test-transaction-buy-contract test-transaction-sell-contract test-transaction-dividend-contract test-transaction-interest-contract test-transaction-fx-contract test-transaction-portfolio-flow-bundle-contract test-e2e-smoke test-e2e-all test-docker-smoke test-latency-gate test-performance-load-gate test-performance-load-gate-full test-failure-recovery-gate test-institutional-completion-gate test-institutional-signoff-pack lotus-core-validate test-pr-suites test-pr-runtime-gates test-release-gates security-audit check coverage-gate ci ci-main ci-local docker-build docker-prebuild-ci live-dpm-source-validate clean
 .PHONY: ingestion-gateway-rate-limit-policy-guard
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
@@ -105,6 +105,9 @@ domain-layer-guard:
 ingestion-store-port-guard:
 	python scripts/ingestion_store_port_guard.py
 
+event-publisher-port-guard:
+	python scripts/event_publisher_port_guard.py
+
 security-control-coverage-guard:
 	python scripts/security_control_coverage_guard.py
 
@@ -157,6 +160,7 @@ architecture-guard:
 	python scripts/architecture_boundary_guard.py --strict
 	$(MAKE) domain-layer-guard
 	$(MAKE) ingestion-store-port-guard
+	$(MAKE) event-publisher-port-guard
 
 openapi-gate:
 	python scripts/openapi_quality_gate.py

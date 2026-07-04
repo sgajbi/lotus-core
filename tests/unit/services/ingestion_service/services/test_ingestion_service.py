@@ -3,6 +3,7 @@ from datetime import date, datetime
 from unittest.mock import MagicMock
 
 import pytest
+from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 
@@ -30,7 +31,7 @@ def mock_kafka_producer() -> MagicMock:
 @pytest.fixture
 def ingestion_service(mock_kafka_producer: MagicMock) -> IngestionService:
     """Provides an IngestionService instance with a mocked producer."""
-    return IngestionService(mock_kafka_producer)
+    return IngestionService(KafkaEventPublisher(mock_kafka_producer))
 
 
 async def test_publish_portfolios(
