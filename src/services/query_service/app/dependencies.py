@@ -6,6 +6,9 @@ from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .services.buy_state_service import BuyStateService
+from .services.cash_account_service import CashAccountService
+from .services.cash_balance_service import CashBalanceService
+from .services.cash_movement_service import CashMovementService
 from .services.sell_state_service import SellStateService
 
 
@@ -37,6 +40,24 @@ def sorting_params(
 
 def get_buy_state_service(db: AsyncSession = Depends(get_async_db_session)) -> BuyStateService:
     return BuyStateService(db)
+
+
+def get_cash_account_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> CashAccountService:
+    return CashAccountService(db)
+
+
+def get_cash_balance_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> CashBalanceService:
+    return CashBalanceService(db)
+
+
+def get_cash_movement_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> CashMovementService:
+    return CashMovementService(db)
 
 
 def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:

@@ -1,10 +1,9 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_cash_movement_service
 from ..dtos.cash_movement_dto import PortfolioCashMovementSummaryResponse
 from ..services.cash_movement_service import MAX_CASH_MOVEMENT_WINDOW_DAYS, CashMovementService
 
@@ -16,12 +15,6 @@ INVALID_DATE_WINDOW_RESPONSE_EXAMPLE = {
         f"cash movement summary date window must be {MAX_CASH_MOVEMENT_WINDOW_DAYS} days or less"
     )
 }
-
-
-def get_cash_movement_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> CashMovementService:
-    return CashMovementService(db)
 
 
 @router.get(

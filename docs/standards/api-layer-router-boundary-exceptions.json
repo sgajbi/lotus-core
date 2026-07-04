@@ -45,30 +45,6 @@
       "rationale": "Query-control-plane simulation router still injects AsyncSession pending dedicated application dependency modules."
     },
     {
-      "path": "src/services/query_service/app/routers/cash_accounts.py",
-      "violationCodes": [
-        "router_db_session_dependency"
-      ],
-      "issue": "#638",
-      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
-    },
-    {
-      "path": "src/services/query_service/app/routers/cash_balances.py",
-      "violationCodes": [
-        "router_db_session_dependency"
-      ],
-      "issue": "#638",
-      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
-    },
-    {
-      "path": "src/services/query_service/app/routers/cash_movements.py",
-      "violationCodes": [
-        "router_db_session_dependency"
-      ],
-      "issue": "#638",
-      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
-    },
-    {
       "path": "src/services/query_service/app/routers/cashflow_projection.py",
       "violationCodes": [
         "router_db_session_dependency"

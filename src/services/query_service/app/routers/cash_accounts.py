@@ -3,21 +3,14 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_cash_account_service
 from ..dtos.cash_account_dto import CashAccountQueryResponse
 from ..services.cash_account_service import CashAccountService
 
 router = APIRouter(prefix="/portfolios", tags=["Cash Accounts"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-CASH-001 not found"}
-
-
-def get_cash_account_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> CashAccountService:
-    return CashAccountService(db)
 
 
 @router.get(
