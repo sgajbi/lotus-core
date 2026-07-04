@@ -5,7 +5,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from ..repositories.currency_codes import normalize_currency_code
+from portfolio_common.domain_value_objects import CurrencyCode, FxRate, MoneyAmount
+
 from .decimal_amounts import decimal_or_none
 
 
@@ -23,16 +24,23 @@ class CachedFxRateConverter:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        if normalized_from_currency == normalized_to_currency:
-            return amount
+        money = MoneyAmount.from_raw(amount=amount, currency=from_currency)
+        target_currency = CurrencyCode.from_raw(to_currency)
+        if money.currency == target_currency:
+            return money.amount
         rate = await self.get_fx_rate(
-            normalized_from_currency,
-            normalized_to_currency,
+            money.currency.value,
+            target_currency.value,
             as_of_date,
         )
-        return amount * rate
+        return money.converted(
+            FxRate.from_raw(
+                from_currency=money.currency.value,
+                to_currency=target_currency.value,
+                rate=rate,
+                as_of_date=as_of_date,
+            )
+        ).amount
 
     async def get_fx_rate(
         self,
@@ -40,8 +48,8 @@ class CachedFxRateConverter:
         to_currency: str,
         as_of_date: date,
     ) -> Decimal:
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
+        normalized_from_currency = CurrencyCode.from_raw(from_currency).value
+        normalized_to_currency = CurrencyCode.from_raw(to_currency).value
         cache_key = (normalized_from_currency, normalized_to_currency, as_of_date)
         if cache_key in self._cache:
             return self._cache[cache_key]
