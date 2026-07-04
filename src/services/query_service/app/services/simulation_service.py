@@ -19,6 +19,8 @@ from ..dtos.simulation_dto import (
     SimulationSessionCreateRequest,
     SimulationSessionResponse,
 )
+from ..infrastructure.unit_of_work import SqlAlchemyUnitOfWork
+from ..ports.unit_of_work import UnitOfWork
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.instrument_repository import InstrumentRepository
 from ..repositories.position_repository import PositionRepository
@@ -74,10 +76,12 @@ class SimulationService:
         *,
         clock: Callable[[], datetime] | None = None,
         id_generator: Callable[[], str] | None = None,
+        unit_of_work: UnitOfWork | None = None,
     ):
         self.db = db
         self._clock = clock or _default_clock
         self._id_generator = id_generator or _default_id_generator
+        self._unit_of_work = unit_of_work or SqlAlchemyUnitOfWork(db)
         self.repo = SimulationRepository(db)
         self.position_repo = PositionRepository(db)
         self.instrument_repo = InstrumentRepository(db)
@@ -140,7 +144,7 @@ class SimulationService:
 
         deleted = await self.repo.delete_change(session, change_id)
         if not deleted:
-            await self.db.rollback()
+            await self._unit_of_work.rollback()
             raise SimulationChangeNotFoundError(f"Simulation change {change_id} not found")
 
         session.version += 1
@@ -211,12 +215,12 @@ class SimulationService:
 
     async def _commit_and_refresh(self, *entities: Any) -> None:
         try:
-            await self.db.commit()
+            await self._unit_of_work.commit()
         except Exception:
-            await self.db.rollback()
+            await self._unit_of_work.rollback()
             raise
         for entity in entities:
-            await self.db.refresh(entity)
+            await self._unit_of_work.refresh(entity)
 
     async def _projected_baseline(self, portfolio_id: str) -> _ProjectedBaseline:
         baseline_results = await self.position_repo.get_latest_positions_by_portfolio(portfolio_id)

@@ -17,6 +17,25 @@ from src.services.query_service.app.services.simulation_service import (
 pytestmark = pytest.mark.asyncio
 
 
+class _FakeUnitOfWork:
+    def __init__(self, *, fail_commit: bool = False) -> None:
+        self.fail_commit = fail_commit
+        self.commit_count = 0
+        self.rollback_count = 0
+        self.refreshed_entities: list[object] = []
+
+    async def commit(self) -> None:
+        self.commit_count += 1
+        if self.fail_commit:
+            raise RuntimeError("commit failed")
+
+    async def rollback(self) -> None:
+        self.rollback_count += 1
+
+    async def refresh(self, entity) -> None:
+        self.refreshed_entities.append(entity)
+
+
 @pytest.fixture
 def mock_dependencies():
     repo = AsyncMock()
@@ -233,6 +252,48 @@ async def test_add_changes_returns_versioned_change_records(mock_dependencies):
     assert db.refresh.await_count == 2
 
 
+async def test_add_changes_uses_unit_of_work_and_rolls_back_on_commit_failure(
+    mock_dependencies,
+):
+    repo, _, _ = mock_dependencies
+    added_rows = [
+        SimpleNamespace(
+            change_id="C9",
+            session_id="S1",
+            portfolio_id="P1",
+            security_id="SEC_MSFT_US",
+            transaction_type="BUY",
+            quantity=12,
+            amount=None,
+            price=300.0,
+            currency="USD",
+            effective_date=datetime(2025, 9, 12).date(),
+            change_metadata={"source": "unit"},
+            created_at=datetime.now(timezone.utc),
+        )
+    ]
+    repo.add_changes.return_value = (repo.get_session.return_value, added_rows)
+    db = AsyncMock()
+    unit_of_work = _FakeUnitOfWork(fail_commit=True)
+    service = SimulationService(
+        db,
+        id_generator=lambda: "SIM-CHG-0009",
+        unit_of_work=unit_of_work,
+    )
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        await service.add_changes(
+            "S1",
+            [{"security_id": "SEC_MSFT_US", "transaction_type": "BUY", "quantity": 12}],
+        )
+
+    assert unit_of_work.commit_count == 1
+    assert unit_of_work.rollback_count == 1
+    assert unit_of_work.refreshed_entities == []
+    db.commit.assert_not_awaited()
+    db.rollback.assert_not_awaited()
+
+
 async def test_get_session_raises_when_not_found(mock_dependencies):
     repo, _, _ = mock_dependencies
     repo.get_session.return_value = None
@@ -308,6 +369,23 @@ async def test_delete_change_raises_when_change_missing(mock_dependencies):
         await service.delete_change("S1", "C404")
 
     db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
+
+
+async def test_delete_change_uses_unit_of_work_rollback_when_change_missing(
+    mock_dependencies,
+):
+    repo, _, _ = mock_dependencies
+    repo.delete_change.return_value = False
+    db = AsyncMock()
+    unit_of_work = _FakeUnitOfWork()
+    service = SimulationService(db, unit_of_work=unit_of_work)
+
+    with pytest.raises(SimulationChangeNotFoundError, match="not found"):
+        await service.delete_change("S1", "C404")
+
+    assert unit_of_work.rollback_count == 1
+    db.rollback.assert_not_awaited()
     db.commit.assert_not_awaited()
 
 
