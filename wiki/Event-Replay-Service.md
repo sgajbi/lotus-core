@@ -42,6 +42,7 @@ repositories:
 | Module | Responsibility |
 | --- | --- |
 | `app/routers/ingestion_operations.py` | FastAPI route metadata, request binding, API DTO construction, and HTTP error mapping. |
+| `app/routers/ingestion_operations_examples.py` | OpenAPI and operator-facing example payload catalog for ingestion operations routes. |
 | `app/dependencies.py` | Composition providers for replay dispatchers, command services, and query services. |
 | `app/application/ingestion_retry_commands.py` | Ingestion-job retry orchestration, duplicate blocking, replay audit, publish, and post-publish bookkeeping behavior. |
 | `app/application/consumer_dlq_replay_commands.py` | Consumer DLQ event replay orchestration, correlation fallback, candidate selection, retry allowance, replay audit, publish, and bookkeeping behavior. |
