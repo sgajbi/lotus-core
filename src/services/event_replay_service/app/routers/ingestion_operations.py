@@ -35,10 +35,6 @@ from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
     get_ingestion_job_service,
 )
-from src.services.ingestion_service.app.services.ingestion_service import (
-    IngestionService,
-    get_ingestion_service,
-)
 
 from ..application.bookkeeping_repair_commands import (
     BookkeepingRepairCommandError,
@@ -47,6 +43,10 @@ from ..application.bookkeeping_repair_commands import (
 from ..application.consumer_dlq_replay_commands import (
     ConsumerDlqReplayCommand,
     ConsumerDlqReplayCommandService,
+)
+from ..application.ingestion_operations_queries import (
+    IngestionOperationsNotFound,
+    IngestionOperationsQueryService,
 )
 from ..application.ingestion_retry_commands import (
     IngestionRetryCommandService,
@@ -57,9 +57,12 @@ from ..application.ops_control_commands import (
     OpsControlUpdateCommand,
 )
 from ..application.replay_command_errors import ReplayCommandError
-from ..application.replay_payload_dispatcher import (
-    IngestionServiceReplayPayloadDispatcher,
-    ReplayPayloadDispatcher,
+from ..dependencies import (
+    get_bookkeeping_repair_command_service,
+    get_consumer_dlq_replay_command_service,
+    get_ingestion_operations_query_service,
+    get_ingestion_retry_command_service,
+    get_ops_control_command_service,
 )
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
@@ -598,42 +601,11 @@ INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
 }
 
 
-def get_replay_payload_dispatcher(
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-) -> ReplayPayloadDispatcher:
-    return IngestionServiceReplayPayloadDispatcher(ingestion_service)
-
-
-def get_ingestion_retry_command_service(
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
-) -> IngestionRetryCommandService:
-    return IngestionRetryCommandService(
-        ingestion_job_service=ingestion_job_service,
-        replay_payload_dispatcher=replay_payload_dispatcher,
+def _not_found_response(exc: IngestionOperationsNotFound) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"code": exc.code, "message": exc.message},
     )
-
-
-def get_consumer_dlq_replay_command_service(
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
-) -> ConsumerDlqReplayCommandService:
-    return ConsumerDlqReplayCommandService(
-        ingestion_job_service=ingestion_job_service,
-        replay_payload_dispatcher=replay_payload_dispatcher,
-    )
-
-
-def get_bookkeeping_repair_command_service(
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-) -> BookkeepingRepairCommandService:
-    return BookkeepingRepairCommandService(ingestion_job_service=ingestion_job_service)
-
-
-def get_ops_control_command_service(
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-) -> OpsControlCommandService:
-    return OpsControlCommandService(ingestion_job_service=ingestion_job_service)
 
 
 @router.get(
@@ -820,9 +792,11 @@ async def list_ingestion_jobs(
         description="Maximum number of jobs to return.",
         examples=[100],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    jobs, next_cursor = await ingestion_job_service.list_jobs(
+    page = await query_service.list_jobs(
         status=status,
         entity_type=entity_type,
         submitted_from=submitted_from,
@@ -830,7 +804,11 @@ async def list_ingestion_jobs(
         cursor=cursor,
         limit=limit,
     )
-    return IngestionJobListResponse(jobs=jobs, total=len(jobs), next_cursor=next_cursor)
+    return IngestionJobListResponse(
+        jobs=page.jobs,
+        total=page.total,
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get(
@@ -869,19 +847,15 @@ async def list_ingestion_job_failures(
         description="Maximum number of failure events to return.",
         examples=[100],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    job = await ingestion_job_service.get_job(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found.",
-            },
-        )
-    failures = await ingestion_job_service.list_failures(job_id=job_id, limit=limit)
-    return IngestionJobFailureListResponse(failures=failures, total=len(failures))
+    try:
+        page = await query_service.list_job_failures(job_id=job_id, limit=limit)
+    except IngestionOperationsNotFound as exc:
+        raise _not_found_response(exc) from exc
+    return IngestionJobFailureListResponse(failures=page.failures, total=page.total)
 
 
 @router.get(
@@ -913,18 +887,14 @@ async def get_ingestion_job_records(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    record_status = await ingestion_job_service.get_job_record_status(job_id)
-    if record_status is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found.",
-            },
-        )
-    return record_status
+    try:
+        return await query_service.get_job_record_status(job_id)
+    except IngestionOperationsNotFound as exc:
+        raise _not_found_response(exc) from exc
 
 
 @router.post(
@@ -1495,12 +1465,14 @@ async def list_consumer_dlq_events(
         description="Optional consumer-group filter.",
         examples=["persistence-service-group"],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    events = await ingestion_job_service.list_consumer_dlq_events(
+    page = await query_service.list_consumer_dlq_events(
         limit=limit, original_topic=original_topic, consumer_group=consumer_group
     )
-    return ConsumerDlqEventListResponse(events=events, total=len(events))
+    return ConsumerDlqEventListResponse(events=page.events, total=page.total)
 
 
 @router.post(
@@ -1616,16 +1588,18 @@ async def list_ingestion_replay_audits(
         description="Optional ingestion job identifier filter.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    audits = await ingestion_job_service.list_replay_audits(
+    page = await query_service.list_replay_audits(
         limit=limit,
         recovery_path=recovery_path,
         replay_status=replay_status,
         replay_fingerprint=replay_fingerprint,
         job_id=job_id,
     )
-    return IngestionReplayAuditListResponse(audits=audits, total=len(audits))
+    return IngestionReplayAuditListResponse(audits=page.audits, total=page.total)
 
 
 @router.get(
@@ -1655,18 +1629,14 @@ async def get_ingestion_replay_audit(
         description="Replay audit identifier.",
         examples=["replay_01J5WK1G7S3HBQ7Q3M0E3TMT0P"],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    query_service: IngestionOperationsQueryService = Depends(
+        get_ingestion_operations_query_service
+    ),
 ):
-    audit = await ingestion_job_service.get_replay_audit(replay_id)
-    if audit is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_REPLAY_AUDIT_NOT_FOUND",
-                "message": f"Replay audit '{replay_id}' was not found.",
-            },
-        )
-    return audit
+    try:
+        return await query_service.get_replay_audit(replay_id)
+    except IngestionOperationsNotFound as exc:
+        raise _not_found_response(exc) from exc
 
 
 @router.get(

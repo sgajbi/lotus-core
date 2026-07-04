@@ -139,6 +139,14 @@ Current repository posture:
     Query-service lookup catalog assembly now lives in `LookupCatalogService`; lookup routers
     should keep selector routes limited to HTTP query parameter parsing and response wrapping while
     the service owns source scoping, de-duplication, ordering, and limit behavior.
+    Event-replay operations now follows the same bounded-module pattern: FastAPI routes in
+    `src/services/event_replay_service/app/routers/` bind HTTP requests, build API DTOs, and map
+    `HTTPException` only; command and query orchestration belongs in
+    `src/services/event_replay_service/app/application/`; runtime composition providers belong in
+    `src/services/event_replay_service/app/dependencies.py`. Do not rebuild replay payloads,
+    deterministic replay fingerprints, consumer-DLQ candidate selection, audit persistence,
+    retry/bookkeeping state transitions, or query envelope totals in the router. Add application
+    service tests first when extending ingestion operations.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

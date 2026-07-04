@@ -3,6 +3,9 @@
 Authoritative portfolio, booking, account, holding, and transaction platform for the Lotus
 ecosystem.
 
+Service profile: `domain-service`; primary runtime: Python FastAPI services plus governed workers
+and operators.
+
 Repository-local engineering context:
 [REPOSITORY-ENGINEERING-CONTEXT.md](REPOSITORY-ENGINEERING-CONTEXT.md)
 
@@ -48,6 +51,33 @@ Boundary rules that matter:
 3. downstream-facing APIs must remain classified under RFC-0082 contract families
 4. shared infrastructure ownership now belongs in `lotus-platform`, while `lotus-core` may still
    provide app-local isolated runtime support
+
+## Ecosystem Role
+
+Primary downstream consumers:
+
+- `lotus-gateway` and `lotus-workbench` for governed read publication and front-office surfaces
+- `lotus-performance` and `lotus-risk` for source-owned performance and risk calculations
+- `lotus-advise`, `lotus-manage`, and `lotus-report` for advisory, mandate, and reporting workflows
+- platform validators that certify source-data contracts, trust telemetry, and operating posture
+
+Primary upstream dependencies:
+
+- app-local PostgreSQL/Kafka infrastructure for isolated development
+- shared platform contracts and validators from `lotus-platform`
+- external market, reference, treasury, and OMS evidence only through bounded, fail-closed source
+  product contracts
+
+## Data Mesh Posture
+
+`lotus-core` is the source authority for Core-owned source-data products. Product declarations,
+source-security profiles, route-family metadata, trust-telemetry coverage, and methodology docs
+are implementation truth only when repo-native validation proves them.
+
+Important boundary: active declarations, CI-backed implementation, live validator proof, trust
+telemetry coverage, and platform mesh certification are separate statuses. Do not document a
+product as mesh certified unless current generated platform certification artifacts prove that
+exact state.
 
 ## Current Operational Posture
 
@@ -98,6 +128,27 @@ For detailed source-data products and boundary caveats, use
 
 ## Architecture At A Glance
 
+```mermaid
+flowchart LR
+    Ingress["ingestion_service<br/>write ingress and adapter ingestion"]
+    Store["Persistence and Core store<br/>portfolio, account, holding, transaction truth"]
+    Query["query_service<br/>operational read plane"]
+    QCP["query_control_plane_service<br/>analytics-input, support, lineage, policy"]
+    Replay["event_replay_service<br/>DLQ, replay, audit, ops control"]
+    Calc["calculators and generators<br/>position, valuation, cashflow, timeseries"]
+    Downstream["Gateway / Workbench / Performance / Risk / Advise / Manage / Report"]
+
+    Ingress --> Store
+    Store --> Query
+    Store --> QCP
+    Store --> Replay
+    Store --> Calc
+    Query --> Downstream
+    QCP --> Downstream
+    Replay --> Downstream
+    Calc --> Store
+```
+
 Primary runtime surfaces:
 
 - `query_service`
@@ -121,26 +172,20 @@ Primary architecture references:
 
 ## Repository Layout
 
-- `src/services/query_service/`
-  operational read-plane API
-- `src/services/query_control_plane_service/`
-  control-plane and downstream analytics-input contracts
-- `src/services/ingestion_service/`
-  source-data and adapter ingress
-- `src/services/persistence_service/`
-  persistence orchestration
-- `src/services/calculators/`
-  core financial calculators
-- `src/services/timeseries_generator_service/`
-  position and portfolio time-series generation
-- `src/libs/portfolio-common/`
-  shared domain and contract-support libraries
-- `scripts/`
-  gates, guards, manifests, smoke tools, and operational scripts
-- `docs/`
-  architecture, standards, features, operations, and RFC material
-- `wiki/`
-  canonical authored source for GitHub wiki publication
+| Path | Responsibility |
+| --- | --- |
+| `src/services/query_service/` | Operational read-plane API for portfolio, position, transaction, cash, market, and reporting reads. |
+| `src/services/query_control_plane_service/` | Control-plane and downstream analytics-input, snapshot, simulation, support, lineage, policy, and export contracts. |
+| `src/services/ingestion_service/` | Source-data and adapter write ingress. |
+| `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
+| `src/services/persistence_service/` | Persistence orchestration. |
+| `src/services/calculators/` | Core financial calculators. |
+| `src/services/timeseries_generator_service/` | Position and portfolio time-series generation. |
+| `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
+| `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
+| `scripts/` | Gates, guards, manifests, smoke tools, proof generators, and operational scripts. |
+| `docs/` | Detailed architecture, standards, features, operations, methodology, and RFC material. |
+| `wiki/` | Canonical authored source for GitHub wiki publication. |
 
 ## Quick Start
 
