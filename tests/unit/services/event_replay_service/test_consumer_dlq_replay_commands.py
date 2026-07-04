@@ -9,7 +9,7 @@ from src.services.event_replay_service.app.application.consumer_dlq_replay_comma
     ConsumerDlqReplayCommandService,
     ConsumerDlqReplayResult,
 )
-from src.services.event_replay_service.app.application.ingestion_retry_commands import (
+from src.services.event_replay_service.app.application.replay_command_errors import (
     ReplayCommandError,
 )
 

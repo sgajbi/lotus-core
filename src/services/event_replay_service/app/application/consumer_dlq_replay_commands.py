@@ -6,7 +6,7 @@ from typing import Any
 
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
-from .ingestion_retry_commands import ReplayCommandError
+from .replay_command_errors import ReplayCommandError
 from .replay_payload_dispatcher import ReplayPayloadDispatcher
 from .replay_retry_payloads import deterministic_replay_fingerprint, payload_record_count
 
