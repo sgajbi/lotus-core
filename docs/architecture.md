@@ -29,10 +29,13 @@ transaction domain data in the Lotus ecosystem.
    publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
 7. Transaction replay stays split across pure replay planning, reader ports, and publisher
    adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
-8. Repositories own persistence access.
-9. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+8. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
+   adapters, and pure dispatch planning; see
+   `docs/standards/aggregation-scheduler-boundary-standard.md`.
+9. Repositories own persistence access.
+10. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-10. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+11. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 

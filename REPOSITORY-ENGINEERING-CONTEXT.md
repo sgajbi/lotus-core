@@ -947,6 +947,20 @@ Most relevant current governance:
     architecture-guard` runs `scripts/transaction_replay_boundary_guard.py` so event planning,
     deduplication, and correlation header construction do not drift back into the compatibility
     repository adapter.
+78. Portfolio aggregation scheduler policy is split from global database sessions, concrete
+    repositories, raw metric functions, system clocks, and concrete Kafka publication. The
+    repo-local standard lives at
+    `docs/standards/aggregation-scheduler-boundary-standard.md`.
+    `portfolio_aggregation_service.app.ports.aggregation_scheduler_ports` owns repository-provider,
+    repository, metrics-sink, and clock contracts; `app.infrastructure.aggregation_scheduler_adapters`
+    owns SQLAlchemy, Prometheus, and system-clock adapters; and `app.core.aggregation_job_publisher`
+    owns aggregation job record-key/header/payload planning plus dispatch failure classification
+    behind an aggregation-job publisher port. `AggregationScheduler` preserves its default runtime
+    constructor while accepting injected settings, repository provider, metrics sink, clock, and
+    publisher for fake-port tests. `make architecture-guard` runs
+    `scripts/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
+    repositories, concrete Kafka producers, direct publish/flush calls, and raw metric functions do
+    not drift back into scheduler orchestration.
 
 ## Context Maintenance Rule
 
