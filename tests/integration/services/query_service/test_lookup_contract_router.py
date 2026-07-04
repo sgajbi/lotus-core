@@ -1,11 +1,13 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dependencies import (
+    get_instrument_service,
+    get_portfolio_service,
+)
 from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -31,23 +33,15 @@ async def async_test_client():
     mock_instrument_service.search_instrument_lookup_items = AsyncMock(return_value=[])
     mock_instrument_service.list_currency_lookup_items = AsyncMock(return_value=[])
 
-    app.dependency_overrides[get_async_db_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[get_portfolio_service] = lambda: mock_portfolio_service
+    app.dependency_overrides[get_instrument_service] = lambda: mock_instrument_service
 
-    with (
-        patch(
-            "src.services.query_service.app.routers.lookups.PortfolioService",
-            return_value=mock_portfolio_service,
-        ),
-        patch(
-            "src.services.query_service.app.routers.lookups.InstrumentService",
-            return_value=mock_instrument_service,
-        ),
-    ):
-        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client, mock_portfolio_service, mock_instrument_service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, mock_portfolio_service, mock_instrument_service
 
-    app.dependency_overrides.pop(get_async_db_session, None)
+    app.dependency_overrides.pop(get_portfolio_service, None)
+    app.dependency_overrides.pop(get_instrument_service, None)
 
 
 async def test_portfolio_lookup_contract_sorted_filtered_and_limited(async_test_client):

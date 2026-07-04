@@ -10,9 +10,12 @@ from .services.cash_account_service import CashAccountService
 from .services.cash_balance_service import CashBalanceService
 from .services.cash_movement_service import CashMovementService
 from .services.cashflow_projection_service import CashflowProjectionService
+from .services.fx_rate_service import FxRateService
+from .services.instrument_service import InstrumentService
 from .services.liquidity_ladder_service import PortfolioLiquidityLadderService
 from .services.portfolio_service import PortfolioService
 from .services.position_service import PositionService
+from .services.price_service import MarketPriceService
 from .services.reporting_service import ReportingService
 from .services.sell_state_service import SellStateService
 
@@ -71,6 +74,18 @@ def get_cashflow_projection_service(
     return CashflowProjectionService(db)
 
 
+def get_fx_rate_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> FxRateService:
+    return FxRateService(db)
+
+
+def get_instrument_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> InstrumentService:
+    return InstrumentService(db)
+
+
 def get_liquidity_ladder_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> PortfolioLiquidityLadderService:
@@ -87,6 +102,12 @@ def get_position_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> PositionService:
     return PositionService(db)
+
+
+def get_market_price_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> MarketPriceService:
+    return MarketPriceService(db)
 
 
 def get_reporting_service(
