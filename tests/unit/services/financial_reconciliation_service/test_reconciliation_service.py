@@ -1,11 +1,15 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import get_type_hints
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from src.services.financial_reconciliation_service.app.dtos import ReconciliationRunRequest
+from src.services.financial_reconciliation_service.app.ports.reconciliation_repository_ports import (
+    ReconciliationRepositoryPort,
+)
 from src.services.financial_reconciliation_service.app.services.reconciliation_service import (
     ReconciliationService,
 )
@@ -25,6 +29,12 @@ class FakeIdGenerator:
 
     def hex(self) -> str:
         return self._ids.pop(0)
+
+
+def test_reconciliation_service_depends_on_repository_port() -> None:
+    hints = get_type_hints(ReconciliationService.__init__)
+
+    assert hints["repository"] is ReconciliationRepositoryPort
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,9 @@
 import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import get_type_hints
 
+from src.services.query_service.app.ports.source_data_repository_ports import PortfolioTaxLotReader
 from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
 )
@@ -49,6 +51,12 @@ def test_portfolio_tax_lot_after_sort_key_requires_complete_cursor() -> None:
     assert portfolio_tax_lot_after_sort_key(
         {"last_acquisition_date": "2026-03-25", "last_lot_id": "LOT-A"}
     ) == (date(2026, 3, 25), "LOT-A")
+
+
+def test_portfolio_tax_lot_resolver_depends_on_reader_port() -> None:
+    hints = get_type_hints(resolve_portfolio_tax_lot_window_response)
+
+    assert hints["repository"] is PortfolioTaxLotReader
 
 
 def test_portfolio_tax_lot_window_request_scope_binds_filters_and_cursor() -> None:

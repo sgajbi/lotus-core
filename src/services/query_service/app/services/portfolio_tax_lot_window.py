@@ -11,6 +11,7 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowSupportability,
     ReferencePageMetadata,
 )
+from ..ports.source_data_repository_ports import PortfolioTaxLotReader
 from ..read_models import PortfolioTaxLotReadRecord
 from ..repositories.identifier_normalization import normalize_security_id
 from .reference_data_helpers import latest_reference_evidence_timestamp
@@ -110,7 +111,7 @@ def portfolio_tax_lot_page_token(
 
 async def resolve_portfolio_tax_lot_window_response(
     *,
-    repository: Any,
+    repository: PortfolioTaxLotReader,
     portfolio_id: str,
     request: PortfolioTaxLotWindowRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
