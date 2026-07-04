@@ -11,13 +11,23 @@ from src.services.query_service.app.read_models import (
     PerformanceEconomicsTransactionReadRecord,
 )
 from src.services.query_service.app.services.performance_component_economics import (
-    build_performance_component_economics_response,
     build_performance_component_economics_rows,
     build_performance_component_economics_totals,
     performance_component_economics_next_page_token_payload,
     performance_component_economics_page_scope,
     performance_component_economics_page_token,
     resolve_performance_component_economics_response,
+)
+from src.services.query_service.app.services.performance_component_economics_policy import (
+    missing_performance_component_families,
+    observed_performance_component_families,
+    performance_component_economics_data_quality_status,
+    performance_component_economics_source_lineage,
+    performance_component_economics_supportability_reason,
+    performance_component_economics_supportability_state,
+)
+from src.services.query_service.app.services.performance_component_economics_response import (
+    build_performance_component_economics_response,
 )
 
 
@@ -282,6 +292,84 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     assert response.tenant_id == "tenant-sg"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
+
+
+def test_performance_component_economics_policy_classifies_source_evidence() -> None:
+    rows = build_performance_component_economics_rows(
+        [
+            _transaction(
+                transaction_id="TXN-POLICY-001",
+                costs=[_cost(amount="2.5000", currency="USD")],
+                cashflow=_cashflow(amount="100.0000", currency="USD"),
+                withholding_tax_amount="15.0000",
+                net_interest_amount="80.0000",
+                realized_fx_pnl_base="3.0000",
+                transaction_fx_rate="1.2500000000",
+            )
+        ]
+    )
+
+    observed = observed_performance_component_families(rows)
+
+    assert performance_component_economics_supportability_state(rows=rows, has_more=False) == (
+        "READY"
+    )
+    assert (
+        performance_component_economics_supportability_reason(
+            rows=rows,
+            has_more=False,
+        )
+        == "PERFORMANCE_COMPONENT_ECONOMICS_READY"
+    )
+    assert performance_component_economics_data_quality_status(rows=rows, has_more=False) == (
+        "COMPLETE"
+    )
+    assert observed == [
+        "cashflow",
+        "fee",
+        "income",
+        "tax",
+        "realized_fx_pnl",
+        "fx_context",
+    ]
+    assert "realized_capital_pnl" in missing_performance_component_families(observed)
+    assert performance_component_economics_source_lineage() == {
+        "source_system": "transactions",
+        "source_table": "transactions,cashflows,transaction_costs",
+        "contract_version": "performance_component_economics_v1",
+    }
+
+
+def test_performance_component_economics_policy_classifies_empty_and_partial_pages() -> None:
+    assert performance_component_economics_supportability_state(rows=[], has_more=False) == (
+        "UNAVAILABLE"
+    )
+    assert (
+        performance_component_economics_supportability_reason(
+            rows=[],
+            has_more=False,
+        )
+        == "PERFORMANCE_COMPONENT_ECONOMICS_EVIDENCE_NOT_FOUND"
+    )
+    assert performance_component_economics_data_quality_status(rows=[], has_more=False) == (
+        "UNKNOWN"
+    )
+
+    rows = build_performance_component_economics_rows([_transaction(transaction_id="TXN-PAGE-001")])
+
+    assert performance_component_economics_supportability_state(rows=rows, has_more=True) == (
+        "DEGRADED"
+    )
+    assert (
+        performance_component_economics_supportability_reason(
+            rows=rows,
+            has_more=True,
+        )
+        == "PERFORMANCE_COMPONENT_ECONOMICS_PAGE_PARTIAL"
+    )
+    assert performance_component_economics_data_quality_status(rows=rows, has_more=True) == (
+        "PARTIAL"
+    )
 
 
 def test_performance_component_economics_totals_do_not_mislabel_mixed_fee_currency() -> None:

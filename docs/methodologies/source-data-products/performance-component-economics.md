@@ -83,6 +83,26 @@ When positive transaction-cost rows on one transaction carry multiple currencies
 amount per currency. Fee totals are built from those per-currency components. Downstream consumers
 must not treat `MIXED` as an ISO currency.
 
+## Field Provenance And Assembly Boundaries
+
+The implementation keeps the source-data anti-corruption boundary in three stages:
+
+1. typed read records from the repository,
+2. source-evidence policy over component families, supportability, data quality, totals, and
+   lineage,
+3. response-envelope assembly for product identity, page metadata, runtime metadata, and DTO
+   construction.
+
+| Field family | Provenance |
+| --- | --- |
+| `rows[*].transaction_id`, `portfolio_id`, `security_id`, `transaction_type`, `transaction_date`, `currency`, `trade_currency`, `gross_transaction_amount`, tax, income, realized P&L, FX context | Source-authored transaction evidence, normalized only for identifiers, case, and Decimal/date representation. |
+| `rows[*].cashflow_*` | Source-authored latest linked cashflow evidence selected by the repository by highest cashflow epoch and id. |
+| `rows[*].trade_fee_components` | Source-authored transaction-cost rows de-duplicated by component identity, or transaction `trade_fee` fallback when no cost rows exist. |
+| `rows[*].source_lineage` | Core source-data policy metadata for the row evidence contract. |
+| `component_totals` and `component_totals_scope` | Core response policy derived from the returned page only. |
+| `supportability` and `data_quality_status` | Core source-evidence policy derived from returned rows and paging state. |
+| `page`, `request_fingerprint`, runtime source-data metadata, and top-level `lineage` | Response-envelope metadata derived by Core assembly policy. |
+
 ## Supportability
 
 `READY` means at least one source row was returned and no additional page is indicated. `DEGRADED`
