@@ -182,13 +182,17 @@ Current repository posture:
     until operators inspect failure history. Bookkeeping repair must use the protected
     `POST /ingestion/jobs/{job_id}/bookkeeping/repair` operation and must require recorded
     `queue_bookkeeping` or `persist_bookkeeping` evidence before moving accepted jobs to queued.
+    Lifecycle mutations are expected-state guarded; repair must treat stale accepted-to-queued
+    updates as conflicts, not successful repairs.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but
     do not expose raw downstream publish or bookkeeping exception text as the primary client
     message. Current outcomes are `not_found`, `retry_unsupported`, `partial_retry_unsupported`,
-    `retry_blocked`, `duplicate_blocked`, `publish_failed`, `bookkeeping_failed`, and
-    `audit_write_failed`.
+    `retry_blocked`, `duplicate_blocked`, `publish_failed`, `bookkeeping_failed`,
+    `bookkeeping_conflict`, and `audit_write_failed`. Replay success bookkeeping must use the
+    atomic retry-plus-queued transition so retry counters cannot advance separately from queued
+    status.
 29. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
     Token parsing belongs in `portfolio_common.metrics_settings`, and standard API apps,
     health-only worker apps, and web-backed worker runtime paths must all use the shared policy so

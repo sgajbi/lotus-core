@@ -107,7 +107,22 @@ class BookkeepingRepairCommandService:
         previous_status: str,
     ) -> None:
         try:
-            await self.ingestion_job_service.mark_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_queued(job_id)
+            if not transitioned:
+                raise BookkeepingRepairCommandError(
+                    HTTP_CONFLICT,
+                    {
+                        "code": "INGESTION_BOOKKEEPING_REPAIR_CONFLICT",
+                        "message": (
+                            "Ingestion job status changed before bookkeeping repair completed."
+                        ),
+                        "job_id": job_id,
+                        "previous_status": previous_status,
+                        "recovery_action": POST_BOOKKEEPING_REPAIR_ACTION,
+                    },
+                )
+        except BookkeepingRepairCommandError:
+            raise
         except Exception as exc:
             logger.exception(
                 "Ingestion bookkeeping repair failed.",

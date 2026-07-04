@@ -62,8 +62,7 @@ async def test_ingestion_job_retry_dry_run_records_audit_and_returns_job() -> No
 async def test_ingestion_job_retry_success_audit_failure_is_not_bookkeeping_success() -> None:
     context = SimpleNamespace(endpoint="/ingest/transactions")
     ingestion_job_service = MagicMock()
-    ingestion_job_service.mark_retried = AsyncMock()
-    ingestion_job_service.mark_queued = AsyncMock()
+    ingestion_job_service.mark_retried_and_queued = AsyncMock(return_value=True)
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
         side_effect=RuntimeError("audit database unavailable")
     )
@@ -266,8 +265,7 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
 async def test_ingestion_job_retry_bookkeeping_failure_uses_recovery_detail() -> None:
     context = SimpleNamespace(endpoint="/ingest/transactions")
     ingestion_job_service = MagicMock()
-    ingestion_job_service.mark_retried = AsyncMock()
-    ingestion_job_service.mark_queued = AsyncMock(
+    ingestion_job_service.mark_retried_and_queued = AsyncMock(
         side_effect=RuntimeError("queue state write failed with downstream detail")
     )
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-book")
@@ -295,3 +293,40 @@ async def test_ingestion_job_retry_bookkeeping_failure_uses_recovery_detail() ->
         "replay_audit_id": "audit-book",
         "replay_fingerprint": "fp-001",
     }
+
+
+@pytest.mark.asyncio
+async def test_ingestion_job_retry_bookkeeping_conflict_uses_governed_detail() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_retried_and_queued = AsyncMock(return_value=False)
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(
+        return_value="audit-conflict"
+    )
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _retry_service(
+            ingestion_job_service=ingestion_job_service
+        )._mark_ingestion_job_retry_replayed(
+            job_id="job-001",
+            context=context,
+            replay_fingerprint="fp-001",
+            requested_by="ops",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "INGESTION_RETRY_BOOKKEEPING_CONFLICT",
+        "message": (
+            "Replay publish succeeded but ingestion job state changed before bookkeeping completed."
+        ),
+        "outcome": "bookkeeping_conflict",
+        "remediation": (
+            "Refresh the ingestion job status and replay audit before retrying; another "
+            "recovery path changed the job state."
+        ),
+        "recovery_path": "ingestion_job_retry",
+        "replay_audit_id": "audit-conflict",
+        "replay_fingerprint": "fp-001",
+    }
+    ingestion_job_service.mark_retried_and_queued.assert_awaited_once_with("job-001")

@@ -56,21 +56,41 @@ async def test_mark_queued_uses_single_atomic_update(
     service: IngestionJobService,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    session = _FakeSession()
+    session = _FakeSession(returned_row=SimpleNamespace(status="accepted"))
     monkeypatch.setattr(
         service_module,
         "get_async_db_session",
         make_single_session_getter(session),
     )
 
-    await service.mark_queued("job_mark_queued")
+    updated = await service.mark_queued("job_mark_queued")
 
+    assert updated is True
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
+    assert "ingestion_jobs.status IN" in compiled_sql
     assert "status=:status" in compiled_sql
     assert "completed_at=:completed_at" in compiled_sql
     assert "failure_reason=:failure_reason" in compiled_sql
+    assert "RETURNING ingestion_jobs.status" in compiled_sql
+
+
+async def test_mark_queued_returns_false_when_expected_status_is_stale(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    session = _FakeSession(returned_row=None)
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    updated = await service.mark_queued("job_mark_queued")
+
+    assert updated is False
+    assert len(session.executed_statements) == 1
 
 
 async def test_mark_failed_uses_atomic_update_and_records_failure(
@@ -96,6 +116,7 @@ async def test_mark_failed_uses_atomic_update_and_records_failure(
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
+    assert "ingestion_jobs.status IN" in compiled_sql
     assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
 
     assert len(session.added_rows) == 1
@@ -125,6 +146,36 @@ async def test_mark_retried_uses_atomic_increment_update(
     assert len(session.executed_statements) == 1
     compiled_sql = str(session.executed_statements[0])
     assert "UPDATE ingestion_jobs" in compiled_sql
+    assert "ingestion_jobs.status IN" in compiled_sql
+    assert (
+        "retry_count=(coalesce(ingestion_jobs.retry_count, :coalesce_1) + :coalesce_2)"
+        in compiled_sql
+    )
+    assert "last_retried_at=:last_retried_at" in compiled_sql
+    assert "RETURNING ingestion_jobs.endpoint, ingestion_jobs.entity_type" in compiled_sql
+
+
+async def test_mark_retried_and_queued_is_single_expected_status_update(
+    service: IngestionJobService,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    session = _FakeSession(
+        returned_row=SimpleNamespace(endpoint="transactions", entity_type="transaction")
+    )
+    monkeypatch.setattr(
+        service_module,
+        "get_async_db_session",
+        make_single_session_getter(session),
+    )
+
+    updated = await service.mark_retried_and_queued("job_mark_retried")
+
+    assert updated is True
+    assert len(session.executed_statements) == 1
+    compiled_sql = str(session.executed_statements[0])
+    assert "UPDATE ingestion_jobs" in compiled_sql
+    assert "ingestion_jobs.status IN" in compiled_sql
+    assert "status=:status" in compiled_sql
     assert (
         "retry_count=(coalesce(ingestion_jobs.retry_count, :coalesce_1) + :coalesce_2)"
         in compiled_sql

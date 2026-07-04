@@ -102,6 +102,9 @@ classification, and lookthrough inputs are upstream canonical data products for 
 - duplicate `X-Idempotency-Key` use for the same endpoint and same source-safe canonical payload
   replays the existing acknowledgement; the same endpoint/key with a different payload returns
   `409 INGESTION_IDEMPOTENCY_CONFLICT`
+- ingestion job lifecycle updates are expected-state guarded; stale replay, failure, or
+  bookkeeping-repair mutations return conflict outcomes instead of overwriting newer operator
+  truth
 
 ## When not to use this page
 
