@@ -11,6 +11,11 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.core_snapshot import (
+    CoreSnapshotIdentityCommand,
+    CoreSnapshotOptionsCommand,
+    CoreSnapshotSimulationCommand,
+)
 from ..dtos.core_snapshot_dto import (
     CoreSnapshotFreshnessMetadata,
     CoreSnapshotGovernanceMetadata,
@@ -140,6 +145,33 @@ class CoreSnapshotService:
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
         return request_fingerprint(payload)
+
+    @staticmethod
+    def _identity_command_from_request(
+        request: CoreSnapshotRequest,
+    ) -> CoreSnapshotIdentityCommand:
+        return CoreSnapshotIdentityCommand(
+            as_of_date=request.as_of_date,
+            snapshot_mode=request.snapshot_mode.value,
+            reporting_currency=request.reporting_currency,
+            consumer_system=request.consumer_system,
+            tenant_id=request.tenant_id,
+            sections=[section.value for section in request.sections],
+            simulation=(
+                CoreSnapshotSimulationCommand(
+                    session_id=request.simulation.session_id,
+                    expected_version=request.simulation.expected_version,
+                )
+                if request.simulation is not None
+                else None
+            ),
+            options=CoreSnapshotOptionsCommand(
+                include_zero_quantity_positions=(request.options.include_zero_quantity_positions),
+                include_cash_positions=request.options.include_cash_positions,
+                position_basis=request.options.position_basis.value,
+                weight_basis=request.options.weight_basis.value,
+            ),
+        )
 
     @staticmethod
     def _normalize_freshness_status(status: str | None) -> str | None:
@@ -571,7 +603,7 @@ class CoreSnapshotService:
         return self._request_fingerprint(
             {
                 "portfolio_id": portfolio_id,
-                "request": request.model_dump(mode="json"),
+                "request": self._identity_command_from_request(request).canonical_payload(),
                 "governance": {
                     "consumer_system": governance.consumer_system,
                     "tenant_id": governance.tenant_id,

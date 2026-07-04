@@ -4,7 +4,18 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 
 from ..adapter_mode import require_upload_adapter_enabled
 from ..application.errors import ApplicationError
-from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
+from ..application.upload_commands import (
+    UploadCommitCommand,
+    UploadCommitResult,
+    UploadPreviewCommand,
+    UploadPreviewResult,
+)
+from ..DTOs.upload_dto import (
+    UploadCommitResponse,
+    UploadEntityType,
+    UploadPreviewResponse,
+    UploadRowError,
+)
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.ingestion_service import (
@@ -82,6 +93,66 @@ def upload_application_error_to_http(exc: ApplicationError) -> HTTPException:
     )
 
 
+def upload_preview_command_from_api(
+    *,
+    entity_type: UploadEntityType,
+    filename: str,
+    content: bytes,
+    sample_size: int,
+) -> UploadPreviewCommand:
+    return UploadPreviewCommand(
+        entity_type=entity_type,
+        filename=filename,
+        content=content,
+        sample_size=sample_size,
+    )
+
+
+def upload_commit_command_from_api(
+    *,
+    entity_type: UploadEntityType,
+    filename: str,
+    content: bytes,
+    allow_partial: bool,
+) -> UploadCommitCommand:
+    return UploadCommitCommand(
+        entity_type=entity_type,
+        filename=filename,
+        content=content,
+        allow_partial=allow_partial,
+    )
+
+
+def upload_preview_response_from_result(
+    result: UploadPreviewResult,
+) -> UploadPreviewResponse:
+    return UploadPreviewResponse(
+        entity_type=result.entity_type,
+        file_format=result.file_format,
+        total_rows=result.total_rows,
+        valid_rows=result.valid_rows,
+        invalid_rows=result.invalid_rows,
+        sample_rows=result.sample_rows,
+        errors=[
+            UploadRowError(row_number=error.row_number, message=error.message)
+            for error in result.errors
+        ],
+    )
+
+
+def upload_commit_response_from_result(result: UploadCommitResult) -> UploadCommitResponse:
+    return UploadCommitResponse(
+        entity_type=result.entity_type,
+        file_format=result.file_format,
+        total_rows=result.total_rows,
+        valid_rows=result.valid_rows,
+        invalid_rows=result.invalid_rows,
+        published_rows=result.published_rows,
+        skipped_rows=result.skipped_rows,
+        message=result.message,
+    )
+
+
 async def _read_bounded_upload_content(file: UploadFile) -> bytes:
     max_bytes = get_ingestion_service_settings().adapter_mode.upload_max_bytes
     chunks: list[bytes] = []
@@ -154,14 +225,17 @@ async def preview_upload(
 ):
     content = await _read_bounded_upload_content(file)
     try:
-        response = upload_service.preview_upload(
-            entity_type=entity_type,
-            filename=file.filename or "upload.csv",
-            content=content,
-            sample_size=sample_size,
+        result = upload_service.preview_upload(
+            upload_preview_command_from_api(
+                entity_type=entity_type,
+                filename=file.filename or "upload.csv",
+                content=content,
+                sample_size=sample_size,
+            )
         )
     except ApplicationError as exc:
         raise upload_application_error_to_http(exc) from exc
+    response = upload_preview_response_from_result(result)
     logger.info(
         "Upload preview completed.",
         extra={
@@ -249,16 +323,19 @@ async def commit_upload(
             detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
         ) from exc
     try:
-        response = await upload_service.commit_upload(
-            entity_type=entity_type,
-            filename=file.filename or "upload.csv",
-            content=content,
-            allow_partial=allow_partial,
+        result = await upload_service.commit_upload(
+            upload_commit_command_from_api(
+                entity_type=entity_type,
+                filename=file.filename or "upload.csv",
+                content=content,
+                allow_partial=allow_partial,
+            )
         )
     except ApplicationError as exc:
         raise upload_application_error_to_http(exc) from exc
     except IngestionPublishError as exc:
         raise_ingestion_publish_unavailable(exc)
+    response = upload_commit_response_from_result(result)
     logger.info(
         "Upload commit completed.",
         extra={
