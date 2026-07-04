@@ -12,6 +12,9 @@ from portfolio_common.logging_utils import correlation_id_var
 from pydantic import BaseModel, ValidationError
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from services.ingestion_service.app.services.ingestion_event_payloads import (
+    transaction_event_payload,
+)
 from services.ingestion_service.app.services.ingestion_service import IngestionService
 from src.services.persistence_service.app.adapters.event_record_mapper import (
     transaction_event_to_record_values,
@@ -84,33 +87,34 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
     producer = _CapturingProducer()
     service = IngestionService(producer)
     correlation_token = correlation_id_var.set("corr-boundary-001")
+    transaction = Transaction(
+        transaction_id="TXN-MAP-001",
+        portfolio_id="PORT-MAP-001",
+        instrument_id="EQ_US_AAPL",
+        security_id="EQ_US_AAPL",
+        transaction_date=datetime(2026, 3, 25, 9, 30, tzinfo=UTC),
+        settlement_date=datetime(2026, 3, 27, 0, 0, tzinfo=UTC),
+        transaction_type=" buy ",
+        quantity=Decimal("100.0000000000"),
+        price=Decimal("150.0550000000"),
+        gross_transaction_amount=Decimal("15005.5000000000"),
+        trade_currency=" usd ",
+        currency=" usd ",
+        brokerage=Decimal("2.5000000000"),
+        stamp_duty=Decimal("1.2000000000"),
+        exchange_fee=Decimal("0.7000000000"),
+        gst=Decimal("0.4500000000"),
+        other_fees=Decimal("0.1500000000"),
+        economic_event_id="EVT-TXN-MAP-001",
+        linked_transaction_group_id="LTG-TXN-MAP-001",
+        calculation_policy_id="BUY_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+        source_system="OMS_PRIMARY",
+    )
 
     try:
         await service.publish_transaction(
-            Transaction(
-                transaction_id="TXN-MAP-001",
-                portfolio_id="PORT-MAP-001",
-                instrument_id="EQ_US_AAPL",
-                security_id="EQ_US_AAPL",
-                transaction_date=datetime(2026, 3, 25, 9, 30, tzinfo=UTC),
-                settlement_date=datetime(2026, 3, 27, 0, 0, tzinfo=UTC),
-                transaction_type=" buy ",
-                quantity=Decimal("100.0000000000"),
-                price=Decimal("150.0550000000"),
-                gross_transaction_amount=Decimal("15005.5000000000"),
-                trade_currency=" usd ",
-                currency=" usd ",
-                brokerage=Decimal("2.5000000000"),
-                stamp_duty=Decimal("1.2000000000"),
-                exchange_fee=Decimal("0.7000000000"),
-                gst=Decimal("0.4500000000"),
-                other_fees=Decimal("0.1500000000"),
-                economic_event_id="EVT-TXN-MAP-001",
-                linked_transaction_group_id="LTG-TXN-MAP-001",
-                calculation_policy_id="BUY_DEFAULT_POLICY",
-                calculation_policy_version="1.0.0",
-                source_system="OMS_PRIMARY",
-            ),
+            transaction,
             idempotency_key="idem-boundary-001",
         )
     finally:
@@ -123,6 +127,7 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         "correlation_id": "corr-boundary-001",
         "idempotency_key": "idem-boundary-001",
     }
+    assert published["value"] == transaction_event_payload(transaction)
 
     event_payload = _kafka_json_round_trip(
         {

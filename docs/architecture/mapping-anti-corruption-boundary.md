@@ -9,7 +9,8 @@ change without silently changing downstream banking evidence.
 ## Boundary Rules
 
 - API DTOs may be accepted at the API or ingestion edge, but application workflows should receive
-  commands or validated boundary payloads rather than framework objects.
+  commands or validated boundary payloads rather than framework objects. Ingestion publish
+  workflows should map API DTOs through named payload mappers before Kafka publication.
 - Event payloads should validate through governed event models before persistence or downstream
   processing.
 - Persistence repositories should map event/domain/read inputs through named mapper functions
@@ -54,7 +55,9 @@ in `make lint`.
 
 Current coverage:
 
-- transaction ingestion DTO to published payload headers and body;
+- transaction ingestion DTO to explicit published-payload mapper, headers, and body;
+- business-date, portfolio, transaction, instrument, market-price, and FX-rate ingestion publish
+  workflows route API DTO serialization through named payload mappers;
 - JSON payload to governed `TransactionEvent`;
 - Kafka message payload to persistence event adapter envelope, including event identity,
   correlation lineage, idempotency key, portfolio scope, and non-transaction fallback behavior;
@@ -77,6 +80,10 @@ GitHub issue #665 is fixed locally pending PR CI/QA for the current conformance 
 locally pending PR CI/QA for the repository output-shape standard and static guard. GitHub issue
 #662 is fixed locally pending PR CI/QA and issue closure. GitHub issue #663 is fixed locally for
 the required representative `PerformanceComponentEconomics:v1` source-data product pending PR
-CI/QA and issue closure. GitHub issue #661 remains the umbrella mapping/anti-corruption contract
-for continued coverage across more event families, source-data products, API DTO to command paths,
-and typed read records.
+CI/QA and issue closure. GitHub issue #661 is fixed locally for the representative
+anti-corruption contract acceptance set pending PR CI/QA and issue closure: ingestion API DTO to
+event payload mapping, Kafka event payload validation, persistence event-to-row mapping, typed
+repository/read-record mapping, and source-data response assembly are all covered by named modules
+and the boundary conformance gate. Issue #640 remains a related architecture-governance reference
+for keeping API/application/domain/infrastructure boundaries explicit as future command/result
+paths are migrated.

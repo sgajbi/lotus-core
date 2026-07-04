@@ -27,6 +27,14 @@ from ..DTOs.market_price_dto import MarketPrice
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..DTOs.portfolio_dto import Portfolio
 from ..DTOs.transaction_dto import Transaction
+from .ingestion_event_payloads import (
+    business_date_event_payload,
+    fx_rate_event_payload,
+    instrument_event_payload,
+    market_price_event_payload,
+    portfolio_event_payload,
+    transaction_event_payload,
+)
 
 
 class IngestionPublishError(RuntimeError):
@@ -117,7 +125,7 @@ class IngestionService:
         ]
         for idx, business_date in enumerate(business_dates):
             key = record_keys[idx]
-            payload = business_date.model_dump()
+            payload = business_date_event_payload(business_date)
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
@@ -146,7 +154,7 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         record_keys = [portfolio.portfolio_id for portfolio in portfolios]
         for idx, portfolio in enumerate(portfolios):
-            portfolio_payload = portfolio.model_dump()
+            portfolio_payload = portfolio_event_payload(portfolio)
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
@@ -173,7 +181,7 @@ class IngestionService:
     ) -> None:
         """Publishes a single transaction to the raw transactions topic."""
         headers = self._get_headers(idempotency_key)
-        transaction_payload = transaction.model_dump()
+        transaction_payload = transaction_event_payload(transaction)
         partition_key = self._partition_key_or_raise(
             key=transaction.portfolio_id, field_name="portfolio_id"
         )
@@ -198,7 +206,7 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         record_keys = [transaction.transaction_id for transaction in transactions]
         for idx, transaction in enumerate(transactions):
-            transaction_payload = transaction.model_dump()
+            transaction_payload = transaction_event_payload(transaction)
             partition_key = self._partition_key_or_raise(
                 key=transaction.portfolio_id, field_name="portfolio_id"
             )
@@ -230,7 +238,7 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         record_keys = [instrument.security_id for instrument in instruments]
         for idx, instrument in enumerate(instruments):
-            instrument_payload = instrument.model_dump()
+            instrument_payload = instrument_event_payload(instrument)
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
@@ -257,7 +265,7 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         record_keys = [price.security_id for price in market_prices]
         for idx, price in enumerate(market_prices):
-            price_payload = price.model_dump()
+            price_payload = market_price_event_payload(price)
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
@@ -290,7 +298,7 @@ class IngestionService:
         ]
         for idx, rate in enumerate(fx_rates):
             key = record_keys[idx]
-            rate_payload = rate.model_dump()
+            rate_payload = fx_rate_event_payload(rate)
             try:
                 self._kafka_producer.publish_message(
                     topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
