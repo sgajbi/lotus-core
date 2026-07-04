@@ -1,6 +1,7 @@
 # tests/unit/libs/portfolio-common/test_reprocessing_repository.py
 from datetime import datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +16,47 @@ from portfolio_common.reprocessing_repository import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 pytestmark = pytest.mark.asyncio
+
+
+class FakeReplayReader:
+    def __init__(self, transactions: list[SimpleNamespace]) -> None:
+        self.transactions = transactions
+        self.requested_ids: list[str] | None = None
+
+    async def list_transactions_to_replay(
+        self,
+        ordered_transaction_ids: list[str],
+    ) -> list[SimpleNamespace]:
+        self.requested_ids = ordered_transaction_ids
+        return self.transactions
+
+
+class FakeReplayPublisher:
+    def __init__(self) -> None:
+        self.messages = []
+
+    def publish_replay_message(self, message) -> None:
+        self.messages.append(message)
+
+    def confirm_replay_delivery(self) -> int:
+        return 0
+
+
+def _replay_transaction(transaction_id: str, portfolio_id: str = "P1") -> SimpleNamespace:
+    return SimpleNamespace(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime.now(),
+        transaction_type="BUY",
+        quantity=10,
+        price=100,
+        gross_transaction_amount=1000,
+        currency="USD",
+        trade_currency="USD",
+        trade_fee=Decimal("0.0"),
+    )
 
 
 @pytest.fixture
@@ -356,3 +398,19 @@ async def test_reprocess_transactions_fails_on_flush_timeout(
 
     assert exc_info.value.failed_transaction_ids == ["TXN_A", "TXN_B"]
     assert "Delivery confirmation timed out while republishing transactions." in str(exc_info.value)
+
+
+async def test_reprocess_transactions_can_run_through_reader_and_publisher_ports():
+    reader = FakeReplayReader([_replay_transaction("TXN_A", portfolio_id="PORT-1")])
+    publisher = FakeReplayPublisher()
+    repository = ReprocessingRepository.from_ports(reader=reader, publisher=publisher)
+
+    count = await repository.reprocess_transactions_by_ids(
+        ["TXN_A", "TXN_A"],
+        correlation_id=" corr-explicit ",
+    )
+
+    assert count == 1
+    assert reader.requested_ids == ["TXN_A"]
+    assert publisher.messages[0].payload["transaction_id"] == "TXN_A"
+    assert publisher.messages[0].headers == [("correlation_id", b"corr-explicit")]

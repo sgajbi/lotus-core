@@ -27,10 +27,12 @@ transaction domain data in the Lotus ecosystem.
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
 6. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
    publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
-7. Repositories own persistence access.
-8. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+7. Transaction replay stays split across pure replay planning, reader ports, and publisher
+   adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
+8. Repositories own persistence access.
+9. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-9. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+10. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
