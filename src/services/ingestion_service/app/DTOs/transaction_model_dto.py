@@ -49,6 +49,22 @@ class Transaction(BaseModel):
     def _normalize_transaction_control_code(cls, value: str | None) -> str:
         return cast(str, normalize_transaction_control_code(value))
 
+    @field_validator(
+        "transaction_id",
+        "portfolio_id",
+        "instrument_id",
+        "security_id",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_required_identifier(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        identifier = value.strip()
+        if not identifier:
+            raise ValueError("Identifier must not be blank.")
+        return identifier
+
     quantity: NonNegativeDecimal = Field(
         description="Absolute traded quantity or units moved by the transaction.",
         json_schema_extra={"example": "10.0"},
