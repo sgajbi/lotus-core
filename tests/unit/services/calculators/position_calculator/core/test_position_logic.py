@@ -16,6 +16,9 @@ from src.services.calculators.position_calculator.app.core.position_logic import
 from src.services.calculators.position_calculator.app.core.position_models import (
     PositionState as PositionStateDTO,
 )
+from src.services.calculators.position_calculator.app.core.position_reducer import (
+    cash_position_deltas,
+)
 from src.services.calculators.position_calculator.app.repositories.position_repository import (
     PositionRepository,
 )
@@ -899,8 +902,8 @@ def test_cash_position_deltas_normalize_booked_costs_once() -> None:
         movement_direction=None,
     )
 
-    quantity_delta, cost_basis_delta, cost_basis_local_delta = (
-        PositionCalculator._cash_position_deltas(transaction, "DEPOSIT")
+    quantity_delta, cost_basis_delta, cost_basis_local_delta = cash_position_deltas(
+        transaction, "DEPOSIT"
     )
 
     assert quantity_delta == Decimal("25")
