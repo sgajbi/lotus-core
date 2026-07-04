@@ -1,9 +1,7 @@
-import hashlib
-import json
 import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 
@@ -52,6 +50,11 @@ from src.services.ingestion_service.app.services.ingestion_service import (
 from ..application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
     ReplayPayloadDispatcher,
+)
+from ..application.replay_retry_payloads import (
+    deterministic_replay_fingerprint,
+    filter_payload_by_record_keys,
+    payload_record_count,
 )
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
@@ -591,8 +594,6 @@ INGESTION_REPLAY_AUDIT_NOT_FOUND_EXAMPLE = {
 }
 
 
-_RetryPayloadFilter = Callable[[dict[str, Any], set[str]], dict[str, Any]]
-
 INGESTION_JOB_RETRY_RECOVERY_PATH = "ingestion_job_retry"
 
 
@@ -645,97 +646,6 @@ def get_replay_payload_dispatcher(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
 ) -> ReplayPayloadDispatcher:
     return IngestionServiceReplayPayloadDispatcher(ingestion_service)
-
-
-def _filter_record_collection_payload(
-    *,
-    payload: dict[str, Any],
-    collection_name: str,
-    record_key_name: str,
-    key_set: set[str],
-    stringify_record_key: bool = False,
-) -> dict[str, Any]:
-    rows = [
-        row
-        for row in payload.get(collection_name, [])
-        if _retry_record_key(row, record_key_name, stringify_record_key) in key_set
-    ]
-    return {collection_name: rows}
-
-
-def _retry_record_key(row: dict[str, Any], record_key_name: str, stringify: bool) -> Any:
-    value = row.get(record_key_name)
-    return str(value) if stringify else value
-
-
-def _filter_transaction_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
-    return _filter_record_collection_payload(
-        payload=payload,
-        collection_name="transactions",
-        record_key_name="transaction_id",
-        key_set=key_set,
-    )
-
-
-def _filter_portfolio_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
-    return _filter_record_collection_payload(
-        payload=payload,
-        collection_name="portfolios",
-        record_key_name="portfolio_id",
-        key_set=key_set,
-    )
-
-
-def _filter_instrument_retry_payload(payload: dict[str, Any], key_set: set[str]) -> dict[str, Any]:
-    return _filter_record_collection_payload(
-        payload=payload,
-        collection_name="instruments",
-        record_key_name="security_id",
-        key_set=key_set,
-    )
-
-
-def _filter_business_date_retry_payload(
-    payload: dict[str, Any], key_set: set[str]
-) -> dict[str, Any]:
-    return _filter_record_collection_payload(
-        payload=payload,
-        collection_name="business_dates",
-        record_key_name="business_date",
-        key_set=key_set,
-        stringify_record_key=True,
-    )
-
-
-def _filter_reprocess_transaction_retry_payload(
-    payload: dict[str, Any], key_set: set[str]
-) -> dict[str, Any]:
-    rows = [txn_id for txn_id in payload.get("transaction_ids", []) if txn_id in key_set]
-    return {"transaction_ids": rows}
-
-
-_PARTIAL_RETRY_PAYLOAD_FILTERS: dict[str, _RetryPayloadFilter] = {
-    "/ingest/transactions": _filter_transaction_retry_payload,
-    "/ingest/portfolios": _filter_portfolio_retry_payload,
-    "/ingest/instruments": _filter_instrument_retry_payload,
-    "/ingest/business-dates": _filter_business_date_retry_payload,
-    "/reprocess/transactions": _filter_reprocess_transaction_retry_payload,
-}
-
-
-def _filter_payload_by_record_keys(
-    *,
-    endpoint: str,
-    payload: dict[str, Any],
-    record_keys: list[str],
-) -> dict[str, Any]:
-    if not record_keys:
-        return payload
-    key_set = set(record_keys)
-    payload_filter = _PARTIAL_RETRY_PAYLOAD_FILTERS.get(endpoint)
-    if payload_filter is None:
-        raise ValueError(f"Partial retry is not supported for endpoint '{endpoint}'.")
-    return payload_filter(payload, key_set)
 
 
 async def _record_mandatory_replay_audit(
@@ -819,39 +729,6 @@ async def _replay_job_payload(
         payload=payload,
         idempotency_key=idempotency_key,
     )
-
-
-def _deterministic_replay_fingerprint(
-    *,
-    event_id: str,
-    correlation_id: str | None,
-    job_id: str | None,
-    endpoint: str | None,
-    payload: dict[str, Any] | None,
-    idempotency_key: str | None,
-    alternate_lookup_key: str | None = None,
-) -> str:
-    basis = {
-        "event_id": event_id,
-        "correlation_id": correlation_id,
-        "job_id": job_id,
-        "endpoint": endpoint,
-        "idempotency_key": idempotency_key,
-        "payload": payload or {},
-    }
-    if alternate_lookup_key is not None:
-        basis["alternate_lookup_key"] = alternate_lookup_key
-    canonical = json.dumps(basis, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _payload_record_count(payload: dict[str, Any] | None) -> int:
-    if not payload:
-        return 0
-    counts = [len(value) for value in payload.values() if isinstance(value, list)]
-    if counts:
-        return max(counts)
-    return 1
 
 
 @router.get(
@@ -1327,13 +1204,13 @@ async def retry_ingestion_job(
         context=context,
         retry_request=retry_request,
     )
-    replay_record_count = _payload_record_count(replay_payload)
+    replay_record_count = payload_record_count(replay_payload)
     await _assert_ingestion_retry_allowed(
         ingestion_job_service=ingestion_job_service,
         submitted_at=context.submitted_at,
         replay_record_count=replay_record_count,
     )
-    replay_fingerprint = _deterministic_replay_fingerprint(
+    replay_fingerprint = deterministic_replay_fingerprint(
         event_id=f"job:{job_id}",
         correlation_id=None,
         job_id=job_id,
@@ -1412,7 +1289,7 @@ def _retry_payload_or_http_error(
     retry_request: IngestionRetryRequest,
 ) -> dict[str, Any]:
     try:
-        return _filter_payload_by_record_keys(
+        return filter_payload_by_record_keys(
             endpoint=context.endpoint,
             payload=context.request_payload,
             record_keys=retry_request.record_keys,
@@ -2261,7 +2138,7 @@ async def replay_consumer_dlq_event(
 
     await ingestion_job_service.assert_retry_allowed_for_records(
         submitted_at=context.submitted_at,
-        replay_record_count=_payload_record_count(context.request_payload),
+        replay_record_count=payload_record_count(context.request_payload),
     )
     if replay_request.dry_run:
         return await _record_consumer_dlq_replay_response(
@@ -2347,7 +2224,7 @@ def _consumer_dlq_replay_fingerprint(
     replay_job_id: str,
     context: Any | None,
 ) -> str:
-    return _deterministic_replay_fingerprint(
+    return deterministic_replay_fingerprint(
         event_id=event_id,
         correlation_id=correlation_id,
         job_id=replay_job_id,
@@ -2461,7 +2338,7 @@ async def _consumer_dlq_not_replayable_response(
     ingestion_job_service: IngestionJobService,
     requested_by: str | None,
 ) -> ConsumerDlqReplayResponse:
-    replay_fingerprint = _deterministic_replay_fingerprint(
+    replay_fingerprint = deterministic_replay_fingerprint(
         event_id=event_id,
         correlation_id=correlation_id,
         job_id=job_id,
