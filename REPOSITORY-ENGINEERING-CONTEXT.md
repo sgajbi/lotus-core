@@ -108,7 +108,13 @@ Current repository posture:
 22. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
-    transaction event, portfolio tax-lot, and performance-economics source-data mappings.
+    transaction event, persistence event-envelope, portfolio tax-lot, and
+    performance-economics source-data mappings.
+    Persistence service consumers must use explicit event adapters for Kafka bytes, deterministic
+    message identity, governed Pydantic event validation, fallback correlation, idempotency
+    metadata, and portfolio-scope derivation before opening database units of work. Persistence
+    repositories must consume adapter-owned event record values and keep only table-specific SQL
+    conflict/update policy locally.
     `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` as the typed
     repository-to-source-data boundary. `PerformanceComponentEconomics:v1` uses
     `PerformanceEconomicsTransactionReadRecord`, `PerformanceEconomicsCashflowReadRecord`, and
@@ -652,10 +658,10 @@ Most relevant current governance:
     the repo file does not enable those settings by itself.
 50. Cost-calculator persistence boundaries must strip event-envelope fields before transaction-table
     upserts. `TransactionEvent` carries governed event fields such as `event_type`,
-    `schema_version`, and `correlation_id` that are not `transactions` columns. Use the shared
-    `event_business_payload(...)` helper and the SQLAlchemy table-column whitelist in the cost
-    repository instead of persisting event DTO dictionaries directly; this prevents FX lifecycle
-    rows from DLQing when event-envelope metadata is present.
+    `schema_version`, and `correlation_id` that are not `transactions` columns. Use the persistence
+    service event-record mapper and the SQLAlchemy table-column whitelist in the cost repository
+    instead of persisting event DTO dictionaries directly; this prevents FX lifecycle rows from
+    DLQing when event-envelope metadata is present.
 51. `PortfolioMaturitySummary:v1` is the Core-owned maturity posture contract for downstream
     opportunity and review workflows. It is served by `query_service` at
     `/portfolios/{portfolio_id}/maturity-summary`, reuses the existing `HoldingsAsOf:v1` read path,

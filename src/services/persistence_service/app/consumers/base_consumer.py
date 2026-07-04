@@ -13,6 +13,11 @@ from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 
+from ..adapters.persistence_event_adapter import (
+    decode_persistence_message_payload,
+    validate_persistence_event_payload,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,29 +66,29 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         - For validation/poison-pill errors, sends to DLQ.
         - For unexpected errors, raises them to be handled by the BaseConsumer.
         """
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         event = None
 
         try:
-            event_data = json.loads(msg.value().decode("utf-8"))
+            decoded_payload = decode_persistence_message_payload(msg)
             with self._message_correlation_context(
                 msg,
-                fallback_correlation_id=event_data.get("correlation_id"),
+                fallback_correlation_id=decoded_payload.fallback_correlation_id,
             ) as correlation_id:
-                event = self.event_model.model_validate(event_data)
-
-                idempotency_key = getattr(event, "transaction_id", event_id)
+                envelope = validate_persistence_event_payload(decoded_payload, self.event_model)
+                event = envelope.event
 
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
                         if not await idempotency_repo.claim_event_processing(
-                            idempotency_key,
-                            getattr(event, "portfolio_id", None) or "N/A",
+                            envelope.idempotency_key,
+                            envelope.portfolio_id,
                             self.service_name,
                             correlation_id,
                         ):
-                            logger.warning(f"Event {idempotency_key} already processed. Skipping.")
+                            logger.warning(
+                                f"Event {envelope.idempotency_key} already processed. Skipping."
+                            )
                             return
 
                         persisted_object = await self.handle_persistence(db, event)
