@@ -935,6 +935,18 @@ Most relevant current governance:
     ingestion publish methods. `make architecture-guard` runs
     `scripts/upload_component_boundary_guard.py` so upload parsing and entity-specific publish
     dispatch do not drift back into the orchestration service.
+77. Transaction replay planning is split from SQLAlchemy and Kafka adapters. The repo-local
+    standard lives at `docs/standards/transaction-replay-boundary-standard.md`.
+    `portfolio_common.reprocessing_replay` owns ordered transaction-id deduplication, explicit
+    `ReplayCorrelationMetadata`, replay message planning, partial publish failure classification,
+    and flush-timeout classification without `AsyncSession`, `KafkaProducer`, or global
+    correlation context. `portfolio_common.reprocessing_repository` preserves the existing
+    `ReprocessingRepository(db, kafka_producer)` public API while composing
+    `SqlAlchemyTransactionReplayReader` and `KafkaTransactionReplayPublisher`; tests may use
+    `ReprocessingRepository.from_ports(...)` with fake reader/publisher ports. `make
+    architecture-guard` runs `scripts/transaction_replay_boundary_guard.py` so event planning,
+    deduplication, and correlation header construction do not drift back into the compatibility
+    repository adapter.
 
 ## Context Maintenance Rule
 
