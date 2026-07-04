@@ -7,14 +7,18 @@
 - [Architecture](Architecture)
 - [RFC Index](RFC-Index)
 
-## Contracts and operations
+## Contracts and data products
 
 - [System Data Flow](System-Data-Flow)
 - [Supported Features](Supported-Features)
 - [API Surface](API-Surface)
 - [Query Control Plane](Query-Control-Plane)
+- [Mesh Data Products](Mesh-Data-Products)
 - [Support and Lineage](Support-and-Lineage)
 - [Integrations](Integrations)
+
+## Operations and governance
+
 - [Validation and CI](Validation-and-CI)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
@@ -45,5 +49,3 @@
 ## Direction
 
 - [Roadmap](Roadmap)
-
-- [Mesh Data Products](Mesh-Data-Products)

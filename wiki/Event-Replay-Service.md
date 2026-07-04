@@ -34,6 +34,36 @@ For replay and remediation workflows, the service:
 The key design rule is that replay is controlled and evidence-backed. It is not a generic message
 republisher.
 
+## Implementation Structure
+
+The service follows the same bounded internal structure used by the newer Lotus domain-service
+repositories:
+
+| Module | Responsibility |
+| --- | --- |
+| `app/routers/ingestion_operations.py` | FastAPI route metadata, request binding, API DTO construction, and HTTP error mapping. |
+| `app/dependencies.py` | Composition providers for replay dispatchers, command services, and query services. |
+| `app/application/ingestion_retry_commands.py` | Ingestion-job retry orchestration, duplicate blocking, replay audit, publish, and post-publish bookkeeping behavior. |
+| `app/application/consumer_dlq_replay_commands.py` | Consumer DLQ event replay orchestration, correlation fallback, candidate selection, retry allowance, replay audit, publish, and bookkeeping behavior. |
+| `app/application/ingestion_operations_queries.py` | Read-side pagination totals, not-found codes, and query delegation for jobs, failures, records, consumer DLQ events, and replay audits. |
+| `app/application/replay_retry_payloads.py` | Deterministic replay fingerprinting, partial retry payload filtering, and replay record counting. |
+| `app/application/replay_payload_dispatcher.py` | Port-style dispatch from governed replay payloads into ingestion publisher methods. |
+
+This structure is intentionally design modularity inside one deployable service. It is not a
+runtime service split.
+
+## Extension Rules
+
+When adding or changing ingestion operations behavior:
+
+1. keep FastAPI DTOs and `HTTPException` mapping in the router,
+2. put replay, retry, audit, duplicate-detection, and state-transition policy in application
+   services,
+3. put composition providers in `app/dependencies.py`,
+4. test command/query behavior directly under `tests/unit/services/event_replay_service/`,
+5. preserve existing route paths, status codes, response fields, audit fields, and problem-detail
+   codes unless an intentional behavior change is tested and documented.
+
 Consumer DLQ `payload_excerpt` values are redacted and truncated diagnostic evidence. They are useful
 for triage, but they can still contain client-linked identifiers such as portfolio or transaction
 IDs and must remain behind the protected event-replay control-plane access boundary.
@@ -103,4 +133,5 @@ Check beyond this service when:
 - [System Data Flow](System-Data-Flow)
 - [Operations Runbook](Operations-Runbook)
 - [Troubleshooting](Troubleshooting)
+- [Architecture](Architecture)
 - [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)

@@ -68,7 +68,7 @@ enable:
 - capability-rule enforcement
 - runtime configuration enforcement
 
-Local, dev, and test environments remain opt-in. A temporary production-profile opt-out must be
+Local, dev, and test environments remain opt-in. A time-bound production-profile opt-out must be
 explicit through `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false` and should be treated as deployment
 posture evidence, not as a code default.
 

@@ -6,6 +6,10 @@ platform for Lotus.
 This wiki is the operator and onboarding map for the repo. It summarizes current implementation
 truth and links to deeper docs; it is not a substitute for repo-native validation evidence.
 
+Service profile: `domain-service`. Current posture: implementation-backed Core domain service with
+heavy contract, source-data, security, and runtime validation gates. Supported claims require code,
+tests, contracts, generated evidence, RFC/docs truth, and validation on the correct branch.
+
 ## What Core Does
 
 - stores foundational private-banking portfolio and transaction truth,
@@ -33,6 +37,16 @@ truth and links to deeper docs; it is not a substitute for repo-native validatio
 - [Mesh Data Products](Mesh-Data-Products)
 - [Integrations](Integrations)
 - [Roadmap](Roadmap)
+
+## Evidence Standard
+
+| Claim type | Evidence path |
+| --- | --- |
+| API or route behavior | Route code, OpenAPI/route-family guards, focused tests, and [API Surface](API-Surface). |
+| Source-data product support | Contract declaration, methodology doc, route metadata, trust telemetry where available, and [Mesh Data Products](Mesh-Data-Products). |
+| Operational supportability | Runtime/readiness behavior, logs/metrics/traces where implemented, [Operations Runbook](Operations-Runbook), and [Support and Lineage](Support-and-Lineage). |
+| Architecture boundary | Repo context, architecture docs, review ledger, and blocking guards such as `make architecture-guard`. |
+| Supported feature claim | [Supported Features](Supported-Features), implementation evidence, and validation on `main`; roadmap text is not support. |
 
 ## Service And Subsystem Pages
 
