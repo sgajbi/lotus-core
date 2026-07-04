@@ -28,6 +28,9 @@ This standard defines guardrails for directory organization and dependency bound
    - query-control-plane routers must not import query-service repositories directly,
    - query runtime routers must not import query-control-plane internals,
    - ingestion routers must not import other service implementations directly.
+   - API routers must not add database session dependencies, repository construction, external
+     client access, file access, or direct SQLAlchemy operations outside the transitional exception
+     registry in `docs/standards/api-layer-router-boundary-exceptions.json`.
 3. CI conformance:
  - OpenAPI, vocabulary, no-alias, and migration checks remain mandatory.
 

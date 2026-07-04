@@ -1,0 +1,178 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "description": "Transitional exceptions for API router boundary enforcement. Each entry must point to an open architecture issue and is stale once the file no longer has the declared violation code.",
+  "transitionalExceptions": [
+    {
+      "path": "src/services/financial_reconciliation_service/app/routers/reconciliation.py",
+      "violationCodes": [
+        "router_db_session_dependency",
+        "router_repository_dependency",
+        "router_sqlalchemy_operation"
+      ],
+      "issue": "#636",
+      "rationale": "Financial reconciliation router still composes database sessions and repositories pending extraction to dedicated dependency/composition modules."
+    },
+    {
+      "path": "src/services/ingestion_service/app/routers/business_dates.py",
+      "violationCodes": [
+        "router_repository_dependency"
+      ],
+      "issue": "#635",
+      "rationale": "Business-date ingestion still injects a repository dependency at the HTTP adapter boundary pending application-use-case dependency extraction."
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/routers/analytics_inputs.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query-control-plane analytics input router still injects AsyncSession pending dedicated application dependency modules."
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/routers/integration.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query-control-plane integration router still injects AsyncSession pending dedicated application dependency modules."
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/routers/operations.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query-control-plane operations router still injects AsyncSession pending dedicated application dependency modules."
+    },
+    {
+      "path": "src/services/query_control_plane_service/app/routers/simulation.py",
+      "violationCodes": [
+        "router_db_session_dependency",
+        "router_sqlalchemy_operation"
+      ],
+      "issue": "#638",
+      "rationale": "Query-control-plane simulation router still injects AsyncSession pending dedicated application dependency modules."
+    },
+    {
+      "path": "src/services/query_service/app/routers/buy_state.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still uses router-local service factory with AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/cash_accounts.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/cash_balances.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/cash_movements.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/cashflow_projection.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/fx_rates.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/instruments.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/liquidity_ladder.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/lookups.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/portfolios.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/positions.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/prices.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/reporting.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/sell_state.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still uses router-local service factory with AsyncSession pending composition-module extraction."
+    },
+    {
+      "path": "src/services/query_service/app/routers/transactions.py",
+      "violationCodes": [
+        "router_db_session_dependency"
+      ],
+      "issue": "#638",
+      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
+    }
+  ]
+}
