@@ -13,6 +13,7 @@ from .services.cashflow_projection_service import CashflowProjectionService
 from .services.fx_rate_service import FxRateService
 from .services.instrument_service import InstrumentService
 from .services.liquidity_ladder_service import PortfolioLiquidityLadderService
+from .services.lookup_catalog_service import LookupCatalogService
 from .services.portfolio_service import PortfolioService
 from .services.position_service import PositionService
 from .services.price_service import MarketPriceService
@@ -97,6 +98,16 @@ def get_portfolio_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> PortfolioService:
     return PortfolioService(db)
+
+
+def get_lookup_catalog_service(
+    portfolio_service: PortfolioService = Depends(get_portfolio_service),
+    instrument_service: InstrumentService = Depends(get_instrument_service),
+) -> LookupCatalogService:
+    return LookupCatalogService(
+        portfolio_service=portfolio_service,
+        instrument_service=instrument_service,
+    )
 
 
 def get_position_service(

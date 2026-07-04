@@ -1,29 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 
-from ..dependencies import get_instrument_service, get_portfolio_service
-from ..dtos.lookup_dto import LookupItem, LookupResponse
-from ..services.instrument_service import InstrumentService
-from ..services.portfolio_service import PortfolioService
+from ..dependencies import get_lookup_catalog_service
+from ..dtos.lookup_dto import LookupResponse
+from ..services.lookup_catalog_service import LookupCatalogService
 
 router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
-
-
-def _lookup_item_code(item: LookupItem | dict) -> str:
-    if isinstance(item, dict):
-        return str(item.get("id", "")).upper()
-    return item.id.upper()
-
-
-def _merge_currency_lookup_items(
-    portfolio_items: list[LookupItem | dict],
-    instrument_items: list[LookupItem | dict],
-    *,
-    limit: int,
-) -> list[LookupItem]:
-    codes = {
-        code for item in portfolio_items + instrument_items if (code := _lookup_item_code(item))
-    }
-    return [LookupItem(id=code, label=code) for code in sorted(codes)[:limit]]
 
 
 @router.get(
@@ -59,7 +40,7 @@ async def get_portfolio_lookups(
         description="Maximum number of lookup items to return after filtering and sorting.",
         examples=[100],
     ),
-    service: PortfolioService = Depends(get_portfolio_service),
+    service: LookupCatalogService = Depends(get_lookup_catalog_service),
 ) -> LookupResponse:
     items = await service.search_portfolio_lookup_items(
         client_id=client_id,
@@ -100,7 +81,7 @@ async def get_instrument_lookups(
         ),
         examples=["AAPL"],
     ),
-    service: InstrumentService = Depends(get_instrument_service),
+    service: LookupCatalogService = Depends(get_lookup_catalog_service),
 ) -> LookupResponse:
     items = await service.search_instrument_lookup_items(
         product_type=product_type,
@@ -150,27 +131,14 @@ async def get_currency_lookups(
         description="Maximum number of currency lookup items to return after filtering.",
         examples=[100],
     ),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service),
-    instrument_service: InstrumentService = Depends(get_instrument_service),
+    service: LookupCatalogService = Depends(get_lookup_catalog_service),
 ) -> LookupResponse:
     _ = instrument_page_limit
 
-    source_scope = source.upper()
-    portfolio_items = (
-        await portfolio_service.list_currency_lookup_items(q=q, limit=limit)
-        if source_scope in {"ALL", "PORTFOLIOS"}
-        else []
-    )
-    instrument_items = (
-        await instrument_service.list_currency_lookup_items(q=q, limit=limit)
-        if source_scope in {"ALL", "INSTRUMENTS"}
-        else []
-    )
-
     return LookupResponse(
-        items=_merge_currency_lookup_items(
-            portfolio_items,
-            instrument_items,
+        items=await service.list_currency_lookup_items(
+            source=source,
+            q=q,
             limit=limit,
         )
     )
