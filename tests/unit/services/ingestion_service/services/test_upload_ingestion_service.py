@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from openpyxl import Workbook
@@ -14,6 +14,7 @@ from src.services.ingestion_service.app.application.upload_commands import (
 from src.services.ingestion_service.app.services.upload_ingestion_service import (
     UploadIngestionService,
 )
+from src.services.ingestion_service.app.services.upload_validation import BulkUploadValidator
 
 
 def _csv_bytes(content: str) -> bytes:
@@ -33,14 +34,12 @@ def _xlsx_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
 
 @pytest.fixture
 def upload_service() -> UploadIngestionService:
-    ingestion_service = MagicMock()
-    ingestion_service.publish_transactions = AsyncMock()
-    ingestion_service.publish_instruments = AsyncMock()
-    ingestion_service.publish_portfolios = AsyncMock()
-    ingestion_service.publish_market_prices = AsyncMock()
-    ingestion_service.publish_fx_rates = AsyncMock()
-    ingestion_service.publish_business_dates = AsyncMock()
-    return UploadIngestionService(ingestion_service=ingestion_service)
+    publisher = AsyncMock()
+    publisher.publish_records = AsyncMock()
+    return UploadIngestionService(
+        validator=BulkUploadValidator(),
+        publisher=publisher,
+    )
 
 
 def test_preview_upload_csv_with_mixed_rows(upload_service: UploadIngestionService) -> None:
@@ -121,7 +120,7 @@ async def test_commit_upload_rejects_partial_by_default(
     assert exc.value.detail["message"] == (
         "Upload contains invalid rows. Fix errors or use allow_partial=true."
     )
-    upload_service._ingestion_service.publish_transactions.assert_not_awaited()
+    upload_service._publisher.publish_records.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -147,7 +146,7 @@ async def test_commit_upload_allows_partial(upload_service: UploadIngestionServi
 
     assert response.published_rows == 1
     assert response.skipped_rows == 1
-    upload_service._ingestion_service.publish_transactions.assert_awaited_once()
+    upload_service._publisher.publish_records.assert_awaited_once()
 
 
 @pytest.mark.asyncio

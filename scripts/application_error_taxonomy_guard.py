@@ -3,20 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ERROR_TAXONOMY_MODULE = Path("src/services/ingestion_service/app/application/errors.py")
 UPLOAD_APPLICATION_SERVICE = Path(
     "src/services/ingestion_service/app/services/upload_ingestion_service.py"
 )
+UPLOAD_VALIDATOR_SERVICE = Path("src/services/ingestion_service/app/services/upload_validation.py")
 REQUIRED_ERROR_SYMBOLS = (
     "class ApplicationError",
     "class ValidationRejected",
     "class UnsupportedOperation",
 )
-REQUIRED_UPLOAD_SNIPPETS = (
-    "ValidationRejected",
-    "UnsupportedOperation",
-)
+REQUIRED_UPLOAD_SNIPPETS = ("ValidationRejected",)
+REQUIRED_UPLOAD_VALIDATOR_SNIPPETS = ("UnsupportedOperation",)
 FORBIDDEN_UPLOAD_SNIPPETS = {
     "HTTPException": "application services must raise application errors, not HTTP exceptions",
     "status.HTTP_": "HTTP status mapping belongs in the API router",
@@ -83,6 +81,37 @@ def find_application_error_taxonomy_findings(
             findings.append(
                 ApplicationErrorTaxonomyFinding(
                     path=UPLOAD_APPLICATION_SERVICE.as_posix(),
+                    snippet=snippet,
+                    reason=reason,
+                )
+            )
+
+    validator_path = root / UPLOAD_VALIDATOR_SERVICE
+    if not validator_path.exists():
+        findings.append(
+            ApplicationErrorTaxonomyFinding(
+                path=UPLOAD_VALIDATOR_SERVICE.as_posix(),
+                snippet="<missing-file>",
+                reason="upload validation module is missing",
+            )
+        )
+        return findings
+
+    validator_source = validator_path.read_text(encoding="utf-8")
+    for snippet in REQUIRED_UPLOAD_VALIDATOR_SNIPPETS:
+        if snippet not in validator_source:
+            findings.append(
+                ApplicationErrorTaxonomyFinding(
+                    path=UPLOAD_VALIDATOR_SERVICE.as_posix(),
+                    snippet=snippet,
+                    reason="upload validator must use framework-independent application errors",
+                )
+            )
+    for snippet, reason in FORBIDDEN_UPLOAD_SNIPPETS.items():
+        if snippet in validator_source:
+            findings.append(
+                ApplicationErrorTaxonomyFinding(
+                    path=UPLOAD_VALIDATOR_SERVICE.as_posix(),
                     snippet=snippet,
                     reason=reason,
                 )
