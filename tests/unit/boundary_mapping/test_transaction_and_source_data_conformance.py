@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.events import TransactionEvent
+from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.logging_utils import correlation_id_var
 from pydantic import BaseModel, ValidationError
 
@@ -85,7 +86,7 @@ def _mock_kafka_message(payload: dict[str, Any]) -> MagicMock:
 @pytest.mark.asyncio
 async def test_transaction_mapping_chain_preserves_event_and_record_invariants() -> None:
     producer = _CapturingProducer()
-    service = IngestionService(producer)
+    service = IngestionService(KafkaEventPublisher(producer))  # type: ignore[arg-type]
     correlation_token = correlation_id_var.set("corr-boundary-001")
     transaction = Transaction(
         transaction_id="TXN-MAP-001",

@@ -9,6 +9,7 @@ from portfolio_common.database_models import (
     PortfolioValuationJob,
     PositionState,
 )
+from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer
 from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
@@ -48,7 +49,9 @@ def mock_kafka_producer() -> MagicMock:
 def scheduler(mock_kafka_producer: MagicMock) -> ValuationScheduler:
     yield ValuationScheduler(
         poll_interval=0.01,
-        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer),
+        valuation_job_publisher=KafkaValuationJobPublisher(
+            KafkaEventPublisher(mock_kafka_producer)
+        ),
     )
 
 

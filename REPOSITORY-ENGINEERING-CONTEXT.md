@@ -794,6 +794,16 @@ Most relevant current governance:
     ports for job creation/idempotency and replay audit workflows. `make architecture-guard` now
     runs `scripts/ingestion_store_port_guard.py`; keep it green when adding diagnostics, DLQ event,
     ops-control, unit-of-work, or publisher ports.
+64. Application event publishing must use `portfolio_common.event_publisher` ports rather than
+    concrete Kafka producer APIs. `EventPublishRequest` carries topic, key, payload, headers,
+    outbox id, and delivery callback metadata. `EventPublishResult` reports `success`,
+    `retryable_failure`, `terminal_failure`, or `uncertain` delivery state. Ingestion publish paths
+    map those results back to existing `IngestionPublishError` contracts; valuation job publishing
+    uses the same port behind the scheduler-specific publisher wrapper. `make architecture-guard`
+    now runs `scripts/event_publisher_port_guard.py` to block governed ingestion and valuation
+    application publisher paths from importing `KafkaProducer` or `get_kafka_producer` directly.
+    Runtime dispatchers, consumer managers, aggregation scheduler publishing, and outbox
+    publication are separate follow-up slices.
 
 ## Context Maintenance Rule
 

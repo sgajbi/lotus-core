@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from portfolio_common.config import KAFKA_VALUATION_JOB_REQUESTED_TOPIC
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from portfolio_common.event_publisher import (
+    EventPublisher,
+    EventPublishRequest,
+    get_kafka_event_publisher,
+)
 
 
 class ValuationJobPublisher(Protocol):
@@ -21,7 +25,7 @@ class ValuationJobPublisher(Protocol):
 
 @dataclass(frozen=True)
 class KafkaValuationJobPublisher:
-    producer: KafkaProducer
+    event_publisher: EventPublisher
 
     def publish_job_requested(
         self,
@@ -30,16 +34,21 @@ class KafkaValuationJobPublisher:
         value: dict[str, Any],
         headers: list[tuple[str, bytes]],
     ) -> None:
-        self.producer.publish_message(
-            topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
-            key=key,
-            value=value,
-            headers=headers,
+        result = self.event_publisher.publish(
+            EventPublishRequest(
+                topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+                key=key,
+                value=value,
+                headers=headers,
+            )
         )
+        if not result.succeeded:
+            raise RuntimeError(result.error_message or result.status.value)
 
     def confirm_delivery(self, *, timeout_seconds: int) -> int:
-        return self.producer.flush(timeout=timeout_seconds)
+        result = self.event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)
+        return result.undelivered_count
 
 
 def get_valuation_job_publisher() -> ValuationJobPublisher:
-    return KafkaValuationJobPublisher(get_kafka_producer())
+    return KafkaValuationJobPublisher(get_kafka_event_publisher())

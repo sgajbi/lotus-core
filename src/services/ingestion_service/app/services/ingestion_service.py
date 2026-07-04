@@ -11,7 +11,11 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
-from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from portfolio_common.event_publisher import (
+    EventPublisher,
+    EventPublishRequest,
+    get_kafka_event_publisher,
+)
 from portfolio_common.logging_utils import (
     correlation_id_var,
     normalize_lineage_value,
@@ -50,8 +54,8 @@ class IngestionPublishError(RuntimeError):
 
 
 class IngestionService:
-    def __init__(self, kafka_producer: KafkaProducer):
-        self._kafka_producer = kafka_producer
+    def __init__(self, event_publisher: EventPublisher):
+        self._event_publisher = event_publisher
 
     def _get_headers(self, idempotency_key: str | None = None):
         """Constructs Kafka headers with the current correlation ID."""
@@ -114,6 +118,29 @@ class IngestionService:
             published_record_count=0,
         )
 
+    def _publish_event(
+        self,
+        *,
+        topic: str,
+        key: str,
+        value: dict,
+        headers: list[tuple[str, bytes]] | None,
+    ) -> None:
+        result = self._event_publisher.publish(
+            EventPublishRequest(
+                topic=topic,
+                key=key,
+                value=value,
+                headers=headers,
+            )
+        )
+        if not result.succeeded:
+            raise RuntimeError(result.error_message or result.status.value)
+
+    def _confirm_delivery(self, *, timeout_seconds: int) -> int:
+        result = self._event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)
+        return result.undelivered_count
+
     async def publish_business_dates(
         self, business_dates: List[BusinessDate], idempotency_key: str | None = None
     ) -> None:
@@ -127,7 +154,7 @@ class IngestionService:
             key = record_keys[idx]
             payload = business_date_event_payload(business_date)
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
                     key=key,
                     value=payload,
@@ -156,7 +183,7 @@ class IngestionService:
         for idx, portfolio in enumerate(portfolios):
             portfolio_payload = portfolio_event_payload(portfolio)
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_PORTFOLIOS_RAW_RECEIVED_TOPIC,
                     key=portfolio.portfolio_id,
                     value=portfolio_payload,
@@ -186,7 +213,7 @@ class IngestionService:
             key=transaction.portfolio_id, field_name="portfolio_id"
         )
         try:
-            self._kafka_producer.publish_message(
+            self._publish_event(
                 topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                 key=partition_key,
                 value=transaction_payload,
@@ -211,7 +238,7 @@ class IngestionService:
                 key=transaction.portfolio_id, field_name="portfolio_id"
             )
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_TRANSACTIONS_RAW_RECEIVED_TOPIC,
                     key=partition_key,
                     value=transaction_payload,
@@ -240,7 +267,7 @@ class IngestionService:
         for idx, instrument in enumerate(instruments):
             instrument_payload = instrument_event_payload(instrument)
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
                     key=instrument.security_id,
                     value=instrument_payload,
@@ -267,7 +294,7 @@ class IngestionService:
         for idx, price in enumerate(market_prices):
             price_payload = market_price_event_payload(price)
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_MARKET_PRICES_RAW_RECEIVED_TOPIC,
                     key=price.security_id,
                     value=price_payload,
@@ -300,7 +327,7 @@ class IngestionService:
             key = record_keys[idx]
             rate_payload = fx_rate_event_payload(rate)
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
                     key=key,
                     value=rate_payload,
@@ -376,7 +403,7 @@ class IngestionService:
         headers = self._get_headers(idempotency_key)
         for idx, txn_id in enumerate(transaction_ids):
             try:
-                self._kafka_producer.publish_message(
+                self._publish_event(
                     topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
                     key=txn_id,
                     value={"transaction_id": txn_id},
@@ -396,7 +423,7 @@ class IngestionService:
                 except IngestionPublishError as publish_exc:
                     raise publish_exc from exc
 
-        undelivered_count = self._kafka_producer.flush(timeout=5)
+        undelivered_count = self._confirm_delivery(timeout_seconds=5)
         if undelivered_count:
             self._raise_flush_timeout_error(
                 entity_label="reprocessing request delivery confirmation",
@@ -405,7 +432,7 @@ class IngestionService:
 
 
 def get_ingestion_service(
-    kafka_producer: KafkaProducer = Depends(get_kafka_producer),
+    event_publisher: EventPublisher = Depends(get_kafka_event_publisher),
 ) -> IngestionService:
     """Dependency injector for the IngestionService."""
-    return IngestionService(kafka_producer)
+    return IngestionService(event_publisher)
