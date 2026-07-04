@@ -132,8 +132,9 @@ Current repository posture:
     account, cash balance, cash movement, cashflow projection, liquidity ladder, portfolio,
     position, reporting, FX rate, instrument, price, lookup, and transaction routers now use
     dependency-module service providers and no longer require #638 exceptions. Query-control-plane
-    analytics-input and simulation routers now use a QCP dependency module too. Remaining #638
-    backlog is limited to query-control-plane integration and operations routers.
+    analytics-input, simulation, integration, and operations routers now use a QCP dependency
+    module too. The local #638 API-router DB-session exception backlog is cleared; the remaining
+    API-router boundary registry entry is the #635 ingestion business-date repository extraction.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

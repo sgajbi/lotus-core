@@ -1,9 +1,7 @@
 from typing import NoReturn, cast
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.core_snapshot_dto import (
     CoreSnapshotRequest,
@@ -98,6 +96,7 @@ from src.services.query_service.app.services.core_snapshot_service import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
+from ..dependencies import get_core_snapshot_service, get_integration_service
 from .response_helpers import (
     problem_example,
     problem_or_validation_response,
@@ -420,18 +419,6 @@ SOURCE_EVIDENCE_INVALID_REQUEST_EXAMPLE = problem_example(
     },
 )
 HTTP_422_UNPROCESSABLE_CONTENT = 422
-
-
-def get_integration_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> IntegrationService:
-    return IntegrationService(db)
-
-
-def get_core_snapshot_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> CoreSnapshotService:
-    return CoreSnapshotService(db)
 
 
 def _raise_integration_source_not_found(

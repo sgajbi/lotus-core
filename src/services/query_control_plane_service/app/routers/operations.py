@@ -3,9 +3,7 @@ from datetime import date
 from typing import Awaitable, Optional, TypeVar
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.operations_dto import (
     AnalyticsExportJobListResponse,
@@ -37,6 +35,7 @@ from src.services.query_service.app.support_policy import (
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
 )
 
+from ..dependencies import get_operations_service
 from .response_helpers import problem_example, problem_response, raise_problem
 
 logger = logging.getLogger(__name__)
@@ -212,12 +211,6 @@ async def execute_outbox_recovery_call(
             error_code="QCP_OPERATIONS_UNEXPECTED_ERROR",
             metadata={**OPERATIONS_METADATA, "resource": "failed_outbox_requeue"},
         )
-
-
-def get_operations_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> OperationsService:
-    return OperationsService(db)
 
 
 @router.get(

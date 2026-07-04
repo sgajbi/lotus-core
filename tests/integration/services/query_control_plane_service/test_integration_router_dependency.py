@@ -5,11 +5,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from src.services.query_control_plane_service.app.main import app
-from src.services.query_control_plane_service.app.routers.integration import (
+from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
     get_integration_service,
 )
+from src.services.query_control_plane_service.app.main import app
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
