@@ -120,9 +120,12 @@ Current repository posture:
     repository-to-source-data boundary. `PerformanceComponentEconomics:v1` uses
     `PerformanceEconomicsTransactionReadRecord`, `PerformanceEconomicsCashflowReadRecord`, and
     `PerformanceEconomicsCostReadRecord` so latest optional cashflow evidence and transaction-cost
-    component evidence are modeled explicitly before source-data response assembly. Extend this
-    pattern before adding new high-value source-data mappers that would otherwise accept raw ORM
-    rows, ORM relationship objects, or tuple-shaped SQL results.
+    component evidence are modeled explicitly before source-data response assembly. Its source-data
+    builder is split into row mapping, source-evidence policy, and response-envelope assembly
+    modules; preserve that shape before adding component-family, supportability, lineage, runtime
+    metadata, or response DTO behavior. Extend this pattern before adding new high-value
+    source-data mappers that would otherwise accept raw ORM rows, ORM relationship objects, or
+    tuple-shaped SQL results.
     Repository output-shape governance now also has `make repository-output-shape-guard`, wired into
     `make lint`, backed by `scripts/repository_output_shape_guard.py`, and documented in
     `docs/architecture/repository-output-shape-standard.md`. It blocks new public repository methods

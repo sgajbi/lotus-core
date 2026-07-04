@@ -26,6 +26,9 @@ change without silently changing downstream banking evidence.
   untyped row objects through application/domain policy.
 - Source-data response envelopes must preserve product identity, version, runtime metadata,
   supportability, paging, and source lineage.
+- High-value source-data products should split typed row/read-model mapping, source-evidence or
+  supportability policy, and response-envelope assembly into separately testable modules before
+  adding new behavior.
 
 See [Repository Output-Shape Standard](./repository-output-shape-standard.md) for the repository
 adapter rule and transitional exception register.
@@ -62,13 +65,18 @@ Current coverage:
 - unknown and missing transaction event field rejection;
 - typed portfolio tax-lot read-record mapping to `PortfolioTaxLotWindow:v1` source-data envelope;
 - typed performance-economics read-record mapping to `PerformanceComponentEconomics:v1`, including
-  missing optional cashflow evidence and multiple fee currencies.
+  missing optional cashflow evidence and multiple fee currencies;
+- performance-economics source-evidence policy and response-envelope assembly, including component
+  coverage, empty/partial-page supportability, data quality, lineage, runtime metadata, and
+  returned-page totals.
 
 ## Follow-Up Scope
 
 GitHub issue #665 is fixed locally pending PR CI/QA for the current conformance gate. GitHub issue
 #664 is fixed locally pending PR CI/QA for typed source-data read records. GitHub issue #648 is fixed
 locally pending PR CI/QA for the repository output-shape standard and static guard. GitHub issue
-#662 is fixed locally pending PR CI/QA and issue closure. GitHub issue #661 remains the umbrella
-mapping/anti-corruption contract for continued coverage across more event families, source-data
-products, API DTO to command paths, and typed read records.
+#662 is fixed locally pending PR CI/QA and issue closure. GitHub issue #663 is fixed locally for
+the required representative `PerformanceComponentEconomics:v1` source-data product pending PR
+CI/QA and issue closure. GitHub issue #661 remains the umbrella mapping/anti-corruption contract
+for continued coverage across more event families, source-data products, API DTO to command paths,
+and typed read records.
