@@ -3,6 +3,11 @@
 Application and source-data use cases must depend on the smallest repository capability they need,
 not on broad concrete repositories as de facto application contracts.
 
+This repository-specific standard extends the broader
+[Application Port Layer Standard](./application-port-layer-standard.md). Governed representative
+repository ports must also be listed in
+`docs/architecture/application-port-capability-catalog.json`.
+
 ## Required Pattern
 
 1. Define a protocol for the use case capability, such as a source-data reader, evidence reader,
@@ -33,4 +38,3 @@ annotations once a narrow port exists.
 This standard improves design-time modularity inside existing deployables. It does not require a
 new process, database, queue, or service split. Runtime splits require separate scalability,
 resilience, security-isolation, and ownership evidence.
-

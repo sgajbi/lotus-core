@@ -1,0 +1,160 @@
+{
+  "schema_version": "lotus-core.application-port-capability-catalog.v1",
+  "repository": "lotus-core",
+  "purpose": "Govern the representative application ports that keep use cases decoupled from concrete repositories, Kafka producers, store helpers, and runtime providers.",
+  "catalog_guard": "scripts/application_port_catalog_guard.py",
+  "capabilities": [
+    {
+      "capability_id": "ingestion.job-store",
+      "capability_family": "audit-idempotency-store",
+      "owner_service": "ingestion_service",
+      "port_module": "src/services/ingestion_service/app/ports/ingestion_workflow_stores.py",
+      "port_symbols": [
+        "IngestionJobStore"
+      ],
+      "adapter_modules": [
+        "src/services/ingestion_service/app/adapters/ingestion_workflow_stores.py"
+      ],
+      "consumer_modules": [
+        "src/services/ingestion_service/app/services/ingestion_job_service.py"
+      ],
+      "guard_scripts": [
+        "scripts/ingestion_store_port_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/ingestion-workflow-store-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "ingestion.replay-audit-store",
+      "capability_family": "audit-idempotency-store",
+      "owner_service": "ingestion_service",
+      "port_module": "src/services/ingestion_service/app/ports/ingestion_workflow_stores.py",
+      "port_symbols": [
+        "ReplayAuditStore"
+      ],
+      "adapter_modules": [
+        "src/services/ingestion_service/app/adapters/ingestion_workflow_stores.py"
+      ],
+      "consumer_modules": [
+        "src/services/ingestion_service/app/services/ingestion_job_service.py"
+      ],
+      "guard_scripts": [
+        "scripts/ingestion_store_port_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/ingestion-workflow-store-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "events.event-publisher",
+      "capability_family": "event-publisher",
+      "owner_service": "portfolio_common",
+      "port_module": "src/libs/portfolio-common/portfolio_common/event_publisher.py",
+      "port_symbols": [
+        "EventPublisher",
+        "EventPublishRequest",
+        "EventPublishResult"
+      ],
+      "adapter_modules": [
+        "src/libs/portfolio-common/portfolio_common/event_publisher.py"
+      ],
+      "consumer_modules": [
+        "src/services/ingestion_service/app/services/ingestion_service.py",
+        "src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py"
+      ],
+      "guard_scripts": [
+        "scripts/event_publisher_port_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/event-publisher-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "query.portfolio-tax-lot-reader",
+      "capability_family": "repository-reader",
+      "owner_service": "query_service",
+      "port_module": "src/services/query_service/app/ports/source_data_repository_ports.py",
+      "port_symbols": [
+        "PortfolioTaxLotReader"
+      ],
+      "adapter_modules": [
+        "src/services/query_service/app/repositories/reference_data_repository.py"
+      ],
+      "consumer_modules": [
+        "src/services/query_service/app/services/portfolio_tax_lot_window.py"
+      ],
+      "guard_scripts": [
+        "scripts/repository_port_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/repository-capability-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "reconciliation.repository-port",
+      "capability_family": "repository-reader-writer",
+      "owner_service": "financial_reconciliation_service",
+      "port_module": "src/services/financial_reconciliation_service/app/ports/reconciliation_repository_ports.py",
+      "port_symbols": [
+        "ReconciliationRunWriter",
+        "TransactionCashflowEvidenceReader",
+        "PositionValuationEvidenceReader",
+        "TimeseriesIntegrityEvidenceReader",
+        "ReconciliationRepositoryPort"
+      ],
+      "adapter_modules": [
+        "src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py"
+      ],
+      "consumer_modules": [
+        "src/services/financial_reconciliation_service/app/services/reconciliation_service.py"
+      ],
+      "guard_scripts": [
+        "scripts/repository_port_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/repository-capability-port-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "reconciliation.runtime-providers",
+      "capability_family": "clock-id-provider",
+      "owner_service": "financial_reconciliation_service",
+      "port_module": "src/services/financial_reconciliation_service/app/services/runtime_providers.py",
+      "port_symbols": [
+        "MonotonicTimer",
+        "IdGenerator"
+      ],
+      "adapter_modules": [
+        "src/services/financial_reconciliation_service/app/services/runtime_providers.py"
+      ],
+      "consumer_modules": [
+        "src/services/financial_reconciliation_service/app/services/reconciliation_service.py"
+      ],
+      "guard_scripts": [
+        "scripts/architecture_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/architecture/runtime-provider-port-policy.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    }
+  ]
+}

@@ -813,6 +813,16 @@ Most relevant current governance:
     need, add fake-port behavior tests, and keep `make architecture-guard`
     (`scripts/repository_port_guard.py`) green. This is design modularity inside existing
     deployables, not approval for a runtime service split.
+66. Governed application ports are cataloged in
+    `docs/architecture/application-port-capability-catalog.json` with the human companion
+    `docs/architecture/application-port-capability-catalog.md` and standard
+    `docs/standards/application-port-layer-standard.md`. Service-local ports should live under
+    `src/services/<service>/app/ports/`; shared cross-service ports should live in the narrow
+    shared library that owns the reusable contract. `make architecture-guard` now runs
+    `scripts/application_port_catalog_guard.py` before the specific port-regression guards, so new
+    representative ports must keep port modules, symbols, adapters, consumers, standards, and guard
+    references truthful. This catalog is not a claim that every dependency has been inverted; it is
+    the governed entrypoint for implemented representative port patterns and follow-on slices.
 
 ## Context Maintenance Rule
 
