@@ -15,6 +15,11 @@ from portfolio_common.monitoring import (
 )
 from sqlalchemy import and_, desc, func, select, update
 
+from ..domain.ingestion_job_lifecycle_policy import (
+    IngestionJobStatus,
+    IngestionJobTransition,
+    ingestion_job_transition_expected_statuses,
+)
 from ..DTOs.ingestion_job_dto import (
     IngestionJobFailureResponse,
     IngestionJobResponse,
@@ -33,11 +38,6 @@ class IngestionIdempotencyConflictError(ValueError):
         super().__init__(
             "Ingestion idempotency key was reused for the same endpoint with a different payload."
         )
-
-
-ACCEPTED_TO_QUEUED_STATUSES = ("accepted",)
-FAILED_REPLAY_TO_QUEUED_STATUSES = ("failed", "accepted", "queued")
-FAILURE_RECORDING_STATUSES = ("accepted", "failed")
 
 
 @dataclass(slots=True)
@@ -134,7 +134,7 @@ async def create_or_get_job_result(
                 job_id=job_id,
                 endpoint=endpoint,
                 entity_type=entity_type,
-                status="accepted",
+                status=IngestionJobStatus.ACCEPTED.value,
                 accepted_count=accepted_count,
                 idempotency_key=idempotency_key,
                 correlation_id=correlation_id,
@@ -159,8 +159,11 @@ async def mark_job_queued(
     *,
     job_id: str,
     session_factory,
-    expected_statuses: Sequence[str] = ACCEPTED_TO_QUEUED_STATUSES,
+    expected_statuses: Sequence[str] | None = None,
 ) -> bool:
+    expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
+        IngestionJobTransition.ACCEPTED_TO_QUEUED
+    )
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
@@ -168,7 +171,7 @@ async def mark_job_queued(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
-                    status="queued",
+                    status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=None,
                 )
@@ -185,8 +188,11 @@ async def mark_job_failed(
     failure_phase: str,
     failed_record_keys: list[str] | None,
     session_factory,
-    expected_statuses: Sequence[str] = FAILURE_RECORDING_STATUSES,
+    expected_statuses: Sequence[str] | None = None,
 ) -> bool:
+    expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
+        IngestionJobTransition.MARK_FAILED
+    )
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
@@ -194,7 +200,7 @@ async def mark_job_failed(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
-                    status="failed",
+                    status=IngestionJobStatus.FAILED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=failure_reason,
                 )
@@ -254,8 +260,11 @@ async def mark_job_retried(
     *,
     job_id: str,
     session_factory,
-    expected_statuses: Sequence[str] = FAILED_REPLAY_TO_QUEUED_STATUSES,
+    expected_statuses: Sequence[str] | None = None,
 ) -> bool:
+    expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
+        IngestionJobTransition.MARK_RETRIED
+    )
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
@@ -282,8 +291,11 @@ async def mark_job_retried_and_queued(
     *,
     job_id: str,
     session_factory,
-    expected_statuses: Sequence[str] = FAILED_REPLAY_TO_QUEUED_STATUSES,
+    expected_statuses: Sequence[str] | None = None,
 ) -> bool:
+    expected_statuses = expected_statuses or ingestion_job_transition_expected_statuses(
+        IngestionJobTransition.RETRY_TO_QUEUED
+    )
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
@@ -291,7 +303,7 @@ async def mark_job_retried_and_queued(
                 .where(DBIngestionJob.job_id == job_id)
                 .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
-                    status="queued",
+                    status=IngestionJobStatus.QUEUED.value,
                     completed_at=datetime.now(UTC),
                     failure_reason=None,
                     retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,

@@ -135,7 +135,7 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def mark_queued(self, job_id: str, *, expected_statuses=("accepted",)) -> bool:
+    async def mark_queued(self, job_id: str, *, expected_statuses=None) -> bool:
         return await mark_job_queued(
             job_id=job_id,
             expected_statuses=expected_statuses,
