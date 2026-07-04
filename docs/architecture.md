@@ -17,12 +17,15 @@ transaction domain data in the Lotus ecosystem.
 2. Routers must not own database sessions, repository construction, Kafka/Redis/cloud/downstream
    clients, file access, domain calculations, or workflow orchestration; see
    `docs/architecture/api-layer-router-boundary-contract.md`.
-3. Services coordinate validation, read orchestration, conversion, and response assembly through
-   focused helper modules.
-4. Repositories own persistence access.
-5. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+3. Application modules own use-case orchestration, command/query handling, application errors,
+   workflow policies, and calls to ports; see
+   `docs/standards/application-layer-contract.md`.
+4. Services coordinate validation, read orchestration, conversion, and response assembly through
+   focused helper modules when a path has not yet moved fully into an application package.
+5. Repositories own persistence access.
+6. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-6. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+7. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 

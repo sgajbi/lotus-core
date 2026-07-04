@@ -905,6 +905,15 @@ Most relevant current governance:
     contracts, and core snapshot fingerprinting cannot return to `request.model_dump(mode="json")`.
     Remaining API DTO usage in broader application services is transitional backlog and should not
     be copied into new use cases.
+74. The application layer now has a first-class repo-local contract in
+    `docs/standards/application-layer-contract.md`. `app/application` and future `app/use_cases`
+    packages own command/query handling, use-case orchestration, workflow policies, application
+    errors, and calls to ports. They must not import FastAPI/Starlette, SQLAlchemy, concrete Kafka
+    producers, repository implementations, producer infrastructure, or consumer infrastructure.
+    `make architecture-guard` runs `scripts/application_layer_contract_guard.py` to enforce this
+    over current application packages in ingestion, query, event replay, and financial
+    reconciliation services. Legacy `app/services` modules remain incremental migration scope, but
+    new use cases should prefer `app/application` plus ports/adapters.
 
 ## Context Maintenance Rule
 
