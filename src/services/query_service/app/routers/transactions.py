@@ -3,11 +3,9 @@ from datetime import date
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dependencies import pagination_params, sorting_params
+from ..dependencies import get_transaction_service, pagination_params, sorting_params
 from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..services.transaction_service import TransactionService
 
@@ -145,9 +143,8 @@ async def get_transactions(
     ),
     pagination: Dict[str, int] = Depends(pagination_params),
     sorting: Dict[str, Optional[str]] = Depends(sorting_params),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: TransactionService = Depends(get_transaction_service),
 ):
-    service = TransactionService(db)
     try:
         return await service.get_transactions(
             portfolio_id=portfolio_id,
@@ -233,9 +230,8 @@ async def get_realized_tax_summary(
         description=("Optional reporting currency for restating aggregated explicit tax totals."),
         examples=["SGD"],
     ),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: TransactionService = Depends(get_transaction_service),
 ):
-    service = TransactionService(db)
     try:
         return await service.get_realized_tax_summary(
             portfolio_id=portfolio_id,

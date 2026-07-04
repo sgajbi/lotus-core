@@ -18,6 +18,7 @@ from .services.position_service import PositionService
 from .services.price_service import MarketPriceService
 from .services.reporting_service import ReportingService
 from .services.sell_state_service import SellStateService
+from .services.transaction_service import TransactionService
 
 
 def pagination_params(
@@ -118,3 +119,9 @@ def get_reporting_service(
 
 def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:
     return SellStateService(db)
+
+
+def get_transaction_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> TransactionService:
+    return TransactionService(db)

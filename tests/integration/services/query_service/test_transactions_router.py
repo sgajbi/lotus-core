@@ -1,13 +1,12 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dependencies import get_transaction_service
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )
@@ -93,17 +92,13 @@ async def async_test_client():
         )
     )
 
-    app.dependency_overrides[get_async_db_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[get_transaction_service] = lambda: mock_transaction_service
 
-    with patch(
-        "src.services.query_service.app.routers.transactions.TransactionService",
-        return_value=mock_transaction_service,
-    ):
-        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client, mock_transaction_service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, mock_transaction_service
 
-    app.dependency_overrides.pop(get_async_db_session, None)
+    app.dependency_overrides.pop(get_transaction_service, None)
 
 
 async def test_get_transactions_success_with_sorting_and_filters(async_test_client):
