@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application import (
+    GetReconciliationRunQuery,
+    ListReconciliationFindingsQuery,
+    ListReconciliationRunsQuery,
+    ReconciliationRunCommand,
+    ReconciliationUseCases,
+)
+from ..dependencies import get_reconciliation_use_cases
 from ..dtos import (
     ReconciliationFindingListResponse,
     ReconciliationRunListResponse,
     ReconciliationRunRequest,
     ReconciliationRunResponse,
 )
-from ..repositories import ReconciliationRepository
-from ..services import ReconciliationService
 
 router = APIRouter(tags=["financial-reconciliation"])
 
@@ -101,10 +105,6 @@ def _reconciliation_run_not_found(run_id: str) -> HTTPException:
     )
 
 
-def _service(db_session: AsyncSession) -> ReconciliationService:
-    return ReconciliationService(ReconciliationRepository(db_session))
-
-
 @router.post(
     "/reconciliation/runs/transaction-cashflow",
     response_model=ReconciliationRunResponse,
@@ -126,7 +126,7 @@ def _service(db_session: AsyncSession) -> ReconciliationService:
 )
 async def run_transaction_cashflow_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
         default=None,
         description=(
@@ -135,10 +135,16 @@ async def run_transaction_cashflow_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    service = _service(db_session)
-    run = await service.run_transaction_cashflow(request=request, correlation_id=x_correlation_id)
-    await db_session.commit()
-    return run
+    return await use_cases.run_transaction_cashflow(
+        ReconciliationRunCommand(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            tolerance=request.tolerance,
+            correlation_id=x_correlation_id,
+        )
+    )
 
 
 @router.post(
@@ -160,7 +166,7 @@ async def run_transaction_cashflow_reconciliation(
 )
 async def run_position_valuation_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
         default=None,
         description=(
@@ -169,10 +175,16 @@ async def run_position_valuation_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    service = _service(db_session)
-    run = await service.run_position_valuation(request=request, correlation_id=x_correlation_id)
-    await db_session.commit()
-    return run
+    return await use_cases.run_position_valuation(
+        ReconciliationRunCommand(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            tolerance=request.tolerance,
+            correlation_id=x_correlation_id,
+        )
+    )
 
 
 @router.post(
@@ -196,7 +208,7 @@ async def run_position_valuation_reconciliation(
 )
 async def run_timeseries_integrity_reconciliation(
     request: ReconciliationRunRequest = Body(openapi_examples=RECONCILIATION_RUN_REQUEST_EXAMPLES),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
     x_correlation_id: str | None = Header(
         default=None,
         description=(
@@ -205,10 +217,16 @@ async def run_timeseries_integrity_reconciliation(
         examples=["CTL:9b4db9d1-1a39-42f2-9f55-2b2a4f9a4700"],
     ),
 ):
-    service = _service(db_session)
-    run = await service.run_timeseries_integrity(request=request, correlation_id=x_correlation_id)
-    await db_session.commit()
-    return run
+    return await use_cases.run_timeseries_integrity(
+        ReconciliationRunCommand(
+            portfolio_id=request.portfolio_id,
+            business_date=request.business_date,
+            epoch=request.epoch,
+            requested_by=request.requested_by,
+            tolerance=request.tolerance,
+            correlation_id=x_correlation_id,
+        )
+    )
 
 
 @router.get(
@@ -252,15 +270,16 @@ async def list_reconciliation_runs(
         description="Maximum number of runs to return.",
         examples=[50],
     ),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
 ):
-    repository = ReconciliationRepository(db_session)
-    runs = await repository.list_runs(
-        reconciliation_type=reconciliation_type,
-        portfolio_id=portfolio_id,
-        limit=limit,
+    result = await use_cases.list_runs(
+        ListReconciliationRunsQuery(
+            reconciliation_type=reconciliation_type,
+            portfolio_id=portfolio_id,
+            limit=limit,
+        )
     )
-    return ReconciliationRunListResponse(runs=runs, total=len(runs))
+    return ReconciliationRunListResponse(runs=result.runs, total=result.total)
 
 
 @router.get(
@@ -288,10 +307,9 @@ async def get_reconciliation_run(
         description="Reconciliation run identifier.",
         examples=["FRR-20260306-0001"],
     ),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
 ):
-    repository = ReconciliationRepository(db_session)
-    run = await repository.get_run(run_id)
+    run = await use_cases.get_run(GetReconciliationRunQuery(run_id=run_id))
     if run is None:
         raise _reconciliation_run_not_found(run_id)
     return run
@@ -324,11 +342,9 @@ async def list_reconciliation_findings(
         description="Reconciliation run identifier.",
         examples=["FRR-20260306-0001"],
     ),
-    db_session: AsyncSession = Depends(get_async_db_session),
+    use_cases: ReconciliationUseCases = Depends(get_reconciliation_use_cases),
 ):
-    repository = ReconciliationRepository(db_session)
-    run = await repository.get_run(run_id)
-    if run is None:
+    result = await use_cases.list_findings(ListReconciliationFindingsQuery(run_id=run_id))
+    if result is None:
         raise _reconciliation_run_not_found(run_id)
-    findings = await repository.list_findings(run_id)
-    return ReconciliationFindingListResponse(findings=findings, total=len(findings))
+    return ReconciliationFindingListResponse(findings=result.findings, total=result.total)
