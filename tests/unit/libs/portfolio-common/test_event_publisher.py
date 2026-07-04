@@ -7,6 +7,11 @@ from portfolio_common.event_publisher import (
     EventPublishStatus,
     KafkaEventPublisher,
 )
+from portfolio_common.infrastructure_errors import (
+    KafkaPublishBackPressure,
+    KafkaPublishFailed,
+    KafkaPublishUncertain,
+)
 from portfolio_common.kafka_utils import KafkaProducer
 
 
@@ -41,6 +46,14 @@ def test_kafka_event_publisher_maps_buffer_error_to_retryable_failure() -> None:
 
     assert result.status == EventPublishStatus.RETRYABLE_FAILURE
     assert result.error_message == "local queue full"
+    assert isinstance(result.infrastructure_error, KafkaPublishBackPressure)
+    assert result.infrastructure_error.safe_diagnostics() == {
+        "reason_code": "kafka_publish_back_pressure",
+        "dependency": "kafka",
+        "retryable": True,
+        "message": "Kafka producer local queue is saturated.",
+        "context": {"topic": "topic", "key_present": "True"},
+    }
 
 
 def test_kafka_event_publisher_maps_unexpected_publish_error_to_terminal_failure() -> None:
@@ -52,6 +65,9 @@ def test_kafka_event_publisher_maps_unexpected_publish_error_to_terminal_failure
 
     assert result.status == EventPublishStatus.TERMINAL_FAILURE
     assert result.error_message == "serialization failed"
+    assert isinstance(result.infrastructure_error, KafkaPublishFailed)
+    assert result.infrastructure_error.reason_code == "kafka_publish_failed"
+    assert result.infrastructure_error.safe_context == {"topic": "topic", "key_present": "True"}
 
 
 def test_kafka_event_publisher_maps_flush_timeout_to_uncertain_publish() -> None:
@@ -63,4 +79,10 @@ def test_kafka_event_publisher_maps_flush_timeout_to_uncertain_publish() -> None
 
     assert result.status == EventPublishStatus.UNCERTAIN
     assert result.undelivered_count == 2
+    assert isinstance(result.infrastructure_error, KafkaPublishUncertain)
+    assert result.infrastructure_error.reason_code == "kafka_publish_uncertain"
+    assert result.infrastructure_error.safe_context == {
+        "timeout_seconds": "5",
+        "undelivered_count": "2",
+    }
     producer.flush.assert_called_once_with(timeout=5)

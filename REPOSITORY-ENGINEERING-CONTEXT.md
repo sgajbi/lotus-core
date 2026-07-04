@@ -823,6 +823,17 @@ Most relevant current governance:
     representative ports must keep port modules, symbols, adapters, consumers, standards, and guard
     references truthful. This catalog is not a claim that every dependency has been inverted; it is
     the governed entrypoint for implemented representative port patterns and follow-on slices.
+67. Infrastructure adapters should translate concrete library failures into typed infrastructure
+    errors before application workflows decide retry, DLQ, degraded response, operator attention, or
+    API problem-detail behavior. The shared taxonomy lives in
+    `portfolio_common.infrastructure_errors` and is documented in
+    `docs/standards/infrastructure-error-taxonomy.md`. `KafkaEventPublisher` now returns typed
+    Kafka infrastructure errors on publish back-pressure, terminal publish failure, and uncertain
+    delivery confirmation while preserving existing `EventPublishResult` status fields. Replay
+    audit persistence continues to fail closed with `InfrastructureAuditWriteFailed`, now backed by
+    the shared taxonomy and source-safe diagnostics. Future repository, downstream HTTP, cache,
+    storage, and configuration adapter slices should extend this taxonomy instead of raising raw
+    `RuntimeError` or leaking concrete library exception classes into application workflows.
 
 ## Context Maintenance Rule
 

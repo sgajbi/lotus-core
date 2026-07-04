@@ -1,12 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from portfolio_common.infrastructure_errors import InfrastructureAuditWriteFailed
 
 
-@dataclass
-class InfrastructureAuditWriteFailed(RuntimeError):
-    message: str
-    reason_code: str
-
-    def __post_init__(self) -> None:
-        RuntimeError.__init__(self, self.message)
+__all__ = ["InfrastructureAuditWriteFailed"]
