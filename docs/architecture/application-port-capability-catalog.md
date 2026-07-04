@@ -27,8 +27,8 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 
 | Capability | Family | Port module | Representative consumers |
 | --- | --- | --- | --- |
-| `ingestion.job-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService` |
-| `ingestion.replay-audit-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService` |
+| `ingestion.job-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
+| `ingestion.replay-audit-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
 | `events.event-publisher` | event publisher | `portfolio_common/event_publisher.py` | ingestion publish workflow, valuation job publisher |
 | `query.portfolio-tax-lot-reader` | repository reader | `query_service/app/ports/source_data_repository_ports.py` | `PortfolioTaxLotWindow:v1` resolver |
 | `reconciliation.repository-port` | repository reader/writer | `financial_reconciliation_service/app/ports/reconciliation_repository_ports.py` | `ReconciliationService` |
@@ -37,7 +37,8 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 ## Enforcement
 
 `make architecture-guard` runs `scripts/application_port_catalog_guard.py`,
-`scripts/application_dependency_inversion_guard.py`, and the specific port-regression guards for
+`scripts/application_dependency_inversion_guard.py`,
+`scripts/infrastructure_adapter_layer_guard.py`, and the specific port-regression guards for
 ingestion stores, event publishing, and repository capability ports.
 
 The catalog guard validates that:
