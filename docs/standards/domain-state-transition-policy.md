@@ -29,17 +29,22 @@ Persistence models store status values. They do not own transition rules.
 - API DTOs, ORM rows, Kafka payloads, and downstream response models must not be imported into
   domain policy modules.
 
-## First Implemented Policy
+## Implemented Policies
 
-The first governed implementation is:
+The governed implementations are:
 
 ```text
 src/services/ingestion_service/app/domain/ingestion_job_lifecycle_policy.py
+src/services/financial_reconciliation_service/app/domain/reconciliation_run_lifecycle_policy.py
 ```
 
-It defines the ingestion job statuses, transition names, source states, target states, replay-audit
-requirements, failure-evidence requirements, retry metadata requirements, and explicit terminal
-state posture for ingestion job lifecycle mutations.
+The ingestion policy defines ingestion job statuses, transition names, source states, target
+states, replay-audit requirements, failure-evidence requirements, retry metadata requirements, and
+explicit terminal-state posture for ingestion job lifecycle mutations.
+
+The reconciliation policy defines reconciliation run statuses, completion transition metadata,
+terminal statuses, retryable statuses, and automatic-bundle outcome policy for failed runs and
+error-finding replay posture.
 
 ## Test Requirements
 
