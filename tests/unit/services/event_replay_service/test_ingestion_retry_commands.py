@@ -6,6 +6,8 @@ import pytest
 
 from src.services.event_replay_service.app.application.ingestion_retry_commands import (
     IngestionRetryCommandService,
+)
+from src.services.event_replay_service.app.application.replay_command_errors import (
     ReplayCommandError,
 )
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionRetryRequest

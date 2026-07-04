@@ -8,6 +8,7 @@ from typing import Any
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionRetryRequest
 from src.services.ingestion_service.app.services.ingestion_job_service import IngestionJobService
 
+from .replay_command_errors import ReplayCommandError
 from .replay_payload_dispatcher import ReplayPayloadDispatcher
 from .replay_retry_payloads import (
     deterministic_replay_fingerprint,
@@ -47,13 +48,6 @@ INGESTION_JOB_RETRY_REMEDIATIONS = {
         "Do not assume replay completion; restore replay audit persistence and retry safely."
     ),
 }
-
-
-class ReplayCommandError(Exception):
-    def __init__(self, status_code: int, detail: dict[str, Any]) -> None:
-        super().__init__(str(detail.get("message", detail.get("code", "replay command failed"))))
-        self.status_code = status_code
-        self.detail = detail
 
 
 @dataclass(frozen=True)

@@ -53,8 +53,8 @@ from ..application.consumer_dlq_replay_commands import (
 )
 from ..application.ingestion_retry_commands import (
     IngestionRetryCommandService,
-    ReplayCommandError,
 )
+from ..application.replay_command_errors import ReplayCommandError
 from ..application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
     ReplayPayloadDispatcher,
