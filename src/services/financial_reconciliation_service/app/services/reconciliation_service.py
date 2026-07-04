@@ -27,7 +27,7 @@ from ..domain.reconciliation_run_lifecycle_policy import (
     determine_automatic_bundle_outcome,
 )
 from ..dtos import ReconciliationRunRequest
-from ..repositories import ReconciliationRepository
+from ..ports.reconciliation_repository_ports import ReconciliationRepositoryPort
 from .runtime_providers import (
     IdGenerator,
     MonotonicTimer,
@@ -213,7 +213,7 @@ class ScopeKey:
 class ReconciliationService:
     def __init__(
         self,
-        repository: ReconciliationRepository,
+        repository: ReconciliationRepositoryPort,
         *,
         monotonic_timer: MonotonicTimer | None = None,
         id_generator: IdGenerator | None = None,

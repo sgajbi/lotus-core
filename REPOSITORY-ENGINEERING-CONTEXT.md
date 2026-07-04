@@ -804,6 +804,15 @@ Most relevant current governance:
     application publisher paths from importing `KafkaProducer` or `get_kafka_producer` directly.
     Runtime dispatchers, consumer managers, aggregation scheduler publishing, and outbox
     publication are separate follow-up slices.
+65. Application/source-data repository dependencies should use capability-specific ports before
+    broad concrete repositories. `PortfolioTaxLotWindow:v1` now depends on
+    `PortfolioTaxLotReader`, and financial reconciliation service orchestration now depends on
+    reconciliation run-writer and evidence-reader ports through `ReconciliationRepositoryPort`
+    instead of the concrete `ReconciliationRepository` type. Concrete SQLAlchemy repositories may
+    implement multiple ports, but new use cases should name the narrow read/write capability they
+    need, add fake-port behavior tests, and keep `make architecture-guard`
+    (`scripts/repository_port_guard.py`) green. This is design modularity inside existing
+    deployables, not approval for a runtime service split.
 
 ## Context Maintenance Rule
 
