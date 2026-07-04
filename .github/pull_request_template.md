@@ -21,6 +21,7 @@
 ## Governance/Docs
 - [ ] RFC/docs updated where behavior or standards changed
 - [ ] API/OpenAPI/vocabulary updates included if contract changed
+- [ ] Runtime-boundary decision record/catalog entry included for new deployables, or no-runtime-split rationale recorded for in-process-only modularity
 
 ## Post-Merge Hygiene
 - [ ] Delete remote feature branch

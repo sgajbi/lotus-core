@@ -3,6 +3,11 @@
 Last updated: 2026-03-08  
 Source authority: RFC 081
 
+Runtime-boundary governance: this matrix documents current-state service responsibilities. It is
+not approval evidence for new deployable splits. New or expanded deployable boundaries must follow
+`docs/standards/runtime-boundary-decision-standard.md` and be cataloged in
+`docs/architecture/runtime-boundary-decision-catalog.json`.
+
 ## Service Responsibility Map
 
 | Service | Primary Role | Owns State | Consumes | Emits | Trigger Type |
