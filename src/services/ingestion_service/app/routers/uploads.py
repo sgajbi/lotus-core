@@ -3,14 +3,16 @@ import logging
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from ..adapter_mode import require_upload_adapter_enabled
+from ..application.errors import ApplicationError
 from ..DTOs.upload_dto import UploadCommitResponse, UploadEntityType, UploadPreviewResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from ..services.ingestion_service import IngestionPublishError
-from ..services.upload_ingestion_service import (
-    UploadIngestionService,
-    get_upload_ingestion_service,
+from ..services.ingestion_service import (
+    IngestionPublishError,
+    IngestionService,
+    get_ingestion_service,
 )
+from ..services.upload_ingestion_service import UploadIngestionService
 from ..settings import get_ingestion_service_settings
 from .publish_errors import (
     ingestion_publish_failed_example,
@@ -21,6 +23,15 @@ from .publish_errors import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+HTTP_422_UNPROCESSABLE_CONTENT = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+UPLOAD_APPLICATION_ERROR_STATUS = {
+    "unsupported_upload_file_format": status.HTTP_400_BAD_REQUEST,
+    "invalid_csv_content": status.HTTP_400_BAD_REQUEST,
+    "invalid_xlsx_content": status.HTTP_400_BAD_REQUEST,
+    "empty_upload": status.HTTP_400_BAD_REQUEST,
+    "upload_invalid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
+    "upload_no_valid_rows": HTTP_422_UNPROCESSABLE_CONTENT,
+}
 
 UPLOAD_INVALID_EXAMPLE = {"detail": "Unsupported upload file format. Expected CSV or XLSX."}
 UPLOAD_ADAPTER_DISABLED_EXAMPLE = {
@@ -53,6 +64,22 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     failed_record_keys=["T2"],
     published_record_count=1,
 )
+
+
+def get_upload_ingestion_service(
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
+) -> UploadIngestionService:
+    return UploadIngestionService(ingestion_service)
+
+
+def upload_application_error_to_http(exc: ApplicationError) -> HTTPException:
+    return HTTPException(
+        status_code=UPLOAD_APPLICATION_ERROR_STATUS.get(
+            exc.reason_code,
+            status.HTTP_400_BAD_REQUEST,
+        ),
+        detail=exc.detail,
+    )
 
 
 async def _read_bounded_upload_content(file: UploadFile) -> bytes:
@@ -126,12 +153,15 @@ async def preview_upload(
     upload_service: UploadIngestionService = Depends(get_upload_ingestion_service),
 ):
     content = await _read_bounded_upload_content(file)
-    response = upload_service.preview_upload(
-        entity_type=entity_type,
-        filename=file.filename or "upload.csv",
-        content=content,
-        sample_size=sample_size,
-    )
+    try:
+        response = upload_service.preview_upload(
+            entity_type=entity_type,
+            filename=file.filename or "upload.csv",
+            content=content,
+            sample_size=sample_size,
+        )
+    except ApplicationError as exc:
+        raise upload_application_error_to_http(exc) from exc
     logger.info(
         "Upload preview completed.",
         extra={
@@ -225,6 +255,8 @@ async def commit_upload(
             content=content,
             allow_partial=allow_partial,
         )
+    except ApplicationError as exc:
+        raise upload_application_error_to_http(exc) from exc
     except IngestionPublishError as exc:
         raise_ingestion_publish_unavailable(exc)
     logger.info(

@@ -878,6 +878,17 @@ Most relevant current governance:
     `scripts/application_workflow_policy_guard.py` so the representative path cannot bypass those
     policies. Broader command-handler extraction from routers and cross-workflow concurrency
     certification remain follow-up issue scope.
+72. Application services should raise framework-independent application errors and leave HTTP,
+    worker, consumer, and operator mapping to their entrypoint adapters. The first representative
+    taxonomy lives in `src/services/ingestion_service/app/application/errors.py` with
+    `ApplicationError`, `ValidationRejected`, and `UnsupportedOperation`. `UploadIngestionService`
+    now raises those errors for upload validation failures, while
+    `src/services/ingestion_service/app/routers/uploads.py` maps reason codes back to the existing
+    HTTP 400/422 detail contract. `make architecture-guard` now runs
+    `scripts/application_error_taxonomy_guard.py` so the representative path cannot reintroduce
+    FastAPI imports, `HTTPException`, or HTTP status mapping inside the application service.
+    Broader application-error migration remains follow-up scope and should preserve API contracts
+    with router mapping tests.
 
 ## Context Maintenance Rule
 
