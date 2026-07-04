@@ -14,12 +14,15 @@ transaction domain data in the Lotus ecosystem.
 ## Target Architecture Direction
 
 1. Routers remain thin and call application services or use cases.
-2. Services coordinate validation, read orchestration, conversion, and response assembly through
+2. Routers must not own database sessions, repository construction, Kafka/Redis/cloud/downstream
+   clients, file access, domain calculations, or workflow orchestration; see
+   `docs/architecture/api-layer-router-boundary-contract.md`.
+3. Services coordinate validation, read orchestration, conversion, and response assembly through
    focused helper modules.
-3. Repositories own persistence access.
-4. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+4. Repositories own persistence access.
+5. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-5. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+6. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
