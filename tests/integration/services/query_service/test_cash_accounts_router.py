@@ -5,11 +5,9 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_service.app.dependencies import get_cash_account_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.cash_accounts import (
-    CashAccountService,
-    get_cash_account_service,
-)
+from src.services.query_service.app.services.cash_account_service import CashAccountService
 
 pytestmark = pytest.mark.asyncio
 
