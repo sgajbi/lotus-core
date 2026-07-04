@@ -4,9 +4,9 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import HTTPException
 from openpyxl import Workbook
 
+from src.services.ingestion_service.app.application.errors import ValidationRejected
 from src.services.ingestion_service.app.services.upload_ingestion_service import (
     UploadIngestionService,
 )
@@ -99,7 +99,7 @@ async def test_commit_upload_rejects_partial_by_default(
         )
     )
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
             entity_type="transactions",
             filename="transactions.csv",
@@ -107,7 +107,10 @@ async def test_commit_upload_rejects_partial_by_default(
             allow_partial=False,
         )
 
-    assert exc.value.status_code == 422
+    assert exc.value.reason_code == "upload_invalid_rows"
+    assert exc.value.detail["message"] == (
+        "Upload contains invalid rows. Fix errors or use allow_partial=true."
+    )
     upload_service._ingestion_service.publish_transactions.assert_not_awaited()
 
 
@@ -141,7 +144,7 @@ async def test_commit_upload_empty_data_rows(upload_service: UploadIngestionServ
         "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency\n"
     )
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
             entity_type="transactions",
             filename="transactions.csv",
@@ -149,4 +152,5 @@ async def test_commit_upload_empty_data_rows(upload_service: UploadIngestionServ
             allow_partial=True,
         )
 
-    assert exc.value.status_code == 400
+    assert exc.value.reason_code == "empty_upload"
+    assert exc.value.detail == "Upload file contains no data rows."

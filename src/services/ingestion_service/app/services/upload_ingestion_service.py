@@ -7,11 +7,11 @@ from io import BytesIO, StringIO
 from typing import Any, Literal
 from zipfile import BadZipFile
 
-from fastapi import Depends, HTTPException, status
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel, ValidationError
 
+from ..application.errors import UnsupportedOperation, ValidationRejected
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
@@ -24,7 +24,7 @@ from ..DTOs.upload_dto import (
     UploadPreviewResponse,
     UploadRowError,
 )
-from ..services.ingestion_service import IngestionService, get_ingestion_service
+from ..services.ingestion_service import IngestionService
 
 MODEL_BY_ENTITY: dict[UploadEntityType, type[BaseModel]] = {
     "portfolios": Portfolio,
@@ -34,7 +34,6 @@ MODEL_BY_ENTITY: dict[UploadEntityType, type[BaseModel]] = {
     "fx_rates": FxRate,
     "business_dates": BusinessDate,
 }
-HTTP_422_UNPROCESSABLE_CONTENT = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
 
 def _normalized_key(value: str) -> str:
@@ -120,8 +119,8 @@ def _detect_format(filename: str) -> Literal["csv", "xlsx"]:
         return "csv"
     if lowered.endswith(".xlsx"):
         return "xlsx"
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
+    raise UnsupportedOperation(
+        reason_code="unsupported_upload_file_format",
         detail="Unsupported file format. Use .csv or .xlsx.",
     )
 
@@ -148,13 +147,13 @@ class UploadIngestionService:
                 return file_format, _parse_csv(content)
             return file_format, _parse_xlsx(content)
         except (UnicodeDecodeError, CsvError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise ValidationRejected(
+                reason_code="invalid_csv_content",
                 detail=f"Invalid CSV content: {exc}",
             ) from exc
         except (BadZipFile, InvalidFileException, ValueError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise ValidationRejected(
+                reason_code="invalid_xlsx_content",
                 detail=f"Invalid XLSX content: {exc}",
             ) from exc
 
@@ -231,14 +230,14 @@ class UploadIngestionService:
             self._raise_no_valid_upload_rows()
 
     def _raise_empty_upload(self) -> None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise ValidationRejected(
+            reason_code="empty_upload",
             detail="Upload file contains no data rows.",
         )
 
     def _raise_partial_upload_rejected(self, errors: list[UploadRowError]) -> None:
-        raise HTTPException(
-            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ValidationRejected(
+            reason_code="upload_invalid_rows",
             detail={
                 "message": "Upload contains invalid rows. Fix errors or use allow_partial=true.",
                 "errors": [error.model_dump() for error in errors[:50]],
@@ -246,8 +245,8 @@ class UploadIngestionService:
         )
 
     def _raise_no_valid_upload_rows(self) -> None:
-        raise HTTPException(
-            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ValidationRejected(
+            reason_code="upload_no_valid_rows",
             detail="No valid rows found in upload.",
         )
 
@@ -307,9 +306,3 @@ class UploadIngestionService:
             skipped_rows=len(validation.errors),
             message="Upload committed and queued for processing.",
         )
-
-
-def get_upload_ingestion_service(
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-) -> UploadIngestionService:
-    return UploadIngestionService(ingestion_service)
