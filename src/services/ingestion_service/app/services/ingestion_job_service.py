@@ -8,7 +8,7 @@ from typing import Any
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
-from ..adapters.ingestion_workflow_stores import (
+from ..infrastructure.workflow_stores import (
     SqlAlchemyIngestionJobStore,
     SqlAlchemyReplayAuditStore,
 )

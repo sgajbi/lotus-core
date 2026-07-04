@@ -845,6 +845,17 @@ Most relevant current governance:
     portfolio, position, transaction, cash account, FX rate, price, and similar services remains
     follow-up migration scope. Preserve existing runtime deployables unless separate scaling,
     ownership, isolation, or operational evidence justifies a runtime service split.
+69. Concrete infrastructure adapters should live behind `app/infrastructure` package boundaries or
+    explicitly transitional legacy packages. `docs/standards/infrastructure-adapter-layer-standard.md`
+    defines the repo-local adapter package contract. `IngestionJobStore` and `ReplayAuditStore`
+    SQLAlchemy implementations now live in
+    `src/services/ingestion_service/app/infrastructure/workflow_stores.py`, while the previous
+    `app/adapters/ingestion_workflow_stores.py` module is a compatibility re-export only.
+    `make architecture-guard` now runs `scripts/infrastructure_adapter_layer_guard.py` so migrated
+    concrete store wiring cannot drift back into the transitional adapter module. Existing
+    `repositories`, `consumers`, `producers`, and `adapters` packages elsewhere remain transitional
+    migration scope; do not treat them as approval for new concrete infrastructure coupling in API,
+    domain, or application logic.
 
 ## Context Maintenance Rule
 

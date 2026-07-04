@@ -13,7 +13,7 @@
         "IngestionJobStore"
       ],
       "adapter_modules": [
-        "src/services/ingestion_service/app/adapters/ingestion_workflow_stores.py"
+        "src/services/ingestion_service/app/infrastructure/workflow_stores.py"
       ],
       "consumer_modules": [
         "src/services/ingestion_service/app/services/ingestion_job_service.py"
@@ -23,7 +23,8 @@
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
-        "docs/standards/ingestion-workflow-store-port-standard.md"
+        "docs/standards/ingestion-workflow-store-port-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
       ],
       "status": "implemented-representative",
       "runtime_boundary": "design-modularity-only"
@@ -37,7 +38,7 @@
         "ReplayAuditStore"
       ],
       "adapter_modules": [
-        "src/services/ingestion_service/app/adapters/ingestion_workflow_stores.py"
+        "src/services/ingestion_service/app/infrastructure/workflow_stores.py"
       ],
       "consumer_modules": [
         "src/services/ingestion_service/app/services/ingestion_job_service.py"
@@ -47,7 +48,8 @@
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
-        "docs/standards/ingestion-workflow-store-port-standard.md"
+        "docs/standards/ingestion-workflow-store-port-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
       ],
       "status": "implemented-representative",
       "runtime_boundary": "design-modularity-only"
