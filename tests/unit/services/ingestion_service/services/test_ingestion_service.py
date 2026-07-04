@@ -124,7 +124,7 @@ async def test_publish_transactions_rejects_empty_partition_key(
     ingestion_service: IngestionService, mock_kafka_producer: MagicMock
 ):
     transactions = [
-        Transaction(
+        Transaction.model_construct(
             transaction_id="T3",
             portfolio_id="   ",
             instrument_id="I1",

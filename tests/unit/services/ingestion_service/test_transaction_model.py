@@ -32,6 +32,58 @@ def test_transaction_model_success():
     assert transaction.quantity == Decimal("10.0")
 
 
+def test_transaction_model_trims_required_identity_fields() -> None:
+    payload = {
+        "transaction_id": " TXN_TRIM_001 ",
+        "portfolio_id": " PORT_TRIM_001 ",
+        "instrument_id": " INST_TRIM_001 ",
+        "security_id": " SEC_TRIM_001 ",
+        "transaction_date": "2025-07-21T00:00:00",
+        "transaction_type": "BUY",
+        "quantity": "10.0",
+        "price": "150.0",
+        "gross_transaction_amount": "1500.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+    }
+
+    transaction = Transaction(**payload)
+
+    assert transaction.transaction_id == "TXN_TRIM_001"
+    assert transaction.portfolio_id == "PORT_TRIM_001"
+    assert transaction.instrument_id == "INST_TRIM_001"
+    assert transaction.security_id == "SEC_TRIM_001"
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["transaction_id", "portfolio_id", "instrument_id", "security_id"],
+)
+def test_transaction_model_rejects_blank_required_identity_fields(field_name: str) -> None:
+    payload = {
+        "transaction_id": "TXN_VALID_001",
+        "portfolio_id": "PORT_VALID_001",
+        "instrument_id": "INST_VALID_001",
+        "security_id": "SEC_VALID_001",
+        "transaction_date": "2025-07-21T00:00:00",
+        "transaction_type": "BUY",
+        "quantity": "10.0",
+        "price": "150.0",
+        "gross_transaction_amount": "1500.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        field_name: "   ",
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    assert any(
+        field_name in err.get("loc", ()) and "Identifier must not be blank" in err["msg"]
+        for err in exc_info.value.errors()
+    )
+
+
 def test_transaction_model_missing_field_fails():
     """
     Tests that the Transaction model fails validation if a required field is missing.
