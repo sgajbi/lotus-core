@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -32,6 +33,11 @@ class IngestionIdempotencyConflictError(ValueError):
         super().__init__(
             "Ingestion idempotency key was reused for the same endpoint with a different payload."
         )
+
+
+ACCEPTED_TO_QUEUED_STATUSES = ("accepted",)
+FAILED_REPLAY_TO_QUEUED_STATUSES = ("failed", "accepted", "queued")
+FAILURE_RECORDING_STATUSES = ("accepted", "failed")
 
 
 @dataclass(slots=True)
@@ -149,18 +155,27 @@ async def create_or_get_job_result(
     raise RuntimeError(msg)
 
 
-async def mark_job_queued(*, job_id: str, session_factory) -> None:
+async def mark_job_queued(
+    *,
+    job_id: str,
+    session_factory,
+    expected_statuses: Sequence[str] = ACCEPTED_TO_QUEUED_STATUSES,
+) -> bool:
     async for db in session_factory():
         async with db.begin():
-            await db.execute(
+            updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     status="queued",
                     completed_at=datetime.now(UTC),
                     failure_reason=None,
                 )
+                .returning(DBIngestionJob.status)
             )
+            return updated.first() is not None
+    return False
 
 
 async def mark_job_failed(
@@ -170,12 +185,14 @@ async def mark_job_failed(
     failure_phase: str,
     failed_record_keys: list[str] | None,
     session_factory,
-) -> None:
+    expected_statuses: Sequence[str] = FAILURE_RECORDING_STATUSES,
+) -> bool:
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     status="failed",
                     completed_at=datetime.now(UTC),
@@ -185,7 +202,7 @@ async def mark_job_failed(
             )
             row = updated.first()
             if row is None:
-                return
+                return False
             db.add(
                 _build_failure_row(
                     job_id=job_id,
@@ -199,6 +216,8 @@ async def mark_job_failed(
                 entity_type=row.entity_type,
                 failure_phase=failure_phase,
             ).inc()
+            return True
+    return False
 
 
 async def record_job_failure_observation(
@@ -231,12 +250,18 @@ async def record_job_failure_observation(
             ).inc()
 
 
-async def mark_job_retried(*, job_id: str, session_factory) -> None:
+async def mark_job_retried(
+    *,
+    job_id: str,
+    session_factory,
+    expected_statuses: Sequence[str] = FAILED_REPLAY_TO_QUEUED_STATUSES,
+) -> bool:
     async for db in session_factory():
         async with db.begin():
             updated = await db.execute(
                 update(DBIngestionJob)
                 .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
                 .values(
                     retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
                     last_retried_at=datetime.now(UTC),
@@ -245,10 +270,43 @@ async def mark_job_retried(*, job_id: str, session_factory) -> None:
             )
             row = updated.first()
             if row is None:
-                return
+                return False
             INGESTION_JOBS_RETRIED_TOTAL.labels(
                 endpoint=row.endpoint, entity_type=row.entity_type, result="accepted"
             ).inc()
+            return True
+    return False
+
+
+async def mark_job_retried_and_queued(
+    *,
+    job_id: str,
+    session_factory,
+    expected_statuses: Sequence[str] = FAILED_REPLAY_TO_QUEUED_STATUSES,
+) -> bool:
+    async for db in session_factory():
+        async with db.begin():
+            updated = await db.execute(
+                update(DBIngestionJob)
+                .where(DBIngestionJob.job_id == job_id)
+                .where(DBIngestionJob.status.in_(tuple(expected_statuses)))
+                .values(
+                    status="queued",
+                    completed_at=datetime.now(UTC),
+                    failure_reason=None,
+                    retry_count=func.coalesce(DBIngestionJob.retry_count, 0) + 1,
+                    last_retried_at=datetime.now(UTC),
+                )
+                .returning(DBIngestionJob.endpoint, DBIngestionJob.entity_type)
+            )
+            row = updated.first()
+            if row is None:
+                return False
+            INGESTION_JOBS_RETRIED_TOTAL.labels(
+                endpoint=row.endpoint, entity_type=row.entity_type, result="accepted"
+            ).inc()
+            return True
+    return False
 
 
 async def get_job_response(

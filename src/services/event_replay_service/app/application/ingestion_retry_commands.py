@@ -44,6 +44,10 @@ INGESTION_JOB_RETRY_REMEDIATIONS = {
     "bookkeeping_failed": (
         "Inspect replay audit state and job queue state before retrying or reconciling manually."
     ),
+    "bookkeeping_conflict": (
+        "Refresh the ingestion job status and replay audit before retrying; another recovery path "
+        "changed the job state."
+    ),
     "audit_write_failed": (
         "Do not assume replay completion; restore replay audit persistence and retry safely."
     ),
@@ -309,8 +313,38 @@ class IngestionRetryCommandService:
         requested_by: str | None,
     ) -> None:
         try:
-            await self.ingestion_job_service.mark_retried(job_id)
-            await self.ingestion_job_service.mark_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_retried_and_queued(job_id)
+            if not transitioned:
+                replay_audit_id = await self._record_mandatory_replay_audit(
+                    recovery_path="ingestion_job_retry",
+                    event_id=f"job:{job_id}",
+                    replay_fingerprint=replay_fingerprint,
+                    correlation_id=None,
+                    job_id=job_id,
+                    endpoint=context.endpoint,
+                    replay_status="replayed_bookkeeping_failed",
+                    dry_run=False,
+                    replay_reason=(
+                        "Replay publish succeeded but ingestion job state transition was rejected."
+                    ),
+                    requested_by=requested_by,
+                    correlation_missing_reason="ingestion_job_retry_uses_job_id",
+                    alternate_lookup_key=f"job:{job_id}",
+                )
+                raise ReplayCommandError(
+                    HTTP_CONFLICT,
+                    ingestion_job_retry_problem_detail(
+                        code="INGESTION_RETRY_BOOKKEEPING_CONFLICT",
+                        message=(
+                            "Replay publish succeeded but ingestion job state changed before "
+                            "bookkeeping completed."
+                        ),
+                        outcome="bookkeeping_conflict",
+                        remediation=INGESTION_JOB_RETRY_REMEDIATIONS["bookkeeping_conflict"],
+                        replay_audit_id=replay_audit_id,
+                        replay_fingerprint=replay_fingerprint,
+                    ),
+                )
             await self._record_ingestion_job_retry_audit(
                 job_id=job_id,
                 context=context,

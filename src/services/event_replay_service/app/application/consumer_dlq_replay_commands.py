@@ -13,6 +13,7 @@ from .replay_retry_payloads import deterministic_replay_fingerprint, payload_rec
 logger = logging.getLogger(__name__)
 
 HTTP_NOT_FOUND = 404
+HTTP_CONFLICT = 409
 HTTP_INTERNAL_SERVER_ERROR = 500
 
 CONSUMER_DLQ_REPLAY_RECOVERY_PATH = "consumer_dlq_replay"
@@ -426,8 +427,33 @@ class ConsumerDlqReplayCommandService:
         requested_by: str | None,
     ) -> ConsumerDlqReplayResult:
         try:
-            await self.ingestion_job_service.mark_retried(job_id)
-            await self.ingestion_job_service.mark_queued(job_id)
+            transitioned = await self.ingestion_job_service.mark_retried_and_queued(job_id)
+            if not transitioned:
+                replay_audit_id = await self._record_mandatory_replay_audit(
+                    event_id=event_id,
+                    replay_fingerprint=replay_fingerprint,
+                    correlation_id=correlation_id,
+                    job_id=job_id,
+                    endpoint=context.endpoint,
+                    replay_status="replayed_bookkeeping_failed",
+                    dry_run=False,
+                    replay_reason=(
+                        "Replay publish succeeded but ingestion job state transition was rejected."
+                    ),
+                    requested_by=requested_by,
+                )
+                raise ReplayCommandError(
+                    HTTP_CONFLICT,
+                    {
+                        "code": "INGESTION_DLQ_REPLAY_BOOKKEEPING_CONFLICT",
+                        "message": (
+                            "Replay publish succeeded but ingestion job state changed before "
+                            "bookkeeping completed."
+                        ),
+                        "replay_audit_id": replay_audit_id,
+                        "replay_fingerprint": replay_fingerprint,
+                    },
+                )
             return await self._record_consumer_dlq_replay_result(
                 event_id=event_id,
                 correlation_id=correlation_id,

@@ -30,7 +30,7 @@ async def test_bookkeeping_repair_marks_accepted_job_queued_and_returns_result()
     ingestion_job_service.list_failures = AsyncMock(
         return_value=[SimpleNamespace(failure_phase="queue_bookkeeping")]
     )
-    ingestion_job_service.mark_queued = AsyncMock()
+    ingestion_job_service.mark_queued = AsyncMock(return_value=True)
 
     response = await _repair_service(
         ingestion_job_service=ingestion_job_service
@@ -141,6 +141,29 @@ async def test_bookkeeping_repair_mark_queued_failure_uses_governed_error() -> N
         "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
         "message": "Ingestion job bookkeeping repair did not complete.",
         "job_id": "job-123",
+        "recovery_action": "repair_ingestion_job_bookkeeping",
+    }
+
+
+@pytest.mark.asyncio
+async def test_bookkeeping_repair_mark_queued_conflict_uses_governed_error() -> None:
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.mark_queued = AsyncMock(return_value=False)
+
+    with pytest.raises(BookkeepingRepairCommandError) as exc_info:
+        await _repair_service(
+            ingestion_job_service=ingestion_job_service
+        )._mark_ingestion_job_queued_for_bookkeeping_repair(
+            job_id="job-123",
+            previous_status="accepted",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == {
+        "code": "INGESTION_BOOKKEEPING_REPAIR_CONFLICT",
+        "message": "Ingestion job status changed before bookkeeping repair completed.",
+        "job_id": "job-123",
+        "previous_status": "accepted",
         "recovery_action": "repair_ingestion_job_bookkeeping",
     }
 

@@ -70,6 +70,10 @@ correlation lookup, not through generic operator listing pages. The lookup filte
 statuses and selects the newest matching row deterministically, so recovery behavior is not capped
 by unrelated ingestion volume.
 
+Replay success bookkeeping must use the atomic retry-plus-queued ingestion job transition. Do not
+reintroduce separate retry-count and queued-status mutations for retry or consumer-DLQ replay
+success; stale transitions must produce governed conflict outcomes.
+
 Consumer DLQ `payload_excerpt` values are redacted and truncated diagnostic evidence. They are useful
 for triage, but they can still contain client-linked identifiers such as portfolio or transaction
 IDs and must remain behind the protected event-replay control-plane access boundary.

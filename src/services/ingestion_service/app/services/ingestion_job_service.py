@@ -49,6 +49,7 @@ from .ingestion_job_lifecycle import (
     mark_job_failed,
     mark_job_queued,
     mark_job_retried,
+    mark_job_retried_and_queued,
     record_job_failure_observation,
 )
 from .ingestion_job_listing import (
@@ -134,8 +135,12 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def mark_queued(self, job_id: str) -> None:
-        await mark_job_queued(job_id=job_id, session_factory=get_async_db_session)
+    async def mark_queued(self, job_id: str, *, expected_statuses=("accepted",)) -> bool:
+        return await mark_job_queued(
+            job_id=job_id,
+            expected_statuses=expected_statuses,
+            session_factory=get_async_db_session,
+        )
 
     async def mark_failed(
         self,
@@ -143,8 +148,8 @@ class IngestionJobService:
         failure_reason: str,
         failure_phase: str = "publish",
         failed_record_keys: list[str] | None = None,
-    ) -> None:
-        await mark_job_failed(
+    ) -> bool:
+        return await mark_job_failed(
             job_id=job_id,
             failure_reason=failure_reason,
             failure_phase=failure_phase,
@@ -168,8 +173,14 @@ class IngestionJobService:
             session_factory=get_async_db_session,
         )
 
-    async def mark_retried(self, job_id: str) -> None:
-        await mark_job_retried(job_id=job_id, session_factory=get_async_db_session)
+    async def mark_retried(self, job_id: str) -> bool:
+        return await mark_job_retried(job_id=job_id, session_factory=get_async_db_session)
+
+    async def mark_retried_and_queued(self, job_id: str) -> bool:
+        return await mark_job_retried_and_queued(
+            job_id=job_id,
+            session_factory=get_async_db_session,
+        )
 
     async def get_job(self, job_id: str) -> IngestionJobResponse | None:
         return await get_job_response(job_id=job_id, session_factory=get_async_db_session)
