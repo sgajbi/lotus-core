@@ -961,6 +961,20 @@ Most relevant current governance:
     `scripts/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
     repositories, concrete Kafka producers, direct publish/flush calls, and raw metric functions do
     not drift back into scheduler orchestration.
+79. Position calculation rules are split from database sessions, concrete repositories, outbox
+    staging, metrics, epoch fencing, and position-history persistence orchestration. The repo-local
+    standard lives at `docs/standards/position-reducer-boundary-standard.md`.
+    `position_calculator.app.core.position_reducer` owns `PositionBalanceState`,
+    `BackdatedReplayDecision`, buy/sell transitions, cash movement deltas, transfer and
+    corporate-action quantity policy, FX contract/cash settlement behavior, flat-position cost
+    zeroing, and deterministic backdated replay planning without SQLAlchemy, repositories, outbox,
+    metrics, `EpochFencer`, persistence models, Pydantic DTOs, or correlation context.
+    `PositionCalculator` remains the application orchestrator and compatibility entry point: it
+    performs epoch-fencing checks, repository reads/writes, position-history persistence, outbox
+    staging, metric emission, replay event ordering, and DTO adaptation. `make architecture-guard`
+    runs `scripts/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
+    helpers, buy/sell/transfer/corporate-action state helpers, and backdated replay decision
+    helpers do not drift back into `position_logic.py`.
 
 ## Context Maintenance Rule
 

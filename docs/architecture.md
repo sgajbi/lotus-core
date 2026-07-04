@@ -32,10 +32,13 @@ transaction domain data in the Lotus ecosystem.
 8. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
    adapters, and pure dispatch planning; see
    `docs/standards/aggregation-scheduler-boundary-standard.md`.
-9. Repositories own persistence access.
-10. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+9. Position calculation rules and backdated replay decisions stay pure and separate from
+   persistence, outbox, metrics, and epoch-fencing orchestration; see
+   `docs/standards/position-reducer-boundary-standard.md`.
+10. Repositories own persistence access.
+11. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-11. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+12. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
