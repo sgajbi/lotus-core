@@ -700,6 +700,12 @@ Most relevant current governance:
     branches. Baseline engine and consumer paths support `NONE` and `UPSTREAM_PROVIDED`
     `fx_realized_pnl_mode`; `CASH_LOT_COST_METHOD` remains an explicit future extension that must
     not be simulated without a governed cash-lot ledger, methodology, and tests.
+62. Local cleanup is governed by `scripts/clean_generated_artifacts.py` and exposed through
+    `make clean`. Keep cleanup policy explicit, repo-root scoped, and test-backed. It may remove
+    ignored local caches, Python bytecode, build/package byproducts, coverage files, and generated
+    `output/` evidence artifacts, but must preserve source, docs, wiki source, migrations,
+    contracts, `.git`, virtual environments, and dependency directories. Do not reintroduce opaque
+    inline cleanup commands in `Makefile`.
 
 ## Context Maintenance Rule
 
