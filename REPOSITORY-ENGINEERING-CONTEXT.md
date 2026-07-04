@@ -212,6 +212,11 @@ Current repository posture:
     reporting-currency paths should normalize DTO/ORM primitives into these value objects at the
     boundary, keep domain rules framework-free, and serialize back to primitive payloads only at
     API/event/persistence edges.
+    Cost-engine domain models now follow
+    `docs/standards/cost-engine-domain-model-standard.md`: `cost_engine/domain` must stay free of
+    Pydantic, FastAPI, SQLAlchemy, repositories, database sessions, Kafka clients, HTTP clients, and
+    settings. Keep event/API validation at adapter boundaries and let parser construction map raw
+    dictionaries into pure domain objects.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but

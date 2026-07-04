@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 
 from cost_engine.domain.models.transaction import Transaction
 
@@ -56,3 +57,22 @@ def test_transaction_settlement_date_can_remain_none() -> None:
     transaction = _transaction(settlement_date=None)
 
     assert transaction.settlement_date is None
+
+
+def test_cost_engine_domain_models_do_not_import_pydantic() -> None:
+    domain_root = (
+        Path(__file__).resolve().parents[6]
+        / "src"
+        / "services"
+        / "calculators"
+        / "cost_calculator_service"
+        / "app"
+        / "cost_engine"
+        / "domain"
+    )
+
+    offenders = [
+        path for path in domain_root.rglob("*.py") if "pydantic" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
