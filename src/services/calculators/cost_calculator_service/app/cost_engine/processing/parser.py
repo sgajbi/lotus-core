@@ -2,8 +2,6 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from pydantic import TypeAdapter, ValidationError
-
 from ..domain.models.transaction import Transaction
 from .error_reporter import ErrorReporter
 
@@ -16,7 +14,6 @@ class TransactionParser:
     """
 
     def __init__(self, error_reporter: ErrorReporter):
-        self._single_transaction_adapter = TypeAdapter(Transaction)
         self._error_reporter = error_reporter
 
     def parse_transactions(self, raw_transaction_data: list[dict[str, Any]]) -> list[Transaction]:
@@ -24,13 +21,10 @@ class TransactionParser:
         for raw_txn_data in raw_transaction_data:
             transaction_id = raw_txn_data.get("transaction_id", "UNKNOWN_ID_BEFORE_PARSE")
             try:
-                validated_txn = self._single_transaction_adapter.validate_python(raw_txn_data)
+                validated_txn = Transaction(**raw_txn_data)
                 parsed_transactions.append(validated_txn)
-            except ValidationError as e:
-                error_messages = "; ".join(
-                    [f"{err.get('loc', ['unknown'])[0]}: {err['msg']}" for err in e.errors()]
-                )
-                error_reason = f"Validation error: {error_messages}"
+            except (TypeError, ValueError) as e:
+                error_reason = f"Validation error: {str(e)}"
                 self._error_reporter.add_error(transaction_id, error_reason)
                 stub_txn = self._create_stub_transaction(raw_txn_data, error_reason)
                 parsed_transactions.append(stub_txn)
