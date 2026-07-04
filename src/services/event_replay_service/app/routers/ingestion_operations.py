@@ -1,15 +1,8 @@
-import logging
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 
-from src.services.ingestion_service.app.bookkeeping_recovery import (
-    POST_BOOKKEEPING_FAILURE_PHASES,
-    POST_BOOKKEEPING_REPAIR_ACTION,
-    bookkeeping_reason_code,
-)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import (
     ConsumerDlqEventListResponse,
     ConsumerDlqReplayRequest,
@@ -47,6 +40,10 @@ from src.services.ingestion_service.app.services.ingestion_service import (
     get_ingestion_service,
 )
 
+from ..application.bookkeeping_repair_commands import (
+    BookkeepingRepairCommandError,
+    BookkeepingRepairCommandService,
+)
 from ..application.consumer_dlq_replay_commands import (
     ConsumerDlqReplayCommand,
     ConsumerDlqReplayCommandService,
@@ -61,7 +58,6 @@ from ..application.replay_payload_dispatcher import (
 )
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
-logger = logging.getLogger(__name__)
 
 INGESTION_JOB_RESPONSE_EXAMPLE = {
     "job_id": "job_01J5S0J6D3BAVMK2E1V0WQ7MCC",
@@ -623,10 +619,10 @@ def get_consumer_dlq_replay_command_service(
     )
 
 
-def _job_field(job: Any, field: str) -> Any:
-    if isinstance(job, dict):
-        return job.get(field)
-    return getattr(job, field, None)
+def get_bookkeeping_repair_command_service(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> BookkeepingRepairCommandService:
+    return BookkeepingRepairCommandService(ingestion_job_service=ingestion_job_service)
 
 
 @router.get(
@@ -743,120 +739,15 @@ async def repair_ingestion_job_bookkeeping(
         description="Ingestion job identifier.",
         examples=["job_01J5S0J6D3BAVMK2E1V0WQ7MCC"],
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    command_service: BookkeepingRepairCommandService = Depends(
+        get_bookkeeping_repair_command_service
+    ),
 ):
-    job = await _required_ingestion_job_for_bookkeeping_repair(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_id,
-    )
-    previous_status = str(_job_field(job, "status"))
-    failures = await ingestion_job_service.list_failures(job_id=job_id, limit=25)
-    bookkeeping_phase = _bookkeeping_repair_phase_or_http_error(
-        failures=failures,
-        job_id=job_id,
-        previous_status=previous_status,
-    )
-    if previous_status == "accepted":
-        await _mark_ingestion_job_queued_for_bookkeeping_repair(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_id,
-            previous_status=previous_status,
-        )
-    repaired = await ingestion_job_service.get_job(job_id)
-    repaired_status = str(_job_field(repaired or job, "status"))
-    return _bookkeeping_repair_response(
-        job_id=job_id,
-        previous_status=previous_status,
-        repaired_status=repaired_status,
-        bookkeeping_phase=bookkeeping_phase,
-    )
-
-
-async def _required_ingestion_job_for_bookkeeping_repair(
-    *,
-    ingestion_job_service: IngestionJobService,
-    job_id: str,
-) -> Any:
-    job = await ingestion_job_service.get_job(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found.",
-            },
-        )
-    return job
-
-
-def _bookkeeping_repair_phase_or_http_error(
-    *,
-    failures: list[Any],
-    job_id: str,
-    previous_status: str,
-) -> str:
-    bookkeeping_phase = _first_bookkeeping_failure_phase(failures)
-    if bookkeeping_phase is None or previous_status not in {"accepted", "queued"}:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "INGESTION_BOOKKEEPING_REPAIR_NOT_ELIGIBLE",
-                "message": "Ingestion job is not eligible for bookkeeping repair.",
-                "job_id": job_id,
-                "status": previous_status,
-            },
-        )
-    return bookkeeping_phase
-
-
-async def _mark_ingestion_job_queued_for_bookkeeping_repair(
-    *,
-    ingestion_job_service: IngestionJobService,
-    job_id: str,
-    previous_status: str,
-) -> None:
     try:
-        await ingestion_job_service.mark_queued(job_id)
-    except Exception as exc:
-        logger.exception(
-            "Ingestion bookkeeping repair failed.",
-            extra={"job_id": job_id, "previous_status": previous_status},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "INGESTION_BOOKKEEPING_REPAIR_FAILED",
-                "message": "Ingestion job bookkeeping repair did not complete.",
-                "job_id": job_id,
-                "recovery_action": POST_BOOKKEEPING_REPAIR_ACTION,
-            },
-        ) from exc
-
-
-def _bookkeeping_repair_response(
-    *,
-    job_id: str,
-    previous_status: str,
-    repaired_status: str,
-    bookkeeping_phase: str,
-) -> IngestionJobBookkeepingRepairResponse:
-    return IngestionJobBookkeepingRepairResponse(
-        job_id=job_id,
-        previous_status=previous_status,
-        repaired_status=repaired_status,
-        recovery_action=POST_BOOKKEEPING_REPAIR_ACTION,
-        supportability_reason_code=bookkeeping_reason_code(bookkeeping_phase),
-        retry_safe=False,
-        message=f"Ingestion job bookkeeping repaired from {previous_status} to {repaired_status}.",
-    )
-
-
-def _first_bookkeeping_failure_phase(failures: list[Any]) -> str | None:
-    for failure in failures:
-        failure_phase = _job_field(failure, "failure_phase")
-        if failure_phase in POST_BOOKKEEPING_FAILURE_PHASES:
-            return str(failure_phase)
-    return None
+        result = await command_service.repair_ingestion_job_bookkeeping(job_id=job_id)
+    except BookkeepingRepairCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return IngestionJobBookkeepingRepairResponse(**result.to_response_payload())
 
 
 @router.get(
