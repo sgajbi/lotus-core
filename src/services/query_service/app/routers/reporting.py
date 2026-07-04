@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_reporting_service
 from ..dtos.reporting_dto import (
     AssetAllocationQueryRequest,
     AssetAllocationResponse,
@@ -18,12 +17,6 @@ PORTFOLIO_SUMMARY_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id POR
 PORTFOLIO_SUMMARY_INVALID_REPORTING_CURRENCY_RESPONSE_EXAMPLE = {
     "detail": "FX rate not found for USD/SGD as of 2026-03-27."
 }
-
-
-def get_reporting_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> ReportingService:
-    return ReportingService(db)
 
 
 @router.post(

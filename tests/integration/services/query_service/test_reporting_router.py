@@ -6,11 +6,9 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_service.app.dependencies import get_reporting_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.reporting import (
-    ReportingService,
-    get_reporting_service,
-)
+from src.services.query_service.app.services.reporting_service import ReportingService
 
 pytestmark = pytest.mark.asyncio
 

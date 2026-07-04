@@ -2,10 +2,9 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_cashflow_projection_service
 from ..dtos.cashflow_projection_dto import CashflowProjectionResponse
 from ..services.cashflow_projection_service import (
     DEFAULT_HORIZON_DAYS,
@@ -18,12 +17,6 @@ router = APIRouter(prefix="/portfolios", tags=["Cashflow Projection"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-CF-001 not found"}
 BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 1 and 366."}
-
-
-def get_cashflow_projection_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> CashflowProjectionService:
-    return CashflowProjectionService(db)
 
 
 @router.get(

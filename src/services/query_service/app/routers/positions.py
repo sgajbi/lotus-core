@@ -3,10 +3,9 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_position_service
 from ..dtos.position_dto import (
     PortfolioMaturitySummaryResponse,
     PortfolioPositionHistoryResponse,
@@ -17,12 +16,6 @@ from ..services.position_service import PositionService
 router = APIRouter(prefix="/portfolios", tags=["Positions"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-POS-001 not found"}
-
-
-def get_position_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> PositionService:
-    return PositionService(db)
 
 
 @router.get(

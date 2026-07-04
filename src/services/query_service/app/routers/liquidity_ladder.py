@@ -3,10 +3,9 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, Path, Query, status
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_liquidity_ladder_service
 from ..dtos.liquidity_ladder_dto import PortfolioLiquidityLadderResponse
 from ..services.liquidity_ladder_service import (
     DEFAULT_HORIZON_DAYS,
@@ -19,12 +18,6 @@ router = APIRouter(prefix="/portfolios", tags=["Liquidity Ladder"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-001 not found"}
 BAD_REQUEST_RESPONSE_EXAMPLE = {"detail": "horizon_days must be between 0 and 366."}
-
-
-def get_liquidity_ladder_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> PortfolioLiquidityLadderService:
-    return PortfolioLiquidityLadderService(db)
 
 
 @router.get(
