@@ -914,6 +914,17 @@ Most relevant current governance:
     over current application packages in ingestion, query, event replay, and financial
     reconciliation services. Legacy `app/services` modules remain incremental migration scope, but
     new use cases should prefer `app/application` plus ports/adapters.
+75. Ingestion business services and adapter-mode policy must stay framework-neutral. The repo-local
+    standard lives at `docs/standards/ingestion-service-framework-boundary-standard.md`.
+    `src/services/ingestion_service/app/dependencies.py` owns FastAPI dependency providers for
+    ingestion publishing, reference-data ingestion, business-calendar policy composition, and
+    adapter-mode HTTP `410 Gone` translation. `adapter_mode.py` raises
+    `AdapterModeDisabledError`, while routers import `require_*_adapter_enabled(...)` providers
+    from `dependencies.py`. `make architecture-guard` runs
+    `scripts/ingestion_service_framework_guard.py` to prevent FastAPI imports, `Depends(...)`,
+    `HTTPException`, and `status.HTTP` mapping from returning to ingestion `app/services` modules
+    or adapter-mode policy. This keeps current `app/services` modules directly constructable in
+    tests while broader migration to `app/application` remains incremental issue scope.
 
 ## Context Maintenance Rule
 

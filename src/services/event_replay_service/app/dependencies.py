@@ -1,13 +1,13 @@
 from fastapi import Depends
 
+from src.services.ingestion_service.app.dependencies import (
+    get_ingestion_service,
+)
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     IngestionJobService,
     get_ingestion_job_service,
 )
-from src.services.ingestion_service.app.services.ingestion_service import (
-    IngestionService,
-    get_ingestion_service,
-)
+from src.services.ingestion_service.app.services.ingestion_service import IngestionService
 
 from .application.bookkeeping_repair_commands import BookkeepingRepairCommandService
 from .application.consumer_dlq_replay_commands import ConsumerDlqReplayCommandService

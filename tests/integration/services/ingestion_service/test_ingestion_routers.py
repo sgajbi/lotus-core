@@ -14,11 +14,15 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException
 from openpyxl import Workbook
+from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from src.services.event_replay_service.app.main import app as event_replay_app
 from src.services.ingestion_service.app import ops_controls
-from src.services.ingestion_service.app.dependencies import get_business_date_ingestion_policy
+from src.services.ingestion_service.app.dependencies import (
+    get_business_date_ingestion_policy,
+    get_ingestion_service,
+)
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
 from src.services.ingestion_service.app.services.business_date_ingestion_policy import (
@@ -63,6 +67,7 @@ from src.services.ingestion_service.app.routers import uploads as uploads_router
 from src.services.ingestion_service.app.services.ingestion_job_service import (
     get_ingestion_job_service,
 )
+from src.services.ingestion_service.app.services.ingestion_service import IngestionService
 
 # Mark all tests in this file as async
 pytestmark = pytest.mark.asyncio
@@ -105,6 +110,9 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
 
     def override_get_kafka_producer():
         return mock_kafka_producer
+
+    def override_get_ingestion_service():
+        return IngestionService(KafkaEventPublisher(mock_kafka_producer))
 
     class FakeIngestionJobService:
         def __init__(self):
@@ -161,18 +169,19 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 self.job_payloads[job_id] = request_payload
             return SimpleNamespace(job=self.jobs[job_id], created=True)
 
-        async def mark_queued(self, job_id: str) -> None:
+        async def mark_queued(self, job_id: str) -> bool:
             if self.fail_next_mark_queued:
                 self.fail_next_mark_queued = False
                 raise RuntimeError("queue state write failed")
             if job_id in self.fail_mark_queued_job_ids:
                 raise RuntimeError("queue state write failed")
             if job_id not in self.jobs:
-                return
+                return False
             record = self.jobs[job_id]
             record.status = "queued"
             record.completed_at = datetime.now(UTC)
             self.jobs[job_id] = record
+            return True
 
         async def mark_failed(
             self,
@@ -1026,6 +1035,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     for target_app in target_apps:
         target_app.dependency_overrides[get_ingestion_job_service] = lambda: fake_job_service
         target_app.dependency_overrides[get_kafka_producer] = override_get_kafka_producer
+        target_app.dependency_overrides[get_ingestion_service] = override_get_ingestion_service
 
     app.dependency_overrides[transactions_router.get_ingestion_job_service] = lambda: (
         fake_job_service
@@ -1067,6 +1077,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     for target_app in target_apps:
         target_app.dependency_overrides.pop(get_kafka_producer, None)
         target_app.dependency_overrides.pop(get_ingestion_job_service, None)
+        target_app.dependency_overrides.pop(get_ingestion_service, None)
     app.dependency_overrides.pop(transactions_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(portfolios_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(instruments_router.get_ingestion_job_service, None)

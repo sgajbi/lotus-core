@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
-from ..dependencies import get_business_date_ingestion_policy
+from ..dependencies import get_business_date_ingestion_policy, get_ingestion_service
 from ..DTOs.business_date_dto import BusinessDateIngestionRequest
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..ops_controls import enforce_ingestion_write_rate_limit
@@ -21,7 +21,6 @@ from ..services.ingestion_job_service import IngestionJobService, get_ingestion_
 from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
-    get_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 from .publish_errors import (

@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import Depends
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
@@ -31,7 +30,6 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
-from portfolio_common.db import get_async_db_session
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -688,9 +686,3 @@ class ReferenceDataIngestionService:
         update_map["updated_at"] = now
         stmt = stmt.on_conflict_do_update(index_elements=conflict_columns, set_=update_map)
         await self._db.execute(stmt)
-
-
-def get_reference_data_ingestion_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> ReferenceDataIngestionService:
-    return ReferenceDataIngestionService(db)

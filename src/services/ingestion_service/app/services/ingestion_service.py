@@ -1,7 +1,6 @@
 # services/ingestion_service/app/services/ingestion_service.py
 from typing import List
 
-from fastapi import Depends
 from portfolio_common.config import (
     KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC,
     KAFKA_FX_RATES_RAW_RECEIVED_TOPIC,
@@ -14,7 +13,6 @@ from portfolio_common.config import (
 from portfolio_common.event_publisher import (
     EventPublisher,
     EventPublishRequest,
-    get_kafka_event_publisher,
 )
 from portfolio_common.logging_utils import (
     correlation_id_var,
@@ -429,10 +427,3 @@ class IngestionService:
                 entity_label="reprocessing request delivery confirmation",
                 record_keys=transaction_ids,
             )
-
-
-def get_ingestion_service(
-    event_publisher: EventPublisher = Depends(get_kafka_event_publisher),
-) -> IngestionService:
-    """Dependency injector for the IngestionService."""
-    return IngestionService(event_publisher)
