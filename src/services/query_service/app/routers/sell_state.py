@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_sell_state_service
 from ..dtos.sell_state_dto import SellCashLinkageResponse, SellDisposalsResponse
 from ..services.sell_state_service import SellStateService
 
@@ -16,10 +15,6 @@ SELL_CASH_LINKAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
         "TXN-SELL-2026-0001"
     )
 }
-
-
-def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:
-    return SellStateService(db)
 
 
 @router.get(

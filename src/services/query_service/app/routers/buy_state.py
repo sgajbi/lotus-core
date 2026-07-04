@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_buy_state_service
 from ..dtos.buy_state_dto import (
     AccruedIncomeOffsetsResponse,
     BuyCashLinkageResponse,
@@ -19,10 +18,6 @@ BUY_CASH_LINKAGE_NOT_FOUND_RESPONSE_EXAMPLE = {
         "BUY cash linkage not found for portfolio PORT-STATE-001 and transaction TXN-BUY-2026-0001"
     )
 }
-
-
-def get_buy_state_service(db: AsyncSession = Depends(get_async_db_session)) -> BuyStateService:
-    return BuyStateService(db)
 
 
 @router.get(

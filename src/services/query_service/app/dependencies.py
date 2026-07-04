@@ -1,7 +1,12 @@
 # services/query-service/app/dependencies.py
 from typing import Dict, Optional
 
-from fastapi import Query
+from fastapi import Depends, Query
+from portfolio_common.db import get_async_db_session
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .services.buy_state_service import BuyStateService
+from .services.sell_state_service import SellStateService
 
 
 def pagination_params(
@@ -28,3 +33,11 @@ def sorting_params(
     - sort_order: The direction of the sort (ascending or descending).
     """
     return {"sort_by": sort_by, "sort_order": sort_order}
+
+
+def get_buy_state_service(db: AsyncSession = Depends(get_async_db_session)) -> BuyStateService:
+    return BuyStateService(db)
+
+
+def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:
+    return SellStateService(db)
