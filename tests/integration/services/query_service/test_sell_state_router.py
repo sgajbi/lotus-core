@@ -1,13 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dependencies import get_sell_state_service
 from src.services.query_service.app.dtos.sell_state_dto import (
     SellCashLinkageResponse,
     SellDisposalRecord,
@@ -63,17 +62,11 @@ async def async_test_client():
         )
     )
 
-    app.dependency_overrides[get_async_db_session] = lambda: AsyncMock(spec=AsyncSession)
-
-    with patch(
-        "src.services.query_service.app.routers.sell_state.SellStateService",
-        return_value=mock_sell_state_service,
-    ):
-        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            yield client, mock_sell_state_service
-
-    app.dependency_overrides.pop(get_async_db_session, None)
+    app.dependency_overrides[get_sell_state_service] = lambda: mock_sell_state_service
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, mock_sell_state_service
+    app.dependency_overrides.pop(get_sell_state_service, None)
 
 
 async def test_get_sell_disposals_success(async_test_client):
