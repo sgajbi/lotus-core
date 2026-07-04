@@ -201,6 +201,9 @@ Important runtime note:
   eventing and supportability contract enforcement
 - `make rfc0083-closure-guard`
   RFC-0083 closure ledger enforcement
+- `make clean`
+  remove governed local caches, build byproducts, coverage files, and generated `output/`
+  evidence artifacts through the reviewed cleanup script
 
 ## Validation And CI Lanes
 
