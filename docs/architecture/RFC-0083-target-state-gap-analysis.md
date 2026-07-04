@@ -224,6 +224,9 @@ Required follow-up slice:
 These endpoint families are useful, but they must be controlled so `lotus-core` does not grow
 consumer-specific convenience APIs instead of durable source-data products.
 
+The live executable watchlist is `docs/standards/endpoint-consolidation-watchlist.json`; it is
+enforced by `make endpoint-consolidation-watchlist-guard`.
+
 | Surface | Risk | Target disposition |
 | --- | --- | --- |
 | `/reporting/*/query` | Can drift into report composition | Keep as source-data query surfaces or migrate into named source-data products |
@@ -451,6 +454,9 @@ runtime behavior, schemas, generated OpenAPI, persistence, or downstream contrac
 Slice 8 endpoint consolidation disposition is recorded in:
 
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
+- `docs/standards/endpoint-consolidation-watchlist.json`
+- `scripts/endpoint_consolidation_watchlist_guard.py`
+- `tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py`
 - `src/services/query_service/app/routers/reporting.py`
 - `tests/integration/services/query_service/test_main_app.py`
 

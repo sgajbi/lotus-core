@@ -7,6 +7,12 @@ runtime handlers, persistence, DTOs, or response shapes. Route removal is deferr
 consumers are migrated to named source-data products and the platform evidence proves no active
 surface depends on the old route shape.
 
+The executable watchlist is maintained in
+`docs/standards/endpoint-consolidation-watchlist.json` and enforced by
+`make endpoint-consolidation-watchlist-guard`. Future routes in monitored consolidation families
+must either bind to governed source-data product metadata or carry an approved bounded-use rationale,
+boundary guardrail, and consumer guidance.
+
 ## Consolidation Principle
 
 `lotus-core` should expose durable source-data products, not consumer-specific convenience shapes.
@@ -63,5 +69,6 @@ Slice 8 validation is:
 2. `python -m ruff check src/services/query_service/app/routers/reporting.py tests/integration/services/query_service/test_main_app.py --ignore E501,I001`,
 3. `python -m ruff format --check src/services/query_service/app/routers/reporting.py tests/integration/services/query_service/test_main_app.py`,
 4. `make route-contract-family-guard`,
-5. `make lint`,
-6. `git diff --check`.
+5. `make endpoint-consolidation-watchlist-guard`,
+6. `make lint`,
+7. `git diff --check`.

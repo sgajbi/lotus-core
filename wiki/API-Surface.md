@@ -139,4 +139,5 @@ For detailed classification, use:
 
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
+- [Endpoint Consolidation Watchlist](../docs/standards/endpoint-consolidation-watchlist.json)
 - [Architecture Index](../docs/architecture/README.md)

@@ -1,0 +1,357 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "governingRfcs": [
+    "RFC-0082",
+    "RFC-0083",
+    "RFC-0067"
+  ],
+  "description": "Machine-readable RFC-0083 endpoint consolidation watchlist. It prevents monitored convenience-route families from growing without explicit ownership, product identity, or approved bounded-use rationale.",
+  "monitoredRoutes": [
+    {
+      "service": "query_service",
+      "method": "POST",
+      "pathPrefix": "/reporting/",
+      "reason": "Reporting query routes can drift into report-composition APIs instead of source-data contracts."
+    },
+    {
+      "service": "query_service",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/cashflow-projection",
+      "reason": "Cashflow projections must remain core-derived source data, not performance forecasting."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "GET",
+      "path": "/simulation-sessions/{session_id}/projected-summary",
+      "reason": "Projected summary must remain deterministic projected state, not advisory or manage recommendation logic."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "pathPrefix": "/integration/advisory/proposals/",
+      "reason": "Advisory-facing simulation routes must not become advisory decisioning owned by core."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/instruments/enrichment-bulk",
+      "reason": "Instrument enrichment must remain source reference data, not suitability enrichment."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "pathPrefix": "/integration/benchmarks/",
+      "reason": "Benchmark routes must stay aligned with benchmark/reference source-data products."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "pathPrefix": "/integration/indices/",
+      "reason": "Index routes must stay aligned with benchmark/reference source-data products."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "pathPrefix": "/integration/reference/risk-free-series",
+      "reason": "Risk-free-series routes must stay aligned with reference source-data products."
+    }
+  ],
+  "activeWatchlistRoutes": [
+    {
+      "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/assets-under-management/query",
+      "routeFamily": "Operational Read",
+      "disposition": "keep_bounded_source_summary",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Current operational readers still need a compact portfolio source summary while migration to named source-data products completes.",
+      "boundaryGuardrail": "Do not add narrative reporting, performance attribution, recommendation, or downstream report composition behavior.",
+      "consumerGuidance": "Prefer source-data products such as PortfolioStateSnapshot:v1 when consumers need durable provenance, policy, and supportability metadata."
+    },
+    {
+      "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/asset-allocation/query",
+      "routeFamily": "Operational Read",
+      "disposition": "keep_bounded_source_summary",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "HoldingsAsOf",
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Current operational readers still need a compact allocation source summary while migration to named source-data products completes.",
+      "boundaryGuardrail": "Keep this as core-held allocation source truth only; do not add advice, risk interpretation, or product-specific presentation rules.",
+      "consumerGuidance": "Prefer HoldingsAsOf or PortfolioStateSnapshot source-data products where consumers need durable product identity and provenance."
+    },
+    {
+      "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/portfolio-summary/query",
+      "routeFamily": "Operational Read",
+      "disposition": "keep_bounded_source_summary",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Current operational readers still need a compact portfolio summary while migration to named source-data products completes.",
+      "boundaryGuardrail": "Keep this as a source summary; no analytics narrative, report-composition, or recommendation behavior belongs here.",
+      "consumerGuidance": "Prefer PortfolioStateSnapshot:v1 for durable source-data product consumption."
+    },
+    {
+      "service": "query_service",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/cashflow-projection",
+      "routeFamily": "Operational Read",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "PortfolioCashflowProjection"
+      ],
+      "approvedRationale": "Core owns deterministic cashflow state derived from booked transactions and cashflow rules.",
+      "boundaryGuardrail": "Do not add performance forecasting, recommendation, or financial-planning advice.",
+      "consumerGuidance": "Consume this route as PortfolioCashflowProjection:v1 when cashflow source facts are needed."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "GET",
+      "path": "/simulation-sessions/{session_id}/projected-summary",
+      "routeFamily": "Snapshot And Simulation",
+      "disposition": "keep_bounded_snapshot_simulation",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Core owns deterministic projected state assembled from accepted simulation changes.",
+      "boundaryGuardrail": "Do not add advisory recommendation, suitability, or manage workflow decisioning.",
+      "consumerGuidance": "Use this only for deterministic projected-state inspection; consume named source-data products for durable portfolio facts."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/advisory/proposals/simulate-execution",
+      "routeFamily": "Snapshot And Simulation",
+      "disposition": "keep_bounded_snapshot_simulation",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "PortfolioStateSnapshot"
+      ],
+      "approvedRationale": "Core may simulate source-owned proposal execution effects without owning advisory suitability or recommendation logic.",
+      "boundaryGuardrail": "Suitability, recommendation, and proposal decisioning remain outside lotus-core.",
+      "consumerGuidance": "Use this route only for execution-effect projection; use lotus-advise for advisory recommendation semantics."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/instruments/enrichment-bulk",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "InstrumentReferenceBundle"
+      ],
+      "approvedRationale": "Core owns instrument master and reference enrichment facts.",
+      "boundaryGuardrail": "Do not add suitability, eligibility, or advisory-specific enrichment behavior.",
+      "consumerGuidance": "Consume this route as InstrumentReferenceBundle:v1 for instrument reference facts."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/catalog",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_bounded_reference_catalog",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "BenchmarkDefinition"
+      ],
+      "approvedRationale": "Benchmark catalog lookup is a bounded reference surface while benchmark definition product identity is completed.",
+      "boundaryGuardrail": "Do not add consumer-specific benchmark ranking, reporting narrative, or performance interpretation.",
+      "consumerGuidance": "Prefer named benchmark/reference source-data products for durable downstream analytics contracts."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/{benchmark_id}/composition-window",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "BenchmarkConstituentWindow"
+      ],
+      "approvedRationale": "Core owns benchmark constituent source windows.",
+      "boundaryGuardrail": "Do not add performance attribution, benchmark recommendation, or reporting narrative.",
+      "consumerGuidance": "Consume this route as BenchmarkConstituentWindow:v1."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/{benchmark_id}/coverage",
+      "routeFamily": "Control-Plane And Policy",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "DataQualityCoverageReport"
+      ],
+      "approvedRationale": "Core owns bounded coverage evidence for benchmark source readiness.",
+      "boundaryGuardrail": "Expose coverage evidence only; do not add consumer-specific readiness policy decisions.",
+      "consumerGuidance": "Consume this route as DataQualityCoverageReport:v1 for benchmark coverage diagnostics."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/{benchmark_id}/definition",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_bounded_reference_definition",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "BenchmarkDefinition"
+      ],
+      "approvedRationale": "Benchmark definition lookup is a bounded reference surface while product identity is completed.",
+      "boundaryGuardrail": "Do not add consumer-specific benchmark selection, performance interpretation, or reporting narrative.",
+      "consumerGuidance": "Prefer named benchmark/reference source-data products where durable product identity is required."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/{benchmark_id}/market-series",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "MarketDataWindow"
+      ],
+      "approvedRationale": "Core owns benchmark market-data source windows.",
+      "boundaryGuardrail": "Do not add performance attribution, benchmark recommendation, or reporting narrative.",
+      "consumerGuidance": "Consume this route as MarketDataWindow:v1 for benchmark market series facts."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/benchmarks/{benchmark_id}/return-series",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_bounded_reference_series",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "BenchmarkReturnSeries"
+      ],
+      "approvedRationale": "Benchmark return series remains bounded reference input while product identity is completed.",
+      "boundaryGuardrail": "Do not add downstream-specific performance analytics, attribution, or narrative.",
+      "consumerGuidance": "Prefer named benchmark/reference source-data products where durable product identity is required."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/indices/catalog",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_bounded_reference_catalog",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": false,
+      "sourceDataProducts": [
+        "IndexSeriesWindow"
+      ],
+      "approvedRationale": "Index catalog lookup is a bounded reference surface while complete catalog product identity is completed.",
+      "boundaryGuardrail": "Do not add consumer-specific index ranking, performance interpretation, or reporting narrative.",
+      "consumerGuidance": "Prefer named index/reference source-data products for durable downstream analytics contracts."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/indices/{index_id}/price-series",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "IndexSeriesWindow"
+      ],
+      "approvedRationale": "Core owns index price source windows.",
+      "boundaryGuardrail": "Do not add downstream-specific performance analytics or reporting narrative.",
+      "consumerGuidance": "Consume this route as IndexSeriesWindow:v1."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/indices/{index_id}/return-series",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "IndexSeriesWindow"
+      ],
+      "approvedRationale": "Core owns index return source windows.",
+      "boundaryGuardrail": "Do not add downstream-specific performance analytics or reporting narrative.",
+      "consumerGuidance": "Consume this route as IndexSeriesWindow:v1."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/reference/risk-free-series",
+      "routeFamily": "Analytics Input",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "RiskFreeSeriesWindow"
+      ],
+      "approvedRationale": "Core owns risk-free reference source windows.",
+      "boundaryGuardrail": "Do not add downstream-specific performance analytics, discounting policy decisions, or reporting narrative.",
+      "consumerGuidance": "Consume this route as RiskFreeSeriesWindow:v1."
+    },
+    {
+      "service": "query_control_plane_service",
+      "method": "POST",
+      "path": "/integration/reference/risk-free-series/coverage",
+      "routeFamily": "Control-Plane And Policy",
+      "disposition": "keep_source_data_product",
+      "owner": "lotus-core",
+      "sourceDataProductRequired": true,
+      "sourceDataProducts": [
+        "DataQualityCoverageReport"
+      ],
+      "approvedRationale": "Core owns bounded coverage evidence for risk-free source readiness.",
+      "boundaryGuardrail": "Expose coverage evidence only; do not add consumer-specific readiness policy decisions.",
+      "consumerGuidance": "Consume this route as DataQualityCoverageReport:v1 for risk-free coverage diagnostics."
+    }
+  ],
+  "retiredRoutes": [
+    {
+      "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/income-summary/query",
+      "formerRouteFamily": "Operational Read",
+      "replacementRoutes": [
+        "GET /portfolios/{portfolio_id}/transactions"
+      ],
+      "disposition": "retired_after_consumer_migration",
+      "removalEvidence": "Removed from the active route surface; downstream consumers should derive income summaries from the transaction ledger product."
+    },
+    {
+      "service": "query_service",
+      "method": "POST",
+      "path": "/reporting/activity-summary/query",
+      "formerRouteFamily": "Operational Read",
+      "replacementRoutes": [
+        "GET /portfolios/{portfolio_id}/transactions"
+      ],
+      "disposition": "retired_after_consumer_migration",
+      "removalEvidence": "Removed from the active route surface; downstream consumers should derive activity summaries from the transaction ledger product."
+    }
+  ]
+}
