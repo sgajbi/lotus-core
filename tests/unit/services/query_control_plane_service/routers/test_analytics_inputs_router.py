@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.responses import Response
 
+from src.services.query_control_plane_service.app.dependencies import (
+    get_analytics_timeseries_service,
+)
 from src.services.query_control_plane_service.app.routers.analytics_inputs import (
     _raise_http_for_analytics_error,
     create_analytics_export_job,
     get_analytics_export_job,
     get_analytics_export_job_result,
-    get_analytics_timeseries_service,
     get_portfolio_analytics_reference,
     get_portfolio_analytics_timeseries,
     get_position_analytics_timeseries,

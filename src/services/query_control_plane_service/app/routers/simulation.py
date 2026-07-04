@@ -1,7 +1,5 @@
 # src/services/query_control_plane_service/app/routers/simulation.py
 from fastapi import APIRouter, Depends, Path, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.simulation_dto import (
     ProjectedPositionsResponse,
@@ -19,6 +17,7 @@ from src.services.query_service.app.services.simulation_service import (
     SimulationSessionNotFoundError,
 )
 
+from ..dependencies import get_simulation_service
 from .response_helpers import problem_example, problem_response, raise_problem
 
 router = APIRouter(prefix="/simulation-sessions", tags=["Simulation"])
@@ -95,12 +94,6 @@ def _raise_simulation_not_found(exc: ValueError) -> None:
         error_code="QCP_SIMULATION_SESSION_NOT_FOUND",
         metadata={"source_product": "SimulationSession", "reason": exc.__class__.__name__},
     )
-
-
-def get_simulation_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> SimulationService:
-    return SimulationService(db)
 
 
 @router.post(

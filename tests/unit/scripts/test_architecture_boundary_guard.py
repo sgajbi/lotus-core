@@ -333,6 +333,41 @@ def route():
     assert "router_file_access" in {violation.code for violation in violations}
 
 
+def test_api_router_boundary_allows_http_delete_decorator(tmp_path, monkeypatch) -> None:
+    router = _write_router(
+        tmp_path,
+        monkeypatch,
+        "src/services/query_control_plane_service/app/routers/new_route.py",
+        """
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.delete("/{resource_id}")
+async def delete_resource(resource_id: str):
+    return {"resource_id": resource_id}
+""",
+    )
+
+    assert _scan_api_router_boundary_violations([router]) == []
+
+
+def test_api_router_boundary_still_flags_direct_delete_call(tmp_path, monkeypatch) -> None:
+    router = _write_router(
+        tmp_path,
+        monkeypatch,
+        "src/services/query_control_plane_service/app/routers/new_route.py",
+        """
+async def delete_resource(db, resource):
+    await db.delete(resource)
+""",
+    )
+
+    violations = _scan_api_router_boundary_violations([router])
+
+    assert {violation.code for violation in violations} == {"router_sqlalchemy_operation"}
+
+
 def test_api_router_boundary_applies_transitional_exception(tmp_path, monkeypatch) -> None:
     router = _write_router(
         tmp_path,

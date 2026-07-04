@@ -40,6 +40,17 @@ ROUTER_DB_OPERATION_NAMES = {
     "scalars",
     "stream",
 }
+APIRouter_HTTP_METHOD_DECORATORS = {
+    "delete",
+    "get",
+    "head",
+    "options",
+    "patch",
+    "post",
+    "put",
+    "trace",
+    "websocket",
+}
 ROUTER_FILE_ACCESS_CALLS = {
     "open",
     "read_text",
@@ -364,7 +375,9 @@ def _scan_api_router_boundary_violations(files: list[Path]) -> list[ApiRouterBou
                             detail=f"router constructs repository '{call_name}' directly",
                         )
                     )
-                if call_name in ROUTER_DB_OPERATION_NAMES:
+                if call_name in ROUTER_DB_OPERATION_NAMES and not (
+                    root_name == "router" and call_name in APIRouter_HTTP_METHOD_DECORATORS
+                ):
                     violations.append(
                         ApiRouterBoundaryViolation(
                             path=rel,

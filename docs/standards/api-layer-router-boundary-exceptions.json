@@ -12,14 +12,6 @@
       "rationale": "Business-date ingestion still injects a repository dependency at the HTTP adapter boundary pending application-use-case dependency extraction."
     },
     {
-      "path": "src/services/query_control_plane_service/app/routers/analytics_inputs.py",
-      "violationCodes": [
-        "router_db_session_dependency"
-      ],
-      "issue": "#638",
-      "rationale": "Query-control-plane analytics input router still injects AsyncSession pending dedicated application dependency modules."
-    },
-    {
       "path": "src/services/query_control_plane_service/app/routers/integration.py",
       "violationCodes": [
         "router_db_session_dependency"
@@ -34,15 +26,6 @@
       ],
       "issue": "#638",
       "rationale": "Query-control-plane operations router still injects AsyncSession pending dedicated application dependency modules."
-    },
-    {
-      "path": "src/services/query_control_plane_service/app/routers/simulation.py",
-      "violationCodes": [
-        "router_db_session_dependency",
-        "router_sqlalchemy_operation"
-      ],
-      "issue": "#638",
-      "rationale": "Query-control-plane simulation router still injects AsyncSession pending dedicated application dependency modules."
     }
   ]
 }
