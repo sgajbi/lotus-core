@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -28,8 +28,14 @@ from ..domain.reconciliation_run_lifecycle_policy import initial_reconciliation_
 
 
 class ReconciliationRepository:
-    def __init__(self, db_session: AsyncSession):
+    def __init__(
+        self,
+        db_session: AsyncSession,
+        *,
+        run_id_suffix_provider: Callable[[], str] | None = None,
+    ):
         self.db = db_session
+        self._run_id_suffix_provider = run_id_suffix_provider or (lambda: uuid4().hex)
 
     async def create_run(
         self,
@@ -50,7 +56,7 @@ class ReconciliationRepository:
                 return existing, False
 
         run = FinancialReconciliationRun(
-            run_id=f"recon-{uuid4().hex}",
+            run_id=f"recon-{self._run_id_suffix_provider()}",
             reconciliation_type=reconciliation_type,
             portfolio_id=portfolio_id,
             business_date=business_date,

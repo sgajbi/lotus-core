@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -121,8 +122,14 @@ class _BaselinePositionRows:
 
 
 class CoreSnapshotService:
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ):
         self.db = db
+        self._clock = clock or (lambda: datetime.now(UTC))
         self.position_repo = PositionRepository(db)
         self.portfolio_repo = PortfolioRepository(db)
         self.simulation_repo = SimulationRepository(db)
@@ -513,7 +520,7 @@ class CoreSnapshotService:
         sections: CoreSnapshotSections,
         baseline_count: int,
     ) -> CoreSnapshotResponse:
-        generated_at = datetime.now(UTC)
+        generated_at = self._clock()
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             snapshot_mode=request.snapshot_mode,
