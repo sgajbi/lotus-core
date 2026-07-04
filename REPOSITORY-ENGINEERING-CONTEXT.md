@@ -136,6 +136,9 @@ Current repository posture:
     module too. Business-date ingestion validation now lives in `BusinessDateIngestionPolicy`
     behind ingestion dependency-module composition, so the local #635 API-router repository
     exception is cleared too. The API-router boundary exception registry is empty.
+    Query-service lookup catalog assembly now lives in `LookupCatalogService`; lookup routers
+    should keep selector routes limited to HTTP query parameter parsing and response wrapping while
+    the service owns source scoping, de-duplication, ordering, and limit behavior.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

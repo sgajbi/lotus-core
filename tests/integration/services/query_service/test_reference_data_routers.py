@@ -5,16 +5,16 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from src.services.query_service.app.dtos.fx_rate_dto import FxRateResponse
-from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrumentResponse
-from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
-from src.services.query_service.app.dtos.price_dto import MarketPriceResponse
 from src.services.query_service.app.dependencies import (
     get_fx_rate_service,
     get_instrument_service,
     get_market_price_service,
     get_portfolio_service,
 )
+from src.services.query_service.app.dtos.fx_rate_dto import FxRateResponse
+from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrumentResponse
+from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
+from src.services.query_service.app.dtos.price_dto import MarketPriceResponse
 from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
