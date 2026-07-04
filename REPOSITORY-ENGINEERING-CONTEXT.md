@@ -110,6 +110,9 @@ Current repository posture:
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
     transaction event, persistence event-envelope, portfolio tax-lot, and
     performance-economics source-data mappings.
+    Ingestion publish workflows must route API DTO serialization through
+    `ingestion_service.app.services.ingestion_event_payloads` before Kafka publication; do not add
+    new inline DTO `model_dump()` publish payloads in `IngestionService`.
     Valuation, pipeline, persistence, and future event-consuming services must use
     `portfolio_common.event_mapping` or a narrower service adapter around it for Kafka bytes,
     deterministic message identity, governed Pydantic event validation, outbox event payload
