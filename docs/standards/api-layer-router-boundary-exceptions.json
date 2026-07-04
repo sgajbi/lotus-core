@@ -43,14 +43,6 @@
       ],
       "issue": "#638",
       "rationale": "Query-control-plane simulation router still injects AsyncSession pending dedicated application dependency modules."
-    },
-    {
-      "path": "src/services/query_service/app/routers/transactions.py",
-      "violationCodes": [
-        "router_db_session_dependency"
-      ],
-      "issue": "#638",
-      "rationale": "Query router still injects AsyncSession pending composition-module extraction."
     }
   ]
 }
