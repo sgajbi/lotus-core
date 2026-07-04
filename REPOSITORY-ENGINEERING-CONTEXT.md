@@ -986,6 +986,17 @@ Most relevant current governance:
     infrastructure/adapters/repositories, and shared infrastructure modules. When a legacy service
     path is extracted into a use case, policy, port, or pure reducer, add that path to the
     protected contract and prove it with fake-port tests.
+81. Runtime deployable boundaries require design-before-runtime-split evidence. The repo-local
+    standard lives at `docs/standards/runtime-boundary-decision-standard.md`; the current deployable
+    catalog lives at `docs/architecture/runtime-boundary-decision-catalog.json`; and the template
+    lives at `docs/architecture/templates/runtime-boundary-decision-record-template.md`.
+    `make architecture-guard` runs `scripts/runtime_boundary_decision_guard.py`, which discovers
+    `src/services/**/Dockerfile`, requires every deployable root to have a catalog entry, blocks
+    stale catalog entries, prevents new service paths from using current-state status, and requires
+    PR checklist coverage. Existing deployables are cataloged as
+    `current-state-revalidation-required`; that is current-state documentation, not retrospective
+    approval. In-process-only refactors must record a no-runtime-split rationale in their CR, RFC,
+    or ledger entry.
 
 ## Context Maintenance Rule
 

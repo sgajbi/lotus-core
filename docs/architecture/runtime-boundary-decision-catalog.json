@@ -1,0 +1,204 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "baselineCurrentStateServicePaths": [
+    "src/services/calculators/cashflow_calculator_service",
+    "src/services/calculators/cost_calculator_service",
+    "src/services/calculators/position_calculator",
+    "src/services/calculators/position_valuation_calculator",
+    "src/services/event_replay_service",
+    "src/services/financial_reconciliation_service",
+    "src/services/ingestion_service",
+    "src/services/persistence_service",
+    "src/services/pipeline_orchestrator_service",
+    "src/services/portfolio_aggregation_service",
+    "src/services/query_control_plane_service",
+    "src/services/query_service",
+    "src/services/timeseries_generator_service",
+    "src/services/valuation_orchestrator_service"
+  ],
+  "decisionRecords": [
+    {
+      "serviceId": "cashflow_calculator_service",
+      "servicePath": "src/services/calculators/cashflow_calculator_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "cost_calculator_service",
+      "servicePath": "src/services/calculators/cost_calculator_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "position_calculator_service",
+      "servicePath": "src/services/calculators/position_calculator",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "position_valuation_calculator",
+      "servicePath": "src/services/calculators/position_valuation_calculator",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "event_replay_service",
+      "servicePath": "src/services/event_replay_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "financial_reconciliation_service",
+      "servicePath": "src/services/financial_reconciliation_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "ingestion_service",
+      "servicePath": "src/services/ingestion_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "persistence_service",
+      "servicePath": "src/services/persistence_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "pipeline_orchestrator_service",
+      "servicePath": "src/services/pipeline_orchestrator_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "portfolio_aggregation_service",
+      "servicePath": "src/services/portfolio_aggregation_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "query_control_plane_service",
+      "servicePath": "src/services/query_control_plane_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "query_service",
+      "servicePath": "src/services/query_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "timeseries_generator_service",
+      "servicePath": "src/services/timeseries_generator_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
+      "serviceId": "valuation_orchestrator_service",
+      "servicePath": "src/services/valuation_orchestrator_service",
+      "status": "current-state-revalidation-required",
+      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "inProcessBoundaryEvidence": [
+        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "No new runtime split is approved by this catalog entry."
+      ],
+      "runtimeBoundaryDrivers": ["current-state"],
+      "revalidationOwner": "lotus-core engineering"
+    }
+  ]
+}
