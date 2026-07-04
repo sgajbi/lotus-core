@@ -183,7 +183,10 @@ Current repository posture:
     `POST /ingestion/jobs/{job_id}/bookkeeping/repair` operation and must require recorded
     `queue_bookkeeping` or `persist_bookkeeping` evidence before moving accepted jobs to queued.
     Lifecycle mutations are expected-state guarded; repair must treat stale accepted-to-queued
-    updates as conflicts, not successful repairs.
+    updates as conflicts, not successful repairs. New lifecycle workflows must follow
+    `docs/standards/domain-state-transition-policy.md`; domain policy modules own status
+    vocabulary, allowed transitions, terminal posture, retry metadata, and audit/failure-evidence
+    requirements, while persistence helpers only consume policy-derived expected states.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but

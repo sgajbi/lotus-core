@@ -105,6 +105,8 @@ classification, and lookthrough inputs are upstream canonical data products for 
 - ingestion job lifecycle updates are expected-state guarded; stale replay, failure, or
   bookkeeping-repair mutations return conflict outcomes instead of overwriting newer operator
   truth
+- ingestion job lifecycle transition rules live in the pure domain policy module; persistence
+  helpers consume policy-derived expected states instead of owning status strings
 
 ## When not to use this page
 
@@ -117,4 +119,5 @@ classification, and lookthrough inputs are upstream canonical data products for 
 - [API Surface](API-Surface)
 - [System Data Flow](System-Data-Flow)
 - [Operations Runbook](Operations-Runbook)
+- [Domain State Transition Policy](../docs/standards/domain-state-transition-policy.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
