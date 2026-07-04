@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.ingestion_service.app.dependencies import get_reference_data_ingestion_service
 from src.services.ingestion_service.app.services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
     ReferenceDataUpsertOperation,
-    get_reference_data_ingestion_service,
 )
 
 

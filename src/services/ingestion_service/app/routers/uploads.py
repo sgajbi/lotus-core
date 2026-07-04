@@ -2,7 +2,6 @@ import logging
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from ..adapter_mode import require_upload_adapter_enabled
 from ..application.errors import ApplicationError
 from ..application.upload_commands import (
     UploadCommitCommand,
@@ -10,6 +9,7 @@ from ..application.upload_commands import (
     UploadPreviewCommand,
     UploadPreviewResult,
 )
+from ..dependencies import get_ingestion_service, require_upload_adapter_enabled
 from ..DTOs.upload_dto import (
     UploadCommitResponse,
     UploadEntityType,
@@ -21,7 +21,6 @@ from ..services.ingestion_job_service import IngestionJobService, get_ingestion_
 from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
-    get_ingestion_service,
 )
 from ..services.upload_ingestion_service import UploadIngestionService
 from ..settings import get_ingestion_service_settings

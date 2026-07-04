@@ -4,6 +4,7 @@ from typing import Awaitable, Callable
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
+from ..dependencies import get_reference_data_ingestion_service
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reference_data_dto import (
     BenchmarkCompositionIngestionRequest,
@@ -38,7 +39,6 @@ from ..request_metadata import (
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
-    get_reference_data_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 

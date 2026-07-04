@@ -22,10 +22,13 @@ transaction domain data in the Lotus ecosystem.
    `docs/standards/application-layer-contract.md`.
 4. Services coordinate validation, read orchestration, conversion, and response assembly through
    focused helper modules when a path has not yet moved fully into an application package.
-5. Repositories own persistence access.
-6. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+5. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
+   providers and HTTP policy translation live in `app/dependencies.py`; see
+   `docs/standards/ingestion-service-framework-boundary-standard.md`.
+6. Repositories own persistence access.
+7. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-7. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+8. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 

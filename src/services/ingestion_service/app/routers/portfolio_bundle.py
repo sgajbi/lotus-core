@@ -3,7 +3,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
-from ..adapter_mode import require_portfolio_bundle_adapter_enabled
+from ..dependencies import (
+    get_ingestion_service,
+    require_portfolio_bundle_adapter_enabled,
+)
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
 from ..ops_controls import enforce_ingestion_write_rate_limit
@@ -16,7 +19,6 @@ from ..services.ingestion_job_service import IngestionJobService, get_ingestion_
 from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
-    get_ingestion_service,
 )
 from .job_bookkeeping import raise_post_publish_bookkeeping_failure
 from .publish_errors import (
