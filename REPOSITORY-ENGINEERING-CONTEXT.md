@@ -925,6 +925,16 @@ Most relevant current governance:
     `HTTPException`, and `status.HTTP` mapping from returning to ingestion `app/services` modules
     or adapter-mode policy. This keeps current `app/services` modules directly constructable in
     tests while broader migration to `app/application` remains incremental issue scope.
+76. Bulk upload handling is split into parser/validator, commit policy, and publisher adapter
+    responsibilities. `docs/standards/bulk-upload-component-boundary-standard.md` defines the
+    repo-local boundary. `BulkUploadValidator` in `upload_validation.py` owns CSV/XLSX parsing,
+    header normalization, row normalization, DTO validation, and validation-report construction
+    without FastAPI, Kafka, database, or ingestion-service dependencies. `UploadIngestionService`
+    owns preview/commit policy and depends on the `UploadRecordPublisher` port. The
+    `IngestionServiceUploadPublisher` adapter dispatches validated records to existing canonical
+    ingestion publish methods. `make architecture-guard` runs
+    `scripts/upload_component_boundary_guard.py` so upload parsing and entity-specific publish
+    dispatch do not drift back into the orchestration service.
 
 ## Context Maintenance Rule
 

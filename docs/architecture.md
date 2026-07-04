@@ -25,10 +25,12 @@ transaction domain data in the Lotus ecosystem.
 5. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
    providers and HTTP policy translation live in `app/dependencies.py`; see
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
-6. Repositories own persistence access.
-7. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+6. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
+   publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
+7. Repositories own persistence access.
+8. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-8. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+9. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 

@@ -21,9 +21,11 @@ def test_application_error_taxonomy_guard_allows_application_errors(
     )
     _write(
         tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
-        "from ..application.errors import UnsupportedOperation, ValidationRejected\n"
-        "raise UnsupportedOperation(reason_code='unsupported', detail='bad')\n"
         "raise ValidationRejected(reason_code='invalid', detail='bad')\n",
+    )
+    _write(
+        tmp_path / "src/services/ingestion_service/app/services/upload_validation.py",
+        "raise UnsupportedOperation(reason_code='unsupported', detail='bad')\n",
     )
 
     assert find_application_error_taxonomy_findings(tmp_path) == []
@@ -43,14 +45,20 @@ def test_application_error_taxonomy_guard_rejects_http_exceptions(
         "from fastapi import HTTPException, status\n"
         "raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='bad')\n",
     )
+    _write(
+        tmp_path / "src/services/ingestion_service/app/services/upload_validation.py",
+        "from fastapi import HTTPException\n",
+    )
 
     findings = find_application_error_taxonomy_findings(tmp_path)
 
     assert [finding.snippet for finding in findings] == [
         "ValidationRejected",
-        "UnsupportedOperation",
         "HTTPException",
         "status.HTTP_",
+        "from fastapi",
+        "UnsupportedOperation",
+        "HTTPException",
         "from fastapi",
     ]
 
@@ -65,7 +73,11 @@ def test_application_error_taxonomy_guard_rejects_missing_taxonomy_symbol(
     )
     _write(
         tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
-        "from ..application.errors import UnsupportedOperation, ValidationRejected\n",
+        "raise ValidationRejected(reason_code='invalid', detail='bad')\n",
+    )
+    _write(
+        tmp_path / "src/services/ingestion_service/app/services/upload_validation.py",
+        "raise UnsupportedOperation(reason_code='unsupported', detail='bad')\n",
     )
 
     findings = find_application_error_taxonomy_findings(tmp_path)

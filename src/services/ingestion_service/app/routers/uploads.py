@@ -23,6 +23,8 @@ from ..services.ingestion_service import (
     IngestionService,
 )
 from ..services.upload_ingestion_service import UploadIngestionService
+from ..services.upload_publishers import IngestionServiceUploadPublisher
+from ..services.upload_validation import BulkUploadValidator
 from ..settings import get_ingestion_service_settings
 from .publish_errors import (
     ingestion_publish_failed_example,
@@ -79,7 +81,10 @@ UPLOAD_COMMIT_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 def get_upload_ingestion_service(
     ingestion_service: IngestionService = Depends(get_ingestion_service),
 ) -> UploadIngestionService:
-    return UploadIngestionService(ingestion_service)
+    return UploadIngestionService(
+        validator=BulkUploadValidator(),
+        publisher=IngestionServiceUploadPublisher(ingestion_service),
+    )
 
 
 def upload_application_error_to_http(exc: ApplicationError) -> HTTPException:
