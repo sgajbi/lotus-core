@@ -3,6 +3,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.services.query_control_plane_service.app.dependencies import (
+    get_core_snapshot_service,
+    get_integration_service,
+)
 from src.services.query_control_plane_service.app.routers.integration import (
     create_core_snapshot,
     fetch_benchmark_catalog,
@@ -20,7 +24,6 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_client_restriction_profile,
     get_client_tax_profile,
     get_client_tax_rule_set,
-    get_core_snapshot_service,
     get_dpm_source_readiness,
     get_effective_integration_policy,
     get_external_currency_exposure,
@@ -30,7 +33,6 @@ from src.services.query_control_plane_service.app.routers.integration import (
     get_external_hedge_policy,
     get_external_order_execution_acknowledgement,
     get_instrument_enrichment_bulk,
-    get_integration_service,
     get_liquidity_reserve_requirement,
     get_market_data_coverage,
     get_performance_component_economics,
