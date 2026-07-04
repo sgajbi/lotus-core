@@ -40,6 +40,9 @@ entrypoint for implemented representative ports and the pattern future slices mu
 See `docs/standards/application-dependency-inversion-standard.md` for the protected application
 service dependency rules.
 
+See `docs/standards/application-workflow-policy-standard.md` for reusable application command
+context, idempotency, audit, and recovery-evidence workflow rules.
+
 ## Runtime Boundary
 
 Application ports are an in-process design boundary. A runtime service split requires separate

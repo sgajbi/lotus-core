@@ -8,6 +8,12 @@ from typing import Any
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
+from ..application.workflow_policies import (
+    ApplicationCommandEnvelope,
+    AuditWorkflow,
+    CorrelationContext,
+    IdempotencyWorkflow,
+)
 from ..infrastructure.workflow_stores import (
     SqlAlchemyIngestionJobStore,
     SqlAlchemyReplayAuditStore,
@@ -139,6 +145,14 @@ class IngestionJobService:
     def _replay_audit_store_adapter(self) -> ReplayAuditStore:
         return self._replay_audit_store or self._default_replay_audit_store()
 
+    @property
+    def _idempotency_workflow(self) -> IdempotencyWorkflow:
+        return IdempotencyWorkflow(self._job_store_adapter)
+
+    @property
+    def _audit_workflow(self) -> AuditWorkflow:
+        return AuditWorkflow(self._replay_audit_store_adapter)
+
     async def create_or_get_job(
         self,
         *,
@@ -152,16 +166,21 @@ class IngestionJobService:
         trace_id: str,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult:
-        return await self._job_store_adapter.create_or_get_job(
-            job_id=job_id,
-            endpoint=endpoint,
-            entity_type=entity_type,
-            accepted_count=accepted_count,
-            idempotency_key=idempotency_key,
-            correlation_id=correlation_id,
-            request_id=request_id,
-            trace_id=trace_id,
-            request_payload=request_payload,
+        return await self._idempotency_workflow.create_or_get(
+            ApplicationCommandEnvelope(
+                command_id=job_id,
+                endpoint=endpoint,
+                entity_type=entity_type,
+                accepted_count=accepted_count,
+                idempotency_key=idempotency_key,
+                correlation=CorrelationContext(
+                    correlation_id=correlation_id,
+                    request_id=request_id,
+                    trace_id=trace_id,
+                    source_lineage={"endpoint": endpoint, "entity_type": entity_type},
+                ),
+                request_payload=request_payload,
+            )
         )
 
     async def mark_queued(self, job_id: str, *, expected_statuses=None) -> bool:
@@ -399,7 +418,7 @@ class IngestionJobService:
         correlation_missing_reason: str | None = None,
         alternate_lookup_key: str | None = None,
     ) -> str:
-        return await self._replay_audit_store_adapter.record_consumer_dlq_replay_audit(
+        return await self._audit_workflow.record_replay_audit(
             ReplayAuditRecord(
                 recovery_path=recovery_path,
                 event_id=event_id,

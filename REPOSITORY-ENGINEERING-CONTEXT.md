@@ -866,6 +866,18 @@ Most relevant current governance:
     `rollback()` calls are blocked unless explicitly registered as transitional. The current
     transitional exception is `query_service/app/repositories/operations_repository.py` for
     operator control-plane status updates.
+71. Application command workflows should model idempotency, audit, correlation, command identity,
+    and recovery evidence as reusable application policies instead of repeated local parameter
+    plumbing. `docs/standards/application-workflow-policy-standard.md` defines the repo-local rule.
+    The first representative workflow lives in
+    `src/services/ingestion_service/app/application/workflow_policies.py`:
+    `CorrelationContext`, `ApplicationCommandEnvelope`, `IdempotencyWorkflow`, and `AuditWorkflow`.
+    `IngestionJobService` preserves its router-facing method signatures but now routes ingestion
+    job duplicate/conflict behavior through `IdempotencyWorkflow` and consumer-DLQ replay audit
+    writes through `AuditWorkflow`. `make architecture-guard` now runs
+    `scripts/application_workflow_policy_guard.py` so the representative path cannot bypass those
+    policies. Broader command-handler extraction from routers and cross-workflow concurrency
+    certification remain follow-up issue scope.
 
 ## Context Maintenance Rule
 
