@@ -31,10 +31,14 @@ store, downstream-client, cache, and unit-of-work ports should use `app/ports` f
 
 ## Enforcement
 
-`make architecture-guard` validates the catalog and runs the specific port-regression guards.
+`make architecture-guard` validates the catalog and runs the dependency-inversion and specific
+port-regression guards.
 
 The catalog is not a claim that every application dependency has been inverted. It is the governed
 entrypoint for implemented representative ports and the pattern future slices must extend.
+
+See `docs/standards/application-dependency-inversion-standard.md` for the protected application
+service dependency rules.
 
 ## Runtime Boundary
 

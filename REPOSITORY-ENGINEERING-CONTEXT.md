@@ -834,6 +834,17 @@ Most relevant current governance:
     the shared taxonomy and source-safe diagnostics. Future repository, downstream HTTP, cache,
     storage, and configuration adapter slices should extend this taxonomy instead of raising raw
     `RuntimeError` or leaking concrete library exception classes into application workflows.
+68. Application services with governed port boundaries must not reintroduce direct infrastructure
+    dependencies. `make architecture-guard` now runs
+    `scripts/application_dependency_inversion_guard.py`, which protects the representative
+    port-enabled ingestion job, ingestion publishing, `PortfolioTaxLotWindow:v1`, and financial
+    reconciliation use cases from direct SQLAlchemy session imports, broad concrete repository
+    imports, concrete Kafka producer APIs, and direct helper calls for capabilities that now have
+    ports. This does not claim every query-service application service has been inverted; remaining
+    direct `AsyncSession` and concrete repository construction in core snapshot, integration,
+    portfolio, position, transaction, cash account, FX rate, price, and similar services remains
+    follow-up migration scope. Preserve existing runtime deployables unless separate scaling,
+    ownership, isolation, or operational evidence justifies a runtime service split.
 
 ## Context Maintenance Rule
 
