@@ -31,6 +31,7 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 | `ingestion.replay-audit-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
 | `events.event-publisher` | event publisher | `portfolio_common/event_publisher.py` | ingestion publish workflow, valuation job publisher |
 | `query.portfolio-tax-lot-reader` | repository reader | `query_service/app/ports/source_data_repository_ports.py` | `PortfolioTaxLotWindow:v1` resolver |
+| `query.unit-of-work` | unit of work | `query_service/app/ports/unit_of_work.py` | `SimulationService`; SQLAlchemy adapter in `query_service/app/infrastructure/unit_of_work.py` |
 | `reconciliation.repository-port` | repository reader/writer | `financial_reconciliation_service/app/ports/reconciliation_repository_ports.py` | `ReconciliationService` |
 | `reconciliation.runtime-providers` | clock/ID provider | `financial_reconciliation_service/app/services/runtime_providers.py` | `ReconciliationService` |
 
@@ -38,8 +39,9 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 
 `make architecture-guard` runs `scripts/application_port_catalog_guard.py`,
 `scripts/application_dependency_inversion_guard.py`,
-`scripts/infrastructure_adapter_layer_guard.py`, and the specific port-regression guards for
-ingestion stores, event publishing, and repository capability ports.
+`scripts/infrastructure_adapter_layer_guard.py`, `scripts/repository_transaction_boundary_guard.py`,
+and the specific port-regression guards for ingestion stores, event publishing, repository
+capability ports, and unit-of-work boundaries.
 
 The catalog guard validates that:
 

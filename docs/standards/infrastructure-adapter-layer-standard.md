@@ -14,6 +14,7 @@ Service-local concrete infrastructure should use these package families:
 5. `app/infrastructure/storage` for file or object-storage adapters,
 6. `app/infrastructure/workflow_stores.py` or a narrower module when one service has a small
    adapter family that does not justify a subpackage yet.
+7. `app/infrastructure/unit_of_work.py` for SQLAlchemy transaction adapters.
 
 `app/runtime` or dependency/composition modules may wire concrete infrastructure adapters into
 application services. API routers, domain modules, and port modules should not construct concrete
@@ -46,6 +47,9 @@ definitions or concrete helper wiring.
 `IngestionJobStore` and `ReplayAuditStore` SQLAlchemy implementations now live in
 `src/services/ingestion_service/app/infrastructure/workflow_stores.py`. The previous
 `app/adapters/ingestion_workflow_stores.py` module is a transitional compatibility re-export only.
+
+`SimulationService` uses `src/services/query_service/app/infrastructure/unit_of_work.py` as the
+representative SQLAlchemy unit-of-work adapter.
 
 `make architecture-guard` runs `scripts/infrastructure_adapter_layer_guard.py` to keep this
 representative migration from drifting back into the transitional package.

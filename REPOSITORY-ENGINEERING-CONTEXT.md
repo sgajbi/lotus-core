@@ -856,6 +856,16 @@ Most relevant current governance:
     `repositories`, `consumers`, `producers`, and `adapters` packages elsewhere remain transitional
     migration scope; do not treat them as approval for new concrete infrastructure coupling in API,
     domain, or application logic.
+70. Repository modules should stage persistence changes and leave transaction completion to an
+    explicit unit-of-work boundary. `docs/standards/repository-transaction-boundary-standard.md`
+    defines the repo-local transaction ownership rule. `SimulationService` now uses the
+    query-service `UnitOfWork` port and `SqlAlchemyUnitOfWork` infrastructure adapter for commit,
+    rollback, and refresh behavior, while `SimulationRepository` remains a staging repository with
+    no direct transaction completion. `make architecture-guard` now runs
+    `scripts/repository_transaction_boundary_guard.py`; direct repository `commit()` or
+    `rollback()` calls are blocked unless explicitly registered as transitional. The current
+    transitional exception is `query_service/app/repositories/operations_repository.py` for
+    operator control-plane status updates.
 
 ## Context Maintenance Rule
 

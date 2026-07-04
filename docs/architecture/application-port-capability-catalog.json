@@ -106,6 +106,31 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "query.unit-of-work",
+      "capability_family": "unit-of-work",
+      "owner_service": "query_service",
+      "port_module": "src/services/query_service/app/ports/unit_of_work.py",
+      "port_symbols": [
+        "UnitOfWork"
+      ],
+      "adapter_modules": [
+        "src/services/query_service/app/infrastructure/unit_of_work.py"
+      ],
+      "consumer_modules": [
+        "src/services/query_service/app/services/simulation_service.py"
+      ],
+      "guard_scripts": [
+        "scripts/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "reconciliation.repository-port",
       "capability_family": "repository-reader-writer",
       "owner_service": "financial_reconciliation_service",
