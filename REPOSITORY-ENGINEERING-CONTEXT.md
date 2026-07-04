@@ -217,6 +217,11 @@ Current repository posture:
     Pydantic, FastAPI, SQLAlchemy, repositories, database sessions, Kafka clients, HTTP clients, and
     settings. Keep event/API validation at adapter boundaries and let parser construction map raw
     dictionaries into pure domain objects.
+    The broader domain-layer contract lives in `docs/standards/domain-layer-contract.md` and is
+    enforced by `make domain-layer-guard`, which also runs under `make architecture-guard`. New
+    `domain` packages must not import framework, persistence, DTO, repository, client, consumer, or
+    settings modules unless a narrow transitional exception is explicitly allowlisted with
+    migration rationale.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but
