@@ -2,14 +2,5 @@
   "specVersion": "1.0.0",
   "application": "lotus-core",
   "description": "Transitional exceptions for API router boundary enforcement. Each entry must point to an open architecture issue and is stale once the file no longer has the declared violation code.",
-  "transitionalExceptions": [
-    {
-      "path": "src/services/ingestion_service/app/routers/business_dates.py",
-      "violationCodes": [
-        "router_repository_dependency"
-      ],
-      "issue": "#635",
-      "rationale": "Business-date ingestion still injects a repository dependency at the HTTP adapter boundary pending application-use-case dependency extraction."
-    }
-  ]
+  "transitionalExceptions": []
 }
