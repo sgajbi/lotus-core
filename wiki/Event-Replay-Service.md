@@ -65,6 +65,11 @@ When adding or changing ingestion operations behavior:
 5. preserve existing route paths, status codes, response fields, audit fields, and problem-detail
    codes unless an intentional behavior change is tested and documented.
 
+Consumer DLQ replay must resolve correlated ingestion jobs through the dedicated ingestion-job
+correlation lookup, not through generic operator listing pages. The lookup filters to replayable job
+statuses and selects the newest matching row deterministically, so recovery behavior is not capped
+by unrelated ingestion volume.
+
 Consumer DLQ `payload_excerpt` values are redacted and truncated diagnostic evidence. They are useful
 for triage, but they can still contain client-linked identifiers such as portfolio or transaction
 IDs and must remain behind the protected event-replay control-plane access boundary.

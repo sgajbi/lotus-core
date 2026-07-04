@@ -37,12 +37,10 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
     ingestion_job_service.get_consumer_dlq_event = AsyncMock(
         return_value=SimpleNamespace(event_id="dlq-001", correlation_id="corr-001")
     )
-    ingestion_job_service.list_jobs = AsyncMock(
-        return_value=(
-            [SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")],
-            1,
-        )
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id = AsyncMock(
+        return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")
     )
+    ingestion_job_service.list_jobs = AsyncMock()
     ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
     ingestion_job_service.find_successful_replay_audit_by_fingerprint = AsyncMock(return_value=None)
     ingestion_job_service.assert_retry_allowed_for_records = AsyncMock()
@@ -61,6 +59,10 @@ async def test_consumer_dlq_replay_dry_run_records_audit_without_publish() -> No
     assert response.replay_status == "dry_run"
     assert response.job_id == "job-001"
     assert response.replay_audit_id == "audit-001"
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id.assert_awaited_once_with(
+        "corr-001"
+    )
+    ingestion_job_service.list_jobs.assert_not_awaited()
     replay_payload_dispatcher.replay_payload.assert_not_awaited()
 
 
@@ -132,7 +134,8 @@ async def test_consumer_dlq_mandatory_replay_audit_failure_raises_governed_error
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response() -> None:
     ingestion_job_service = MagicMock()
-    ingestion_job_service.list_jobs = AsyncMock(return_value=([], 0))
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id = AsyncMock(return_value=None)
+    ingestion_job_service.list_jobs = AsyncMock()
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-001")
 
     response = await _consumer_service(
@@ -147,6 +150,10 @@ async def test_consumer_dlq_replay_candidate_records_no_correlated_job_response(
     assert response.replay_status == "not_replayable"
     assert response.job_id is None
     assert response.message == "No correlated ingestion job found for consumer DLQ event."
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id.assert_awaited_once_with(
+        "corr-001"
+    )
+    ingestion_job_service.list_jobs.assert_not_awaited()
     ingestion_job_service.record_consumer_dlq_replay_audit.assert_awaited_once()
 
 
@@ -186,8 +193,8 @@ async def test_consumer_dlq_not_replayable_records_missing_correlation_diagnosti
 @pytest.mark.asyncio
 async def test_consumer_dlq_replay_candidate_records_missing_payload_response() -> None:
     ingestion_job_service = MagicMock()
-    ingestion_job_service.list_jobs = AsyncMock(
-        return_value=([{"job_id": "job-001", "correlation_id": "corr-001", "status": "failed"}], 1)
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id = AsyncMock(
+        return_value={"job_id": "job-001", "correlation_id": "corr-001", "status": "failed"}
     )
     ingestion_job_service.get_job_replay_context = AsyncMock(
         return_value=SimpleNamespace(
@@ -221,11 +228,8 @@ async def test_consumer_dlq_replay_candidate_returns_replayable_context() -> Non
         idempotency_key="idem-001",
     )
     ingestion_job_service = MagicMock()
-    ingestion_job_service.list_jobs = AsyncMock(
-        return_value=(
-            [SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")],
-            1,
-        )
+    ingestion_job_service.get_latest_replayable_job_by_correlation_id = AsyncMock(
+        return_value=SimpleNamespace(job_id="job-001", correlation_id="corr-001", status="queued")
     )
     ingestion_job_service.get_job_replay_context = AsyncMock(return_value=context)
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock()

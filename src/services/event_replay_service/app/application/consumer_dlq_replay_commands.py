@@ -259,15 +259,8 @@ class ConsumerDlqReplayCommandService:
         *,
         correlation_id: str,
     ) -> Any | None:
-        jobs, _ = await self.ingestion_job_service.list_jobs(limit=500)
-        return next(
-            (
-                job
-                for job in jobs
-                if self._job_field(job, "correlation_id") == correlation_id
-                and self._job_field(job, "status") in {"failed", "queued", "accepted"}
-            ),
-            None,
+        return await self.ingestion_job_service.get_latest_replayable_job_by_correlation_id(
+            correlation_id
         )
 
     async def _consumer_dlq_not_replayable_result(

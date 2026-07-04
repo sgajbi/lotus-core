@@ -10,6 +10,8 @@ from sqlalchemy import desc, select
 from ..DTOs.ingestion_job_dto import IngestionJobResponse, IngestionJobStatus
 from .ingestion_job_lifecycle import to_job_response
 
+REPLAYABLE_INGESTION_JOB_STATUSES = ("failed", "queued", "accepted")
+
 
 @dataclass(frozen=True, slots=True)
 class IngestionJobListFilters:
@@ -49,6 +51,16 @@ def build_cursor_lookup_statement(*, cursor: str) -> Any:
     return select(DBIngestionJob).where(DBIngestionJob.job_id == cursor).limit(1)
 
 
+def build_replayable_correlation_lookup_statement(*, correlation_id: str) -> Any:
+    return (
+        select(DBIngestionJob)
+        .where(DBIngestionJob.correlation_id == correlation_id)
+        .where(DBIngestionJob.status.in_(REPLAYABLE_INGESTION_JOB_STATUSES))
+        .order_by(desc(DBIngestionJob.id))
+        .limit(1)
+    )
+
+
 def ingestion_job_list_page(
     *,
     rows: list[Any],
@@ -81,3 +93,16 @@ async def load_job_list_response(
         page = ingestion_job_list_page(rows=rows, limit=limit)
         return ([to_job_response(row) for row in page.rows], page.next_cursor)
     return ([], None)
+
+
+async def load_latest_replayable_job_by_correlation_id(
+    *,
+    correlation_id: str,
+    session_factory,
+) -> IngestionJobResponse | None:
+    async for db in session_factory():
+        row = await db.scalar(
+            build_replayable_correlation_lookup_statement(correlation_id=correlation_id)
+        )
+        return to_job_response(row) if row is not None else None
+    return None

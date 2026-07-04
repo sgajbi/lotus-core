@@ -2099,6 +2099,12 @@ class IngestionJob(Base):
             "submitted_at",
             "completed_at",
         ),
+        Index(
+            "ix_ingestion_jobs_correlation_status_id",
+            "correlation_id",
+            "status",
+            id.desc(),
+        ),
     )
 
 
