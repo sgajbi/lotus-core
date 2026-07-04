@@ -47,13 +47,16 @@ from src.services.ingestion_service.app.services.ingestion_service import (
     get_ingestion_service,
 )
 
+from ..application.ingestion_retry_commands import (
+    IngestionRetryCommandService,
+    ReplayCommandError,
+)
 from ..application.replay_payload_dispatcher import (
     IngestionServiceReplayPayloadDispatcher,
     ReplayPayloadDispatcher,
 )
 from ..application.replay_retry_payloads import (
     deterministic_replay_fingerprint,
-    filter_payload_by_record_keys,
     payload_record_count,
 )
 
@@ -648,6 +651,16 @@ def get_replay_payload_dispatcher(
     return IngestionServiceReplayPayloadDispatcher(ingestion_service)
 
 
+def get_ingestion_retry_command_service(
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
+) -> IngestionRetryCommandService:
+    return IngestionRetryCommandService(
+        ingestion_job_service=ingestion_job_service,
+        replay_payload_dispatcher=replay_payload_dispatcher,
+    )
+
+
 async def _record_mandatory_replay_audit(
     *,
     ingestion_job_service: IngestionJobService,
@@ -1196,354 +1209,16 @@ async def retry_ingestion_job(
         openapi_examples=INGESTION_RETRY_REQUEST_EXAMPLES,
     ),
     ops_actor: str = Depends(require_ops_token),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
-    replay_payload_dispatcher: ReplayPayloadDispatcher = Depends(get_replay_payload_dispatcher),
+    command_service: IngestionRetryCommandService = Depends(get_ingestion_retry_command_service),
 ):
-    context = await _required_job_replay_context(job_id, ingestion_job_service)
-    replay_payload = _retry_payload_or_http_error(
-        context=context,
-        retry_request=retry_request,
-    )
-    replay_record_count = payload_record_count(replay_payload)
-    await _assert_ingestion_retry_allowed(
-        ingestion_job_service=ingestion_job_service,
-        submitted_at=context.submitted_at,
-        replay_record_count=replay_record_count,
-    )
-    replay_fingerprint = deterministic_replay_fingerprint(
-        event_id=f"job:{job_id}",
-        correlation_id=None,
-        job_id=job_id,
-        endpoint=context.endpoint,
-        payload=replay_payload,
-        idempotency_key=context.idempotency_key,
-    )
-
-    if retry_request.dry_run:
-        return await _dry_run_ingestion_job_retry(
-            job_id=job_id,
-            context=context,
-            ingestion_job_service=ingestion_job_service,
-            replay_fingerprint=replay_fingerprint,
-            ops_actor=ops_actor,
-        )
-
-    await _block_duplicate_ingestion_job_retry(
-        job_id=job_id,
-        context=context,
-        ingestion_job_service=ingestion_job_service,
-        replay_fingerprint=replay_fingerprint,
-        ops_actor=ops_actor,
-    )
-    await _publish_ingestion_job_retry(
-        job_id=job_id,
-        context=context,
-        retry_request=retry_request,
-        replay_payload=replay_payload,
-        replay_fingerprint=replay_fingerprint,
-        ingestion_job_service=ingestion_job_service,
-        replay_payload_dispatcher=replay_payload_dispatcher,
-        ops_actor=ops_actor,
-    )
-    await _mark_ingestion_job_retry_replayed(
-        job_id=job_id,
-        context=context,
-        replay_fingerprint=replay_fingerprint,
-        ingestion_job_service=ingestion_job_service,
-        ops_actor=ops_actor,
-    )
-    return await _required_job_after_retry(job_id, ingestion_job_service)
-
-
-async def _required_job_replay_context(job_id: str, ingestion_job_service: IngestionJobService):
-    context = await ingestion_job_service.get_job_replay_context(job_id)
-    if context is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_JOB_NOT_FOUND",
-                message=f"Ingestion job '{job_id}' was not found.",
-                outcome="not_found",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
-            ),
-        )
-    if context.request_payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_JOB_RETRY_UNSUPPORTED",
-                message=(
-                    f"Ingestion job '{job_id}' does not have stored request payload and "
-                    "cannot be retried."
-                ),
-                outcome="retry_unsupported",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["retry_unsupported"],
-            ),
-        )
-    return context
-
-
-def _retry_payload_or_http_error(
-    *,
-    context,
-    retry_request: IngestionRetryRequest,
-) -> dict[str, Any]:
     try:
-        return filter_payload_by_record_keys(
-            endpoint=context.endpoint,
-            payload=context.request_payload,
-            record_keys=retry_request.record_keys,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_PARTIAL_RETRY_UNSUPPORTED",
-                message=str(exc),
-                outcome="partial_retry_unsupported",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["partial_retry_unsupported"],
-            ),
-        ) from exc
-
-
-async def _assert_ingestion_retry_allowed(
-    *,
-    ingestion_job_service: IngestionJobService,
-    submitted_at: datetime,
-    replay_record_count: int,
-) -> None:
-    try:
-        await ingestion_job_service.assert_retry_allowed_for_records(
-            submitted_at=submitted_at,
-            replay_record_count=replay_record_count,
-        )
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_RETRY_BLOCKED",
-                message=str(exc),
-                outcome="retry_blocked",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["retry_blocked"],
-            ),
-        ) from exc
-
-
-async def _record_ingestion_job_retry_audit(
-    *,
-    ingestion_job_service: IngestionJobService,
-    job_id: str,
-    context,
-    replay_fingerprint: str,
-    replay_status: str,
-    dry_run: bool,
-    replay_reason: str,
-    requested_by: str | None,
-) -> str:
-    return await _record_mandatory_replay_audit(
-        ingestion_job_service=ingestion_job_service,
-        recovery_path=INGESTION_JOB_RETRY_RECOVERY_PATH,
-        event_id=f"job:{job_id}",
-        replay_fingerprint=replay_fingerprint,
-        correlation_id=None,
-        job_id=job_id,
-        endpoint=context.endpoint,
-        replay_status=replay_status,
-        dry_run=dry_run,
-        replay_reason=replay_reason,
-        requested_by=requested_by,
-        correlation_missing_reason="ingestion_job_retry_uses_job_id",
-        alternate_lookup_key=f"job:{job_id}",
-    )
-
-
-async def _dry_run_ingestion_job_retry(
-    *,
-    job_id: str,
-    context,
-    ingestion_job_service: IngestionJobService,
-    replay_fingerprint: str,
-    ops_actor: str | None,
-):
-    await _record_ingestion_job_retry_audit(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_id,
-        context=context,
-        replay_fingerprint=replay_fingerprint,
-        replay_status="dry_run",
-        dry_run=True,
-        replay_reason="Dry-run successful. Ingestion job retry is replayable.",
-        requested_by=ops_actor,
-    )
-    job = await ingestion_job_service.get_job(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "code": "INGESTION_JOB_NOT_FOUND",
-                "message": f"Ingestion job '{job_id}' was not found after dry-run.",
-            },
-        )
-    return job
-
-
-async def _block_duplicate_ingestion_job_retry(
-    *,
-    job_id: str,
-    context,
-    ingestion_job_service: IngestionJobService,
-    replay_fingerprint: str,
-    ops_actor: str | None,
-) -> None:
-    existing_success = await ingestion_job_service.find_successful_replay_audit_by_fingerprint(
-        replay_fingerprint=replay_fingerprint,
-        recovery_path="ingestion_job_retry",
-    )
-    if existing_success:
-        await _record_ingestion_job_retry_audit(
-            ingestion_job_service=ingestion_job_service,
+        return await command_service.retry_ingestion_job(
             job_id=job_id,
-            context=context,
-            replay_fingerprint=replay_fingerprint,
-            replay_status="duplicate_blocked",
-            dry_run=False,
-            replay_reason=(
-                "Retry blocked because this deterministic retry fingerprint was already replayed "
-                f"successfully (replay_id={existing_success['replay_id']})."
-            ),
+            retry_request=retry_request,
             requested_by=ops_actor,
         )
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_RETRY_DUPLICATE_BLOCKED",
-                message=(
-                    "Retry blocked because an equivalent deterministic replay already succeeded."
-                ),
-                outcome="duplicate_blocked",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["duplicate_blocked"],
-                replay_fingerprint=replay_fingerprint,
-            ),
-        )
-
-
-async def _publish_ingestion_job_retry(
-    *,
-    job_id: str,
-    context,
-    retry_request: IngestionRetryRequest,
-    replay_payload: dict[str, Any],
-    replay_fingerprint: str,
-    ingestion_job_service: IngestionJobService,
-    replay_payload_dispatcher: ReplayPayloadDispatcher,
-    ops_actor: str | None,
-) -> None:
-    try:
-        await _replay_job_payload(
-            endpoint=context.endpoint,
-            payload=replay_payload,
-            idempotency_key=context.idempotency_key,
-            replay_payload_dispatcher=replay_payload_dispatcher,
-        )
-    except Exception as exc:
-        replay_audit_id = await _record_ingestion_job_retry_audit(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_id,
-            context=context,
-            replay_fingerprint=replay_fingerprint,
-            replay_status="failed",
-            dry_run=False,
-            replay_reason=str(exc),
-            requested_by=ops_actor,
-        )
-        await ingestion_job_service.mark_failed(
-            job_id,
-            str(exc),
-            failure_phase="retry_publish",
-            failed_record_keys=retry_request.record_keys,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_RETRY_PUBLISH_FAILED",
-                message=(
-                    "Ingestion job retry could not be published to the downstream ingestion "
-                    "pipeline."
-                ),
-                outcome="publish_failed",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["publish_failed"],
-                replay_audit_id=replay_audit_id,
-                replay_fingerprint=replay_fingerprint,
-            ),
-        ) from exc
-
-
-async def _mark_ingestion_job_retry_replayed(
-    *,
-    job_id: str,
-    context,
-    replay_fingerprint: str,
-    ingestion_job_service: IngestionJobService,
-    ops_actor: str | None,
-) -> None:
-    try:
-        await ingestion_job_service.mark_retried(job_id)
-        await ingestion_job_service.mark_queued(job_id)
-        await _record_ingestion_job_retry_audit(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_id,
-            context=context,
-            replay_fingerprint=replay_fingerprint,
-            replay_status="replayed",
-            dry_run=False,
-            replay_reason="Ingestion job retry replay succeeded.",
-            requested_by=ops_actor,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        replay_reason = f"Replay publish succeeded but post-publish bookkeeping failed: {exc}"
-        replay_audit_id = await _record_mandatory_replay_audit(
-            ingestion_job_service=ingestion_job_service,
-            recovery_path="ingestion_job_retry",
-            event_id=f"job:{job_id}",
-            replay_fingerprint=replay_fingerprint,
-            correlation_id=None,
-            job_id=job_id,
-            endpoint=context.endpoint,
-            replay_status="replayed_bookkeeping_failed",
-            dry_run=False,
-            replay_reason=replay_reason,
-            requested_by=ops_actor,
-            correlation_missing_reason="ingestion_job_retry_uses_job_id",
-            alternate_lookup_key=f"job:{job_id}",
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_RETRY_BOOKKEEPING_FAILED",
-                message="Replay publish succeeded but post-publish bookkeeping did not complete.",
-                outcome="bookkeeping_failed",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["bookkeeping_failed"],
-                replay_audit_id=replay_audit_id,
-                replay_fingerprint=replay_fingerprint,
-            ),
-        ) from exc
-
-
-async def _required_job_after_retry(job_id: str, ingestion_job_service: IngestionJobService):
-    job = await ingestion_job_service.get_job(job_id)
-    if job is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=_ingestion_job_retry_problem_detail(
-                code="INGESTION_JOB_NOT_FOUND",
-                message=f"Ingestion job '{job_id}' was not found after retry.",
-                outcome="not_found",
-                remediation=INGESTION_JOB_RETRY_REMEDIATIONS["not_found"],
-            ),
-        )
-    return job
+    except ReplayCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
 
 @router.get(
