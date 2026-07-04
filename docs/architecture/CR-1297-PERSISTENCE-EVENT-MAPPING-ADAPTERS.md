@@ -4,9 +4,9 @@
 
 Issue cluster: GitHub issue #662, with supporting coverage for umbrella mapping issue #661.
 
-This slice covers the persistence-service event boundary. The remaining #662 scope includes
-valuation-readiness consumer mapping, pipeline processed-stage consumer mapping, and pipeline
-outbox payload mapping.
+This slice covers the persistence-service event boundary. The remaining #662 scope was completed
+locally by CR-1298, which adds shared Kafka event mapping and rewires valuation/pipeline consumers
+plus outbox payload serialization.
 
 ## Objective
 
@@ -71,6 +71,6 @@ adapters, while repositories own table-specific SQL conflict and query behavior.
 
 ## Remaining Work
 
-Continue #662 with a separate small slice for valuation-readiness and pipeline consumer decode
-adapters, followed by pipeline outbox payload mapping. Keep #661 open until representative API DTO,
-event, persistence, and source-data mapper families are covered by conformance evidence.
+CR-1298 completes the remaining #662 valuation, pipeline consumer, and outbox mapping scope
+locally. Keep #661 open until representative API DTO, event, persistence, and source-data mapper
+families are covered by conformance evidence.

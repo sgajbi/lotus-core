@@ -4,6 +4,7 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
+from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
 from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -46,17 +47,15 @@ class PriceEventConsumer(BaseConsumer):
     )
     async def process_message(self, msg: Message):
         key = msg.key().decode("utf-8") if msg.key() else "NoKey"
-        value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
         event = None
 
         try:
-            event_data = json.loads(value)
-            price_event_correlation_id = _price_event_correlation_id(event_data)
+            decoded_payload = decode_kafka_event_payload(msg)
+            price_event_correlation_id = _price_event_correlation_id(decoded_payload.data)
             with self._message_correlation_context(
                 msg, fallback_correlation_id=price_event_correlation_id
             ) as correlation_id:
-                event = MarketPricePersistedEvent.model_validate(event_data)
+                event = validate_kafka_event_payload(decoded_payload, MarketPricePersistedEvent)
                 logger.info(
                     f"Received new market price for {event.security_id} on {event.price_date}."
                 )
@@ -68,13 +67,15 @@ class PriceEventConsumer(BaseConsumer):
                         reprocessing_repo = InstrumentReprocessingStateRepository(db)
 
                         if not await idempotency_repo.claim_event_processing(
-                            event_id,
+                            decoded_payload.event_id,
                             "N/A",
                             SERVICE_NAME,
                             correlation_id,
                         ):
                             logger.warning(
-                                f"Event {event_id} already processed by {SERVICE_NAME}. Skipping."
+                                "Event "
+                                f"{decoded_payload.event_id} already processed by "
+                                f"{SERVICE_NAME}. Skipping."
                             )
                             return
 

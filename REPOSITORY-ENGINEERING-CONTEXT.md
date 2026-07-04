@@ -110,11 +110,12 @@ Current repository posture:
     `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
     transaction event, persistence event-envelope, portfolio tax-lot, and
     performance-economics source-data mappings.
-    Persistence service consumers must use explicit event adapters for Kafka bytes, deterministic
-    message identity, governed Pydantic event validation, fallback correlation, idempotency
-    metadata, and portfolio-scope derivation before opening database units of work. Persistence
-    repositories must consume adapter-owned event record values and keep only table-specific SQL
-    conflict/update policy locally.
+    Valuation, pipeline, persistence, and future event-consuming services must use
+    `portfolio_common.event_mapping` or a narrower service adapter around it for Kafka bytes,
+    deterministic message identity, governed Pydantic event validation, outbox event payload
+    serialization, and explicit correlation/idempotency metadata before opening database units of
+    work. Persistence repositories must consume adapter-owned event record values and keep only
+    table-specific SQL conflict/update policy locally.
     `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` as the typed
     repository-to-source-data boundary. `PerformanceComponentEconomics:v1` uses
     `PerformanceEconomicsTransactionReadRecord`, `PerformanceEconomicsCashflowReadRecord`, and

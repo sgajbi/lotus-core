@@ -17,6 +17,9 @@ change without silently changing downstream banking evidence.
 - Persistence service consumers should decode Kafka bytes, derive deterministic message identity,
   validate Pydantic event models, and derive idempotency metadata through explicit event adapters
   before opening database units of work.
+- Valuation, pipeline, persistence, and future event-consuming services should use
+  `portfolio_common.event_mapping` for raw Kafka decode/model validation and outbox payload
+  serialization unless a service-specific adapter adds narrower domain metadata.
 - Persistence service repositories should consume adapter-owned event record values and keep only
   table-specific SQL conflict/update policy locally.
 - Read rows should be mapped to explicit read records or DTOs at the query boundary, not passed as
@@ -52,6 +55,9 @@ Current coverage:
 - JSON payload to governed `TransactionEvent`;
 - Kafka message payload to persistence event adapter envelope, including event identity,
   correlation lineage, idempotency key, portfolio scope, and non-transaction fallback behavior;
+- shared Kafka event mapping for valuation, pipeline, and persistence consumers, including invalid
+  JSON, validation errors, Decimal/date fidelity, schema/correlation preservation, DLQ handoff, and
+  outbox payload serialization;
 - transaction event to persistence record values;
 - unknown and missing transaction event field rejection;
 - typed portfolio tax-lot read-record mapping to `PortfolioTaxLotWindow:v1` source-data envelope;
@@ -63,7 +69,6 @@ Current coverage:
 GitHub issue #665 is fixed locally pending PR CI/QA for the current conformance gate. GitHub issue
 #664 is fixed locally pending PR CI/QA for typed source-data read records. GitHub issue #648 is fixed
 locally pending PR CI/QA for the repository output-shape standard and static guard. GitHub issue
-#662 has persistence-service event adapter coverage locally but remains open for valuation,
-pipeline consumer, and pipeline outbox mapping. GitHub issue #661 remains the umbrella
+#662 is fixed locally pending PR CI/QA and issue closure. GitHub issue #661 remains the umbrella
 mapping/anti-corruption contract for continued coverage across more event families, source-data
 products, API DTO to command paths, and typed read records.

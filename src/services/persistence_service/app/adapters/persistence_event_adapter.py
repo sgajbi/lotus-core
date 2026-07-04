@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
 from confluent_kafka import Message
+from portfolio_common.event_mapping import (
+    decode_kafka_event_payload,
+    kafka_event_id,
+    validate_kafka_event_payload,
+)
 from pydantic import BaseModel
 
 EventT = TypeVar("EventT", bound=BaseModel)
@@ -33,16 +37,16 @@ class PersistenceEventEnvelope(Generic[EventT]):
 
 def persistence_event_id(msg: Message) -> str:
     """Build the deterministic fallback identity for a Kafka message."""
-    return f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
+    return kafka_event_id(msg)
 
 
 def decode_persistence_message_payload(msg: Message) -> PersistenceMessagePayload:
     """Decode raw Kafka bytes into the payload consumed by persistence event models."""
-    data = json.loads(msg.value().decode("utf-8"))
+    decoded = decode_kafka_event_payload(msg)
     return PersistenceMessagePayload(
-        event_id=persistence_event_id(msg),
-        data=data,
-        fallback_correlation_id=data.get("correlation_id"),
+        event_id=decoded.event_id,
+        data=decoded.data,
+        fallback_correlation_id=decoded.data.get("correlation_id"),
     )
 
 
@@ -51,7 +55,7 @@ def validate_persistence_event_payload(
     event_model: type[EventT],
 ) -> PersistenceEventEnvelope[EventT]:
     """Validate decoded payload and derive consumer idempotency metadata."""
-    event = event_model.model_validate(payload.data)
+    event = validate_kafka_event_payload(payload, event_model)
     return PersistenceEventEnvelope(
         event_id=payload.event_id,
         event=event,

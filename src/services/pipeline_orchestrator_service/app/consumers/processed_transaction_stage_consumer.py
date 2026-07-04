@@ -3,6 +3,7 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
+from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
 from portfolio_common.events import TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -27,17 +28,15 @@ class ProcessedTransactionStageConsumer(BaseConsumer):
         reraise=True,
     )
     async def process_message(self, msg: Message):
-        value = msg.value().decode("utf-8")
-        event_id = f"{msg.topic()}-{msg.partition()}-{msg.offset()}"
-
         try:
-            event = TransactionEvent.model_validate(json.loads(value))
+            decoded_payload = decode_kafka_event_payload(msg)
+            event = validate_kafka_event_payload(decoded_payload, TransactionEvent)
             with self._message_correlation_context(msg) as correlation_id:
                 async for db in get_async_db_session():
                     async with db.begin():
                         idempotency_repo = IdempotencyRepository(db)
                         if not await idempotency_repo.claim_event_processing(
-                            event_id,
+                            decoded_payload.event_id,
                             event.portfolio_id,
                             SERVICE_NAME,
                             correlation_id,
