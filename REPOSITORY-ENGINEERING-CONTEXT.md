@@ -786,6 +786,14 @@ Most relevant current governance:
     `output/` evidence artifacts, but must preserve source, docs, wiki source, migrations,
     contracts, `.git`, virtual environments, and dependency directories. Do not reintroduce opaque
     inline cleanup commands in `Makefile`.
+63. Ingestion audit and idempotency workflows must use explicit store ports before reaching
+    SQLAlchemy helper functions. `IngestionJobStore` owns same-key idempotency replay/conflict
+    semantics; `ReplayAuditStore` owns replay-audit duplicate lookup, audit persistence, audit
+    reads, fail-closed typed audit-write behavior, and source-safe diagnostic metadata. Default
+    runtime wiring may use SQLAlchemy-backed adapters, but `IngestionJobService` must call the
+    ports for job creation/idempotency and replay audit workflows. `make architecture-guard` now
+    runs `scripts/ingestion_store_port_guard.py`; keep it green when adding diagnostics, DLQ event,
+    ops-control, unit-of-work, or publisher ports.
 
 ## Context Maintenance Rule
 

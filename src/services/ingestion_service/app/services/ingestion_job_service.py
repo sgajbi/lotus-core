@@ -8,6 +8,10 @@ from typing import Any
 from portfolio_common.db import get_async_db_session
 from portfolio_common.monitoring import INGESTION_BACKLOG_AGE_SECONDS, INGESTION_MODE_STATE
 
+from ..adapters.ingestion_workflow_stores import (
+    SqlAlchemyIngestionJobStore,
+    SqlAlchemyReplayAuditStore,
+)
 from ..DTOs.ingestion_job_dto import (
     ConsumerDlqEventResponse,
     IngestionBacklogBreakdownResponse,
@@ -28,6 +32,11 @@ from ..DTOs.ingestion_job_dto import (
     IngestionSloStatusResponse,
     IngestionStalledJobListResponse,
 )
+from ..ports.ingestion_workflow_stores import (
+    IngestionJobStore,
+    ReplayAuditRecord,
+    ReplayAuditStore,
+)
 from ..settings import get_ingestion_service_settings
 from . import ingestion_capacity_status as _capacity_status
 from . import ingestion_error_budget_status as _error_budget_status
@@ -42,7 +51,6 @@ from .ingestion_idempotency_diagnostics import load_idempotency_diagnostics_resp
 from .ingestion_job_lifecycle import (
     IngestionJobCreateResult,
     IngestionJobReplayContext,
-    create_or_get_job_result,
     get_job_replay_context_response,
     get_job_response,
     list_failure_responses,
@@ -71,12 +79,6 @@ from .ingestion_ops_mode import (
     update_ops_mode_response,
 )
 from .ingestion_record_status import load_record_status_response
-from .ingestion_replay_audits import (
-    find_successful_replay_audit_by_fingerprint_response,
-    get_replay_audit_response,
-    list_replay_audit_responses,
-    record_consumer_dlq_replay_audit_response,
-)
 from .ingestion_reprocessing_queue_health import load_reprocessing_queue_health_response
 from .ingestion_retry_permissions import (
     assert_reprocessing_publish_allowed_for_count,
@@ -109,6 +111,34 @@ class IngestionJobService:
     Persists ingestion lifecycle and operational controls for ingestion runbooks.
     """
 
+    def __init__(
+        self,
+        *,
+        session_factory=None,
+        job_store: IngestionJobStore | None = None,
+        replay_audit_store: ReplayAuditStore | None = None,
+    ) -> None:
+        self._session_factory_override = session_factory
+        self._job_store = job_store
+        self._replay_audit_store = replay_audit_store
+
+    def _session_factory(self):
+        return self._session_factory_override or get_async_db_session
+
+    def _default_job_store(self) -> IngestionJobStore:
+        return SqlAlchemyIngestionJobStore(session_factory=self._session_factory())
+
+    def _default_replay_audit_store(self) -> ReplayAuditStore:
+        return SqlAlchemyReplayAuditStore(session_factory=self._session_factory())
+
+    @property
+    def _job_store_adapter(self) -> IngestionJobStore:
+        return self._job_store or self._default_job_store()
+
+    @property
+    def _replay_audit_store_adapter(self) -> ReplayAuditStore:
+        return self._replay_audit_store or self._default_replay_audit_store()
+
     async def create_or_get_job(
         self,
         *,
@@ -122,7 +152,7 @@ class IngestionJobService:
         trace_id: str,
         request_payload: dict[str, Any] | None,
     ) -> IngestionJobCreateResult:
-        return await create_or_get_job_result(
+        return await self._job_store_adapter.create_or_get_job(
             job_id=job_id,
             endpoint=endpoint,
             entity_type=entity_type,
@@ -132,7 +162,6 @@ class IngestionJobService:
             request_id=request_id,
             trace_id=trace_id,
             request_payload=request_payload,
-            session_factory=get_async_db_session,
         )
 
     async def mark_queued(self, job_id: str, *, expected_statuses=None) -> bool:
@@ -349,10 +378,9 @@ class IngestionJobService:
         replay_fingerprint: str,
         recovery_path: str | None = None,
     ) -> dict[str, str] | None:
-        return await find_successful_replay_audit_by_fingerprint_response(
+        return await self._replay_audit_store_adapter.find_successful_replay_audit_by_fingerprint(
             replay_fingerprint=replay_fingerprint,
             recovery_path=recovery_path,
-            session_factory=get_async_db_session,
         )
 
     async def record_consumer_dlq_replay_audit(
@@ -371,26 +399,26 @@ class IngestionJobService:
         correlation_missing_reason: str | None = None,
         alternate_lookup_key: str | None = None,
     ) -> str:
-        return await record_consumer_dlq_replay_audit_response(
-            recovery_path=recovery_path,
-            event_id=event_id,
-            replay_fingerprint=replay_fingerprint,
-            correlation_id=correlation_id,
-            correlation_missing_reason=correlation_missing_reason,
-            alternate_lookup_key=alternate_lookup_key,
-            job_id=job_id,
-            endpoint=endpoint,
-            replay_status=replay_status,
-            dry_run=dry_run,
-            replay_reason=replay_reason,
-            requested_by=requested_by,
-            session_factory=get_async_db_session,
+        return await self._replay_audit_store_adapter.record_consumer_dlq_replay_audit(
+            ReplayAuditRecord(
+                recovery_path=recovery_path,
+                event_id=event_id,
+                replay_fingerprint=replay_fingerprint,
+                correlation_id=correlation_id,
+                correlation_missing_reason=correlation_missing_reason,
+                alternate_lookup_key=alternate_lookup_key,
+                job_id=job_id,
+                endpoint=endpoint,
+                replay_status=replay_status,
+                dry_run=dry_run,
+                replay_reason=replay_reason,
+                requested_by=requested_by,
+            )
         )
 
     async def get_replay_audit(self, replay_id: str) -> IngestionReplayAuditResponse | None:
-        return await get_replay_audit_response(
+        return await self._replay_audit_store_adapter.get_replay_audit(
             replay_id=replay_id,
-            session_factory=get_async_db_session,
         )
 
     async def list_replay_audits(
@@ -402,13 +430,12 @@ class IngestionJobService:
         replay_fingerprint: str | None = None,
         job_id: str | None = None,
     ) -> list[IngestionReplayAuditResponse]:
-        return await list_replay_audit_responses(
+        return await self._replay_audit_store_adapter.list_replay_audits(
             limit=limit,
             recovery_path=recovery_path,
             replay_status=replay_status,
             replay_fingerprint=replay_fingerprint,
             job_id=job_id,
-            session_factory=get_async_db_session,
         )
 
     async def get_consumer_lag(
