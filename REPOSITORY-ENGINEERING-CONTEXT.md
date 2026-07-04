@@ -150,6 +150,10 @@ Current repository posture:
     totals, or large example catalogs in the router. Add application service tests first when
     extending ingestion operations, and add router-support guard tests when moving API
     documentation data.
+    Consumer-DLQ replay correlation joins must use purpose-built ingestion job service lookups,
+    not generic operator listing pages. Use the latest replayable correlation lookup for recovery
+    paths so replay correctness does not depend on unrelated job volume, page size, or incidental
+    list ordering.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

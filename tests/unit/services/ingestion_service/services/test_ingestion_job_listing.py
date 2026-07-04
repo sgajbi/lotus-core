@@ -6,10 +6,13 @@ from types import SimpleNamespace
 import pytest
 
 from src.services.ingestion_service.app.services.ingestion_job_listing import (
+    REPLAYABLE_INGESTION_JOB_STATUSES,
     IngestionJobListFilters,
     build_ingestion_job_list_statement,
+    build_replayable_correlation_lookup_statement,
     ingestion_job_list_page,
     load_job_list_response,
+    load_latest_replayable_job_by_correlation_id,
 )
 
 
@@ -57,6 +60,19 @@ def test_build_ingestion_job_list_statement_applies_filters_and_cursor():
     assert "ORDER BY ingestion_jobs.id DESC" in compiled_sql
 
 
+def test_build_replayable_correlation_lookup_statement_is_index_shaped():
+    statement = build_replayable_correlation_lookup_statement(correlation_id="corr-001")
+
+    compiled = statement.compile()
+    compiled_sql = str(compiled)
+
+    assert "ingestion_jobs.correlation_id = :correlation_id_1" in compiled_sql
+    assert "ingestion_jobs.status IN" in compiled_sql
+    assert "ORDER BY ingestion_jobs.id DESC" in compiled_sql
+    assert compiled.params["correlation_id_1"] == "corr-001"
+    assert tuple(compiled.params["status_1"]) == REPLAYABLE_INGESTION_JOB_STATUSES
+
+
 class _SingleSessionAsyncIterable:
     def __init__(self, session):
         self._session = session
@@ -93,6 +109,18 @@ class _FakeSession:
     async def scalars(self, _stmt):
         self.scalars_calls += 1
         return _FakeScalars(self.rows)
+
+
+class _FakeScalarSession:
+    def __init__(self, row):
+        self.row = row
+        self.scalar_calls = 0
+        self.last_statement = None
+
+    async def scalar(self, stmt):
+        self.scalar_calls += 1
+        self.last_statement = stmt
+        return self.row
 
 
 def _job_row(job_id: str):
@@ -136,3 +164,33 @@ async def test_load_job_list_response_maps_rows_and_next_cursor():
     assert [job.job_id for job in result] == ["job_3", "job_2"]
     assert result[0].endpoint == "/ingest/transactions"
     assert next_cursor == "job_2"
+
+
+@pytest.mark.asyncio
+async def test_load_latest_replayable_job_by_correlation_id_maps_latest_row():
+    session = _FakeScalarSession(_job_row("job_500_plus"))
+
+    result = await load_latest_replayable_job_by_correlation_id(
+        correlation_id="corr-job_500_plus",
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert session.scalar_calls == 1
+    assert result is not None
+    assert result.job_id == "job_500_plus"
+    assert result.correlation_id == "corr-job_500_plus"
+    assert "correlation_id = :correlation_id_1" in str(session.last_statement)
+    assert "ORDER BY ingestion_jobs.id DESC" in str(session.last_statement)
+
+
+@pytest.mark.asyncio
+async def test_load_latest_replayable_job_by_correlation_id_returns_none_when_missing():
+    session = _FakeScalarSession(None)
+
+    result = await load_latest_replayable_job_by_correlation_id(
+        correlation_id="corr-missing",
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert session.scalar_calls == 1
+    assert result is None
