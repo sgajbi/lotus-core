@@ -3,9 +3,8 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_fx_rate_service
 from ..dtos.fx_rate_dto import FxRateResponse
 from ..services.fx_rate_service import FxRateService
 
@@ -48,9 +47,8 @@ async def get_fx_rates(
         description="The end date for the date range filter (inclusive).",
         examples=["2026-03-31"],
     ),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: FxRateService = Depends(get_fx_rate_service),
 ):
-    service = FxRateService(db)
     return await service.get_fx_rates(
         from_currency=from_currency.upper(),
         to_currency=to_currency.upper(),

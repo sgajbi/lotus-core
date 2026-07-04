@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_instrument_service, get_portfolio_service
 from ..dtos.lookup_dto import LookupItem, LookupResponse
 from ..services.instrument_service import InstrumentService
 from ..services.portfolio_service import PortfolioService
@@ -60,9 +59,8 @@ async def get_portfolio_lookups(
         description="Maximum number of lookup items to return after filtering and sorting.",
         examples=[100],
     ),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: PortfolioService = Depends(get_portfolio_service),
 ) -> LookupResponse:
-    service = PortfolioService(db)
     items = await service.search_portfolio_lookup_items(
         client_id=client_id,
         booking_center_code=booking_center_code,
@@ -102,9 +100,8 @@ async def get_instrument_lookups(
         ),
         examples=["AAPL"],
     ),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: InstrumentService = Depends(get_instrument_service),
 ) -> LookupResponse:
-    service = InstrumentService(db)
     items = await service.search_instrument_lookup_items(
         product_type=product_type,
         q=q,
@@ -153,10 +150,9 @@ async def get_currency_lookups(
         description="Maximum number of currency lookup items to return after filtering.",
         examples=[100],
     ),
-    db: AsyncSession = Depends(get_async_db_session),
+    portfolio_service: PortfolioService = Depends(get_portfolio_service),
+    instrument_service: InstrumentService = Depends(get_instrument_service),
 ) -> LookupResponse:
-    portfolio_service = PortfolioService(db)
-    instrument_service = InstrumentService(db)
     _ = instrument_page_limit
 
     source_scope = source.upper()

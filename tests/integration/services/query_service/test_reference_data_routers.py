@@ -1,16 +1,20 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 import pytest_asyncio
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.fx_rate_dto import FxRateResponse
 from src.services.query_service.app.dtos.instrument_dto import PaginatedInstrumentResponse
 from src.services.query_service.app.dtos.portfolio_dto import PortfolioQueryResponse
 from src.services.query_service.app.dtos.price_dto import MarketPriceResponse
+from src.services.query_service.app.dependencies import (
+    get_fx_rate_service,
+    get_instrument_service,
+    get_market_price_service,
+    get_portfolio_service,
+)
 from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
@@ -39,41 +43,28 @@ async def async_test_client():
     mock_portfolio_service.search_portfolio_lookup_items = AsyncMock(return_value=[])
     mock_portfolio_service.list_currency_lookup_items = AsyncMock(return_value=[])
 
-    app.dependency_overrides[get_async_db_session] = lambda: AsyncMock(spec=AsyncSession)
+    app.dependency_overrides[get_fx_rate_service] = lambda: mock_fx_service
+    app.dependency_overrides[get_instrument_service] = lambda: mock_instrument_service
+    app.dependency_overrides[get_market_price_service] = lambda: mock_price_service
+    app.dependency_overrides[get_portfolio_service] = lambda: mock_portfolio_service
 
-    with (
-        patch(
-            "src.services.query_service.app.routers.fx_rates.FxRateService",
-            return_value=mock_fx_service,
-        ),
-        patch(
-            "src.services.query_service.app.routers.instruments.InstrumentService",
-            return_value=mock_instrument_service,
-        ),
-        patch(
-            "src.services.query_service.app.routers.prices.MarketPriceService",
-            return_value=mock_price_service,
-        ),
-        patch(
-            "src.services.query_service.app.routers.lookups.PortfolioService",
-            return_value=mock_portfolio_service,
-        ),
-        patch(
-            "src.services.query_service.app.routers.lookups.InstrumentService",
-            return_value=mock_instrument_service,
-        ),
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield (
+            client,
+            mock_fx_service,
+            mock_instrument_service,
+            mock_price_service,
+            mock_portfolio_service,
+        )
+
+    for dependency in (
+        get_fx_rate_service,
+        get_instrument_service,
+        get_market_price_service,
+        get_portfolio_service,
     ):
-        transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            yield (
-                client,
-                mock_fx_service,
-                mock_instrument_service,
-                mock_price_service,
-                mock_portfolio_service,
-            )
-
-    app.dependency_overrides.pop(get_async_db_session, None)
+        app.dependency_overrides.pop(dependency, None)
 
 
 async def test_get_fx_rates_success_and_uppercase(async_test_client):

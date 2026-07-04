@@ -1,10 +1,8 @@
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, Query
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dependencies import pagination_params
+from ..dependencies import get_instrument_service, pagination_params
 from ..dtos.instrument_dto import PaginatedInstrumentResponse
 from ..services.instrument_service import InstrumentService
 
@@ -34,9 +32,8 @@ async def get_instruments(
         examples=["Equity"],
     ),
     pagination: Dict[str, int] = Depends(pagination_params),
-    db: AsyncSession = Depends(get_async_db_session),
+    service: InstrumentService = Depends(get_instrument_service),
 ):
-    service = InstrumentService(db)
     return await service.get_instruments(
         security_id=security_id, product_type=product_type, **pagination
     )
