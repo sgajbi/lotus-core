@@ -6,10 +6,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_service.app.dependencies import get_liquidity_ladder_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.liquidity_ladder import (
+from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
-    get_liquidity_ladder_service,
 )
 
 pytestmark = pytest.mark.asyncio

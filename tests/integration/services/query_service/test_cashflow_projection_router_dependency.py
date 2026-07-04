@@ -5,10 +5,8 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_service.app.dependencies import get_cashflow_projection_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.cashflow_projection import (
-    get_cashflow_projection_service,
-)
 
 pytestmark = pytest.mark.asyncio
 

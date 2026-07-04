@@ -6,11 +6,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.dependencies import get_portfolio_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.portfolios import (
-    PortfolioService,
-    get_portfolio_service,
-)
+from src.services.query_service.app.services.portfolio_service import PortfolioService
 
 pytestmark = pytest.mark.asyncio
 

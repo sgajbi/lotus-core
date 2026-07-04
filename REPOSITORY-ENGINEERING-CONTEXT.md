@@ -128,9 +128,10 @@ Current repository posture:
     `docs/standards/api-layer-router-boundary-exceptions.json`. Treat that registry as transitional
     extraction backlog for issues #635 and #638, not as approval for new router coupling. The
     financial reconciliation router has been moved behind reconciliation use cases, so #636 no
-    longer requires an API-router boundary exception. The query-service BUY/SELL state and cash
-    account, cash balance, and cash movement routers now use dependency-module service providers
-    and no longer require #638 exceptions.
+    longer requires an API-router boundary exception. The query-service BUY/SELL state, cash
+    account, cash balance, cash movement, cashflow projection, liquidity ladder, portfolio,
+    position, and reporting routers now use dependency-module service providers and no longer
+    require #638 exceptions.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

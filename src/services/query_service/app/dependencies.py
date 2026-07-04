@@ -9,6 +9,11 @@ from .services.buy_state_service import BuyStateService
 from .services.cash_account_service import CashAccountService
 from .services.cash_balance_service import CashBalanceService
 from .services.cash_movement_service import CashMovementService
+from .services.cashflow_projection_service import CashflowProjectionService
+from .services.liquidity_ladder_service import PortfolioLiquidityLadderService
+from .services.portfolio_service import PortfolioService
+from .services.position_service import PositionService
+from .services.reporting_service import ReportingService
 from .services.sell_state_service import SellStateService
 
 
@@ -58,6 +63,36 @@ def get_cash_movement_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> CashMovementService:
     return CashMovementService(db)
+
+
+def get_cashflow_projection_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> CashflowProjectionService:
+    return CashflowProjectionService(db)
+
+
+def get_liquidity_ladder_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> PortfolioLiquidityLadderService:
+    return PortfolioLiquidityLadderService(db)
+
+
+def get_portfolio_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> PortfolioService:
+    return PortfolioService(db)
+
+
+def get_position_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> PositionService:
+    return PositionService(db)
+
+
+def get_reporting_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ReportingService:
+    return ReportingService(db)
 
 
 def get_sell_state_service(db: AsyncSession = Depends(get_async_db_session)) -> SellStateService:

@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )
+from src.services.query_service.app.dependencies import get_position_service
 from src.services.query_service.app.main import app
-from src.services.query_service.app.routers.positions import PositionService, get_position_service
+from src.services.query_service.app.services.position_service import PositionService
 
 pytestmark = pytest.mark.asyncio
 

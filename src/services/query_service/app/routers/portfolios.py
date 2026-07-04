@@ -2,21 +2,14 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from portfolio_common.db import get_async_db_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..dependencies import get_portfolio_service
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
 from ..services.portfolio_service import PortfolioService
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolios"])
 
 PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-DISC-001 not found"}
-
-
-def get_portfolio_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> PortfolioService:
-    return PortfolioService(db)
 
 
 @router.get(
