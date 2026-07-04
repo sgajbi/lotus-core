@@ -6,10 +6,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from src.services.query_control_plane_service.app.main import app
-from src.services.query_control_plane_service.app.routers.analytics_inputs import (
+from src.services.query_control_plane_service.app.dependencies import (
     get_analytics_timeseries_service,
 )
+from src.services.query_control_plane_service.app.main import app
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
 )

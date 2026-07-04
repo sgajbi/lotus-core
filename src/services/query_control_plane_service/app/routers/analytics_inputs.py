@@ -4,9 +4,7 @@ from typing import Literal, NoReturn, cast
 
 from fastapi import APIRouter, Depends, Path, Query, status
 from fastapi.responses import Response
-from portfolio_common.db import get_async_db_session
 from portfolio_common.source_data_products import source_data_product_openapi_extra
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.analytics_input_dto import (
     AnalyticsExportCreateRequest,
@@ -24,6 +22,7 @@ from src.services.query_service.app.services.analytics_timeseries_service import
     AnalyticsTimeseriesService,
 )
 
+from ..dependencies import get_analytics_timeseries_service
 from .response_helpers import (
     problem_example,
     problem_or_validation_response,
@@ -97,12 +96,6 @@ ANALYTICS_ERROR_CONTRACTS = {
         "QCP_ANALYTICS_UNSUPPORTED_CONFIGURATION",
     ),
 }
-
-
-def get_analytics_timeseries_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> AnalyticsTimeseriesService:
-    return AnalyticsTimeseriesService(db)
 
 
 def _raise_http_for_analytics_error(exc: AnalyticsInputError) -> NoReturn:
