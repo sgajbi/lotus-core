@@ -24,6 +24,8 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain.reconciliation_run_lifecycle_policy import initial_reconciliation_run_status
+
 
 class ReconciliationRepository:
     def __init__(self, db_session: AsyncSession):
@@ -57,7 +59,7 @@ class ReconciliationRepository:
             dedupe_key=dedupe_key,
             correlation_id=correlation_id,
             tolerance=tolerance,
-            status="RUNNING",
+            status=initial_reconciliation_run_status(),
         )
         try:
             async with self.db.begin_nested():

@@ -12,6 +12,13 @@ from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 from portfolio_common.valuation_prices import resolve_valuation_unit_price
 
+from ..domain.reconciliation_run_lifecycle_policy import (
+    AutomaticBundleOutcome,
+    ReconciliationRunLifecycleSnapshot,
+    ReconciliationRunStatus,
+    completed_reconciliation_run_status,
+    determine_automatic_bundle_outcome,
+)
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
 from .runtime_providers import (
@@ -201,15 +208,6 @@ class ScopeKey:
     epoch: int
 
 
-@dataclass(frozen=True, slots=True)
-class AutomaticBundleOutcome:
-    outcome_status: str
-    blocking_reconciliation_types: list[str]
-    run_ids: dict[str, str]
-    error_count: int
-    warning_count: int
-
-
 class ReconciliationService:
     def __init__(
         self,
@@ -311,42 +309,16 @@ class ReconciliationService:
     def determine_automatic_bundle_outcome(
         runs: dict[str, object],
     ) -> AutomaticBundleOutcome:
-        blocking_types: list[str] = []
-        run_ids: dict[str, str] = {}
-        error_count = 0
-        warning_count = 0
-        has_failed_run = False
-
+        snapshots: dict[str, ReconciliationRunLifecycleSnapshot] = {}
         for reconciliation_type, run in runs.items():
-            run_ids[reconciliation_type] = getattr(run, "run_id")
-            status = getattr(run, "status", None)
             summary = getattr(run, "summary", None) or {}
-            run_error_count = int(summary.get("error_count", 0) or 0)
-            run_warning_count = int(summary.get("warning_count", 0) or 0)
-            error_count += run_error_count
-            warning_count += run_warning_count
-
-            if status == "FAILED":
-                has_failed_run = True
-                blocking_types.append(reconciliation_type)
-                continue
-            if run_error_count > 0:
-                blocking_types.append(reconciliation_type)
-
-        if has_failed_run:
-            outcome_status = "FAILED"
-        elif blocking_types:
-            outcome_status = "REQUIRES_REPLAY"
-        else:
-            outcome_status = "COMPLETED"
-
-        return AutomaticBundleOutcome(
-            outcome_status=outcome_status,
-            blocking_reconciliation_types=sorted(set(blocking_types)),
-            run_ids=run_ids,
-            error_count=error_count,
-            warning_count=warning_count,
-        )
+            snapshots[reconciliation_type] = ReconciliationRunLifecycleSnapshot(
+                run_id=getattr(run, "run_id"),
+                status=ReconciliationRunStatus.normalize(getattr(run, "status", None)),
+                error_count=int(summary.get("error_count", 0) or 0),
+                warning_count=int(summary.get("warning_count", 0) or 0),
+            )
+        return determine_automatic_bundle_outcome(snapshots)
 
     async def run_transaction_cashflow(
         self,
@@ -384,10 +356,11 @@ class ReconciliationService:
 
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
-        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        status = completed_reconciliation_run_status()
+        await self.repository.mark_run_completed(run, status=status, summary=summary)
         observe_financial_reconciliation_run(
             "transaction_cashflow",
-            "COMPLETED",
+            status,
             self._monotonic_timer.seconds() - started_at,
             findings,
         )
@@ -623,10 +596,11 @@ class ReconciliationService:
 
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
-        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        status = completed_reconciliation_run_status()
+        await self.repository.mark_run_completed(run, status=status, summary=summary)
         observe_financial_reconciliation_run(
             "position_valuation",
-            "COMPLETED",
+            status,
             self._monotonic_timer.seconds() - started_at,
             findings,
         )
@@ -681,10 +655,11 @@ class ReconciliationService:
 
         await self.repository.add_findings(findings)
         summary = self._summary(examined=examined, findings=findings)
-        await self.repository.mark_run_completed(run, status="COMPLETED", summary=summary)
+        status = completed_reconciliation_run_status()
+        await self.repository.mark_run_completed(run, status=status, summary=summary)
         observe_financial_reconciliation_run(
             "timeseries_integrity",
-            "COMPLETED",
+            status,
             self._monotonic_timer.seconds() - started_at,
             findings,
         )
