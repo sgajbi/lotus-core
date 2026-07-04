@@ -36,8 +36,9 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_port_catalog_guard.py` plus the specific
-port-regression guards for ingestion stores, event publishing, and repository capability ports.
+`make architecture-guard` runs `scripts/application_port_catalog_guard.py`,
+`scripts/application_dependency_inversion_guard.py`, and the specific port-regression guards for
+ingestion stores, event publishing, and repository capability ports.
 
 The catalog guard validates that:
 
@@ -47,6 +48,10 @@ The catalog guard validates that:
    `app/ports` package convention,
 4. listed adapter, consumer, standard, and guard files exist,
 5. capability identifiers are unique.
+
+The dependency-inversion guard protects representative port-enabled application modules from
+reintroducing direct SQLAlchemy sessions, concrete repositories, concrete Kafka producer APIs, or
+direct helper calls for capabilities that now have ports.
 
 ## Runtime Boundary
 
