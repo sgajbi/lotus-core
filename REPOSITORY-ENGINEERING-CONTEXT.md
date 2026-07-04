@@ -133,8 +133,9 @@ Current repository posture:
     position, reporting, FX rate, instrument, price, lookup, and transaction routers now use
     dependency-module service providers and no longer require #638 exceptions. Query-control-plane
     analytics-input, simulation, integration, and operations routers now use a QCP dependency
-    module too. The local #638 API-router DB-session exception backlog is cleared; the remaining
-    API-router boundary registry entry is the #635 ingestion business-date repository extraction.
+    module too. Business-date ingestion validation now lives in `BusinessDateIngestionPolicy`
+    behind ingestion dependency-module composition, so the local #635 API-router repository
+    exception is cleared too. The API-router boundary exception registry is empty.
 23. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy

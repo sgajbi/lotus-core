@@ -18,8 +18,12 @@ from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 
 from src.services.event_replay_service.app.main import app as event_replay_app
 from src.services.ingestion_service.app import ops_controls
+from src.services.ingestion_service.app.dependencies import get_business_date_ingestion_policy
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
+from src.services.ingestion_service.app.services.business_date_ingestion_policy import (
+    BusinessDateIngestionPolicy,
+)
 
 try:
     from app import ops_controls as app_ops_controls
@@ -1013,6 +1017,10 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     fake_job_service = FakeIngestionJobService()
     fake_reference_data_service = FakeReferenceDataIngestionService()
     fake_business_calendar_repository = FakeBusinessCalendarRepository()
+    fake_business_date_policy = BusinessDateIngestionPolicy(
+        fake_business_calendar_repository,
+        enforce_monotonic_advance=True,
+    )
     target_apps = (app, event_replay_app)
 
     for target_app in target_apps:
@@ -1033,9 +1041,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
-    app.dependency_overrides[business_dates_router.get_business_calendar_repository] = lambda: (
-        fake_business_calendar_repository
-    )
+    app.dependency_overrides[get_business_date_ingestion_policy] = lambda: fake_business_date_policy
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
     )
@@ -1067,10 +1073,7 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(market_prices_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
-    app.dependency_overrides.pop(
-        business_dates_router.get_business_calendar_repository,
-        None,
-    )
+    app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reference_data_router.get_ingestion_job_service, None)
@@ -7402,10 +7405,8 @@ async def test_ingest_business_dates_returns_429_when_rate_limited(
 async def test_ingest_business_dates_rejects_monotonic_regression(
     async_test_client: httpx.AsyncClient,
     ingestion_test_harness,
-    monkeypatch,
     mock_kafka_producer: MagicMock,
 ):
-    monkeypatch.setattr(business_dates_router, "BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", True)
     ingestion_test_harness["fake_business_calendar_repository"].latest_business_dates["GLOBAL"] = (
         datetime(2025, 1, 10).date()
     )

@@ -1,8 +1,6 @@
 from datetime import date
 
-from fastapi import Depends
 from portfolio_common.database_models import BusinessDate
-from portfolio_common.db import get_async_db_session
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,9 +15,3 @@ class BusinessCalendarRepository:
         )
         result = await self._db.execute(stmt)
         return result.scalar_one_or_none()
-
-
-def get_business_calendar_repository(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> BusinessCalendarRepository:
-    return BusinessCalendarRepository(db)
