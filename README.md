@@ -195,6 +195,8 @@ Important runtime note:
   RFC-0082 route-family enforcement
 - `make source-data-product-contract-guard`
   source-data product contract enforcement
+- `make endpoint-consolidation-watchlist-guard`
+  RFC-0083 endpoint consolidation watchlist enforcement
 - `make analytics-input-consumer-contract-guard`
   downstream analytics-input consumer enforcement
 - `make event-runtime-contract-guard`
@@ -269,6 +271,8 @@ Architecture and contract truth:
   [docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - route-family registry:
   [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
+- endpoint consolidation watchlist:
+  [docs/standards/endpoint-consolidation-watchlist.json](docs/standards/endpoint-consolidation-watchlist.json)
 - temporal vocabulary:
   [docs/standards/temporal-vocabulary.md](docs/standards/temporal-vocabulary.md)
 
