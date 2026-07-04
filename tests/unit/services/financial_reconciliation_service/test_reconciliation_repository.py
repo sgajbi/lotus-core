@@ -50,6 +50,28 @@ async def test_create_run_normalizes_sentinel_correlation(mock_db_session: Async
     mock_db_session.refresh.assert_awaited_once_with(run)
 
 
+async def test_create_run_uses_injected_run_id_suffix_provider(mock_db_session: AsyncMock):
+    repository = reconciliation_repo.ReconciliationRepository(
+        mock_db_session,
+        run_id_suffix_provider=lambda: "deterministic-run-id",
+    )
+    repository.get_run_by_dedupe_key = AsyncMock(return_value=None)
+
+    run, created = await repository.create_run(
+        reconciliation_type="transaction_cashflow",
+        portfolio_id="P1",
+        business_date=date(2025, 8, 10),
+        epoch=1,
+        requested_by="system",
+        dedupe_key=None,
+        correlation_id="corr-1",
+        tolerance=Decimal("0.01"),
+    )
+
+    assert created is True
+    assert run.run_id == "recon-deterministic-run-id"
+
+
 async def test_create_run_returns_existing_row_after_dedupe_integrity_race(
     mock_db_session: AsyncMock,
 ):

@@ -194,6 +194,20 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.correlation_id is None
 
 
+async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dependencies):
+    generated_at = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
+    service = CoreSnapshotService(AsyncMock(), clock=lambda: generated_at)
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.BASELINE,
+        sections=[CoreSnapshotSection.POSITIONS_BASELINE],
+    )
+
+    response = await service.get_core_snapshot("PORT_001", request)
+
+    assert response.generated_at == generated_at
+
+
 async def test_snapshot_data_quality_status_classifies_snapshot_evidence() -> None:
     assert (
         CoreSnapshotService._snapshot_data_quality_status(

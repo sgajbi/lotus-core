@@ -222,6 +222,11 @@ Current repository posture:
     `domain` packages must not import framework, persistence, DTO, repository, client, consumer, or
     settings modules unless a narrow transitional exception is explicitly allowlisted with
     migration rationale.
+    Time, monotonic timer, and generated ID behavior is governed by
+    `docs/standards/time-id-provider-policy.md`. Application/use-case code should inject provider
+    ports for generated timestamps, elapsed duration, expiry checks, and deterministic IDs.
+    Financial reconciliation, simulation, and core snapshot now provide representative provider
+    coverage with focused deterministic tests and targeted static guard coverage.
 28. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but
