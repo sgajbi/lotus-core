@@ -7,6 +7,10 @@ import pytest
 from openpyxl import Workbook
 
 from src.services.ingestion_service.app.application.errors import ValidationRejected
+from src.services.ingestion_service.app.application.upload_commands import (
+    UploadCommitCommand,
+    UploadPreviewCommand,
+)
 from src.services.ingestion_service.app.services.upload_ingestion_service import (
     UploadIngestionService,
 )
@@ -51,10 +55,12 @@ def test_preview_upload_csv_with_mixed_rows(upload_service: UploadIngestionServi
     )
 
     response = upload_service.preview_upload(
-        entity_type="transactions",
-        filename="transactions.csv",
-        content=content,
-        sample_size=10,
+        UploadPreviewCommand(
+            entity_type="transactions",
+            filename="transactions.csv",
+            content=content,
+            sample_size=10,
+        )
     )
 
     assert response.file_format == "csv"
@@ -72,10 +78,12 @@ def test_preview_upload_xlsx_canonical_headers(upload_service: UploadIngestionSe
     )
 
     response = upload_service.preview_upload(
-        entity_type="instruments",
-        filename="instruments.xlsx",
-        content=content,
-        sample_size=5,
+        UploadPreviewCommand(
+            entity_type="instruments",
+            filename="instruments.xlsx",
+            content=content,
+            sample_size=5,
+        )
     )
 
     assert response.file_format == "xlsx"
@@ -101,10 +109,12 @@ async def test_commit_upload_rejects_partial_by_default(
 
     with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
-            entity_type="transactions",
-            filename="transactions.csv",
-            content=content,
-            allow_partial=False,
+            UploadCommitCommand(
+                entity_type="transactions",
+                filename="transactions.csv",
+                content=content,
+                allow_partial=False,
+            )
         )
 
     assert exc.value.reason_code == "upload_invalid_rows"
@@ -127,10 +137,12 @@ async def test_commit_upload_allows_partial(upload_service: UploadIngestionServi
     )
 
     response = await upload_service.commit_upload(
-        entity_type="transactions",
-        filename="transactions.csv",
-        content=content,
-        allow_partial=True,
+        UploadCommitCommand(
+            entity_type="transactions",
+            filename="transactions.csv",
+            content=content,
+            allow_partial=True,
+        )
     )
 
     assert response.published_rows == 1
@@ -146,10 +158,12 @@ async def test_commit_upload_empty_data_rows(upload_service: UploadIngestionServ
 
     with pytest.raises(ValidationRejected) as exc:
         await upload_service.commit_upload(
-            entity_type="transactions",
-            filename="transactions.csv",
-            content=content,
-            allow_partial=True,
+            UploadCommitCommand(
+                entity_type="transactions",
+                filename="transactions.csv",
+                content=content,
+                allow_partial=True,
+            )
         )
 
     assert exc.value.reason_code == "empty_upload"

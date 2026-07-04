@@ -889,6 +889,22 @@ Most relevant current governance:
     FastAPI imports, `HTTPException`, or HTTP status mapping inside the application service.
     Broader application-error migration remains follow-up scope and should preserve API contracts
     with router mapping tests.
+73. Application services should use command/query and result models instead of API DTOs as their
+    internal use-case contracts. `docs/standards/application-command-result-standard.md` defines
+    the repo-local rule. The first representative write workflow lives in
+    `src/services/ingestion_service/app/application/upload_commands.py`; `UploadIngestionService`
+    now accepts `UploadPreviewCommand` and `UploadCommitCommand` and returns application results
+    while the upload router maps to/from public API DTOs. The first representative read workflow
+    lives in `src/services/query_service/app/application/lookup_catalog.py`; `LookupCatalogService`
+    now returns lookup application results while the lookup router maps them to `LookupResponse`.
+    Core snapshot request fingerprinting now uses a canonical identity command from
+    `src/services/query_service/app/application/core_snapshot.py` instead of API DTO JSON
+    serialization side effects.
+    `make architecture-guard` now runs `scripts/application_command_result_guard.py` so the
+    migrated representative services cannot reintroduce API DTO imports or response DTO return
+    contracts, and core snapshot fingerprinting cannot return to `request.model_dump(mode="json")`.
+    Remaining API DTO usage in broader application services is transitional backlog and should not
+    be copied into new use cases.
 
 ## Context Maintenance Rule
 

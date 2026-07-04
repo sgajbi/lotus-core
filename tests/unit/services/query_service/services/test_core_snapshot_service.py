@@ -1060,3 +1060,24 @@ async def test_core_snapshot_request_fingerprint_is_deterministic(mock_dependenc
     assert first.request_fingerprint == second.request_fingerprint
     assert first.governance.consumer_system == "lotus-performance"
     assert first.governance.tenant_id == "tenant_sg_pb"
+
+
+async def test_core_snapshot_identity_command_preserves_canonical_payload_shape():
+    request = CoreSnapshotRequest(
+        as_of_date="2026-02-27",
+        snapshot_mode=CoreSnapshotMode.SIMULATION,
+        reporting_currency="SGD",
+        sections=[
+            CoreSnapshotSection.POSITIONS_BASELINE,
+            CoreSnapshotSection.POSITIONS_PROJECTED,
+        ],
+        simulation={"session_id": "SIM_1", "expected_version": 3},
+        consumer_system="lotus-performance",
+        tenant_id="tenant_sg_pb",
+    )
+
+    command_payload = CoreSnapshotService._identity_command_from_request(
+        request
+    ).canonical_payload()
+
+    assert command_payload == request.model_dump(mode="json")

@@ -12,21 +12,23 @@ from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import BaseModel, ValidationError
 
 from ..application.errors import UnsupportedOperation, ValidationRejected
+from ..application.upload_commands import (
+    UploadCommitCommand,
+    UploadCommitResult,
+    UploadEntity,
+    UploadPreviewCommand,
+    UploadPreviewResult,
+    UploadRowIssue,
+)
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
 from ..DTOs.market_price_dto import MarketPrice
 from ..DTOs.portfolio_dto import Portfolio
 from ..DTOs.transaction_dto import Transaction
-from ..DTOs.upload_dto import (
-    UploadCommitResponse,
-    UploadEntityType,
-    UploadPreviewResponse,
-    UploadRowError,
-)
 from ..services.ingestion_service import IngestionService
 
-MODEL_BY_ENTITY: dict[UploadEntityType, type[BaseModel]] = {
+MODEL_BY_ENTITY: dict[UploadEntity, type[BaseModel]] = {
     "portfolios": Portfolio,
     "instruments": Instrument,
     "transactions": Transaction,
@@ -130,7 +132,7 @@ class _ValidationResult:
     file_format: Literal["csv", "xlsx"]
     valid_models: list[BaseModel]
     valid_rows: list[dict[str, Any]]
-    errors: list[UploadRowError]
+    errors: list[UploadRowIssue]
     total_rows: int
 
 
@@ -158,7 +160,7 @@ class UploadIngestionService:
             ) from exc
 
     def _validate_rows(
-        self, entity_type: UploadEntityType, filename: str, content: bytes
+        self, entity_type: UploadEntity, filename: str, content: bytes
     ) -> _ValidationResult:
         model_cls = MODEL_BY_ENTITY[entity_type]
         alias_index = _field_alias_index(model_cls)
@@ -166,7 +168,7 @@ class UploadIngestionService:
 
         valid_models: list[BaseModel] = []
         valid_rows: list[dict[str, Any]] = []
-        errors: list[UploadRowError] = []
+        errors: list[UploadRowIssue] = []
 
         for index, row in enumerate(rows, start=2):
             normalized_row = _normalize_row(row, alias_index)
@@ -177,7 +179,7 @@ class UploadIngestionService:
                 for error in exc.errors():
                     location = ".".join(str(part) for part in error.get("loc", ()))
                     issues.append(f"{location}: {error.get('msg', 'invalid value')}")
-                errors.append(UploadRowError(row_number=index, message="; ".join(issues)))
+                errors.append(UploadRowIssue(row_number=index, message="; ".join(issues)))
                 continue
 
             valid_models.append(model)
@@ -193,33 +195,35 @@ class UploadIngestionService:
 
     def preview_upload(
         self,
-        entity_type: UploadEntityType,
-        filename: str,
-        content: bytes,
-        sample_size: int = 20,
-    ) -> UploadPreviewResponse:
-        validation = self._validate_rows(entity_type, filename, content)
-        return UploadPreviewResponse(
-            entity_type=entity_type,
+        command: UploadPreviewCommand,
+    ) -> UploadPreviewResult:
+        validation = self._validate_rows(
+            command.entity_type,
+            command.filename,
+            command.content,
+        )
+        return UploadPreviewResult(
+            entity_type=command.entity_type,
             file_format=validation.file_format,
             total_rows=validation.total_rows,
             valid_rows=len(validation.valid_models),
             invalid_rows=len(validation.errors),
-            sample_rows=validation.valid_rows[:sample_size],
-            errors=validation.errors[:sample_size],
+            sample_rows=validation.valid_rows[: command.sample_size],
+            errors=validation.errors[: command.sample_size],
         )
 
     async def commit_upload(
         self,
-        entity_type: UploadEntityType,
-        filename: str,
-        content: bytes,
-        allow_partial: bool,
-    ) -> UploadCommitResponse:
-        validation = self._validate_rows(entity_type, filename, content)
-        self._validate_commit(validation, allow_partial)
-        await self._publish_valid_models(entity_type, validation.valid_models)
-        return self._commit_response(entity_type, validation)
+        command: UploadCommitCommand,
+    ) -> UploadCommitResult:
+        validation = self._validate_rows(
+            command.entity_type,
+            command.filename,
+            command.content,
+        )
+        self._validate_commit(validation, command.allow_partial)
+        await self._publish_valid_models(command.entity_type, validation.valid_models)
+        return self._commit_response(command.entity_type, validation)
 
     def _validate_commit(self, validation: _ValidationResult, allow_partial: bool) -> None:
         if validation.total_rows == 0:
@@ -235,12 +239,12 @@ class UploadIngestionService:
             detail="Upload file contains no data rows.",
         )
 
-    def _raise_partial_upload_rejected(self, errors: list[UploadRowError]) -> None:
+    def _raise_partial_upload_rejected(self, errors: list[UploadRowIssue]) -> None:
         raise ValidationRejected(
             reason_code="upload_invalid_rows",
             detail={
                 "message": "Upload contains invalid rows. Fix errors or use allow_partial=true.",
-                "errors": [error.model_dump() for error in errors[:50]],
+                "errors": [error.as_dict() for error in errors[:50]],
             },
         )
 
@@ -251,7 +255,7 @@ class UploadIngestionService:
         )
 
     async def _publish_valid_models(
-        self, entity_type: UploadEntityType, valid_models: list[BaseModel]
+        self, entity_type: UploadEntity, valid_models: list[BaseModel]
     ) -> None:
         publishers = {
             "portfolios": self._publish_portfolios,
@@ -294,9 +298,9 @@ class UploadIngestionService:
         )
 
     def _commit_response(
-        self, entity_type: UploadEntityType, validation: _ValidationResult
-    ) -> UploadCommitResponse:
-        return UploadCommitResponse(
+        self, entity_type: UploadEntity, validation: _ValidationResult
+    ) -> UploadCommitResult:
+        return UploadCommitResult(
             entity_type=entity_type,
             file_format=validation.file_format,
             total_rows=validation.total_rows,

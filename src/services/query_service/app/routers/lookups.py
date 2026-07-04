@@ -1,10 +1,20 @@
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import get_lookup_catalog_service
-from ..dtos.lookup_dto import LookupResponse
+from ..application.lookup_catalog import (
+    CurrencyLookupQuery,
+    InstrumentLookupQuery,
+    LookupCatalogResult,
+    PortfolioLookupQuery,
+)
+from ..dtos.lookup_dto import LookupItem, LookupResponse
 from ..services.lookup_catalog_service import LookupCatalogService
 
 router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
+
+
+def lookup_response_from_result(result: LookupCatalogResult) -> LookupResponse:
+    return LookupResponse(items=[LookupItem(id=item.id, label=item.label) for item in result.items])
 
 
 @router.get(
@@ -42,13 +52,15 @@ async def get_portfolio_lookups(
     ),
     service: LookupCatalogService = Depends(get_lookup_catalog_service),
 ) -> LookupResponse:
-    items = await service.search_portfolio_lookup_items(
-        client_id=client_id,
-        booking_center_code=booking_center_code,
-        q=q,
-        limit=limit,
+    result = await service.search_portfolio_lookup_items(
+        PortfolioLookupQuery(
+            client_id=client_id,
+            booking_center_code=booking_center_code,
+            q=q,
+            limit=limit,
+        )
     )
-    return LookupResponse(items=items)
+    return lookup_response_from_result(result)
 
 
 @router.get(
@@ -83,12 +95,10 @@ async def get_instrument_lookups(
     ),
     service: LookupCatalogService = Depends(get_lookup_catalog_service),
 ) -> LookupResponse:
-    items = await service.search_instrument_lookup_items(
-        product_type=product_type,
-        q=q,
-        limit=limit,
+    result = await service.search_instrument_lookup_items(
+        InstrumentLookupQuery(product_type=product_type, q=q, limit=limit)
     )
-    return LookupResponse(items=items)
+    return lookup_response_from_result(result)
 
 
 @router.get(
@@ -135,10 +145,8 @@ async def get_currency_lookups(
 ) -> LookupResponse:
     _ = instrument_page_limit
 
-    return LookupResponse(
-        items=await service.list_currency_lookup_items(
-            source=source,
-            q=q,
-            limit=limit,
+    return lookup_response_from_result(
+        await service.list_currency_lookup_items(
+            CurrencyLookupQuery(source=source, q=q, limit=limit)
         )
     )
