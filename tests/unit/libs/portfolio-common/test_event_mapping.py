@@ -5,12 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 from portfolio_common.event_mapping import (
+    EventContractValidationError,
     decode_kafka_event_payload,
     kafka_event_id,
     outbox_event_payload,
     validate_kafka_event_payload,
 )
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, TransactionEvent
 from pydantic import ValidationError
 
 
@@ -54,20 +55,140 @@ def test_validate_kafka_event_payload_preserves_decimal_dates_and_lineage() -> N
                 "gross_transaction_amount": "15005.5000000000",
                 "trade_currency": "USD",
                 "currency": "USD",
-                "event_type": "transaction.raw.received",
-                "schema_version": "transaction.raw.v1",
+                "event_type": "ProcessedTransactionPersisted",
+                "schema_version": GOVERNED_EVENT_SCHEMA_VERSION,
                 "correlation_id": "corr-event-map",
             }
         )
     )
 
-    event = validate_kafka_event_payload(decoded, TransactionEvent)
+    event = validate_kafka_event_payload(
+        decoded,
+        TransactionEvent,
+        expected_event_type="ProcessedTransactionPersisted",
+    )
 
     assert event.quantity == Decimal("100.0000000000")
     assert event.transaction_date == datetime(2026, 3, 25, 9, 30, tzinfo=UTC)
-    assert event.event_type == "transaction.raw.received"
-    assert event.schema_version == "transaction.raw.v1"
+    assert event.event_type == "ProcessedTransactionPersisted"
+    assert event.schema_version == GOVERNED_EVENT_SCHEMA_VERSION
     assert event.correlation_id == "corr-event-map"
+
+
+def test_validate_kafka_event_payload_rejects_missing_event_type_for_governed_consumer() -> None:
+    decoded = decode_kafka_event_payload(
+        _message(
+            {
+                "transaction_id": "TXN-EVENT-MAP-STRICT-001",
+                "portfolio_id": "PORT-EVENT-MAP",
+                "instrument_id": "INST-EVENT-MAP",
+                "security_id": "SEC-EVENT-MAP",
+                "transaction_date": "2026-03-25T09:30:00Z",
+                "transaction_type": "BUY",
+                "quantity": "100",
+                "price": "150",
+                "gross_transaction_amount": "15000",
+                "trade_currency": "USD",
+                "currency": "USD",
+                "schema_version": GOVERNED_EVENT_SCHEMA_VERSION,
+            }
+        )
+    )
+
+    with pytest.raises(EventContractValidationError, match="event_type is required"):
+        validate_kafka_event_payload(
+            decoded,
+            TransactionEvent,
+            expected_event_type="ProcessedTransactionPersisted",
+        )
+
+
+def test_validate_kafka_event_payload_rejects_missing_schema_version_for_governed_consumer() -> (
+    None
+):
+    decoded = decode_kafka_event_payload(
+        _message(
+            {
+                "transaction_id": "TXN-EVENT-MAP-STRICT-002",
+                "portfolio_id": "PORT-EVENT-MAP",
+                "instrument_id": "INST-EVENT-MAP",
+                "security_id": "SEC-EVENT-MAP",
+                "transaction_date": "2026-03-25T09:30:00Z",
+                "transaction_type": "BUY",
+                "quantity": "100",
+                "price": "150",
+                "gross_transaction_amount": "15000",
+                "trade_currency": "USD",
+                "currency": "USD",
+                "event_type": "ProcessedTransactionPersisted",
+            }
+        )
+    )
+
+    with pytest.raises(EventContractValidationError, match="schema_version is required"):
+        validate_kafka_event_payload(
+            decoded,
+            TransactionEvent,
+            expected_event_type="ProcessedTransactionPersisted",
+        )
+
+
+def test_validate_kafka_event_payload_rejects_unsupported_schema_version() -> None:
+    decoded = decode_kafka_event_payload(
+        _message(
+            {
+                "transaction_id": "TXN-EVENT-MAP-STRICT-003",
+                "portfolio_id": "PORT-EVENT-MAP",
+                "instrument_id": "INST-EVENT-MAP",
+                "security_id": "SEC-EVENT-MAP",
+                "transaction_date": "2026-03-25T09:30:00Z",
+                "transaction_type": "BUY",
+                "quantity": "100",
+                "price": "150",
+                "gross_transaction_amount": "15000",
+                "trade_currency": "USD",
+                "currency": "USD",
+                "event_type": "ProcessedTransactionPersisted",
+                "schema_version": "2.0.0",
+            }
+        )
+    )
+
+    with pytest.raises(EventContractValidationError, match="schema_version '2.0.0'"):
+        validate_kafka_event_payload(
+            decoded,
+            TransactionEvent,
+            expected_event_type="ProcessedTransactionPersisted",
+        )
+
+
+def test_validate_kafka_event_payload_rejects_event_type_drift() -> None:
+    decoded = decode_kafka_event_payload(
+        _message(
+            {
+                "transaction_id": "TXN-EVENT-MAP-STRICT-004",
+                "portfolio_id": "PORT-EVENT-MAP",
+                "instrument_id": "INST-EVENT-MAP",
+                "security_id": "SEC-EVENT-MAP",
+                "transaction_date": "2026-03-25T09:30:00Z",
+                "transaction_type": "BUY",
+                "quantity": "100",
+                "price": "150",
+                "gross_transaction_amount": "15000",
+                "trade_currency": "USD",
+                "currency": "USD",
+                "event_type": "RawTransactionPersisted",
+                "schema_version": GOVERNED_EVENT_SCHEMA_VERSION,
+            }
+        )
+    )
+
+    with pytest.raises(EventContractValidationError, match="does not match expected"):
+        validate_kafka_event_payload(
+            decoded,
+            TransactionEvent,
+            expected_event_type="ProcessedTransactionPersisted",
+        )
 
 
 def test_validate_kafka_event_payload_rejects_unknown_fields() -> None:

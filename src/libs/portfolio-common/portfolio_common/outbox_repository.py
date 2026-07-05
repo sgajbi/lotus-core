@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
+from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION
 from portfolio_common.logging_utils import (
     normalize_lineage_value,
     normalize_traceparent,
@@ -14,7 +15,7 @@ from portfolio_common.logging_utils import (
 
 logger = logging.getLogger(__name__)
 
-EVENT_SCHEMA_VERSION = "1.0.0"
+EVENT_SCHEMA_VERSION = GOVERNED_EVENT_SCHEMA_VERSION
 EVENT_ENVELOPE_FIELDS = ("event_type", "schema_version", "correlation_id", "traceparent")
 
 

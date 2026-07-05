@@ -4,7 +4,11 @@ import logging
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
-from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
+from portfolio_common.event_mapping import (
+    EventContractValidationError,
+    decode_kafka_event_payload,
+    validate_kafka_event_payload,
+)
 from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
@@ -56,7 +60,11 @@ class PriceEventConsumer(BaseConsumer):
             with self._message_correlation_context(
                 msg, fallback_correlation_id=price_event_correlation_id
             ) as correlation_id:
-                event = validate_kafka_event_payload(decoded_payload, MarketPricePersistedEvent)
+                event = validate_kafka_event_payload(
+                    decoded_payload,
+                    MarketPricePersistedEvent,
+                    expected_event_type="MarketPricePersisted",
+                )
                 logger.info(
                     f"Received new market price for {event.security_id} on {event.price_date}."
                 )
@@ -99,7 +107,7 @@ class PriceEventConsumer(BaseConsumer):
                             correlation_id=event_correlation_id,
                         )
 
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, ValidationError, EventContractValidationError) as e:
             logger.error(
                 f"Message validation failed for key '{key}'. Sending to DLQ.", exc_info=True
             )

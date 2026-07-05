@@ -3,7 +3,10 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import PortfolioDayReadyForValuationEvent
+from portfolio_common.events import (
+    GOVERNED_EVENT_SCHEMA_VERSION,
+    PortfolioDayReadyForValuationEvent,
+)
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +52,8 @@ def mock_event() -> PortfolioDayReadyForValuationEvent:
         security_id="SEC-VAL-1",
         valuation_date=date(2026, 3, 7),
         epoch=0,
+        event_type="PortfolioDayReadyForValuation",
+        schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
 
 

@@ -33,6 +33,11 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `docs/standards/risk-based-test-coverage-matrix.v1.json`.
 5. Run `make risk-based-test-coverage-matrix-guard` after adding or changing high-risk behavior,
    test suites, proof-family markers, or CI lane ownership.
+6. Kafka and outbox event contracts are governed by
+   `docs/standards/event-contract-test-pack.v1.json`. Run
+   `make event-contract-test-pack-guard` after adding, renaming, or changing governed event
+   families, direct Kafka topics, payload models, schema versions, consumer validation behavior,
+   producer envelope metadata, DLQ payloads, or replay envelopes.
 
 ## Proof-Family Markers
 

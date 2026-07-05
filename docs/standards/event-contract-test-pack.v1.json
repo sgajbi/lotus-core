@@ -1,0 +1,95 @@
+{
+  "schema_version": "lotus-core.event-contract-test-pack.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#604",
+  "gate_command": "make event-contract-test-pack-guard",
+  "accepted_event_schema_versions": [
+    "1.0.0"
+  ],
+  "required_contract_dimensions": [
+    "topic name and event family",
+    "event type and version",
+    "required payload fields and unknown-field rejection",
+    "correlation, trace, idempotency, source-system, and schema-version metadata",
+    "partition/key policy",
+    "DLQ payload and replay envelope",
+    "compatibility rules for additive and breaking changes"
+  ],
+  "compatibility_policy": {
+    "additive_change": "Allowed only when consumers tolerate the field through an explicit versioned compatibility contract; governed event models otherwise fail fast on unknown fields.",
+    "breaking_change": "Requires a new schema version, updated event-family/direct-topic catalog entry, producer and consumer tests, DLQ/replay evidence, and downstream migration notes.",
+    "unknown_field_policy": "forbid"
+  },
+  "evidence_profiles": {
+    "governed_outbox_event": {
+      "producer_evidence": [
+        "tests/unit/libs/portfolio-common/test_outbox_repository.py",
+        "tests/unit/scripts/test_event_runtime_contract_guard.py",
+        "make event-runtime-contract-guard"
+      ],
+      "consumer_evidence": [
+        "tests/unit/libs/portfolio-common/test_event_mapping.py",
+        "tests/unit/libs/portfolio-common/test_events.py"
+      ],
+      "header_and_lineage_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py"
+      ],
+      "dlq_replay_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/integration/tools/test_dlq_replayer.py"
+      ]
+    },
+    "direct_kafka_topic": {
+      "producer_evidence": [
+        "tests/unit/libs/portfolio-common/test_event_publisher.py",
+        "tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py",
+        "tests/unit/scripts/test_event_runtime_contract_guard.py"
+      ],
+      "consumer_evidence": [
+        "tests/unit/libs/portfolio-common/test_event_mapping.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py"
+      ],
+      "header_and_lineage_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/unit/libs/portfolio-common/test_reprocessing_replay.py"
+      ],
+      "dlq_replay_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/integration/tools/test_dlq_replayer.py"
+      ]
+    }
+  },
+  "event_families": [
+    {"event_type": "PortfolioIngested", "topic": "portfolio.ingested", "schema_model": "PortfolioEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
+    {"event_type": "TransactionIngested", "topic": "transaction.ingested", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"},
+    {"event_type": "MarketPricePersisted", "topic": "market_prices.persisted", "schema_model": "MarketPricePersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from security id"},
+    {"event_type": "RawTransactionPersisted", "topic": "transactions.persisted", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
+    {"event_type": "ProcessedTransactionPersisted", "topic": "transactions.cost.processed", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
+    {"event_type": "InstrumentUpserted", "topic": "instruments.received", "schema_model": "InstrumentEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from instrument or security id"},
+    {"event_type": "DailyPositionSnapshotPersisted", "topic": "valuation.snapshot.persisted", "schema_model": "DailyPositionSnapshotPersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/security/date"},
+    {"event_type": "CashflowCalculated", "topic": "cashflows.calculated", "schema_model": "CashflowCalculatedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
+    {"event_type": "TransactionProcessingCompleted", "topic": "transaction_processing.ready", "schema_model": "TransactionProcessingCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/security/date"},
+    {"event_type": "PortfolioDayReadyForValuation", "topic": "portfolio_security_day.valuation.ready", "schema_model": "PortfolioDayReadyForValuationEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/security/date"},
+    {"event_type": "ValuationDayCompleted", "topic": "portfolio_security_day.valuation.completed", "schema_model": "ValuationDayCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/security/date"},
+    {"event_type": "PositionTimeseriesDayCompleted", "topic": "portfolio_security_day.position_timeseries.completed", "schema_model": "PositionTimeseriesDayCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/security/date"},
+    {"event_type": "PortfolioAggregationDayCompleted", "topic": "portfolio_day.aggregation.completed", "schema_model": "PortfolioAggregationDayCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
+    {"event_type": "FinancialReconciliationRequested", "topic": "portfolio_day.reconciliation.requested", "schema_model": "FinancialReconciliationRequestedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
+    {"event_type": "FinancialReconciliationCompleted", "topic": "portfolio_day.reconciliation.completed", "schema_model": "FinancialReconciliationCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
+    {"event_type": "PortfolioDayControlsEvaluated", "topic": "portfolio_day.controls.evaluated", "schema_model": "PortfolioDayControlsEvaluatedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
+    {"event_type": "ReprocessTransactionReplay", "topic": "transactions.cost.processed", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"}
+  ],
+  "direct_kafka_topics": [
+    {"name": "RawPortfolioReceived", "topic": "portfolios.raw.received", "payload_contract": "PortfolioEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source portfolio id"},
+    {"name": "RawTransactionReceived", "topic": "transactions.raw.received", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source transaction or portfolio id"},
+    {"name": "InstrumentReceived", "topic": "instruments.received", "payload_contract": "InstrumentEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source security id"},
+    {"name": "RawMarketPriceReceived", "topic": "market_prices.raw.received", "payload_contract": "MarketPriceEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source security id"},
+    {"name": "RawFxRateReceived", "topic": "fx_rates.raw.received", "payload_contract": "FxRateEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "currency pair and rate date"},
+    {"name": "RawBusinessDateReceived", "topic": "business_dates.raw.received", "payload_contract": "BusinessDateEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "business date and calendar"},
+    {"name": "TransactionReprocessingRequested", "topic": "transactions.reprocessing.requested", "payload_contract": "transaction_id_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "transaction id"},
+    {"name": "TransactionReprocessingPersistedReplay", "topic": "transactions.persisted", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source transaction or portfolio id"},
+    {"name": "ValuationJobRequested", "topic": "valuation.job.requested", "payload_contract": "valuation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio/security/date"},
+    {"name": "PortfolioAggregationJobRequested", "topic": "portfolio_day.aggregation.job.requested", "payload_contract": "portfolio_aggregation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio/date"},
+    {"name": "PersistenceServiceDlq", "topic": "dlq.persistence_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original message key or NoKey"}
+  ]
+}

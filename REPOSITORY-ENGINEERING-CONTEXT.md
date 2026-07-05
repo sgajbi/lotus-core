@@ -1371,6 +1371,14 @@ Most relevant current governance:
      supportability surfaces must remain operator-only and evidence-backed. Update the catalog and
      its tests before adding, renaming, or relaxing event families, topics, replay/supportability
      paths, or envelope metadata behavior.
+     Event contract test-pack governance now lives in
+     `docs/standards/event-contract-test-pack.v1.json` and is enforced by
+     `make event-contract-test-pack-guard`, which is wired into `make lint`. Current governed
+     event-family consumers use `portfolio_common.event_mapping.validate_kafka_event_payload(...)`
+     with an expected event type so missing `event_type`, missing `schema_version`, unsupported
+     schema versions, and event-type drift are rejected before application handlers run. Do not add
+     a consumer-local permissive parser or local schema-version check; extend the shared validator,
+     event catalog, contract pack, and focused tests instead.
 113. Durable operational records that can persist without request correlation must record explicit
      missing-correlation diagnostics. Use `portfolio_common.durable_correlation` for nullable
      durable records so absent correlation IDs produce `correlation_missing_reason` and a
