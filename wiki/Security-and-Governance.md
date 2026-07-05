@@ -96,6 +96,9 @@ posture evidence, not as a code default.
   every registered write route
 - enterprise capability decisions must use the signed service-principal auth context; unsigned
   `X-Capabilities`, `X-Service-Identity`, or `Authorization` presence is not proof of entitlement
+- upload preview is source-safe by default: `sample_rows` stays empty unless
+  `include_sample_rows=true` is backed by signed `ingestion.uploads.preview_samples.read`, and
+  privileged samples are still field-redacted
 - privileged ingestion ops JWTs must require issuer, audience, expiry, issued-at, replay id,
   principal identity, required ops scope/capability, and `kid`; key rotation uses an active HS256
   key plus previous-key JSON and non-local static-token fallback requires explicit approval

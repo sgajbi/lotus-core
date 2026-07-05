@@ -1205,6 +1205,12 @@ Most relevant current governance:
     normalized capabilities using `ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET`. Do not treat
     `Authorization` or `X-Service-Identity` presence as proof of service identity; unsigned gateway
     capability headers are only data until the auth-context signature verifies.
+95. Bulk upload preview is source-safe by default. `/ingest/uploads/preview` keeps the
+    `sample_rows` field for compatibility but returns an empty list unless the caller submits
+    `include_sample_rows=true` and presents the signed
+    `ingestion.uploads.preview_samples.read` capability. Privileged sample rows must still be
+    redacted for sensitive identifiers, monetary, fee, tax, price, quantity, notional, balance, and
+    market-value fields. Do not reintroduce default normalized row disclosure in preview responses.
 
 ## Context Maintenance Rule
 

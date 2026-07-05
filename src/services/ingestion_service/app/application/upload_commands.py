@@ -19,6 +19,7 @@ class UploadPreviewCommand:
     filename: str
     content: bytes
     sample_size: int = 20
+    include_sample_rows: bool = False
 
 
 @dataclass(frozen=True, slots=True)

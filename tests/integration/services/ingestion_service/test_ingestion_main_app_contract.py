@@ -157,7 +157,11 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     commit_body = components[commit_body_ref.rsplit("/", 1)[-1]]
 
     assert preview_body["properties"]["sample_size"]["description"] == (
-        "Maximum number of valid normalized sample rows to include in the preview."
+        "Maximum number of validation errors and privileged sample rows to include."
+    )
+    assert preview_body["properties"]["include_sample_rows"]["description"] == (
+        "Return redacted valid sample rows. Requires the signed "
+        "ingestion.uploads.preview_samples.read capability."
     )
     assert preview_body["properties"]["file"]["description"] == (
         "CSV or XLSX file containing rows for the selected upload entity family."
@@ -183,7 +187,8 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
     row_error_schema = components["UploadRowError"]
 
     assert preview_schema["properties"]["sample_rows"]["description"] == (
-        "Normalized and validated sample rows for UI preview."
+        "Redacted valid sample rows returned only when include_sample_rows=true and the "
+        "caller has the signed preview-sample capability. Defaults to an empty list."
     )
     assert commit_schema["properties"]["published_rows"]["description"] == (
         "Count of rows published to canonical ingestion topics."

@@ -98,6 +98,13 @@ def authorize_write_request(
     return _runtime.authorize_write_request(method, path, headers)
 
 
+def authorize_capability(
+    headers: dict[str, str],
+    required_capability: str,
+) -> tuple[bool, str | None]:
+    return _runtime.authorize_capability(headers, required_capability)
+
+
 def emit_audit_event(
     *,
     action: str,

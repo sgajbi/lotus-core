@@ -66,8 +66,42 @@ def test_preview_upload_csv_with_mixed_rows(upload_service: UploadIngestionServi
     assert response.total_rows == 2
     assert response.valid_rows == 1
     assert response.invalid_rows == 1
-    assert response.sample_rows[0]["transaction_id"] == "T1"
+    assert response.sample_rows == []
     assert response.errors[0].row_number == 3
+
+
+def test_preview_upload_privileged_sample_rows_are_redacted(
+    upload_service: UploadIngestionService,
+) -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,transaction_type,quantity,price,gross_transaction_amount,trade_currency,currency",
+                "T1,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD",
+            ]
+        )
+    )
+
+    response = upload_service.preview_upload(
+        UploadPreviewCommand(
+            entity_type="transactions",
+            filename="transactions.csv",
+            content=content,
+            sample_size=10,
+            include_sample_rows=True,
+        )
+    )
+
+    row = response.sample_rows[0]
+    assert row["transaction_id"] == "T1"
+    assert row["transaction_type"] == "BUY"
+    assert row["portfolio_id"] == "***REDACTED***"
+    assert row["instrument_id"] == "***REDACTED***"
+    assert row["security_id"] == "***REDACTED***"
+    assert row["quantity"] == "***REDACTED***"
+    assert row["price"] == "***REDACTED***"
+    assert row["gross_transaction_amount"] == "***REDACTED***"
+    assert row["trade_fee"] == "***REDACTED***"
 
 
 def test_preview_upload_xlsx_canonical_headers(upload_service: UploadIngestionService) -> None:
@@ -89,7 +123,7 @@ def test_preview_upload_xlsx_canonical_headers(upload_service: UploadIngestionSe
     assert response.total_rows == 1
     assert response.valid_rows == 1
     assert response.invalid_rows == 0
-    assert response.sample_rows[0]["security_id"] == "SEC1"
+    assert response.sample_rows == []
 
 
 @pytest.mark.asyncio

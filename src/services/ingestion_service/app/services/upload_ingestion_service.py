@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from ..application.errors import ValidationRejected
 from ..application.upload_commands import (
     UploadCommitCommand,
@@ -11,6 +13,42 @@ from ..application.upload_commands import (
 )
 from ..ports.upload_record_publisher import UploadRecordPublisher
 from .upload_validation import BulkUploadValidator, UploadValidationReport
+
+SENSITIVE_SAMPLE_FIELDS = frozenset(
+    {
+        "account_id",
+        "account_number",
+        "amount",
+        "base_market_value",
+        "brokerage",
+        "client_id",
+        "exchange_fee",
+        "gross_transaction_amount",
+        "gst",
+        "instrument_id",
+        "isin",
+        "market_value",
+        "other_fees",
+        "portfolio_id",
+        "price",
+        "quantity",
+        "rate",
+        "security_id",
+        "stamp_duty",
+        "tax_amount",
+        "trade_fee",
+    }
+)
+SENSITIVE_SAMPLE_SUFFIXES = (
+    "_amount",
+    "_balance",
+    "_fee",
+    "_fees",
+    "_market_value",
+    "_notional",
+    "_price",
+)
+REDACTED_SAMPLE_VALUE = "***REDACTED***"
 
 
 class UploadIngestionService:
@@ -37,7 +75,11 @@ class UploadIngestionService:
             total_rows=validation.total_rows,
             valid_rows=len(validation.valid_models),
             invalid_rows=len(validation.errors),
-            sample_rows=validation.valid_rows[: command.sample_size],
+            sample_rows=(
+                _redacted_sample_rows(validation.valid_rows[: command.sample_size])
+                if command.include_sample_rows
+                else []
+            ),
             errors=validation.errors[: command.sample_size],
         )
 
@@ -96,3 +138,14 @@ class UploadIngestionService:
             skipped_rows=len(validation.errors),
             message="Upload committed and queued for processing.",
         )
+
+
+def _redacted_sample_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{key: _redacted_sample_value(key, value) for key, value in row.items()} for row in rows]
+
+
+def _redacted_sample_value(field_name: str, value: Any) -> Any:
+    normalized = field_name.strip().lower()
+    if normalized in SENSITIVE_SAMPLE_FIELDS or normalized.endswith(SENSITIVE_SAMPLE_SUFFIXES):
+        return REDACTED_SAMPLE_VALUE
+    return value

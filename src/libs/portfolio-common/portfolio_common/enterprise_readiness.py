@@ -214,6 +214,25 @@ class EnterpriseReadinessRuntime:
     ) -> tuple[bool, str | None]:
         return self.authorize_request(method, path, headers)
 
+    def authorize_capability(
+        self,
+        headers: dict[str, str],
+        required_capability: str,
+    ) -> tuple[bool, str | None]:
+        normalized_headers = _normalize_headers(headers)
+        missing_headers = _missing_required_headers(normalized_headers)
+        if missing_headers:
+            return False, f"missing_headers:{','.join(missing_headers)}"
+
+        if not _has_service_identity(normalized_headers):
+            return False, "missing_service_identity"
+
+        verified_principal = _verified_service_principal(normalized_headers, self.load_settings())
+        if isinstance(verified_principal, str):
+            return False, verified_principal
+
+        return self._authorize_required_capability(required_capability, verified_principal)
+
     def authorize_request(
         self, method: str, path: str, headers: dict[str, str]
     ) -> tuple[bool, str | None]:
