@@ -152,3 +152,26 @@ def test_deterministic_replay_fingerprint_is_stable_across_payload_key_order() -
 
     assert left == right
     assert len(left) == 64
+
+
+def test_deterministic_replay_fingerprint_can_exclude_dlq_event_identity() -> None:
+    first = deterministic_replay_fingerprint(
+        event_id="event-001",
+        correlation_id="corr-001",
+        job_id="job-001",
+        endpoint="/ingest/transactions",
+        payload={"transactions": [{"transaction_id": "T1"}]},
+        idempotency_key="idem-001",
+        include_event_id=False,
+    )
+    second = deterministic_replay_fingerprint(
+        event_id="event-002",
+        correlation_id="corr-001",
+        job_id="job-001",
+        endpoint="/ingest/transactions",
+        payload={"transactions": [{"transaction_id": "T1"}]},
+        idempotency_key="idem-001",
+        include_event_id=False,
+    )
+
+    assert first == second

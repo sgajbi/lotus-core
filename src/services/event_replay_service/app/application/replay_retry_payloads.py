@@ -40,15 +40,17 @@ def deterministic_replay_fingerprint(
     payload: dict[str, Any] | None,
     idempotency_key: str | None,
     alternate_lookup_key: str | None = None,
+    include_event_id: bool = True,
 ) -> str:
     basis = {
-        "event_id": event_id,
         "correlation_id": correlation_id,
         "job_id": job_id,
         "endpoint": endpoint,
         "idempotency_key": idempotency_key,
         "payload": payload or {},
     }
+    if include_event_id:
+        basis["event_id"] = event_id
     if alternate_lookup_key is not None:
         basis["alternate_lookup_key"] = alternate_lookup_key
     canonical = json.dumps(basis, sort_keys=True, separators=(",", ":"), default=str)

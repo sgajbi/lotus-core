@@ -298,12 +298,27 @@ class IngestionRetryCommandService:
                 replay_reason=str(exc),
                 requested_by=requested_by,
             )
-            await self.ingestion_job_service.mark_failed(
+            failure_recorded = await self.ingestion_job_service.mark_failed(
                 job_id,
                 str(exc),
                 failure_phase="retry_publish",
                 failed_record_keys=retry_request.record_keys,
             )
+            if not failure_recorded:
+                raise ReplayCommandError(
+                    HTTP_CONFLICT,
+                    ingestion_job_retry_problem_detail(
+                        code="INGESTION_RETRY_FAILURE_BOOKKEEPING_REJECTED",
+                        message=(
+                            "Ingestion job retry publish failed, but the failure state could not "
+                            "be recorded because the job state changed concurrently."
+                        ),
+                        outcome="bookkeeping_conflict",
+                        remediation=INGESTION_JOB_RETRY_REMEDIATIONS["bookkeeping_conflict"],
+                        replay_audit_id=replay_audit_id,
+                        replay_fingerprint=replay_fingerprint,
+                    ),
+                ) from exc
             raise ReplayCommandError(
                 HTTP_INTERNAL_SERVER_ERROR,
                 ingestion_job_retry_problem_detail(
