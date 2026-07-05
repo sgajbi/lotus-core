@@ -227,15 +227,37 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 }
             )
 
-        async def mark_retried(self, job_id: str) -> None:
+        async def mark_retried(self, job_id: str) -> bool:
             if job_id in self.fail_mark_retried_job_ids:
                 raise RuntimeError("retry accounting write failed")
             if job_id not in self.jobs:
-                return
+                return False
             record = self.jobs[job_id]
             record.retry_count += 1
             record.last_retried_at = datetime.now(UTC)
             self.jobs[job_id] = record
+            return True
+
+        async def mark_retried_and_queued(self, job_id: str) -> bool:
+            if self.fail_next_mark_queued:
+                self.fail_next_mark_queued = False
+                raise RuntimeError("queue state write failed")
+            if job_id in self.fail_mark_queued_job_ids:
+                raise RuntimeError("queue state write failed")
+            if job_id in self.fail_mark_retried_job_ids:
+                raise RuntimeError("retry accounting write failed")
+            if job_id not in self.jobs:
+                return False
+            record = self.jobs[job_id]
+            if record.status not in {"accepted", "queued", "failed"}:
+                return False
+            record.status = "queued"
+            record.failure_reason = None
+            record.completed_at = datetime.now(UTC)
+            record.retry_count += 1
+            record.last_retried_at = datetime.now(UTC)
+            self.jobs[job_id] = record
+            return True
 
         async def get_job(self, job_id: str) -> IngestionJobResponse | None:
             return self.jobs.get(job_id)
@@ -253,6 +275,24 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                 request_payload=self.job_payloads.get(job_id),
                 submitted_at=record.submitted_at,
             )
+
+        async def get_latest_replayable_job_by_correlation_id(
+            self,
+            correlation_id: str,
+        ) -> IngestionJobResponse | None:
+            replayable_jobs = [
+                job
+                for job in self.jobs.values()
+                if job.correlation_id == correlation_id
+                and job.status in {"failed", "queued", "accepted"}
+            ]
+            if not replayable_jobs:
+                return None
+            return sorted(
+                replayable_jobs,
+                key=lambda job: (job.submitted_at, job.job_id),
+                reverse=True,
+            )[0]
 
         async def list_jobs(
             self,
