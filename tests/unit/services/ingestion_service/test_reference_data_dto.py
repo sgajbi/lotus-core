@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
+from src.services.ingestion_service.app.DTOs.ingestion_validation_errors import (
+    DUPLICATE_SOURCE_KEY,
+    INVALID_EFFECTIVE_WINDOW,
+    INVALID_QUALITY_STATUS,
+    INVALID_THRESHOLD_PAIR,
+    MISSING_REQUIRED_LINEAGE,
+    validate_required_lineage,
+)
 from src.services.ingestion_service.app.DTOs.reference_data_dto import (
     BenchmarkDefinitionRecord,
     BenchmarkReturnSeriesRecord,
@@ -374,8 +382,36 @@ def test_reference_data_source_observation_accepts_legacy_lineage_aliases() -> N
 
 
 def test_reference_data_source_observation_rejects_blank_quality_status() -> None:
-    with pytest.raises(ValidationError, match="quality_status must not be blank"):
+    with pytest.raises(ValidationError, match="quality_status must not be blank") as exc_info:
         BenchmarkDefinitionRecord.model_validate(_benchmark_definition(quality_status="  "))
+
+    error = exc_info.value.errors()[0]
+    assert error["type"] == INVALID_QUALITY_STATUS
+    assert error["ctx"]["field_path"] == "quality_status"
+
+
+def test_ingestion_validation_taxonomy_returns_missing_lineage_code() -> None:
+    class LineageRequiredRecord(BaseModel):
+        source_system: str | None = None
+        source_record_id: str | None = None
+        observed_at: str | None = None
+
+        @model_validator(mode="after")
+        def validate_lineage(self) -> "LineageRequiredRecord":
+            validate_required_lineage(
+                source_system=self.source_system,
+                source_record_id=self.source_record_id,
+                observed_at=self.observed_at,
+            )
+            return self
+
+    with pytest.raises(ValidationError) as exc_info:
+        LineageRequiredRecord.model_validate({"source_system": "tax-reference"})
+
+    error = exc_info.value.errors()[0]
+    assert error["type"] == MISSING_REQUIRED_LINEAGE
+    assert error["ctx"]["field_path"] == "source_record_id"
+    assert "source_system" in error["ctx"]["remediation"]
 
 
 @pytest.mark.parametrize(
@@ -578,10 +614,12 @@ def test_sustainability_preference_profile_validates_bounds_and_substance() -> N
 def test_sustainability_preference_ingestion_rejects_duplicate_effective_profiles() -> None:
     duplicate = _sustainability_profile()
 
-    with pytest.raises(ValidationError, match="duplicate effective records"):
+    with pytest.raises(ValidationError, match="duplicate effective records") as exc_info:
         SustainabilityPreferenceProfileIngestionRequest.model_validate(
             {"sustainability_preferences": [duplicate, dict(duplicate)]}
         )
+
+    assert exc_info.value.errors()[0]["type"] == DUPLICATE_SOURCE_KEY
 
 
 def test_client_tax_profile_validates_unknown_status_has_no_tax_detail() -> None:
@@ -605,8 +643,9 @@ def test_client_tax_profile_ingestion_rejects_duplicate_effective_profiles() -> 
 
 
 def test_client_tax_rule_set_validates_threshold_pair_and_substance() -> None:
-    with pytest.raises(ValidationError, match="threshold_currency is required"):
+    with pytest.raises(ValidationError, match="threshold_currency is required") as exc_info:
         ClientTaxRuleSetRecord.model_validate(_tax_rule_set(threshold_amount="250000.0000"))
+    assert exc_info.value.errors()[0]["type"] == INVALID_THRESHOLD_PAIR
 
     with pytest.raises(ValidationError, match="threshold_amount is required"):
         ClientTaxRuleSetRecord.model_validate(
@@ -627,19 +666,25 @@ def test_client_tax_rule_set_validates_threshold_pair_and_substance() -> None:
 
 
 def test_client_tax_rule_set_validates_effective_window() -> None:
-    with pytest.raises(ValidationError, match="effective_to must be on or after"):
+    with pytest.raises(ValidationError, match="effective_to must be on or after") as exc_info:
         ClientTaxRuleSetRecord.model_validate(
             _tax_rule_set(effective_from="2026-04-10", effective_to="2026-04-01")
         )
+
+    error = exc_info.value.errors()[0]
+    assert error["type"] == INVALID_EFFECTIVE_WINDOW
+    assert error["ctx"]["field_path"] == "effective_to"
 
 
 def test_client_tax_rule_set_ingestion_rejects_duplicate_effective_rules() -> None:
     duplicate = _tax_rule_set()
 
-    with pytest.raises(ValidationError, match="duplicate effective records"):
+    with pytest.raises(ValidationError, match="duplicate effective records") as exc_info:
         ClientTaxRuleSetIngestionRequest.model_validate(
             {"tax_rule_sets": [duplicate, dict(duplicate)]}
         )
+
+    assert exc_info.value.errors()[0]["type"] == DUPLICATE_SOURCE_KEY
 
 
 def test_client_income_needs_schedule_validates_effective_window() -> None:

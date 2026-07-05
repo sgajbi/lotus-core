@@ -111,3 +111,6 @@ If one of these fails, the change is not validated, even if a narrow pytest targ
 10. keep observability contract proof centralized across health/version surfaces, metrics,
     correlation/request/trace headers, route-template labels, structured logs, and source-safe
     diagnostics
+11. keep ingestion validation errors machine-readable through the shared taxonomy and prove upload
+    row-level `code`, `field_path`, `record_key`, remediation, safe lineage, and OpenAPI shape when
+    changing DTO domain rules

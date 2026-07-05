@@ -194,6 +194,16 @@ async def test_openapi_describes_upload_parameters_and_shared_schemas(async_test
         "Count of rows published to canonical ingestion topics."
     )
     assert row_error_schema["properties"]["message"]["examples"] == ["baseCurrency is required"]
+    assert row_error_schema["properties"]["code"]["description"] == (
+        "Stable machine-readable ingestion validation code."
+    )
+    assert row_error_schema["properties"]["field_path"]["examples"] == ["effective_to"]
+    assert row_error_schema["properties"]["record_key"]["examples"] == [
+        "source_record_id:tax-rule-2026-001"
+    ]
+    assert row_error_schema["properties"]["source_lineage"]["description"].startswith(
+        "Source-safe lineage fields"
+    )
 
 
 async def test_openapi_describes_portfolio_bundle_parameters_and_shared_schema(async_test_client):

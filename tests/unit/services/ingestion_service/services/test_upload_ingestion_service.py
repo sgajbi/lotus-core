@@ -154,6 +154,8 @@ async def test_commit_upload_rejects_partial_by_default(
     assert exc.value.detail["message"] == (
         "Upload contains invalid rows. Fix errors or use allow_partial=true."
     )
+    assert exc.value.detail["errors"][0]["code"] == "SCHEMA_VALIDATION_FAILED"
+    assert exc.value.detail["errors"][0]["record_key"] == "transaction_id:T2"
     upload_service._publisher.publish_records.assert_not_awaited()
 
 

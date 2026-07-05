@@ -130,14 +130,22 @@ def test_upload_preview_response_from_result_preserves_api_contract() -> None:
         )
     )
 
-    assert response.model_dump() == {
+    assert response.model_dump(exclude_none=True) == {
         "entity_type": "transactions",
         "file_format": "csv",
         "total_rows": 2,
         "valid_rows": 1,
         "invalid_rows": 1,
         "sample_rows": [{"transaction_id": "T1"}],
-        "errors": [{"row_number": 3, "message": "bad row"}],
+        "errors": [
+            {
+                "row_number": 3,
+                "message": "bad row",
+                "code": "SCHEMA_VALIDATION_FAILED",
+                "severity": "error",
+                "source_lineage": {},
+            }
+        ],
     }
 
 

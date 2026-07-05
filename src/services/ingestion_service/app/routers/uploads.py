@@ -172,7 +172,16 @@ def upload_preview_response_from_result(
         invalid_rows=result.invalid_rows,
         sample_rows=result.sample_rows,
         errors=[
-            UploadRowError(row_number=error.row_number, message=error.message)
+            UploadRowError(
+                row_number=error.row_number,
+                message=error.message,
+                code=error.code,
+                severity=error.severity,
+                field_path=error.field_path,
+                record_key=error.record_key,
+                remediation=error.remediation,
+                source_lineage=error.source_lineage,
+            )
             for error in result.errors
         ],
     )
@@ -316,6 +325,7 @@ def _authorize_preview_sample_rows(request: Request) -> None:
 @router.post(
     "/ingest/uploads/preview",
     response_model=UploadPreviewResponse,
+    response_model_exclude_none=True,
     status_code=status.HTTP_200_OK,
     responses={
         status.HTTP_400_BAD_REQUEST: {
@@ -411,6 +421,7 @@ async def preview_upload(
 @router.post(
     "/ingest/uploads/commit",
     response_model=UploadCommitResponse,
+    response_model_exclude_none=True,
     status_code=status.HTTP_202_ACCEPTED,
     responses={
         status.HTTP_400_BAD_REQUEST: {

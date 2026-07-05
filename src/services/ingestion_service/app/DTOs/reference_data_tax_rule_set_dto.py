@@ -7,6 +7,14 @@ from typing import Annotated, Literal, cast
 from portfolio_common.currency_codes import normalize_optional_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .ingestion_validation_errors import (
+    INVALID_THRESHOLD_PAIR,
+    MISSING_RULE_EVIDENCE,
+    raise_ingestion_validation_error,
+    validate_effective_window,
+    validate_unique_records,
+)
+
 NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 RatioDecimal = Annotated[Decimal, Field(ge=Decimal(0), le=Decimal(1))]
 
@@ -16,8 +24,7 @@ def _validate_tax_rule_effective_window(
     effective_from: date,
     effective_to: date | None,
 ) -> None:
-    if effective_to is not None and effective_to < effective_from:
-        raise ValueError("effective_to must be on or after effective_from")
+    validate_effective_window(effective_from=effective_from, effective_to=effective_to)
 
 
 def _validate_tax_rule_threshold_pair(
@@ -26,9 +33,17 @@ def _validate_tax_rule_threshold_pair(
     threshold_currency: str | None,
 ) -> None:
     if threshold_amount is not None and not threshold_currency:
-        raise ValueError("threshold_currency is required when threshold_amount is supplied")
+        raise_ingestion_validation_error(
+            INVALID_THRESHOLD_PAIR,
+            field_path="threshold_currency",
+            message="threshold_currency is required when threshold_amount is supplied",
+        )
     if threshold_currency and threshold_amount is None:
-        raise ValueError("threshold_amount is required when threshold_currency is supplied")
+        raise_ingestion_validation_error(
+            INVALID_THRESHOLD_PAIR,
+            field_path="threshold_amount",
+            message="threshold_amount is required when threshold_currency is supplied",
+        )
 
 
 def _tax_rule_has_bounded_evidence(
@@ -66,7 +81,11 @@ def _validate_tax_rule_evidence(
         threshold_amount=threshold_amount,
     ):
         return
-    raise ValueError("tax rule set records must carry bounded rule evidence")
+    raise_ingestion_validation_error(
+        MISSING_RULE_EVIDENCE,
+        field_path="tax_rule_sets",
+        message="tax rule set records must carry bounded rule evidence",
+    )
 
 
 class ClientTaxRuleSetRecord(BaseModel):
@@ -154,8 +173,11 @@ class ClientTaxRuleSetIngestionRequest(BaseModel):
             )
             for rule in self.tax_rule_sets
         ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("tax_rule_sets contains duplicate effective records")
+        validate_unique_records(
+            keys,
+            field_path="tax_rule_sets",
+            message="tax_rule_sets contains duplicate effective records",
+        )
         return self
 
     model_config = ConfigDict()

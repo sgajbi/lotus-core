@@ -6,6 +6,14 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .ingestion_validation_errors import (
+    INVALID_ALLOCATION_BOUNDS,
+    MISSING_PROFILE_SUBSTANCE,
+    raise_ingestion_validation_error,
+    validate_effective_window,
+    validate_unique_records,
+)
+
 AllocationBound = Annotated[Decimal, Field(ge=Decimal(0), le=Decimal(1))]
 
 
@@ -76,16 +84,18 @@ class SustainabilityPreferenceProfileIngestionRequest(BaseModel):
             )
             for profile in self.sustainability_preferences
         ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("sustainability_preferences contains duplicate effective records")
+        validate_unique_records(
+            keys,
+            field_path="sustainability_preferences",
+            message="sustainability_preferences contains duplicate effective records",
+        )
         return self
 
     model_config = ConfigDict()
 
 
 def _validate_effective_window(effective_from: date, effective_to: date | None) -> None:
-    if effective_to is not None and effective_to < effective_from:
-        raise ValueError("effective_to must be on or after effective_from")
+    validate_effective_window(effective_from=effective_from, effective_to=effective_to)
 
 
 def _validate_allocation_bounds(
@@ -96,7 +106,11 @@ def _validate_allocation_bounds(
         and maximum_allocation is not None
         and minimum_allocation > maximum_allocation
     ):
-        raise ValueError("minimum_allocation must be less than or equal to maximum_allocation")
+        raise_ingestion_validation_error(
+            INVALID_ALLOCATION_BOUNDS,
+            field_path="minimum_allocation",
+            message="minimum_allocation must be less than or equal to maximum_allocation",
+        )
 
 
 def _validate_preference_substance(
@@ -106,6 +120,10 @@ def _validate_preference_substance(
     minimum_allocation: Decimal | None,
 ) -> None:
     if not (exclusion_codes or positive_tilt_codes or minimum_allocation is not None):
-        raise ValueError(
-            "sustainability preference must include an exclusion, tilt, or allocation bound"
+        raise_ingestion_validation_error(
+            MISSING_PROFILE_SUBSTANCE,
+            field_path="sustainability_preferences",
+            message=(
+                "sustainability preference must include an exclusion, tilt, or allocation bound"
+            ),
         )

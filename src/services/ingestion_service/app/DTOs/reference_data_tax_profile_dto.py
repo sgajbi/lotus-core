@@ -6,6 +6,13 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .ingestion_validation_errors import (
+    INVALID_TAX_STATUS_DETAIL,
+    raise_ingestion_validation_error,
+    validate_effective_window,
+    validate_unique_records,
+)
+
 RatioDecimal = Annotated[Decimal, Field(ge=Decimal(0), le=Decimal(1))]
 
 
@@ -14,8 +21,7 @@ def _validate_tax_profile_effective_window(
     effective_from: date,
     effective_to: date | None,
 ) -> None:
-    if effective_to is not None and effective_to < effective_from:
-        raise ValueError("effective_to must be on or after effective_from")
+    validate_effective_window(effective_from=effective_from, effective_to=effective_to)
 
 
 def _validate_unknown_tax_status_detail(
@@ -32,7 +38,11 @@ def _validate_unknown_tax_status_detail(
         income_tax_applicable=income_tax_applicable,
         treaty_codes=treaty_codes,
     ):
-        raise ValueError("UNKNOWN tax_status cannot carry applicable tax detail")
+        raise_ingestion_validation_error(
+            INVALID_TAX_STATUS_DETAIL,
+            field_path="tax_status",
+            message="UNKNOWN tax_status cannot carry applicable tax detail",
+        )
 
 
 def _tax_profile_has_applicable_detail(
@@ -123,8 +133,11 @@ class ClientTaxProfileIngestionRequest(BaseModel):
             )
             for profile in self.tax_profiles
         ]
-        if len(keys) != len(set(keys)):
-            raise ValueError("tax_profiles contains duplicate effective records")
+        validate_unique_records(
+            keys,
+            field_path="tax_profiles",
+            message="tax_profiles contains duplicate effective records",
+        )
         return self
 
     model_config = ConfigDict()

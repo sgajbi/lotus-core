@@ -14,6 +14,8 @@ from portfolio_common.transaction_fee_components import (
 )
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .ingestion_validation_errors import BLANK_IDENTIFIER, raise_ingestion_validation_error
+
 NonNegativeDecimal = Annotated[Decimal, Field(ge=Decimal(0))]
 PositiveDecimal = Annotated[Decimal, Field(gt=Decimal(0))]
 
@@ -62,7 +64,11 @@ class Transaction(BaseModel):
             return value
         identifier = value.strip()
         if not identifier:
-            raise ValueError("Identifier must not be blank.")
+            raise_ingestion_validation_error(
+                BLANK_IDENTIFIER,
+                field_path="identifier",
+                message="Identifier must not be blank.",
+            )
         return identifier
 
     quantity: NonNegativeDecimal = Field(
