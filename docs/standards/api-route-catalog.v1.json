@@ -2265,6 +2265,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2324,6 +2329,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -2385,6 +2395,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2444,6 +2459,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -2505,6 +2525,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "none",
           "description": "Business-date payload violated validation or policy rules."
@@ -2559,6 +2584,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -2620,6 +2650,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2679,6 +2714,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -2740,6 +2780,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2800,6 +2845,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2854,6 +2904,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -2915,6 +2970,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -2974,6 +3034,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3035,6 +3100,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3095,6 +3165,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3149,6 +3224,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3210,6 +3290,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3270,6 +3355,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3324,6 +3414,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3385,6 +3480,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3444,6 +3544,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3505,6 +3610,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "410",
           "schema": "none",
           "description": "Portfolio bundle adapter mode disabled for this environment."
@@ -3565,6 +3675,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3619,6 +3734,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3680,6 +3800,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3739,6 +3864,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3800,6 +3930,11 @@
       ],
       "error_models": [
         {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
+        {
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
@@ -3859,6 +3994,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -3974,6 +4114,11 @@
         }
       ],
       "error_models": [
+        {
+          "status_code": "409",
+          "schema": "none",
+          "description": "Idempotency key was reused for the same endpoint with a different canonical request payload."
+        },
         {
           "status_code": "422",
           "schema": "HTTPValidationError",
@@ -4209,7 +4354,7 @@
         {
           "status_code": "409",
           "schema": "none",
-          "description": "Reprocessing publication is currently blocked by policy controls."
+          "description": "Reprocessing publication is blocked by policy controls or the idempotency key was reused with a different canonical request payload."
         },
         {
           "status_code": "422",

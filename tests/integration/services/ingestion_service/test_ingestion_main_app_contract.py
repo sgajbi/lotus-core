@@ -244,7 +244,9 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
     reprocess = schema["paths"]["/reprocess/transactions"]["post"]
     components = schema["components"]["schemas"]
 
-    conflict = reprocess["responses"]["409"]["content"]["application/json"]["example"]
+    conflict = reprocess["responses"]["409"]["content"]["application/json"]["examples"][
+        "policy_blocked"
+    ]["value"]
     assert conflict["detail"]["code"] == "INGESTION_REPLAY_BLOCKED"
 
     rate_limited = reprocess["responses"]["429"]["content"]["application/json"]["example"]
@@ -265,6 +267,41 @@ async def test_openapi_describes_reprocessing_parameters_and_shared_schema(async
         "Asynchronous ingestion job identifier used for client polling, "
         "replay controls, and operational support."
     )
+
+
+async def test_openapi_describes_ingestion_idempotency_conflict_response(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+
+    assert response.status_code == 200
+    paths = response.json()["paths"]
+    job_backed_routes = [
+        "/ingest/portfolios",
+        "/ingest/transactions",
+        "/ingest/instruments",
+        "/ingest/market-prices",
+        "/ingest/fx-rates",
+        "/ingest/business-dates",
+        "/ingest/portfolio-bundle",
+        "/ingest/benchmark-assignments",
+        "/ingest/benchmark-definitions",
+        "/ingest/benchmark-compositions",
+        "/ingest/indices",
+        "/ingest/index-price-series",
+        "/ingest/index-return-series",
+        "/ingest/benchmark-return-series",
+        "/ingest/risk-free-series",
+        "/reprocess/transactions",
+    ]
+
+    for route in job_backed_routes:
+        response_409 = paths[route]["post"]["responses"]["409"]["content"]["application/json"]
+        if "example" in response_409:
+            detail = response_409["example"]["detail"]
+        else:
+            detail = response_409["examples"]["idempotency_conflict"]["value"]["detail"]
+        assert detail["code"] == "INGESTION_IDEMPOTENCY_CONFLICT"
+        assert detail["endpoint"] == "/ingest/transactions"
+        assert detail["idempotency_key"]
 
 
 async def test_openapi_describes_remaining_ingestion_operational_responses(async_test_client):

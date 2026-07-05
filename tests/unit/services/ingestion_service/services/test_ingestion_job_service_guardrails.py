@@ -489,8 +489,9 @@ async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints
     class _FakeSession:
         async def execute(self, _stmt):
             return [
-                ("key_shared", 3, 2, ["positions", "transactions"], now, now),
-                ("key_single", 1, 1, ["transactions"], now, now),
+                ("key_conflict", 3, 1, 2, 2, ["transactions"], now, now),
+                ("key_shared", 3, 2, 1, 1, ["positions", "transactions"], now, now),
+                ("key_single", 1, 1, 1, 1, ["transactions"], now, now),
             ]
 
     monkeypatch.setattr(
@@ -499,14 +500,21 @@ async def test_get_idempotency_diagnostics_counts_collisions_and_sorts_endpoints
         lambda: _SingleSessionAsyncIterable(_FakeSession()),
     )
 
-    response = await service.get_idempotency_diagnostics(lookback_minutes=60, limit=2)
+    response = await service.get_idempotency_diagnostics(lookback_minutes=60, limit=3)
 
-    assert response.total_keys == 2
-    assert response.collisions == 1
-    assert response.keys[0].idempotency_key == "key_shared"
+    assert response.total_keys == 3
+    assert response.collisions == 2
+    assert response.keys[0].idempotency_key == "key_conflict"
     assert response.keys[0].collision_detected is True
-    assert response.keys[0].endpoints == ["positions", "transactions"]
-    assert response.keys[1].collision_detected is False
+    assert response.keys[0].payload_conflict_detected is True
+    assert response.keys[0].reuse_classification == "conflicting_payload_reuse"
+    assert response.keys[1].idempotency_key == "key_shared"
+    assert response.keys[1].collision_detected is True
+    assert response.keys[1].payload_conflict_detected is False
+    assert response.keys[1].reuse_classification == "cross_endpoint_reuse"
+    assert response.keys[1].endpoints == ["positions", "transactions"]
+    assert response.keys[2].collision_detected is False
+    assert response.keys[2].reuse_classification == "single_record_or_benign_replay"
 
 
 async def test_record_consumer_dlq_replay_audit_increments_duplicate_blocked_metric(

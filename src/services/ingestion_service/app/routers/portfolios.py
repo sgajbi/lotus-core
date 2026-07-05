@@ -19,6 +19,7 @@ from ..services.ingestion_service import (
 )
 from .job_bookkeeping import mark_job_queued_after_publish_or_raise
 from .publish_errors import (
+    ingestion_idempotency_conflict_response,
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
     raise_ingestion_publish_unavailable,
@@ -51,6 +52,7 @@ PORTFOLIO_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
+        status.HTTP_409_CONFLICT: ingestion_idempotency_conflict_response(),
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the portfolio request.",
             "content": {"application/json": {"example": PORTFOLIO_RATE_LIMIT_EXCEEDED_EXAMPLE}},

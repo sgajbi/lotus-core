@@ -232,6 +232,21 @@ class IngestionIdempotencyDiagnosticItemResponse(BaseModel):
         description="Number of distinct ingestion endpoints using this key.",
         examples=[1],
     )
+    payload_fingerprint_count: int = Field(
+        ge=0,
+        description=(
+            "Number of distinct canonical request payload fingerprints observed for this key."
+        ),
+        examples=[1],
+    )
+    max_payload_fingerprints_per_endpoint: int = Field(
+        ge=0,
+        description=(
+            "Maximum distinct canonical payload fingerprints observed for any one endpoint "
+            "using this key."
+        ),
+        examples=[1],
+    )
     endpoints: list[str] = Field(
         description="Distinct ingestion endpoints observed for this idempotency key.",
         examples=[["/ingest/transactions"]],
@@ -245,8 +260,25 @@ class IngestionIdempotencyDiagnosticItemResponse(BaseModel):
         examples=["2026-03-01T07:11:01.127Z"],
     )
     collision_detected: bool = Field(
-        description="True when same key is reused across multiple endpoints.",
+        description=(
+            "True when the key is reused across multiple endpoints or historical rows show "
+            "same-endpoint conflicting payload fingerprints."
+        ),
         examples=[False],
+    )
+    payload_conflict_detected: bool = Field(
+        description=(
+            "True when historical rows show the same endpoint and idempotency key with more "
+            "than one canonical payload fingerprint."
+        ),
+        examples=[False],
+    )
+    reuse_classification: str = Field(
+        description=(
+            "Stable operator classification: conflicting_payload_reuse, cross_endpoint_reuse, "
+            "or single_record_or_benign_replay."
+        ),
+        examples=["single_record_or_benign_replay"],
     )
 
 
