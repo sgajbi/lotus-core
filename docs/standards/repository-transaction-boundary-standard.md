@@ -36,8 +36,9 @@ repository modules for direct `commit()` or `rollback()` calls and fails unless 
 as a transitional exception. It also fails stale exceptions after a repository no longer owns direct
 transaction completion.
 
-Generated `build/lib` copies are intentionally excluded from this guard while issue #649 tracks
-removing or governing tracked generated artifacts.
+Generated `build/lib` copies are intentionally excluded from this guard as disposable local build
+artifacts. They are not authored source truth and should remain untracked under the generated
+artifact cleanup policy.
 
 ## Runtime Boundary
 
