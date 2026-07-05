@@ -46,6 +46,12 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    quarantine are governed by `docs/standards/test-lane-governance.v1.json`. Run
    `make test-lane-governance-guard` after changing pytest markers, `scripts/test_manifest.py`,
    Make test targets, quarantine entries, or CI lane ownership.
+9. Concurrency, duplicate-delivery, replay/live collision, outbox partial-delivery, and stale-job
+   recovery proof is governed by
+   `docs/standards/concurrency-duplicate-delivery-test-pack.v1.json`. Run
+   `make concurrency-duplicate-delivery-guard` after adding or changing idempotency keys,
+   consumer replay behavior, outbox claim/result handling, worker claim/reset logic, epoch fences,
+   dirty-window propagation, or correction/cancellation recalculation behavior.
 
 ## Proof-Family Markers
 

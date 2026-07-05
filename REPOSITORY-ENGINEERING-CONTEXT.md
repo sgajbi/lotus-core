@@ -357,6 +357,16 @@ Current repository posture:
     `scripts/test_manifest.py`, Make test targets, flaky-test quarantine, deterministic-time
     guidance, or integration/E2E lane ownership must update the contract and keep unit lanes
     excluding `integration_db`, `db_direct`, `live_worker`, and `e2e` runtime markers.
+    Concurrency and duplicate-delivery proof now lives in
+    `docs/standards/concurrency-duplicate-delivery-test-pack.v1.json` and is enforced by
+    `make concurrency-duplicate-delivery-guard` through `make lint`. When touching idempotency
+    fences, semantic event identity, consumer replay, outbox claim/result handling, worker
+    claim/reset logic, epoch fences, dirty-window propagation, or correction/cancellation
+    recalculation behavior, update the pack and add deterministic tests that assert durable final
+    state, emitted event count where applicable, version/epoch behavior where applicable, and
+    operator-visible job/retry state. Do not rely on unbounded sleeps as the primary concurrency
+    trigger; use barriers, callback outcomes, database constraints, claim tokens, and explicit
+    transactions.
 41. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
