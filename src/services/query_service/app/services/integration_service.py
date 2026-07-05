@@ -80,26 +80,16 @@ from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
 from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
-from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
-from .client_restriction_profile import resolve_client_restriction_profile_response
-from .client_tax_profile import resolve_client_tax_profile_response
-from .client_tax_rule_set import resolve_client_tax_rule_set_response
+from .client_profile_income_integration_service import ClientProfileIncomeIntegrationService
 from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_hedge_integration_service import ExternalHedgeIntegrationService
 from .integration_policy import resolve_effective_policy_response
-from .liquidity_reserve_requirement import (
-    resolve_liquidity_reserve_requirement_response,
-)
 from .page_token_codec import PageTokenCodec
-from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
     resolve_portfolio_manager_book_membership_response,
-)
-from .sustainability_preference_profile import (
-    resolve_sustainability_preference_profile_response,
 )
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
@@ -166,6 +156,9 @@ class IntegrationService:
             reference_repository_provider=lambda: self._reference_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
+        )
+        self._client_profile_income_service = ClientProfileIncomeIntegrationService(
+            reference_repository_provider=lambda: self._reference_repository,
         )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
@@ -252,8 +245,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ClientRestrictionProfileRequest,
     ) -> ClientRestrictionProfileResponse | None:
-        return await resolve_client_restriction_profile_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_client_restriction_profile(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -263,8 +255,7 @@ class IntegrationService:
         portfolio_id: str,
         request: SustainabilityPreferenceProfileRequest,
     ) -> SustainabilityPreferenceProfileResponse | None:
-        return await resolve_sustainability_preference_profile_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_sustainability_preference_profile(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -274,8 +265,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ClientTaxProfileRequest,
     ) -> ClientTaxProfileResponse | None:
-        return await resolve_client_tax_profile_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_client_tax_profile(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -285,8 +275,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ClientTaxRuleSetRequest,
     ) -> ClientTaxRuleSetResponse | None:
-        return await resolve_client_tax_rule_set_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_client_tax_rule_set(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -296,8 +285,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ClientIncomeNeedsScheduleRequest,
     ) -> ClientIncomeNeedsScheduleResponse | None:
-        return await resolve_client_income_needs_schedule_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_client_income_needs_schedule(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -307,8 +295,7 @@ class IntegrationService:
         portfolio_id: str,
         request: LiquidityReserveRequirementRequest,
     ) -> LiquidityReserveRequirementResponse | None:
-        return await resolve_liquidity_reserve_requirement_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_liquidity_reserve_requirement(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -318,8 +305,7 @@ class IntegrationService:
         portfolio_id: str,
         request: PlannedWithdrawalScheduleRequest,
     ) -> PlannedWithdrawalScheduleResponse | None:
-        return await resolve_planned_withdrawal_schedule_response(
-            repository=self._reference_repository,
+        return await self._client_profile_income_service.get_planned_withdrawal_schedule(
             portfolio_id=portfolio_id,
             request=request,
         )
