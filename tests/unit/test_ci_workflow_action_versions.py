@@ -251,3 +251,30 @@ def test_quality_baseline_runs_wiki_docs_gate() -> None:
     assert "quality-wiki-docs-gate:" in makefile_text
     assert "Quality Baseline / Wiki Docs Gate" in workflow_text
     assert "make quality-wiki-docs-gate" in workflow_text
+
+
+def test_pr_template_requires_documentation_acceptance_evidence() -> None:
+    template_text = Path(".github/pull_request_template.md").read_text(encoding="utf-8")
+
+    required_terms = (
+        "Documentation impact reviewed",
+        "README",
+        "architecture docs",
+        "API catalog",
+        "OpenAPI",
+        "vocabulary",
+        "RFCs",
+        "runbooks",
+        "supported-features",
+        "wiki source",
+        "repository context",
+        "platform context",
+        "no-doc-change rationale",
+        "Route, contract, supported-feature, operational, security, validation-lane, and service-boundary changes",
+        "post-merge",
+        "Sync-RepoWikis.ps1 -Publish -Repository lotus-core",
+    )
+
+    missing_terms = [term for term in required_terms if term not in template_text]
+
+    assert missing_terms == []
