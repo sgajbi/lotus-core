@@ -1485,7 +1485,9 @@ Most relevant current governance:
      economics repository/page-token wiring. `BenchmarkReferenceIntegrationService` owns
      benchmark, index, risk-free, coverage, and classification reference repository/page-token
      wiring. `ClientProfileIncomeIntegrationService` owns client suitability, tax, income,
-     liquidity reserve, and planned-withdrawal reference repository wiring. Do not add new
+     liquidity reserve, and planned-withdrawal reference repository wiring.
+     `DpmPortfolioManagementIntegrationService` owns portfolio-manager book membership, CIO
+     model-change cohort, and DPM portfolio-universe repository/page-token wiring. Do not add new
      cohesive source-data product families directly to the full `IntegrationService` facade.
 120. Kafka consumers should keep transport responsibilities separate from valid-message
      application orchestration. The cost-calculation consumer now routes valid transaction events

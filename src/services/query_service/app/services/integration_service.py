@@ -79,18 +79,14 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
-from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
 from .client_profile_income_integration_service import ClientProfileIncomeIntegrationService
-from .dpm_portfolio_universe import (
-    resolve_dpm_portfolio_universe_candidate_response,
+from .dpm_portfolio_management_integration_service import (
+    DpmPortfolioManagementIntegrationService,
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_hedge_integration_service import ExternalHedgeIntegrationService
 from .integration_policy import resolve_effective_policy_response
 from .page_token_codec import PageTokenCodec
-from .portfolio_manager_book_membership import (
-    resolve_portfolio_manager_book_membership_response,
-)
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)
@@ -160,6 +156,12 @@ class IntegrationService:
         self._client_profile_income_service = ClientProfileIncomeIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
         )
+        self._dpm_portfolio_management_service = DpmPortfolioManagementIntegrationService(
+            reference_repository_provider=lambda: self._reference_repository,
+            portfolio_repository_provider=lambda: self._portfolio_repository,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))
@@ -202,10 +204,11 @@ class IntegrationService:
         portfolio_manager_id: str,
         request: PortfolioManagerBookMembershipRequest,
     ) -> PortfolioManagerBookMembershipResponse:
-        return await resolve_portfolio_manager_book_membership_response(
-            repository=self._portfolio_repository,
-            portfolio_manager_id=portfolio_manager_id,
-            request=request,
+        return (
+            await self._dpm_portfolio_management_service.resolve_portfolio_manager_book_membership(
+                portfolio_manager_id=portfolio_manager_id,
+                request=request,
+            )
         )
 
     async def resolve_cio_model_change_affected_cohort(
@@ -213,21 +216,21 @@ class IntegrationService:
         model_portfolio_id: str,
         request: CioModelChangeAffectedCohortRequest,
     ) -> CioModelChangeAffectedCohortResponse | None:
-        return await resolve_cio_model_change_affected_cohort_response(
-            repository=self._reference_repository,
-            model_portfolio_id=model_portfolio_id,
-            request=request,
+        return (
+            await self._dpm_portfolio_management_service.resolve_cio_model_change_affected_cohort(
+                model_portfolio_id=model_portfolio_id,
+                request=request,
+            )
         )
 
     async def resolve_dpm_portfolio_universe_candidates(
         self,
         request: DpmPortfolioUniverseCandidateRequest,
     ) -> DpmPortfolioUniverseCandidateResponse:
-        return await resolve_dpm_portfolio_universe_candidate_response(
-            repository=self._reference_repository,
-            request=request,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
+        return (
+            await self._dpm_portfolio_management_service.resolve_dpm_portfolio_universe_candidates(
+                request=request,
+            )
         )
 
     async def resolve_discretionary_mandate_binding(
