@@ -1387,6 +1387,13 @@ Most relevant current governance:
      router-local exception type, or application error taxonomy, with tests proving the targeted
      endpoint contract and a non-target endpoint fallback. Do not reintroduce path-specific
      branches or route-contract imports in `main.py`.
+116. Web-backed Kafka worker readiness must include `db`, `kafka`, and `worker_runtime` unless the
+     worker has a documented exception. Use `portfolio_common.worker_readiness` and pass
+     `readiness_service_name=WORKER_READINESS_SERVICE_NAME` into
+     `wait_for_shutdown_or_task_failure(...)` so critical consumer, dispatcher, scheduler, and
+     embedded runtime task exits surface as bounded readiness dependency states instead of leaving
+     `/health/ready` green from database reachability alone. Keep liveness lightweight and do not
+     expose raw exception strings or unbounded task details in readiness responses.
 
 ## Context Maintenance Rule
 

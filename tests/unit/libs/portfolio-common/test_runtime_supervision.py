@@ -7,6 +7,10 @@ from portfolio_common.runtime_supervision import (
     shutdown_runtime_components,
     wait_for_shutdown_or_task_failure,
 )
+from portfolio_common.worker_readiness import (
+    clear_worker_runtime_readiness,
+    worker_runtime_readiness_snapshot,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -43,6 +47,60 @@ async def test_returns_runtime_error_when_task_fails():
     assert "Critical service task 'failing-task' failed." in str(result)
     assert isinstance(result.__cause__, ValueError)
     assert shutdown_event.is_set() is True
+
+
+async def test_registers_worker_readiness_and_marks_failed_task():
+    shutdown_event = asyncio.Event()
+    logger = logging.getLogger("test-runtime-supervision")
+    service_name = "worker_service_web"
+
+    async def _failing():
+        raise ValueError("boom")
+
+    failing_task = asyncio.create_task(_failing(), name="failing-task")
+    try:
+        result = await wait_for_shutdown_or_task_failure(
+            tasks=[failing_task],
+            shutdown_event=shutdown_event,
+            logger=logger,
+            readiness_service_name=service_name,
+        )
+
+        snapshot = worker_runtime_readiness_snapshot(service_name=service_name)
+
+        assert isinstance(result, RuntimeError)
+        assert snapshot.status == "failed"
+        assert snapshot.failed_task_names == ("failing-task",)
+    finally:
+        clear_worker_runtime_readiness(service_name=service_name)
+
+
+async def test_marks_worker_readiness_stopping_on_explicit_shutdown():
+    shutdown_event = asyncio.Event()
+    logger = logging.getLogger("test-runtime-supervision")
+    service_name = "worker_service_web"
+
+    async def _running():
+        await asyncio.Future()
+
+    task = asyncio.create_task(_running(), name="running-task")
+    shutdown_event.set()
+    try:
+        result = await wait_for_shutdown_or_task_failure(
+            tasks=[task],
+            shutdown_event=shutdown_event,
+            logger=logger,
+            readiness_service_name=service_name,
+        )
+
+        snapshot = worker_runtime_readiness_snapshot(service_name=service_name)
+
+        assert result is None
+        assert snapshot.status == "stopping"
+    finally:
+        clear_worker_runtime_readiness(service_name=service_name)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_prefers_real_failure_over_simultaneous_cancelled_task():

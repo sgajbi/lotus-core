@@ -30,6 +30,7 @@ from .consumers.market_price_consumer import MarketPriceConsumer
 from .consumers.portfolio_consumer import PortfolioConsumer
 from .consumers.transaction_consumer import TransactionPersistenceConsumer
 from .monitoring import setup_metrics
+from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,7 @@ class ConsumerManager:
             tasks=self.tasks,
             shutdown_event=self._shutdown_event,
             logger=logger,
+            readiness_service_name=WORKER_READINESS_SERVICE_NAME,
         )
 
         logger.info("Shutdown event received. Stopping all tasks...")

@@ -30,6 +30,7 @@ from .consumers.financial_reconciliation_completion_consumer import (
 )
 from .consumers.portfolio_aggregation_stage_consumer import PortfolioAggregationStageConsumer
 from .consumers.processed_transaction_stage_consumer import ProcessedTransactionStageConsumer
+from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,7 @@ class ConsumerManager:
             tasks=self.tasks,
             shutdown_event=self._shutdown_event,
             logger=logger,
+            readiness_service_name=WORKER_READINESS_SERVICE_NAME,
         )
 
         await shutdown_runtime_components(

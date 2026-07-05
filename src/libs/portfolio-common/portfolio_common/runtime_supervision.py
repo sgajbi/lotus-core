@@ -2,12 +2,19 @@ import asyncio
 import contextlib
 from collections.abc import Callable, Sequence
 
+from .worker_readiness import (
+    mark_worker_runtime_failed,
+    mark_worker_runtime_stopping,
+    register_worker_runtime_tasks,
+)
+
 
 async def wait_for_shutdown_or_task_failure(
     *,
     tasks: Sequence[asyncio.Task],
     shutdown_event: asyncio.Event,
     logger,
+    readiness_service_name: str | None = None,
 ) -> RuntimeError | None:
     """
     Wait until an explicit shutdown signal arrives or a critical runtime task exits.
@@ -16,8 +23,16 @@ async def wait_for_shutdown_or_task_failure(
     - None when shutdown was explicitly requested.
     - RuntimeError when a critical task exited unexpectedly.
     """
+    if readiness_service_name is not None:
+        register_worker_runtime_tasks(
+            service_name=readiness_service_name,
+            tasks=tasks,
+        )
+
     if not tasks:
         await shutdown_event.wait()
+        if readiness_service_name is not None:
+            mark_worker_runtime_stopping(service_name=readiness_service_name)
         return None
 
     shutdown_wait_task = asyncio.create_task(shutdown_event.wait(), name="shutdown-wait")
@@ -27,10 +42,17 @@ async def wait_for_shutdown_or_task_failure(
             return_when=asyncio.FIRST_COMPLETED,
         )
         if shutdown_wait_task in done:
+            if readiness_service_name is not None:
+                mark_worker_runtime_stopping(service_name=readiness_service_name)
             return None
 
         completed_tasks = [task for task in done if task is not shutdown_wait_task]
         failed_task = _select_failed_runtime_task(completed_tasks)
+        if readiness_service_name is not None:
+            mark_worker_runtime_failed(
+                service_name=readiness_service_name,
+                task_names=[failed_task.get_name() or "unnamed-task"],
+            )
         runtime_error = _runtime_error_for_failed_task(failed_task)
         logger.error("Critical runtime task failure detected; initiating shutdown.")
         shutdown_event.set()
