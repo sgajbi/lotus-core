@@ -86,6 +86,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make test-lane-governance-guard`
 - `make concurrency-duplicate-delivery-guard`
 - `make cross-product-golden-regression-guard`
+- `make command-api-behavior-certification-guard`
 - `make rfc0083-closure-guard`
 
 If one of these fails, the change is not validated, even if a narrow pytest target passed.
@@ -104,3 +105,5 @@ If one of these fails, the change is not validated, even if a narrow pytest targ
    final-state assertions
 8. keep cross-product golden transaction examples reusable, synthetic, explicit about expected
    position/cash/cost/income/lineage impact, and honest about product-family gaps
+9. certify command APIs through route-surface evidence for accepted, duplicate, conflict,
+   malformed, mode-blocked, dependency-failure, bookkeeping-failure, and security-denied outcomes

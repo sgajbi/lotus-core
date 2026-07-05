@@ -58,6 +58,12 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `make cross-product-golden-regression-guard` after changing transaction type behavior,
    corporate-action legs, cash/product leg mapping, cost basis, income/cashflow classification,
    valuation assumptions, lineage/correlation fields, or reusable golden examples.
+11. Command API behavior certification is governed by
+   `docs/standards/command-api-behavior-certification-pack.v1.json`. Run
+   `make command-api-behavior-certification-guard` after changing ingestion write commands,
+   replay/repair/ops-control commands, reconciliation control commands, idempotency behavior,
+   runtime-mode gating, dependency-failure mapping, bookkeeping recovery, or security-denied
+   command responses.
 
 ## Proof-Family Markers
 

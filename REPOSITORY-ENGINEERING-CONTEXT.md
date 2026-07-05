@@ -377,6 +377,15 @@ Current repository posture:
     executable must remain explicit `documented_gap` or `implemented_with_gaps` entries with
     expected state sections and linked follow-up ownership instead of disappearing from the golden
     pack.
+    Command API behavior certification now lives in
+    `docs/standards/command-api-behavior-certification-pack.v1.json`; `make
+    command-api-behavior-certification-guard` is wired into lint. When changing ingestion write
+    commands, event replay retry/repair/DLQ replay/ops-control commands, financial reconciliation
+    control commands, idempotency behavior, runtime-mode or policy blocking, dependency-failure
+    mapping, post-publish bookkeeping recovery, or security-denied command responses, keep
+    route-surface evidence for accepted, duplicate, conflict, malformed, blocked, retryable
+    failure, bookkeeping failure, and denied outcomes in that pack instead of relying on service
+    tests alone.
 41. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when

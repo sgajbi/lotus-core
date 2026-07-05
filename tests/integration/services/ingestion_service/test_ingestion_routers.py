@@ -29,6 +29,9 @@ from src.services.ingestion_service.app.services import business_date_ingestion_
 from src.services.ingestion_service.app.services.business_date_ingestion_policy import (
     BusinessDateIngestionPolicy,
 )
+from src.services.ingestion_service.app.services.ingestion_job_lifecycle import (
+    IngestionIdempotencyConflictError,
+)
 
 try:
     from app import ops_controls as app_ops_controls
@@ -91,6 +94,21 @@ def _assert_publish_dependency_failure(
     return body
 
 
+def _command_payload_identity(payload: dict | None) -> str | None:
+    if payload is None:
+        return None
+    if isinstance(payload.get("transactions"), list):
+        return json.dumps(
+            [
+                record.get("transaction_id")
+                for record in payload["transactions"]
+                if isinstance(record, dict)
+            ],
+            sort_keys=True,
+        )
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
 @pytest.fixture
 def mock_kafka_producer() -> MagicMock:
     """Provides a mock KafkaProducer."""
@@ -146,6 +164,17 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                         existing.endpoint == endpoint
                         and existing.idempotency_key == idempotency_key
                     ):
+                        existing_payload = self.job_payloads.get(existing.job_id)
+                        if (
+                            request_payload is not None
+                            and existing_payload is not None
+                            and _command_payload_identity(existing_payload)
+                            != _command_payload_identity(request_payload)
+                        ):
+                            raise IngestionIdempotencyConflictError(
+                                endpoint=endpoint,
+                                idempotency_key=idempotency_key,
+                            )
                         return SimpleNamespace(job=existing, created=False)
             self.jobs[job_id] = IngestionJobResponse(
                 job_id=job_id,
@@ -626,19 +655,27 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
                     "idempotency_key": "integration-ingestion-idempotency-001",
                     "usage_count": 3,
                     "endpoint_count": 2,
+                    "payload_fingerprint_count": 2,
+                    "max_payload_fingerprints_per_endpoint": 1,
                     "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
                     "first_seen_at": datetime(2026, 3, 6, 7, 10, 11, 211000, tzinfo=UTC),
                     "last_seen_at": datetime(2026, 3, 6, 7, 15, 1, 127000, tzinfo=UTC),
                     "collision_detected": True,
+                    "payload_conflict_detected": False,
+                    "reuse_classification": "cross_endpoint_reuse",
                 },
                 {
                     "idempotency_key": "integration-ingestion-idempotency-002",
                     "usage_count": 2,
                     "endpoint_count": 1,
+                    "payload_fingerprint_count": 1,
+                    "max_payload_fingerprints_per_endpoint": 1,
                     "endpoints": ["/ingest/transactions"],
                     "first_seen_at": datetime(2026, 3, 6, 8, 1, 3, tzinfo=UTC),
                     "last_seen_at": datetime(2026, 3, 6, 8, 5, 17, tzinfo=UTC),
                     "collision_detected": False,
+                    "payload_conflict_detected": False,
+                    "reuse_classification": "single_record_or_benign_replay",
                 },
             ][:limit]
             return {
@@ -1927,6 +1964,36 @@ async def test_ingestion_jobs_idempotency_replays_existing_job(
         second.json()["message"] == "Duplicate ingestion request accepted via idempotency replay."
     )
     assert second.json()["idempotency_key"] == "idem-batch-001"
+    mock_kafka_producer.publish_message.assert_called_once()
+
+
+async def test_ingest_transactions_rejects_same_idempotency_key_with_different_payload(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    headers = {"X-Idempotency-Key": "idem-batch-conflict-001"}
+
+    first = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_IDEMPOTENT_CONFLICT_001"),
+        headers=headers,
+    )
+    second = await async_test_client.post(
+        "/ingest/transactions",
+        json=_transaction_batch_payload("TX_IDEMPOTENT_CONFLICT_002"),
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json()["detail"] == {
+        "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+        "message": (
+            "Ingestion idempotency key was reused for the same endpoint with a different payload."
+        ),
+        "endpoint": "/ingest/transactions",
+        "idempotency_key": "idem-batch-conflict-001",
+    }
     mock_kafka_producer.publish_message.assert_called_once()
 
 
@@ -5086,19 +5153,27 @@ async def test_ingestion_idempotency_diagnostics_endpoint(
                 "idempotency_key": "integration-ingestion-idempotency-001",
                 "usage_count": 3,
                 "endpoint_count": 2,
+                "payload_fingerprint_count": 2,
+                "max_payload_fingerprints_per_endpoint": 1,
                 "endpoints": ["/ingest/transactions", "/ingest/portfolio-bundles"],
                 "first_seen_at": "2026-03-06T07:10:11.211000Z",
                 "last_seen_at": "2026-03-06T07:15:01.127000Z",
                 "collision_detected": True,
+                "payload_conflict_detected": False,
+                "reuse_classification": "cross_endpoint_reuse",
             },
             {
                 "idempotency_key": "integration-ingestion-idempotency-002",
                 "usage_count": 2,
                 "endpoint_count": 1,
+                "payload_fingerprint_count": 1,
+                "max_payload_fingerprints_per_endpoint": 1,
                 "endpoints": ["/ingest/transactions"],
                 "first_seen_at": "2026-03-06T08:01:03Z",
                 "last_seen_at": "2026-03-06T08:05:17Z",
                 "collision_detected": False,
+                "payload_conflict_detected": False,
+                "reuse_classification": "single_record_or_benign_replay",
             },
         ],
     }
