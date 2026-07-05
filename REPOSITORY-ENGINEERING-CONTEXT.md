@@ -223,6 +223,12 @@ Current repository posture:
     until operators inspect failure history. Bookkeeping repair must use the protected
     `POST /ingestion/jobs/{job_id}/bookkeeping/repair` operation and must require recorded
     `queue_bookkeeping` or `persist_bookkeeping` evidence before moving accepted jobs to queued.
+    Reference-data ingestion family dispatch is governed by
+    `ingestion_service.app.application.reference_data_ingestion_registry.ReferenceDataIngestionRegistry`.
+    New reference-data families must add one registry command plus focused registry/router tests;
+    do not reintroduce route-local `persist_fn` lambdas, `ReferenceDataIngestionService.upsert_*`
+    dispatch, accepted-count mapping, or DTO-to-record transformation in
+    `ingestion_service/app/routers/reference_data.py`.
     Lifecycle mutations are expected-state guarded; repair must treat stale accepted-to-queued
     updates as conflicts, not successful repairs. New lifecycle workflows must follow
     `docs/standards/domain-state-transition-policy.md`; domain policy modules own status
