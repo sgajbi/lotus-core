@@ -18,7 +18,6 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotGovernanceMetadata,
     CoreSnapshotInstrumentEnrichmentRecord,
     CoreSnapshotMode,
-    CoreSnapshotPolicyProvenance,
     CoreSnapshotPortfolioTotals,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -53,6 +52,11 @@ from .core_snapshot_instrument_enrichment import (
     instrument_enrichment_records,
     requested_instrument_security_ids,
 )
+from .core_snapshot_governance import (
+    CoreSnapshotGovernanceResolution,
+    SnapshotGovernanceContext,
+    resolve_core_snapshot_governance,
+)
 from .core_snapshot_projected_positions import (
     apply_baseline_projected_values,
     apply_projected_position_changes,
@@ -81,20 +85,6 @@ class CoreSnapshotUnavailableSectionError(ValueError):
     pass
 
 
-@dataclass
-class SnapshotGovernanceContext:
-    consumer_system: str
-    tenant_id: str
-    requested_sections: list[CoreSnapshotSection]
-    applied_sections: list[CoreSnapshotSection]
-    dropped_sections: list[CoreSnapshotSection]
-    policy_version: str
-    policy_source: str
-    matched_rule_id: str
-    strict_mode: bool
-    warnings: list[str]
-
-
 @dataclass(frozen=True)
 class _CoreSnapshotCurrencyContext:
     portfolio_currency: str
@@ -107,17 +97,6 @@ class _CoreSnapshotProjection:
     positions: dict[str, dict[str, Any]] | None
     total_market_value: Decimal
     simulation_metadata: CoreSnapshotSimulationMetadata | None
-
-
-@dataclass(frozen=True)
-class _CoreSnapshotGovernanceResolution:
-    requested_sections: list[CoreSnapshotSection]
-    applied_sections: list[CoreSnapshotSection]
-    dropped_sections: list[CoreSnapshotSection]
-    policy_provenance: CoreSnapshotPolicyProvenance
-    warnings: list[str]
-    consumer_system: str
-    tenant_id: str
 
 
 @dataclass(frozen=True)
@@ -539,35 +518,10 @@ class CoreSnapshotService:
         *,
         request: CoreSnapshotRequest,
         governance: SnapshotGovernanceContext | None,
-    ) -> _CoreSnapshotGovernanceResolution:
-        if governance is not None:
-            return _CoreSnapshotGovernanceResolution(
-                requested_sections=governance.requested_sections,
-                applied_sections=governance.applied_sections,
-                dropped_sections=governance.dropped_sections,
-                policy_provenance=CoreSnapshotPolicyProvenance(
-                    policy_version=governance.policy_version,
-                    policy_source=governance.policy_source,
-                    matched_rule_id=governance.matched_rule_id,
-                    strict_mode=governance.strict_mode,
-                ),
-                warnings=governance.warnings,
-                consumer_system=governance.consumer_system,
-                tenant_id=governance.tenant_id,
-            )
-        return _CoreSnapshotGovernanceResolution(
-            requested_sections=list(request.sections),
-            applied_sections=list(request.sections),
-            dropped_sections=[],
-            policy_provenance=CoreSnapshotPolicyProvenance(
-                policy_version="snapshot.policy.inline.default",
-                policy_source="snapshot.inline.default",
-                matched_rule_id="snapshot.default",
-                strict_mode=False,
-            ),
-            warnings=[],
-            consumer_system=request.consumer_system,
-            tenant_id=request.tenant_id,
+    ) -> CoreSnapshotGovernanceResolution:
+        return resolve_core_snapshot_governance(
+            request=request,
+            governance=governance,
         )
 
     def _build_core_snapshot_response(
@@ -577,7 +531,7 @@ class CoreSnapshotService:
         request: CoreSnapshotRequest,
         currency_context: _CoreSnapshotCurrencyContext,
         freshness: CoreSnapshotFreshnessMetadata,
-        governance: _CoreSnapshotGovernanceResolution,
+        governance: CoreSnapshotGovernanceResolution,
         simulation_metadata: CoreSnapshotSimulationMetadata | None,
         sections: CoreSnapshotSections,
         baseline_count: int,
@@ -675,7 +629,7 @@ class CoreSnapshotService:
         *,
         portfolio_id: str,
         request: CoreSnapshotRequest,
-        governance: _CoreSnapshotGovernanceResolution,
+        governance: CoreSnapshotGovernanceResolution,
     ) -> str:
         return self._request_fingerprint(
             {

@@ -1531,6 +1531,9 @@ Most relevant current governance:
 123. Core snapshot HTTP dependency factories belong in the query-control-plane dependency module,
      not in `CoreSnapshotService`. Keep `CoreSnapshotService` free of FastAPI dependency imports;
      bounded snapshot composition collaborators should remain delivery-framework agnostic.
+     Core snapshot governance mapping belongs in `core_snapshot_governance.py`; do not re-add
+     request policy provenance, applied/dropped section, or inline-default governance mapping to the
+     broad service.
 
 ## Context Maintenance Rule
 
