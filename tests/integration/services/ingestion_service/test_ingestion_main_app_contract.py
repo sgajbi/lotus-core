@@ -17,6 +17,17 @@ async def async_test_client():
         yield client
 
 
+def _enterprise_headers(capabilities: str) -> dict[str, str]:
+    return {
+        "X-Actor-Id": "actor-1",
+        "X-Tenant-Id": "tenant-1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "corr-1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": capabilities,
+    }
+
+
 def _publish_failed_example(operation: dict) -> dict:
     response = operation["responses"]["503"]
     assert "Retry-After" in response["headers"]
@@ -53,6 +64,53 @@ async def test_metrics_include_http_series_samples(async_test_client):
     metrics_text = metrics_response.text
     assert "http_requests_total{" in metrics_text
     assert "http_request_latency_seconds_count{" in metrics_text
+
+
+async def test_enterprise_middleware_denies_ingestion_write_without_headers(
+    async_test_client, monkeypatch
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+
+    response = await async_test_client.post("/ingest/portfolios", json={"portfolios": []})
+
+    assert response.status_code == 403
+    detail = response.json()
+    assert detail["detail"] == "authorization_policy_denied"
+    assert detail["reason"].startswith("missing_headers:")
+
+
+async def test_enterprise_middleware_denies_ingestion_write_missing_capability(
+    async_test_client, monkeypatch
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+
+    response = await async_test_client.post(
+        "/ingest/portfolios",
+        json={"portfolios": []},
+        headers=_enterprise_headers("ingestion.transactions.write"),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "authorization_policy_denied",
+        "reason": "missing_capability:ingestion.portfolios.write",
+    }
+
+
+async def test_enterprise_middleware_keeps_operational_paths_unauthenticated(
+    async_test_client, monkeypatch
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+
+    live_response = await async_test_client.get("/health/live")
+    metrics_response = await async_test_client.get("/metrics")
+    openapi_response = await async_test_client.get("/openapi.json")
+
+    assert live_response.status_code == 200
+    assert metrics_response.status_code == 200
+    assert openapi_response.status_code == 200
+    assert live_response.headers["X-Enterprise-Policy-Version"]
 
 
 async def test_openapi_declares_upload_400_contracts(async_test_client):

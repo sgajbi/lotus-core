@@ -31,8 +31,8 @@ make security-control-coverage-guard
 
 The contract lists every FastAPI app and its required control posture for standard HTTP bootstrap,
 secure response headers, CORS, trusted-host enforcement, metrics access, auth/audit middleware,
-unauthenticated health and metrics allowlist, payload limits, upload limits where relevant,
-secret/default validation, and safe unhandled-error responses.
+unauthenticated health, metrics, OpenAPI/docs, and version allowlist, payload limits, upload limits
+where relevant, secret/default validation, and safe unhandled-error responses.
 
 The guard proves static control installation. It does not prove live ingress policy, external IAM,
 WAF behavior, penetration-test coverage, or environment-specific firewall rules.
@@ -50,4 +50,8 @@ Current runtime posture:
 5. business/operator HTTP apps install enterprise audit/authorization middleware; authz remains
    default-disabled for local compatibility until `ENTERPRISE_ENFORCE_AUTHZ` or
    `ENTERPRISE_ENFORCE_READ_AUTHZ` is enabled,
-6. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`.
+6. the shared enterprise middleware keeps `/health/live`, `/health/ready`, `/metrics`,
+   `/openapi.json`, `/docs`, `/redoc`, and `/version` unauthenticated for operational access,
+7. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`,
+8. ingestion write APIs have service-owned default capability rules instead of depending only on
+   `ENTERPRISE_CAPABILITY_RULES_JSON`.

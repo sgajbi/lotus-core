@@ -26,7 +26,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "cost_calculator_service_web",
@@ -35,7 +35,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "event_replay_service",
@@ -44,7 +44,7 @@
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "financial_reconciliation_service",
@@ -53,7 +53,7 @@
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "ingestion_service",
@@ -62,7 +62,7 @@
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "ingestion_upload_max_bytes",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "persistence_service_web",
@@ -71,7 +71,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "pipeline_orchestrator_service_web",
@@ -80,7 +80,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "portfolio_aggregation_service_web",
@@ -89,7 +89,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "position_calculator_web",
@@ -98,7 +98,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "position_valuation_calculator_web",
@@ -107,7 +107,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "query_control_plane_service",
@@ -116,7 +116,7 @@
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "query_service",
@@ -125,7 +125,7 @@
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "timeseries_generator_service_web",
@@ -134,7 +134,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
       "service_name": "valuation_orchestrator_service_web",
@@ -143,7 +143,7 @@
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"]
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     }
   ]
 }

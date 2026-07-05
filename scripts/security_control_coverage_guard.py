@@ -94,6 +94,7 @@ def _enterprise_middleware_installed(content: str) -> bool:
         (
             "build_enterprise_audit_middleware",
             "build_default_enterprise_audit_middleware",
+            "build_ingestion_enterprise_audit_middleware",
         ),
     )
 

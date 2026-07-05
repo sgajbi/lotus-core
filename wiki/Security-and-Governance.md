@@ -32,6 +32,8 @@ It is enforced through:
 - generated `x-lotus-source-data-security` route metadata
 - shared enterprise-readiness helpers in
   `src/libs/portfolio-common/portfolio_common/enterprise_readiness.py`
+- ingestion write capability rules in
+  `src/services/ingestion_service/app/enterprise_readiness.py`
 - shared production-security profile selection in
   `src/libs/portfolio-common/portfolio_common/runtime_settings.py`
 - source-data security profiles in
@@ -53,6 +55,11 @@ matrix and has implementation anchors for:
 - unauthenticated health and metrics allowlist
 - payload limits and ingestion upload byte limits where relevant
 - safe unhandled-error responses
+
+For `ingestion_service`, the service-owned enterprise wrapper is also the default source of
+capability truth for canonical write routes. New `/ingest/*` or `/reprocess/*` write routes must
+add a route capability rule and keep the route-coverage test green; production-like deployments
+should not rely only on environment JSON to protect normal ingestion writes.
 
 This is static repository evidence. Live ingress, IAM, WAF, network policy, and penetration-test
 proof remain separate higher-lane evidence.
@@ -85,6 +92,8 @@ posture evidence, not as a code default.
   enterprise-readiness layer already owns it
 - production-like deployments should not depend on hand-written per-service auth/audit defaults;
   use the shared production-security profile helper
+- source-of-truth write planes need service-owned default capability maps plus tests that cover
+  every registered write route
 - production-like HTTP services must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; the local `*`
   trusted-host default is only for local/dev/test compatibility
 - new FastAPI apps must be added to the security-control matrix in the same slice as their

@@ -22,7 +22,15 @@ def _minimal_contract(app_path: str) -> dict[str, object]:
                 "auth_audit_control": "enterprise_middleware",
                 "payload_limit_control": "enterprise_middleware",
                 "upload_limit_control": "not_applicable",
-                "unauthenticated_allowlist": ["/health/live", "/health/ready", "/metrics"],
+                "unauthenticated_allowlist": [
+                    "/docs",
+                    "/health/live",
+                    "/health/ready",
+                    "/metrics",
+                    "/openapi.json",
+                    "/redoc",
+                    "/version",
+                ],
             }
         ],
     }
@@ -71,6 +79,23 @@ def _write_minimal_guard_repo(tmp_path: Path, *, app_source: str) -> Path:
 
 def test_security_control_coverage_guard_accepts_current_truth() -> None:
     assert guard.evaluate_security_control_coverage() == []
+
+
+def test_security_control_coverage_guard_accepts_service_local_enterprise_wrapper(
+    tmp_path: Path,
+) -> None:
+    repo_root = _write_minimal_guard_repo(
+        tmp_path,
+        app_source=(
+            "from fastapi import FastAPI\n"
+            "app = FastAPI()\n"
+            "build_ingestion_enterprise_audit_middleware()\n"
+            "validate_enterprise_runtime_config()\n"
+            "configure_standard_http_app()\n"
+        ),
+    )
+
+    assert guard.evaluate_security_control_coverage(repo_root=repo_root) == []
 
 
 def test_security_control_coverage_guard_rejects_unregistered_fastapi_app(tmp_path: Path) -> None:

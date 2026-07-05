@@ -124,11 +124,11 @@ readiness proof and keeps the published capability requirement aligned with the 
 
 ## Shared Runtime Support
 
-`query_service` and `query_control_plane_service` now use typed service settings plus the shared
-`portfolio_common.enterprise_readiness` runtime for enterprise policy version headers, write payload
-limits, write authorization checks, capability-rule matching, feature-flag lookup, sensitive audit
-metadata redaction, write audit event emission, read audit event emission, read authorization, and
-strict capability-rule enforcement.
+`query_service`, `query_control_plane_service`, and `ingestion_service` now use typed or
+service-local settings plus the shared `portfolio_common.enterprise_readiness` runtime for
+enterprise policy version headers, write payload limits, write authorization checks,
+capability-rule matching, feature-flag lookup, sensitive audit metadata redaction, write audit event
+emission, read audit event emission, read authorization, and strict capability-rule enforcement.
 
 Local/dev/test environments remain opt-in for read authorization, read auditing, capability-rule
 enforcement, and runtime-config enforcement. Production-like environments now use the shared
@@ -147,6 +147,18 @@ analytics-input routes, so enabling read authorization protects source-data prod
 request method is `POST`. `ENTERPRISE_CAPABILITY_RULES_JSON` can still add or override rules, but
 production source-data routes no longer rely on hand-written environment mappings before strict mode
 can be enabled.
+
+Services with source-of-truth write planes may also provide service-owned default capability rules.
+`ingestion_service` uses this mechanism for canonical `/ingest/*` and `/reprocess/*` write routes
+with route-family capabilities such as `ingestion.portfolios.write`,
+`ingestion.transactions.write`, and `ingestion.reference_data.write`. Future ingestion write routes
+must update the service-owned map and keep the route-coverage test green; production policy must not
+depend only on environment JSON for normal write-plane authorization.
+
+The shared enterprise middleware has an explicit unauthenticated operational allowlist for
+`/health/live`, `/health/ready`, `/metrics`, `/openapi.json`, `/docs`, `/redoc`, and `/version`.
+This preserves probe, metrics, API documentation, and version access under read-authorization
+enforcement while keeping business and operator routes protected by capability rules.
 
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
@@ -180,10 +192,11 @@ Slice 9 validation is:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_security.py -q`,
 2. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
-3. `python -m pytest tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py -q`,
+3. `python -m pytest tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/services/ingestion_service/test_enterprise_readiness.py -q`,
 4. `python scripts/source_data_product_contract_guard.py`,
 5. `python -m pytest tests/integration/services/query_service/test_main_app.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`,
-6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
-7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
-8. `git diff --check`,
-9. `make lint`.
+6. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py -q`,
+7. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py src/services/ingestion_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/services/ingestion_service/test_enterprise_readiness.py tests/unit/scripts/test_source_data_product_contract_guard.py --ignore E501,I001`,
+8. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/services/query_service/app/enterprise_readiness.py src/services/query_service/app/settings.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/query_control_plane_service/app/settings.py src/services/ingestion_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py scripts/source_data_product_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/services/query_service/test_enterprise_readiness.py tests/unit/services/query_service/test_query_service_settings.py tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py tests/unit/services/query_control_plane_service/test_control_plane_settings.py tests/unit/services/ingestion_service/test_enterprise_readiness.py tests/unit/scripts/test_source_data_product_contract_guard.py`,
+9. `git diff --check`,
+10. `make lint`.
