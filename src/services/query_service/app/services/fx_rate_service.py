@@ -6,6 +6,7 @@ from typing import Optional
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.collection_window_policy import validate_required_bounded_date_window
 from ..dtos.fx_rate_dto import FxRateRecord, FxRateResponse
 from ..repositories.fx_rate_repository import FxRateRepository
 
@@ -31,6 +32,11 @@ class FxRateService:
         """
         Retrieves a filtered list of FX rates for a currency pair.
         """
+        validate_required_bounded_date_window(
+            source_product="FxRateSeries",
+            start_date=start_date,
+            end_date=end_date,
+        )
         logger.info(
             "FX rate query requested.",
             extra=operation_log_extra(

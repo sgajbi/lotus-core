@@ -19,6 +19,10 @@ downstream platform consumers.
    supplied values with structured 400 responses, and use deterministic tie-breakers for paginated
    ordering. Silent fallback is only acceptable when the parameter is omitted and the default is
    documented.
+6. Collection and raw-series endpoints must publish an explicit bound: cursor/page-token
+   pagination, offset pagination with maximum `limit`, mandatory bounded date windows, or a
+   documented small-cardinality contract with tests. Optional date filters must not allow
+   full-history scans by omission.
 
 ## Enforcement
 

@@ -6,6 +6,7 @@ from typing import Optional
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.collection_window_policy import validate_required_bounded_date_window
 from ..dtos.position_dto import (
     PortfolioMaturitySummaryResponse,
     PortfolioPositionHistoryResponse,
@@ -39,6 +40,11 @@ class PositionService:
         """
         Retrieves and formats the position history for a given security.
         """
+        validate_required_bounded_date_window(
+            source_product="PositionHistorySeries",
+            start_date=start_date,
+            end_date=end_date,
+        )
         logger.info(
             "Position history query requested.",
             extra=operation_log_extra(

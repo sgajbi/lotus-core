@@ -5,6 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
+from ..application.collection_window_policy import (
+    CollectionWindowValidationError,
+    validate_required_bounded_date_window,
+)
 from ..dependencies import get_position_service
 from ..dtos.position_dto import (
     PortfolioMaturitySummaryResponse,
@@ -12,7 +16,7 @@ from ..dtos.position_dto import (
     PortfolioPositionsResponse,
 )
 from ..services.position_service import PositionService
-from .http_errors import lookup_error_to_http
+from .http_errors import collection_window_error_to_http, lookup_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["Positions"])
 
@@ -33,7 +37,8 @@ PORTFOLIO_NOT_FOUND_RESPONSE_EXAMPLE = {"detail": "Portfolio with id PORT-POS-00
         "Returns epoch-aware position history for a portfolio-security key across an optional date "
         "range. Use this route for holdings drill-down, lineage-aware troubleshooting, and "
         "historical security-level state inspection when a downstream consumer needs dated "
-        "position-history rows; do not use it as a substitute for the strategic latest-holdings "
+        "position-history rows. Callers must provide both `start_date` and `end_date`; the window "
+        "is capped at ten years. Do not use it as a substitute for the strategic latest-holdings "
         "read, transaction-ledger rows, or reporting summaries."
     ),
 )
@@ -61,6 +66,11 @@ async def get_position_history(
     service: PositionService = Depends(get_position_service),
 ):
     try:
+        validate_required_bounded_date_window(
+            source_product="PositionHistorySeries",
+            start_date=start_date,
+            end_date=end_date,
+        )
         return await service.get_position_history(
             portfolio_id=portfolio_id,
             security_id=security_id,
@@ -69,6 +79,8 @@ async def get_position_history(
         )
     except LookupError as exc:
         raise lookup_error_to_http(exc) from exc
+    except CollectionWindowValidationError as exc:
+        raise collection_window_error_to_http(exc) from exc
 
 
 @router.get(
@@ -87,7 +99,9 @@ async def get_position_history(
         "position history when snapshot materialization has not caught up yet, and publishes "
         "source-data runtime metadata with holdings-level data-quality posture.\n"
         "When: Use this route for holdings screens, gateway portfolio position books, and other "
-        "downstream consumers that need the governed source-of-truth holdings surface. Use "
+        "downstream consumers that need the governed source-of-truth holdings surface. This is a "
+        "current HoldingsAsOf book, not an unbounded history series: it returns at most one "
+        "current holding row per security for the resolved as-of scope. Use "
         "`as_of_date` for booked historical state on or before a specific business date. Use "
         "`include_projected=true` only when the consumer intentionally wants future-dated "
         "projected state beyond the latest booked business date. Do not treat this route as a "

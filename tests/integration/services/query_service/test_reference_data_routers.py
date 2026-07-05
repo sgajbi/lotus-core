@@ -129,11 +129,46 @@ async def test_get_prices_success(async_test_client):
     )
 
 
+async def test_get_fx_rates_rejects_missing_window(async_test_client):
+    client, mock_fx_service, _, _, _ = async_test_client
+
+    response = await client.get("/fx-rates/?from_currency=USD&to_currency=SGD")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "COLLECTION_WINDOW_REQUIRED"
+    assert body["detail"]["source_product"] == "FxRateSeries"
+    assert body["detail"]["max_window_days"] == 3660
+    mock_fx_service.get_fx_rates.assert_not_awaited()
+
+
+async def test_get_prices_rejects_oversized_window(async_test_client):
+    client, _, _, mock_price_service, _ = async_test_client
+
+    response = await client.get(
+        "/prices/",
+        params={
+            "security_id": "SEC_1",
+            "start_date": "2020-01-01",
+            "end_date": "2030-01-08",
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "COLLECTION_WINDOW_TOO_LARGE"
+    assert body["detail"]["source_product"] == "MarketPriceSeries"
+    assert body["detail"]["max_window_days"] == 3660
+    mock_price_service.get_prices.assert_not_awaited()
+
+
 async def test_get_fx_rates_unexpected_uses_global_500_envelope(async_test_client):
     client, mock_fx_service, _, _, _ = async_test_client
     mock_fx_service.get_fx_rates.side_effect = RuntimeError("boom")
 
-    response = await client.get("/fx-rates/?from_currency=USD&to_currency=SGD")
+    response = await client.get(
+        "/fx-rates/?from_currency=USD&to_currency=SGD&start_date=2025-01-01&end_date=2025-01-31"
+    )
 
     assert response.status_code == 500
     assert response.json()["error"] == "Internal Server Error"
@@ -155,7 +190,9 @@ async def test_get_prices_unexpected_uses_global_500_envelope(async_test_client)
     client, _, _, mock_price_service, _ = async_test_client
     mock_price_service.get_prices.side_effect = RuntimeError("boom")
 
-    response = await client.get("/prices/?security_id=SEC_1")
+    response = await client.get(
+        "/prices/?security_id=SEC_1&start_date=2025-01-01&end_date=2025-01-31"
+    )
 
     assert response.status_code == 500
     assert response.json()["error"] == "Internal Server Error"

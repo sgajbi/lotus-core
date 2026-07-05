@@ -48,3 +48,21 @@ async def test_get_fx_rates(mock_fx_rate_repo: AsyncMock):
         assert len(response.rates) == 1
         assert response.rates[0].rate_date == date(2025, 1, 1)
         assert response.rates[0].rate == Decimal("1.1")
+
+
+async def test_get_fx_rates_rejects_oversized_window(mock_fx_rate_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.fx_rate_service.FxRateRepository",
+        return_value=mock_fx_rate_repo,
+    ):
+        service = FxRateService(AsyncMock())
+
+        with pytest.raises(ValueError, match="maximum is 3660 days"):
+            await service.get_fx_rates(
+                from_currency="USD",
+                to_currency="EUR",
+                start_date=date(2020, 1, 1),
+                end_date=date(2030, 1, 8),
+            )
+
+        mock_fx_rate_repo.get_fx_rates.assert_not_awaited()

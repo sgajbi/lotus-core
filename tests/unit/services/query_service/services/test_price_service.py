@@ -50,3 +50,16 @@ async def test_get_prices(mock_price_repo: AsyncMock):
         assert len(response.prices) == 1
         assert response.prices[0].price_date == date(2025, 1, 1)
         assert response.prices[0].price == Decimal("150.75")
+
+
+async def test_get_prices_rejects_unbounded_window(mock_price_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.price_service.MarketPriceRepository",
+        return_value=mock_price_repo,
+    ):
+        service = MarketPriceService(AsyncMock())
+
+        with pytest.raises(ValueError, match="requires start_date and end_date"):
+            await service.get_prices(security_id="S1", start_date=date(2025, 1, 1))
+
+        mock_price_repo.get_prices.assert_not_awaited()

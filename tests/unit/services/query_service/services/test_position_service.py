@@ -132,6 +132,20 @@ async def test_get_position_history(mock_position_repo: AsyncMock):
         assert response.positions[0].reprocessing_status == "CURRENT"
 
 
+async def test_get_position_history_rejects_missing_window(mock_position_repo: AsyncMock):
+    with patch(
+        "src.services.query_service.app.services.position_service.PositionRepository",
+        return_value=mock_position_repo,
+    ):
+        service = PositionService(AsyncMock())
+
+        with pytest.raises(ValueError, match="requires start_date and end_date"):
+            await service.get_position_history(portfolio_id="P1", security_id="S1")
+
+        mock_position_repo.portfolio_exists.assert_not_awaited()
+        mock_position_repo.get_position_history_by_security.assert_not_awaited()
+
+
 async def test_get_latest_positions(mock_position_repo: AsyncMock):
     """Tests the latest portfolio positions service method."""
     # ARRANGE
