@@ -18,6 +18,19 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from .db_base import Base
+from .source_lifecycle_predicates import (
+    BENCHMARK_DEFINITION_ACTIVE,
+    CLIENT_INCOME_NEEDS_ACTIVE,
+    CLIENT_RESTRICTION_ACTIVE,
+    CLIENT_TAX_PROFILE_ACTIVE,
+    CLIENT_TAX_RULE_SET_ACTIVE,
+    DPM_DISCRETIONARY_MANDATE_ACTIVE,
+    INDEX_DEFINITION_ACTIVE,
+    LIQUIDITY_RESERVE_ACTIVE,
+    MODEL_PORTFOLIO_TARGET_ACTIVE,
+    PLANNED_WITHDRAWAL_ACTIVE,
+    SUSTAINABILITY_PREFERENCE_ACTIVE,
+)
 
 
 class BusinessDate(Base):
@@ -413,9 +426,7 @@ class PortfolioMandateBinding(Base):
             "effective_to",
             "portfolio_id",
             "mandate_id",
-            postgresql_where=text(
-                "mandate_type = 'discretionary' AND discretionary_authority_status = 'active'"
-            ),
+            postgresql_where=DPM_DISCRETIONARY_MANDATE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -476,7 +487,7 @@ class ClientRestrictionProfile(Base):
             observed_at.desc().nulls_last(),
             restriction_version.desc(),
             updated_at.desc(),
-            postgresql_where=text("restriction_status = 'active'"),
+            postgresql_where=CLIENT_RESTRICTION_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -537,7 +548,7 @@ class SustainabilityPreferenceProfile(Base):
             observed_at.desc().nulls_last(),
             preference_version.desc(),
             updated_at.desc(),
-            postgresql_where=text("preference_status = 'active'"),
+            postgresql_where=SUSTAINABILITY_PREFERENCE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -597,7 +608,7 @@ class ClientTaxProfile(Base):
             observed_at.desc().nulls_last(),
             profile_version.desc(),
             updated_at.desc(),
-            postgresql_where=text("profile_status = 'active'"),
+            postgresql_where=CLIENT_TAX_PROFILE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -664,7 +675,7 @@ class ClientTaxRuleSet(Base):
             observed_at.desc().nulls_last(),
             rule_version.desc(),
             updated_at.desc(),
-            postgresql_where=text("rule_status = 'active'"),
+            postgresql_where=CLIENT_TAX_RULE_SET_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -719,7 +730,7 @@ class ClientIncomeNeedsSchedule(Base):
             "end_date",
             observed_at.desc().nulls_last(),
             updated_at.desc(),
-            postgresql_where=text("need_status = 'active'"),
+            postgresql_where=CLIENT_INCOME_NEEDS_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -777,7 +788,7 @@ class LiquidityReserveRequirement(Base):
             observed_at.desc().nulls_last(),
             requirement_version.desc(),
             updated_at.desc(),
-            postgresql_where=text("reserve_status = 'active'"),
+            postgresql_where=LIQUIDITY_RESERVE_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -828,7 +839,7 @@ class PlannedWithdrawalSchedule(Base):
             "withdrawal_schedule_id",
             observed_at.desc().nulls_last(),
             updated_at.desc(),
-            postgresql_where=text("withdrawal_status = 'active'"),
+            postgresql_where=PLANNED_WITHDRAWAL_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -983,7 +994,7 @@ class ModelPortfolioTarget(Base):
             "instrument_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=text("target_status = 'active'"),
+            postgresql_where=MODEL_PORTFOLIO_TARGET_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1025,7 +1036,7 @@ class BenchmarkDefinition(Base):
             "benchmark_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=text("benchmark_status = 'active'"),
+            postgresql_where=BENCHMARK_DEFINITION_ACTIVE.postgresql_where(),
         ),
     )
 
@@ -1061,7 +1072,7 @@ class IndexDefinition(Base):
             "index_id",
             effective_from.desc(),
             "effective_to",
-            postgresql_where=text("index_status = 'active'"),
+            postgresql_where=INDEX_DEFINITION_ACTIVE.postgresql_where(),
         ),
     )
 

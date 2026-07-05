@@ -4,6 +4,10 @@ from datetime import date
 from typing import Any
 
 from portfolio_common.database_models import PortfolioMandateBinding
+from portfolio_common.source_lifecycle_predicates import (
+    DISCRETIONARY_MANDATE_TYPE,
+    DPM_DISCRETIONARY_MANDATE_ACTIVE,
+)
 from sqlalchemy import and_, func, or_, select, tuple_
 
 
@@ -54,7 +58,7 @@ def _dpm_portfolio_universe_predicates(
     include_inactive_mandates: bool,
 ) -> list[Any]:
     predicates = [
-        PortfolioMandateBinding.mandate_type == "discretionary",
+        PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
         _effective_reference_filter(
             PortfolioMandateBinding.effective_from,
             PortfolioMandateBinding.effective_to,
@@ -66,7 +70,11 @@ def _dpm_portfolio_universe_predicates(
     if model_portfolio_ids:
         predicates.append(PortfolioMandateBinding.model_portfolio_id.in_(model_portfolio_ids))
     if not include_inactive_mandates:
-        predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+        predicates.append(
+            DPM_DISCRETIONARY_MANDATE_ACTIVE.sqlalchemy_filter(
+                PortfolioMandateBinding.discretionary_authority_status
+            )
+        )
     return predicates
 
 
