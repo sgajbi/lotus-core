@@ -5,7 +5,11 @@ from typing import Any
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
 
 from ..dtos.position_dto import PortfolioPositionsResponse, Position
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..dtos.source_data_product_identity import (
+    SourceDataDegradationSummary,
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
@@ -427,6 +431,31 @@ def holdings_data_quality_status(
     return COMPLETE
 
 
+def holdings_content_hash(
+    *,
+    portfolio_id: str,
+    positions: list[Position],
+    response_as_of_date: date,
+    data_quality_status: str,
+    latest_evidence_timestamp: datetime | None,
+    degradation: SourceDataDegradationSummary,
+) -> str:
+    return stable_content_hash(
+        {
+            "product_name": "HoldingsAsOf",
+            "product_version": "v1",
+            "portfolio_id": portfolio_id,
+            "as_of_date": response_as_of_date,
+            "data_quality_status": data_quality_status,
+            "latest_evidence_timestamp": latest_evidence_timestamp,
+            "positions": [
+                position.model_dump(mode="json", exclude_none=True) for position in positions
+            ],
+            "degradation": degradation.model_dump(mode="json", exclude_none=True),
+        }
+    )
+
+
 def latest_holdings_evidence_timestamp(
     db_results: list[PositionRowResult],
 ) -> datetime | None:
@@ -464,15 +493,39 @@ def portfolio_positions_response_data(
     response_as_of_date: date,
     data_quality_status: str,
     latest_evidence_timestamp: datetime | None,
+    degradation: SourceDataDegradationSummary | None = None,
 ) -> PortfolioPositionsResponse:
+    resolved_degradation = degradation or SourceDataDegradationSummary()
+    content_hash = holdings_content_hash(
+        portfolio_id=portfolio_id,
+        positions=positions,
+        response_as_of_date=response_as_of_date,
+        data_quality_status=data_quality_status,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        degradation=resolved_degradation,
+    )
     return PortfolioPositionsResponse(
         portfolio_id=portfolio_id,
         positions=positions,
         maturity_summary=holdings_maturity_summary_payload(positions),
+        degradation=resolved_degradation,
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
             data_quality_status=data_quality_status,
             latest_evidence_timestamp=latest_evidence_timestamp,
+            content_hash=content_hash,
+            source_refs=[
+                (
+                    "lotus-core://source/HoldingsAsOf/"
+                    f"{portfolio_id}/{response_as_of_date.isoformat()}"
+                )
+            ],
+            lineage={
+                "source_owner": "lotus-core",
+                "source_product": "HoldingsAsOf",
+                "source_product_version": "v1",
+                "degradation_status": resolved_degradation.status,
+            },
             use_content_hash_as_source_batch_fingerprint=True,
         ),
     )

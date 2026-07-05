@@ -2,7 +2,7 @@ import hashlib
 import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.reconciliation_quality import UNKNOWN
@@ -27,6 +27,76 @@ def product_version_field():
         "v1",
         description="RFC-0083 source-data product version represented by this response.",
         examples=["v1"],
+    )
+
+
+class SourceDataDegradationDetail(BaseModel):
+    section: str = Field(
+        ...,
+        description="Response section where source degradation applies.",
+        examples=["positions"],
+    )
+    record_key: str | None = Field(
+        None,
+        description="Stable record key inside the section when degradation is row-scoped.",
+        examples=["security_id:EQ_US_AAPL"],
+    )
+    affected_fields: list[str] = Field(
+        default_factory=list,
+        description="Response fields affected by fallback, stale, partial, or unavailable data.",
+        examples=[["valuation.market_price", "valuation.market_value"]],
+    )
+    source_kind: Literal["AUTHORITATIVE", "FALLBACK", "DERIVED_DEFAULT", "UNAVAILABLE"] = Field(
+        ...,
+        description="Kind of source used for the affected field values.",
+        examples=["FALLBACK"],
+    )
+    source_product_name: str = Field(
+        ...,
+        description="Source-data product that owns the affected evidence.",
+        examples=["HoldingsAsOf"],
+    )
+    source_product_version: str = Field(
+        "v1",
+        description="Version of the source-data product that owns the affected evidence.",
+        examples=["v1"],
+    )
+    source_as_of_date: date | None = Field(
+        None,
+        description="Business as-of date of the source evidence used for the affected fields.",
+        examples=["2026-04-10"],
+    )
+    latest_evidence_timestamp: datetime | None = Field(
+        None,
+        description="Latest known source evidence timestamp for the affected fields.",
+        examples=["2026-04-10T01:30:00Z"],
+    )
+    freshness_status: Literal["CURRENT", "STALE", "PARTIAL", "UNAVAILABLE", "UNKNOWN"] = Field(
+        ...,
+        description="Freshness posture for the affected fields.",
+        examples=["PARTIAL"],
+    )
+    reason_code: str = Field(
+        ...,
+        description="Bounded machine-readable reason for the degradation detail.",
+        examples=["HOLDINGS_VALUATION_FALLBACK"],
+    )
+
+
+class SourceDataDegradationSummary(BaseModel):
+    status: Literal["NONE", "PARTIAL", "STALE", "UNAVAILABLE", "UNKNOWN"] = Field(
+        "NONE",
+        description="Highest-severity degradation posture across this response.",
+        examples=["PARTIAL"],
+    )
+    reason_codes: list[str] = Field(
+        default_factory=list,
+        description="Deduplicated bounded reason codes present in the degradation details.",
+        examples=[["HOLDINGS_VALUATION_FALLBACK"]],
+    )
+    details: list[SourceDataDegradationDetail] = Field(
+        default_factory=list,
+        description="Row, section, or field-level degradation details.",
     )
 
 
@@ -109,6 +179,13 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         default_factory=dict,
         description="Bounded source lineage identifiers for support and proof validation.",
         examples=[{"source_product": "PortfolioStateSnapshot", "source_owner": "lotus-core"}],
+    )
+    degradation: SourceDataDegradationSummary = Field(
+        default_factory=lambda: SourceDataDegradationSummary(),
+        description=(
+            "Per-section or per-field degradation metadata. Empty details mean Core did not "
+            "apply fallback, stale, partial, or unavailable source handling for this response."
+        ),
     )
     source_evidence_current: bool = Field(
         False,
