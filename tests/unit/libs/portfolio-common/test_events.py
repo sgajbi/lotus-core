@@ -2,7 +2,11 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
+from portfolio_common.events import (
+    CoreEventModel,
+    TransactionEvent,
+    transaction_event_ordering_key,
+)
 from pydantic import ValidationError
 
 
@@ -175,6 +179,28 @@ def test_transaction_event_rejects_unknown_payload_fields() -> None:
         }
     ]
     assert "vNext" not in str(errors)
+
+
+def test_all_core_event_models_reject_unknown_payload_fields() -> None:
+    event_models = [
+        model_cls
+        for model_cls in CoreEventModel.__subclasses__()
+        if model_cls is not CoreEventModel
+    ]
+
+    assert event_models
+    for model_cls in event_models:
+        with pytest.raises(ValidationError) as exc_info:
+            model_cls.model_validate({"unexpected_contract_drift": "lineage-lost"})
+
+        errors = exc_info.value.errors(include_input=False)
+        assert {
+            "type": "extra_forbidden",
+            "loc": ("unexpected_contract_drift",),
+            "msg": "Extra inputs are not permitted",
+            "url": "https://errors.pydantic.dev/2.13/v/extra_forbidden",
+        } in errors
+        assert "lineage-lost" not in str(errors)
 
 
 def test_transaction_event_accepts_governed_envelope_metadata() -> None:

@@ -1315,6 +1315,13 @@ Most relevant current governance:
      ledger reads. Default business-calendar selection belongs in service date policy, passed
      explicitly to repository queries. Extend this spec pattern for future ledger-style reads rather
      than adding repository-local API vocabulary, silent fallbacks, or as-of default rules.
+111. Governed event payloads must fail fast on unknown fields instead of silently dropping contract
+     drift. `portfolio_common.events.CoreEventModel` uses `extra="forbid"`, and the shared event
+     tests cover every current `CoreEventModel` subclass for unknown-field rejection with
+     source-safe validation errors. Do not change governed event models to `extra="ignore"` or add
+     local permissive parsers unless an explicit versioned compatibility contract preserves unknown
+     fields as typed extension metadata and includes producer/consumer, DLQ, redaction, and replay
+     tests.
 
 ## Context Maintenance Rule
 
