@@ -36,6 +36,7 @@ from .valuation_job_publisher import (
     ValuationJobPublishError,
     get_valuation_job_publisher,
 )
+from .valuation_stale_job_resetter import ValuationStaleJobResetter
 from .valuation_watermark_advancer import ValuationWatermarkAdvancer
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class ValuationScheduler:
         valuation_backfill_planner: ValuationBackfillPlanner | None = None,
         valuation_watermark_advancer: ValuationWatermarkAdvancer | None = None,
         instrument_reprocessing_coordinator: InstrumentReprocessingCoordinator | None = None,
+        valuation_stale_job_resetter: ValuationStaleJobResetter | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -104,6 +106,14 @@ class ValuationScheduler:
             instrument_reprocessing_coordinator
             if instrument_reprocessing_coordinator is not None
             else InstrumentReprocessingCoordinator(batch_size=self._batch_size)
+        )
+        self._valuation_stale_job_resetter = (
+            valuation_stale_job_resetter
+            if valuation_stale_job_resetter is not None
+            else ValuationStaleJobResetter(
+                stale_timeout_minutes=self._stale_timeout_minutes,
+                max_attempts=self._max_attempts,
+            )
         )
 
     def stop(self):
@@ -270,10 +280,7 @@ class ValuationScheduler:
 
     async def _reset_stale_valuation_jobs(self, db) -> None:
         repo = ValuationRepository(db)
-        await repo.find_and_reset_stale_jobs(
-            timeout_minutes=self._stale_timeout_minutes,
-            max_attempts=self._max_attempts,
-        )
+        await self._valuation_stale_job_resetter.reset_stale_jobs(repo=repo)
 
     async def _run_poll_once(self) -> None:
         poll_started_at = time.monotonic()

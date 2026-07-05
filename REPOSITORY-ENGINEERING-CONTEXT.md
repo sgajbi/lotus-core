@@ -1506,10 +1506,11 @@ Most relevant current governance:
      metrics, bounded instrument trigger claiming, durable `RESET_WATERMARKS` replay-job creation,
      trigger correlation propagation, and trigger consume logging. Keep publisher/Kafka flush
      logic, backfill planning, watermark policy, and instrument trigger coordination out of
-     `ValuationScheduler`; remaining scheduler slices should continue extracting loop cadence,
-     stale reset, claimed-job dispatch orchestration/recovery ownership, and DB session/repository
-     factory ownership into separately testable collaborators before issue #545 is marked
-     fixed-local.
+     `ValuationScheduler`. `ValuationStaleJobResetter` owns stale valuation job reset invocation
+     with scheduler-configured timeout and maximum-attempt policy. Remaining scheduler slices
+     should continue extracting loop cadence, claimed-job dispatch orchestration/recovery
+     ownership, and DB session/repository factory ownership into separately testable collaborators
+     before issue #545 is marked fixed-local.
 
 ## Context Maintenance Rule
 
