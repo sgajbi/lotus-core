@@ -94,6 +94,8 @@ posture evidence, not as a code default.
   use the shared production-security profile helper
 - source-of-truth write planes need service-owned default capability maps plus tests that cover
   every registered write route
+- query-service cursor/page tokens must use the shared versioned `PageTokenCodec` envelope with
+  `kid`, expiry, issuer/audience, optional route/tenant binding, and previous-key rotation support
 - production-like HTTP services must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; the local `*`
   trusted-host default is only for local/dev/test compatibility
 - new FastAPI apps must be added to the security-control matrix in the same slice as their

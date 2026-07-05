@@ -156,7 +156,13 @@ class IntegrationService:
         self._buy_state_repository = BuyStateRepository(db)
         self._portfolio_repository = PortfolioRepository(db)
         self._transaction_repository = TransactionRepository(db)
-        self._page_token_codec = PageTokenCodec(load_query_service_settings().page_token_secret)
+        settings = load_query_service_settings()
+        self._page_token_codec = PageTokenCodec(
+            secret=settings.page_token_secret,
+            active_kid=settings.page_token_key_id,
+            previous_secrets=settings.page_token_previous_keys,
+            ttl_seconds=settings.page_token_ttl_seconds,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))

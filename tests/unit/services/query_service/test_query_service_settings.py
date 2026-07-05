@@ -11,6 +11,11 @@ from src.services.query_service.app.settings import (
 )
 
 
+def _set_non_default_page_token_material(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "query-page-token-secret")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "query-page-token-key-2026-07")
+
+
 def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
@@ -45,11 +50,15 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     assert settings.enterprise_max_write_payload_bytes == 1_048_576
     assert settings.enterprise_feature_flags == {}
     assert settings.enterprise_capability_rules == {}
+    assert settings.page_token_key_id == "local-dev"
+    assert settings.page_token_previous_keys == {}
+    assert settings.page_token_ttl_seconds == 900
 
 
 def test_query_service_settings_enable_production_security_profile(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
+    _set_non_default_page_token_material(monkeypatch)
     for name in (
         "ENTERPRISE_ENFORCE_AUTHZ",
         "ENTERPRISE_ENFORCE_READ_AUTHZ",
@@ -71,6 +80,7 @@ def test_query_service_settings_enable_production_security_profile(monkeypatch) 
 def test_query_service_settings_allow_explicit_production_security_opt_out(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+    _set_non_default_page_token_material(monkeypatch)
 
     settings = load_query_service_settings()
 
@@ -93,6 +103,13 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "45")
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
     monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "query-page-token-secret")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "query-page-token-key-2026-07")
+    monkeypatch.setenv(
+        "LOTUS_CORE_PAGE_TOKEN_PREVIOUS_KEYS_JSON",
+        '{"query-page-token-key-2026-06":"previous-secret"}',
+    )
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_TTL_SECONDS", "1200")
     monkeypatch.setenv(
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         '{"query.advanced":{"tenant-a":{"ops":true,"*":false}}}',
@@ -118,6 +135,32 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
         "query.advanced": {"tenant-a": {"ops": True, "*": False}}
     }
     assert settings.enterprise_capability_rules == {"GET /portfolios/**": "portfolios.read"}
+    assert settings.page_token_secret == "query-page-token-secret"
+    assert settings.page_token_key_id == "query-page-token-key-2026-07"
+    assert settings.page_token_previous_keys == {"query-page-token-key-2026-06": "previous-secret"}
+    assert settings.page_token_ttl_seconds == 1200
+
+
+def test_query_service_settings_non_local_rejects_default_page_token_secret(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("LOTUS_CORE_PAGE_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "query-page-token-key-2026-07")
+
+    with pytest.raises(QueryServiceConfigurationError, match="LOTUS_CORE_PAGE_TOKEN_SECRET"):
+        load_query_service_settings()
+
+
+def test_query_service_settings_non_local_rejects_default_page_token_key_id(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "query-page-token-secret")
+    monkeypatch.delenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", raising=False)
+
+    with pytest.raises(QueryServiceConfigurationError, match="LOTUS_CORE_PAGE_TOKEN_KEY_ID"):
+        load_query_service_settings()
 
 
 def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
@@ -133,6 +176,7 @@ def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypat
 
 def test_query_service_settings_strict_rejects_invalid_integer(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "not-an-int")
 
     with pytest.raises(
@@ -144,6 +188,7 @@ def test_query_service_settings_strict_rejects_invalid_integer(monkeypatch) -> N
 
 def test_query_service_settings_strict_rejects_out_of_range_payload_size(monkeypatch) -> None:
     monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "0")
 
     with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES"):
@@ -152,6 +197,7 @@ def test_query_service_settings_strict_rejects_out_of_range_payload_size(monkeyp
 
 def test_query_service_settings_strict_rejects_invalid_json_map(monkeypatch) -> None:
     monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "[]")
 
     with pytest.raises(QueryServiceConfigurationError, match="ENTERPRISE_FEATURE_FLAGS_JSON"):
