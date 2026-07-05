@@ -1165,6 +1165,12 @@ Most relevant current governance:
     downstream performance, risk, and idea proof generation. `AnalyticsTimeseriesService` routes
     those responses through a guarded metadata helper and has canonical
     `PB_SG_GLOBAL_BAL_001` regression tests for the issue #705 proof path.
+89. Resilience-critical runtime settings should use `portfolio_common.runtime_settings` so invalid
+    values fail fast in strict or non-local profiles while local fallback remains explicit and
+    logged. Current migrated families include ingestion, query service, query-control-plane,
+    common outbox, valuation runtime, and portfolio aggregation runtime controls. When changing
+    remaining legacy settings in `portfolio_common.config`, do not add another local silent parser;
+    either migrate to the shared helper or document and test the compatibility fallback.
 
 ## Context Maintenance Rule
 

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
+
+from portfolio_common.runtime_settings import env_int
+
+SERVICE_NAME = "portfolio aggregation service"
 
 
 def _env_positive_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if raw is None:
-        return max(1, int(default))
-    try:
-        return max(1, int(raw))
-    except Exception:
-        return max(1, int(default))
+    return env_int(
+        name,
+        max(1, int(default)),
+        service_name=SERVICE_NAME,
+        minimum=1,
+        minimum_fallback=1,
+    )
 
 
 @dataclass(frozen=True, slots=True)
