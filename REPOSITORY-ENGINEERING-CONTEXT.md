@@ -1220,6 +1220,12 @@ Most relevant current governance:
     `INGESTION_UPLOAD_PARSER_BUDGET_EXCEEDED`. Preview must have rate/abuse protection because it
     performs parsing work even though it does not publish records. Do not reintroduce full-file XLSX
     worksheet materialization or unbounded CSV row collection.
+97. Downstream dependency probes and admin clients must use
+    `portfolio_common.downstream_access.DownstreamAccessPolicy` instead of hard-coded timeout,
+    retry, batch, pagination, cache, or circuit-breaker assumptions. The policy is configured with
+    `LOTUS_CORE_DOWNSTREAM_*` environment variables and is strict-validation aware. Health
+    readiness and Kafka admin helpers are the first consumers; future HTTP/source-data/storage
+    adapters should inherit this policy rather than introducing local client defaults.
 
 ## Context Maintenance Rule
 

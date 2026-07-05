@@ -4,11 +4,13 @@ from typing import List
 
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
-from tenacity import before_log, retry, stop_after_attempt, wait_fixed
+from tenacity import before_log, retry, stop_after_attempt, stop_after_delay, wait_fixed
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 
 logger = logging.getLogger(__name__)
+KAFKA_ADMIN_ACCESS_POLICY = load_downstream_access_policy()
 
 
 class KafkaTopicVerificationError(RuntimeError):
@@ -16,8 +18,9 @@ class KafkaTopicVerificationError(RuntimeError):
 
 
 @retry(
-    stop=stop_after_attempt(15),  # Total wait time: 15 attempts * 4s = 60s
-    wait=wait_fixed(4),
+    stop=stop_after_attempt(KAFKA_ADMIN_ACCESS_POLICY.retry_max_attempts)
+    | stop_after_delay(KAFKA_ADMIN_ACCESS_POLICY.retry_max_elapsed_seconds),
+    wait=wait_fixed(KAFKA_ADMIN_ACCESS_POLICY.retry_backoff_seconds),
     before=before_log(logger, logging.INFO),
 )
 def ensure_topics_exist(required_topics: List[str]):
@@ -37,7 +40,11 @@ def ensure_topics_exist(required_topics: List[str]):
     logger.info(f"Verifying existence of Kafka topics: {required_topics}...")
 
     try:
-        _verify_required_topics(_build_admin_client(), required_topics)
+        _verify_required_topics(
+            _build_admin_client(),
+            required_topics,
+            policy=KAFKA_ADMIN_ACCESS_POLICY,
+        )
         logger.info("All required Kafka topics found.")
 
     except KafkaException as e:
@@ -54,15 +61,25 @@ def _build_admin_client() -> AdminClient:
     return AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
 
 
-def _verify_required_topics(admin_client: AdminClient, required_topics: List[str]) -> None:
-    existing_topics = _existing_topic_names(admin_client)
+def _verify_required_topics(
+    admin_client: AdminClient,
+    required_topics: List[str],
+    *,
+    policy: DownstreamAccessPolicy | None = None,
+) -> None:
+    existing_topics = _existing_topic_names(admin_client, policy=policy)
     missing_topics = _missing_required_topics(required_topics, existing_topics)
     if missing_topics:
         raise KafkaException(f"Required topics are not yet available: {missing_topics}")
 
 
-def _existing_topic_names(admin_client: AdminClient):
-    cluster_metadata = admin_client.list_topics(timeout=5)
+def _existing_topic_names(
+    admin_client: AdminClient,
+    *,
+    policy: DownstreamAccessPolicy | None = None,
+):
+    resolved_policy = policy or KAFKA_ADMIN_ACCESS_POLICY
+    cluster_metadata = admin_client.list_topics(timeout=resolved_policy.request_timeout_seconds)
     return cluster_metadata.topics.keys()
 
 

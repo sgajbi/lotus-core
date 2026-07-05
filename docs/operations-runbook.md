@@ -242,6 +242,15 @@ Operational knobs:
 | `LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS` | `5000` | Rejects bulk upload files with more parsed data rows than the parser budget. |
 | `LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS` | `200` | Rejects bulk upload files with more columns than the parser budget. |
 | `LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH` | `8192` | Rejects bulk upload files containing a cell value longer than the parser budget. |
+| `LOTUS_CORE_DOWNSTREAM_CONNECT_TIMEOUT_MS` | `500` | Shared connection timeout budget for dependency probes and downstream clients. |
+| `LOTUS_CORE_DOWNSTREAM_REQUEST_TIMEOUT_MS` | `5000` | Shared request/metadata timeout budget for readiness probes, Kafka admin calls, and downstream clients. |
+| `LOTUS_CORE_DOWNSTREAM_RETRY_MAX_ATTEMPTS` | `15` | Shared retry attempt budget for dependency/admin calls that retry. |
+| `LOTUS_CORE_DOWNSTREAM_RETRY_BACKOFF_MS` | `4000` | Shared fixed retry backoff for dependency/admin calls that retry. |
+| `LOTUS_CORE_DOWNSTREAM_RETRY_MAX_ELAPSED_MS` | `60000` | Shared maximum elapsed retry budget. |
+| `LOTUS_CORE_DOWNSTREAM_CIRCUIT_BREAKER_ENABLED` | `false` | Records whether downstream clients may use circuit-breaker posture. |
+| `LOTUS_CORE_DOWNSTREAM_MAX_PAGE_SIZE` | `500` | Shared maximum downstream page size for future paged adapters. |
+| `LOTUS_CORE_DOWNSTREAM_MAX_BATCH_SIZE` | `500` | Shared maximum downstream batch size for future batched adapters. |
+| `LOTUS_CORE_DOWNSTREAM_CACHE_ALLOWED` | `true` | Records whether downstream clients may cache responses under their contract. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
