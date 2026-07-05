@@ -27,7 +27,10 @@ class FakeIdGenerator:
     def __init__(self, ids: list[str]):
         self._ids = list(ids)
 
-    def hex(self) -> str:
+    def new_id(self) -> str:
+        return self.new_hex()
+
+    def new_hex(self) -> str:
         return self._ids.pop(0)
 
 

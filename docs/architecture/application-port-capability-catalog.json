@@ -189,26 +189,30 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
-      "capability_id": "reconciliation.runtime-providers",
+      "capability_id": "runtime.provider-ports",
       "capability_family": "clock-id-provider",
-      "owner_service": "financial_reconciliation_service",
-      "port_module": "src/services/financial_reconciliation_service/app/services/runtime_providers.py",
+      "owner_service": "portfolio_common",
+      "port_module": "src/libs/portfolio-common/portfolio_common/runtime_providers.py",
       "port_symbols": [
+        "Clock",
         "MonotonicTimer",
         "IdGenerator"
       ],
       "adapter_modules": [
+        "src/libs/portfolio-common/portfolio_common/runtime_providers.py",
         "src/services/financial_reconciliation_service/app/services/runtime_providers.py"
       ],
       "consumer_modules": [
-        "src/services/financial_reconciliation_service/app/services/reconciliation_service.py"
+        "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
+        "src/services/query_service/app/services/core_snapshot_service.py",
+        "src/services/query_service/app/services/simulation_service.py"
       ],
       "guard_scripts": [
-        "scripts/architecture_boundary_guard.py"
+        "scripts/runtime_provider_port_guard.py"
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
-        "docs/architecture/runtime-provider-port-policy.md"
+        "docs/standards/runtime-provider-port-standard.md"
       ],
       "status": "implemented-representative",
       "runtime_boundary": "design-modularity-only"

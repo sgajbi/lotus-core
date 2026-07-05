@@ -18,7 +18,8 @@ src/services/<service>/app/ports/
 ```
 
 Shared cross-service ports live in the smallest shared library that owns the reusable contract, such
-as `src/libs/portfolio-common/portfolio_common/event_publisher.py`.
+as `src/libs/portfolio-common/portfolio_common/event_publisher.py` or
+`src/libs/portfolio-common/portfolio_common/runtime_providers.py`.
 
 Existing clock/ID provider ports that predate this convention may remain in dedicated provider
 modules while cataloged as transitional `clock-id-provider` capabilities.
@@ -34,7 +35,7 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 | `query.portfolio-tax-lot-reader` | repository reader | `query_service/app/ports/source_data_repository_ports.py` | `PortfolioTaxLotWindow:v1` resolver |
 | `query.unit-of-work` | unit of work | `query_service/app/ports/unit_of_work.py` | `SimulationService`; SQLAlchemy adapter in `query_service/app/infrastructure/unit_of_work.py` |
 | `reconciliation.repository-port` | repository reader/writer | `financial_reconciliation_service/app/ports/reconciliation_repository_ports.py` | `ReconciliationService` |
-| `reconciliation.runtime-providers` | clock/ID provider | `financial_reconciliation_service/app/services/runtime_providers.py` | `ReconciliationService` |
+| `runtime.provider-ports` | clock/ID provider | `portfolio_common/runtime_providers.py` | `ReconciliationService`, `CoreSnapshotService`, `SimulationService` |
 
 ## Enforcement
 

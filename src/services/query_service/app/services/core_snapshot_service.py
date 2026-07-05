@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.runtime_providers import Clock, SystemClock
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -131,10 +130,10 @@ class CoreSnapshotService:
         self,
         db: AsyncSession,
         *,
-        clock: Callable[[], datetime] | None = None,
+        clock: Clock | None = None,
     ):
         self.db = db
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock or SystemClock()
         self.position_repo = PositionRepository(db)
         self.portfolio_repo = PortfolioRepository(db)
         self.simulation_repo = SimulationRepository(db)
@@ -552,7 +551,7 @@ class CoreSnapshotService:
         sections: CoreSnapshotSections,
         baseline_count: int,
     ) -> CoreSnapshotResponse:
-        generated_at = self._clock()
+        generated_at = self._clock.utc_now()
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             snapshot_mode=request.snapshot_mode,

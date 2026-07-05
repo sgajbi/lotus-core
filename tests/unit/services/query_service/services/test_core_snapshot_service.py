@@ -34,6 +34,14 @@ from src.services.query_service.app.services.core_snapshot_service import (
 pytestmark = pytest.mark.asyncio
 
 
+class _FixedClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def utc_now(self) -> datetime:
+        return self._now
+
+
 def _snapshot_row(
     security_id: str = "SEC_AAPL_US",
     quantity: Decimal = Decimal("10"),
@@ -196,7 +204,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
 
 async def test_core_snapshot_uses_injected_clock_for_generated_metadata(mock_dependencies):
     generated_at = datetime(2026, 3, 1, 9, 30, tzinfo=UTC)
-    service = CoreSnapshotService(AsyncMock(), clock=lambda: generated_at)
+    service = CoreSnapshotService(AsyncMock(), clock=_FixedClock(generated_at))
     request = CoreSnapshotRequest(
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,

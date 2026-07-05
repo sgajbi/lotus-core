@@ -28,7 +28,7 @@ from ..domain.reconciliation_run_lifecycle_policy import (
 )
 from ..dtos import ReconciliationRunRequest
 from ..ports.reconciliation_repository_ports import ReconciliationRepositoryPort
-from .runtime_providers import (
+from portfolio_common.runtime_providers import (
     IdGenerator,
     MonotonicTimer,
     SystemMonotonicTimer,
@@ -809,7 +809,7 @@ class ReconciliationService:
             reconciliation_finding_to_orm(
                 finding,
                 run_id=run_id,
-                finding_id=f"finding-{self._id_generator.hex()}",
+                finding_id=f"finding-{self._id_generator.new_hex()}",
             )
             for finding in findings
         ]
@@ -831,7 +831,7 @@ class ReconciliationService:
         detail: dict | None,
     ) -> FinancialReconciliationFinding:
         return FinancialReconciliationFinding(
-            finding_id=f"finding-{self._id_generator.hex()}",
+            finding_id=f"finding-{self._id_generator.new_hex()}",
             run_id=run_id,
             reconciliation_type=reconciliation_type,
             finding_type=finding_type,
