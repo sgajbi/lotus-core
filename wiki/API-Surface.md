@@ -70,6 +70,12 @@ Reconciliation and control execution contracts.
 
 ## Copy-paste route examples
 
+Verified synthetic success and failure examples live in
+[verified-api-examples.v1.json](../docs/standards/verified-api-examples.v1.json). The catalog maps
+each route family to example IDs and is guarded by `make api-example-catalog-guard`; use it for
+error, idempotency, pagination, security, dependency-timeout, and degraded-source-data examples
+instead of copying unverified prose snippets.
+
 Operational read:
 
 ```text
