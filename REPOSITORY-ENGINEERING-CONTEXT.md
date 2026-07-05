@@ -374,9 +374,10 @@ Current repository posture:
     cash/product leg mapping, cost basis, income/cashflow classification, valuation assumptions,
     corporate-action legs, or lineage/correlation behavior, update the reusable fixture and add
     executable lowest-meaningful-level assertions first. Product families that are not yet fully
-    executable must remain explicit `documented_gap` or `implemented_with_gaps` entries with
-    expected state sections and linked follow-up ownership instead of disappearing from the golden
-    pack.
+    executable must remain explicit `implemented_with_gaps` entries with expected state sections,
+    executable target-gap assertions where possible, and linked follow-up ownership instead of
+    disappearing from the golden pack. Do not mark target-model-only product mechanics as
+    production-booking supported merely to close a test-suite issue.
     Command API behavior certification now lives in
     `docs/standards/command-api-behavior-certification-pack.v1.json`; `make
     command-api-behavior-certification-guard` is wired into lint. When changing ingestion write

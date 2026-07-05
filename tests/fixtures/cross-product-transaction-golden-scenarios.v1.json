@@ -212,7 +212,8 @@
         }
       },
       "gap_links": [
-        "sgajbi/lotus-core#607"
+        "sgajbi/lotus-core#480",
+        "sgajbi/lotus-core#481"
       ],
       "gap_notes": "Stock split, return of capital, full merger, and rights issue need deeper executable calculation coverage beyond current CA bundle A validation/reconciliation."
     },
@@ -270,71 +271,174 @@
         }
       },
       "gap_links": [
-        "sgajbi/lotus-core#607"
+        "sgajbi/lotus-core#477",
+        "sgajbi/lotus-core#478"
       ],
       "gap_notes": "Amortization/accretion, partial sale, and maturity/redemption need full executable golden coverage."
     },
     {
       "id": "fund_subscription_redemption_distribution_reinvestment",
       "product_family": "fund",
-      "status": "documented_gap",
-      "input_events": [],
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_FUND_SUB_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_FUND_GLOBAL_001",
+          "quantity": "100",
+          "price": "10",
+          "gross_transaction_amount": "1000",
+          "net_cost": "1000",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-fund-sub"
+        },
+        {
+          "transaction_id": "GOLDEN_FUND_DIST_001",
+          "transaction_type": "DIVIDEND",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_FUND_GLOBAL_001",
+          "gross_transaction_amount": "40",
+          "trade_fee": "0",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-fund-dist"
+        },
+        {
+          "transaction_id": "GOLDEN_FUND_REINVEST_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_FUND_GLOBAL_001",
+          "quantity": "4",
+          "price": "10",
+          "gross_transaction_amount": "40",
+          "net_cost": "40",
+          "trade_currency": "USD",
+          "linked_transaction_group_id": "SYNTH_FUND_REINVEST_GROUP_001",
+          "correlation_id": "corr-golden-fund-reinvest"
+        },
+        {
+          "transaction_id": "GOLDEN_FUND_RED_001",
+          "transaction_type": "SELL",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_FUND_GLOBAL_001",
+          "quantity": "30",
+          "price": "12",
+          "gross_transaction_amount": "360",
+          "net_cost": "-300",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-fund-redemption"
+        }
+      ],
       "expected": {
         "position_state": {
-          "required": "fund units, NAV, reinvested units"
+          "quantity": "74",
+          "cost_basis": "740",
+          "reinvested_units": "4"
         },
         "cash_ledger_impact": {
-          "required": "subscription cash out, redemption cash in, distribution cash or reinvestment"
+          "trade_currency": "USD",
+          "subscription_cash": "-1000",
+          "distribution_cash": "40",
+          "reinvestment_cash": "-40",
+          "redemption_cash": "360",
+          "net_cash": "-640"
         },
         "cost_basis_impact": {
-          "required": "subscription cost, redemption relief, reinvested distribution cost"
+          "subscription_cost": "1000",
+          "reinvestment_cost": "40",
+          "redemption_cost_relief": "-300",
+          "realized_gain_loss": "60"
         },
         "income_cashflow_impact": {
-          "required": "distribution income and reinvestment classification"
+          "distribution_classification": "INCOME",
+          "distribution_amount": "40",
+          "reinvestment_classification": "INVESTMENT_FLOW"
         },
         "lineage": {
+          "idempotency_key": "transaction_id",
           "required_fields": [
             "transaction_id",
             "portfolio_id",
             "security_id",
+            "linked_transaction_group_id",
             "correlation_id"
           ]
         }
-      },
-      "gap_links": [
-        "sgajbi/lotus-core#607"
-      ]
+      }
     },
     {
       "id": "option_exercise_expiry_structured_coupon_barrier_payoff",
       "product_family": "derivative_structured_product",
-      "status": "documented_gap",
-      "input_events": [],
+      "status": "implemented_with_gaps",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_OPTION_EX_OUT_001",
+          "transaction_type": "EXERCISE_OUT",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_CALL_OPTION_001",
+          "quantity": "10",
+          "net_cost": "-2000",
+          "trade_currency": "USD",
+          "linked_transaction_group_id": "SYNTH_CONVERSION_GROUP_001",
+          "correlation_id": "corr-golden-option-exercise-out"
+        },
+        {
+          "transaction_id": "GOLDEN_OPTION_EX_IN_001",
+          "transaction_type": "EXERCISE_IN",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_003",
+          "quantity": "100",
+          "net_cost": "7000",
+          "trade_currency": "USD",
+          "linked_transaction_group_id": "SYNTH_CONVERSION_GROUP_001",
+          "correlation_id": "corr-golden-option-exercise-in"
+        },
+        {
+          "transaction_id": "GOLDEN_STRUCT_COUPON_001",
+          "transaction_type": "INTEREST",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_STRUCT_NOTE_001",
+          "gross_transaction_amount": "75",
+          "trade_fee": "0",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-structured-coupon"
+        }
+      ],
       "expected": {
         "position_state": {
-          "required": "exercise delivery, expiry zeroing, payoff-linked quantity state"
+          "exercise_out_target_status": "target_not_implemented",
+          "exercise_in_target_status": "target_not_implemented",
+          "structured_coupon_position_quantity_delta": "0"
         },
         "cash_ledger_impact": {
-          "required": "premium, exercise cash, structured payoff cash"
+          "trade_currency": "USD",
+          "structured_coupon_cash": "75",
+          "exercise_cash_target_status": "target_not_implemented"
         },
         "cost_basis_impact": {
-          "required": "premium cost, exercise transfer, expiry write-off"
+          "exercise_out_basis_target": "-2000",
+          "exercise_in_basis_target": "7000",
+          "target_model_gap": "conversion/exercise basis transfer is registered but not production-booking enabled"
         },
         "income_cashflow_impact": {
-          "required": "coupon/barrier/payoff classification"
+          "classification": "INCOME",
+          "amount": "75"
         },
         "lineage": {
+          "idempotency_key": "transaction_id",
           "required_fields": [
             "transaction_id",
             "portfolio_id",
             "security_id",
+            "linked_transaction_group_id",
             "correlation_id"
           ]
         }
       },
       "gap_links": [
-        "sgajbi/lotus-core#607"
-      ]
+        "sgajbi/lotus-core#479"
+      ],
+      "gap_notes": "Conversion/exercise transaction types are present in the governed registry as target-not-implemented and production-booking disabled; the golden pack proves the gap explicitly while structured coupon cashflow behavior is executable."
     },
     {
       "id": "transfer_in_out_linked_lots_custody_account_movement",
@@ -390,32 +494,94 @@
     {
       "id": "correction_cancel_rebook_restatement",
       "product_family": "correction",
-      "status": "documented_gap",
-      "input_events": [],
+      "status": "implemented_with_gaps",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_RESTATE_ORIG_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_004",
+          "quantity": "100",
+          "price": "10",
+          "gross_transaction_amount": "1000",
+          "net_cost": "1000",
+          "trade_currency": "USD",
+          "economic_event_id": "SYNTH_RESTATE_EVENT_001",
+          "linked_transaction_group_id": "SYNTH_RESTATE_GROUP_001",
+          "correlation_id": "corr-golden-restate-original"
+        },
+        {
+          "transaction_id": "GOLDEN_RESTATE_CANCEL_001",
+          "transaction_type": "SELL",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_004",
+          "quantity": "100",
+          "price": "10",
+          "gross_transaction_amount": "1000",
+          "net_cost": "-1000",
+          "trade_currency": "USD",
+          "originating_transaction_id": "GOLDEN_RESTATE_ORIG_001",
+          "adjustment_reason": "CANCEL",
+          "economic_event_id": "SYNTH_RESTATE_EVENT_001",
+          "linked_transaction_group_id": "SYNTH_RESTATE_GROUP_001",
+          "correlation_id": "corr-golden-restate-cancel"
+        },
+        {
+          "transaction_id": "GOLDEN_RESTATE_REBOOK_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_004",
+          "quantity": "90",
+          "price": "10",
+          "gross_transaction_amount": "900",
+          "net_cost": "900",
+          "trade_currency": "USD",
+          "originating_transaction_id": "GOLDEN_RESTATE_ORIG_001",
+          "adjustment_reason": "REBOOK",
+          "economic_event_id": "SYNTH_RESTATE_EVENT_002",
+          "linked_transaction_group_id": "SYNTH_RESTATE_GROUP_002",
+          "correlation_id": "corr-golden-restate-rebook"
+        }
+      ],
       "expected": {
         "position_state": {
-          "required": "reversal and restatement version handling"
+          "quantity": "90",
+          "cost_basis": "900",
+          "cancel_quantity_delta": "-100",
+          "rebook_quantity": "90"
         },
         "cash_ledger_impact": {
-          "required": "original cash reversal and corrected cash application"
+          "trade_currency": "USD",
+          "original_cash": "-1000",
+          "cancel_cash": "1000",
+          "rebook_cash": "-900",
+          "net_cash": "-900"
         },
         "cost_basis_impact": {
-          "required": "original cost reversal and corrected basis"
+          "original_cost": "1000",
+          "cancel_cost_relief": "-1000",
+          "rebook_cost": "900"
         },
         "income_cashflow_impact": {
-          "required": "original income reversal and corrected classification"
+          "classification": "INVESTMENT_FLOW",
+          "amount": "-900"
         },
         "lineage": {
+          "idempotency_key": "transaction_id",
           "required_fields": [
-            "original_transaction_id",
-            "restatement_version",
+            "originating_transaction_id",
+            "adjustment_reason",
+            "economic_event_id",
+            "linked_transaction_group_id",
             "correlation_id"
           ]
         }
       },
       "gap_links": [
-        "sgajbi/lotus-core#607"
-      ]
+        "sgajbi/lotus-core#472",
+        "sgajbi/lotus-core#480"
+      ],
+      "gap_notes": "This golden scenario is executable as economic reversal plus rebook using supported BUY/SELL semantics. First-class corporate-action correction state remains linked to lifecycle and parent-event model issues."
     }
   ]
 }
