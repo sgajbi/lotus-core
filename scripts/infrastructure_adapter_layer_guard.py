@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REQUIRED_INFRASTRUCTURE_MODULES = (
     Path("src/services/ingestion_service/app/infrastructure/__init__.py"),
     Path("src/services/ingestion_service/app/infrastructure/workflow_stores.py"),

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 SERVICE_PATH = Path("src/services/ingestion_service/app/services/ingestion_job_service.py")
 FORBIDDEN_HELPER_TOKENS = {
     "create_or_get_job_result(": "job creation and idempotency must use IngestionJobStore",

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import importlib
+import json
 import sys
 from collections import Counter
 from dataclasses import dataclass
@@ -248,7 +248,8 @@ def evaluate_watchlist(
             if route_key.full_key not in active_key_set:
                 errors.append(
                     f"{route.source}:{route.function_name}: {route_key.full_key} matches an "
-                    "endpoint consolidation monitored family but has no active watchlist disposition"
+                    "endpoint consolidation monitored family but has no active "
+                    "watchlist disposition"
                 )
 
     for entry in watchlist.active_routes:

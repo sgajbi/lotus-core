@@ -92,7 +92,10 @@ def _scan_forbidden_imports(root: Path) -> list[ProofBuilderPatternFinding]:
                     ProofBuilderPatternFinding(
                         path=path.relative_to(root).as_posix(),
                         rule="proof-builder-import-in-delivery-or-persistence",
-                        detail="routers and repositories must not import shared proof-builder contracts directly",
+                        detail=(
+                            "routers and repositories must not import shared "
+                            "proof-builder contracts directly"
+                        ),
                     )
                 )
     return findings

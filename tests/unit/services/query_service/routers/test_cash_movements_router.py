@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from src.services.query_service.app.dependencies import get_cash_movement_service
 from src.services.query_service.app.dtos.cash_movement_dto import (
     PortfolioCashMovementSummaryResponse,
 )
-from src.services.query_service.app.dependencies import get_cash_movement_service
 from src.services.query_service.app.routers.cash_movements import (
     get_cash_movement_summary,
 )

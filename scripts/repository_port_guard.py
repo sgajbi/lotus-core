@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 FORBIDDEN_SNIPPETS = {
     Path("src/services/financial_reconciliation_service/app/services/reconciliation_service.py"): {
         "from ..repositories import ReconciliationRepository": (

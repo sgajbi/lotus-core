@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 CATALOG_PATH = Path("docs/architecture/application-port-capability-catalog.json")
 EXPECTED_SCHEMA_VERSION = "lotus-core.application-port-capability-catalog.v1"
 REQUIRED_ENTRY_FIELDS = {

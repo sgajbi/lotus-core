@@ -11,9 +11,9 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
+from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .db import AsyncSessionLocal
-from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .logging_utils import log_operation_event
 from .monitoring import observe_health_dependency_check, set_health_readiness_state
 from .runtime_settings import env_str

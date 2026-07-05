@@ -10,7 +10,11 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
     bootstrap.parent.mkdir(parents=True, exist_ok=True)
     bootstrap.write_text(
         bootstrap_content
-        or 'def configure_standard_http_app():\n    create_version_router(service_name=service_name)\n"/version"\n',
+        or (
+            "def configure_standard_http_app():\n"
+            "    create_version_router(service_name=service_name)\n"
+            '"/version"\n'
+        ),
         encoding="utf-8",
     )
     root.joinpath(

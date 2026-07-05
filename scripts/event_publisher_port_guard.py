@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 GOVERNED_APPLICATION_PUBLISHER_PATHS = (
     Path("src/services/ingestion_service/app/services/ingestion_service.py"),
     Path("src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py"),

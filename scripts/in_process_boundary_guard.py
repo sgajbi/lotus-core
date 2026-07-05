@@ -227,7 +227,8 @@ def _classify_domain_import(
                 line,
                 "domain-forbidden-layer-import",
                 imported_module,
-                "domain must not depend on application, ports, adapters, delivery, persistence, or legacy service packages",
+                "domain must not depend on application, ports, adapters, delivery, "
+                "persistence, or legacy service packages",
             )
         )
     return findings
@@ -264,7 +265,8 @@ def _classify_application_import(
                 line,
                 "application-forbidden-layer-import",
                 imported_module,
-                "application modules must not import routers, concrete adapters, infrastructure, repositories, API DTOs, or legacy services",
+                "application modules must not import routers, concrete adapters, "
+                "infrastructure, repositories, API DTOs, or legacy services",
             )
         )
     return findings
@@ -301,7 +303,8 @@ def _classify_ports_import(
                 line,
                 "ports-forbidden-layer-import",
                 imported_module,
-                "ports must not import delivery, concrete adapters, infrastructure, repositories, DTOs, or legacy services",
+                "ports must not import delivery, concrete adapters, infrastructure, "
+                "repositories, DTOs, or legacy services",
             )
         )
     return findings
@@ -318,7 +321,8 @@ def _classify_proof_builder_import(
                 line,
                 "proof-builder-forbidden-runtime-import",
                 imported_module,
-                "proof builders must assemble evidence from domain/application outputs, not framework or infrastructure objects",
+                "proof builders must assemble evidence from domain/application outputs, "
+                "not framework or infrastructure objects",
             )
         )
     if _matches_prefix(imported_module, PERSISTENCE_IMPORT_PREFIXES):
@@ -357,7 +361,8 @@ def _classify_runtime_call(layer: str, path: str, node: ast.Call) -> list[InProc
             node.lineno,
             f"{rule_prefix}-forbidden-runtime-call",
             name,
-            "runtime wiring belongs in composition roots, routers, consumers, or infrastructure adapters",
+            "runtime wiring belongs in composition roots, routers, consumers, or "
+            "infrastructure adapters",
         )
     ]
 

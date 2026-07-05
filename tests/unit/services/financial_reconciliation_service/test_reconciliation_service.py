@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from src.services.financial_reconciliation_service.app.dtos import ReconciliationRunRequest
-from src.services.financial_reconciliation_service.app.ports.reconciliation_repository_ports import (
-    ReconciliationRepositoryPort,
+from src.services.financial_reconciliation_service.app.ports import (
+    reconciliation_repository_ports,
 )
 from src.services.financial_reconciliation_service.app.services.reconciliation_service import (
     ReconciliationService,
@@ -37,7 +37,7 @@ class FakeIdGenerator:
 def test_reconciliation_service_depends_on_repository_port() -> None:
     hints = get_type_hints(ReconciliationService.__init__)
 
-    assert hints["repository"] is ReconciliationRepositoryPort
+    assert hints["repository"] is reconciliation_repository_ports.ReconciliationRepositoryPort
 
 
 @pytest.mark.asyncio

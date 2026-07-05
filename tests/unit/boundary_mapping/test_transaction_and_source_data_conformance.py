@@ -7,8 +7,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from portfolio_common.events import TransactionEvent
 from portfolio_common.event_publisher import KafkaEventPublisher
+from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import correlation_id_var
 from pydantic import BaseModel, ValidationError
 

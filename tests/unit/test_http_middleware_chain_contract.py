@@ -39,7 +39,6 @@ from tests.test_support.http_middleware_contract import (
     assert_standard_http_middleware_contract,
 )
 
-
 SERVICE_APPS: tuple[tuple[str, FastAPI], ...] = (
     ("cashflow_calculator_service_web", cashflow_calculator_service_app),
     ("cost_calculator_service_web", cost_calculator_service_app),

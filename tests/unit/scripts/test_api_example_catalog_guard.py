@@ -66,7 +66,14 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"code": "VALIDATION_ERROR", "message": "invalid", "correlation_id": "corr", "details": {}} },
+      "response": {
+        "body": {
+          "code": "VALIDATION_ERROR",
+          "message": "invalid",
+          "correlation_id": "corr",
+          "details": {}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {
@@ -78,7 +85,14 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"code": "DENIED", "message": "denied", "correlation_id": "corr", "details": {}} },
+      "response": {
+        "body": {
+          "code": "DENIED",
+          "message": "denied",
+          "correlation_id": "corr",
+          "details": {}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {
@@ -90,7 +104,14 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"code": "NOT_FOUND", "message": "missing", "correlation_id": "corr", "details": {}} },
+      "response": {
+        "body": {
+          "code": "NOT_FOUND",
+          "message": "missing",
+          "correlation_id": "corr",
+          "details": {}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {
@@ -102,7 +123,15 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"code": "CONFLICT", "message": "conflict", "correlation_id": "corr", "idempotency_key": "idem", "details": {}} },
+      "response": {
+        "body": {
+          "code": "CONFLICT",
+          "message": "conflict",
+          "correlation_id": "corr",
+          "idempotency_key": "idem",
+          "details": {}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {
@@ -114,7 +143,14 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"code": "TIMEOUT", "message": "timeout", "correlation_id": "corr", "details": {}} },
+      "response": {
+        "body": {
+          "code": "TIMEOUT",
+          "message": "timeout",
+          "correlation_id": "corr",
+          "details": {}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {
@@ -126,7 +162,12 @@ def test_api_example_catalog_guard_accepts_verified_catalog(tmp_path: Path) -> N
       "path": "/portfolios/{portfolio_id}/positions",
       "sourceTests": ["tests/unit/example.py"],
       "request": {},
-      "response": {"body": {"correlation_id": "corr", "data_quality": {"state": "SOURCE_LIMITED"}} },
+      "response": {
+        "body": {
+          "correlation_id": "corr",
+          "data_quality": {"state": "SOURCE_LIMITED"}
+        }
+      },
       "sensitivity": {"syntheticOnly": true}
     },
     {

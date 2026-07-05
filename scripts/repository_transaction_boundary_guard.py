@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REPOSITORY_ROOT = Path("src/services")
 REPOSITORY_PATH_PART = "/app/repositories/"
 EXCLUDED_PATH_PARTS = ("/build/lib/",)

@@ -3,10 +3,10 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import get_type_hints
 
-from src.services.query_service.app.ports.source_data_repository_ports import PortfolioTaxLotReader
 from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
 )
+from src.services.query_service.app.ports.source_data_repository_ports import PortfolioTaxLotReader
 from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.portfolio_tax_lot_window import (
     build_portfolio_tax_lot_window_response,

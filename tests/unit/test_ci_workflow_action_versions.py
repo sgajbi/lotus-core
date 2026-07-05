@@ -316,7 +316,8 @@ def test_pr_template_requires_documentation_acceptance_evidence() -> None:
         "repository context",
         "platform context",
         "no-doc-change rationale",
-        "Route, contract, supported-feature, operational, security, validation-lane, and service-boundary changes",
+        "Route, contract, supported-feature, operational, security, "
+        "validation-lane, and service-boundary changes",
         "post-merge",
         "Sync-RepoWikis.ps1 -Publish -Repository lotus-core",
     )
