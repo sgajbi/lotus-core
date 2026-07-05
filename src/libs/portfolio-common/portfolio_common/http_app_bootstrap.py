@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -28,7 +29,7 @@ from portfolio_common.logging_utils import (
 from portfolio_common.metrics_settings import load_metrics_runtime_settings
 from portfolio_common.monitoring import HTTP_REQUEST_LATENCY_SECONDS, HTTP_REQUESTS_TOTAL
 from portfolio_common.openapi_enrichment import enrich_openapi_schema
-from portfolio_common.runtime_settings import env_str
+from portfolio_common.runtime_settings import env_str, production_security_profile_enabled
 
 UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 METRICS_INTERNAL_OPEN_MODE = "internal_open"
@@ -36,7 +37,9 @@ METRICS_PROTECTED_SCRAPE_MODE = "protected_scrape"
 _METRICS_POLICY_CONFIGURED_STATE_KEY = "lotus_metrics_access_policy_configured"
 _SECURITY_HEADERS_CONFIGURED_STATE_KEY = "lotus_secure_response_headers_configured"
 _CORS_POLICY_CONFIGURED_STATE_KEY = "lotus_cors_policy_configured"
+_TRUSTED_HOST_POLICY_CONFIGURED_STATE_KEY = "lotus_trusted_host_policy_configured"
 HTTP_CORS_ALLOW_ORIGINS_ENV = "LOTUS_HTTP_CORS_ALLOW_ORIGINS"
+HTTP_TRUSTED_HOSTS_ENV = "LOTUS_HTTP_TRUSTED_HOSTS"
 
 SECURE_RESPONSE_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -156,6 +159,46 @@ def configure_cors_policy(
     return origins
 
 
+def resolve_trusted_hosts(
+    *,
+    service_name: str,
+    trusted_hosts: Sequence[str] | None = None,
+) -> tuple[str, ...]:
+    production_profile = production_security_profile_enabled(service_name=service_name)
+    if trusted_hosts is not None:
+        hosts = tuple(host.strip() for host in trusted_hosts if host.strip())
+    else:
+        hosts = _normalized_csv_values(env_str(HTTP_TRUSTED_HOSTS_ENV, ""))
+    if not hosts:
+        if production_profile:
+            raise RuntimeError(
+                f"{HTTP_TRUSTED_HOSTS_ENV} must be set for {service_name} outside local/dev/test "
+                "profiles."
+            )
+        return ("*",)
+    if production_profile and "*" in hosts:
+        raise RuntimeError(
+            f"{HTTP_TRUSTED_HOSTS_ENV} must not include '*' for {service_name} outside "
+            "local/dev/test profiles."
+        )
+    return hosts
+
+
+def configure_trusted_host_policy(
+    app: FastAPI,
+    *,
+    service_name: str,
+    trusted_hosts: Sequence[str] | None = None,
+) -> tuple[str, ...]:
+    if getattr(app.state, _TRUSTED_HOST_POLICY_CONFIGURED_STATE_KEY, False):
+        return tuple(getattr(app.state, "lotus_trusted_hosts", ()))
+    hosts = resolve_trusted_hosts(service_name=service_name, trusted_hosts=trusted_hosts)
+    setattr(app.state, _TRUSTED_HOST_POLICY_CONFIGURED_STATE_KEY, True)
+    setattr(app.state, "lotus_trusted_hosts", hosts)
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(hosts))
+    return hosts
+
+
 def configure_secure_response_headers(app: FastAPI) -> None:
     if getattr(app.state, _SECURITY_HEADERS_CONFIGURED_STATE_KEY, False):
         return
@@ -272,9 +315,15 @@ def configure_standard_http_app(
     id_generator=generate_correlation_id,
     metrics_access_token: str | None = None,
     cors_allow_origins: Sequence[str] | None = None,
+    trusted_hosts: Sequence[str] | None = None,
 ) -> None:
     include_routers(app, create_version_router(service_name=service_name))
     metrics_access_policy = resolve_metrics_access_policy(metrics_access_token)
+    configured_trusted_hosts = configure_trusted_host_policy(
+        app,
+        service_name=service_name,
+        trusted_hosts=trusted_hosts,
+    )
     configured_cors_origins = configure_cors_policy(
         app,
         cors_allow_origins=cors_allow_origins,
@@ -290,6 +339,15 @@ def configure_standard_http_app(
         extra={
             "cors_allow_origin_count": len(configured_cors_origins),
             "cors_policy_mode": "explicit_origins" if configured_cors_origins else "deny_browser",
+        },
+    )
+    logger.info(
+        "HTTP trusted host policy configured.",
+        extra={
+            "trusted_host_count": len(configured_trusted_hosts),
+            "trusted_host_policy_mode": (
+                "wildcard_local" if configured_trusted_hosts == ("*",) else "explicit_trusted_hosts"
+            ),
         },
     )
 
@@ -478,6 +536,7 @@ def create_standard_health_app(
     id_generator=generate_correlation_id,
     metrics_access_token: str | None = None,
     cors_allow_origins: Sequence[str] | None = None,
+    trusted_hosts: Sequence[str] | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title=title,
@@ -493,6 +552,7 @@ def create_standard_health_app(
         id_generator=id_generator,
         metrics_access_token=metrics_access_token,
         cors_allow_origins=cors_allow_origins,
+        trusted_hosts=trusted_hosts,
     )
     include_routers(app, create_health_router(*dependencies, service_name=service_name))
     return app

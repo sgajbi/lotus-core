@@ -203,15 +203,16 @@ make security-control-coverage-guard
 
 This guard must pass when adding a FastAPI app, changing an app bootstrap path, or changing shared
 HTTP security behavior. It checks that every FastAPI app is listed in the matrix and that required
-controls have implementation anchors for secure response headers, deny-by-default CORS, metrics
-access policy, safe unhandled-error responses, auth/audit middleware, payload limits, and upload
-limits where relevant.
+controls have implementation anchors for secure response headers, deny-by-default CORS, trusted
+host enforcement, metrics access policy, safe unhandled-error responses, auth/audit middleware,
+payload limits, and upload limits where relevant.
 
 Operational knobs:
 
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `LOTUS_HTTP_CORS_ALLOW_ORIGINS` | empty | Comma-separated browser origins allowed by the shared CORS middleware. Empty means browser cross-origin requests are denied. |
+| `LOTUS_HTTP_TRUSTED_HOSTS` | `*` in local/dev/test only | Comma-separated host allowlist enforced by the shared trusted-host middleware. Production-like profiles must set non-wildcard hosts. |
 | `LOTUS_METRICS_ACCESS_TOKEN` | empty | When set, `/metrics` requires `Authorization: Bearer <token>`. |
 | `ENTERPRISE_ENFORCE_AUTHZ` | `false` | Enables write authorization checks in enterprise middleware. |
 | `ENTERPRISE_ENFORCE_READ_AUTHZ` | `false` | Enables read authorization checks in enterprise middleware. |

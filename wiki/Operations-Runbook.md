@@ -146,6 +146,11 @@ manifests, SBOM artifact/provenance/signing/scan workflow controls, digest-based
 references, same-image promotion evidence across `dev`, `uat`, and `prod`, no secret-like build
 ARG/ENV additions, and the shared `/version` route.
 
+HTTP security-control coverage is guarded by `make security-control-coverage-guard`. Production-like
+profiles must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; local/dev/test profiles default to `*`
+for app-local compatibility. Browser CORS remains deny-by-default unless
+`LOTUS_HTTP_CORS_ALLOW_ORIGINS` is configured.
+
 Kafka consumers inheriting `BaseConsumer` emit:
 
 - `kafka_consumer_events_total{service,topic,group_id,outcome,reason}`

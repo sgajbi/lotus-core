@@ -7,12 +7,14 @@
     "enterprise_authz": "default_disabled_for_local_compatibility",
     "enterprise_audit": "write_audit_middleware_installed_on_business_http_apps",
     "metrics_access": "internal_open_unless_LOTUS_METRICS_ACCESS_TOKEN_is_set",
+    "trusted_host_policy": "wildcard_for_local_only_non_local_requires_LOTUS_HTTP_TRUSTED_HOSTS",
     "strict_config": "local_fallback_unless_LOTUS_CORE_STRICT_CONFIG_VALIDATION_or_non_local_ENVIRONMENT_enables_fail_closed_validation"
   },
   "required_shared_controls": [
     "standard_http_bootstrap",
     "secure_response_headers",
     "cors_policy",
+    "trusted_host_policy",
     "metrics_access_policy",
     "safe_unhandled_error_response"
   ],

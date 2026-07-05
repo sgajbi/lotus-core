@@ -47,6 +47,7 @@ matrix and has implementation anchors for:
 - shared HTTP bootstrap
 - secure response headers
 - deny-by-default CORS
+- trusted-host enforcement
 - metrics access policy
 - enterprise auth/audit middleware on business and operator APIs
 - unauthenticated health and metrics allowlist
@@ -84,6 +85,8 @@ posture evidence, not as a code default.
   enterprise-readiness layer already owns it
 - production-like deployments should not depend on hand-written per-service auth/audit defaults;
   use the shared production-security profile helper
+- production-like HTTP services must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; the local `*`
+  trusted-host default is only for local/dev/test compatibility
 - new FastAPI apps must be added to the security-control matrix in the same slice as their
   bootstrap path, or `make lint` will fail
 

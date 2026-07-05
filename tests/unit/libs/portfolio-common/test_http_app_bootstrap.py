@@ -1,9 +1,11 @@
 import re
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from portfolio_common.http_app_bootstrap import (
+    HTTP_TRUSTED_HOSTS_ENV,
     METRICS_INTERNAL_OPEN_MODE,
     METRICS_PROTECTED_SCRAPE_MODE,
     SECURE_RESPONSE_HEADERS,
@@ -232,6 +234,87 @@ def test_standard_http_app_allows_configured_cors_origin():
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://workbench.dev.lotus"
+
+
+def test_standard_http_app_trusted_hosts_defaults_to_wildcard_for_local(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv(HTTP_TRUSTED_HOSTS_ENV, raising=False)
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app, base_url="http://any-local-host.test").get("/lineage")
+
+    assert response.status_code == 200
+    assert app.state.lotus_trusted_hosts == ("*",)
+
+
+def test_standard_http_app_enforces_configured_trusted_hosts(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+        trusted_hosts=("api.lotus.local",),
+    )
+
+    allowed_response = TestClient(app, base_url="http://api.lotus.local").get("/lineage")
+    denied_response = TestClient(app, base_url="http://untrusted.lotus.local").get("/lineage")
+
+    assert allowed_response.status_code == 200
+    assert denied_response.status_code == 400
+    for header, value in SECURE_RESPONSE_HEADERS.items():
+        assert denied_response.headers[header] == value
+    assert app.state.lotus_trusted_hosts == ("api.lotus.local",)
+
+
+def test_standard_http_app_requires_trusted_hosts_in_production(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
+    monkeypatch.delenv(HTTP_TRUSTED_HOSTS_ENV, raising=False)
+    app = FastAPI()
+
+    with pytest.raises(RuntimeError, match=HTTP_TRUSTED_HOSTS_ENV):
+        configure_standard_http_app(
+            app,
+            service_name="test-service",
+            service_prefix="TST",
+            logger=MagicMock(),
+            id_generator=lambda prefix: f"{prefix}-id",
+        )
+
+
+def test_standard_http_app_rejects_wildcard_trusted_host_in_production(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(HTTP_TRUSTED_HOSTS_ENV, "*")
+    app = FastAPI()
+
+    with pytest.raises(RuntimeError, match="must not include"):
+        configure_standard_http_app(
+            app,
+            service_name="test-service",
+            service_prefix="TST",
+            logger=MagicMock(),
+            id_generator=lambda prefix: f"{prefix}-id",
+        )
 
 
 def test_standard_http_app_derives_w3c_traceparent_from_trace_id_header():

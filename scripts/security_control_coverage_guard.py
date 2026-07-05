@@ -16,6 +16,7 @@ INGESTION_SETTINGS_PATH = Path("src/services/ingestion_service/app/settings.py")
 REQUIRED_SHARED_BOOTSTRAP_ANCHORS = {
     "secure_response_headers": "configure_secure_response_headers",
     "cors_policy": "configure_cors_policy",
+    "trusted_host_policy": "configure_trusted_host_policy",
     "metrics_access_policy": "configure_metrics_access_policy",
     "safe_unhandled_error_response": "unhandled_exception_handler",
 }

@@ -30,9 +30,9 @@ make security-control-coverage-guard
 ```
 
 The contract lists every FastAPI app and its required control posture for standard HTTP bootstrap,
-secure response headers, CORS, metrics access, auth/audit middleware, unauthenticated health and
-metrics allowlist, payload limits, upload limits where relevant, secret/default validation, and
-safe unhandled-error responses.
+secure response headers, CORS, trusted-host enforcement, metrics access, auth/audit middleware,
+unauthenticated health and metrics allowlist, payload limits, upload limits where relevant,
+secret/default validation, and safe unhandled-error responses.
 
 The guard proves static control installation. It does not prove live ingress policy, external IAM,
 WAF behavior, penetration-test coverage, or environment-specific firewall rules.
@@ -43,9 +43,11 @@ Current runtime posture:
    `Permissions-Policy` headers,
 2. CORS is deny-by-default for browser cross-origin access unless
    `LOTUS_HTTP_CORS_ALLOW_ORIGINS` names allowed origins,
-3. metrics remain internal-open by default and become bearer-token protected when
+3. trusted-host enforcement defaults to `*` for local/dev/test compatibility, while
+   production-like profiles require non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`,
+4. metrics remain internal-open by default and become bearer-token protected when
    `LOTUS_METRICS_ACCESS_TOKEN` is set,
-4. business/operator HTTP apps install enterprise audit/authorization middleware; authz remains
+5. business/operator HTTP apps install enterprise audit/authorization middleware; authz remains
    default-disabled for local compatibility until `ENTERPRISE_ENFORCE_AUTHZ` or
    `ENTERPRISE_ENFORCE_READ_AUTHZ` is enabled,
-5. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`.
+6. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`.
