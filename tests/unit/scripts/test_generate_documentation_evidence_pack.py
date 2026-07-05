@@ -46,9 +46,11 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
         path.endswith("api-vocabulary-inventory.json") for path in evidence["artifact_paths"]
     )
     assert "docs/standards/api-route-catalog.v1.json" in evidence["artifact_paths"]
+    assert "docs/standards/front-door-sync.v1.json" in evidence["artifact_paths"]
     rendered_commands = [" ".join(command) for command in commands]
     assert any("api_vocabulary_inventory.py" in command for command in rendered_commands)
     assert any("generate_api_route_catalog.py --check" in command for command in rendered_commands)
+    assert any("front_door_sync_guard.py" in command for command in rendered_commands)
     assert any("wiki_validation_guard.py" in command for command in rendered_commands)
     assert any("rfc0083_closure_guard.py" in command for command in rendered_commands)
     assert any("rfc_status_ledger_guard.py" in command for command in rendered_commands)
@@ -56,6 +58,7 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
     assert {
         "readme_link_validation",
         "wiki_link_validation",
+        "front_door_sync_check",
         "api_catalog_generation",
         "api_route_catalog_check",
         "rfc_ledger_check",
@@ -73,14 +76,10 @@ def test_documentation_evidence_pack_fails_when_command_fails(tmp_path: Path, mo
         def __init__(self, returncode: int):
             self.returncode = returncode
 
-    calls = 0
-
     def fake_run(command, **_kwargs):
-        nonlocal calls
-        calls += 1
         if command[:2] == ["git", "rev-parse"]:
             return Completed(0)
-        return Completed(1 if calls == 2 else 0)
+        return Completed(1 if "scripts/api_vocabulary_inventory.py" in command else 0)
 
     monkeypatch.setattr(pack.subprocess, "run", fake_run)
 

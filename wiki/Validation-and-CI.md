@@ -43,6 +43,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make openapi-gate`
 - `make quality-openapi-spectral-gate`
 - `make api-route-catalog-guard`
+- `make front-door-sync-guard`
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
 - `make architecture-guard`
@@ -74,6 +75,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make api-route-catalog-guard`
   protects the generated API route catalog against drift from FastAPI OpenAPI output and
   route-family governance metadata
+- `make front-door-sync-guard`
+  protects README, wiki home/sidebar, canonical documentation links, and PR documentation
+  no-change decision terms
 - `make quality-wiki-docs-gate`
   validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
   pages, publication-safe page names, first headings, and local relative links; when a published
@@ -106,6 +110,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - OpenAPI quality
 - portable Spectral OpenAPI linting
 - generated API route catalog coverage
+- README/wiki front-door synchronization
 - wiki source publication readiness
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata
@@ -157,5 +162,6 @@ and still uploads the generated evidence for diagnosis.
 Use it for release, PR, and demo documentation review when README, wiki, API, RFC, runbook, or
 supported-feature claims need one citable evidence source. The pack records the command, UTC
 timestamp, git SHA, runtime profile, status, generated artifacts, affected documentation surfaces,
-wiki validation, API vocabulary generation, generated API route catalog checks, RFC-0083 closure
-checks, RFC status ledger checks, supported-feature truth, and runbook validation.
+wiki validation, README/wiki front-door synchronization, API vocabulary generation, generated API
+route catalog checks, RFC-0083 closure checks, RFC status ledger checks, supported-feature truth,
+and runbook validation.

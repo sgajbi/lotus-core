@@ -272,6 +272,8 @@ Important runtime note:
 - `make rfc-status-ledger-guard`
   full RFC status ledger coverage across core RFCs, transaction specs, architecture RFC material,
   and operations RFC playbooks
+- `make front-door-sync-guard`
+  README/wiki/sidebar/documentation front-door synchronization and PR documentation decision check
 - `make api-route-catalog-guard`
   generated API route catalog drift check across OpenAPI and route-family governance
 - `make image-provenance-guard`
@@ -350,6 +352,8 @@ Architecture and contract truth:
   [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
 - generated API route catalog:
   [docs/standards/api-route-catalog.v1.json](docs/standards/api-route-catalog.v1.json)
+- front-door synchronization contract:
+  [docs/standards/front-door-sync.v1.json](docs/standards/front-door-sync.v1.json)
 - endpoint consolidation watchlist:
   [docs/standards/endpoint-consolidation-watchlist.json](docs/standards/endpoint-consolidation-watchlist.json)
 - temporal vocabulary:

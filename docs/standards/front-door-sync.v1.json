@@ -1,0 +1,114 @@
+{
+  "schema_version": "lotus-core.front-door-sync.v1",
+  "repository": "lotus-core",
+  "guard_command": "python scripts/front_door_sync_guard.py",
+  "description": "Governed front-door synchronization contract for README, wiki navigation, durable docs, and PR documentation decisions.",
+  "canonical_sources": [
+    {
+      "id": "repository_context",
+      "path": "REPOSITORY-ENGINEERING-CONTEXT.md",
+      "role": "repo-local engineering truth"
+    },
+    {
+      "id": "architecture_index",
+      "path": "docs/architecture/README.md",
+      "role": "architecture document map"
+    },
+    {
+      "id": "api_route_catalog",
+      "path": "docs/standards/api-route-catalog.v1.json",
+      "role": "generated API route truth"
+    },
+    {
+      "id": "rfc_status_ledger",
+      "path": "docs/standards/rfc-status-ledger.v1.json",
+      "role": "generated RFC status truth"
+    },
+    {
+      "id": "supported_features_contract",
+      "path": "contracts/supported-features/lotus-core-supported-features.v1.json",
+      "role": "supported feature evidence manifest"
+    },
+    {
+      "id": "operations_runbook",
+      "path": "docs/operations-runbook.md",
+      "role": "operator runbook truth"
+    }
+  ],
+  "summary_sources": [
+    {
+      "id": "readme",
+      "path": "README.md",
+      "role": "repository front door"
+    },
+    {
+      "id": "wiki_home",
+      "path": "wiki/Home.md",
+      "role": "wiki front door"
+    },
+    {
+      "id": "wiki_sidebar",
+      "path": "wiki/_Sidebar.md",
+      "role": "wiki navigation map"
+    },
+    {
+      "id": "wiki_api_surface",
+      "path": "wiki/API-Surface.md",
+      "role": "API navigation summary"
+    },
+    {
+      "id": "wiki_validation_ci",
+      "path": "wiki/Validation-and-CI.md",
+      "role": "validation lane summary"
+    },
+    {
+      "id": "wiki_supported_features",
+      "path": "wiki/Supported-Features.md",
+      "role": "business-supported feature summary"
+    }
+  ],
+  "readme_required_links": [
+    "REPOSITORY-ENGINEERING-CONTEXT.md",
+    "docs/architecture/README.md",
+    "docs/standards/api-route-catalog.v1.json",
+    "docs/standards/route-contract-family-registry.json",
+    "wiki/API-Surface.md",
+    "wiki/Supported-Features.md",
+    "wiki/Operations-Runbook.md",
+    "wiki/Validation-and-CI.md"
+  ],
+  "wiki_home_required_links": [
+    "Supported-Features",
+    "API-Surface",
+    "Operations-Runbook",
+    "Validation-and-CI",
+    "Architecture",
+    "RFC-Index"
+  ],
+  "wiki_sidebar_required_pages": [
+    "Home",
+    "Overview",
+    "Architecture",
+    "RFC-Index",
+    "Supported-Features",
+    "API-Surface",
+    "Operations-Runbook",
+    "Validation-and-CI",
+    "Getting-Started",
+    "Development-Workflow"
+  ],
+  "pr_template_required_terms": [
+    "no-doc-change rationale",
+    "wiki source",
+    "post-merge",
+    "README",
+    "API catalog",
+    "supported-features",
+    "repository context"
+  ],
+  "update_checklist": [
+    "When README, wiki, API catalog, runbooks, supported features, RFC state, validation lanes, or repository context changes, update this contract if the front-door map changes.",
+    "When no durable documentation changes are needed, record a no-doc-change rationale in the PR or review evidence.",
+    "When wiki source changes, publish after merge with Sync-RepoWikis.ps1 -Publish -Repository lotus-core."
+  ]
+}
