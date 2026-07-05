@@ -27,6 +27,33 @@ def test_gateway_rate_limit_policy_guard_rejects_missing_endpoint() -> None:
     ]
 
 
+def test_gateway_rate_limit_policy_guard_discovers_post_route_templates_and_excludes_preview(
+    tmp_path: Path,
+) -> None:
+    router_root = tmp_path / "routers"
+    router_root.mkdir()
+    (router_root / "uploads.py").write_text(
+        "\n".join(
+            [
+                "from fastapi import APIRouter",
+                "router = APIRouter()",
+                '@router.post("/ingest/uploads/preview")',
+                "async def preview():",
+                "    pass",
+                '@router.post("/ingest/uploads/commit")',
+                "async def commit():",
+                "    pass",
+                '@router.get("/ingest/uploads/status")',
+                "async def status():",
+                "    pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert guard._literal_write_route_templates(router_root) == {"/ingest/uploads/commit"}
+
+
 def test_gateway_rate_limit_policy_guard_rejects_missing_docs_anchor(tmp_path: Path) -> None:
     doc_path = tmp_path / "docs" / "operations"
     doc_path.mkdir(parents=True)
