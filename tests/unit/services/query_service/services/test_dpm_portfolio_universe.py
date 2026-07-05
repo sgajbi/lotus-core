@@ -108,6 +108,7 @@ def test_build_dpm_portfolio_universe_response_marks_ready() -> None:
     assert response.candidates[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
     assert response.selection_basis.source_table == "portfolio_mandate_bindings"
     assert "suitability approval" in response.selection_basis.downstream_boundary
+    assert "trading authorization" in response.selection_basis.downstream_boundary
     assert response.data_quality_status == "ACCEPTED"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 1, 8, 4, tzinfo=UTC)
     assert response.source_batch_fingerprint is None

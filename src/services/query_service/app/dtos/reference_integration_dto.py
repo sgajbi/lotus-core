@@ -930,13 +930,13 @@ class ExternalCurrencyExposureRequest(BaseModel):
     mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        description="Optional reporting currency supplied by the portfolio-management request.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
         description=(
-            "Optional currency universe requested by the downstream workflow. The current "
+            "Optional currency universe requested for hedge policy evaluation. The current "
             "source-owner posture remains unavailable until external treasury ingestion is "
             "certified."
         ),
@@ -987,12 +987,12 @@ class ExternalCurrencyExposureResponse(SourceDataProductRuntimeMetadata):
     mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
     reporting_currency: str | None = Field(
         None,
-        description="Requested reporting currency echoed for downstream audit.",
+        description="Requested reporting currency echoed for source-data audit.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
-        description="Requested currency universe echoed for downstream audit.",
+        description="Requested currency universe echoed for source-data audit.",
     )
     exposures: list[dict[str, str]] = Field(
         default_factory=list,
@@ -1022,7 +1022,7 @@ class ExternalHedgePolicyRequest(BaseModel):
     mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        description="Optional reporting currency supplied by the portfolio-management request.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
@@ -1077,12 +1077,12 @@ class ExternalHedgePolicyResponse(SourceDataProductRuntimeMetadata):
     mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
     reporting_currency: str | None = Field(
         None,
-        description="Requested reporting currency echoed for downstream audit.",
+        description="Requested reporting currency echoed for source-data audit.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
-        description="Requested exposure currencies echoed for downstream audit.",
+        description="Requested exposure currencies echoed for source-data audit.",
     )
     policy_rules: list[dict[str, str]] = Field(
         default_factory=list,
@@ -1115,7 +1115,7 @@ class ExternalEligibleHedgeInstrumentRequest(BaseModel):
     mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        description="Optional reporting currency supplied by the portfolio-management request.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
@@ -1185,16 +1185,16 @@ class ExternalEligibleHedgeInstrumentResponse(SourceDataProductRuntimeMetadata):
     mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
     reporting_currency: str | None = Field(
         None,
-        description="Requested reporting currency echoed for downstream audit.",
+        description="Requested reporting currency echoed for source-data audit.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
-        description="Requested exposure currencies echoed for downstream audit.",
+        description="Requested exposure currencies echoed for source-data audit.",
     )
     instrument_types: list[str] = Field(
         default_factory=list,
-        description="Requested external treasury instrument types echoed for downstream audit.",
+        description="Requested external treasury instrument types echoed for source-data audit.",
     )
     eligible_instruments: list[dict[str, str]] = Field(
         default_factory=list,
@@ -1228,13 +1228,13 @@ class ExternalFXForwardCurveRequest(BaseModel):
     tenant_id: str | None = Field(None, description="Optional tenant identifier.")
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        description="Optional reporting currency supplied by the portfolio-management request.",
         examples=["USD"],
     )
     currency_pairs: list[str] = Field(
         default_factory=list,
         description=(
-            "Optional ISO currency pairs requested by the downstream workflow. The current "
+            "Optional ISO currency pairs requested for FX forward readiness. The current "
             "source-owner posture remains unavailable until external treasury curve ingestion "
             "is certified."
         ),
@@ -1288,16 +1288,16 @@ class ExternalFXForwardCurveResponse(SourceDataProductRuntimeMetadata):
     product_version: Literal["v1"] = product_version_field()
     reporting_currency: str | None = Field(
         None,
-        description="Requested reporting currency echoed for downstream audit.",
+        description="Requested reporting currency echoed for source-data audit.",
         examples=["USD"],
     )
     currency_pairs: list[str] = Field(
         default_factory=list,
-        description="Requested currency pairs echoed for downstream audit.",
+        description="Requested currency pairs echoed for source-data audit.",
     )
     tenors: list[str] = Field(
         default_factory=list,
-        description="Requested forward tenors echoed for downstream audit.",
+        description="Requested forward tenors echoed for source-data audit.",
     )
     curve_points: list[dict[str, str]] = Field(
         default_factory=list,
@@ -1330,14 +1330,13 @@ class ExternalHedgeExecutionReadinessRequest(BaseModel):
     mandate_id: str | None = Field(None, description="Optional mandate disambiguator.")
     reporting_currency: str | None = Field(
         None,
-        description="Optional reporting currency supplied by the downstream DPM workflow.",
+        description="Optional reporting currency supplied by the portfolio-management request.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
         description=(
-            "Optional exposure currencies the downstream workflow wants treasury readiness "
-            "checked for. The current source-owner posture remains unavailable until external "
+            "Optional exposure currencies to check for treasury readiness. The current source-owner posture remains unavailable until external "
             "treasury ingestion is certified."
         ),
         examples=[["EUR", "JPY"]],
@@ -1385,12 +1384,12 @@ class ExternalHedgeExecutionReadinessResponse(SourceDataProductRuntimeMetadata):
     mandate_id: str | None = Field(None, description="Mandate identifier, when available.")
     reporting_currency: str | None = Field(
         None,
-        description="Requested reporting currency echoed for downstream audit.",
+        description="Requested reporting currency echoed for source-data audit.",
         examples=["USD"],
     )
     exposure_currencies: list[str] = Field(
         default_factory=list,
-        description="Requested exposure currencies echoed for downstream audit.",
+        description="Requested exposure currencies echoed for source-data audit.",
     )
     readiness_checks: list[dict[str, str]] = Field(
         default_factory=list,
@@ -1419,7 +1418,7 @@ class BenchmarkAssignmentRequest(BaseModel):
     reporting_currency: str | None = Field(
         None,
         description=(
-            "Optional downstream context currency for caller symmetry and lineage. "
+            "Optional request context currency for caller symmetry and lineage. "
             "This field does not change benchmark assignment selection in the current "
             "implementation."
         ),
@@ -1483,7 +1482,7 @@ class BenchmarkAssignmentResponse(SourceDataProductRuntimeMetadata):
     source_system: str | None = Field(
         None,
         description="Upstream source system identifier.",
-        examples=["lotus-manage"],
+        examples=["mandate-booking-system"],
     )
     assignment_recorded_at: datetime = Field(
         ...,
@@ -1513,8 +1512,8 @@ class ModelPortfolioTargetRequest(BaseModel):
     include_inactive_targets: bool = Field(
         False,
         description=(
-            "Include inactive target rows when true. Default false returns only active "
-            "target rows suitable for DPM execution."
+            "Include inactive target rows when true. Default false returns only active approved "
+            "model target rows."
         ),
         examples=[False],
     )
@@ -1545,12 +1544,15 @@ class DiscretionaryMandateBindingRequest(BaseModel):
     )
     booking_center_code: str | None = Field(
         None,
-        description="Optional booking-center selector when downstream context already knows it.",
+        description="Optional booking-center selector when request context already provides it.",
         examples=["Singapore"],
     )
     include_policy_pack: bool = Field(
         True,
-        description="Return policy_pack_id when true. Default true is required by lotus-manage.",
+        description=(
+            "Return policy_pack_id when true. Default true preserves complete mandate-policy "
+            "evidence in the source-data response."
+        ),
         examples=[True],
     )
 
@@ -1615,7 +1617,10 @@ class DiscretionaryMandateBindingResponse(SourceDataProductRuntimeMetadata):
     )
     discretionary_authority_status: str = Field(
         ...,
-        description="Authority status used by lotus-manage to allow, degrade, or block DPM.",
+        description=(
+            "Authority status used to determine whether discretionary portfolio management is "
+            "allowed, degraded, or blocked."
+        ),
         examples=["active"],
     )
     booking_center_code: str = Field(
@@ -1631,7 +1636,7 @@ class DiscretionaryMandateBindingResponse(SourceDataProductRuntimeMetadata):
     )
     policy_pack_id: str | None = Field(
         None,
-        description="Policy pack identifier used for downstream DPM constraints.",
+        description="Policy pack identifier used for discretionary mandate constraints.",
         examples=["POLICY_DPM_SG_BALANCED_V1"],
     )
     mandate_objective: str | None = Field(
@@ -2522,7 +2527,8 @@ class DpmPortfolioUniverseCandidateSelectionBasis(BaseModel):
         ...,
         description=(
             "Source-owned selection-basis code declaring that candidate membership is resolved "
-            "from effective discretionary mandate bindings, not inferred by a downstream campaign."
+            "from effective discretionary mandate bindings, not inferred by advisory campaign "
+            "or relationship workflow state."
         ),
         examples=["EFFECTIVE_DISCRETIONARY_MANDATE_BINDING"],
     )
@@ -2549,15 +2555,16 @@ class DpmPortfolioUniverseCandidateSelectionBasis(BaseModel):
     downstream_boundary: str = Field(
         ...,
         description=(
-            "Consumer boundary for the candidate-selection basis. This prevents candidate "
-            "membership from being promoted into unsupported relationship, suitability, PM "
-            "ranking, execution, client-communication, or external workflow authority."
+            "Source-authority boundary for the candidate-selection basis. This prevents "
+            "candidate membership from being promoted into unsupported relationship, suitability, "
+            "manager-assignment, trading-authorization, client-notification, or external-process "
+            "authority."
         ),
         examples=[
             (
                 "Candidate membership is not relationship householding, suitability approval, "
-                "portfolio-manager ranking, execution readiness, client communication workflow, "
-                "or external workflow ownership."
+                "manager assignment, trading authorization, client notification authority, or "
+                "external process ownership."
             )
         ],
     )
@@ -2627,7 +2634,7 @@ class RiskFreeSeriesRequest(SeriesRequest):
     )
     series_mode: Literal["annualized_rate_series", "return_series"] = Field(
         ...,
-        description="Risk-free series mode requested by downstream consumer.",
+        description="Risk-free series mode requested by the integration client.",
         examples=["annualized_rate_series"],
     )
 
