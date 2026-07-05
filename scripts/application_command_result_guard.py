@@ -53,7 +53,7 @@ REQUIRED_SERVICE_SNIPPETS = {
         "CurrencyLookupQuery",
         "LookupCatalogResult",
     ),
-    Path("src/services/query_service/app/services/core_snapshot_service.py"): (
+    Path("src/services/query_service/app/services/core_snapshot_identity.py"): (
         "CoreSnapshotIdentityCommand",
         "canonical_payload()",
     ),
@@ -115,7 +115,24 @@ def find_application_command_result_findings(
                         reason="representative service must use application command/result models",
                     )
                 )
-        for snippet, reason in FORBIDDEN_SERVICE_SNIPPETS[service_path].items():
+        for snippet, reason in FORBIDDEN_SERVICE_SNIPPETS.get(service_path, {}).items():
+            if snippet in source:
+                findings.append(
+                    ApplicationCommandResultFinding(
+                        path=service_path.as_posix(),
+                        snippet=snippet,
+                        reason=reason,
+                    )
+                )
+
+    for service_path, forbidden_snippets in FORBIDDEN_SERVICE_SNIPPETS.items():
+        if service_path in REQUIRED_SERVICE_SNIPPETS:
+            continue
+        source_path = root / service_path
+        if not source_path.exists():
+            continue
+        source = source_path.read_text(encoding="utf-8")
+        for snippet, reason in forbidden_snippets.items():
             if snippet in source:
                 findings.append(
                     ApplicationCommandResultFinding(

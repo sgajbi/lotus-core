@@ -46,8 +46,12 @@ def test_application_command_result_guard_allows_application_contracts(
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
         "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        "",
     )
 
     assert find_application_command_result_findings(tmp_path) == []
@@ -89,10 +93,70 @@ def test_application_command_result_guard_rejects_api_dto_contracts(
         "..dtos.lookup_dto",
         "LookupResponse",
         "LookupItem",
-        "CoreSnapshotIdentityCommand",
-        "canonical_payload()",
+        "<missing-file>",
         'request.model_dump(mode="json")',
     ]
+
+
+def test_application_command_result_guard_checks_core_snapshot_identity_module(
+    tmp_path: Path,
+) -> None:
+    _write_required_modules(tmp_path)
+    _write(
+        tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
+        "UploadPreviewCommand\nUploadCommitCommand\nUploadPreviewResult\nUploadCommitResult\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/lookup_catalog_service.py",
+        "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        "CoreSnapshotIdentityCommand\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        "",
+    )
+
+    findings = find_application_command_result_findings(tmp_path)
+
+    assert [(finding.path, finding.snippet) for finding in findings] == [
+        (
+            "src/services/query_service/app/services/core_snapshot_identity.py",
+            "canonical_payload()",
+        )
+    ]
+
+
+def test_application_command_result_guard_rejects_core_snapshot_service_shortcut(
+    tmp_path: Path,
+) -> None:
+    _write_required_modules(tmp_path)
+    _write(
+        tmp_path / "src/services/ingestion_service/app/services/upload_ingestion_service.py",
+        "UploadPreviewCommand\nUploadCommitCommand\nUploadPreviewResult\nUploadCommitResult\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/lookup_catalog_service.py",
+        "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        'request.model_dump(mode="json")\n',
+    )
+
+    findings = find_application_command_result_findings(tmp_path)
+
+    assert any(
+        finding.path == "src/services/query_service/app/services/core_snapshot_service.py"
+        and finding.snippet == 'request.model_dump(mode="json")'
+        for finding in findings
+    )
 
 
 def test_application_command_result_guard_rejects_missing_symbol(
@@ -126,8 +190,12 @@ def test_application_command_result_guard_rejects_missing_symbol(
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
         "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
+    )
+    _write(
+        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        "",
     )
 
     findings = find_application_command_result_findings(tmp_path)

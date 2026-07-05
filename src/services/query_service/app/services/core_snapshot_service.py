@@ -8,11 +8,6 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.runtime_providers import Clock, SystemClock
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..application.core_snapshot import (
-    CoreSnapshotIdentityCommand,
-    CoreSnapshotOptionsCommand,
-    CoreSnapshotSimulationCommand,
-)
 from ..dtos.core_snapshot_dto import (
     CoreSnapshotFreshnessMetadata,
     CoreSnapshotGovernanceMetadata,
@@ -57,6 +52,7 @@ from .core_snapshot_governance import (
     SnapshotGovernanceContext,
     resolve_core_snapshot_governance,
 )
+from .core_snapshot_identity import core_snapshot_request_fingerprint
 from .core_snapshot_projected_positions import (
     apply_baseline_projected_values,
     apply_projected_position_changes,
@@ -66,7 +62,6 @@ from .core_snapshot_projected_positions import (
     new_projected_position,
 )
 from .decimal_amounts import decimal_or_none
-from .request_fingerprint import request_fingerprint
 
 
 class CoreSnapshotBadRequestError(ValueError):
@@ -146,37 +141,6 @@ class CoreSnapshotService:
         self.price_repo = dependencies.price_repo
         self.fx_repo = dependencies.fx_repo
         self.instrument_repo = dependencies.instrument_repo
-
-    @staticmethod
-    def _request_fingerprint(payload: dict[str, Any]) -> str:
-        return cast(str, request_fingerprint(payload))
-
-    @staticmethod
-    def _identity_command_from_request(
-        request: CoreSnapshotRequest,
-    ) -> CoreSnapshotIdentityCommand:
-        return CoreSnapshotIdentityCommand(
-            as_of_date=request.as_of_date,
-            snapshot_mode=request.snapshot_mode.value,
-            reporting_currency=request.reporting_currency,
-            consumer_system=request.consumer_system,
-            tenant_id=request.tenant_id,
-            sections=[section.value for section in request.sections],
-            simulation=(
-                CoreSnapshotSimulationCommand(
-                    session_id=request.simulation.session_id,
-                    expected_version=request.simulation.expected_version,
-                )
-                if request.simulation is not None
-                else None
-            ),
-            options=CoreSnapshotOptionsCommand(
-                include_zero_quantity_positions=(request.options.include_zero_quantity_positions),
-                include_cash_positions=request.options.include_cash_positions,
-                position_basis=request.options.position_basis.value,
-                weight_basis=request.options.weight_basis.value,
-            ),
-        )
 
     @staticmethod
     def _normalize_freshness_status(status: str | None) -> str | None:
@@ -537,7 +501,7 @@ class CoreSnapshotService:
         baseline_count: int,
     ) -> CoreSnapshotResponse:
         generated_at = self._clock.utc_now()
-        request_fingerprint_value = self._core_snapshot_request_fingerprint(
+        request_fingerprint_value = core_snapshot_request_fingerprint(
             portfolio_id=portfolio_id,
             request=request,
             governance=governance,
@@ -622,34 +586,6 @@ class CoreSnapshotService:
                 },
                 use_content_hash_as_source_batch_fingerprint=True,
             ),
-        )
-
-    def _core_snapshot_request_fingerprint(
-        self,
-        *,
-        portfolio_id: str,
-        request: CoreSnapshotRequest,
-        governance: CoreSnapshotGovernanceResolution,
-    ) -> str:
-        return self._request_fingerprint(
-            {
-                "portfolio_id": portfolio_id,
-                "request": self._identity_command_from_request(request).canonical_payload(),
-                "governance": {
-                    "consumer_system": governance.consumer_system,
-                    "tenant_id": governance.tenant_id,
-                    "requested_sections": [
-                        section.value for section in governance.requested_sections
-                    ],
-                    "applied_sections": [section.value for section in governance.applied_sections],
-                    "dropped_sections": [section.value for section in governance.dropped_sections],
-                    "policy_version": governance.policy_provenance.policy_version,
-                    "policy_source": governance.policy_provenance.policy_source,
-                    "matched_rule_id": governance.policy_provenance.matched_rule_id,
-                    "strict_mode": governance.policy_provenance.strict_mode,
-                    "warnings": governance.warnings,
-                },
-            }
         )
 
     async def _resolve_baseline_positions(
