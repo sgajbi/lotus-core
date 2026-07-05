@@ -45,6 +45,9 @@ from src.services.valuation_orchestrator_service.app.core.valuation_job_publishe
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
+from src.services.valuation_orchestrator_service.app.core.valuation_scheduler_dependencies import (
+    ValuationSchedulerRepositoryFactory,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_stale_job_resetter import (
     ValuationStaleJobResetter,
 )
@@ -669,6 +672,101 @@ async def test_scheduler_updates_queue_metrics(
     mock_set_pending.assert_called_once_with("valuation", 4)
     mock_set_failed.assert_called_once_with("valuation", 2)
     mock_set_oldest.assert_called_once_with("valuation", 300.0)
+
+
+async def test_scheduler_uses_injected_repository_factory_for_db_step_wrappers():
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_repo.get_job_queue_stats.return_value = {
+        "pending_count": 4,
+        "failed_count": 2,
+        "oldest_pending_created_at": None,
+    }
+    repository_factory = ValuationSchedulerRepositoryFactory(
+        valuation_repository_factory=lambda db: mock_repo,
+        valuation_job_repository_factory=lambda db: AsyncMock(spec=ValuationJobRepository),
+        position_state_repository_factory=lambda db: AsyncMock(spec=PositionStateRepository),
+        reprocessing_job_repository_factory=lambda db: AsyncMock(spec=ReprocessingJobRepository),
+    )
+    scheduler = ValuationScheduler(
+        valuation_job_publisher=MagicMock(),
+        repository_factory=repository_factory,
+    )
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_pending"
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_failed_stored"
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_oldest_pending_age_seconds"
+        ),
+    ):
+        await scheduler._update_queue_metrics(AsyncMock())
+
+    mock_repo.get_job_queue_stats.assert_awaited_once()
+
+
+async def test_scheduler_poll_once_uses_injected_dependencies_without_real_repositories_or_kafka():
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_repo.get_job_queue_stats.return_value = {
+        "pending_count": 0,
+        "failed_count": 0,
+        "oldest_pending_created_at": None,
+    }
+    mock_db_session = AsyncMock(spec=AsyncSession)
+
+    async def get_session_gen():
+        yield mock_db_session
+
+    repository_factory = ValuationSchedulerRepositoryFactory(
+        valuation_repository_factory=lambda db: mock_repo,
+        valuation_job_repository_factory=lambda db: AsyncMock(spec=ValuationJobRepository),
+        position_state_repository_factory=lambda db: AsyncMock(spec=PositionStateRepository),
+        reprocessing_job_repository_factory=lambda db: AsyncMock(spec=ReprocessingJobRepository),
+    )
+    reprocessing_coordinator = MagicMock()
+    reprocessing_coordinator.update_reprocessing_metrics = AsyncMock()
+    reprocessing_coordinator.process_instrument_level_triggers = AsyncMock()
+    stale_job_resetter = MagicMock()
+    stale_job_resetter.reset_stale_jobs = AsyncMock()
+    backfill_planner = MagicMock()
+    backfill_planner.create_backfill_jobs = AsyncMock()
+    watermark_advancer = MagicMock()
+    watermark_advancer.advance_watermarks = AsyncMock()
+    dispatch_coordinator = MagicMock()
+    dispatch_coordinator.claim_and_dispatch_ready_jobs = AsyncMock()
+    scheduler = ValuationScheduler(
+        valuation_job_publisher=MagicMock(),
+        repository_factory=repository_factory,
+        session_provider=get_session_gen,
+        instrument_reprocessing_coordinator=reprocessing_coordinator,
+        valuation_stale_job_resetter=stale_job_resetter,
+        valuation_backfill_planner=backfill_planner,
+        valuation_watermark_advancer=watermark_advancer,
+        valuation_dispatch_coordinator=dispatch_coordinator,
+    )
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_pending"
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_failed_stored"
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.set_control_queue_oldest_pending_age_seconds"
+        ),
+    ):
+        await scheduler._run_poll_once()
+
+    reprocessing_coordinator.update_reprocessing_metrics.assert_awaited_once_with(repo=mock_repo)
+    reprocessing_coordinator.process_instrument_level_triggers.assert_awaited_once()
+    stale_job_resetter.reset_stale_jobs.assert_awaited_once_with(repo=mock_repo)
+    backfill_planner.create_backfill_jobs.assert_awaited_once()
+    dispatch_coordinator.claim_and_dispatch_ready_jobs.assert_awaited_once()
+    watermark_advancer.advance_watermarks.assert_awaited_once()
 
 
 async def test_scheduler_normalizes_terminal_reprocessing_states(
