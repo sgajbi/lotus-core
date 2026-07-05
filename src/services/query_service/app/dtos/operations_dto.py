@@ -789,7 +789,9 @@ class LoadRunProgressResponse(BaseModel):
         description=(
             "Configured maximum number of valuation jobs that the scheduler can claim and "
             "dispatch in a single poll cycle, expressed as "
-            "`valuation_scheduler_batch_size * valuation_scheduler_dispatch_rounds`."
+            "`valuation_scheduler_batch_size * valuation_scheduler_dispatch_rounds`. "
+            "Actual dispatch can be lower when the scheduler poll budget, dispatch budget, "
+            "or producer back-pressure stop condition is reached."
         ),
         examples=[1000],
     )
@@ -810,7 +812,8 @@ class LoadRunProgressResponse(BaseModel):
             "configured scheduler poll interval and maximum per-poll dispatch budget, "
             "expressed as `valuation_scheduler_pending_dispatch_polls_lower_bound * "
             "valuation_scheduler_poll_interval_seconds`. This is a claim-budget estimate, "
-            "not a full end-to-end completion forecast."
+            "not a full end-to-end completion forecast, and excludes budget exhaustion or "
+            "producer back-pressure deferrals."
         ),
         examples=[30],
     )

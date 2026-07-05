@@ -1,5 +1,6 @@
 DISPATCH_PUBLISH_FAILURE_PHASE = "publish"
 DISPATCH_CONFIRMATION_TIMEOUT_PHASE = "delivery_confirmation_timeout"
+DISPATCH_BUDGET_EXHAUSTED_PHASE = "budget_exhausted"
 
 
 class SchedulerDispatchError(RuntimeError):
@@ -30,6 +31,8 @@ def dispatch_failure_reason(*, failure_phase: str, record_keys: tuple[str, ...])
             "Scheduler dispatch delivery confirmation timed out; delivery state is unknown for "
             f"record keys: {key_summary}"
         )
+    if failure_phase == DISPATCH_BUDGET_EXHAUSTED_PHASE:
+        return f"Scheduler dispatch budget exhausted before queueing record keys: {key_summary}"
     return f"Scheduler dispatch publish failed before queueing record keys: {key_summary}"
 
 

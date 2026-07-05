@@ -1246,6 +1246,13 @@ Most relevant current governance:
      max attempts, max elapsed budgets, explicit retryable exception classes, and
      `retry_policy_events_total` telemetry. Unexpected exceptions should remain non-retryable unless
      a domain policy explicitly classifies them as transient.
+101. Durable queue schedulers must have explicit work budgets in addition to batch-size and
+     dispatch-round limits. Valuation scheduler uses `VALUATION_SCHEDULER_POLL_BUDGET_SECONDS` and
+     `VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS`, emits poll-duration, claimed, dispatched,
+     budget-exhausted, and producer-back-pressure metrics, and recovers claimed-but-undispatched
+     jobs through the existing durable dispatch recovery path. Do not increase scheduler batch
+     sizes or dispatch rounds without preserving time-budget stop behavior and source-safe
+     carry-forward semantics.
 
 ## Context Maintenance Rule
 
