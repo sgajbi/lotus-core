@@ -1226,6 +1226,13 @@ Most relevant current governance:
     `LOTUS_CORE_DOWNSTREAM_*` environment variables and is strict-validation aware. Health
     readiness and Kafka admin helpers are the first consumers; future HTTP/source-data/storage
     adapters should inherit this policy rather than introducing local client defaults.
+98. Kafka producer runtime posture is centralized in
+    `portfolio_common.kafka_producer_policy.KafkaProducerPolicy` and applied by
+    `portfolio_common.kafka_utils.KafkaProducer`. Do not add service-local producer config
+    dictionaries for client identity, retry count, batching, compression, delivery timeout,
+    request timeout, or queue bounds. Use the shared `LOTUS_CORE_KAFKA_PRODUCER_*` variables and
+    service override JSON; keep idempotence, `acks=all`, and safe in-flight request limits as
+    adapter-owned invariants rather than caller-overridable settings.
 
 ## Context Maintenance Rule
 

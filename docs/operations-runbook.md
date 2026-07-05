@@ -251,9 +251,25 @@ Operational knobs:
 | `LOTUS_CORE_DOWNSTREAM_MAX_PAGE_SIZE` | `500` | Shared maximum downstream page size for future paged adapters. |
 | `LOTUS_CORE_DOWNSTREAM_MAX_BATCH_SIZE` | `500` | Shared maximum downstream batch size for future batched adapters. |
 | `LOTUS_CORE_DOWNSTREAM_CACHE_ALLOWED` | `true` | Records whether downstream clients may cache responses under their contract. |
+| `LOTUS_CORE_KAFKA_PRODUCER_CLIENT_ID` | `portfolio-analytics-producer` | Default Kafka producer client identity. Service-specific producers default to `<service_name>-producer` unless this global value or service override JSON is set. |
+| `LOTUS_CORE_KAFKA_PRODUCER_RETRIES` | `5` | Default producer retry count. |
+| `LOTUS_CORE_KAFKA_PRODUCER_LINGER_MS` | `5` | Default producer linger budget for batching. |
+| `LOTUS_CORE_KAFKA_PRODUCER_BATCH_NUM_MESSAGES` | `1000` | Default producer batch message limit. |
+| `LOTUS_CORE_KAFKA_PRODUCER_COMPRESSION_TYPE` | `zstd` | Default compression type; accepted values are `none`, `gzip`, `snappy`, `lz4`, and `zstd`. |
+| `LOTUS_CORE_KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS` | `120000` | Default end-to-end producer delivery timeout; must be greater than request timeout and linger budget. |
+| `LOTUS_CORE_KAFKA_PRODUCER_REQUEST_TIMEOUT_MS` | `30000` | Default Kafka broker request timeout for producer calls. |
+| `LOTUS_CORE_KAFKA_PRODUCER_QUEUE_BUFFERING_MAX_MESSAGES` | `100000` | Default local producer queue message bound. |
+| `LOTUS_CORE_KAFKA_PRODUCER_QUEUE_BUFFERING_MAX_KBYTES` | `1048576` | Default local producer queue memory bound in KiB. |
+| `LOTUS_CORE_KAFKA_PRODUCER_DEFAULTS_JSON` | empty | JSON object of default producer overrides using Kafka config keys such as `linger.ms` or `batch.num.messages`. |
+| `LOTUS_CORE_KAFKA_PRODUCER_SERVICE_OVERRIDES_JSON` | empty | JSON object keyed by service name for service-specific producer overrides. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
+
+Kafka producer durability settings `enable.idempotence=true`, `acks=all`, and
+`max.in.flight.requests.per.connection=5` are adapter-owned invariants, not runtime override
+settings. Invalid producer timeout, retry, batch, compression, queue, or override relationships fail
+with source-safe `RuntimeConfigurationError` messages before producer construction.
 
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
