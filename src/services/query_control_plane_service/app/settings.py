@@ -54,6 +54,8 @@ class QueryControlPlaneSettings:
     enterprise_primary_key_id: str
     enterprise_secret_rotation_days: int
     enterprise_max_write_payload_bytes: int
+    enterprise_auth_context_hmac_secret: str
+    enterprise_auth_context_max_age_seconds: int
     enterprise_feature_flags: dict[str, Any]
     enterprise_capability_rules: dict[str, Any]
 
@@ -79,6 +81,10 @@ def load_query_control_plane_settings() -> QueryControlPlaneSettings:
         enterprise_secret_rotation_days=env_int("ENTERPRISE_SECRET_ROTATION_DAYS", 90, minimum=1),
         enterprise_max_write_payload_bytes=env_int(
             "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", 1_048_576, minimum=1
+        ),
+        enterprise_auth_context_hmac_secret=env_str("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", ""),
+        enterprise_auth_context_max_age_seconds=env_int(
+            "ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS", 300, minimum=1
         ),
         enterprise_feature_flags=env_json_map("ENTERPRISE_FEATURE_FLAGS_JSON"),
         enterprise_capability_rules=env_json_map("ENTERPRISE_CAPABILITY_RULES_JSON"),

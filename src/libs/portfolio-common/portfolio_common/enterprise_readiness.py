@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Protocol
@@ -58,6 +61,8 @@ class EnterpriseSettings(Protocol):
     enterprise_enforce_runtime_config: bool
     enterprise_secret_rotation_days: int
     enterprise_max_write_payload_bytes: int
+    enterprise_auth_context_hmac_secret: str
+    enterprise_auth_context_max_age_seconds: int
     enterprise_feature_flags: dict[str, Any]
     enterprise_capability_rules: dict[str, Any]
 
@@ -73,8 +78,16 @@ class DefaultEnterpriseSettings:
     enterprise_enforce_runtime_config: bool
     enterprise_secret_rotation_days: int
     enterprise_max_write_payload_bytes: int
+    enterprise_auth_context_hmac_secret: str
+    enterprise_auth_context_max_age_seconds: int
     enterprise_feature_flags: dict[str, Any]
     enterprise_capability_rules: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedServicePrincipal:
+    service_identity: str
+    capabilities: set[str]
 
 
 @dataclass(frozen=True)
@@ -146,6 +159,11 @@ class EnterpriseReadinessRuntime:
         )
         _append_issue_if(
             issues,
+            "missing_auth_context_secret",
+            authz_enabled and not self.load_settings().enterprise_auth_context_hmac_secret.strip(),
+        )
+        _append_issue_if(
+            issues,
             "missing_capability_rules",
             self._requires_capability_rules(authz_enabled) and not self.load_capability_rules(),
         )
@@ -212,7 +230,11 @@ class EnterpriseReadinessRuntime:
         if not _has_service_identity(normalized_headers):
             return False, "missing_service_identity"
 
-        return self._authorize_required_capability(required_capability, normalized_headers)
+        verified_principal = _verified_service_principal(normalized_headers, self.load_settings())
+        if isinstance(verified_principal, str):
+            return False, verified_principal
+
+        return self._authorize_required_capability(required_capability, verified_principal)
 
     def _request_requires_authorization(
         self,
@@ -234,15 +256,14 @@ class EnterpriseReadinessRuntime:
     def _authorize_required_capability(
         self,
         required_capability: str | None,
-        normalized_headers: dict[str, str],
+        verified_principal: VerifiedServicePrincipal,
     ) -> tuple[bool, str | None]:
         if not required_capability and self.env_enabled(
             "ENTERPRISE_REQUIRE_CAPABILITY_RULES", "false"
         ):
             return False, "missing_capability_rule"
         if required_capability:
-            capabilities = _capabilities_from_headers(normalized_headers)
-            if required_capability not in capabilities:
+            if required_capability not in verified_principal.capabilities:
                 return False, f"missing_capability:{required_capability}"
 
         return True, None
@@ -322,6 +343,13 @@ def load_default_enterprise_settings(*, service_name: str) -> DefaultEnterpriseS
         enterprise_max_write_payload_bytes=env_int(
             "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES",
             1_048_576,
+            service_name=service_name,
+            minimum=1,
+        ),
+        enterprise_auth_context_hmac_secret=env_str("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", ""),
+        enterprise_auth_context_max_age_seconds=env_int(
+            "ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS",
+            300,
             service_name=service_name,
             minimum=1,
         ),
@@ -421,6 +449,79 @@ def _capabilities_from_headers(normalized_headers: dict[str, str]) -> set[str]:
         for part in normalized_headers.get("x-capabilities", "").split(",")
         if part.strip()
     }
+
+
+def _verified_service_principal(
+    normalized_headers: dict[str, str],
+    settings: EnterpriseSettings,
+) -> VerifiedServicePrincipal | str:
+    if normalized_headers.get("authorization"):
+        return _unsupported_authorization_reason(normalized_headers["authorization"])
+
+    service_identity = normalized_headers.get("x-service-identity", "").strip()
+    if not service_identity:
+        return "missing_service_identity"
+
+    secret = settings.enterprise_auth_context_hmac_secret.strip()
+    if not secret:
+        return "missing_verified_service_principal"
+
+    key_id = normalized_headers.get("x-enterprise-auth-key-id", "").strip()
+    if settings.enterprise_primary_key_id.strip() and key_id != settings.enterprise_primary_key_id:
+        return "invalid_auth_context_key_id"
+
+    timestamp = _auth_context_timestamp(normalized_headers)
+    if timestamp is None:
+        return "invalid_auth_context_timestamp"
+    if abs(int(time.time()) - timestamp) > settings.enterprise_auth_context_max_age_seconds:
+        return "stale_auth_context"
+
+    signature = normalized_headers.get("x-enterprise-auth-signature", "").strip()
+    if not signature:
+        return "missing_auth_context_signature"
+    expected = _enterprise_auth_context_signature(normalized_headers, secret)
+    if not hmac.compare_digest(expected, signature):
+        return "invalid_auth_context_signature"
+
+    return VerifiedServicePrincipal(
+        service_identity=service_identity,
+        capabilities=_capabilities_from_headers(normalized_headers),
+    )
+
+
+def _unsupported_authorization_reason(authorization: str) -> str:
+    parts = authorization.split(maxsplit=1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
+        return "invalid_authorization_header"
+    return "unverified_authorization_principal"
+
+
+def _auth_context_timestamp(normalized_headers: dict[str, str]) -> int | None:
+    raw = normalized_headers.get("x-enterprise-auth-timestamp", "")
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _enterprise_auth_context_signature(
+    normalized_headers: dict[str, str],
+    secret: str,
+) -> str:
+    canonical = "\n".join(
+        (
+            "lotus-enterprise-auth-context-v1",
+            normalized_headers.get("x-enterprise-auth-key-id", ""),
+            normalized_headers.get("x-service-identity", ""),
+            normalized_headers.get("x-actor-id", ""),
+            normalized_headers.get("x-tenant-id", ""),
+            normalized_headers.get("x-role", ""),
+            normalized_headers.get("x-correlation-id", ""),
+            normalized_headers.get("x-enterprise-auth-timestamp", ""),
+            ",".join(sorted(_capabilities_from_headers(normalized_headers))),
+        )
+    )
+    return hmac.new(secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def _path_matches_rule(path: str, rule_path: str) -> bool:

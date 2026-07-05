@@ -94,6 +94,8 @@ posture evidence, not as a code default.
   use the shared production-security profile helper
 - source-of-truth write planes need service-owned default capability maps plus tests that cover
   every registered write route
+- enterprise capability decisions must use the signed service-principal auth context; unsigned
+  `X-Capabilities`, `X-Service-Identity`, or `Authorization` presence is not proof of entitlement
 - privileged ingestion ops JWTs must require issuer, audience, expiry, issued-at, replay id,
   principal identity, required ops scope/capability, and `kid`; key rotation uses an active HS256
   key plus previous-key JSON and non-local static-token fallback requires explicit approval

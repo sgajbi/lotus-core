@@ -1,8 +1,13 @@
+from time import time
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.enterprise_readiness import (
+    _enterprise_auth_context_signature,
+    _normalize_headers,
+)
 
 from src.services.ingestion_service.app import main as ingestion_main
 from src.services.ingestion_service.app.main import app
@@ -18,14 +23,26 @@ async def async_test_client():
 
 
 def _enterprise_headers(capabilities: str) -> dict[str, str]:
-    return {
+    headers = {
         "X-Actor-Id": "actor-1",
         "X-Tenant-Id": "tenant-1",
         "X-Role": "ops",
         "X-Correlation-Id": "corr-1",
         "X-Service-Identity": "lotus-gateway",
         "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": "kms-key-1",
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
     }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers),
+        "auth-context-secret",
+    )
+    return headers
+
+
+def _configure_auth_context_env(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
 
 
 def _publish_failed_example(operation: dict) -> dict:
@@ -83,6 +100,7 @@ async def test_enterprise_middleware_denies_ingestion_write_missing_capability(
     async_test_client, monkeypatch
 ):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
 
     response = await async_test_client.post(
         "/ingest/portfolios",
