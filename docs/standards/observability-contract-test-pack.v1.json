@@ -1,0 +1,113 @@
+{
+  "schema_version": "lotus-core.observability-contract-test-pack.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#571",
+  "guard_command": "make observability-contract-test-pack-guard",
+  "named_ci_lane": "test-ops-contract",
+  "scope": [
+    "standard FastAPI service apps",
+    "health-only worker web apps",
+    "HTTP correlation/request/trace headers",
+    "route-template HTTP metrics",
+    "safe diagnostics and logging contracts",
+    "bounded Prometheus metric labels"
+  ],
+  "required_contract_assertions": [
+    "health_or_version_surface",
+    "metrics_surface",
+    "correlation_request_trace_headers",
+    "route_template_metrics",
+    "unsafe_label_or_log_rejection",
+    "source_safe_diagnostics"
+  ],
+  "scenarios": [
+    {
+      "id": "runtime_apps_expose_health_version_and_metrics_surfaces",
+      "status": "implemented",
+      "observability_family": "health,version,metrics",
+      "evidence": [
+        "tests/unit/test_http_middleware_chain_contract.py",
+        "tests/unit/libs/portfolio-common/test_http_app_bootstrap.py"
+      ],
+      "test_evidence": [
+        "test_service_app_entrypoint_uses_standard_http_middleware_chain",
+        "test_standard_health_app_exposes_shared_observability_contract"
+      ],
+      "contract_assertions": [
+        "health_or_version_surface",
+        "metrics_surface",
+        "correlation_request_trace_headers"
+      ]
+    },
+    {
+      "id": "standard_headers_and_route_template_metrics_are_preserved",
+      "status": "implemented",
+      "observability_family": "http_middleware,metrics",
+      "evidence": [
+        "tests/test_support/http_middleware_contract.py",
+        "tests/unit/libs/portfolio-common/test_http_app_bootstrap.py"
+      ],
+      "test_evidence": [
+        "assert_standard_http_middleware_contract",
+        "test_standard_http_metrics_use_route_template_for_dynamic_paths"
+      ],
+      "contract_assertions": [
+        "correlation_request_trace_headers",
+        "route_template_metrics"
+      ]
+    },
+    {
+      "id": "malformed_trace_headers_are_normalized_to_valid_w3c_context",
+      "status": "implemented",
+      "observability_family": "trace_context",
+      "evidence": [
+        "tests/unit/libs/portfolio-common/test_http_app_bootstrap.py",
+        "tests/unit/libs/portfolio-common/test_logging_utils.py"
+      ],
+      "test_evidence": [
+        "test_standard_http_app_replaces_malformed_traceparent_context",
+        "test_trace_context_normalizers_reject_invalid_w3c_ids"
+      ],
+      "contract_assertions": [
+        "correlation_request_trace_headers"
+      ]
+    },
+    {
+      "id": "forbidden_metric_labels_and_unsafe_logs_are_rejected",
+      "status": "implemented",
+      "observability_family": "metrics,logs",
+      "evidence": [
+        "tests/unit/libs/portfolio-common/test_monitoring.py",
+        "tests/unit/scripts/test_metric_vocabulary_guard.py",
+        "tests/unit/scripts/test_structured_log_guard.py"
+      ],
+      "test_evidence": [
+        "test_production_prometheus_metric_labels_exclude_business_identifiers",
+        "test_metric_vocabulary_guard_rejects_forbidden_label",
+        "test_structured_log_guard_rejects_sensitive_format_args"
+      ],
+      "contract_assertions": [
+        "unsafe_label_or_log_rejection"
+      ]
+    },
+    {
+      "id": "diagnostics_and_payload_evidence_remain_source_safe",
+      "status": "implemented",
+      "observability_family": "diagnostics,source_safety",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/ingestion_service/services/test_ingestion_payload_evidence.py",
+        "tests/unit/libs/portfolio-common/test_logging_utils.py"
+      ],
+      "test_evidence": [
+        "test_ingestion_idempotency_diagnostics_endpoint",
+        "test_source_safe_request_payload_redacts_sensitive_values_without_mutating_input",
+        "test_redacting_json_formatter_masks_message_and_extra_fields"
+      ],
+      "contract_assertions": [
+        "source_safe_diagnostics",
+        "unsafe_label_or_log_rejection"
+      ]
+    }
+  ]
+}

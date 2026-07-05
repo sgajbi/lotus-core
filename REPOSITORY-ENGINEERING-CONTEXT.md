@@ -955,6 +955,12 @@ Most relevant current governance:
     `409 INGESTION_IDEMPOTENCY_CONFLICT`, OpenAPI must expose the shared 409 response on every
     job-backed ingestion route, and diagnostics must classify same-endpoint payload conflicts
     separately from cross-endpoint key reuse.
+    Observability contract evidence for HTTP app bootstrap, health/version/metrics surfaces,
+    route-template metrics, trace/correlation headers, unsafe metric/log rejection, and source-safe
+    diagnostics is governed by `docs/standards/observability-contract-test-pack.v1.json` and
+    `make observability-contract-test-pack-guard`. Keep this pack current whenever middleware,
+    metrics, tracing, structured logging, or operator diagnostics change; do not scatter
+    observability proof across tests without updating the pack.
     Business-date ingestion lifecycle orchestration belongs in
     `BusinessDateIngestionCommandHandler`, not `routers/business_dates.py`. Keep empty payload,
     max-future-date, and monotonic calendar advancement in `BusinessDateIngestionPolicy`; keep

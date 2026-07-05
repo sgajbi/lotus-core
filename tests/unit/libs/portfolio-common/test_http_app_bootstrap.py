@@ -160,6 +160,32 @@ def test_standard_http_app_preserves_incoming_traceparent_context():
     assert response.headers["X-Trace-Id"] == "0123456789abcdef0123456789abcdef"
 
 
+def test_standard_http_app_replaces_malformed_traceparent_context():
+    app = FastAPI()
+
+    @app.get("/lineage")
+    def read_lineage():
+        return {"ok": True}
+
+    configure_standard_http_app(
+        app,
+        service_name="test-service",
+        service_prefix="TST",
+        logger=MagicMock(),
+        id_generator=lambda prefix: f"{prefix}-id",
+    )
+
+    response = TestClient(app).get(
+        "/lineage",
+        headers={"traceparent": "00-not-a-valid-traceparent"},
+    )
+
+    assert response.status_code == 200
+    assert TRACEPARENT_PATTERN.fullmatch(response.headers["traceparent"])
+    assert response.headers["traceparent"] != "00-not-a-valid-traceparent"
+    assert response.headers["traceparent"].startswith(f"00-{response.headers['X-Trace-Id']}-")
+
+
 def test_standard_http_app_adds_secure_response_headers():
     app = FastAPI()
 
