@@ -98,18 +98,7 @@ from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
-from .external_currency_exposure import resolve_external_currency_exposure_response
-from .external_eligible_hedge_instrument import (
-    resolve_external_eligible_hedge_instrument_response,
-)
-from .external_fx_forward_curve import build_external_fx_forward_curve_response
-from .external_hedge_execution_readiness import (
-    resolve_external_hedge_execution_readiness_response,
-)
-from .external_hedge_policy import resolve_external_hedge_policy_response
-from .external_order_execution_acknowledgement import (
-    resolve_external_order_execution_acknowledgement_response,
-)
+from .external_hedge_integration_service import ExternalHedgeIntegrationService
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
 from .index_return_series import resolve_index_return_series_response
@@ -185,6 +174,9 @@ class IntegrationService:
             buy_state_repository_provider=lambda: self._buy_state_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
+        )
+        self._external_hedge_service = ExternalHedgeIntegrationService(
+            reference_repository_provider=lambda: self._reference_repository,
         )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
@@ -351,8 +343,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalHedgeExecutionReadinessRequest,
     ) -> ExternalHedgeExecutionReadinessResponse | None:
-        return await resolve_external_hedge_execution_readiness_response(
-            repository=self._reference_repository,
+        return await self._external_hedge_service.get_execution_readiness(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -362,8 +353,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalCurrencyExposureRequest,
     ) -> ExternalCurrencyExposureResponse | None:
-        return await resolve_external_currency_exposure_response(
-            repository=self._reference_repository,
+        return await self._external_hedge_service.get_currency_exposure(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -373,8 +363,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalOrderExecutionAcknowledgementRequest,
     ) -> ExternalOrderExecutionAcknowledgementResponse | None:
-        return await resolve_external_order_execution_acknowledgement_response(
-            repository=self._reference_repository,
+        return await self._external_hedge_service.get_order_execution_acknowledgement(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -384,8 +373,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalHedgePolicyRequest,
     ) -> ExternalHedgePolicyResponse | None:
-        return await resolve_external_hedge_policy_response(
-            repository=self._reference_repository,
+        return await self._external_hedge_service.get_hedge_policy(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -395,8 +383,7 @@ class IntegrationService:
         portfolio_id: str,
         request: ExternalEligibleHedgeInstrumentRequest,
     ) -> ExternalEligibleHedgeInstrumentResponse | None:
-        return await resolve_external_eligible_hedge_instrument_response(
-            repository=self._reference_repository,
+        return await self._external_hedge_service.get_eligible_hedge_instruments(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -405,7 +392,7 @@ class IntegrationService:
         self,
         request: ExternalFXForwardCurveRequest,
     ) -> ExternalFXForwardCurveResponse:
-        return build_external_fx_forward_curve_response(request=request)
+        return await self._external_hedge_service.get_fx_forward_curve(request)
 
     async def resolve_instrument_eligibility_bulk(
         self,
