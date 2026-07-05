@@ -18,7 +18,7 @@ from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
 )
-from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .job_bookkeeping import mark_job_queued_after_publish_or_raise
 from .publish_errors import (
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
@@ -135,15 +135,11 @@ async def ingest_instruments(
         await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
         raise
 
-    try:
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
-    except Exception as exc:
-        await raise_post_publish_bookkeeping_failure(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_result.job.job_id,
-            failure_reason=str(exc),
-            published_record_count=num_instruments,
-        )
+    await mark_job_queued_after_publish_or_raise(
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_result.job.job_id,
+        published_record_count=num_instruments,
+    )
 
     logger.info("Instruments successfully queued.", extra={"num_instruments": num_instruments})
     return build_batch_ack(

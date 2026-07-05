@@ -40,7 +40,7 @@ from ..services.ingestion_job_service import IngestionJobService, get_ingestion_
 from ..services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
 )
-from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .job_bookkeeping import mark_job_queued_after_publish_or_raise
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,18 +131,14 @@ async def _handle_reference_ingestion(
             },
         ) from exc
 
-    try:
-        await ingestion_job_service.mark_queued(job_result.job.job_id)
-    except Exception as exc:
-        await raise_post_publish_bookkeeping_failure(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_result.job.job_id,
-            failure_reason=str(exc),
-            failure_phase="persist_bookkeeping",
-            publish_state="not_published",
-            work_state="persisted",
-            published_record_count=0,
-        )
+    await mark_job_queued_after_publish_or_raise(
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_result.job.job_id,
+        failure_phase="persist_bookkeeping",
+        publish_state="not_published",
+        work_state="persisted",
+        published_record_count=0,
+    )
 
     return build_batch_ack(
         message=f"{entity_type} accepted for asynchronous ingestion processing.",

@@ -11,6 +11,7 @@ from src.services.ingestion_service.app.services.ingestion_job_service import In
 from .replay_command_errors import ReplayCommandError
 from .replay_payload_dispatcher import ReplayPayloadDispatcher
 from .replay_retry_payloads import (
+    MissingReplayRecordKeysError,
     deterministic_replay_fingerprint,
     filter_payload_by_record_keys,
     payload_record_count,
@@ -31,6 +32,9 @@ INGESTION_JOB_RETRY_REMEDIATIONS = {
     ),
     "partial_retry_unsupported": (
         "Retry the full stored payload or use an endpoint with governed partial retry support."
+    ),
+    "partial_retry_records_not_found": (
+        "Correct the requested record_keys against the stored replay payload before retrying."
     ),
     "retry_blocked": (
         "Resume ingestion operations mode or wait for the replay window to permit retries."
@@ -154,6 +158,17 @@ class IngestionRetryCommandService:
                 payload=context.request_payload,
                 record_keys=retry_request.record_keys,
             )
+        except MissingReplayRecordKeysError as exc:
+            raise ReplayCommandError(
+                HTTP_CONFLICT,
+                ingestion_job_retry_problem_detail(
+                    code="INGESTION_PARTIAL_RETRY_RECORDS_NOT_FOUND",
+                    message=str(exc),
+                    outcome="partial_retry_records_not_found",
+                    remediation=INGESTION_JOB_RETRY_REMEDIATIONS["partial_retry_records_not_found"],
+                    missing_record_keys=exc.missing_record_keys,
+                ),
+            ) from exc
         except ValueError as exc:
             raise ReplayCommandError(
                 HTTP_CONFLICT,

@@ -80,3 +80,38 @@ async def raise_post_publish_bookkeeping_failure(
             published_record_count=published_record_count,
         ),
     )
+
+
+async def mark_job_queued_after_publish_or_raise(
+    *,
+    ingestion_job_service: IngestionJobService,
+    job_id: str,
+    failure_phase: str = "queue_bookkeeping",
+    publish_state: str = "published",
+    work_state: str = "published",
+    published_record_count: int | None = None,
+) -> None:
+    try:
+        queued = await ingestion_job_service.mark_queued(job_id)
+    except Exception as exc:
+        await raise_post_publish_bookkeeping_failure(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_id,
+            failure_reason=str(exc),
+            failure_phase=failure_phase,
+            publish_state=publish_state,
+            work_state=work_state,
+            published_record_count=published_record_count,
+        )
+        return
+
+    if not queued:
+        await raise_post_publish_bookkeeping_failure(
+            ingestion_job_service=ingestion_job_service,
+            job_id=job_id,
+            failure_reason="job queue transition was rejected",
+            failure_phase=failure_phase,
+            publish_state=publish_state,
+            work_state=work_state,
+            published_record_count=published_record_count,
+        )
