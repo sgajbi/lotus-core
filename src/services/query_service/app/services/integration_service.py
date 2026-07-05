@@ -94,14 +94,10 @@ from .client_income_needs_schedule import resolve_client_income_needs_schedule_r
 from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import resolve_client_tax_profile_response
 from .client_tax_rule_set import resolve_client_tax_rule_set_response
-from .discretionary_mandate_binding import resolve_discretionary_mandate_binding_response
 from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
 )
-from .dpm_source_readiness import (
-    DpmSourceReadinessReaders,
-    resolve_dpm_source_readiness_response,
-)
+from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_currency_exposure import resolve_external_currency_exposure_response
 from .external_eligible_hedge_instrument import (
     resolve_external_eligible_hedge_instrument_response,
@@ -117,15 +113,10 @@ from .external_order_execution_acknowledgement import (
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
 from .index_return_series import resolve_index_return_series_response
-from .instrument_eligibility import resolve_instrument_eligibility_bulk_response
 from .integration_policy import resolve_effective_policy_response
 from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
 )
-from .market_data_coverage import (
-    resolve_market_data_coverage_response,
-)
-from .model_portfolio_targets import resolve_model_portfolio_target_response
 from .page_token_codec import PageTokenCodec
 from .performance_component_economics import (
     resolve_performance_component_economics_response,
@@ -133,9 +124,6 @@ from .performance_component_economics import (
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
     resolve_portfolio_manager_book_membership_response,
-)
-from .portfolio_tax_lot_window import (
-    resolve_portfolio_tax_lot_window_response,
 )
 from .reference_data_mappers import benchmark_definition_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
@@ -192,6 +180,12 @@ class IntegrationService:
         self._portfolio_repository = dependencies.portfolio_repository
         self._transaction_repository = dependencies.transaction_repository
         self._page_token_codec = dependencies.page_token_codec
+        self._dpm_readiness_service = DpmReadinessIntegrationService.from_facade(
+            reference_repository_provider=lambda: self._reference_repository,
+            buy_state_repository_provider=lambda: self._buy_state_repository,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))
@@ -227,8 +221,7 @@ class IntegrationService:
         model_portfolio_id: str,
         request: ModelPortfolioTargetRequest,
     ) -> ModelPortfolioTargetResponse | None:
-        return await resolve_model_portfolio_target_response(
-            repository=self._reference_repository,
+        return await self._dpm_readiness_service.resolve_model_portfolio_targets(
             model_portfolio_id=model_portfolio_id,
             request=request,
         )
@@ -271,8 +264,7 @@ class IntegrationService:
         portfolio_id: str,
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
-        return await resolve_discretionary_mandate_binding_response(
-            repository=self._reference_repository,
+        return await self._dpm_readiness_service.resolve_discretionary_mandate_binding(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -419,10 +411,7 @@ class IntegrationService:
         self,
         request: InstrumentEligibilityBulkRequest,
     ) -> InstrumentEligibilityBulkResponse:
-        return await resolve_instrument_eligibility_bulk_response(
-            repository=self._reference_repository,
-            request=request,
-        )
+        return await self._dpm_readiness_service.resolve_instrument_eligibility_bulk(request)
 
     async def get_portfolio_tax_lot_window(
         self,
@@ -430,12 +419,9 @@ class IntegrationService:
         portfolio_id: str,
         request: PortfolioTaxLotWindowRequest,
     ) -> PortfolioTaxLotWindowResponse:
-        return await resolve_portfolio_tax_lot_window_response(
-            repository=self._buy_state_repository,
+        return await self._dpm_readiness_service.get_portfolio_tax_lot_window(
             portfolio_id=portfolio_id,
             request=request,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
         )
 
     async def get_transaction_cost_curve(
@@ -470,10 +456,7 @@ class IntegrationService:
         self,
         request: MarketDataCoverageRequest,
     ) -> MarketDataCoverageWindowResponse:
-        return await resolve_market_data_coverage_response(
-            repository=self._reference_repository,
-            request=request,
-        )
+        return await self._dpm_readiness_service.get_market_data_coverage(request)
 
     async def get_dpm_source_readiness(
         self,
@@ -481,24 +464,9 @@ class IntegrationService:
         portfolio_id: str,
         request: DpmSourceReadinessRequest,
     ) -> DpmSourceReadinessResponse:
-        return await resolve_dpm_source_readiness_response(
+        return await self._dpm_readiness_service.get_source_readiness(
             portfolio_id=portfolio_id,
             request=request,
-            readers=self._dpm_source_readiness_readers(),
-        )
-
-    def _dpm_source_readiness_readers(self) -> DpmSourceReadinessReaders:
-        return DpmSourceReadinessReaders(
-            read_mandate_binding=self.resolve_discretionary_mandate_binding,
-            read_model_targets=self.resolve_model_portfolio_targets,
-            read_eligibility=self.resolve_instrument_eligibility_bulk,
-            read_tax_lots=lambda scoped_portfolio_id, scoped_request: (
-                self.get_portfolio_tax_lot_window(
-                    portfolio_id=scoped_portfolio_id,
-                    request=scoped_request,
-                )
-            ),
-            read_market_data=self.get_market_data_coverage,
         )
 
     async def get_benchmark_definition(

@@ -42,6 +42,9 @@ from src.services.query_service.app.services.integration_policy import (
     resolve_consumer_sections,
     resolve_policy_context,
 )
+from src.services.query_service.app.services.dpm_readiness_integration_service import (
+    DpmReadinessIntegrationService,
+)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -4392,8 +4395,13 @@ async def test_market_data_coverage_normalizes_returned_price_security_id() -> N
 
 
 @pytest.mark.asyncio
-async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> None:
-    service = make_service()
+async def test_dpm_readiness_family_service_runs_without_full_integration_facade() -> None:
+    service = DpmReadinessIntegrationService.from_facade(
+        reference_repository_provider=lambda: AsyncMock(),
+        buy_state_repository_provider=lambda: AsyncMock(),
+        decode_page_token=lambda token: {"token": token},
+        encode_page_token=lambda payload: f"token:{payload.get('scope', 'dpm')}",
+    )
     service.resolve_discretionary_mandate_binding = AsyncMock(
         return_value=SimpleNamespace(
             mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
@@ -4407,6 +4415,80 @@ async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> N
     )
     service.resolve_model_portfolio_targets = AsyncMock(
         return_value=SimpleNamespace(
+            targets=[SimpleNamespace(instrument_id="FO_EQ_AAPL_US")],
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MODEL_TARGETS_READY",
+                target_count=1,
+            ),
+        )
+    )
+    service.resolve_instrument_eligibility_bulk = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="INSTRUMENT_ELIGIBILITY_READY",
+                missing_security_ids=[],
+                resolved_count=1,
+            )
+        )
+    )
+    service.get_portfolio_tax_lot_window = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="TAX_LOTS_READY",
+                missing_security_ids=[],
+                returned_lot_count=1,
+            )
+        )
+    )
+    service.get_market_data_coverage = AsyncMock(
+        return_value=SimpleNamespace(
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MARKET_DATA_READY",
+                missing_instrument_ids=[],
+                missing_currency_pairs=[],
+                stale_instrument_ids=[],
+                stale_currency_pairs=[],
+                resolved_price_count=1,
+                resolved_fx_count=1,
+            )
+        )
+    )
+
+    response = await service.get_source_readiness(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=DpmSourceReadinessRequest(
+            as_of_date=date(2026, 4, 10),
+            tenant_id="tenant_sg_pb",
+            valuation_currency="USD",
+        ),
+    )
+
+    assert response.product_name == "DpmSourceReadiness"
+    assert response.supportability.state == "READY"
+    assert response.supportability.ready_family_count == 5
+    assert response.evaluated_instrument_ids == ["FO_EQ_AAPL_US"]
+
+
+@pytest.mark.asyncio
+async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> None:
+    service = make_service()
+    service._dpm_readiness_service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=SimpleNamespace(
+            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
+            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
+            supportability=SimpleNamespace(
+                state="READY",
+                reason="MANDATE_BINDING_READY",
+                missing_data_families=[],
+            ),
+        )
+    )
+    service._dpm_readiness_service.resolve_model_portfolio_targets = AsyncMock(
+        return_value=SimpleNamespace(
             targets=[
                 SimpleNamespace(instrument_id="FO_EQ_AAPL_US"),
                 SimpleNamespace(instrument_id="FO_BOND_UST_2030"),
@@ -4418,7 +4500,7 @@ async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> N
             ),
         )
     )
-    service.resolve_instrument_eligibility_bulk = AsyncMock(
+    service._dpm_readiness_service.resolve_instrument_eligibility_bulk = AsyncMock(
         return_value=SimpleNamespace(
             supportability=SimpleNamespace(
                 state="READY",
@@ -4428,7 +4510,7 @@ async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> N
             )
         )
     )
-    service.get_portfolio_tax_lot_window = AsyncMock(
+    service._dpm_readiness_service.get_portfolio_tax_lot_window = AsyncMock(
         return_value=SimpleNamespace(
             supportability=SimpleNamespace(
                 state="READY",
@@ -4438,7 +4520,7 @@ async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> N
             )
         )
     )
-    service.get_market_data_coverage = AsyncMock(
+    service._dpm_readiness_service.get_market_data_coverage = AsyncMock(
         return_value=SimpleNamespace(
             supportability=SimpleNamespace(
                 state="READY",
@@ -4479,8 +4561,10 @@ async def test_dpm_source_readiness_returns_ready_when_all_families_ready() -> N
 @pytest.mark.asyncio
 async def test_dpm_source_readiness_blocks_when_key_families_unavailable() -> None:
     service = make_service()
-    service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
-    service.resolve_instrument_eligibility_bulk = AsyncMock(
+    service._dpm_readiness_service.resolve_discretionary_mandate_binding = AsyncMock(
+        return_value=None
+    )
+    service._dpm_readiness_service.resolve_instrument_eligibility_bulk = AsyncMock(
         return_value=SimpleNamespace(
             supportability=SimpleNamespace(
                 state="READY",
@@ -4490,8 +4574,10 @@ async def test_dpm_source_readiness_blocks_when_key_families_unavailable() -> No
             )
         )
     )
-    service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
-    service.get_market_data_coverage = AsyncMock(
+    service._dpm_readiness_service.get_portfolio_tax_lot_window = AsyncMock(
+        side_effect=LookupError("missing")
+    )
+    service._dpm_readiness_service.get_market_data_coverage = AsyncMock(
         return_value=SimpleNamespace(
             supportability=SimpleNamespace(
                 state="INCOMPLETE",
@@ -4526,7 +4612,7 @@ async def test_dpm_source_readiness_blocks_when_key_families_unavailable() -> No
 @pytest.mark.asyncio
 async def test_dpm_source_readiness_degrades_source_family_exceptions() -> None:
     service = make_service()
-    service.resolve_discretionary_mandate_binding = AsyncMock(
+    service._dpm_readiness_service.resolve_discretionary_mandate_binding = AsyncMock(
         return_value=SimpleNamespace(
             mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
             model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
@@ -4537,16 +4623,16 @@ async def test_dpm_source_readiness_degrades_source_family_exceptions() -> None:
             ),
         )
     )
-    service.resolve_model_portfolio_targets = AsyncMock(
+    service._dpm_readiness_service.resolve_model_portfolio_targets = AsyncMock(
         side_effect=ValueError("model source unavailable")
     )
-    service.resolve_instrument_eligibility_bulk = AsyncMock(
+    service._dpm_readiness_service.resolve_instrument_eligibility_bulk = AsyncMock(
         side_effect=ValueError("eligibility source unavailable")
     )
-    service.get_portfolio_tax_lot_window = AsyncMock(
+    service._dpm_readiness_service.get_portfolio_tax_lot_window = AsyncMock(
         side_effect=ValueError("tax lot source unavailable")
     )
-    service.get_market_data_coverage = AsyncMock(
+    service._dpm_readiness_service.get_market_data_coverage = AsyncMock(
         side_effect=ValueError("market source unavailable")
     )
 
