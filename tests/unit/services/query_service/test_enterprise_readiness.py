@@ -64,7 +64,7 @@ def test_authorize_write_request_enforces_capability_rules(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        json.dumps({"POST /transactions": "transactions.write"}),
+        json.dumps({"POST /transactions/**": "transactions.write"}),
     )
     headers = {
         "X-Actor-Id": "a1",
@@ -144,11 +144,11 @@ def test_enterprise_policy_and_capability_rules_use_runtime_settings(monkeypatch
     monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "policy-2026-07")
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        json.dumps({"GET /portfolios": "portfolios.read"}),
+        json.dumps({"GET /portfolios/**": "portfolios.read"}),
     )
 
     assert enterprise_policy_version() == "policy-2026-07"
-    assert load_capability_rules()["GET /portfolios"] == "portfolios.read"
+    assert load_capability_rules()["GET /portfolios/**"] == "portfolios.read"
     assert _required_capability("GET", "/portfolios/PB1") == "portfolios.read"
 
 
@@ -169,7 +169,7 @@ def test_authorize_request_enforces_read_capability_rules_at_service_boundary(mo
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        json.dumps({"GET /portfolios": "portfolios.read"}),
+        json.dumps({"GET /portfolios/**": "portfolios.read"}),
     )
     headers = {
         "X-Actor-Id": "a1",

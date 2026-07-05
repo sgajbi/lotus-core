@@ -1173,6 +1173,11 @@ Most relevant current governance:
     add local silent parsers for resilience, cache, retry, scheduler, consumer, or guardrail
     settings; either use the shared helper or document and test an explicit local-compatibility
     fallback.
+90. Enterprise capability rules are exact by default. Use route templates such as
+    `GET /portfolios/{portfolio_id}` only for that exact segment shape, and use explicit
+    `/**` suffixes such as `GET /portfolios/{portfolio_id}/**` only when the rule intentionally
+    authorizes a subtree. Do not rely on prefix matching for authorization examples, tests, source
+    data rules, or service-local capability overrides.
 
 ## Context Maintenance Rule
 

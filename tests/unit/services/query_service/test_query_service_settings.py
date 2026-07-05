@@ -99,7 +99,7 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     )
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        '{"GET /portfolios":"portfolios.read"}',
+        '{"GET /portfolios/**":"portfolios.read"}',
     )
 
     settings = load_query_service_settings()
@@ -117,7 +117,7 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     assert settings.enterprise_feature_flags == {
         "query.advanced": {"tenant-a": {"ops": True, "*": False}}
     }
-    assert settings.enterprise_capability_rules == {"GET /portfolios": "portfolios.read"}
+    assert settings.enterprise_capability_rules == {"GET /portfolios/**": "portfolios.read"}
 
 
 def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
