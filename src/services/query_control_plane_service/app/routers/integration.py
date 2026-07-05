@@ -94,6 +94,8 @@ from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
+)
+from src.services.query_service.app.services.core_snapshot_governance import (
     SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -116,13 +118,16 @@ def _integration_source_not_found_example(
     metadata: dict[str, object] | None = None,
     instance: str = "/integration/portfolios/PORT-INT-001/benchmark-assignment",
 ) -> dict[str, object]:
-    return problem_example(
-        status_code=status.HTTP_404_NOT_FOUND,
-        title="Integration source data not found",
-        detail=detail,
-        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
-        instance=instance,
-        metadata={"source_product": source_product, **(metadata or {})},
+    return cast(
+        dict[str, object],
+        problem_example(
+            status_code=status.HTTP_404_NOT_FOUND,
+            title="Integration source data not found",
+            detail=detail,
+            error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+            instance=instance,
+            metadata={"source_product": source_product, **(metadata or {})},
+        ),
     )
 
 
@@ -133,13 +138,16 @@ def _integration_source_invalid_request_example(
     metadata: dict[str, object] | None = None,
     instance: str = "/integration/dpm/portfolio-universe/candidates",
 ) -> dict[str, object]:
-    return problem_example(
-        status_code=422,
-        title="Integration source request is invalid",
-        detail=detail,
-        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
-        instance=instance,
-        metadata={"source_product": source_product, **(metadata or {})},
+    return cast(
+        dict[str, object],
+        problem_example(
+            status_code=422,
+            title="Integration source request is invalid",
+            detail=detail,
+            error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+            instance=instance,
+            metadata={"source_product": source_product, **(metadata or {})},
+        ),
     )
 
 
@@ -150,13 +158,16 @@ def _integration_source_bad_request_example(
     metadata: dict[str, object] | None = None,
     instance: str = "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
 ) -> dict[str, object]:
-    return problem_example(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        title="Integration source request is invalid",
-        detail=detail,
-        error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
-        instance=instance,
-        metadata={"source_product": source_product, **(metadata or {})},
+    return cast(
+        dict[str, object],
+        problem_example(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            title="Integration source request is invalid",
+            detail=detail,
+            error_code="QCP_INTEGRATION_SOURCE_INVALID_REQUEST",
+            instance=instance,
+            metadata={"source_product": source_product, **(metadata or {})},
+        ),
     )
 
 
@@ -167,13 +178,16 @@ def _integration_source_conflict_example(
     metadata: dict[str, object] | None = None,
     instance: str = "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
 ) -> dict[str, object]:
-    return problem_example(
-        status_code=status.HTTP_409_CONFLICT,
-        title="Integration source data conflict",
-        detail=detail,
-        error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
-        instance=instance,
-        metadata={"source_product": source_product, **(metadata or {})},
+    return cast(
+        dict[str, object],
+        problem_example(
+            status_code=status.HTTP_409_CONFLICT,
+            title="Integration source data conflict",
+            detail=detail,
+            error_code="QCP_INTEGRATION_SOURCE_CONFLICT",
+            instance=instance,
+            metadata={"source_product": source_product, **(metadata or {})},
+        ),
     )
 
 
@@ -436,6 +450,7 @@ def _raise_integration_source_not_found(
         error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
         metadata={"source_product": source_product, **(metadata or {})},
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_mandate_scoped_source_not_found(
@@ -468,6 +483,7 @@ def _raise_integration_source_invalid_request(
             **(metadata or {}),
         },
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_integration_source_bad_request(
@@ -488,6 +504,7 @@ def _raise_integration_source_bad_request(
             **(metadata or {}),
         },
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_integration_source_conflict(
@@ -508,6 +525,7 @@ def _raise_integration_source_conflict(
             **(metadata or {}),
         },
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_instrument_enrichment_invalid_request(exc: Exception) -> NoReturn:
@@ -521,6 +539,7 @@ def _raise_instrument_enrichment_invalid_request(exc: Exception) -> NoReturn:
             "reason": exc.__class__.__name__,
         },
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_source_evidence_problem(
@@ -544,6 +563,7 @@ def _raise_source_evidence_problem(
             "reason": reason,
         },
     )
+    raise AssertionError("raise_problem returned unexpectedly")
 
 
 def _raise_source_evidence_not_found(
@@ -693,8 +713,13 @@ async def create_core_snapshot(
 
 
 def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> dict:
-    payload = jsonable_encoder(
-        response.model_dump(mode="json") if isinstance(response, CoreSnapshotResponse) else response
+    payload = cast(
+        dict,
+        jsonable_encoder(
+            response.model_dump(mode="json")
+            if isinstance(response, CoreSnapshotResponse)
+            else response
+        ),
     )
     payload["freshness_metadata"] = payload.get("freshness")
     payload["freshness"] = payload.get("freshness_status", "UNAVAILABLE")
