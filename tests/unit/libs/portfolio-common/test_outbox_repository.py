@@ -100,6 +100,11 @@ async def test_create_outbox_event_normalizes_sentinel_correlation(
     )
 
     assert event.correlation_id is None
+    assert event.correlation_missing_reason == "correlation_id_not_supplied"
+    assert (
+        event.alternate_lookup_key
+        == "outbox_event|aggregate_id=P1|aggregate_type=portfolio|event_type=evt|topic=topic-1"
+    )
     assert event.payload["correlation_id"] is None
     assert event.payload["traceparent"] is None
 

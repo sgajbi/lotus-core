@@ -108,6 +108,11 @@ async def test_mark_event_processed_normalizes_sentinel_correlation(
     stmt = mock_db_session.execute.await_args.args[0]
     params = stmt.compile().params
     assert params["correlation_id"] is None
+    assert params["correlation_missing_reason"] == "correlation_id_not_supplied"
+    assert (
+        params["alternate_lookup_key"]
+        == "processed_event|event_id=evt-1|portfolio_id=P1|service_name=svc"
+    )
 
 
 async def test_claim_event_processing_returns_true_for_new_fence(

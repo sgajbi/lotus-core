@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
 )
 from portfolio_common.db import get_async_db_session
+from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
 )
@@ -82,12 +83,16 @@ class PositionTimeseriesConsumer(BaseConsumer):
         return cls._material_state(existing_record) != cls._material_state(new_record)
 
     async def _stage_aggregation_job(
-        self, db_session, portfolio_id: str, a_date: date, correlation_id: str
+        self, db_session, portfolio_id: str, a_date: date, correlation_id: str | None
     ):
         await self._stage_aggregation_jobs(db_session, portfolio_id, [a_date], correlation_id)
 
     async def _stage_aggregation_jobs(
-        self, db_session, portfolio_id: str, aggregation_dates: list[date], correlation_id: str
+        self,
+        db_session,
+        portfolio_id: str,
+        aggregation_dates: list[date],
+        correlation_id: str | None,
     ) -> None:
         """
         Idempotently stage aggregation jobs.
@@ -102,45 +107,54 @@ class PositionTimeseriesConsumer(BaseConsumer):
         if not normalized_dates:
             return
 
-        job_stmt = (
-            pg_insert(PortfolioAggregationJob)
-            .values(
-                [
-                    {
-                        "portfolio_id": portfolio_id,
-                        "aggregation_date": aggregation_date,
-                        "status": "PENDING",
-                        "correlation_id": correlation_id,
-                    }
-                    for aggregation_date in normalized_dates
-                ]
+        insert_values = []
+        for aggregation_date in normalized_dates:
+            diagnostics = durable_correlation_diagnostics(
+                correlation_id=correlation_id,
+                record_family="aggregation_job",
+                portfolio_id=portfolio_id,
+                aggregation_date=aggregation_date,
             )
-            .on_conflict_do_update(
-                index_elements=["portfolio_id", "aggregation_date"],
-                set_={
-                    "status": case(
-                        (
-                            PortfolioAggregationJob.status == "PROCESSING",
-                            PortfolioAggregationJob.status,
-                        ),
-                        else_="PENDING",
+            insert_values.append(
+                {
+                    "portfolio_id": portfolio_id,
+                    "aggregation_date": aggregation_date,
+                    "status": "PENDING",
+                    "correlation_id": diagnostics.correlation_id,
+                    "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                    "alternate_lookup_key": diagnostics.alternate_lookup_key,
+                }
+            )
+
+        normalized_correlation_id = insert_values[0]["correlation_id"]
+        insert_stmt = pg_insert(PortfolioAggregationJob).values(insert_values)
+        job_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=["portfolio_id", "aggregation_date"],
+            set_={
+                "status": case(
+                    (
+                        PortfolioAggregationJob.status == "PROCESSING",
+                        PortfolioAggregationJob.status,
                     ),
-                    "correlation_id": correlation_id,
-                    "updated_at": func.now(),
-                    "failure_reason": case(
-                        (
-                            PortfolioAggregationJob.status == "PROCESSING",
-                            AGGREGATION_REPROCESS_REQUESTED,
-                        ),
-                        else_=None,
-                    ),
-                },
-                where=or_(
-                    PortfolioAggregationJob.status != "PENDING",
-                    func.coalesce(PortfolioAggregationJob.correlation_id, "")
-                    != (correlation_id or ""),
+                    else_="PENDING",
                 ),
-            )
+                "correlation_id": insert_stmt.excluded.correlation_id,
+                "correlation_missing_reason": insert_stmt.excluded.correlation_missing_reason,
+                "alternate_lookup_key": insert_stmt.excluded.alternate_lookup_key,
+                "updated_at": func.now(),
+                "failure_reason": case(
+                    (
+                        PortfolioAggregationJob.status == "PROCESSING",
+                        AGGREGATION_REPROCESS_REQUESTED,
+                    ),
+                    else_=None,
+                ),
+            },
+            where=or_(
+                PortfolioAggregationJob.status != "PENDING",
+                func.coalesce(PortfolioAggregationJob.correlation_id, "")
+                != (normalized_correlation_id or ""),
+            ),
         )
         await db_session.execute(job_stmt)
         logger.info(

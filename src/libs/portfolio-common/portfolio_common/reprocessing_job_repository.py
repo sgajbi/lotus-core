@@ -7,7 +7,7 @@ from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ReprocessingJob
-from .logging_utils import normalize_lineage_value
+from .durable_correlation import durable_correlation_diagnostics
 from .monitoring import observe_reprocessing_duplicates_normalized
 from .utils import async_timed
 
@@ -126,7 +126,12 @@ class ReprocessingJobRepository:
     async def create_job(
         self, job_type: str, payload: Dict[str, Any], correlation_id: str | None = None
     ) -> ReprocessingJob:
-        correlation_id = normalize_lineage_value(correlation_id)
+        diagnostics = _reprocessing_job_correlation_diagnostics(
+            job_type=job_type,
+            payload=payload,
+            correlation_id=correlation_id,
+        )
+        correlation_id = diagnostics.correlation_id
         if (
             job_type == "RESET_WATERMARKS"
             and payload.get("security_id")
@@ -139,7 +144,9 @@ class ReprocessingJobRepository:
                     payload,
                     status,
                     attempt_count,
-                    correlation_id
+                    correlation_id,
+                    correlation_missing_reason,
+                    alternate_lookup_key
                 )
                 VALUES (
                     'RESET_WATERMARKS',
@@ -149,7 +156,9 @@ class ReprocessingJobRepository:
                     )::json,
                     'PENDING',
                     0,
-                    :correlation_id
+                    :correlation_id,
+                    :correlation_missing_reason,
+                    :alternate_lookup_key
                 )
                 ON CONFLICT ((payload->>'security_id'))
                 WHERE job_type = 'RESET_WATERMARKS' AND status = 'PENDING'
@@ -172,6 +181,30 @@ class ReprocessingJobRepository:
                         THEN :correlation_id
                         ELSE reprocessing_jobs.correlation_id
                     END,
+                    correlation_missing_reason = CASE
+                        WHEN :correlation_id IS NOT NULL
+                        THEN NULL
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                             AND CAST(:earliest_impacted_date AS date) <
+                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+                        THEN :correlation_missing_reason
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                             AND reprocessing_jobs.correlation_missing_reason IS NULL
+                        THEN :correlation_missing_reason
+                        ELSE reprocessing_jobs.correlation_missing_reason
+                    END,
+                    alternate_lookup_key = CASE
+                        WHEN :correlation_id IS NOT NULL
+                        THEN NULL
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                             AND CAST(:earliest_impacted_date AS date) <
+                                 CAST(reprocessing_jobs.payload->>'earliest_impacted_date' AS date)
+                        THEN :alternate_lookup_key
+                        WHEN reprocessing_jobs.correlation_id IS NULL
+                             AND reprocessing_jobs.alternate_lookup_key IS NULL
+                        THEN :alternate_lookup_key
+                        ELSE reprocessing_jobs.alternate_lookup_key
+                    END,
                     updated_at = now()
                 RETURNING *;
                 """
@@ -179,6 +212,8 @@ class ReprocessingJobRepository:
                 bindparam("security_id", type_=String()),
                 bindparam("earliest_impacted_date", type_=Date()),
                 bindparam("correlation_id", type_=String()),
+                bindparam("correlation_missing_reason", type_=String()),
+                bindparam("alternate_lookup_key", type_=String()),
             )
             result = await self.db.execute(
                 stmt,
@@ -186,6 +221,8 @@ class ReprocessingJobRepository:
                     "security_id": payload["security_id"],
                     "earliest_impacted_date": date.fromisoformat(payload["earliest_impacted_date"]),
                     "correlation_id": correlation_id,
+                    "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                    "alternate_lookup_key": diagnostics.alternate_lookup_key,
                 },
             )
             job = ReprocessingJob(**result.mappings().one())
@@ -203,6 +240,8 @@ class ReprocessingJobRepository:
             payload=payload,
             status="PENDING",
             correlation_id=correlation_id,
+            correlation_missing_reason=diagnostics.correlation_missing_reason,
+            alternate_lookup_key=diagnostics.alternate_lookup_key,
         )
         self.db.add(job)
         await self.db.flush()
@@ -371,4 +410,19 @@ def _stale_jobs_update_stmt(job_ids: list[int], stale_cutoff: datetime):
         ReprocessingJob.id.in_(job_ids),
         ReprocessingJob.status == "PROCESSING",
         ReprocessingJob.updated_at < stale_cutoff,
+    )
+
+
+def _reprocessing_job_correlation_diagnostics(
+    *,
+    job_type: str,
+    payload: Dict[str, Any],
+    correlation_id: str | None,
+):
+    return durable_correlation_diagnostics(
+        correlation_id=correlation_id,
+        record_family="reprocessing_job",
+        job_type=job_type,
+        security_id=payload.get("security_id"),
+        earliest_impacted_date=payload.get("earliest_impacted_date"),
     )

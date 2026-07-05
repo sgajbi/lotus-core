@@ -1805,9 +1805,14 @@ class ProcessedEvent(Base):
     portfolio_id = Column(String, nullable=False)
     service_name = Column(String, nullable=False)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    __table_args__ = (UniqueConstraint("event_id", "service_name", name="_event_service_uc"),)
+    __table_args__ = (
+        UniqueConstraint("event_id", "service_name", name="_event_service_uc"),
+        Index("ix_processed_events_alternate_lookup_key", "alternate_lookup_key"),
+    )
 
 
 class OutboxEvent(Base):
@@ -1821,6 +1826,8 @@ class OutboxEvent(Base):
     topic = Column(String, nullable=False)
     status = Column(String, default="PENDING", nullable=False, index=True)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     retry_count = Column(Integer, default=0, nullable=False)
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
     next_attempt_at = Column(DateTime(timezone=True), nullable=True)
@@ -1865,6 +1872,7 @@ class OutboxEvent(Base):
             "status",
             "last_failure_at",
         ),
+        Index("ix_outbox_events_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 
@@ -1916,6 +1924,8 @@ class PortfolioAggregationJob(Base):
     aggregation_date = Column(Date, nullable=False, index=True)
     status = Column(String, nullable=False, default="PENDING", index=True)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -1965,6 +1975,7 @@ class PortfolioAggregationJob(Base):
             "id",
             postgresql_where=correlation_id.is_not(None),
         ),
+        Index("ix_portfolio_aggregation_jobs_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 
@@ -1984,6 +1995,8 @@ class PortfolioValuationJob(Base):
     epoch = Column(Integer, nullable=False, default=0, server_default="0")
     status = Column(String, nullable=False, default="PENDING", index=True)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -2057,6 +2070,7 @@ class PortfolioValuationJob(Base):
             "id",
             postgresql_where=correlation_id.is_not(None),
         ),
+        Index("ix_portfolio_valuation_jobs_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 
@@ -2294,6 +2308,8 @@ class ReprocessingJob(Base):
     payload = Column(JSON, nullable=False)
     status = Column(String, nullable=False, default="PENDING", index=True)
     correlation_id = Column(String, nullable=True)
+    correlation_missing_reason = Column(String, nullable=True)
+    alternate_lookup_key = Column(String, nullable=True)
 
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
     last_attempted_at = Column(DateTime(timezone=True), nullable=True)
@@ -2346,6 +2362,7 @@ class ReprocessingJob(Base):
             "id",
             postgresql_where=text("job_type = 'RESET_WATERMARKS'"),
         ),
+        Index("ix_reprocessing_jobs_alternate_lookup_key", "alternate_lookup_key"),
     )
 
 

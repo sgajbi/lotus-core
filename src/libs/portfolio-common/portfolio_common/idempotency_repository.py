@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import ProcessedEvent
-from .logging_utils import normalize_lineage_value
+from .durable_correlation import durable_correlation_diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,14 @@ class IdempotencyRepository:
             service_name: The name of the service that processed the event.
             correlation_id: The correlation ID for tracing the event flow.
         """
-        correlation_id = normalize_lineage_value(correlation_id)
+        diagnostics = durable_correlation_diagnostics(
+            correlation_id=correlation_id,
+            record_family="processed_event",
+            event_id=event_id,
+            service_name=service_name,
+            portfolio_id=portfolio_id,
+        )
+        correlation_id = diagnostics.correlation_id
         stmt = (
             pg_insert(ProcessedEvent)
             .values(
@@ -70,6 +77,8 @@ class IdempotencyRepository:
                 portfolio_id=portfolio_id,
                 service_name=service_name,
                 correlation_id=correlation_id,
+                correlation_missing_reason=diagnostics.correlation_missing_reason,
+                alternate_lookup_key=diagnostics.alternate_lookup_key,
             )
             .on_conflict_do_nothing(
                 index_elements=["event_id", "service_name"],

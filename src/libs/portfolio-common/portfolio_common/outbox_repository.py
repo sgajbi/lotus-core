@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import OutboxEvent
+from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.logging_utils import (
     normalize_lineage_value,
     normalize_traceparent,
@@ -48,7 +49,15 @@ class OutboxRepository:
         if not isinstance(payload, dict):
             raise TypeError("payload must be a dict (will be serialized by SQLAlchemy JSON type)")
 
-        correlation_id = normalize_lineage_value(correlation_id)
+        diagnostics = durable_correlation_diagnostics(
+            correlation_id=correlation_id,
+            record_family="outbox_event",
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            event_type=event_type,
+            topic=topic,
+        )
+        correlation_id = diagnostics.correlation_id
         traceparent = normalize_traceparent(traceparent) or normalize_traceparent(
             traceparent_var.get()
         )
@@ -66,6 +75,8 @@ class OutboxRepository:
             ),
             topic=topic,
             correlation_id=correlation_id,
+            correlation_missing_reason=diagnostics.correlation_missing_reason,
+            alternate_lookup_key=diagnostics.alternate_lookup_key,
             created_at=datetime.now(timezone.utc),
         )
         self.db.add(event)

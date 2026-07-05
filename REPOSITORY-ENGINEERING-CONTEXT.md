@@ -1329,6 +1329,13 @@ Most relevant current governance:
      supportability surfaces must remain operator-only and evidence-backed. Update the catalog and
      its tests before adding, renaming, or relaxing event families, topics, replay/supportability
      paths, or envelope metadata behavior.
+113. Durable operational records that can persist without request correlation must record explicit
+     missing-correlation diagnostics. Use `portfolio_common.durable_correlation` for nullable
+     durable records so absent correlation IDs produce `correlation_missing_reason` and a
+     deterministic `alternate_lookup_key` from stable business identifiers. Do not add new
+     operator-searchable records with nullable `correlation_id` unless they either require
+     correlation at the schema boundary or persist the same diagnostic fields with migration,
+     backfill, index, and tests.
 
 ## Context Maintenance Rule
 
