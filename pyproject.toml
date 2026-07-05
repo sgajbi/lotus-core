@@ -62,6 +62,8 @@ minversion = "6.0"
 markers = [
     "asyncio: mark a test as being an asyncio test",
     "dependency: mark test dependency ordering/grouping",
+    "unit: mark tests that require no Docker, database, Kafka, or live worker dependency",
+    "domain: mark tests that prove deterministic domain model, policy, value object, or calculation behavior",
     "integration_db: mark tests that require dockerized database infrastructure",
     "db_direct: mark tests that exercise direct database-backed runtime without live worker reliance",
     "live_worker: mark tests that require live worker/background service runtime semantics",
@@ -70,6 +72,10 @@ markers = [
     "middleware: mark tests that prove HTTP middleware, auth, audit, header, or diagnostics behavior",
     "security: mark tests that prove authorization, privacy, secrets, or abuse-boundary controls",
     "regression: mark tests that protect golden scenarios or previously fixed defects",
+    "performance: mark tests that prove bounded latency, throughput, budgets, batching, or load behavior",
+    "resilience: mark tests that prove retry, timeout, recovery, back-pressure, or degraded-state behavior",
+    "certification: mark tests that contribute to release, institutional, app-validation, or supported-feature certification evidence",
+    "flaky_quarantine: mark temporarily quarantined tests; requires a governed issue link and expiry in the test lane governance contract",
     "e2e: mark tests that exercise multi-service end-to-end workflows",
 ]
 filterwarnings = [

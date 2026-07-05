@@ -83,6 +83,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make analytics-input-consumer-contract-guard`
 - `make event-runtime-contract-guard`
 - `make synthetic-fixture-leakage-guard`
+- `make test-lane-governance-guard`
 - `make rfc0083-closure-guard`
 
 If one of these fails, the change is not validated, even if a narrow pytest target passed.
@@ -94,3 +95,5 @@ If one of these fails, the change is not validated, even if a narrow pytest targ
 3. test ownership boundaries when route or contract-family placement changes
 4. test supportability and replay behavior when eventing or ops surfaces change
 5. avoid superficial coverage that does not meaningfully protect the system-of-record contract
+6. keep integration, DB-backed, and live-worker tests in their governed lanes; flaky quarantine
+   requires an owner, issue, reason, and expiry in the test-lane governance contract

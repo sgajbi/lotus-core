@@ -1,0 +1,204 @@
+{
+  "schema_version": "test-lane-governance.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#611",
+  "guard_command": "make test-lane-governance-guard",
+  "marker_taxonomy": {
+    "required_pytest_markers": [
+      "unit",
+      "domain",
+      "api",
+      "middleware",
+      "contract",
+      "integration_db",
+      "db_direct",
+      "live_worker",
+      "e2e",
+      "security",
+      "regression",
+      "performance",
+      "resilience",
+      "certification",
+      "flaky_quarantine"
+    ],
+    "runtime_markers": {
+      "unit": "No Docker, database, Kafka, or live worker dependency.",
+      "integration_db": "Requires dockerized database infrastructure.",
+      "db_direct": "Uses database-backed runtime without live workers.",
+      "live_worker": "Requires live worker or background-service runtime semantics.",
+      "e2e": "Exercises multi-service end-to-end workflows."
+    }
+  },
+  "determinism_policy": {
+    "clock": "Use explicit fixed datetime/date providers or runtime-provider fakes for time-sensitive logic; avoid direct wall-clock dependence in tests unless testing timeout/polling support.",
+    "ids": "Use deterministic IDs or injected UUID providers when assertions depend on generated identity.",
+    "business_dates": "Use explicit as-of, trade, settlement, booking, and effective dates. Do not rely on today's date for business assertions.",
+    "ordering": "Database and Kafka assertions must specify stable ordering or compare unordered sets explicitly."
+  },
+  "sleep_and_polling_policy": {
+    "allowed_only_in": [
+      "tests/test_support",
+      "tests/e2e",
+      "tests/integration"
+    ],
+    "required_controls": [
+      "bounded timeout",
+      "small polling interval",
+      "diagnostic last-observed state on failure",
+      "no unconditional sleep in unit tests"
+    ]
+  },
+  "parallel_isolation_policy": {
+    "database": "Use per-run compose project names and repo-managed test runtime environment.",
+    "kafka": "Use isolated compose ports and topics through test harness setup.",
+    "ports": "Use runtime_env profile ports or allocated free ports, not hard-coded shared local ports in tests.",
+    "portfolios": "Use synthetic portfolio identifiers scoped to the suite or canonical governed portfolio only when the test explicitly proves canonical behavior."
+  },
+  "ci_lane_mapping": [
+    {
+      "suite": "unit",
+      "make_target": "make test",
+      "runtime_mode": "unit",
+      "environment_profile": "unit",
+      "allowed_markers": [
+        "unit",
+        "domain",
+        "api",
+        "middleware",
+        "contract",
+        "security",
+        "regression",
+        "performance",
+        "resilience",
+        "certification"
+      ],
+      "forbidden_markers": [
+        "integration_db",
+        "db_direct",
+        "live_worker",
+        "e2e",
+        "flaky_quarantine"
+      ]
+    },
+    {
+      "suite": "unit-db",
+      "make_target": "make test-unit-db",
+      "runtime_mode": "db_direct",
+      "environment_profile": "unit",
+      "allowed_markers": [
+        "integration_db",
+        "db_direct",
+        "contract",
+        "regression"
+      ],
+      "forbidden_markers": [
+        "live_worker",
+        "e2e",
+        "flaky_quarantine"
+      ]
+    },
+    {
+      "suite": "integration-lite",
+      "make_target": "make test-integration-lite",
+      "runtime_mode": "db_direct",
+      "environment_profile": "integration",
+      "allowed_markers": [
+        "integration_db",
+        "db_direct",
+        "api",
+        "middleware",
+        "contract",
+        "security",
+        "regression",
+        "resilience"
+      ],
+      "forbidden_markers": [
+        "live_worker",
+        "e2e",
+        "flaky_quarantine"
+      ]
+    },
+    {
+      "suite": "integration-all",
+      "make_target": "make test-integration-all",
+      "runtime_mode": "db_direct",
+      "environment_profile": "integration",
+      "allowed_markers": [
+        "integration_db",
+        "db_direct",
+        "api",
+        "middleware",
+        "contract",
+        "security",
+        "regression",
+        "performance",
+        "resilience",
+        "certification"
+      ],
+      "forbidden_markers": [
+        "live_worker",
+        "e2e",
+        "flaky_quarantine"
+      ]
+    },
+    {
+      "suite": "e2e-smoke",
+      "make_target": "make test-e2e-smoke",
+      "runtime_mode": "live_worker",
+      "environment_profile": "e2e",
+      "allowed_markers": [
+        "live_worker",
+        "e2e",
+        "api",
+        "contract",
+        "regression",
+        "resilience",
+        "certification"
+      ],
+      "forbidden_markers": [
+        "flaky_quarantine"
+      ]
+    },
+    {
+      "suite": "e2e-all",
+      "make_target": "make test-e2e-all",
+      "runtime_mode": "live_worker",
+      "environment_profile": "e2e",
+      "allowed_markers": [
+        "live_worker",
+        "e2e",
+        "api",
+        "contract",
+        "regression",
+        "performance",
+        "resilience",
+        "certification"
+      ],
+      "forbidden_markers": [
+        "flaky_quarantine"
+      ]
+    }
+  ],
+  "quarantine_policy": {
+    "maximum_days": 14,
+    "required_fields": [
+      "nodeid",
+      "owner",
+      "issue",
+      "reason",
+      "quarantined_at",
+      "expires_at"
+    ],
+    "quarantined_tests": []
+  },
+  "flake_tracking_report": {
+    "generated_path": "output/test-governance/flake-tracking-report.json",
+    "minimum_fields": [
+      "schema_version",
+      "generated_at_utc",
+      "quarantine_count",
+      "expired_quarantine_count",
+      "lane_count"
+    ]
+  }
+}

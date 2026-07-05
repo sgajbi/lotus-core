@@ -352,6 +352,11 @@ Current repository posture:
     and must not commit concrete bearer tokens, credentialed database URLs, personal emails,
     natural-person client names, uncataloged CIF-style identifiers, concrete account numbers, API
     keys, secrets, or passwords.
+    Test lane governance now lives in `docs/standards/test-lane-governance.v1.json` and is enforced
+    by `make test-lane-governance-guard` through `make lint`. Changes to pytest markers,
+    `scripts/test_manifest.py`, Make test targets, flaky-test quarantine, deterministic-time
+    guidance, or integration/E2E lane ownership must update the contract and keep unit lanes
+    excluding `integration_db`, `db_direct`, `live_worker`, and `e2e` runtime markers.
 41. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
