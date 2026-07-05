@@ -27,6 +27,9 @@ from services.calculators.position_valuation_calculator.app.consumers.valuation_
 from services.calculators.position_valuation_calculator.app.repositories.valuation_repository import (  # noqa: E501
     ValuationRepository,
 )
+from services.calculators.position_valuation_calculator.app.valuation_processor import (
+    ValuationJobProcessor,
+)
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
@@ -88,19 +91,19 @@ def mock_dependencies():
 
     with (
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.get_async_db_session",
+            "services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
             new=get_session_gen,
         ),
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.IdempotencyRepository",
+            "services.calculators.position_valuation_calculator.app.valuation_processor.IdempotencyRepository",
             return_value=mock_idempotency_repo,
         ),
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.ValuationRepository",
+            "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationRepository",
             return_value=mock_valuation_repo,
         ),
         patch(
-            "services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.OutboxRepository",
+            "services.calculators.position_valuation_calculator.app.valuation_processor.OutboxRepository",
             return_value=mock_outbox_repo,
         ),
     ):
@@ -109,6 +112,164 @@ def mock_dependencies():
             "outbox_repo": mock_outbox_repo,
             "valuation_repo": mock_valuation_repo,
         }
+
+
+async def test_valuation_processor_executes_success_path_without_kafka_consumer(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="USD",
+        price_date=mock_event.valuation_date,
+    )
+    persisted_snapshot = DailyPositionSnapshot(
+        id=7,
+        portfolio_id=mock_event.portfolio_id,
+        security_id=mock_event.security_id,
+        date=mock_event.valuation_date,
+        epoch=mock_event.epoch,
+        valuation_status="VALUED_CURRENT",
+    )
+    mock_valuation_repo.upsert_daily_snapshot.return_value = persisted_snapshot
+
+    await ValuationJobProcessor().process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-91",
+        "processor-corr-id",
+    )
+
+    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "valuation.job.requested-0-91",
+        mock_event.portfolio_id,
+        "position-valuation-calculator",
+        "processor-corr-id",
+    )
+    mock_valuation_repo.update_job_status.assert_awaited_once()
+    mock_outbox_repo.create_outbox_event.assert_awaited_once()
+    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
+        "processor-corr-id"
+    )
+
+
+async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_idempotency_repo.claim_event_processing.return_value = False
+
+    await ValuationJobProcessor().process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-92",
+        "processor-corr-id",
+    )
+
+    mock_valuation_repo.get_last_position_history_before_date.assert_not_awaited()
+    mock_valuation_repo.update_job_status.assert_not_awaited()
+    mock_outbox_repo.create_outbox_event.assert_not_awaited()
+
+
+async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = None
+
+    def persist_snapshot(snapshot):
+        snapshot.id = 93
+        return snapshot
+
+    mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
+
+    await ValuationJobProcessor().process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-93",
+        "processor-corr-id",
+    )
+
+    persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert persisted_snapshot.valuation_status == "UNVALUED"
+    mock_valuation_repo.update_job_status.assert_awaited_once()
+
+
+async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes_valuation_date(
+    mock_event: PortfolioValuationRequiredEvent,
+    mock_dependencies: dict,
+):
+    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_valuation_repo = mock_dependencies["valuation_repo"]
+    mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_valuation_repo.get_last_position_history_before_date.return_value = PositionHistory(
+        quantity=Decimal("100"),
+        cost_basis=Decimal("10000"),
+        cost_basis_local=Decimal("10000"),
+    )
+    mock_valuation_repo.get_instrument.return_value = Instrument(
+        currency="USD",
+        security_id=mock_event.security_id,
+    )
+    mock_valuation_repo.get_portfolio.return_value = Portfolio(
+        base_currency="USD",
+        portfolio_id=mock_event.portfolio_id,
+    )
+    mock_valuation_repo.get_latest_price_for_position.return_value = MarketPrice(
+        price=Decimal("90"),
+        currency="USD",
+        price_date=date(2025, 7, 31),
+    )
+
+    def persist_snapshot(snapshot):
+        snapshot.id = 94
+        return snapshot
+
+    mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
+
+    await ValuationJobProcessor().process_valid_event(
+        mock_event,
+        "valuation.job.requested-0-94",
+        "processor-corr-id",
+    )
+
+    persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
+    assert persisted_snapshot.valuation_status == "VALUED_STALE"
+    assert persisted_snapshot.market_value == Decimal("9000")
+    mock_valuation_repo.update_job_status.assert_awaited_once()
 
 
 async def test_valuation_consumer_success(
@@ -329,7 +490,7 @@ async def test_process_message_handles_unexpected_error(
     # ACT
     # Patch the logic layer to raise an unexpected error
     with patch(
-        "services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.ValuationLogic.calculate_valuation",
+        "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation",
         side_effect=ValueError("Unexpected logic error"),
     ) as mock_logic:
         await consumer.process_message(mock_kafka_message)
