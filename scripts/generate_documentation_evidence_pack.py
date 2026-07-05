@@ -19,6 +19,7 @@ DOCUMENTATION_SURFACES = (
     "README.md",
     "docs/architecture/README.md",
     "docs/architecture/CODEBASE-REVIEW-LEDGER.md",
+    "docs/standards/api-route-catalog.v1.json",
     "docs/standards/rfc-status-ledger.v1.json",
     "docs/operations-runbook.md",
     "docs/supported-features.md",
@@ -199,6 +200,11 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
             artifact_paths=(api_vocabulary_artifact,),
         ),
         _run_command(
+            name="api_route_catalog_check",
+            command=[sys.executable, "scripts/generate_api_route_catalog.py", "--check"],
+            artifact_paths=(REPO_ROOT / "docs" / "standards" / "api-route-catalog.v1.json",),
+        ),
+        _run_command(
             name="rfc_ledger_check",
             command=[sys.executable, "scripts/rfc0083_closure_guard.py"],
         ),
@@ -210,7 +216,11 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
         _validate_runbooks(),
     ]
     failures = [asdict(check) for check in checks if not check.ok]
-    artifact_paths = [manifest_path, api_vocabulary_artifact]
+    artifact_paths = [
+        manifest_path,
+        api_vocabulary_artifact,
+        REPO_ROOT / "docs" / "standards" / "api-route-catalog.v1.json",
+    ]
     return {
         "app": "lotus-core",
         "evidence_scope": "documentation-release-evidence",
