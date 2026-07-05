@@ -36,6 +36,25 @@ class _FakeUnitOfWork:
         self.refreshed_entities.append(entity)
 
 
+class _FixedClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def utc_now(self) -> datetime:
+        return self._now
+
+
+class _FixedIdGenerator:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    def new_id(self) -> str:
+        return self.value
+
+    def new_hex(self) -> str:
+        return self.value
+
+
 @pytest.fixture
 def mock_dependencies():
     repo = AsyncMock()
@@ -112,8 +131,8 @@ async def test_create_session_returns_session_response(mock_dependencies):
 
     service = SimulationService(
         db,
-        clock=lambda: fixed_now,
-        id_generator=lambda: "SIM-SESSION-1",
+        clock=_FixedClock(fixed_now),
+        id_generator=_FixedIdGenerator("SIM-SESSION-1"),
     )
     request = SimulationSessionCreateRequest(portfolio_id="P1", created_by="tester", ttl_hours=24)
     response = await service.create_session(request)
@@ -236,7 +255,7 @@ async def test_add_changes_returns_versioned_change_records(mock_dependencies):
     ]
     repo.add_changes.return_value = (repo.get_session.return_value, added_rows)
     db = AsyncMock()
-    service = SimulationService(db, id_generator=lambda: "SIM-CHG-0009")
+    service = SimulationService(db, id_generator=_FixedIdGenerator("SIM-CHG-0009"))
 
     response = await service.add_changes(
         "S1", [{"security_id": "SEC_MSFT_US", "transaction_type": "BUY", "quantity": 12}]
@@ -277,7 +296,7 @@ async def test_add_changes_uses_unit_of_work_and_rolls_back_on_commit_failure(
     unit_of_work = _FakeUnitOfWork(fail_commit=True)
     service = SimulationService(
         db,
-        id_generator=lambda: "SIM-CHG-0009",
+        id_generator=_FixedIdGenerator("SIM-CHG-0009"),
         unit_of_work=unit_of_work,
     )
 
@@ -352,8 +371,9 @@ async def test_add_changes_raises_when_session_inactive(mock_dependencies):
 
 async def test_add_changes_raises_when_session_expired(mock_dependencies):
     repo, _, _ = mock_dependencies
-    repo.get_session.return_value.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
-    service = SimulationService(AsyncMock())
+    fixed_now = datetime(2026, 7, 1, 8, 30, tzinfo=timezone.utc)
+    repo.get_session.return_value.expires_at = fixed_now - timedelta(minutes=1)
+    service = SimulationService(AsyncMock(), clock=_FixedClock(fixed_now))
 
     with pytest.raises(SimulationMutationInvalidError, match="expired"):
         await service.add_changes("S1", [{"security_id": "SEC_AAPL_US", "transaction_type": "BUY"}])

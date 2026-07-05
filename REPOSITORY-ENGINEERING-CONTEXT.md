@@ -1048,6 +1048,13 @@ Most relevant current governance:
     architecture-guard` runs `scripts/api_mapper_pattern_guard.py`. Keep this context entry as
     navigation only: detailed mapping rules belong in the standard and executable guard, not
     duplicated prose.
+87. Runtime current-time, elapsed-duration, and generated-ID access should flow through
+    `portfolio_common.runtime_providers` in provider-migrated application workflows. The repo-local
+    standard lives at `docs/standards/runtime-provider-port-standard.md`; current representative
+    coverage includes financial reconciliation elapsed-duration/finding IDs, core snapshot
+    generated metadata, and simulation session/change IDs plus TTL/expiry decisions; and `make
+    architecture-guard` runs `scripts/runtime_provider_port_guard.py`. Legacy analytics and
+    operations services still have direct wall-clock usage and remain explicit migration scope.
 
 ## Context Maintenance Rule
 
