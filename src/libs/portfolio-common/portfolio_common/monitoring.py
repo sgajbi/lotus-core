@@ -69,6 +69,12 @@ KAFKA_CONSUMER_EVENTS_TOTAL = Counter(
     labelnames=("service", "topic", "group_id", "outcome", "reason"),
 )
 
+KAFKA_PRODUCER_EVENTS_TOTAL = Counter(
+    "kafka_producer_events_total",
+    "Standard Kafka producer publish events.",
+    labelnames=("service", "topic", "outcome", "reason"),
+)
+
 KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS = Histogram(
     "kafka_consumer_processing_duration_seconds",
     "Kafka consumer message processing duration in seconds.",
@@ -104,6 +110,17 @@ def observe_kafka_published(topic: str, count: int = 1) -> None:
 
 def observe_kafka_publish_error(topic: str, error: str, count: int = 1) -> None:
     KAFKA_PUBLISH_ERRORS_TOTAL.labels(topic, error).inc(count)
+
+
+def observe_kafka_producer_event(
+    *,
+    service: str,
+    topic: str,
+    outcome: str,
+    reason: str,
+    count: int = 1,
+) -> None:
+    KAFKA_PRODUCER_EVENTS_TOTAL.labels(service, topic, outcome, reason).inc(count)
 
 
 def observe_kafka_consumed(topic: str, group_id: str, count: int = 1) -> None:

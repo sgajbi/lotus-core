@@ -143,6 +143,23 @@ Use these for worker fleet dashboards and incident triage. Keep message keys, of
 fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
 metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-through.
 
+## Kafka Producer Metrics
+
+Shared producers and publisher adapters emit bounded producer telemetry:
+
+| Metric | Labels | Purpose |
+| --- | --- | --- |
+| `kafka_producer_events_total` | `service`, `topic`, `outcome`, `reason` | Count accepted produce calls, local queue saturation, and generic producer publish failures. |
+
+Expected producer outcomes are `accepted`, `back_pressure`, and `failed`. Local queue saturation is
+reported as outcome `back_pressure` with reason `queue_full`, and the shared publisher port maps it
+to retryable `KafkaPublishBackPressure` so schedulers and outbox/replay paths can defer or recover
+work without marking it successfully dispatched.
+
+Keep message keys, payload fields, outbox IDs, portfolio/security IDs, request/correlation IDs,
+trace IDs, and raw exception text out of producer metric labels. Use structured logs with
+`event_name=kafka.producer.back_pressure` and reason `queue_full` for queue-saturation drill-down.
+
 ## Kafka Consumer DLQ Failure Containment
 
 `BaseConsumer` commits terminal-message offsets only after DLQ publication succeeds. If DLQ
