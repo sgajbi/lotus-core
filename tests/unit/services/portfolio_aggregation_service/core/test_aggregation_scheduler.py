@@ -1,9 +1,11 @@
 import asyncio
+import logging
 from datetime import date, datetime, timezone
 
 import pytest
 from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
     DISPATCH_PUBLISH_FAILURE_PHASE,
@@ -18,7 +20,10 @@ from src.services.portfolio_aggregation_service.app.core.aggregation_job_publish
 from src.services.portfolio_aggregation_service.app.core.aggregation_scheduler import (
     AggregationScheduler,
 )
-from src.services.portfolio_aggregation_service.app.settings import AggregationRuntimeSettings
+from src.services.portfolio_aggregation_service.app.settings import (
+    AggregationRuntimeSettings,
+    get_aggregation_runtime_settings,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -320,6 +325,49 @@ async def test_scheduler_reads_runtime_settings_from_environment(
     assert scheduler._batch_size == 17
     assert scheduler._stale_timeout_minutes == 13
     assert scheduler._max_attempts == 6
+
+
+async def test_aggregation_runtime_settings_strict_profile_rejects_invalid_values(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_BATCH_SIZE", "not-an-int")
+
+    with pytest.raises(RuntimeConfigurationError, match="AGGREGATION_SCHEDULER_BATCH_SIZE"):
+        get_aggregation_runtime_settings()
+
+
+async def test_aggregation_runtime_settings_strict_profile_rejects_non_positive_values(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("PORTFOLIO_AGGREGATION_CONSUMER_COUNT", "0")
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match="PORTFOLIO_AGGREGATION_CONSUMER_COUNT",
+    ):
+        get_aggregation_runtime_settings()
+
+
+async def test_aggregation_runtime_settings_local_fallback_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+):
+    caplog.set_level(logging.WARNING, logger="portfolio_common.runtime_settings")
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS", "bad")
+    monkeypatch.setenv("AGGREGATION_SCHEDULER_BATCH_SIZE", "0")
+
+    settings = get_aggregation_runtime_settings(
+        scheduler_poll_interval_default=7,
+        scheduler_batch_size_default=11,
+    )
+
+    assert settings.aggregation_scheduler_poll_interval_seconds == 7
+    assert settings.aggregation_scheduler_batch_size == 1
+    assert "falling back to default" in caplog.text
 
 
 async def test_scheduler_stop_interrupts_poll_sleep():
