@@ -15,6 +15,32 @@
 9. performance-facing component economics evidence where declared as
    `PerformanceComponentEconomics:v1`.
 
+Canonical supported-feature truth is maintained in
+`contracts/supported-features/lotus-core-supported-features.v1.json` and validated by:
+
+```powershell
+make supported-features-guard
+```
+
+The guard checks that this document and `wiki/Supported-Features.md` carry the manifest-backed
+capability names, status values, evidence links, fail-closed limitations, and downstream ownership
+caveats.
+
+## Manifest-Backed Capability Status
+
+| Capability | Manifest status | Owner | Publication boundary |
+| --- | --- | --- | --- |
+| Portfolio and account source of record | `supported` | `lotus-core` | Source truth only; downstream apps own analytics and product experience. |
+| Transaction and booking evidence | `supported` | `lotus-core` | Booking and ledger evidence only; tax advice, execution, and reporting interpretation are downstream-owned. |
+| Position, valuation, and cashflow calculators | `supported` | `lotus-core` | Source-data foundations only; performance, risk, advice, and liquidity conclusions are downstream-owned. |
+| Operational read plane | `supported` | `lotus-core` | Operational reads must not drift into report composition, advice, risk, or performance ownership. |
+| Query control plane | `supported` | `lotus-core` | Source-data products and control-plane evidence only; consumer adoption proof remains downstream-owned. |
+| DPM source-data products | `supported_with_fail_closed_dependencies` | `lotus-core` | Core publishes source readiness and fail-closed external dependency posture; DPM decisions remain `lotus-manage` owned. |
+| Market/reference products | `supported` | `lotus-core` | Coverage and reference evidence only; attribution and risk conclusions remain downstream-owned. |
+| Ingestion and replay | `supported` | `lotus-core` | Operational ingestion, replay, DLQ, and recovery evidence only; downstream semantic outcomes remain consumer-owned. |
+| Reconciliation and supportability | `supported` | `lotus-core` | Operator evidence only unless a route family explicitly supports product use. |
+| Simulation and advisory source effects | `producer_certified_downstream_owned` | `lotus-core` | Deterministic source-effect evidence only; advisory decisioning remains `lotus-advise` owned. |
+
 ## Supported Surface Families
 
 The app-level validation command treats these implementation-backed surface families as the current
@@ -49,3 +75,7 @@ ingestion.
    `output/lotus-core-validation/`, and exits non-zero on weak proof.
 7. `make docs-evidence-pack`, which writes `output/documentation-evidence/` with a release-ready
    manifest for README, wiki, API vocabulary, RFC ledger, supported-feature, and runbook evidence.
+8. `contracts/supported-features/lotus-core-supported-features.v1.json`, guarded by
+   `make supported-features-guard`, which maps every published capability to implementation
+   modules, routes, source-data products, tests, validation evidence, safe demo claims, prohibited
+   claims, limitations, and downstream ownership caveats.

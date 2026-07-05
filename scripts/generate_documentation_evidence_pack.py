@@ -27,12 +27,6 @@ DOCUMENTATION_SURFACES = (
     "wiki/API-Surface.md",
 )
 
-SUPPORTED_FEATURE_TERMS = (
-    "implementation-backed",
-    "make lotus-core-validate",
-    "output/lotus-core-validation/",
-)
-
 RUNBOOK_TERMS = (
     "operator-facing posture",
     "support APIs",
@@ -132,25 +126,15 @@ def _validate_markdown_links(*, name: str, paths: tuple[Path, ...]) -> Documenta
 
 
 def _validate_supported_features() -> DocumentationEvidenceCheck:
-    missing_terms: dict[str, list[str]] = {}
-    for relative_path in ("docs/supported-features.md", "wiki/Supported-Features.md"):
-        path = REPO_ROOT / relative_path
-        if not path.exists():
-            missing_terms[relative_path] = ["missing file"]
-            continue
-        text = path.read_text(encoding="utf-8")
-        absent = [term for term in SUPPORTED_FEATURE_TERMS if term not in text]
-        if absent:
-            missing_terms[relative_path] = absent
-
-    return _check(
-        "supported_features_manifest",
-        not missing_terms,
-        {
-            "checked_files": ["docs/supported-features.md", "wiki/Supported-Features.md"],
-            "required_terms": list(SUPPORTED_FEATURE_TERMS),
-            "missing_terms": missing_terms,
-        },
+    return _run_command(
+        name="supported_features_manifest",
+        command=[sys.executable, "scripts/supported_features_guard.py"],
+        artifact_paths=(
+            REPO_ROOT
+            / "contracts"
+            / "supported-features"
+            / "lotus-core-supported-features.v1.json",
+        ),
     )
 
 

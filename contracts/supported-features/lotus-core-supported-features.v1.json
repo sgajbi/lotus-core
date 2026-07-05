@@ -1,0 +1,558 @@
+{
+  "schema_version": "lotus-core-supported-features.v1",
+  "repository": "lotus-core",
+  "documentation_surfaces": [
+    "docs/supported-features.md",
+    "wiki/Supported-Features.md"
+  ],
+  "guard_command": "make supported-features-guard",
+  "capabilities": [
+    {
+      "id": "portfolio-account-source-record",
+      "display_name": "Portfolio and account source of record",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/query_service/app/routers/portfolios.py",
+        "src/services/query_service/app/routers/cash_accounts.py",
+        "src/services/query_service/app/routers/cash_balances.py",
+        "src/services/query_service/app/routers/instruments.py",
+        "src/services/query_service/app/routers/positions.py"
+      ],
+      "routes": [
+        "/portfolios/{portfolio_id}",
+        "/portfolios/{portfolio_id}/positions",
+        "/portfolios/{portfolio_id}/cash-balances"
+      ],
+      "source_data_products": [
+        "HoldingsAsOf:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_service/test_main_app.py",
+        "tests/integration/services/query_service/test_positions_router_dependency.py",
+        "tests/integration/services/query_service/test_cash_balances_router.py",
+        "tests/unit/services/query_service"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "scripts/certify_lotus_core_app.py",
+        "docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core provides recorded portfolio, cash, instrument, and holding source truth for downstream apps.",
+          "evidence_refs": [
+            "wiki/API-Surface.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Performance, risk, advice, reporting, or execution conclusions are provided by this capability.",
+          "owning_service_boundary": "lotus-performance, lotus-risk, lotus-advise, lotus-report, lotus-manage, or execution/OMS systems",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Source truth is bounded to persisted Core records and governed source-data products."
+      ],
+      "downstream_ownership_caveats": [
+        "Gateway and Workbench compose user experiences but do not own Core source truth."
+      ]
+    },
+    {
+      "id": "transaction-booking-evidence",
+      "display_name": "Transaction and booking evidence",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/query_service/app/routers/transactions.py",
+        "src/services/query_service/app/routers/buy_state.py",
+        "src/services/query_service/app/routers/sell_state.py",
+        "src/services/query_service/app/routers/cash_movements.py"
+      ],
+      "routes": [
+        "/transactions/",
+        "/transactions/ledger",
+        "/portfolios/{portfolio_id}/cash-movements"
+      ],
+      "source_data_products": [
+        "TransactionLedgerWindow:v1",
+        "TransactionCostCurve:v1",
+        "PortfolioCashMovementSummary:v1",
+        "PortfolioRealizedTaxSummary:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_service/test_transactions_router.py",
+        "tests/integration/services/query_service/test_cashflow_projection_router_dependency.py",
+        "tests/unit/services/query_service/routers"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "docs/methodologies/source-data-products/transaction-ledger-window.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core can expose booked transaction, cash movement, cost, and realized-tax evidence with deterministic pagination.",
+          "evidence_refs": [
+            "docs/methodologies/source-data-products/transaction-ledger-window.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Core provides client tax advice, best execution, or OMS acknowledgement from transaction evidence.",
+          "owning_service_boundary": "tax advisory, execution/OMS, and downstream reporting systems",
+          "evidence_refs": [
+            "wiki/Supported-Features.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Booking evidence is source-state evidence, not downstream performance or execution interpretation."
+      ],
+      "downstream_ownership_caveats": [
+        "Client-facing reporting and performance interpretation remain owned outside lotus-core."
+      ]
+    },
+    {
+      "id": "position-valuation-cashflow-calculators",
+      "display_name": "Position, valuation, and cashflow calculators",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/calculators/position_calculator",
+        "src/services/calculators/position_valuation_calculator",
+        "src/services/calculators/cashflow_calculator_service",
+        "src/services/valuation_orchestrator_service",
+        "src/services/pipeline_orchestrator_service",
+        "src/services/query_service/app/routers/cashflow_projection.py"
+      ],
+      "routes": [
+        "/portfolios/{portfolio_id}/cashflow-projection",
+        "/positions/timeseries",
+        "/portfolios/timeseries"
+      ],
+      "source_data_products": [
+        "PortfolioCashflowProjection:v1",
+        "PortfolioTimeseriesInput:v1",
+        "PositionTimeseriesInput:v1"
+      ],
+      "tests": [
+        "tests/unit/services/query_service/services",
+        "tests/integration/services/query_service/test_cashflow_projection_router_dependency.py",
+        "tests/integration/services/query_service/test_query_position_repository.py"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Position-Calculator.md",
+        "wiki/Valuation-Calculator.md",
+        "wiki/Cashflow-Calculator.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core maintains source-owned position, valuation, cashflow, and time-series foundations.",
+          "evidence_refs": [
+            "wiki/Timeseries-and-Aggregation.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Core owns portfolio performance attribution, risk analytics, or liquidity advice.",
+          "owning_service_boundary": "lotus-performance, lotus-risk, lotus-advise, and lotus-manage",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Calculator outputs remain source-data foundations and support evidence, not investment recommendations."
+      ],
+      "downstream_ownership_caveats": [
+        "Analytics conclusions remain owned by downstream domain apps."
+      ]
+    },
+    {
+      "id": "operational-read-plane",
+      "display_name": "Operational read plane",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/query_service/app/routers"
+      ],
+      "routes": [
+        "/portfolios/{portfolio_id}/positions",
+        "/transactions/",
+        "/market-prices/",
+        "/fx-rates/"
+      ],
+      "source_data_products": [
+        "HoldingsAsOf:v1",
+        "MarketDataWindow:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_service/test_main_app.py",
+        "tests/integration/services/query_service/test_reference_data_routers.py",
+        "tests/unit/services/query_service/routers"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/API-Surface.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core exposes stable operational read APIs for source data and support workflows.",
+          "evidence_refs": [
+            "wiki/API-Surface.md",
+            "docs/standards/route-contract-family-registry.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Operational reads are front-office product experiences or downstream analytics products by themselves.",
+          "owning_service_boundary": "lotus-gateway, lotus-workbench, and downstream domain apps",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Operational reads must not drift into report composition, advice, risk, or performance ownership."
+      ],
+      "downstream_ownership_caveats": [
+        "Consumer-facing experience and aggregation remain owned by gateway/workbench or downstream apps."
+      ]
+    },
+    {
+      "id": "query-control-plane-source-products",
+      "display_name": "Query control plane",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/query_control_plane_service/app/routers/analytics_inputs.py",
+        "src/services/query_control_plane_service/app/routers/integration.py",
+        "src/services/query_control_plane_service/app/routers/capabilities.py",
+        "src/services/query_control_plane_service/app/routers/operations.py"
+      ],
+      "routes": [
+        "/integration/portfolios/{portfolio_id}/core-snapshot",
+        "/integration/capabilities",
+        "/integration/policy/effective"
+      ],
+      "source_data_products": [
+        "PortfolioStateSnapshot:v1",
+        "PortfolioAnalyticsReference:v1",
+        "BenchmarkAssignment:v1",
+        "InstrumentReferenceBundle:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py",
+        "tests/unit/services/query_control_plane_service"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Query-Control-Plane.md",
+        "contracts/domain-data-products/lotus-core-products.v1.json"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core publishes governed source-data products and control-plane evidence for downstream services.",
+          "evidence_refs": [
+            "wiki/Query-Control-Plane.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Control-plane source products replace downstream performance, risk, advisory, or reporting ownership.",
+          "owning_service_boundary": "lotus-performance, lotus-risk, lotus-advise, lotus-report, and lotus-manage",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Source products carry source evidence and supportability, not downstream conclusions."
+      ],
+      "downstream_ownership_caveats": [
+        "Approved consumer status is declared in product contracts; live adoption proof remains owned by each consuming repo."
+      ]
+    },
+    {
+      "id": "dpm-source-data-products",
+      "display_name": "DPM source-data products",
+      "owner": "lotus-core",
+      "status": "supported_with_fail_closed_dependencies",
+      "implementation_modules": [
+        "src/services/query_control_plane_service/app/routers/integration.py",
+        "src/libs/portfolio-common/portfolio_common/source_data_products.py"
+      ],
+      "routes": [
+        "/integration/dpm/*",
+        "/integration/market-data/coverage"
+      ],
+      "source_data_products": [
+        "DpmModelPortfolioTarget:v1",
+        "DiscretionaryMandateBinding:v1",
+        "InstrumentEligibilityProfile:v1",
+        "DpmSourceReadiness:v1",
+        "ExternalHedgeExecutionReadiness:v1",
+        "ExternalOrderExecutionAcknowledgement:v1"
+      ],
+      "tests": [
+        "tests/unit/libs/portfolio-common/test_source_data_products.py",
+        "tests/unit/test_domain_data_product_contracts.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "make live-dpm-source-validate",
+        "wiki/Mesh-Data-Products.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core exposes DPM source readiness and marks missing external treasury or OMS evidence fail-closed.",
+          "evidence_refs": [
+            "wiki/Mesh-Data-Products.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Core makes discretionary rebalance decisions or certifies external order execution.",
+          "owning_service_boundary": "lotus-manage and external bank-owned treasury/OMS systems",
+          "evidence_refs": [
+            "wiki/Supported-Features.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "External treasury and OMS products remain fail-closed until bank-owned ingestion is certified."
+      ],
+      "downstream_ownership_caveats": [
+        "DPM workflow decisions and action registers belong to lotus-manage."
+      ]
+    },
+    {
+      "id": "market-reference-products",
+      "display_name": "Market/reference products",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/query_control_plane_service/app/routers/integration.py",
+        "src/services/query_service/app/routers/fx_rates.py",
+        "src/services/query_service/app/routers/prices.py"
+      ],
+      "routes": [
+        "/integration/benchmarks/{benchmark_id}/coverage",
+        "/integration/market-data/coverage",
+        "/fx-rates/"
+      ],
+      "source_data_products": [
+        "BenchmarkAssignment:v1",
+        "BenchmarkConstituentWindow:v1",
+        "IndexSeriesWindow:v1",
+        "RiskFreeSeriesWindow:v1",
+        "MarketDataCoverageWindow:v1",
+        "DataQualityCoverageReport:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py",
+        "tests/unit/libs/portfolio-common/test_market_reference_quality.py"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Mesh-Data-Products.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core publishes governed benchmark, index, risk-free, price, FX, and coverage evidence.",
+          "evidence_refs": [
+            "wiki/Mesh-Data-Products.md",
+            "contracts/domain-data-products/lotus-core-products.v1.json"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Market/reference products produce performance attribution or risk conclusions.",
+          "owning_service_boundary": "lotus-performance and lotus-risk",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Coverage diagnostics indicate data readiness, not valuation methodology or analytics conclusions."
+      ],
+      "downstream_ownership_caveats": [
+        "Performance and risk methodology remain downstream-owned."
+      ]
+    },
+    {
+      "id": "ingestion-replay",
+      "display_name": "Ingestion and replay",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/ingestion_service/app/main.py",
+        "src/services/event_replay_service/app/routers/ingestion_operations.py",
+        "src/services/event_replay_service/app/routers/replay_mappers.py"
+      ],
+      "routes": [
+        "/ingest/*",
+        "/operations/ingestion/*",
+        "/operations/replay/*"
+      ],
+      "source_data_products": [
+        "IngestionEvidenceBundle:v1"
+      ],
+      "tests": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/integration/services/event_replay_service/test_event_replay_app.py",
+        "tests/unit/services/ingestion_service"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Ingestion-Service.md",
+        "wiki/Event-Replay-Service.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core supports API-first ingestion, job evidence, replay diagnostics, and DLQ recovery surfaces.",
+          "evidence_refs": [
+            "wiki/Ingestion-Service.md",
+            "wiki/Event-Replay-Service.md"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Replay APIs certify downstream consumer business outcomes.",
+          "owning_service_boundary": "the affected downstream consumer service",
+          "evidence_refs": [
+            "docs/architecture/RFC-0083-eventing-supportability-target-model.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Replay and DLQ evidence is operational recovery evidence, not downstream semantic certification."
+      ],
+      "downstream_ownership_caveats": [
+        "Consumer-side business validation remains owned by the consuming service."
+      ]
+    },
+    {
+      "id": "reconciliation-supportability",
+      "display_name": "Reconciliation and supportability",
+      "owner": "lotus-core",
+      "status": "supported",
+      "implementation_modules": [
+        "src/services/financial_reconciliation_service/app/routers/reconciliation.py",
+        "src/services/query_control_plane_service/app/routers/operations.py",
+        "src/services/query_service/app/routers/reporting.py"
+      ],
+      "routes": [
+        "/reconciliation/*",
+        "/support/portfolios/{portfolio_id}/readiness",
+        "/support/portfolios/{portfolio_id}/overview"
+      ],
+      "source_data_products": [
+        "ReconciliationEvidenceBundle:v1"
+      ],
+      "tests": [
+        "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py",
+        "tests/unit/services/financial_reconciliation_service"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Financial-Reconciliation.md",
+        "wiki/Support-and-Lineage.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core exposes reconciliation, readiness, supportability, lineage, and bounded operational evidence.",
+          "evidence_refs": [
+            "wiki/Financial-Reconciliation.md",
+            "wiki/Support-and-Lineage.md"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Supportability evidence is a front-office product workflow or client report.",
+          "owning_service_boundary": "lotus-workbench, lotus-gateway, lotus-report, and downstream apps",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Support and reconciliation APIs are operator evidence unless a route family explicitly says otherwise."
+      ],
+      "downstream_ownership_caveats": [
+        "Client-facing presentation and escalation workflows remain outside lotus-core."
+      ]
+    },
+    {
+      "id": "simulation-advisory-source-effects",
+      "display_name": "Simulation and advisory source effects",
+      "owner": "lotus-core",
+      "status": "producer_certified_downstream_owned",
+      "implementation_modules": [
+        "src/services/query_control_plane_service/app/routers/simulation.py",
+        "src/services/query_control_plane_service/app/routers/advisory_simulation.py",
+        "src/services/query_service/app/services/simulation_service.py"
+      ],
+      "routes": [
+        "/simulation-sessions/{session_id}/projected-summary",
+        "/integration/advisory/proposals/simulate-execution"
+      ],
+      "source_data_products": [
+        "PortfolioStateSnapshot:v1"
+      ],
+      "tests": [
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py",
+        "tests/unit/services/query_service/services/test_simulation_service.py"
+      ],
+      "validation_evidence": [
+        "make lotus-core-validate",
+        "wiki/Query-Control-Plane.md"
+      ],
+      "safe_demo_claims": [
+        {
+          "claim": "Core can show deterministic source effects of simulations and advisory proposal execution inputs.",
+          "evidence_refs": [
+            "wiki/Query-Control-Plane.md",
+            "docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md"
+          ]
+        }
+      ],
+      "prohibited_claims": [
+        {
+          "claim": "Core owns advisory suitability, recommendation, or proposal lifecycle decisioning.",
+          "owning_service_boundary": "lotus-advise",
+          "evidence_refs": [
+            "docs/architecture/RFC-0082-contract-family-inventory.md"
+          ]
+        }
+      ],
+      "limitations": [
+        "Simulation support is source-effect evidence, not advisory recommendation ownership."
+      ],
+      "downstream_ownership_caveats": [
+        "Advisory decisioning and client-facing proposal workflow remain owned by lotus-advise."
+      ]
+    }
+  ]
+}

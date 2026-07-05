@@ -11,23 +11,6 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "output" / "lotus-core-validation"
-SUPPORTED_FEATURE_DOCS = (
-    REPO_ROOT / "docs" / "supported-features.md",
-    REPO_ROOT / "wiki" / "Supported-Features.md",
-)
-REQUIRED_SUPPORTED_FEATURE_TERMS = (
-    "Portfolio and account source of record",
-    "Transaction and booking evidence",
-    "Position, valuation, and cashflow calculators",
-    "Operational read plane",
-    "Query control plane",
-    "DPM source-data products",
-    "Ingestion and replay",
-    "Reconciliation and supportability",
-    "Simulation and advisory source effects",
-    "implementation-backed",
-    "fail-closed",
-)
 
 
 @dataclass(frozen=True)
@@ -73,26 +56,9 @@ def _run_command(
 
 
 def _verify_supported_feature_truth() -> ValidationCheck:
-    missing_files = [
-        str(path.relative_to(REPO_ROOT)) for path in SUPPORTED_FEATURE_DOCS if not path.exists()
-    ]
-    missing_terms: dict[str, list[str]] = {}
-    for path in SUPPORTED_FEATURE_DOCS:
-        if not path.exists():
-            continue
-        text = path.read_text(encoding="utf-8")
-        absent = [term for term in REQUIRED_SUPPORTED_FEATURE_TERMS if term not in text]
-        if absent:
-            missing_terms[str(path.relative_to(REPO_ROOT))] = absent
-    return _check(
-        "supported_feature_truth",
-        not missing_files and not missing_terms,
-        {
-            "checked_files": [str(path.relative_to(REPO_ROOT)) for path in SUPPORTED_FEATURE_DOCS],
-            "missing_files": missing_files,
-            "missing_terms": missing_terms,
-            "required_terms": list(REQUIRED_SUPPORTED_FEATURE_TERMS),
-        },
+    return _run_command(
+        name="supported_feature_truth",
+        command=[sys.executable, "scripts/supported_features_guard.py"],
     )
 
 

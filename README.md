@@ -100,6 +100,9 @@ Current repo truth:
 7. `make docs-evidence-pack` writes a documentation release evidence manifest under
    `output/documentation-evidence/`, covering README/wiki link validation, API vocabulary artifact
    generation, RFC ledger checks, supported-feature truth, and runbook validation.
+   Supported-feature publication is backed by
+   `contracts/supported-features/lotus-core-supported-features.v1.json` and
+   `make supported-features-guard`.
 8. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
    [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
 9. Production-like deployments default to the governed service-local enterprise security profile:
