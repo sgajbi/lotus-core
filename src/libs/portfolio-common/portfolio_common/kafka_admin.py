@@ -4,10 +4,11 @@ from typing import List
 
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
-from tenacity import before_log, retry, stop_after_attempt, stop_after_delay, wait_fixed
+from tenacity import retry
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
+from .retry_policy import KAFKA_ADMIN_STARTUP_RETRY, tenacity_retry_kwargs
 
 logger = logging.getLogger(__name__)
 KAFKA_ADMIN_ACCESS_POLICY = load_downstream_access_policy()
@@ -18,10 +19,12 @@ class KafkaTopicVerificationError(RuntimeError):
 
 
 @retry(
-    stop=stop_after_attempt(KAFKA_ADMIN_ACCESS_POLICY.retry_max_attempts)
-    | stop_after_delay(KAFKA_ADMIN_ACCESS_POLICY.retry_max_elapsed_seconds),
-    wait=wait_fixed(KAFKA_ADMIN_ACCESS_POLICY.retry_backoff_seconds),
-    before=before_log(logger, logging.INFO),
+    **tenacity_retry_kwargs(
+        profile=KAFKA_ADMIN_STARTUP_RETRY,
+        retry_exceptions=(KafkaException,),
+        logger=logger,
+        reraise=False,
+    )
 )
 def ensure_topics_exist(required_topics: List[str]):
     """

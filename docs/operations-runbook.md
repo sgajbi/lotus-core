@@ -116,6 +116,29 @@ The enforcement command is:
 make image-provenance-guard
 ```
 
+## Shared Retry Policies
+
+Kafka admin/startup checks and DB-backed consumers use `portfolio_common.retry_policy` profiles
+instead of service-local fixed waits. Profiles define retryable exception classes at the call site
+and use bounded exponential backoff with jitter, max attempts, and max elapsed budgets.
+
+| Profile | Max Attempts | Max Elapsed | Backoff | Used For |
+| --- | ---: | ---: | --- | --- |
+| `kafka_admin_startup` | 15 | 60s | exponential jitter, max 4s | Kafka topic verification during startup. |
+| `consumer_db_short` | 8 | 30s | exponential jitter, max 2s | Short DB-backed event consumers such as valuation readiness, price, and reconciliation requests. |
+| `consumer_db_standard` | 12 | 60s | exponential jitter, max 5s | Position transaction processing where recalculation locks or transaction visibility can be transient. |
+| `consumer_db_extended` | 15 | 90s | exponential jitter, max 5s | Cashflow processing where rule/cache/database races may need a longer bounded retry window. |
+
+Shared retry attempts emit:
+
+| Metric | Labels | Purpose |
+| --- | --- | --- |
+| `retry_policy_events_total` | `profile`, `outcome`, `reason` | Count bounded retry attempts by low-cardinality policy profile. |
+
+Retry logs use `event_name=retry.policy.retrying` with source-safe profile, attempt, budget, and
+exception type fields. Do not add raw exception text, payload fields, request/correlation/trace
+IDs, portfolio IDs, or security IDs as retry metric labels.
+
 ## Metric Vocabulary Guard
 
 Metric labels are governed by `portfolio_common.observability_contracts` and enforced by:

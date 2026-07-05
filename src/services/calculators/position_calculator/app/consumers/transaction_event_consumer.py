@@ -9,9 +9,10 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
+from portfolio_common.retry_policy import CONSUMER_DB_STANDARD_RETRY, tenacity_retry_kwargs
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from tenacity import retry
 
 from ..core.position_logic import PositionCalculator
 from ..repositories.position_repository import PositionRepository
@@ -43,18 +44,16 @@ class TransactionEventConsumer(BaseConsumer):
         super().__init__(*args, **kwargs)
 
     @retry(
-        wait=wait_fixed(5),  # Wait longer for retryable errors
-        stop=stop_after_attempt(12),
-        before=before_log(logger, logging.INFO),
-        retry=retry_if_exception_type(
-            (
+        **tenacity_retry_kwargs(
+            profile=CONSUMER_DB_STANDARD_RETRY,
+            retry_exceptions=(
                 DBAPIError,
                 IntegrityError,
                 RecalculationInProgressError,
                 TransactionNotYetAvailableError,
-            )
-        ),
-        reraise=True,
+            ),
+            logger=logger,
+        )
     )
     async def process_message(self, msg: Message):
         value = msg.value().decode("utf-8")

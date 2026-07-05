@@ -17,6 +17,7 @@ TELEMETRY_METRIC_ALLOWED_LABELS: tuple[str, ...] = (
     "job_type",
     "method",
     "outcome",
+    "profile",
     "queue",
     "reason",
     "reconciliation_type",

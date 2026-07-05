@@ -75,6 +75,12 @@ KAFKA_PRODUCER_EVENTS_TOTAL = Counter(
     labelnames=("service", "topic", "outcome", "reason"),
 )
 
+RETRY_POLICY_EVENTS_TOTAL = Counter(
+    "retry_policy_events_total",
+    "Bounded retry policy events.",
+    labelnames=("profile", "outcome", "reason"),
+)
+
 KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS = Histogram(
     "kafka_consumer_processing_duration_seconds",
     "Kafka consumer message processing duration in seconds.",
@@ -121,6 +127,16 @@ def observe_kafka_producer_event(
     count: int = 1,
 ) -> None:
     KAFKA_PRODUCER_EVENTS_TOTAL.labels(service, topic, outcome, reason).inc(count)
+
+
+def observe_retry_policy_event(
+    *,
+    profile: str,
+    outcome: str,
+    reason: str,
+    count: int = 1,
+) -> None:
+    RETRY_POLICY_EVENTS_TOTAL.labels(profile, outcome, reason).inc(count)
 
 
 def observe_kafka_consumed(topic: str, group_id: str, count: int = 1) -> None:
