@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, Query
+from fastapi import APIRouter, Body, Depends, Header, Path, Query
 
 from ..application import (
     GetReconciliationRunQuery,
     ListReconciliationFindingsQuery,
     ListReconciliationRunsQuery,
-    ReconciliationRunCommand,
     ReconciliationUseCases,
 )
 from ..dependencies import get_reconciliation_use_cases
@@ -15,6 +14,10 @@ from ..dtos import (
     ReconciliationRunListResponse,
     ReconciliationRunRequest,
     ReconciliationRunResponse,
+)
+from .reconciliation_mappers import (
+    reconciliation_run_command_from_request,
+    reconciliation_run_not_found,
 )
 
 router = APIRouter(tags=["financial-reconciliation"])
@@ -95,16 +98,6 @@ RECONCILIATION_FINDING_LIST_RESPONSE_EXAMPLE = {
 }
 
 
-def _reconciliation_run_not_found(run_id: str) -> HTTPException:
-    return HTTPException(
-        status_code=404,
-        detail={
-            "code": "RECONCILIATION_RUN_NOT_FOUND",
-            "message": f"Reconciliation run '{run_id}' was not found.",
-        },
-    )
-
-
 @router.post(
     "/reconciliation/runs/transaction-cashflow",
     response_model=ReconciliationRunResponse,
@@ -136,12 +129,8 @@ async def run_transaction_cashflow_reconciliation(
     ),
 ):
     return await use_cases.run_transaction_cashflow(
-        ReconciliationRunCommand(
-            portfolio_id=request.portfolio_id,
-            business_date=request.business_date,
-            epoch=request.epoch,
-            requested_by=request.requested_by,
-            tolerance=request.tolerance,
+        reconciliation_run_command_from_request(
+            request,
             correlation_id=x_correlation_id,
         )
     )
@@ -176,12 +165,8 @@ async def run_position_valuation_reconciliation(
     ),
 ):
     return await use_cases.run_position_valuation(
-        ReconciliationRunCommand(
-            portfolio_id=request.portfolio_id,
-            business_date=request.business_date,
-            epoch=request.epoch,
-            requested_by=request.requested_by,
-            tolerance=request.tolerance,
+        reconciliation_run_command_from_request(
+            request,
             correlation_id=x_correlation_id,
         )
     )
@@ -218,12 +203,8 @@ async def run_timeseries_integrity_reconciliation(
     ),
 ):
     return await use_cases.run_timeseries_integrity(
-        ReconciliationRunCommand(
-            portfolio_id=request.portfolio_id,
-            business_date=request.business_date,
-            epoch=request.epoch,
-            requested_by=request.requested_by,
-            tolerance=request.tolerance,
+        reconciliation_run_command_from_request(
+            request,
             correlation_id=x_correlation_id,
         )
     )
@@ -311,7 +292,7 @@ async def get_reconciliation_run(
 ):
     run = await use_cases.get_run(GetReconciliationRunQuery(run_id=run_id))
     if run is None:
-        raise _reconciliation_run_not_found(run_id)
+        raise reconciliation_run_not_found(run_id)
     return run
 
 
@@ -346,5 +327,5 @@ async def list_reconciliation_findings(
 ):
     result = await use_cases.list_findings(ListReconciliationFindingsQuery(run_id=run_id))
     if result is None:
-        raise _reconciliation_run_not_found(run_id)
+        raise reconciliation_run_not_found(run_id)
     return ReconciliationFindingListResponse(findings=result.findings, total=result.total)

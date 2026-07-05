@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from ..dependencies import get_cash_account_service
 from ..dtos.cash_account_dto import CashAccountQueryResponse
 from ..services.cash_account_service import CashAccountService
+from .http_errors import value_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["Cash Accounts"])
 
@@ -50,4 +51,4 @@ async def get_cash_accounts(
     try:
         return await service.get_cash_accounts(portfolio_id, as_of_date=as_of_date)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise value_error_to_http(exc, status_code=status.HTTP_404_NOT_FOUND) from exc

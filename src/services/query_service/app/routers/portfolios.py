@@ -1,11 +1,12 @@
 # services/query-service/app/routers/portfolios.py
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from ..dependencies import get_portfolio_service
 from ..dtos.portfolio_dto import PortfolioQueryResponse, PortfolioRecord
 from ..services.portfolio_service import PortfolioService
+from .http_errors import lookup_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolios"])
 
@@ -87,8 +88,5 @@ async def get_portfolio_by_id(
     try:
         portfolio = await service.get_portfolio_by_id(portfolio_id)
         return portfolio
-    except LookupError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Portfolio with id {portfolio_id} not found",
-        )
+    except LookupError as exc:
+        raise lookup_error_to_http(exc) from exc

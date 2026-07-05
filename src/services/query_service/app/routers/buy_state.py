@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, Path, status
 
 from ..dependencies import get_buy_state_service
 from ..dtos.buy_state_dto import (
@@ -7,6 +7,7 @@ from ..dtos.buy_state_dto import (
     PositionLotsResponse,
 )
 from ..services.buy_state_service import BuyStateService
+from .http_errors import lookup_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["BUY State"])
 
@@ -53,7 +54,7 @@ async def get_position_lots(
     try:
         return await service.get_position_lots(portfolio_id=portfolio_id, security_id=security_id)
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
 
 
 @router.get(
@@ -89,7 +90,7 @@ async def get_accrued_offsets(
     try:
         return await service.get_accrued_offsets(portfolio_id=portfolio_id, security_id=security_id)
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
 
 
 @router.get(
@@ -129,4 +130,4 @@ async def get_buy_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc

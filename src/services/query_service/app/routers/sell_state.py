@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, Path, status
 
 from ..dependencies import get_sell_state_service
 from ..dtos.sell_state_dto import SellCashLinkageResponse, SellDisposalsResponse
 from ..services.sell_state_service import SellStateService
+from .http_errors import lookup_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["SELL State"])
 
@@ -51,7 +52,7 @@ async def get_sell_disposals(
     try:
         return await service.get_sell_disposals(portfolio_id=portfolio_id, security_id=security_id)
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
 
 
 @router.get(
@@ -91,4 +92,4 @@ async def get_sell_cash_linkage(
             portfolio_id=portfolio_id, transaction_id=transaction_id
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc

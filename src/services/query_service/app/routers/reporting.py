@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from ..dependencies import get_reporting_service
 from ..dtos.reporting_dto import (
@@ -10,6 +10,7 @@ from ..dtos.reporting_dto import (
     PortfolioSummaryResponse,
 )
 from ..services.reporting_service import ReportingService
+from .http_errors import lookup_error_to_http, value_error_to_http
 
 router = APIRouter(prefix="/reporting", tags=["Wealth Reporting"])
 
@@ -41,7 +42,7 @@ async def query_assets_under_management(
     try:
         return await service.get_assets_under_management(request)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise value_error_to_http(exc) from exc
 
 
 @router.post(
@@ -66,7 +67,7 @@ async def query_asset_allocation(
     try:
         return await service.get_asset_allocation(request)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise value_error_to_http(exc) from exc
 
 
 @router.post(
@@ -112,6 +113,6 @@ async def query_portfolio_summary(
     try:
         return await service.get_portfolio_summary(request)
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise value_error_to_http(exc) from exc

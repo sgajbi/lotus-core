@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_position_service
@@ -12,6 +12,7 @@ from ..dtos.position_dto import (
     PortfolioPositionsResponse,
 )
 from ..services.position_service import PositionService
+from .http_errors import lookup_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["Positions"])
 
@@ -67,7 +68,7 @@ async def get_position_history(
             end_date=end_date,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
 
 
 @router.get(
@@ -127,7 +128,7 @@ async def get_latest_positions(
             include_projected=include_projected,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
 
 
 @router.get(
@@ -195,4 +196,4 @@ async def get_portfolio_maturity_summary(
             include_projected=include_projected,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc

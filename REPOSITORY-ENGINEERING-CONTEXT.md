@@ -1040,6 +1040,14 @@ Most relevant current governance:
     evidence. Proof builders accept application/domain/support inputs and return typed artifacts;
     routers map artifacts to API DTOs, repositories own persistence reads, and runbooks document
     operator behavior. A separate proof service requires the runtime-boundary decision process.
+86. API adapters should keep DTO-to-command, application-result-to-response, and typed
+    error-to-HTTP translation in bounded mapper modules when the mapping is reused, non-trivial, or
+    representative for a route family. The repo-local standard lives at
+    `docs/standards/api-mapper-pattern-standard.md`; current representative modules cover lookup,
+    reconciliation, event-replay command errors, and query-service read error mapping; and `make
+    architecture-guard` runs `scripts/api_mapper_pattern_guard.py`. Keep this context entry as
+    navigation only: detailed mapping rules belong in the standard and executable guard, not
+    duplicated prose.
 
 ## Context Maintenance Rule
 

@@ -1,11 +1,12 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_cash_movement_service
 from ..dtos.cash_movement_dto import PortfolioCashMovementSummaryResponse
 from ..services.cash_movement_service import MAX_CASH_MOVEMENT_WINDOW_DAYS, CashMovementService
+from .http_errors import raise_value_error_as_resolution_http
 
 router = APIRouter(prefix="/portfolios", tags=["Cash Movements"])
 
@@ -73,10 +74,4 @@ async def get_cash_movement_summary(
             end_date=end_date,
         )
     except ValueError as exc:
-        detail = str(exc)
-        status_code = (
-            status.HTTP_400_BAD_REQUEST
-            if "start_date" in detail or "date window" in detail
-            else status.HTTP_404_NOT_FOUND
-        )
-        raise HTTPException(status_code=status_code, detail=detail)
+        raise_value_error_as_resolution_http(exc)

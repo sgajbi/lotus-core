@@ -2,12 +2,13 @@
 from datetime import date
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from ..dependencies import get_transaction_service, pagination_params, sorting_params
 from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
 from ..services.transaction_service import TransactionService
+from .http_errors import lookup_error_to_http, value_error_to_http
 
 router = APIRouter(prefix="/portfolios", tags=["Transactions"])
 
@@ -166,9 +167,9 @@ async def get_transactions(
             **sorting,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise value_error_to_http(exc) from exc
 
 
 @router.get(
@@ -241,6 +242,6 @@ async def get_realized_tax_summary(
             reporting_currency=reporting_currency,
         )
     except LookupError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        raise lookup_error_to_http(exc) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise value_error_to_http(exc) from exc
