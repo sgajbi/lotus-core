@@ -164,9 +164,41 @@ def configure_secure_response_headers(app: FastAPI) -> None:
     @app.middleware("http")
     async def add_secure_response_headers(request: Request, call_next):
         response = await call_next(request)
-        for header, value in SECURE_RESPONSE_HEADERS.items():
-            response.headers.setdefault(header, value)
+        _apply_secure_response_headers(response)
         return response
+
+
+def _apply_secure_response_headers(response: Any) -> None:
+    for header, value in SECURE_RESPONSE_HEADERS.items():
+        response.headers.setdefault(header, value)
+
+
+def _apply_lineage_response_headers(
+    response: Any,
+    *,
+    correlation_id: str,
+    request_id: str,
+    trace_id: str,
+    traceparent: str,
+) -> None:
+    response.headers["X-Correlation-ID"] = correlation_id
+    response.headers["X-Correlation-Id"] = correlation_id
+    response.headers["X-Request-Id"] = request_id
+    response.headers["X-Trace-Id"] = trace_id
+    response.headers["traceparent"] = traceparent
+
+
+def _standard_unhandled_exception_response(correlation_id: str) -> JSONResponse:
+    response = JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred. Please contact support.",
+            "correlation_id": correlation_id,
+        },
+    )
+    _apply_secure_response_headers(response)
+    return response
 
 
 def http_metric_path_template(request: Request) -> str:
@@ -292,17 +324,29 @@ def configure_standard_http_app(
         request_token = request_id_var.set(request_id)
         trace_token = trace_id_var.set(trace_id)
         traceparent_token = traceparent_var.set(traceparent)
-        response = await call_next(request)
-        response.headers["X-Correlation-ID"] = correlation_id
-        response.headers["X-Correlation-Id"] = correlation_id
-        response.headers["X-Request-Id"] = request_id
-        response.headers["X-Trace-Id"] = trace_id
-        response.headers["traceparent"] = traceparent
-        correlation_id_var.reset(correlation_token)
-        request_id_var.reset(request_token)
-        trace_id_var.reset(trace_token)
-        traceparent_var.reset(traceparent_token)
-        return response
+        try:
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                logger.critical(
+                    f"Unhandled exception for request {request.method} {request.url}",
+                    exc_info=exc,
+                    extra={"correlation_id": correlation_id},
+                )
+                response = _standard_unhandled_exception_response(correlation_id)
+            _apply_lineage_response_headers(
+                response,
+                correlation_id=correlation_id,
+                request_id=request_id,
+                trace_id=trace_id,
+                traceparent=traceparent,
+            )
+            return response
+        finally:
+            correlation_id_var.reset(correlation_token)
+            request_id_var.reset(request_token)
+            trace_id_var.reset(trace_token)
+            traceparent_var.reset(traceparent_token)
 
     @app.middleware("http")
     async def emit_http_observability(request: Request, call_next):
@@ -341,19 +385,28 @@ def configure_standard_http_app(
         correlation_id = normalize_lineage_value(correlation_id)
         if correlation_id is None:
             correlation_id = id_generator(service_prefix)
+        request_id = normalize_lineage_value(request_id_var.get()) or id_generator("REQ")
+        trace_id = normalize_trace_id(trace_id_var.get()) or uuid4().hex
+        traceparent = normalize_traceparent(traceparent_var.get()) or traceparent_from_trace_id(
+            trace_id
+        )
+        if not traceparent:  # pragma: no cover - uuid4-generated trace IDs should be valid.
+            trace_id = uuid4().hex
+            traceparent = traceparent_from_trace_id(trace_id)
         logger.critical(
             f"Unhandled exception for request {request.method} {request.url}",
             exc_info=exc,
             extra={"correlation_id": correlation_id},
         )
-        return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={
-                "error": "Internal Server Error",
-                "message": "An unexpected error occurred. Please contact support.",
-                "correlation_id": correlation_id,
-            },
+        response = _standard_unhandled_exception_response(correlation_id)
+        _apply_lineage_response_headers(
+            response,
+            correlation_id=correlation_id,
+            request_id=request_id,
+            trace_id=trace_id,
+            traceparent=traceparent or "",
         )
+        return response
 
 
 def include_routers(app: FastAPI, *routers: Any) -> None:
