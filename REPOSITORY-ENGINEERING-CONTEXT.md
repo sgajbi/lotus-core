@@ -1485,6 +1485,14 @@ Most relevant current governance:
      reconciliation diagnostics should follow the processor/dependency-factory pattern so workflow
      sequencing is testable without Kafka consumer objects and concrete infrastructure remains at
      the runtime wiring boundary.
+121. Valuation job processing follows the same consumer/application split at greater depth:
+     `ValuationConsumer` owns Kafka decode, correlation context, retry classification, and DLQ
+     handoff only, while `ValuationJobProcessor` owns valuation state vocabulary, snapshot
+     construction, missing-price and stale/current classification, missing-FX failure handling,
+     no-position skip, job completion, unexpected-error failure marking, idempotency, and outbox
+     staging. Future backfill, replay, or batch valuation entry points should reuse the processor
+     with an injected session provider/dependency factory instead of copying consumer workflow
+     logic.
 
 ## Context Maintenance Rule
 

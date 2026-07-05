@@ -18,6 +18,9 @@ from portfolio_common.events import PortfolioValuationRequiredEvent
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.calculators.position_valuation_calculator.app import (
+    valuation_processor as valuation_processor_module,
+)
 from src.services.calculators.position_valuation_calculator.app.consumers import (
     valuation_consumer as valuation_consumer_module,
 )
@@ -120,7 +123,7 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
         yield async_db_session
 
     with patch(
-        "src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.get_async_db_session",
+        "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
         new=override_session,
     ):
         await consumer.process_message(msg)
@@ -277,7 +280,7 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     async def override_session():
         yield async_db_session
 
-    original_update_job_status = valuation_consumer_module.ValuationRepository.update_job_status
+    original_update_job_status = valuation_processor_module.ValuationRepository.update_job_status
 
     async def update_job_status_with_ownership_loss(
         self,
@@ -312,11 +315,11 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
 
     with (
         patch(
-            "src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.get_async_db_session",
+            "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
             new=override_session,
         ),
         patch.object(
-            valuation_consumer_module.ValuationRepository,
+            valuation_processor_module.ValuationRepository,
             "update_job_status",
             new=update_job_status_with_ownership_loss,
         ),
@@ -500,7 +503,7 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
         yield async_db_session
 
     with patch(
-        "src.services.calculators.position_valuation_calculator.app.consumers.valuation_consumer.get_async_db_session",
+        "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
         new=override_session,
     ):
         await consumer.process_message(msg)
