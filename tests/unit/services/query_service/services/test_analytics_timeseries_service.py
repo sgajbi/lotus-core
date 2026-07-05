@@ -20,6 +20,9 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
+from src.services.query_service.app.services import (
+    analytics_timeseries_service as analytics_timeseries_service_module,
+)
 from src.services.query_service.app.services.analytics_export_jobs import analytics_export_jsonable
 from src.services.query_service.app.services.analytics_quality import timeseries_data_quality_status
 from src.services.query_service.app.services.analytics_timeseries_service import (
@@ -39,6 +42,49 @@ def _sum_external_flows(cash_flows) -> Decimal:
     return sum(
         (flow.amount for flow in cash_flows if flow.cash_flow_type == "external_flow"),
         start=Decimal("0"),
+    )
+
+
+def _canonical_portfolio() -> SimpleNamespace:
+    return SimpleNamespace(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        base_currency="SGD",
+        open_date=date(2020, 1, 1),
+        close_date=None,
+        client_id="CIF_100234",
+        booking_center_code="SGPB",
+        portfolio_type="discretionary",
+        objective="Balanced income",
+        updated_at=datetime(2026, 7, 5, 9, 0, tzinfo=UTC),
+    )
+
+
+def _install_canonical_portfolio_timeseries_repo(service: AnalyticsTimeseriesService) -> None:
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
+        get_fx_rates_map=AsyncMock(return_value={}),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+        get_position_snapshot_epoch=AsyncMock(return_value=0),
+        list_business_dates=AsyncMock(return_value=[date(2026, 7, 3)]),
+        list_position_observation_dates=AsyncMock(return_value=[date(2026, 7, 3)]),
+        list_position_timeseries_rows_unpaged=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    security_id="SEC_SG_BOND_001",
+                    valuation_date=date(2026, 7, 3),
+                    bod_market_value=Decimal("1000"),
+                    eod_market_value=Decimal("1005"),
+                    bod_cashflow_position=Decimal("0"),
+                    epoch=0,
+                    position_currency="SGD",
+                    asset_class="Fixed Income",
+                )
+            ]
+        ),
+        list_latest_position_timeseries_before=AsyncMock(return_value=[]),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[]),
+        list_position_cashflow_rows=AsyncMock(return_value=[]),
     )
 
 
@@ -236,6 +282,31 @@ async def test_get_portfolio_timeseries_happy_path() -> None:
     assert response.tenant_id is None
     assert response.snapshot_id is None
     assert response.policy_version is None
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_timeseries_canonical_payload_keeps_single_response_lineage() -> None:
+    service = make_service()
+    _install_canonical_portfolio_timeseries_repo(service)
+
+    response = await service.get_portfolio_timeseries(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioAnalyticsTimeseriesRequest(
+            as_of_date="2026-07-05",
+            window=AnalyticsWindow(start_date="2026-01-01", end_date="2026-07-05"),
+            reporting_currency="SGD",
+            consumer_system="lotus-performance",
+            page=PageRequest(page_size=5000, page_token=None),
+        ),
+    )
+
+    assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.product_name == "PortfolioTimeseriesInput"
+    assert response.lineage.generated_by == "integration.analytics_inputs"
+    assert len(response.lineage.request_fingerprint) == 64
+    assert response.generated_at == response.lineage.generated_at
+    assert response.source_lineage == {}
+    assert response.source_digest == response.content_hash
 
 
 @pytest.mark.asyncio
@@ -1665,6 +1736,60 @@ async def test_get_portfolio_reference_success() -> None:
     assert response.as_of_date == date(2025, 12, 31)
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2025, 12, 30, 9, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_reference_canonical_payload_keeps_single_response_lineage() -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+    )
+
+    response = await service.get_portfolio_reference(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=PortfolioAnalyticsReferenceRequest(
+            as_of_date="2026-07-05",
+            consumer_system="lotus-performance",
+        ),
+    )
+
+    assert response.portfolio_id == "PB_SG_GLOBAL_BAL_001"
+    assert response.product_name == "PortfolioAnalyticsReference"
+    assert response.resolved_as_of_date == date(2026, 7, 5)
+    assert response.lineage.generated_by == "integration.analytics_inputs"
+    assert len(response.lineage.request_fingerprint) == 64
+    assert response.generated_at == response.lineage.generated_at
+    assert response.source_lineage == {}
+    assert response.source_digest == response.content_hash
+
+
+@pytest.mark.asyncio
+async def test_analytics_runtime_metadata_lineage_collision_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = make_service()
+    service.repo = SimpleNamespace(
+        get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
+        get_latest_portfolio_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+        get_latest_position_timeseries_date=AsyncMock(return_value=date(2026, 7, 3)),
+    )
+
+    monkeypatch.setattr(
+        analytics_timeseries_service_module,
+        "source_data_product_runtime_metadata",
+        lambda **_: {"lineage": {"source_product": "PortfolioAnalyticsReference"}},
+    )
+
+    with pytest.raises(AnalyticsInputError) as exc_info:
+        await service.get_portfolio_reference(
+            portfolio_id="PB_SG_GLOBAL_BAL_001",
+            request=PortfolioAnalyticsReferenceRequest(as_of_date="2026-07-05"),
+        )
+
+    assert exc_info.value.code == "UNSUPPORTED_CONFIGURATION"
+    assert "must not override response lineage" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

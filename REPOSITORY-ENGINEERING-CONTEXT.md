@@ -1157,6 +1157,14 @@ Most relevant current governance:
     generated metadata, and simulation session/change IDs plus TTL/expiry decisions; and `make
     architecture-guard` runs `scripts/runtime_provider_port_guard.py`. Legacy analytics and
     operations services still have direct wall-clock usage and remain explicit migration scope.
+88. Query-control-plane analytics-input responses use response-level `lineage` for reproducibility
+    and source-data runtime metadata uses `source_lineage` for source proof. Do not let runtime
+    metadata helpers return or unpack a raw `lineage` key into
+    `PortfolioAnalyticsTimeseriesResponse`, `PositionAnalyticsTimeseriesResponse`, or
+    `PortfolioAnalyticsReferenceResponse`; that collision causes unhandled constructor failures in
+    downstream performance, risk, and idea proof generation. `AnalyticsTimeseriesService` routes
+    those responses through a guarded metadata helper and has canonical
+    `PB_SG_GLOBAL_BAL_001` regression tests for the issue #705 proof path.
 
 ## Context Maintenance Rule
 
