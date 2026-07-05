@@ -1194,13 +1194,17 @@ Most relevant current governance:
     `/**` suffixes such as `GET /portfolios/{portfolio_id}/**` only when the rule intentionally
     authorizes a subtree. Do not rely on prefix matching for authorization examples, tests, source
     data rules, or service-local capability overrides.
-91. Ingestion write APIs use a service-local enterprise-readiness wrapper over
-    `portfolio_common.enterprise_readiness` with default capability rules for every canonical
-    `/ingest/*` and `/reprocess/*` write route. Future ingestion write routes must update
-    `ingestion_write_capability_rules()` and keep the route-coverage test green; do not rely on
-    `ENTERPRISE_CAPABILITY_RULES_JSON` alone for production write-plane policy. Shared enterprise
-    middleware keeps health, metrics, OpenAPI, docs, ReDoc, and version endpoints on an explicit
-    unauthenticated operational allowlist even when read authorization is enabled.
+91. Service-local enterprise-readiness wrappers must own default capability rules for their
+    canonical business routes instead of relying on `ENTERPRISE_CAPABILITY_RULES_JSON` alone for
+    production policy. Ingestion write APIs cover every canonical `/ingest/*` and `/reprocess/*`
+    write route through `ingestion_write_capability_rules()`. Financial reconciliation control
+    APIs cover every canonical `/reconciliation/*` write/read route through
+    `financial_reconciliation_capability_rules()`, with `financial_reconciliation.controls.run`
+    for control-run creation and `financial_reconciliation.controls.read` for evidence reads.
+    Future business routes in these services must update the service-local capability-rule helper
+    and keep the route-coverage test green. Shared enterprise middleware keeps health, metrics,
+    OpenAPI, docs, ReDoc, and version endpoints on an explicit unauthenticated operational
+    allowlist even when read authorization is enabled.
 92. Query-service cursor/page tokens use the shared `PageTokenCodec` versioned envelope with
     `kid`, expiry, issuer/audience, optional route/tenant binding, and active/previous key support.
     Non-local or strict profiles must set non-default `LOTUS_CORE_PAGE_TOKEN_SECRET` and
