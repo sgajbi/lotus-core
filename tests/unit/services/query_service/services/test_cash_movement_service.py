@@ -73,7 +73,9 @@ async def test_cash_movement_summary_preserves_source_buckets(mock_repo: AsyncMo
     assert response.data_quality_status == "COMPLETE"
     assert response.cashflow_count == 3
     assert response.latest_evidence_timestamp == datetime(2026, 3, 6, 9, 15, tzinfo=UTC)
-    assert response.source_batch_fingerprint == "cash_movement_summary:P1:2026-03-01:2026-03-31"
+    assert response.source_batch_fingerprint.startswith("sha256:")
+    assert response.source_batch_fingerprint == response.content_hash
+    assert response.freshness_status == "CURRENT"
     assert response.buckets[0].movement_direction == "INFLOW"
     assert response.buckets[1].movement_direction == "OUTFLOW"
     assert response.buckets[1].is_position_flow is True
@@ -111,7 +113,7 @@ async def test_cash_movement_summary_converts_bucket_amount_once(mock_repo: Asyn
     assert counted_amount.stringify_count == 1
 
 
-async def test_cash_movement_summary_marks_empty_window_missing(mock_repo: AsyncMock) -> None:
+async def test_cash_movement_summary_marks_empty_window_current(mock_repo: AsyncMock) -> None:
     mock_repo.get_portfolio_cash_movement_summary.return_value = []
 
     with patch(
@@ -127,8 +129,10 @@ async def test_cash_movement_summary_marks_empty_window_missing(mock_repo: Async
 
     assert response.buckets == []
     assert response.cashflow_count == 0
-    assert response.data_quality_status == "MISSING"
+    assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp is None
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
 
 
 async def test_cash_movement_summary_rejects_invalid_window(mock_repo: AsyncMock) -> None:

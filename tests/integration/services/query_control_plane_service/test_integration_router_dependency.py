@@ -683,6 +683,7 @@ async def test_core_snapshot_success(async_test_client):
 
 async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_test_client):
     client, mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_core_snapshot_service.get_core_snapshot.return_value["freshness_status"] = "CURRENT"
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-idea",
         tenant_id="default",
@@ -710,6 +711,9 @@ async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_t
     )
 
     assert response.status_code == 200
+    payload = response.json()
+    assert payload["freshness"] == "CURRENT"
+    assert payload["freshness_metadata"]["freshness_status"] == "CURRENT_SNAPSHOT"
     mock_integration_service.get_effective_policy.assert_called_once_with(
         consumer_system="lotus-idea",
         tenant_id="default",

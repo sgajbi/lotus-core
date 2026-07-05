@@ -136,6 +136,7 @@ def portfolio_maturity_summary_response(
             snapshot_id=holdings.snapshot_id,
             policy_version=holdings.policy_version,
             content_hash=content_hash,
+            freshness_status=_freshness_status(holdings.data_quality_status),
             source_refs=[
                 "lotus-core://source/PortfolioMaturitySummary/"
                 f"{portfolio_id}/{window_start_date.isoformat()}/{window_end_date.isoformat()}"
@@ -146,8 +147,8 @@ def portfolio_maturity_summary_response(
                 "upstream_product": holdings.product_name,
                 "upstream_content_hash": holdings.content_hash,
             },
+            use_content_hash_as_source_batch_fingerprint=True,
         ),
-        freshness_status=_freshness_status(holdings.data_quality_status),
     )
 
 

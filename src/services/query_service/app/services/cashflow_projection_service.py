@@ -136,6 +136,7 @@ class CashflowProjectionService:
                     "source_product": "PortfolioCashflowProjection",
                     "portfolio_id": portfolio_id,
                 },
+                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 

@@ -642,6 +642,7 @@ class CoreSnapshotService:
                     "source_product": "PortfolioStateSnapshot",
                     "request_fingerprint": request_fingerprint_value,
                 },
+                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 

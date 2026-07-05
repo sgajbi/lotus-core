@@ -172,7 +172,10 @@ async def test_get_portfolio_maturity_summary_success(async_test_client):
         "supportability_status": "SUPPORTED",
         "supportability_reasons": [],
         "request_fingerprint": "maturity_summary:abc123",
-        **source_data_product_runtime_metadata(as_of_date=date(2026, 3, 10)),
+        **source_data_product_runtime_metadata(
+            as_of_date=date(2026, 3, 10),
+            source_evidence_current=True,
+        ),
     }
 
     response = await client.get("/portfolios/P1/maturity-summary")
@@ -212,7 +215,10 @@ async def test_get_portfolio_maturity_summary_forwards_query_params(async_test_c
         "supportability_status": "SUPPORTED",
         "supportability_reasons": [],
         "request_fingerprint": "maturity_summary:def456",
-        **source_data_product_runtime_metadata(as_of_date=date(2026, 2, 28)),
+        **source_data_product_runtime_metadata(
+            as_of_date=date(2026, 2, 28),
+            source_evidence_current=True,
+        ),
     }
 
     response = await client.get(

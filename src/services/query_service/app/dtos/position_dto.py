@@ -1,7 +1,7 @@
 # services/query-service/app/dtos/position_dto.py
 from datetime import date
 from decimal import Decimal
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -101,6 +101,15 @@ class PortfolioPositionsResponse(SourceDataProductRuntimeMetadata):
         description=(
             "Governed holdings rows for the resolved HoldingsAsOf scope. Rows reflect booked or "
             "projected state according to the request parameters."
+        ),
+    )
+    maturity_summary: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Source-owned maturity fact summary derived from returned holdings. This lightweight "
+            "inline payload is included for source-proof consumers that read the positions "
+            "product directly; the richer maturity summary endpoint remains the canonical "
+            "operator-facing view."
         ),
     )
 

@@ -1,6 +1,8 @@
 from typing import NoReturn, cast
 
 from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.query_service.app.dtos.core_snapshot_dto import (
@@ -674,17 +676,29 @@ async def create_core_snapshot(
     ),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
     integration_service: IntegrationService = Depends(get_integration_service),
-) -> CoreSnapshotResponse:
+) -> CoreSnapshotResponse | JSONResponse:
     effective_request, governance = _governed_core_snapshot_request(
         request=request,
         integration_service=integration_service,
     )
-    return await _core_snapshot_response_or_http_error(
+    response = await _core_snapshot_response_or_http_error(
         service=service,
         portfolio_id=portfolio_id,
         request=effective_request,
         governance=governance,
     )
+    if request.consumer_system == "lotus-idea":
+        return JSONResponse(content=_lotus_idea_core_snapshot_payload(response))
+    return response
+
+
+def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> dict:
+    payload = jsonable_encoder(
+        response.model_dump(mode="json") if isinstance(response, CoreSnapshotResponse) else response
+    )
+    payload["freshness_metadata"] = payload.get("freshness")
+    payload["freshness"] = payload.get("freshness_status", "UNAVAILABLE")
+    return payload
 
 
 def _governed_core_snapshot_request(

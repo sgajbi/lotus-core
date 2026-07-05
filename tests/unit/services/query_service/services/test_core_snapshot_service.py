@@ -199,16 +199,16 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.reconciliation_status == "UNKNOWN"
     assert response.data_quality_status == COMPLETE
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
-    assert response.source_batch_fingerprint is None
+    assert response.source_batch_fingerprint == response.content_hash
     assert response.snapshot_id is None
     assert response.content_hash.startswith("sha256:")
     assert response.source_digest == response.content_hash
     assert response.source_refs == [
         "lotus-core://source/PortfolioStateSnapshot/PORT_001/2026-02-27"
     ]
-    assert response.lineage["source_owner"] == "lotus-core"
-    assert response.lineage["source_product"] == "PortfolioStateSnapshot"
-    assert response.lineage["request_fingerprint"] == response.request_fingerprint
+    assert response.source_lineage["source_owner"] == "lotus-core"
+    assert response.source_lineage["source_product"] == "PortfolioStateSnapshot"
+    assert response.source_lineage["request_fingerprint"] == response.request_fingerprint
     assert response.source_evidence_current is True
     assert response.policy_version == "snapshot.policy.inline.default"
     assert response.correlation_id is None

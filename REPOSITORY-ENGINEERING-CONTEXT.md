@@ -802,7 +802,12 @@ Most relevant current governance:
     defect pattern that can be safely corrected, then promote the rule into the source-data product
     contract guard. `source_batch_fingerprint` is upstream source-batch lineage only. Request,
     pagination, and response snapshot identity must remain in request/snapshot fields such as
-    `snapshot_id` or `request_scope_fingerprint`; products without true source-batch evidence must
+    `snapshot_id` or `request_scope_fingerprint`. Proof-facing Core source products consumed by
+    `lotus-idea` must emit Core-owned `generated_at`, `content_hash`/`source_digest`,
+    `source_refs`, `source_evidence_current`, and `freshness_status` evidence; when downstream
+    proof tooling requires `source_batch_fingerprint`, emit the deterministic content hash through
+    the shared runtime metadata helper rather than making the consumer synthesize authority.
+    Legacy products without true source-batch or proof-fingerprint evidence should continue to
     return `source_batch_fingerprint: null`. `make source-data-product-contract-guard` now blocks
     `request_fingerprint(...)`, `snapshot_fingerprint`, and `request_scope_fingerprint` from being
     assigned to source-batch lineage.

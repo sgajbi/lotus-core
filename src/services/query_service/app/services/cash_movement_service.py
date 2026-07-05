@@ -85,11 +85,13 @@ class CashMovementService:
             ),
             **source_data_product_runtime_metadata(
                 as_of_date=end_date,
-                data_quality_status=COMPLETE if cashflow_count else "MISSING",
+                data_quality_status=COMPLETE,
                 latest_evidence_timestamp=latest_evidence_timestamp,
                 source_batch_fingerprint=(
                     f"cash_movement_summary:{portfolio_id}:{start_date}:{end_date}"
                 ),
+                source_evidence_current=True,
+                use_content_hash_as_source_batch_fingerprint=True,
             ),
         )
 

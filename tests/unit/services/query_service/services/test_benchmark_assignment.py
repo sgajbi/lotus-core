@@ -47,7 +47,7 @@ def test_build_benchmark_assignment_response_maps_assignment_and_runtime_metadat
     assert response.source_refs == [
         "lotus-core://source/BenchmarkAssignment/PB_SG_GLOBAL_BAL_001/2026-01-31"
     ]
-    assert response.lineage == {
+    assert response.source_lineage == {
         "source_owner": "lotus-core",
         "source_product": "BenchmarkAssignment",
         "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",

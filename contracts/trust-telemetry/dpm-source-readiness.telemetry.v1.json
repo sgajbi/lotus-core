@@ -44,6 +44,7 @@
     "latest_evidence_timestamp": "2026-05-22T00:00:00Z",
     "source_batch_fingerprint": "sha256:dpm-source-readiness-demo-batch",
     "snapshot_id": "PB_SG_GLOBAL_BAL_001:2026-05-22:dpm-source-readiness",
+    "content_hash": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "policy_version": "dpm-source-readiness-policy.v1",
     "correlation_id": "rfc-0087-lotus-core-dpm-source-readiness"
   },

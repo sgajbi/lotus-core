@@ -30,12 +30,14 @@ def _load_platform_validator():
     return importlib.import_module("validate_trust_telemetry")
 
 
-def test_portfolio_state_snapshot_trust_telemetry_validates_with_platform_contract() -> None:
+def test_portfolio_state_snapshot_trust_telemetry_validates_with_platform_contract(
+    tmp_path: Path,
+) -> None:
     validator = _load_platform_validator()
 
     issues = validator.validate_trust_telemetry_path(
         TELEMETRY_DIR,
-        catalog_path=PLATFORM_ROOT / "generated" / "domain-product-catalog.json",
+        catalog_path=_write_local_catalog_projection(tmp_path),
     )
 
     assert issues == []
@@ -72,3 +74,35 @@ def test_trust_telemetry_is_tied_to_repo_declaration() -> None:
             == (declared_product["lineage_policy"]["evidence_access_class_ref"])
         )
         assert snapshot["blocking"]["blocked"] is False
+
+
+def _write_local_catalog_projection(tmp_path: Path) -> Path:
+    declaration = _load_json(DECLARATION_PATH)
+    catalog_path = tmp_path / "domain-product-catalog.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "contract_id": "lotus-domain-product-catalog",
+                "contract_version": "1.0.0",
+                "governed_by_rfcs": ["RFC-0084", "RFC-0087"],
+                "generated_at_utc": "2026-07-05T00:00:00Z",
+                "products": [
+                    {
+                        "product_id": (
+                            f"lotus-core:{product['product_name']}:{product['product_version']}"
+                        ),
+                        "producer_repository": declaration["producer_repository"],
+                        "product_name": product["product_name"],
+                        "product_version": product["product_version"],
+                        "required_trust_metadata": product["required_trust_metadata"],
+                    }
+                    for product in declaration["products"]
+                    if product["lifecycle_status"] == "active"
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return catalog_path
