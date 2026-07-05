@@ -1537,6 +1537,9 @@ Most relevant current governance:
      Core snapshot request identity and fingerprint construction belongs in
      `core_snapshot_identity.py`; do not re-add canonical request payload or governance-sensitive
      fingerprint payload assembly to the broad service.
+     Core snapshot freshness-to-data-quality classification belongs in
+     `core_snapshot_quality.py`; do not re-add `COMPLETE`/`PARTIAL`/`UNKNOWN` policy mapping to the
+     broad service.
 
 ## Context Maintenance Rule
 
