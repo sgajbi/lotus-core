@@ -1479,8 +1479,9 @@ Most relevant current governance:
      change a visible dependency factory or bundle. For broad source-data facades, extract cohesive
      contract-family services behind compatibility delegates before adding more methods to the
      facade; `DpmReadinessIntegrationService` is the current pattern for keeping DPM readiness
-     reader composition, page-token adapters, and related source-data product methods testable
-     without the full `IntegrationService`.
+     reader composition, page-token adapters, and related source-data product methods testable, and
+     `ExternalHedgeIntegrationService` applies the same pattern to external treasury and OMS
+     products without the full `IntegrationService`.
 120. Kafka consumers should keep transport responsibilities separate from valid-message
      application orchestration. The cost-calculation consumer now routes valid transaction events
      through `CostCalculationEventProcessor` and `CostCalculationProcessorDependencies`, with

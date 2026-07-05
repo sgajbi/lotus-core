@@ -45,6 +45,9 @@ from src.services.query_service.app.services.integration_policy import (
 from src.services.query_service.app.services.dpm_readiness_integration_service import (
     DpmReadinessIntegrationService,
 )
+from src.services.query_service.app.services.external_hedge_integration_service import (
+    ExternalHedgeIntegrationService,
+)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -1306,6 +1309,36 @@ async def test_planned_withdrawal_schedule_returns_none_without_binding():
 
     assert response is None
     service._reference_repository.list_planned_withdrawal_schedules.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
+
+
+@pytest.mark.asyncio
+async def test_external_hedge_family_service_runs_without_full_integration_facade():
+    as_of_date = date(2026, 5, 3)
+    repository = AsyncMock()
+    repository.resolve_discretionary_mandate_binding.return_value = profile_binding_row(as_of_date)
+    service = ExternalHedgeIntegrationService(
+        reference_repository_provider=lambda: repository,
+    )
+
+    response = await service.get_execution_readiness(
+        "PB_SG_GLOBAL_BAL_001",
+        ExternalHedgeExecutionReadinessRequest(
+            as_of_date=as_of_date,
+            tenant_id="default",
+            reporting_currency="USD",
+            exposure_currencies=["EUR", "JPY"],
+        ),
+    )
+
+    assert response is not None
+    assert response.product_name == "ExternalHedgeExecutionReadiness"
+    assert response.supportability.state == "UNAVAILABLE"
+    assert response.data_quality_status == "MISSING"
+    repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        as_of_date=as_of_date,
+        mandate_id=None,
+    )
 
 
 @pytest.mark.asyncio
