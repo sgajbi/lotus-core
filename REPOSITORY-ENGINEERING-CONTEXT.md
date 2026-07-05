@@ -1361,6 +1361,13 @@ Most relevant current governance:
      `transaction_date` only when the event lacks the relevant source timing field. Current Core
      events do not expose first-class `payment_date` or `value_date`; do not document or consume
      unsupported fields until the transaction-event schema is intentionally extended and tested.
+115. FastAPI app bootstrap must not own endpoint-specific business-contract error mapping. QCP now
+     registers exception handlers through `query_control_plane_service.app.exception_mappers`,
+     where advisory simulation validation/execution mapping lives behind a typed endpoint mapper
+     registry. Future endpoint-specific problem-details behavior should be added through a mapper,
+     router-local exception type, or application error taxonomy, with tests proving the targeted
+     endpoint contract and a non-target endpoint fallback. Do not reintroduce path-specific
+     branches or route-contract imports in `main.py`.
 
 ## Context Maintenance Rule
 

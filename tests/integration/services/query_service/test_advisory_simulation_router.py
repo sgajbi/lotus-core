@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from src.services.query_control_plane_service.app.contracts import (
@@ -92,6 +94,21 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_validat
     assert body["contract_version"] == ADVISORY_SIMULATION_CONTRACT_VERSION
 
 
+def test_non_advisory_validation_errors_keep_default_fastapi_contract():
+    with TestClient(app) as client:
+        response = client.post(
+            "/integration/portfolios/P1/core-snapshot",
+            json={},
+        )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/json")
+    assert "application/problem+json" not in response.headers["content-type"]
+    body = response.json()
+    assert "detail" in body
+    assert "contract_version" not in body
+
+
 def test_advisory_simulation_execution_router_rejects_nonpositive_market_data():
     payload = _payload()
     payload["market_data_snapshot"]["prices"][0]["price"] = "0"
@@ -164,3 +181,14 @@ def test_advisory_simulation_execution_openapi_documents_contract_header_and_err
     assert problem_details["properties"]["contract_version"]["examples"] == [
         ADVISORY_SIMULATION_CONTRACT_VERSION
     ]
+
+
+def test_query_control_plane_main_keeps_endpoint_contracts_out_of_bootstrap():
+    main_source = Path(
+        "src/services/query_control_plane_service/app/main.py",
+    ).read_text(encoding="utf-8")
+
+    assert "ADVISORY_SIMULATION_EXECUTION_PATH" not in main_source
+    assert "CanonicalSimulationErrorCode" not in main_source
+    assert "PROBLEM_TYPE_PREFIX" not in main_source
+    assert "request.url.path ==" not in main_source
