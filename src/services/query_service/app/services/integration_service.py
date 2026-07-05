@@ -78,18 +78,8 @@ from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
-from .benchmark_assignment import build_benchmark_assignment_response
-from .benchmark_catalog import resolve_benchmark_catalog_response
-from .benchmark_composition import (
-    resolve_benchmark_composition_window_response,
-)
-from .benchmark_coverage import resolve_benchmark_coverage_response
-from .benchmark_market_series import (
-    resolve_benchmark_market_series_response,
-)
-from .benchmark_return_series import resolve_benchmark_return_series_response
+from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
 from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
-from .classification_taxonomy import resolve_classification_taxonomy_response
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
 from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import resolve_client_tax_profile_response
@@ -99,9 +89,6 @@ from .dpm_portfolio_universe import (
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_hedge_integration_service import ExternalHedgeIntegrationService
-from .index_catalog import resolve_index_catalog_response
-from .index_price_series import resolve_index_price_series_response
-from .index_return_series import resolve_index_return_series_response
 from .integration_policy import resolve_effective_policy_response
 from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
@@ -111,9 +98,6 @@ from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_res
 from .portfolio_manager_book_membership import (
     resolve_portfolio_manager_book_membership_response,
 )
-from .reference_data_mappers import benchmark_definition_response
-from .risk_free_coverage import resolve_risk_free_coverage_response
-from .risk_free_series import resolve_risk_free_series_response
 from .sustainability_preference_profile import (
     resolve_sustainability_preference_profile_response,
 )
@@ -178,6 +162,11 @@ class IntegrationService:
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
         )
+        self._benchmark_reference_service = BenchmarkReferenceIntegrationService(
+            reference_repository_provider=lambda: self._reference_repository,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
+        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))
@@ -200,13 +189,10 @@ class IntegrationService:
     async def resolve_benchmark_assignment(
         self, portfolio_id: str, as_of_date: date
     ) -> BenchmarkAssignmentResponse | None:
-        row = await self._reference_repository.resolve_benchmark_assignment(
-            portfolio_id,
-            as_of_date,
+        return await self._benchmark_reference_service.resolve_benchmark_assignment(
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
         )
-        if row is None:
-            return None
-        return build_benchmark_assignment_response(row=row, as_of_date=as_of_date)
 
     async def resolve_model_portfolio_targets(
         self,
@@ -453,22 +439,17 @@ class IntegrationService:
     async def get_benchmark_definition(
         self, benchmark_id: str, as_of_date: date
     ) -> BenchmarkDefinitionResponse | None:
-        row = await self._reference_repository.get_benchmark_definition(benchmark_id, as_of_date)
-        if row is None:
-            return None
-        components = await self._reference_repository.list_benchmark_components(
-            benchmark_id,
-            as_of_date,
+        return await self._benchmark_reference_service.get_benchmark_definition(
+            benchmark_id=benchmark_id,
+            as_of_date=as_of_date,
         )
-        return benchmark_definition_response(row, components=components)
 
     async def get_benchmark_composition_window(
         self,
         benchmark_id: str,
         request: BenchmarkCompositionWindowRequest,
     ) -> BenchmarkCompositionWindowResponse | None:
-        return await resolve_benchmark_composition_window_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_benchmark_composition_window(
             benchmark_id=benchmark_id,
             request=request,
         )
@@ -480,8 +461,7 @@ class IntegrationService:
         benchmark_currency: str | None,
         benchmark_status: str | None,
     ) -> BenchmarkCatalogResponse:
-        return await resolve_benchmark_catalog_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.list_benchmark_catalog(
             as_of_date=as_of_date,
             benchmark_type=benchmark_type,
             benchmark_currency=benchmark_currency,
@@ -496,8 +476,7 @@ class IntegrationService:
         index_type: str | None,
         index_status: str | None,
     ) -> IndexCatalogResponse:
-        return await resolve_index_catalog_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.list_index_catalog(
             as_of_date=as_of_date,
             index_ids=index_ids,
             index_currency=index_currency,
@@ -510,19 +489,15 @@ class IntegrationService:
         benchmark_id: str,
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
-        return await resolve_benchmark_market_series_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_benchmark_market_series(
             benchmark_id=benchmark_id,
             request=request,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
         )
 
     async def get_index_price_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexPriceSeriesResponse:
-        return await resolve_index_price_series_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_index_price_series(
             index_id=index_id,
             request=request,
         )
@@ -530,8 +505,7 @@ class IntegrationService:
     async def get_index_return_series(
         self, index_id: str, request: IndexSeriesRequest
     ) -> IndexReturnSeriesResponse:
-        return await resolve_index_return_series_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_index_return_series(
             index_id=index_id,
             request=request,
         )
@@ -539,17 +513,13 @@ class IntegrationService:
     async def get_benchmark_return_series(
         self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
     ) -> BenchmarkReturnSeriesResponse:
-        return await resolve_benchmark_return_series_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_benchmark_return_series(
             benchmark_id=benchmark_id,
             request=request,
         )
 
     async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
-        return await resolve_risk_free_series_response(
-            repository=self._reference_repository,
-            request=request,
-        )
+        return await self._benchmark_reference_service.get_risk_free_series(request)
 
     async def get_benchmark_coverage(
         self,
@@ -557,8 +527,7 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        return await resolve_benchmark_coverage_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_benchmark_coverage(
             benchmark_id=benchmark_id,
             start_date=start_date,
             end_date=end_date,
@@ -570,8 +539,7 @@ class IntegrationService:
         start_date: date,
         end_date: date,
     ) -> CoverageResponse:
-        return await resolve_risk_free_coverage_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_risk_free_coverage(
             currency=currency,
             start_date=start_date,
             end_date=end_date,
@@ -582,8 +550,7 @@ class IntegrationService:
         as_of_date: date,
         taxonomy_scope: str | None = None,
     ) -> ClassificationTaxonomyResponse:
-        return await resolve_classification_taxonomy_response(
-            repository=self._reference_repository,
+        return await self._benchmark_reference_service.get_classification_taxonomy(
             as_of_date=as_of_date,
             taxonomy_scope=taxonomy_scope,
         )

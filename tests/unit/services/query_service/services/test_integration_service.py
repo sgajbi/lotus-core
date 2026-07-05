@@ -42,6 +42,9 @@ from src.services.query_service.app.services.integration_policy import (
     resolve_consumer_sections,
     resolve_policy_context,
 )
+from src.services.query_service.app.services.benchmark_reference_integration_service import (
+    BenchmarkReferenceIntegrationService,
+)
 from src.services.query_service.app.services.dpm_readiness_integration_service import (
     DpmReadinessIntegrationService,
 )
@@ -2552,6 +2555,38 @@ def test_get_effective_policy_uses_configured_allowed_sections_when_unrequested(
 
     assert response.consumer_system == "lotus-manage"
     assert response.allowed_sections == ["HOLDINGS", "ALLOCATION"]
+
+
+@pytest.mark.asyncio
+async def test_benchmark_reference_family_service_runs_without_full_integration_facade() -> None:
+    repository = SimpleNamespace(
+        resolve_benchmark_assignment=AsyncMock(
+            return_value=SimpleNamespace(
+                portfolio_id="P1",
+                benchmark_id="B1",
+                effective_from=date(2026, 1, 1),
+                effective_to=None,
+                assignment_source="policy",
+                assignment_status="active",
+                policy_pack_id="pack",
+                source_system="lotus-manage",
+                assignment_recorded_at=date(2026, 1, 1),
+                assignment_version=1,
+            )
+        )
+    )
+    service = BenchmarkReferenceIntegrationService(
+        reference_repository_provider=lambda: repository,
+        decode_page_token=lambda token: {"token": token} if token else {},
+        encode_page_token=lambda payload: f"token:{payload['scope_fingerprint']}",
+    )
+
+    response = await service.resolve_benchmark_assignment("P1", date(2026, 1, 1))
+
+    assert response is not None
+    assert response.product_name == "BenchmarkAssignment"
+    assert response.benchmark_id == "B1"
+    repository.resolve_benchmark_assignment.assert_awaited_once_with("P1", date(2026, 1, 1))
 
 
 @pytest.mark.asyncio
