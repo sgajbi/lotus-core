@@ -1,4 +1,5 @@
 # tests/unit/services/calculators/cashflow_calculator_service/unit/repositories/test_cashflow_rules_repository.py  # noqa: E501
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -48,3 +49,26 @@ async def test_get_all_rules_constructs_correct_query(
     assert "SELECT" in compiled_query
     assert "FROM cashflow_rules" in compiled_query
     assert "ORDER BY cashflow_rules.transaction_type" in compiled_query
+
+
+async def test_get_rule_set_version_returns_count_and_latest_update(
+    repository: CashflowRulesRepository,
+    mock_db_session: AsyncMock,
+):
+    latest_updated_at = datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc)
+    mock_result = MagicMock()
+    mock_result.one.return_value = (3, latest_updated_at)
+    mock_db_session.execute.return_value = mock_result
+
+    version = await repository.get_rule_set_version()
+
+    assert version.rule_count == 3
+    assert version.latest_updated_at == latest_updated_at
+    assert version.fingerprint == (
+        "cashflow-rules:v1:count=3:latest_updated_at=2026-04-10T09:30:00+00:00"
+    )
+
+    executed_stmt = mock_db_session.execute.call_args[0][0]
+    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "count(cashflow_rules.transaction_type)" in compiled_query
+    assert "max(cashflow_rules.updated_at)" in compiled_query

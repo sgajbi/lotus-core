@@ -1273,6 +1273,13 @@ Most relevant current governance:
      after processing or DLQ publication succeeds, and expose in-flight, idle-poll, processing, and
      backlog-pressure metrics. Do not add worker-local concurrency or poll-timeout settings without
      extending the shared profile and tests.
+105. Cashflow rule caching is governed reference-data caching, not hidden calculation state. Cached
+     cashflow rules must carry the source rule-set version fingerprint and latest effective
+     timestamp, verify the current source version before serving a fresh cache hit, reload on TTL
+     expiry, source-version change, missing-rule refresh, or explicit process-local invalidation,
+     and emit bounded `cashflow_rule_cache_events_total` outcomes. Multi-process invalidation is
+     source-owned through `cashflow_rules.updated_at`; do not add rule caches that lack source
+     version/effective metadata, stale-read behavior, invalidation ownership, and cache metrics.
 
 ## Context Maintenance Rule
 

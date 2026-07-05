@@ -139,6 +139,30 @@ Retry logs use `event_name=retry.policy.retrying` with source-safe profile, atte
 exception type fields. Do not add raw exception text, payload fields, request/correlation/trace
 IDs, portfolio IDs, or security IDs as retry metric labels.
 
+## Cashflow Rule Cache
+
+The cashflow calculator uses an in-process cache only for cashflow rule reference data. The cache is
+governed by source version metadata and must not be used for persistence-critical transaction,
+position, valuation, or idempotency state.
+
+| Setting | Default | Purpose |
+| --- | ---: | --- |
+| `CASHFLOW_RULE_CACHE_TTL_SECONDS` | `300` | Maximum age for an in-process cashflow rule cache entry before full reload. |
+
+Each cached rule carries the loaded rule-set version fingerprint and latest effective timestamp.
+Before serving a fresh cached rule, the consumer checks the source rule-set version derived from
+rule count and max `cashflow_rules.updated_at`. If that source version changes, the worker treats
+the cache as stale and reloads before calculating the message.
+
+Explicit `invalidate_cashflow_rule_cache()` clears only the current process. Multi-process
+deployments must make rule changes source-owned by updating `cashflow_rules.updated_at`; workers use
+that source version to avoid stale reads before TTL expiry. Missing rules force one immediate reload
+before the message is classified as no-rule and sent to DLQ.
+
+| Metric | Labels | Purpose |
+| --- | --- | --- |
+| `cashflow_rule_cache_events_total` | `outcome`, `reason` | Count hit, miss, reload, stale, explicit invalidation, and missing-rule cache behavior. |
+
 ## Metric Vocabulary Guard
 
 Metric labels are governed by `portfolio_common.observability_contracts` and enforced by:

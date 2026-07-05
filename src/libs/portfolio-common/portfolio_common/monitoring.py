@@ -528,6 +528,13 @@ CASHFLOWS_CREATED_TOTAL = Counter(
     ["classification", "timing"],
 )
 
+CASHFLOW_RULE_CACHE_EVENTS_TOTAL = Counter(
+    "cashflow_rule_cache_events_total",
+    "Cashflow rule cache events for hit, miss, reload, stale, invalidation, "
+    "and missing-rule paths.",
+    labelnames=("outcome", "reason"),
+)
+
 BUY_LIFECYCLE_STAGE_TOTAL = Counter(
     "buy_lifecycle_stage_total",
     "Count of BUY lifecycle stage outcomes.",
@@ -694,6 +701,10 @@ def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
 
 def observe_valuation_worker_stale_resets(count: int = 1) -> None:
     VALUATION_WORKER_STALE_RESETS_TOTAL.inc(count)
+
+
+def observe_cashflow_rule_cache_event(outcome: str, reason: str, count: int = 1) -> None:
+    CASHFLOW_RULE_CACHE_EVENTS_TOTAL.labels(outcome, reason).inc(count)
 
 
 def observe_portfolio_supportability(
