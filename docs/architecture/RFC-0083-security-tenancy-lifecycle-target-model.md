@@ -185,6 +185,15 @@ entries such as `GET /integration/portfolios`, but source-data products already 
 catalog-derived defaults. This is service-policy support; full production entitlement closure still
 requires gateway/platform ingress policy proof and affected-consumer validation.
 
+The service identity and capability context must be verified before it is trusted. The shared
+enterprise middleware accepts capabilities only from the signed internal auth-context contract:
+`X-Enterprise-Auth-Key-Id`, `X-Enterprise-Auth-Timestamp`, and
+`X-Enterprise-Auth-Signature` bind actor, tenant, role, correlation id, service identity, timestamp,
+key id, and normalized capabilities. `Authorization` and `X-Service-Identity` headers are not
+presence markers for entitlement; an unsupported bearer token or unsigned service identity is denied
+when enterprise authorization is enabled. `ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET` and
+`ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS` configure the trusted gateway or mTLS boundary.
+
 When production policy requires explicit entitlement rules, `ENTERPRISE_REQUIRE_CAPABILITY_RULES=true`
 can be enabled alongside read or write authorization. In that mode, any protected request without a
 matching method/path capability rule is denied with `missing_capability_rule`, and runtime

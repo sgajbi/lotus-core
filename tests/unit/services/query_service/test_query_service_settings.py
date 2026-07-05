@@ -30,6 +30,8 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
         "ENTERPRISE_PRIMARY_KEY_ID",
         "ENTERPRISE_SECRET_ROTATION_DAYS",
         "ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES",
+        "ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET",
+        "ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS",
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         "ENTERPRISE_CAPABILITY_RULES_JSON",
         "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
@@ -48,6 +50,8 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
     assert settings.enterprise_primary_key_id == ""
     assert settings.enterprise_secret_rotation_days == 90
     assert settings.enterprise_max_write_payload_bytes == 1_048_576
+    assert settings.enterprise_auth_context_hmac_secret == ""
+    assert settings.enterprise_auth_context_max_age_seconds == 300
     assert settings.enterprise_feature_flags == {}
     assert settings.enterprise_capability_rules == {}
     assert settings.page_token_key_id == "local-dev"
@@ -102,6 +106,8 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
     monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "45")
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS", "120")
     monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "query-page-token-secret")
     monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "query-page-token-key-2026-07")
@@ -130,6 +136,8 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     assert settings.enterprise_primary_key_id == "kms-key-1"
     assert settings.enterprise_secret_rotation_days == 45
     assert settings.enterprise_max_write_payload_bytes == 2048
+    assert settings.enterprise_auth_context_hmac_secret == "auth-context-secret"
+    assert settings.enterprise_auth_context_max_age_seconds == 120
     assert settings.analytics_export_execution_timeout_seconds == 45
     assert settings.enterprise_feature_flags == {
         "query.advanced": {"tenant-a": {"ops": True, "*": False}}

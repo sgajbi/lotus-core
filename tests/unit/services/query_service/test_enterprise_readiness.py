@@ -1,9 +1,14 @@
 import json
+from time import time
 from unittest.mock import patch
 
 import pytest
 from fastapi import Request
 from fastapi.responses import Response
+from portfolio_common.enterprise_readiness import (
+    _enterprise_auth_context_signature,
+    _normalize_headers,
+)
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_service.app.enterprise_readiness import (
@@ -19,6 +24,35 @@ from src.services.query_service.app.enterprise_readiness import (
     redact_sensitive,
     validate_enterprise_runtime_config,
 )
+
+
+def _configure_auth_context_env(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
+
+
+def _signed_enterprise_headers(capabilities: str) -> dict[str, str]:
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": "kms-key-1",
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
+    }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers),
+        "auth-context-secret",
+    )
+    return headers
+
+
+def _headers_scope(headers: dict[str, str]) -> list[tuple[bytes, bytes]]:
+    return [
+        (key.lower().encode("latin-1"), value.encode("latin-1")) for key, value in headers.items()
+    ]
 
 
 def test_feature_flags_tenant_role_resolution(monkeypatch):
@@ -62,23 +96,17 @@ def test_authorize_write_request_enforces_required_headers_when_enabled(monkeypa
 
 def test_authorize_write_request_enforces_capability_rules(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
         json.dumps({"POST /transactions/**": "transactions.write"}),
     )
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-core",
-        "X-Capabilities": "transactions.read",
-    }
+    headers = _signed_enterprise_headers("transactions.read")
     denied, denied_reason = authorize_write_request("POST", "/transactions/import", headers)
     assert denied is False
     assert denied_reason == "missing_capability:transactions.write"
 
-    headers["X-Capabilities"] = "transactions.read,transactions.write"
+    headers = _signed_enterprise_headers("transactions.read,transactions.write")
     allowed, allowed_reason = authorize_write_request("POST", "/transactions/import", headers)
     assert allowed is True
     assert allowed_reason is None
@@ -167,24 +195,18 @@ def test_authorize_write_request_requires_service_identity_when_headers_present(
 
 def test_authorize_request_enforces_read_capability_rules_at_service_boundary(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
         json.dumps({"GET /portfolios/**": "portfolios.read"}),
     )
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-gateway",
-        "X-Capabilities": "transactions.read",
-    }
+    headers = _signed_enterprise_headers("transactions.read")
 
     denied, denied_reason = authorize_request("GET", "/portfolios/PB1", headers)
     assert denied is False
     assert denied_reason == "missing_capability:portfolios.read"
 
-    headers["X-Capabilities"] = "transactions.read,portfolios.read"
+    headers = _signed_enterprise_headers("transactions.read,portfolios.read")
     allowed, allowed_reason = authorize_request("GET", "/portfolios/PB1", headers)
     assert allowed is True
     assert allowed_reason is None
@@ -193,13 +215,8 @@ def test_authorize_request_enforces_read_capability_rules_at_service_boundary(mo
 def test_authorize_request_requires_read_capability_rule_when_strict(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-gateway",
-    }
+    _configure_auth_context_env(monkeypatch)
+    headers = _signed_enterprise_headers("")
 
     allowed, reason = authorize_request("GET", "/portfolios/PB1", headers)
     assert allowed is False
@@ -210,6 +227,7 @@ def test_validate_enterprise_runtime_config_accepts_source_data_default_rules(mo
     monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
     monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
 
     issues = validate_enterprise_runtime_config()
@@ -244,19 +262,14 @@ async def test_enterprise_middleware_denies_write_without_headers(monkeypatch):
 @pytest.mark.asyncio
 async def test_enterprise_middleware_allows_write_with_minimum_headers(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
     middleware = build_enterprise_audit_middleware()
+    headers = {"content-length": "0", **_signed_enterprise_headers("")}
     scope = {
         "type": "http",
         "method": "POST",
         "path": "/api/v1/integration",
-        "headers": [
-            (b"content-length", b"0"),
-            (b"x-actor-id", b"a1"),
-            (b"x-tenant-id", b"t1"),
-            (b"x-role", b"ops"),
-            (b"x-correlation-id", b"c1"),
-            (b"x-service-identity", b"lotus-gateway"),
-        ],
+        "headers": _headers_scope(headers),
         "query_string": b"",
         "server": ("testserver", 80),
         "client": ("127.0.0.1", 1234),

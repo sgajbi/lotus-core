@@ -1198,6 +1198,13 @@ Most relevant current governance:
     must configure JWT issuer, audience, active key id, secret, and required scope. Static
     `X-Lotus-Ops-Token` fallback in non-local profiles requires explicit
     `LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED=true` and a non-default token.
+94. Enterprise read/write authorization must derive capabilities from a signed internal auth
+    context, not arbitrary `X-Capabilities` headers. The shared enterprise middleware verifies
+    `X-Enterprise-Auth-Key-Id`, `X-Enterprise-Auth-Timestamp`, and
+    `X-Enterprise-Auth-Signature` over actor, tenant, role, correlation id, service identity, and
+    normalized capabilities using `ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET`. Do not treat
+    `Authorization` or `X-Service-Identity` presence as proof of service identity; unsigned gateway
+    capability headers are only data until the auth-context signature verifies.
 
 ## Context Maintenance Rule
 

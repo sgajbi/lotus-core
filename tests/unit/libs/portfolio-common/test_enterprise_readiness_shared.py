@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from time import time
 from unittest.mock import Mock
 
 import pytest
@@ -6,6 +7,8 @@ from fastapi import Request
 from fastapi.responses import Response
 from portfolio_common.enterprise_readiness import (
     EnterpriseReadinessRuntime,
+    _enterprise_auth_context_signature,
+    _normalize_headers,
     build_enterprise_audit_middleware,
     create_default_enterprise_readiness_runtime,
     redact_sensitive,
@@ -23,6 +26,8 @@ class _Settings:
     enterprise_enforce_runtime_config: bool = False
     enterprise_secret_rotation_days: int = 90
     enterprise_max_write_payload_bytes: int = 1_048_576
+    enterprise_auth_context_hmac_secret: str = ""
+    enterprise_auth_context_max_age_seconds: int = 300
     enterprise_feature_flags: dict[str, object] | None = None
     enterprise_capability_rules: dict[str, object] | None = None
 
@@ -66,6 +71,8 @@ def _runtime(
             if max_payload_bytes != 1_048_576
             else settings.enterprise_max_write_payload_bytes
         ),
+        enterprise_auth_context_hmac_secret=settings.enterprise_auth_context_hmac_secret,
+        enterprise_auth_context_max_age_seconds=settings.enterprise_auth_context_max_age_seconds,
         enterprise_feature_flags=settings.enterprise_feature_flags,
         enterprise_capability_rules=settings.enterprise_capability_rules,
     )
@@ -85,22 +92,46 @@ def _runtime(
     )
 
 
-def test_authorize_write_request_enforces_capability_rules() -> None:
-    runtime = _runtime(
-        authz_enabled=True,
-        settings=_Settings(
-            enterprise_primary_key_id="primary",
-            enterprise_capability_rules={"POST /transactions/**": "transactions.write"},
-        ),
+def _settings_with_auth_context(**kwargs: object) -> _Settings:
+    return _Settings(
+        enterprise_primary_key_id="primary",
+        enterprise_auth_context_hmac_secret="auth-context-secret",
+        **kwargs,
     )
+
+
+def _signed_enterprise_headers(
+    capabilities: str,
+    *,
+    service_identity: str = "lotus-gateway",
+    key_id: str = "primary",
+    secret: str = "auth-context-secret",
+) -> dict[str, str]:
     headers = {
         "X-Actor-Id": "a1",
         "X-Tenant-Id": "t1",
         "X-Role": "ops",
         "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-gateway",
-        "X-Capabilities": "transactions.read",
+        "X-Service-Identity": service_identity,
+        "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": key_id,
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
     }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers),
+        secret,
+    )
+    return headers
+
+
+def test_authorize_write_request_enforces_capability_rules() -> None:
+    runtime = _runtime(
+        authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"POST /transactions/**": "transactions.write"},
+        ),
+    )
+    headers = _signed_enterprise_headers("transactions.read")
 
     allowed, reason = runtime.authorize_write_request("POST", "/transactions/import", headers)
 
@@ -213,19 +244,11 @@ def test_feature_flags_fail_closed_for_invalid_shapes() -> None:
 def test_authorize_request_enforces_read_capability_rules_when_enabled() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
-        settings=_Settings(
-            enterprise_primary_key_id="primary",
+        settings=_settings_with_auth_context(
             enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"},
         ),
     )
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-gateway",
-        "X-Capabilities": "transactions.read",
-    }
+    headers = _signed_enterprise_headers("transactions.read")
 
     allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
 
@@ -243,15 +266,14 @@ def test_authorize_request_allows_read_when_read_authorization_is_disabled() -> 
 
 
 def test_authorize_request_enforces_source_data_post_routes_as_read_contracts() -> None:
-    runtime = _runtime(read_authz_enabled=True)
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "analytics-service",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-performance",
-        "X-Capabilities": "source_data.portfolio_timeseries_input.read",
-    }
+    runtime = _runtime(
+        read_authz_enabled=True,
+        settings=_settings_with_auth_context(),
+    )
+    headers = _signed_enterprise_headers(
+        "source_data.portfolio_timeseries_input.read",
+        service_identity="lotus-performance",
+    )
 
     allowed, reason = runtime.authorize_request(
         "POST",
@@ -264,15 +286,11 @@ def test_authorize_request_enforces_source_data_post_routes_as_read_contracts() 
 
 
 def test_authorize_request_matches_fastapi_path_templates_for_source_data_rules() -> None:
-    runtime = _runtime(read_authz_enabled=True)
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-manage",
-        "X-Capabilities": "source_data.reconciliation_evidence_bundle.read",
-    }
+    runtime = _runtime(read_authz_enabled=True, settings=_settings_with_auth_context())
+    headers = _signed_enterprise_headers(
+        "source_data.reconciliation_evidence_bundle.read",
+        service_identity="lotus-manage",
+    )
 
     allowed, reason = runtime.authorize_request(
         "GET",
@@ -285,15 +303,11 @@ def test_authorize_request_matches_fastapi_path_templates_for_source_data_rules(
 
 
 def test_authorize_request_normalizes_method_before_capability_lookup() -> None:
-    runtime = _runtime(read_authz_enabled=True)
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-manage",
-        "X-Capabilities": "source_data.reconciliation_evidence_bundle.read",
-    }
+    runtime = _runtime(read_authz_enabled=True, settings=_settings_with_auth_context())
+    headers = _signed_enterprise_headers(
+        "source_data.reconciliation_evidence_bundle.read",
+        service_identity="lotus-manage",
+    )
 
     allowed, reason = runtime.authorize_request(
         " get ",
@@ -309,16 +323,9 @@ def test_authorize_request_requires_matching_capability_rule_when_configured() -
     runtime = _runtime(
         read_authz_enabled=True,
         require_capability_rules=True,
-        settings=_Settings(enterprise_primary_key_id="primary"),
+        settings=_settings_with_auth_context(),
     )
-    headers = {
-        "X-Actor-Id": "a1",
-        "X-Tenant-Id": "t1",
-        "X-Role": "ops",
-        "X-Correlation-Id": "c1",
-        "X-Service-Identity": "lotus-gateway",
-        "X-Capabilities": "portfolios.read",
-    }
+    headers = _signed_enterprise_headers("portfolios.read")
 
     allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
 
@@ -343,7 +350,7 @@ def test_authorize_request_rejects_blank_required_header_values() -> None:
 
 
 def test_authorize_request_rejects_blank_service_identity() -> None:
-    runtime = _runtime(read_authz_enabled=True)
+    runtime = _runtime(read_authz_enabled=True, settings=_settings_with_auth_context())
     headers = {
         "X-Actor-Id": "a1",
         "X-Tenant-Id": "t1",
@@ -356,6 +363,68 @@ def test_authorize_request_rejects_blank_service_identity() -> None:
 
     assert allowed is False
     assert reason == "missing_service_identity"
+
+
+def test_authorize_request_rejects_forged_capability_headers_without_signature() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"}
+        ),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": "portfolios.read",
+        "X-Enterprise-Auth-Key-Id": "primary",
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "missing_auth_context_signature"
+
+
+def test_authorize_request_rejects_forged_service_identity_signature() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"}
+        ),
+    )
+    headers = _signed_enterprise_headers("portfolios.read")
+    headers["X-Service-Identity"] = "forged-service"
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "invalid_auth_context_signature"
+
+
+def test_authorize_request_rejects_authorization_as_presence_marker() -> None:
+    runtime = _runtime(
+        read_authz_enabled=True,
+        settings=_settings_with_auth_context(
+            enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"}
+        ),
+    )
+    headers = {
+        "X-Actor-Id": "a1",
+        "X-Tenant-Id": "t1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "c1",
+        "Authorization": "Bearer unsigned.jwt.token",
+        "X-Capabilities": "portfolios.read",
+    }
+
+    allowed, reason = runtime.authorize_request("GET", "/portfolios/P1", headers)
+
+    assert allowed is False
+    assert reason == "unverified_authorization_principal"
 
 
 def test_required_capability_matches_only_path_segments() -> None:
@@ -439,8 +508,7 @@ def test_runtime_config_uses_source_data_default_capability_rules() -> None:
     runtime = _runtime(
         read_authz_enabled=True,
         require_capability_rules=True,
-        settings=_Settings(
-            enterprise_primary_key_id="primary",
+        settings=_settings_with_auth_context(
             enterprise_capability_rules={"GET /portfolios": ""},
         ),
     )
@@ -464,7 +532,7 @@ def test_validate_enterprise_runtime_config_accepts_source_data_default_rules() 
     runtime = _runtime(
         read_authz_enabled=True,
         require_capability_rules=True,
-        settings=_Settings(enterprise_primary_key_id="primary"),
+        settings=_settings_with_auth_context(),
     )
 
     assert "missing_capability_rules" not in runtime.validate_enterprise_runtime_config()

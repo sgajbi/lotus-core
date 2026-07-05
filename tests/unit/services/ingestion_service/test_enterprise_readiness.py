@@ -1,8 +1,13 @@
+from time import time
 from unittest.mock import patch
 
 import pytest
 from fastapi import Request
 from fastapi.responses import Response
+from portfolio_common.enterprise_readiness import (
+    _enterprise_auth_context_signature,
+    _normalize_headers,
+)
 
 from src.services.ingestion_service.app.enterprise_readiness import (
     _required_capability,
@@ -31,14 +36,26 @@ def _iter_routes(routes) -> list[object]:
 
 
 def _enterprise_headers(capabilities: str) -> dict[str, str]:
-    return {
+    headers = {
         "X-Actor-Id": "actor-1",
         "X-Tenant-Id": "tenant-1",
         "X-Role": "ops",
         "X-Correlation-Id": "corr-1",
         "X-Service-Identity": "lotus-gateway",
         "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": "kms-key-1",
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
     }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers),
+        "auth-context-secret",
+    )
+    return headers
+
+
+def _configure_auth_context_env(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
 
 
 def test_ingestion_default_rules_cover_all_ingestion_write_routes(monkeypatch) -> None:
@@ -61,6 +78,7 @@ def test_ingestion_default_rules_cover_all_ingestion_write_routes(monkeypatch) -
 
 def test_ingestion_write_requires_route_capability(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
 
     denied, denied_reason = authorize_write_request(
         "POST",
@@ -81,6 +99,7 @@ def test_ingestion_write_requires_route_capability(monkeypatch) -> None:
 
 def test_ingestion_write_requires_service_identity_when_headers_present(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
     headers = _enterprise_headers("ingestion.portfolios.write")
     headers.pop("X-Service-Identity")
 
@@ -105,6 +124,7 @@ def test_validate_ingestion_runtime_accepts_default_capability_rules(monkeypatch
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
     monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
     monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
     monkeypatch.delenv("ENTERPRISE_CAPABILITY_RULES_JSON", raising=False)
 
     issues = validate_enterprise_runtime_config()

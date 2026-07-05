@@ -55,9 +55,11 @@ Current runtime posture:
 7. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`,
 8. ingestion write APIs have service-owned default capability rules instead of depending only on
    `ENTERPRISE_CAPABILITY_RULES_JSON`,
-9. privileged ingestion ops JWTs require issuer, audience, expiry, issued-at, replay id, principal
+9. enterprise capability checks consume a signed service-principal auth context rather than trusting
+   arbitrary `X-Capabilities` or `X-Service-Identity` headers,
+10. privileged ingestion ops JWTs require issuer, audience, expiry, issued-at, replay id, principal
    identity, required ops scope/capability, `kid`, and active/previous-key validation,
-10. non-local ingestion profiles cannot use static ops-token fallback unless
+11. non-local ingestion profiles cannot use static ops-token fallback unless
    `LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED=true` and a non-default token are set,
-11. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
+12. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
    closed unless `LOTUS_CORE_PAGE_TOKEN_SECRET` and `LOTUS_CORE_PAGE_TOKEN_KEY_ID` are non-default.
