@@ -26,6 +26,7 @@ class ValuationRuntimeSettings:
     valuation_scheduler_dispatch_rounds: int
     valuation_scheduler_poll_budget_seconds: int
     valuation_scheduler_dispatch_budget_seconds: int
+    valuation_scheduler_backfill_upsert_chunk_size: int
     valuation_scheduler_stale_timeout_minutes: int
     valuation_scheduler_max_attempts: int
     reprocessing_worker_poll_interval_seconds: int
@@ -60,6 +61,9 @@ def load_valuation_runtime_settings(
         ),
         valuation_scheduler_dispatch_budget_seconds=_env_positive_int(
             "VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", 10
+        ),
+        valuation_scheduler_backfill_upsert_chunk_size=_env_positive_int(
+            "VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE", scheduler_batch_size_default
         ),
         valuation_scheduler_stale_timeout_minutes=_env_positive_int(
             "VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", 15

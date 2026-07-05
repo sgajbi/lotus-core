@@ -304,6 +304,7 @@ Operational knobs:
 | `LOTUS_CORE_KAFKA_PRODUCER_SERVICE_OVERRIDES_JSON` | empty | JSON object keyed by service name for service-specific producer overrides. |
 | `VALUATION_SCHEDULER_POLL_BUDGET_SECONDS` | `30` | Maximum valuation scheduler poll work budget before deferring remaining dispatch rounds to a later poll. |
 | `VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS` | `10` | Maximum valuation scheduler per-batch dispatch budget before confirming queued work and recovering remaining claimed jobs. |
+| `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` | `100` | Maximum generated valuation backfill jobs written in one scheduler upsert chunk across states. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
@@ -320,6 +321,9 @@ budget together. Operators should watch `valuation_scheduler_poll_duration_secon
 `valuation_scheduler_producer_backpressure_total` before raising batch size or dispatch rounds.
 Budget exhaustion and producer back-pressure defer remaining work through the durable job recovery
 path; they are not evidence that Kafka payloads, keys, headers, or consumers changed.
+Backfill staging additionally uses `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` to bound
+database write batches across states while preserving repository idempotency and correlation
+lineage.
 
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only
