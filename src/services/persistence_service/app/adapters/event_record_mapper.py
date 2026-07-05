@@ -13,7 +13,7 @@ EventDumpMode = Literal["json", "python"]
 def event_business_record_values(
     event: BaseModel,
     *,
-    mode: EventDumpMode = "json",
+    mode: EventDumpMode = "python",
 ) -> dict[str, object]:
     """Map a validated event model to database-table business values."""
     return event_business_payload(event, mode=mode)
