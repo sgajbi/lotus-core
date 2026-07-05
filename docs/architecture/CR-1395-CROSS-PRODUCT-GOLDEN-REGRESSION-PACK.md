@@ -2,8 +2,9 @@
 
 ## Objective
 
-Progress GitHub issue #607 by creating a governed reusable golden regression pack for transaction
-lifecycle and corporate-action examples across product families.
+Complete the local GitHub issue #607 golden regression suite by making the required transaction
+lifecycle and corporate-action product-family examples either executable or explicitly linked to
+the owning target-model implementation issues.
 
 ## Finding
 
@@ -22,6 +23,9 @@ lineage impact visible across product families.
 - Added `scripts/cross_product_golden_regression_guard.py` plus focused guard tests.
 - Added executable unit-level golden tests for equity buy/sell cost relief, dividend income,
   transfer in/out position and cost deltas, and CA bundle spin-off basis transfer.
+- Extended the fixture and executable tests for fund subscription/distribution/reinvestment/
+  redemption, structured-product coupon income, option exercise target-model gaps, and correction
+  cancel/rebook restatement.
 - Wired `make cross-product-golden-regression-guard` into lint and updated testing strategy, risk
   matrix, repo context, wiki source, and this review ledger.
 
@@ -30,10 +34,11 @@ lineage impact visible across product families.
 No runtime behavior, API route, DTO/OpenAPI schema, database schema, Kafka topic, event payload, or
 deployment topology changed. This slice adds reusable fixtures, executable tests, and governance.
 
-The pack remains honest about product families that still need deeper executable coverage:
-fund subscription/redemption/distribution/reinvestment, option exercise/expiry, structured-product
-coupon/barrier/payoff, and full correction/cancel/rebook/restatement. Those gaps remain visible in
-#607 until follow-up implementation issues are split or the examples become executable.
+The pack remains honest where the production booking target model is not implemented. Option
+exercise/conversion examples assert the governed registry's `target_not_implemented` and
+production-booking-disabled posture and link to `sgajbi/lotus-core#479`. Corporate-action
+correction/rebook is executable as economic reversal plus rebook and links first-class lifecycle
+and parent-event model depth to `sgajbi/lotus-core#472` and `sgajbi/lotus-core#480`.
 
 ## Validation
 

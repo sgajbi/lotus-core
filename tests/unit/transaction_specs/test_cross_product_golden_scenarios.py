@@ -8,6 +8,10 @@ from pathlib import Path
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_domain import evaluate_ca_bundle_a_reconciliation
+from portfolio_common.transaction_type_registry import (
+    TARGET_NOT_IMPLEMENTED,
+    get_transaction_type_definition,
+)
 
 from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
     CashflowLogic,
@@ -51,8 +55,11 @@ def _event(
         net_cost=Decimal(net_cost if net_cost is not None else raw.get("net_cost", "0")),
         net_cost_local=Decimal(net_cost if net_cost is not None else raw.get("net_cost", "0")),
         correlation_id=raw.get("correlation_id"),
+        economic_event_id=raw.get("economic_event_id"),
         parent_event_reference=raw.get("parent_event_reference"),
         linked_transaction_group_id=raw.get("linked_transaction_group_id"),
+        originating_transaction_id=raw.get("originating_transaction_id"),
+        adjustment_reason=raw.get("adjustment_reason"),
     )
 
 
@@ -125,6 +132,113 @@ def test_transfer_golden_position_and_cost_delta() -> None:
     assert after_out.quantity == Decimal("99")
     assert after_out.cost_basis == Decimal("105")
     assert scenario["expected"]["lineage"]["idempotency_key"] == "transaction_id"
+
+
+def test_fund_golden_subscription_distribution_reinvestment_and_redemption(
+    monkeypatch,
+) -> None:
+    scenario = _scenario("fund_subscription_redemption_distribution_reinvestment")
+    subscription, distribution, reinvestment, redemption = scenario["input_events"]
+    monkeypatch.setattr(
+        "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL",
+        type(
+            "Metric",
+            (),
+            {"labels": lambda self, **_: type("Inc", (), {"inc": lambda self: None})()},
+        )(),
+    )
+    state = PositionStateDTO()
+
+    after_subscription = PositionCalculator.calculate_next_position(state, _event(subscription))
+    after_reinvestment = PositionCalculator.calculate_next_position(
+        after_subscription, _event(reinvestment)
+    )
+    after_redemption = PositionCalculator.calculate_next_position(
+        after_reinvestment, _event(redemption)
+    )
+    distribution_cashflow = CashflowLogic.calculate(
+        _event(distribution),
+        CashflowRule(
+            classification=CashflowClassification.INCOME,
+            timing=CashflowTiming.EOD,
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+    )
+
+    expected = scenario["expected"]
+    assert after_redemption.quantity == Decimal(expected["position_state"]["quantity"])
+    assert after_redemption.cost_basis == Decimal(expected["position_state"]["cost_basis"])
+    assert distribution_cashflow.amount == Decimal(
+        expected["income_cashflow_impact"]["distribution_amount"]
+    )
+    assert distribution_cashflow.classification == "INCOME"
+    assert Decimal(expected["cash_ledger_impact"]["net_cash"]) == Decimal("-640")
+    assert Decimal(expected["cost_basis_impact"]["realized_gain_loss"]) == Decimal("60")
+
+
+def test_option_and_structured_product_golden_target_gap_and_coupon_cashflow(
+    monkeypatch,
+) -> None:
+    scenario = _scenario("option_exercise_expiry_structured_coupon_barrier_payoff")
+    exercise_out, exercise_in, structured_coupon = scenario["input_events"]
+    monkeypatch.setattr(
+        "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL",
+        type(
+            "Metric",
+            (),
+            {"labels": lambda self, **_: type("Inc", (), {"inc": lambda self: None})()},
+        )(),
+    )
+
+    exercise_out_definition = get_transaction_type_definition(exercise_out["transaction_type"])
+    exercise_in_definition = get_transaction_type_definition(exercise_in["transaction_type"])
+    structured_coupon_state = PositionCalculator.calculate_next_position(
+        PositionStateDTO(quantity=Decimal("10"), cost_basis=Decimal("1000")),
+        _event(structured_coupon),
+    )
+    structured_coupon_cashflow = CashflowLogic.calculate(
+        _event(structured_coupon),
+        CashflowRule(
+            classification=CashflowClassification.INCOME,
+            timing=CashflowTiming.EOD,
+            is_position_flow=True,
+            is_portfolio_flow=False,
+        ),
+    )
+
+    assert exercise_out_definition is not None
+    assert exercise_in_definition is not None
+    assert exercise_out_definition.calculation_support_status == TARGET_NOT_IMPLEMENTED
+    assert exercise_in_definition.calculation_support_status == TARGET_NOT_IMPLEMENTED
+    assert exercise_out_definition.production_booking_allowed is False
+    assert exercise_in_definition.production_booking_allowed is False
+    assert structured_coupon_state.quantity == Decimal("10")
+    assert structured_coupon_cashflow.amount == Decimal(
+        scenario["expected"]["income_cashflow_impact"]["amount"]
+    )
+    assert structured_coupon_cashflow.classification == "INCOME"
+
+
+def test_correction_golden_cancel_and_rebook_restates_position() -> None:
+    scenario = _scenario("correction_cancel_rebook_restatement")
+    original, cancel, rebook = scenario["input_events"]
+    state = PositionStateDTO()
+
+    after_original = PositionCalculator.calculate_next_position(state, _event(original))
+    after_cancel = PositionCalculator.calculate_next_position(after_original, _event(cancel))
+    after_rebook = PositionCalculator.calculate_next_position(after_cancel, _event(rebook))
+
+    expected = scenario["expected"]
+    assert after_original.quantity == Decimal("100")
+    assert after_cancel.quantity == Decimal("0")
+    assert after_cancel.cost_basis == Decimal("0")
+    assert after_rebook.quantity == Decimal(expected["position_state"]["quantity"])
+    assert after_rebook.cost_basis == Decimal(expected["position_state"]["cost_basis"])
+    assert cancel["originating_transaction_id"] == original["transaction_id"]
+    assert rebook["originating_transaction_id"] == original["transaction_id"]
+    assert cancel["adjustment_reason"] == "CANCEL"
+    assert rebook["adjustment_reason"] == "REBOOK"
 
 
 def test_ca_bundle_golden_spin_off_reconciles_basis_transfer() -> None:

@@ -97,7 +97,7 @@
           "current_coverage": [
             "tests/unit/docs/test_rfc0082_downstream_endpoint_audit_doc.py"
           ],
-          "follow_up_issue": "sgajbi/lotus-core#607"
+          "follow_up_issue": "sgajbi/lotus-core#557"
         }
       ]
     },
@@ -325,13 +325,12 @@
         },
         {
           "proof_family": "regression_golden",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "tests/e2e/test_transaction_type_coverage_matrix.py",
             "make cross-product-golden-regression-guard",
             "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#607"
+          ]
         },
         {
           "proof_family": "e2e",
@@ -371,13 +370,12 @@
         },
         {
           "proof_family": "regression_golden",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py",
             "make cross-product-golden-regression-guard",
             "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#607"
+          ]
         }
       ]
     },
@@ -491,12 +489,13 @@
         },
         {
           "proof_family": "regression_golden",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
-            "tests/unit/transaction_specs/test_interest_slice0_characterization.py"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#607"
+            "tests/unit/transaction_specs/test_interest_slice0_characterization.py",
+            "make cross-product-golden-regression-guard",
+            "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+          ]
         }
       ]
     },
@@ -544,13 +543,13 @@
         },
         {
           "proof_family": "regression_golden",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
             "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
-            "make cross-product-golden-regression-guard"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#607"
+            "make cross-product-golden-regression-guard",
+            "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+          ]
         }
       ]
     },
