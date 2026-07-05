@@ -282,6 +282,9 @@ class IngestionAdapterModeSettings:
     portfolio_bundle_enabled: bool
     upload_apis_enabled: bool
     upload_max_bytes: int
+    upload_max_rows: int
+    upload_max_columns: int
+    upload_max_cell_length: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,6 +473,21 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             upload_max_bytes=_env_int(
                 "LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES",
                 5_242_880,
+                minimum=1,
+            ),
+            upload_max_rows=_env_int(
+                "LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS",
+                5_000,
+                minimum=1,
+            ),
+            upload_max_columns=_env_int(
+                "LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS",
+                200,
+                minimum=1,
+            ),
+            upload_max_cell_length=_env_int(
+                "LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH",
+                8_192,
                 minimum=1,
             ),
         ),

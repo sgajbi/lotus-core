@@ -6789,6 +6789,21 @@ async def test_upload_preview_rejects_payload_above_configured_limit(
     mock_kafka_producer.publish_message.assert_not_called()
 
 
+async def test_upload_preview_rejects_content_length_above_configured_limit(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "16")
+    upload = SimpleNamespace(read=AsyncMock())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await uploads_router._read_bounded_upload_content(
+            upload,
+            content_length=16 + uploads_router.UPLOAD_MULTIPART_OVERHEAD_BYTES + 1,
+        )
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail["code"] == "INGESTION_UPLOAD_TOO_LARGE"
+    upload.read.assert_not_awaited()
+
+
 async def test_upload_preview_allows_upload_budget_above_generic_write_cap(
     async_test_client: httpx.AsyncClient,
     mock_kafka_producer: MagicMock,
@@ -6806,6 +6821,81 @@ async def test_upload_preview_allows_upload_budget_above_generic_write_cap(
 
     assert response.status_code == 200
     assert response.json()["total_rows"] == 1
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_returns_429_when_rate_limited(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    def _raise_rate_limit(*, endpoint: str, record_count: int) -> None:
+        raise PermissionError(f"{endpoint} blocked before parsing")
+
+    monkeypatch.setattr(
+        uploads_router,
+        "enforce_ingestion_write_rate_limit",
+        _raise_rate_limit,
+    )
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("transactions.csv", b"transaction_id,portfolio_id\nT1,P1", "text/csv")},
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == {
+        "code": "INGESTION_RATE_LIMIT_EXCEEDED",
+        "message": "/ingest/uploads/preview blocked before parsing",
+    }
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_rejects_rows_above_parser_budget(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+    mock_kafka_producer: MagicMock,
+):
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS", "1")
+    csv_content = "\n".join(
+        [
+            "security_id,name,isin,currency,product_type",
+            "SEC1,Bond A,ISIN1,USD,Bond",
+            "SEC2,Bond B,ISIN2,USD,Bond",
+        ]
+    ).encode("utf-8")
+
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={"file": ("instruments.csv", csv_content, "text/csv")},
+        data={"entity_type": "instruments", "sample_size": "10"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "INGESTION_UPLOAD_PARSER_BUDGET_EXCEEDED"
+    assert response.json()["detail"]["budget"] == "max_rows"
+    mock_kafka_producer.publish_message.assert_not_called()
+
+
+async def test_upload_preview_rejects_content_type_extension_mismatch(
+    async_test_client: httpx.AsyncClient,
+    mock_kafka_producer: MagicMock,
+):
+    response = await async_test_client.post(
+        "/ingest/uploads/preview",
+        files={
+            "file": (
+                "transactions.csv",
+                b"transaction_id,portfolio_id\nT1,P1",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"entity_type": "transactions", "sample_size": "10"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "INGESTION_UPLOAD_CONTENT_TYPE_MISMATCH"
     mock_kafka_producer.publish_message.assert_not_called()
 
 

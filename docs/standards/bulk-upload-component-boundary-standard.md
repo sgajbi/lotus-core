@@ -9,10 +9,12 @@ responsibilities.
 
 1. file-format detection,
 2. CSV and XLSX parsing,
-3. header normalization,
-4. row-value normalization,
-5. entity DTO validation,
-6. validation report construction.
+3. parser budget enforcement for max rows, max columns, and max cell length,
+4. streamed XLSX row iteration without materializing the whole worksheet,
+5. header normalization,
+6. row-value normalization,
+7. entity DTO validation,
+8. validation report construction.
 
 `upload_ingestion_service.py` owns:
 
@@ -28,6 +30,10 @@ publish methods.
 ## Boundary Rules
 
 The validator must not import FastAPI, Kafka, database sessions, or `IngestionService`.
+
+The validator must not parse unbounded uploads. It owns row, column, and cell-length budgets for
+CSV and XLSX inputs. HTTP byte limits and rate limits are necessary outer controls but do not
+replace parser-level budgets.
 
 The upload orchestration service must not parse CSV/XLSX files inline, import `IngestionService`,
 or own entity-specific publish methods. It depends on `BulkUploadValidator` and

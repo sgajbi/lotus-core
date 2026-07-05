@@ -61,7 +61,7 @@
       "app_kind": "business_api",
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
-      "upload_limit_control": "ingestion_upload_max_bytes",
+      "upload_limit_control": "ingestion_upload_resource_budgets",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {

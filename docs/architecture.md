@@ -45,7 +45,8 @@ transaction domain data in the Lotus ecosystem.
    providers and HTTP policy translation live in `app/dependencies.py`; see
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
 14. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
-   publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
+   publisher adapter, with parser budgets enforced in the validator; see
+   `docs/standards/bulk-upload-component-boundary-standard.md`.
 15. Transaction replay stays split across pure replay planning, reader ports, and publisher
    adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
 16. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure

@@ -82,11 +82,14 @@ portfolio, instrument, transaction, market-price, and FX payload groups.
 Use upload flows for adapter-mode bulk onboarding:
 
 - `POST /ingest/uploads/preview`
-  validate and normalize before publishing
+  validate and normalize before publishing; preview is rate-protected and returns source-safe
+  summaries by default
 - `POST /ingest/uploads/commit`
   commit validated bulk content for processing
 
-This is the right contract family for CSV/XLSX-style onboarding, not the replay family.
+This is the right contract family for CSV/XLSX-style onboarding, not the replay family. Upload
+files are bounded by byte, row, column, and cell-length budgets; content-type and extension must
+match for supported CSV/XLSX media types.
 
 ### Reference-data onboarding
 

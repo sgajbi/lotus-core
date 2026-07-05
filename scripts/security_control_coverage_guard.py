@@ -12,6 +12,9 @@ SHARED_BOOTSTRAP_PATH = Path("src/libs/portfolio-common/portfolio_common/http_ap
 SHARED_ENTERPRISE_PATH = Path("src/libs/portfolio-common/portfolio_common/enterprise_readiness.py")
 INGESTION_UPLOAD_ROUTER_PATH = Path("src/services/ingestion_service/app/routers/uploads.py")
 INGESTION_SETTINGS_PATH = Path("src/services/ingestion_service/app/settings.py")
+INGESTION_UPLOAD_VALIDATION_PATH = Path(
+    "src/services/ingestion_service/app/services/upload_validation.py"
+)
 
 REQUIRED_SHARED_BOOTSTRAP_ANCHORS = {
     "secure_response_headers": "configure_secure_response_headers",
@@ -33,6 +36,7 @@ VALID_PAYLOAD_CONTROLS = {
 
 VALID_UPLOAD_CONTROLS = {
     "ingestion_upload_max_bytes",
+    "ingestion_upload_resource_budgets",
     "not_applicable",
 }
 
@@ -150,19 +154,29 @@ def _validate_ingestion_upload_limit(
     findings: list[dict[str, object]],
     *,
     repo_root: Path,
+    control: str,
 ) -> None:
     router = _read_text(INGESTION_UPLOAD_ROUTER_PATH, repo_root=repo_root)
     settings = _read_text(INGESTION_SETTINGS_PATH, repo_root=repo_root)
+    validation = _read_text(INGESTION_UPLOAD_VALIDATION_PATH, repo_root=repo_root)
     for file, text, anchor in (
         (INGESTION_UPLOAD_ROUTER_PATH, router, "_read_bounded_upload_content"),
         (INGESTION_UPLOAD_ROUTER_PATH, router, "INGESTION_UPLOAD_TOO_LARGE"),
+        (INGESTION_UPLOAD_ROUTER_PATH, router, "_enforce_upload_rate_limit"),
+        (INGESTION_UPLOAD_ROUTER_PATH, router, "_validate_upload_content_type"),
         (INGESTION_SETTINGS_PATH, settings, "LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES"),
+        (INGESTION_SETTINGS_PATH, settings, "LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS"),
+        (INGESTION_SETTINGS_PATH, settings, "LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS"),
+        (INGESTION_SETTINGS_PATH, settings, "LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH"),
+        (INGESTION_UPLOAD_VALIDATION_PATH, validation, "UploadParserBudget"),
+        (INGESTION_UPLOAD_VALIDATION_PATH, validation, "UPLOAD_PARSER_BUDGET_REASON_CODE"),
+        (INGESTION_UPLOAD_VALIDATION_PATH, validation, "worksheet.iter_rows"),
     ):
         if anchor not in text:
             _append_missing_anchor(
                 findings,
                 file=file.as_posix(),
-                control="ingestion_upload_max_bytes",
+                control=control,
                 anchor=anchor,
             )
 
@@ -237,8 +251,12 @@ def _validate_app_entry(
     upload_control = str(app.get("upload_limit_control", ""))
     if upload_control not in VALID_UPLOAD_CONTROLS:
         findings.append({"file": app_path, "invalid_upload_limit_control": upload_control})
-    elif upload_control == "ingestion_upload_max_bytes":
-        _validate_ingestion_upload_limit(findings, repo_root=repo_root)
+    elif upload_control in {"ingestion_upload_max_bytes", "ingestion_upload_resource_budgets"}:
+        _validate_ingestion_upload_limit(
+            findings,
+            repo_root=repo_root,
+            control=upload_control,
+        )
 
     allowlist = app.get("unauthenticated_allowlist")
     if not isinstance(allowlist, list) or not {

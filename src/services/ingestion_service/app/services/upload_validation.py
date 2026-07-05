@@ -4,7 +4,8 @@ import csv
 from csv import Error as CsvError
 from dataclasses import dataclass
 from io import BytesIO, StringIO
-from typing import Any, Literal
+from itertools import zip_longest
+from typing import Any, Iterable, Literal
 from zipfile import BadZipFile
 
 from openpyxl import load_workbook
@@ -28,6 +29,18 @@ MODEL_BY_ENTITY: dict[UploadEntity, type[BaseModel]] = {
     "fx_rates": FxRate,
     "business_dates": BusinessDate,
 }
+DEFAULT_UPLOAD_MAX_ROWS = 5_000
+DEFAULT_UPLOAD_MAX_COLUMNS = 200
+DEFAULT_UPLOAD_MAX_CELL_LENGTH = 8_192
+UPLOAD_PARSER_BUDGET_REASON_CODE = "upload_parser_budget_exceeded"
+UPLOAD_PARSER_BUDGET_ERROR_CODE = "INGESTION_UPLOAD_PARSER_BUDGET_EXCEEDED"
+
+
+@dataclass(frozen=True, slots=True)
+class UploadParserBudget:
+    max_rows: int = DEFAULT_UPLOAD_MAX_ROWS
+    max_columns: int = DEFAULT_UPLOAD_MAX_COLUMNS
+    max_cell_length: int = DEFAULT_UPLOAD_MAX_CELL_LENGTH
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +53,9 @@ class UploadValidationReport:
 
 
 class BulkUploadValidator:
+    def __init__(self, *, budget: UploadParserBudget | None = None) -> None:
+        self._budget = budget or UploadParserBudget()
+
     def validate(
         self,
         *,
@@ -49,7 +65,7 @@ class BulkUploadValidator:
     ) -> UploadValidationReport:
         model_cls = MODEL_BY_ENTITY[entity_type]
         alias_index = _field_alias_index(model_cls)
-        file_format, rows = _parse_rows(filename, content)
+        file_format, rows = _parse_rows(filename, content, self._budget)
 
         valid_models: list[BaseModel] = []
         valid_rows: list[dict[str, Any]] = []
@@ -123,12 +139,13 @@ def _normalized_row_value(raw_value: Any) -> Any:
 def _parse_rows(
     filename: str,
     content: bytes,
+    budget: UploadParserBudget,
 ) -> tuple[Literal["csv", "xlsx"], list[dict[str, Any]]]:
     file_format = _detect_format(filename)
     try:
         if file_format == "csv":
-            return file_format, _parse_csv(content)
-        return file_format, _parse_xlsx(content)
+            return file_format, _parse_csv(content, budget)
+        return file_format, _parse_xlsx(content, budget)
     except (UnicodeDecodeError, CsvError) as exc:
         raise ValidationRejected(
             reason_code="invalid_csv_content",
@@ -141,26 +158,139 @@ def _parse_rows(
         ) from exc
 
 
-def _parse_csv(content: bytes) -> list[dict[str, Any]]:
+def _parse_csv(content: bytes, budget: UploadParserBudget) -> list[dict[str, Any]]:
     text = content.decode("utf-8-sig")
-    reader = csv.DictReader(StringIO(text))
-    return [dict(row) for row in reader]
-
-
-def _parse_xlsx(content: bytes) -> list[dict[str, Any]]:
-    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
-    worksheet = workbook.active
-    rows = list(worksheet.iter_rows(values_only=True))
-    if not rows:
+    reader = csv.reader(StringIO(text))
+    headers = next(reader, None)
+    if headers is None:
         return []
+    _validate_row_shape(
+        row_values=headers,
+        row_number=1,
+        budget=budget,
+        row_kind="header",
+    )
 
-    headers = _xlsx_headers(rows[0])
     records: list[dict[str, Any]] = []
-    for row_values in rows[1:]:
-        row_dict = _xlsx_row_record(headers, row_values)
-        if _xlsx_row_has_data(row_dict):
-            records.append(row_dict)
+    for row_number, row_values in enumerate(reader, start=2):
+        _validate_row_budget(records, budget)
+        _validate_row_shape(
+            row_values=row_values,
+            row_number=row_number,
+            budget=budget,
+            row_kind="row",
+        )
+        records.append(_csv_row_record(headers, row_values))
     return records
+
+
+def _parse_xlsx(content: bytes, budget: UploadParserBudget) -> list[dict[str, Any]]:
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    try:
+        worksheet = workbook.active
+        rows = worksheet.iter_rows(values_only=True)
+        header_row = next(rows, None)
+        if header_row is None:
+            return []
+
+        _validate_row_shape(
+            row_values=header_row,
+            row_number=1,
+            budget=budget,
+            row_kind="header",
+        )
+        headers = _xlsx_headers(header_row)
+        records: list[dict[str, Any]] = []
+        for row_number, row_values in enumerate(rows, start=2):
+            _validate_row_shape(
+                row_values=row_values,
+                row_number=row_number,
+                budget=budget,
+                row_kind="row",
+            )
+            row_dict = _xlsx_row_record(headers, row_values)
+            if _xlsx_row_has_data(row_dict):
+                _validate_row_budget(records, budget)
+                records.append(row_dict)
+        return records
+    finally:
+        workbook.close()
+
+
+def _csv_row_record(headers: list[str], row_values: list[str]) -> dict[str, Any]:
+    return {
+        header: value
+        for header, value in zip_longest(headers, row_values, fillvalue=None)
+        if header
+    }
+
+
+def _validate_row_budget(records: list[dict[str, Any]], budget: UploadParserBudget) -> None:
+    if len(records) >= budget.max_rows:
+        _raise_parser_budget_exceeded(
+            message="Bulk upload row count exceeds the configured parser budget.",
+            budget_name="max_rows",
+            limit=budget.max_rows,
+        )
+
+
+def _validate_row_shape(
+    *,
+    row_values: Iterable[Any],
+    row_number: int,
+    budget: UploadParserBudget,
+    row_kind: str,
+) -> None:
+    values = tuple(row_values)
+    if len(values) > budget.max_columns:
+        _raise_parser_budget_exceeded(
+            message="Bulk upload column count exceeds the configured parser budget.",
+            budget_name="max_columns",
+            limit=budget.max_columns,
+            observed=len(values),
+            row_number=row_number,
+        )
+    for column_index, value in enumerate(values, start=1):
+        if value is not None and len(str(value)) > budget.max_cell_length:
+            _raise_parser_budget_exceeded(
+                message="Bulk upload cell length exceeds the configured parser budget.",
+                budget_name="max_cell_length",
+                limit=budget.max_cell_length,
+                observed=len(str(value)),
+                row_number=row_number,
+                column_index=column_index,
+                row_kind=row_kind,
+            )
+
+
+def _raise_parser_budget_exceeded(
+    *,
+    message: str,
+    budget_name: str,
+    limit: int,
+    observed: int | None = None,
+    row_number: int | None = None,
+    column_index: int | None = None,
+    row_kind: str | None = None,
+) -> None:
+    detail: dict[str, Any] = {
+        "code": UPLOAD_PARSER_BUDGET_ERROR_CODE,
+        "message": message,
+        "budget": budget_name,
+        "limit": limit,
+    }
+    if observed is not None:
+        detail["observed"] = observed
+    if row_number is not None:
+        detail["row_number"] = row_number
+    if column_index is not None:
+        detail["column_index"] = column_index
+    if row_kind is not None:
+        detail["row_kind"] = row_kind
+    raise ValidationRejected(
+        reason_code=UPLOAD_PARSER_BUDGET_REASON_CODE,
+        detail=detail,
+    )
 
 
 def _xlsx_headers(row: tuple[Any, ...]) -> list[str]:

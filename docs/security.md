@@ -52,7 +52,8 @@ Current runtime posture:
    `ENTERPRISE_ENFORCE_READ_AUTHZ` is enabled,
 6. the shared enterprise middleware keeps `/health/live`, `/health/ready`, `/metrics`,
    `/openapi.json`, `/docs`, `/redoc`, and `/version` unauthenticated for operational access,
-7. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`,
+7. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` and parser
+   work above configured row, column, and cell-length budgets,
 8. ingestion write APIs have service-owned default capability rules instead of depending only on
    `ENTERPRISE_CAPABILITY_RULES_JSON`,
 9. enterprise capability checks consume a signed service-principal auth context rather than trusting
