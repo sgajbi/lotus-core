@@ -46,23 +46,28 @@ Current repository posture:
 13. RFC-0083 Slice 9 now defines source-data product security, tenancy, entitlement, capability, audit, sensitivity, and retention profiles, exposes that posture through guarded `x-lotus-source-data-security` OpenAPI route metadata, prevents operator-only products from drifting outside control-plane/policy route families, constrains access classifications, audit requirements, and sensitivity-driven retention requirements to governed RFC-0082/RFC-0083 lanes, derives default source-data read capability rules from the governed product catalog for both `GET` and query-style `POST` routes, centralizes duplicated query-service/query-control-plane enterprise readiness authorization, policy-header, capability, write-audit, read-audit, read-authorization, and strict capability-rule middleware support in `portfolio_common.enterprise_readiness` while preserving service-local wrappers, and defaults production-like environments to the shared service-local enterprise security profile,
 14. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, operator supportability surface posture, operator-only security profile bindings for support evidence, a guarded runtime outbox event/type topic alignment check, direct Kafka publish-topic governance for source-ingestion, recovery, and job-command topics, explicit shared event-model envelope tolerance, and centralized outbox payload envelope metadata for `event_type`, `schema_version`, `correlation_id`, and `traceparent`,
 15. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
-16. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
-17. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
-18. app-local compose keeps the ingestion service write payload cap at 16 MiB through
+16. RFC status governance now has a repository-wide machine-readable ledger at
+    `docs/standards/rfc-status-ledger.v1.json`, guarded by `make rfc-status-ledger-guard` and
+    `quality-wiki-docs-gate`. It covers core RFCs, transaction RFC/spec documents, architecture RFC
+    material, and operations RFC playbooks so new RFC files cannot be added without status,
+    ownership, evidence, wiki, supported-feature, and supersession metadata,
+17. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+18. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
+19. app-local compose keeps the ingestion service write payload cap at 16 MiB through
     `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` so the governed local `demo_data_loader` bundle can seed
     through the HTTP write boundary; do not carry that local override into production ingress policy
     without explicit approval,
-19. RFC-0086 repo-native domain-product declarations now live under
+20. RFC-0086 repo-native domain-product declarations now live under
     `contracts/domain-data-products/` and are validated by `make domain-product-validate` when the
     sibling `lotus-platform` validator and vocabulary registries are available.
-20. RFC-0087 trust telemetry proof currently covers exactly `PortfolioStateSnapshot:v1` and
+21. RFC-0087 trust telemetry proof currently covers exactly `PortfolioStateSnapshot:v1` and
     `DpmSourceReadiness:v1` under `contracts/trust-telemetry/`; it is validated by
     `tests/unit/test_trust_telemetry.py` against the platform trust telemetry validator when
     `lotus-platform` is available. Active source-product declaration, local implementation proof,
     CI proof, live validator proof, trust telemetry coverage, and platform mesh certification are
     distinct statuses; do not describe every active Core source product as mesh certified unless
     current generated platform certification artifacts prove that exact product state.
-21. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
+22. RFC-0087 now promotes the first DPM source-data products for `lotus-manage` stateful
     discretionary mandate portfolio management: `DpmModelPortfolioTarget:v1`,
     `DiscretionaryMandateBinding:v1`, `InstrumentEligibilityProfile:v1`, and
     `PortfolioTaxLotWindow:v1`, `TransactionCostCurve:v1`,
@@ -96,20 +101,20 @@ Current repository posture:
     restatement and explicit boundaries from tax advice, after-tax optimization,
     tax-loss-harvesting, client-tax approval, tax-reporting certification, execution quality, and
     OMS acknowledgement.
-22. RFC-0108 portfolio readiness supportability now publishes the bounded
+23. RFC-0108 portfolio readiness supportability now publishes the bounded
     `metric_labels=["state", "reason", "freshness_bucket"]` contract in
     `PortfolioSupportabilitySummary`, uses the shared
     `portfolio_common.observability_contracts.PORTFOLIO_SUPPORTABILITY_METRIC_LABELS` tuple for the
     Prometheus counter, and has focused tests proving
     `lotus_core_portfolio_supportability_total` does not add portfolio, account, client,
     correlation, trace, transaction, security, request-body, or response-body labels.
-23. App-level supported-surface validation now has a single repo-native evidence command:
+24. App-level supported-surface validation now has a single repo-native evidence command:
     `make lotus-core-validate`. It runs static contract guards plus deterministic runtime smoke over
     ingestion, event replay and ops, operational query reads, query-control-plane support and
     lineage, integration policy and capabilities, core snapshot, simulation, and source-data
     contract governance. PR Merge Gate now runs it as a blocking app-validation gate with a
     workflow-provided `lotus-platform` checkout for domain-product contract validation.
-24. Boundary mapping conformance now has a repo-native command,
+25. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`; `make architecture-guard` also runs
     `scripts/mapping_anti_corruption_guard.py` as the representative contract index. It currently
@@ -172,28 +177,28 @@ Current repository posture:
     not generic operator listing pages. Use the latest replayable correlation lookup for recovery
     paths so replay correctness does not depend on unrelated job volume, page size, or incidental
     list ordering.
-25. Reference-data ingestion source-observation lineage now has a shared DTO contract for
+26. Reference-data ingestion source-observation lineage now has a shared DTO contract for
     benchmark, index, risk-free, and classification families. The canonical API-facing fields are
     `source_system`, `source_record_id`, `observed_at`, and `quality_status`; legacy
     `source_vendor` and `source_timestamp` inputs remain accepted and are mapped to the existing
     storage columns until persistence migrations are explicitly approved.
-26. Consumer DLQ and replay-audit evidence now follows a correlation-or-reason contract:
+27. Consumer DLQ and replay-audit evidence now follows a correlation-or-reason contract:
     `correlation_id` remains nullable for legacy and malformed events, but missing-correlation rows
     must carry `correlation_missing_reason` and `alternate_lookup_key` for support lookup and replay
     forensics. The first implementation covers shared Kafka DLQ persistence, consumer DLQ read
     DTOs, replay response DTOs, replay-audit persistence, and missing-correlation not-replayable
     replay responses.
-27. Replay audit recording is mandatory for ingestion-job retry and consumer-DLQ replay workflows.
+28. Replay audit recording is mandatory for ingestion-job retry and consumer-DLQ replay workflows.
     Replay outcomes must not be acknowledged when audit persistence fails; affected endpoints return
     `INGESTION_REPLAY_AUDIT_WRITE_FAILED` with recovery path, event/job identity, replay status, and
     deterministic fingerprint so operators can restore audit persistence and retry through the
     governed endpoint.
-28. Direct ingestion-router Kafka publish dependency failures use the shared
+29. Direct ingestion-router Kafka publish dependency failures use the shared
     `routers.publish_errors` mapper. Preserve the `INGESTION_PUBLISH_FAILED` application code, but
     return HTTP 503 with `Retry-After`, dependency=`kafka`, retryability, correlation lineage,
     failed-record keys, publish state, and published-record count. Reference-data persistence
     failures and post-publish bookkeeping failures remain distinct HTTP 500 contracts.
-29. Direct ingestion post-publish or post-persist bookkeeping failures must preserve the
+30. Direct ingestion post-publish or post-persist bookkeeping failures must preserve the
     `INGESTION_JOB_BOOKKEEPING_FAILED` code while making partial-failure state explicit with
     `publish_state`, `work_state`, `published_record_count`, `retry_safe=false`,
     `recovery_action`, `recovery_path`, and `supportability_reason_code`. Client retry is not safe
@@ -232,7 +237,7 @@ Current repository posture:
     ports for generated timestamps, elapsed duration, expiry checks, and deterministic IDs.
     Financial reconciliation, simulation, and core snapshot now provide representative provider
     coverage with focused deterministic tests and targeted static guard coverage.
-30. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
+31. Ingestion job retry recovery failures must use stable recovery details with `code`, `message`,
     `outcome`, `remediation`, and `recovery_path="ingestion_job_retry"`. Preserve existing route
     paths, HTTP statuses, success DTOs, replay audit side effects, and failed-job side effects, but
     do not expose raw downstream publish or bookkeeping exception text as the primary client
@@ -241,12 +246,12 @@ Current repository posture:
     `bookkeeping_conflict`, and `audit_write_failed`. Replay success bookkeeping must use the
     atomic retry-plus-queued transition so retry counters cannot advance separately from queued
     status.
-31. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
+32. `/metrics` is an operational scrape endpoint governed by the shared metrics access policy.
     Token parsing belongs in `portfolio_common.metrics_settings`, and standard API apps,
     health-only worker apps, and web-backed worker runtime paths must all use the shared policy so
     `LOTUS_METRICS_ACCESS_TOKEN` consistently enables bearer-token protection without direct env
     reads in HTTP middleware.
-32. Shared `/health/ready` endpoints must keep dependency checks bounded and failure-isolated
+33. Shared `/health/ready` endpoints must keep dependency checks bounded and failure-isolated
     through `portfolio_common.health`. Preserve the per-dependency timeout pattern and explicit
     `ok`, `unavailable`, `timeout`, `misconfigured`, and `error` status vocabulary when adding
     database, Kafka, or future dependency probes. Readiness can return HTTP 503 with dependency
@@ -258,20 +263,20 @@ Current repository posture:
     `health_readiness_state` metrics with only service, dependency, status, and readiness-state
     labels; keep raw exception text, business identifiers, request IDs, correlation IDs, and trace
     IDs out of Prometheus labels.
-33. Prometheus metric vocabulary is governed by `portfolio_common.observability_contracts` and
+34. Prometheus metric vocabulary is governed by `portfolio_common.observability_contracts` and
     enforced by `make metric-vocabulary-guard` through `make lint`. HTTP request metrics must use
     `endpoint_template`, not raw `path`. New labels must be registered in
     `TELEMETRY_METRIC_ALLOWED_LABELS`, must not be listed in `TELEMETRY_METRIC_FORBIDDEN_LABELS`,
     and service-local metrics outside `portfolio_common.monitoring` must be registered in
     `SERVICE_LOCAL_METRIC_OWNERS` with an owning service.
-34. Standard FastAPI service apps and health-only worker web apps are covered by the shared HTTP
+35. Standard FastAPI service apps and health-only worker web apps are covered by the shared HTTP
     middleware-chain contract in `tests/test_support/http_middleware_contract.py` and
     `tests/unit/test_http_middleware_chain_contract.py`. The contract proves `/version` metadata,
     correlation/request/trace headers, `traceparent`, secure response headers, safe unhandled
     exception responses, and route-template HTTP metrics across every app entrypoint that uses
     `configure_standard_http_app` or `create_standard_health_app`. Do not add a new FastAPI app
     entrypoint without extending that matrix.
-35. Kafka consumers inheriting `portfolio_common.kafka_consumer.BaseConsumer` emit the standard
+36. Kafka consumers inheriting `portfolio_common.kafka_consumer.BaseConsumer` emit the standard
     `kafka_consumer_events_total` and `kafka_consumer_processing_duration_seconds` metrics. Keep
     processing attempts, success, retryable/terminal failure, DLQ, commit, poll, critical-exit, and
     shutdown telemetry on the shared consumer boundary; add service-local metrics only as
@@ -285,13 +290,13 @@ Current repository posture:
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS` to route repeatedly retryable messages
     to DLQ after a bounded in-process budget, committing only after DLQ success.
-36. Structured operational logging is governed by
+37. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,
     query, replay, and scheduler paths must use constant messages plus `event_name`, `operation`,
     `status`, and `reason_code`; do not embed portfolio, account, client, security, request,
     correlation, or trace identifiers in free-text operational log messages.
-37. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+38. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
@@ -311,7 +316,7 @@ Current repository posture:
     authorization denial, not-found, idempotency conflict, dependency timeout, degraded source data,
     or pagination/filtering/sorting must extend the catalog with source-test references, synthetic
     identifiers, correlation IDs, and standard problem metadata before wiki prose points to them.
-38. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
+39. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
@@ -329,12 +334,12 @@ Current repository posture:
     default budgets, bounded denial labels, and platform-runtime validation boundary synchronized.
     `make monetary-float-guard` uses token-aware money-like matching and currently has zero active
     findings and zero allowlisted suppressions.
-39. Service runtime import correctness is now part of the architecture guard. Service code under
+40. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
-40. Canonical transaction-type classification now starts in
+41. Canonical transaction-type classification now starts in
     `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
     cashflow, position, query, validation, or RFC target work must be classified there first.
     `OTHER` is migration-only and not production-booking allowed. Redemption and

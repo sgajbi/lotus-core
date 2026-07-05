@@ -49,12 +49,14 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
     assert any("api_vocabulary_inventory.py" in command for command in rendered_commands)
     assert any("wiki_validation_guard.py" in command for command in rendered_commands)
     assert any("rfc0083_closure_guard.py" in command for command in rendered_commands)
+    assert any("rfc_status_ledger_guard.py" in command for command in rendered_commands)
     check_names = {check["name"] for check in evidence["checks"]}
     assert {
         "readme_link_validation",
         "wiki_link_validation",
         "api_catalog_generation",
         "rfc_ledger_check",
+        "rfc_status_ledger_check",
         "supported_features_manifest",
         "runbook_validation",
     } <= check_names
