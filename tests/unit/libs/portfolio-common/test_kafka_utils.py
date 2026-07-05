@@ -1,8 +1,12 @@
 # tests/unit/libs/portfolio-common/test_kafka_utils.py
 from unittest.mock import ANY, MagicMock, patch
 
+import pytest
+
 # The module we are testing
+from portfolio_common.kafka_producer_policy import load_kafka_producer_policy
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer, reset_kafka_producer
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 
 @patch("portfolio_common.kafka_utils.Producer")
@@ -21,7 +25,80 @@ def test_kafka_producer_initialization(MockProducer):
     assert config["enable.idempotence"] is True
     assert config["acks"] == "all"
     assert config["max.in.flight.requests.per.connection"] == 5
+    assert config["client.id"] == "portfolio-analytics-producer"
     assert config["retries"] == 5
+    assert config["linger.ms"] == 5
+    assert config["batch.num.messages"] == 1000
+    assert config["compression.type"] == "zstd"
+    assert config["delivery.timeout.ms"] == 120000
+    assert config["request.timeout.ms"] == 30000
+    assert config["queue.buffering.max.messages"] == 100000
+    assert config["queue.buffering.max.kbytes"] == 1048576
+
+
+def test_kafka_producer_policy_uses_service_specific_identity_by_default(monkeypatch):
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_PRODUCER_CLIENT_ID", raising=False)
+    policy = load_kafka_producer_policy(service_name="valuation_orchestrator_service")
+
+    assert policy.service_name == "valuation_orchestrator_service"
+    assert policy.client_id == "valuation_orchestrator_service-producer"
+
+
+@patch("portfolio_common.kafka_utils.Producer")
+def test_kafka_producer_applies_service_specific_overrides(MockProducer, monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_PRODUCER_DEFAULTS_JSON",
+        '{"linger.ms": 11, "batch.num.messages": 2222}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_PRODUCER_SERVICE_OVERRIDES_JSON",
+        (
+            '{"ingestion_service": {"client.id": "ingestion-writer", '
+            '"request.timeout.ms": 12000, "delivery.timeout.ms": 45000, '
+            '"queue.buffering.max.messages": 5000, '
+            '"queue.buffering.max.kbytes": 32768}}'
+        ),
+    )
+
+    KafkaProducer(bootstrap_servers="mock:9092", service_name="ingestion_service")
+
+    config = MockProducer.call_args[0][0]
+    assert config["client.id"] == "ingestion-writer"
+    assert config["linger.ms"] == 11
+    assert config["batch.num.messages"] == 2222
+    assert config["request.timeout.ms"] == 12000
+    assert config["delivery.timeout.ms"] == 45000
+    assert config["queue.buffering.max.messages"] == 5000
+    assert config["queue.buffering.max.kbytes"] == 32768
+    assert config["enable.idempotence"] is True
+    assert config["acks"] == "all"
+    assert config["max.in.flight.requests.per.connection"] == 5
+
+
+def test_kafka_producer_policy_rejects_invalid_timeout_relationship(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_PRODUCER_REQUEST_TIMEOUT_MS", "30000")
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS", "30000")
+
+    with pytest.raises(RuntimeConfigurationError, match="delivery.timeout.ms"):
+        load_kafka_producer_policy()
+
+
+def test_kafka_producer_policy_strictly_rejects_invalid_batch_size(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_PRODUCER_BATCH_NUM_MESSAGES", "0")
+
+    with pytest.raises(RuntimeConfigurationError, match="BATCH_NUM_MESSAGES"):
+        load_kafka_producer_policy()
+
+
+def test_kafka_producer_policy_rejects_unsupported_override_key(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_PRODUCER_DEFAULTS_JSON",
+        '{"enable.idempotence": false}',
+    )
+
+    with pytest.raises(RuntimeConfigurationError, match="unsupported key"):
+        load_kafka_producer_policy()
 
 
 @patch("portfolio_common.kafka_utils.Producer")
@@ -126,10 +203,12 @@ def test_reset_kafka_producer_clears_singleton(MockProducer):
 
     producer = get_kafka_producer()
     assert producer is get_kafka_producer()
+    service_producer = get_kafka_producer(service_name="valuation_orchestrator_service")
+    assert service_producer is not producer
 
     reset_kafka_producer(timeout=0)
 
-    mock_confluent_producer.flush.assert_called()
+    assert mock_confluent_producer.flush.call_count == 2
     assert get_kafka_producer() is not producer
 
 

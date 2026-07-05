@@ -5,6 +5,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from confluent_kafka import KafkaException, Producer
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
+from .kafka_producer_policy import (
+    DEFAULT_PRODUCER_SERVICE,
+    KafkaProducerPolicy,
+    load_kafka_producer_policy,
+)
 from .logging_utils import operation_log_extra
 
 logger = logging.getLogger(__name__)
@@ -21,9 +26,19 @@ class KafkaProducer:
         already a strong reliability baseline. Transactions can be added later if desired.
     """
 
-    def __init__(self, bootstrap_servers: str = KAFKA_BOOTSTRAP_SERVERS):
+    def __init__(
+        self,
+        bootstrap_servers: str = KAFKA_BOOTSTRAP_SERVERS,
+        *,
+        service_name: str = DEFAULT_PRODUCER_SERVICE,
+        producer_policy: KafkaProducerPolicy | None = None,
+    ):
         self.producer = None
         self.bootstrap_servers = bootstrap_servers
+        self.service_name = service_name
+        self.producer_policy = producer_policy or load_kafka_producer_policy(
+            service_name=service_name
+        )
         self._initialize_producer()
 
     def _initialize_producer(self):
@@ -31,21 +46,13 @@ class KafkaProducer:
             conf = {
                 # Broker connectivity
                 "bootstrap.servers": self.bootstrap_servers,
-                "client.id": "portfolio-analytics-producer",
                 # Reliability
                 "enable.idempotence": True,  # ensure de-dup on broker
                 "acks": "all",
-                "retries": 5,
                 "max.in.flight.requests.per.connection": 5,  # safe with idempotence
-                # Throughput (tune as needed per env)
-                "linger.ms": 5,
-                "batch.num.messages": 1000,
-                "compression.type": "zstd",
-                # Timeouts & keepalive
-                "delivery.timeout.ms": 120000,  # cap end-to-end delivery
-                "request.timeout.ms": 30000,
                 "socket.keepalive.enable": True,
             }
+            conf.update(self.producer_policy.as_confluent_config())
 
             self.producer = Producer(conf)
             broker_count = len([server for server in self.bootstrap_servers.split(",") if server])
@@ -57,6 +64,8 @@ class KafkaProducer:
                     status="succeeded",
                     reason_code="producer_initialized",
                     broker_count=broker_count,
+                    service=self.service_name,
+                    client_id=self.producer_policy.client_id,
                 ),
             )
         except KafkaException as e:
@@ -69,6 +78,7 @@ class KafkaProducer:
                     status="failed",
                     reason_code="producer_initialization_error",
                     error_type=type(e).__name__,
+                    service=self.service_name,
                 ),
             )
             self.producer = None
@@ -166,23 +176,32 @@ class KafkaProducer:
                 self.producer = None
 
 
-_kafka_producer_instance = None
+_kafka_producer_instances: dict[tuple[str, str], KafkaProducer] = {}
 
 
-def get_kafka_producer() -> KafkaProducer:
-    global _kafka_producer_instance
-    if _kafka_producer_instance is None:
-        _kafka_producer_instance = KafkaProducer()
-    return _kafka_producer_instance
+def get_kafka_producer(
+    *,
+    bootstrap_servers: str = KAFKA_BOOTSTRAP_SERVERS,
+    service_name: str = DEFAULT_PRODUCER_SERVICE,
+) -> KafkaProducer:
+    key = (bootstrap_servers, service_name)
+    if key not in _kafka_producer_instances:
+        _kafka_producer_instances[key] = KafkaProducer(
+            bootstrap_servers=bootstrap_servers,
+            service_name=service_name,
+        )
+    return _kafka_producer_instances[key]
 
 
 def reset_kafka_producer(*, timeout: int = 10) -> None:
-    global _kafka_producer_instance
-    if _kafka_producer_instance is not None:
+    global _kafka_producer_instances
+    instances = list(_kafka_producer_instances.values())
+    _kafka_producer_instances = {}
+    for instance in instances:
         try:
-            _kafka_producer_instance.close(timeout=timeout)
-        finally:
-            _kafka_producer_instance = None
+            instance.close(timeout=timeout)
+        except Exception:
+            logger.exception("Kafka producer reset close failed.")
 
 
 def _publish_headers(
