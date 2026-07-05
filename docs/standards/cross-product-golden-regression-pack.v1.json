@@ -1,0 +1,40 @@
+{
+  "schema_version": "lotus-core.cross-product-golden-regression-pack.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#607",
+  "guard_command": "make cross-product-golden-regression-guard",
+  "fixture": "tests/fixtures/cross-product-transaction-golden-scenarios.v1.json",
+  "required_expected_sections": [
+    "position_state",
+    "cash_ledger_impact",
+    "cost_basis_impact",
+    "income_cashflow_impact",
+    "lineage"
+  ],
+  "required_scenarios": [
+    "equity_buy_sell_fee_tax_fx",
+    "cash_deposit_withdrawal_interest_fx_term_deposit_maturity",
+    "equity_dividend_stock_split_return_of_capital_spin_off_merger_rights",
+    "bond_coupon_accrual_partial_sale_maturity_redemption",
+    "fund_subscription_redemption_distribution_reinvestment",
+    "option_exercise_expiry_structured_coupon_barrier_payoff",
+    "transfer_in_out_linked_lots_custody_account_movement",
+    "correction_cancel_rebook_restatement"
+  ],
+  "allowed_statuses": [
+    "implemented",
+    "implemented_with_gaps",
+    "documented_gap"
+  ],
+  "executable_evidence": [
+    "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py",
+    "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
+    "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
+    "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
+    "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py",
+    "tests/unit/libs/portfolio_common/test_ca_bundle_a_reconciliation.py"
+  ],
+  "lowest_meaningful_lane": "unit",
+  "promotion_policy": "Promote only product-critical flows with proven service orchestration risk to E2E; keep calculation and contract golden examples at unit/contract level first.",
+  "sensitive_data_policy": "Fixtures must use SYNTH_* identifiers, explicit currencies, explicit precision, and no natural-person names, account numbers, credentials, or real client identifiers."
+}

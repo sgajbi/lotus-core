@@ -85,6 +85,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make synthetic-fixture-leakage-guard`
 - `make test-lane-governance-guard`
 - `make concurrency-duplicate-delivery-guard`
+- `make cross-product-golden-regression-guard`
 - `make rfc0083-closure-guard`
 
 If one of these fails, the change is not validated, even if a narrow pytest target passed.
@@ -101,3 +102,5 @@ If one of these fails, the change is not validated, even if a narrow pytest targ
 7. prove idempotency, replay/live collision, outbox partial-delivery, and worker recovery races
    with deterministic barriers, database fences, claim tokens, explicit callbacks, and durable
    final-state assertions
+8. keep cross-product golden transaction examples reusable, synthetic, explicit about expected
+   position/cash/cost/income/lineage impact, and honest about product-family gaps

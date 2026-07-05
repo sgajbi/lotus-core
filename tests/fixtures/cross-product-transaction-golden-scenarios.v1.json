@@ -1,0 +1,421 @@
+{
+  "schema_version": "lotus-core.cross-product-transaction-golden-scenarios.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#607",
+  "precision": {
+    "decimal_places": 10,
+    "currency_basis": "trade_currency_and_reporting_currency_explicit"
+  },
+  "scenarios": [
+    {
+      "id": "equity_buy_sell_fee_tax_fx",
+      "product_family": "equity",
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_EQ_BUY_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_001",
+          "quantity": "10",
+          "price": "100",
+          "gross_transaction_amount": "1000",
+          "trade_fee": "12",
+          "tax_amount": "3",
+          "trade_currency": "USD",
+          "reporting_currency": "SGD",
+          "transaction_fx_rate": "1.3500000000",
+          "correlation_id": "corr-golden-eq-buy"
+        },
+        {
+          "transaction_id": "GOLDEN_EQ_SELL_001",
+          "transaction_type": "SELL",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_001",
+          "quantity": "4",
+          "price": "125",
+          "gross_transaction_amount": "500",
+          "trade_fee": "6",
+          "tax_amount": "1",
+          "trade_currency": "USD",
+          "reporting_currency": "SGD",
+          "transaction_fx_rate": "1.3600000000",
+          "correlation_id": "corr-golden-eq-sell"
+        }
+      ],
+      "expected": {
+        "position_state": {
+          "quantity": "6",
+          "cost_basis": "600",
+          "cost_basis_local": "600"
+        },
+        "cash_ledger_impact": {
+          "trade_currency": "USD",
+          "net_cash": "-522",
+          "reporting_currency": "SGD",
+          "net_cash_reporting": "-679.1000000000"
+        },
+        "cost_basis_impact": {
+          "buy_net_cost": "1015",
+          "sell_cost_relief": "-400",
+          "realized_gain_loss": "93"
+        },
+        "income_cashflow_impact": {
+          "classification": "INVESTMENT_FLOW",
+          "amount": "-522"
+        },
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": [
+            "transaction_id",
+            "portfolio_id",
+            "security_id",
+            "correlation_id",
+            "transaction_fx_rate"
+          ]
+        }
+      }
+    },
+    {
+      "id": "cash_deposit_withdrawal_interest_fx_term_deposit_maturity",
+      "product_family": "cash",
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_CASH_DEP_001",
+          "transaction_type": "DEPOSIT",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_CASH_USD",
+          "gross_transaction_amount": "1000",
+          "trade_currency": "USD",
+          "reporting_currency": "SGD",
+          "transaction_fx_rate": "1.3500000000",
+          "correlation_id": "corr-golden-cash-dep"
+        },
+        {
+          "transaction_id": "GOLDEN_CASH_INT_001",
+          "transaction_type": "INTEREST",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_CASH_USD",
+          "gross_transaction_amount": "25",
+          "trade_currency": "USD",
+          "reporting_currency": "SGD",
+          "transaction_fx_rate": "1.3500000000",
+          "correlation_id": "corr-golden-cash-interest"
+        },
+        {
+          "transaction_id": "GOLDEN_TD_MAT_001",
+          "transaction_type": "MATURITY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_TD_USD_001",
+          "gross_transaction_amount": "1000",
+          "trade_currency": "USD",
+          "reporting_currency": "SGD",
+          "transaction_fx_rate": "1.3500000000",
+          "correlation_id": "corr-golden-td-maturity"
+        }
+      ],
+      "expected": {
+        "position_state": {
+          "quantity": "1000",
+          "cost_basis": "1000",
+          "cost_basis_local": "1000"
+        },
+        "cash_ledger_impact": {
+          "trade_currency": "USD",
+          "net_cash": "2025",
+          "reporting_currency": "SGD",
+          "net_cash_reporting": "2733.7500000000"
+        },
+        "cost_basis_impact": {
+          "net_cost": "0",
+          "realized_gain_loss": "0"
+        },
+        "income_cashflow_impact": {
+          "classification": "INCOME",
+          "amount": "25"
+        },
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": [
+            "transaction_id",
+            "portfolio_id",
+            "security_id",
+            "correlation_id"
+          ]
+        }
+      }
+    },
+    {
+      "id": "equity_dividend_stock_split_return_of_capital_spin_off_merger_rights",
+      "product_family": "equity_corporate_action",
+      "status": "implemented_with_gaps",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_DIV_001",
+          "transaction_type": "DIVIDEND",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_001",
+          "gross_transaction_amount": "60",
+          "trade_fee": "2",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-dividend"
+        },
+        {
+          "transaction_id": "GOLDEN_SPIN_OUT_001",
+          "transaction_type": "SPIN_OFF",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_PARENT",
+          "quantity": "10",
+          "net_cost": "-400",
+          "parent_event_reference": "SYNTH_CA_EVENT_001",
+          "linked_transaction_group_id": "SYNTH_CA_GROUP_001",
+          "correlation_id": "corr-golden-spin-out"
+        },
+        {
+          "transaction_id": "GOLDEN_SPIN_IN_001",
+          "transaction_type": "SPIN_IN",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_CHILD",
+          "quantity": "10",
+          "net_cost": "400",
+          "parent_event_reference": "SYNTH_CA_EVENT_001",
+          "linked_transaction_group_id": "SYNTH_CA_GROUP_001",
+          "correlation_id": "corr-golden-spin-in"
+        }
+      ],
+      "expected": {
+        "position_state": {
+          "parent_quantity_delta": "-10",
+          "child_quantity_delta": "10",
+          "cost_basis_transfer": "400"
+        },
+        "cash_ledger_impact": {
+          "trade_currency": "USD",
+          "dividend_cash": "58"
+        },
+        "cost_basis_impact": {
+          "parent_cost_delta": "-400",
+          "child_cost_delta": "400"
+        },
+        "income_cashflow_impact": {
+          "classification": "INCOME",
+          "amount": "58"
+        },
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": [
+            "parent_event_reference",
+            "linked_transaction_group_id",
+            "correlation_id"
+          ]
+        }
+      },
+      "gap_links": [
+        "sgajbi/lotus-core#607"
+      ],
+      "gap_notes": "Stock split, return of capital, full merger, and rights issue need deeper executable calculation coverage beyond current CA bundle A validation/reconciliation."
+    },
+    {
+      "id": "bond_coupon_accrual_partial_sale_maturity_redemption",
+      "product_family": "fixed_income",
+      "status": "implemented_with_gaps",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_BOND_BUY_001",
+          "transaction_type": "BUY",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_BOND_USD_001",
+          "quantity": "100",
+          "price": "99",
+          "gross_transaction_amount": "9900",
+          "accrued_interest_paid_local": "125",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-bond-buy"
+        },
+        {
+          "transaction_id": "GOLDEN_BOND_COUPON_001",
+          "transaction_type": "INTEREST",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_BOND_USD_001",
+          "gross_transaction_amount": "250",
+          "trade_currency": "USD",
+          "correlation_id": "corr-golden-bond-coupon"
+        }
+      ],
+      "expected": {
+        "position_state": {
+          "quantity": "100",
+          "cost_basis": "9900"
+        },
+        "cash_ledger_impact": {
+          "trade_currency": "USD",
+          "net_cash": "-9650"
+        },
+        "cost_basis_impact": {
+          "accrued_interest_offset": "125",
+          "amortization_accretion": "0"
+        },
+        "income_cashflow_impact": {
+          "classification": "INCOME",
+          "amount": "250"
+        },
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": [
+            "transaction_id",
+            "security_id",
+            "correlation_id"
+          ]
+        }
+      },
+      "gap_links": [
+        "sgajbi/lotus-core#607"
+      ],
+      "gap_notes": "Amortization/accretion, partial sale, and maturity/redemption need full executable golden coverage."
+    },
+    {
+      "id": "fund_subscription_redemption_distribution_reinvestment",
+      "product_family": "fund",
+      "status": "documented_gap",
+      "input_events": [],
+      "expected": {
+        "position_state": {
+          "required": "fund units, NAV, reinvested units"
+        },
+        "cash_ledger_impact": {
+          "required": "subscription cash out, redemption cash in, distribution cash or reinvestment"
+        },
+        "cost_basis_impact": {
+          "required": "subscription cost, redemption relief, reinvested distribution cost"
+        },
+        "income_cashflow_impact": {
+          "required": "distribution income and reinvestment classification"
+        },
+        "lineage": {
+          "required_fields": [
+            "transaction_id",
+            "portfolio_id",
+            "security_id",
+            "correlation_id"
+          ]
+        }
+      },
+      "gap_links": [
+        "sgajbi/lotus-core#607"
+      ]
+    },
+    {
+      "id": "option_exercise_expiry_structured_coupon_barrier_payoff",
+      "product_family": "derivative_structured_product",
+      "status": "documented_gap",
+      "input_events": [],
+      "expected": {
+        "position_state": {
+          "required": "exercise delivery, expiry zeroing, payoff-linked quantity state"
+        },
+        "cash_ledger_impact": {
+          "required": "premium, exercise cash, structured payoff cash"
+        },
+        "cost_basis_impact": {
+          "required": "premium cost, exercise transfer, expiry write-off"
+        },
+        "income_cashflow_impact": {
+          "required": "coupon/barrier/payoff classification"
+        },
+        "lineage": {
+          "required_fields": [
+            "transaction_id",
+            "portfolio_id",
+            "security_id",
+            "correlation_id"
+          ]
+        }
+      },
+      "gap_links": [
+        "sgajbi/lotus-core#607"
+      ]
+    },
+    {
+      "id": "transfer_in_out_linked_lots_custody_account_movement",
+      "product_family": "transfer",
+      "status": "implemented",
+      "input_events": [
+        {
+          "transaction_id": "GOLDEN_TRANSFER_IN_001",
+          "transaction_type": "TRANSFER_IN",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_002",
+          "quantity": "2",
+          "net_cost": "20",
+          "linked_transaction_group_id": "SYNTH_TRANSFER_GROUP_001",
+          "correlation_id": "corr-golden-transfer-in"
+        },
+        {
+          "transaction_id": "GOLDEN_TRANSFER_OUT_001",
+          "transaction_type": "TRANSFER_OUT",
+          "portfolio_id": "SYNTH_GOLDEN_PORT_001",
+          "security_id": "SYNTH_EQ_US_002",
+          "quantity": "3",
+          "net_cost": "-15",
+          "linked_transaction_group_id": "SYNTH_TRANSFER_GROUP_001",
+          "correlation_id": "corr-golden-transfer-out"
+        }
+      ],
+      "expected": {
+        "position_state": {
+          "quantity_delta": "-1",
+          "cost_basis_delta": "5"
+        },
+        "cash_ledger_impact": {
+          "trade_currency": "USD",
+          "net_cash": "0"
+        },
+        "cost_basis_impact": {
+          "net_cost": "5"
+        },
+        "income_cashflow_impact": {
+          "classification": "TRANSFER",
+          "amount": "0"
+        },
+        "lineage": {
+          "idempotency_key": "transaction_id",
+          "required_fields": [
+            "linked_transaction_group_id",
+            "correlation_id"
+          ]
+        }
+      }
+    },
+    {
+      "id": "correction_cancel_rebook_restatement",
+      "product_family": "correction",
+      "status": "documented_gap",
+      "input_events": [],
+      "expected": {
+        "position_state": {
+          "required": "reversal and restatement version handling"
+        },
+        "cash_ledger_impact": {
+          "required": "original cash reversal and corrected cash application"
+        },
+        "cost_basis_impact": {
+          "required": "original cost reversal and corrected basis"
+        },
+        "income_cashflow_impact": {
+          "required": "original income reversal and corrected classification"
+        },
+        "lineage": {
+          "required_fields": [
+            "original_transaction_id",
+            "restatement_version",
+            "correlation_id"
+          ]
+        }
+      },
+      "gap_links": [
+        "sgajbi/lotus-core#607"
+      ]
+    }
+  ]
+}
