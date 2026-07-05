@@ -3,15 +3,13 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import Any, Awaitable, Callable, List
 
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
-    REPROCESSING_ACTIVE_KEYS_TOTAL,
-    observe_reprocessing_stale_skips,
     observe_valuation_scheduler_budget_exhausted,
     observe_valuation_scheduler_jobs_claimed,
     observe_valuation_scheduler_poll_duration,
@@ -38,6 +36,7 @@ from .valuation_job_publisher import (
     ValuationJobPublishError,
     get_valuation_job_publisher,
 )
+from .valuation_watermark_advancer import ValuationWatermarkAdvancer
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +55,7 @@ class ValuationScheduler:
         valuation_job_publisher: ValuationJobPublisher | None = None,
         valuation_job_dispatcher: ValuationJobDispatcher | None = None,
         valuation_backfill_planner: ValuationBackfillPlanner | None = None,
+        valuation_watermark_advancer: ValuationWatermarkAdvancer | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -93,6 +93,11 @@ class ValuationScheduler:
             else ValuationBackfillPlanner(
                 backfill_upsert_chunk_size=self._backfill_upsert_chunk_size
             )
+        )
+        self._valuation_watermark_advancer = (
+            valuation_watermark_advancer
+            if valuation_watermark_advancer is not None
+            else ValuationWatermarkAdvancer(batch_size=self._batch_size)
         )
 
     def stop(self):
@@ -174,160 +179,6 @@ class ValuationScheduler:
             ),
         )
 
-    def _build_terminal_reprocessing_updates(self, states) -> List[Dict[str, Any]]:
-        return [
-            {
-                "portfolio_id": state.portfolio_id,
-                "security_id": state.security_id,
-                "expected_epoch": state.epoch,
-                "watermark_date": state.watermark_date,
-                "status": "CURRENT",
-            }
-            for state in states
-        ]
-
-    def _build_watermark_advance_updates(
-        self,
-        states,
-        advancable_dates: Dict[tuple[str, str], Any],
-        latest_business_date,
-    ) -> List[Dict[str, Any]]:
-        updates_to_commit: List[Dict[str, Any]] = []
-        for state in states:
-            key = (state.portfolio_id, state.security_id)
-            new_watermark = advancable_dates.get(key)
-
-            if new_watermark and new_watermark > state.watermark_date:
-                is_complete = new_watermark == latest_business_date
-                updates_to_commit.append(
-                    {
-                        "portfolio_id": state.portfolio_id,
-                        "security_id": state.security_id,
-                        "expected_epoch": state.epoch,
-                        "watermark_date": new_watermark,
-                        "status": "CURRENT" if is_complete else state.status,
-                    }
-                )
-        return updates_to_commit
-
-    async def _bulk_update_watermark_states(
-        self,
-        position_state_repo: PositionStateRepository,
-        updates: List[Dict[str, Any]],
-        *,
-        stale_skip_reason: str,
-        warning_message: str,
-        success_message: str,
-        success_extra_key: str,
-    ) -> int:
-        if not updates:
-            return 0
-
-        updated_count = int(await position_state_repo.bulk_update_states(updates))
-        stale_skipped_count = len(updates) - updated_count
-
-        if stale_skipped_count:
-            observe_reprocessing_stale_skips(stale_skip_reason, stale_skipped_count)
-            logger.warning(
-                warning_message,
-                extra=operation_log_extra(
-                    event_name="valuation.scheduler.watermark_bulk_update_partial",
-                    operation="valuation.scheduler.advance_watermarks",
-                    status="partial",
-                    reason_code=stale_skip_reason,
-                    prepared_count=len(updates),
-                    updated_count=updated_count,
-                    stale_skipped_count=stale_skipped_count,
-                ),
-            )
-        elif updated_count:
-            logger.info(
-                success_message,
-                extra=operation_log_extra(
-                    event_name="valuation.scheduler.watermark_bulk_update_completed",
-                    operation="valuation.scheduler.advance_watermarks",
-                    status="succeeded",
-                    reason_code="watermark_update_completed",
-                    **{success_extra_key: updated_count},
-                ),
-            )
-
-        return updated_count
-
-    async def _normalize_terminal_reprocessing_states(
-        self,
-        position_state_repo: PositionStateRepository,
-        terminal_reprocessing_states,
-    ) -> None:
-        terminal_updates = self._build_terminal_reprocessing_updates(terminal_reprocessing_states)
-        await self._bulk_update_watermark_states(
-            position_state_repo,
-            terminal_updates,
-            stale_skip_reason="terminal_reprocessing_normalization",
-            warning_message=(
-                "ValuationScheduler normalized fewer terminal reprocessing states than "
-                "prepared updates."
-            ),
-            success_message="ValuationScheduler normalized terminal reprocessing states.",
-            success_extra_key="normalized_count",
-        )
-
-    async def _advance_lagging_watermark_states(
-        self,
-        repo: ValuationRepository,
-        position_state_repo: PositionStateRepository,
-        *,
-        lagging_states,
-        first_open_dates,
-        latest_business_date,
-    ) -> None:
-        advancable_dates = await repo.find_contiguous_snapshot_dates(
-            lagging_states, first_open_dates
-        )
-        updates_to_commit = self._build_watermark_advance_updates(
-            lagging_states,
-            advancable_dates,
-            latest_business_date,
-        )
-        await self._bulk_update_watermark_states(
-            position_state_repo,
-            updates_to_commit,
-            stale_skip_reason="watermark_advance",
-            warning_message="ValuationScheduler advanced fewer watermarks than prepared updates.",
-            success_message="ValuationScheduler advanced watermarks.",
-            success_extra_key="updated_count",
-        )
-
-    async def _load_watermark_advance_inputs(
-        self, repo: ValuationRepository
-    ) -> tuple[Any, list[Any], list[Any], Dict[tuple[str, str, int], Any]] | None:
-        latest_business_date = await repo.get_latest_business_date()
-        if not latest_business_date:
-            return None
-
-        lagging_states = await repo.get_lagging_states(latest_business_date, self._batch_size)
-        terminal_reprocessing_states = await repo.get_terminal_reprocessing_states(
-            latest_business_date, self._batch_size
-        )
-        lagging_keys = [(s.portfolio_id, s.security_id, s.epoch) for s in lagging_states]
-        first_open_dates = await repo.get_first_open_dates_for_keys(lagging_keys)
-        return (
-            latest_business_date,
-            lagging_states,
-            terminal_reprocessing_states,
-            first_open_dates,
-        )
-
-    def _observe_reprocessing_active_keys(
-        self,
-        lagging_states,
-        terminal_reprocessing_states,
-    ) -> None:
-        reprocessing_count = sum(1 for s in lagging_states if s.status == "REPROCESSING") + len(
-            terminal_reprocessing_states
-        )
-        REPROCESSING_ACTIVE_KEYS_TOTAL.set(reprocessing_count)
-
     async def _advance_watermarks(self, db):
         """
         Checks all lagging keys, finds how far their snapshots are contiguous,
@@ -335,33 +186,10 @@ class ValuationScheduler:
         """
         repo = ValuationRepository(db)
         position_state_repo = PositionStateRepository(db)
-
-        inputs = await self._load_watermark_advance_inputs(repo)
-        if inputs is None:
-            return
-        (
-            latest_business_date,
-            lagging_states,
-            terminal_reprocessing_states,
-            first_open_dates,
-        ) = inputs
-        self._observe_reprocessing_active_keys(
-            lagging_states,
-            terminal_reprocessing_states,
+        await self._valuation_watermark_advancer.advance_watermarks(
+            repo=repo,
+            position_state_repo=position_state_repo,
         )
-
-        await self._normalize_terminal_reprocessing_states(
-            position_state_repo, terminal_reprocessing_states
-        )
-
-        if lagging_states:
-            await self._advance_lagging_watermark_states(
-                repo,
-                position_state_repo,
-                lagging_states=lagging_states,
-                first_open_dates=first_open_dates,
-                latest_business_date=latest_business_date,
-            )
 
     async def _create_backfill_jobs(self, db):
         """
