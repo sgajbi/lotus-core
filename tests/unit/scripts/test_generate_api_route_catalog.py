@@ -26,7 +26,10 @@ def _openapi_fixture() -> dict:
                                 "content": {
                                     "application/json": {
                                         "schema": {
-                                            "$ref": "#/components/schemas/BatchIngestionAcceptedResponse"
+                                            "$ref": (
+                                                "#/components/schemas/"
+                                                "BatchIngestionAcceptedResponse"
+                                            )
                                         }
                                     }
                                 },

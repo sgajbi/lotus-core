@@ -6,8 +6,8 @@ from typing import Any
 
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
-from portfolio_common.runtime_providers import Clock, SystemClock
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.runtime_providers import Clock, SystemClock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.core_snapshot import (

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import re
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -484,7 +484,9 @@ def run_guard(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate critical-path coverage contract and write changed-code coverage report."
+        description=(
+            "Validate critical-path coverage contract and write changed-code coverage report."
+        )
     )
     parser.add_argument("--contract", type=Path, default=CONTRACT_PATH)
     parser.add_argument("--coverage-json", type=Path)
@@ -502,7 +504,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--contract-only",
         action="store_true",
-        help="Validate the contract and write a report without enforcing measured coverage thresholds.",
+        help=(
+            "Validate the contract and write a report without enforcing measured "
+            "coverage thresholds."
+        ),
     )
     return parser.parse_args()
 

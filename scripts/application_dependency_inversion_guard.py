@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 FORBIDDEN_DEPENDENCY_SNIPPETS = {
     Path("src/services/ingestion_service/app/services/ingestion_job_service.py"): {
         "from sqlalchemy.ext.asyncio import AsyncSession": (

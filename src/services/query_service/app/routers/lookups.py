@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 
-from ..dependencies import get_lookup_catalog_service
 from ..application.lookup_catalog import (
     CurrencyLookupQuery,
     InstrumentLookupQuery,
     PortfolioLookupQuery,
 )
+from ..dependencies import get_lookup_catalog_service
 from ..dtos.lookup_dto import LookupResponse
 from ..services.lookup_catalog_service import LookupCatalogService
 from .lookup_mappers import lookup_response_from_result

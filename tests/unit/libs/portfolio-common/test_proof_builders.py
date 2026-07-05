@@ -15,7 +15,6 @@ from portfolio_common.proof_builders import (
     build_source_data_supportability_proof,
 )
 
-
 GENERATED_AT = datetime(2026, 7, 5, 10, 15, tzinfo=UTC)
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 WORKFLOW_POLICY_MODULE = Path("src/services/ingestion_service/app/application/workflow_policies.py")
 INGESTION_JOB_SERVICE = Path("src/services/ingestion_service/app/services/ingestion_job_service.py")
 REQUIRED_POLICY_SYMBOLS = (

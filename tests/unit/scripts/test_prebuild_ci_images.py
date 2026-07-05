@@ -1,8 +1,7 @@
 from argparse import Namespace
 from pathlib import Path
 
-from scripts.prebuild_ci_images import main
-from scripts.prebuild_ci_images import provenance_build_args
+from scripts.prebuild_ci_images import main, provenance_build_args
 
 
 def test_prebuild_group_expands_to_named_services(

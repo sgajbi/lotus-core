@@ -166,7 +166,10 @@ def _validate_record(
             RuntimeBoundaryDecisionFinding(
                 path=service_path,
                 rule="baseline-service-status-mismatch",
-                detail="baseline current-state services should stay revalidation-required until reviewed",
+                detail=(
+                    "baseline current-state services should stay "
+                    "revalidation-required until reviewed"
+                ),
             )
         )
     for field_name in (

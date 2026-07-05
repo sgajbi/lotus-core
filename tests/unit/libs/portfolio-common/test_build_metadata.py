@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from portfolio_common.build_metadata import (
     BUILD_METADATA_RESPONSE_FIELDS,
     MAX_METADATA_VALUE_LENGTH,

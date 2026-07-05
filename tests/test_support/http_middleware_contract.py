@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 from fastapi import FastAPI
-
 from portfolio_common.http_app_bootstrap import SECURE_RESPONSE_HEADERS
 
 TRACEPARENT_PATTERN = re.compile(r"^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$")

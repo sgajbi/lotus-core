@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 REQUIRED_MODULE_SYMBOLS = {
     Path("src/services/ingestion_service/app/application/upload_commands.py"): (
         "class UploadPreviewCommand",

@@ -77,8 +77,8 @@ def _write_required_artifacts(root: Path) -> None:
         "def pipeline_outbox_event_payload(): pass\noutbox_event_payload\n",
     )
     _write(
-        root
-        / "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py",
+        root / "src/services/pipeline_orchestrator_service/app/services/"
+        "pipeline_orchestrator_service.py",
         "pipeline_outbox_event_payload\n",
     )
     _write(
@@ -169,8 +169,8 @@ def test_mapping_anti_corruption_guard_rejects_inline_pipeline_outbox_dump(
 ) -> None:
     _write_required_artifacts(tmp_path)
     _write(
-        tmp_path
-        / "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py",
+        tmp_path / "src/services/pipeline_orchestrator_service/app/services/"
+        "pipeline_orchestrator_service.py",
         "pipeline_outbox_event_payload\npayload = outbox_event_payload(event)\n",
     )
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-
 APPLICATION_PACKAGE_GLOBS = (
     "src/services/*/app/application",
     "src/services/*/app/use_cases",

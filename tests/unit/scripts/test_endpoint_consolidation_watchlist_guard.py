@@ -3,8 +3,7 @@ from pathlib import Path
 import pytest
 
 from scripts import endpoint_consolidation_watchlist_guard as guard
-from scripts import route_contract_family_guard
-from scripts import source_data_product_contract_guard
+from scripts import route_contract_family_guard, source_data_product_contract_guard
 
 
 def _route(

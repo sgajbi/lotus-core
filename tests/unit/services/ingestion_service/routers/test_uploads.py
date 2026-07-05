@@ -10,9 +10,9 @@ from src.services.ingestion_service.app.application.upload_commands import (
     UploadRowIssue,
 )
 from src.services.ingestion_service.app.routers.uploads import (
+    upload_application_error_to_http,
     upload_commit_command_from_api,
     upload_commit_response_from_result,
-    upload_application_error_to_http,
     upload_preview_command_from_api,
     upload_preview_response_from_result,
 )

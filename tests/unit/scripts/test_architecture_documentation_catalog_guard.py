@@ -115,7 +115,10 @@ def _write_required_files(tmp_path: Path) -> None:
         _write(tmp_path / path, "{}\n" if path.endswith(".json") else "# Doc\n")
     _write(
         tmp_path / "docs/architecture/README.md",
-        "# Index\n\ncurrent-state-architecture-map.md architecture-documentation-catalog.v1.json current-state truth review evidence historical context\n",
+        "# Index\n\n"
+        "current-state-architecture-map.md "
+        "architecture-documentation-catalog.v1.json current-state truth "
+        "review evidence historical context\n",
     )
     _write(
         tmp_path / "docs/architecture/current-state-architecture-map.md",
@@ -124,7 +127,8 @@ def _write_required_files(tmp_path: Path) -> None:
 
 portfolio/account transaction booking positions valuation cashflow cost source-data products
 ingestion/replay reconciliation operations/supportability security/audit platform runtime support
-event/outbox flow database ownership dependency direction downstream consumers prohibited responsibilities
+event/outbox flow database ownership dependency direction downstream consumers
+prohibited responsibilities
 route-contract-family-registry.json RFC-0082-contract-family-inventory.md
 RFC-0083-source-data-product-catalog.md RFC-0083-eventing-supportability-target-model.md
 docs/operations-runbook.md wiki/API-Surface.md CODEBASE-REVIEW-LEDGER.md CR-1330 CR-1331

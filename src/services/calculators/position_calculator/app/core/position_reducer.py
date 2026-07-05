@@ -10,7 +10,6 @@ from portfolio_common.transaction_domain.control_code_normalization import (
     normalize_transaction_control_code,
 )
 
-
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
 CASH_POSITION_DELTA_TRANSACTION_TYPES = (
