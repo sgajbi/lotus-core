@@ -1534,6 +1534,9 @@ Most relevant current governance:
      Core snapshot governance mapping belongs in `core_snapshot_governance.py`; do not re-add
      request policy provenance, applied/dropped section, or inline-default governance mapping to the
      broad service.
+     Core snapshot request identity and fingerprint construction belongs in
+     `core_snapshot_identity.py`; do not re-add canonical request payload or governance-sensitive
+     fingerprint payload assembly to the broad service.
 
 ## Context Maintenance Rule
 
