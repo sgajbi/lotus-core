@@ -36,25 +36,28 @@ transaction domain data in the Lotus ecosystem.
    runtime split is considered; see `docs/standards/proof-builder-pattern-standard.md`.
 10. API adapters use bounded mapper modules for DTO-to-command, application-result-to-response, and
    typed error-to-HTTP translation; see `docs/standards/api-mapper-pattern-standard.md`.
-11. Application workflows use runtime provider ports for current time, monotonic elapsed duration,
+11. Boundary anti-corruption across API DTOs, Kafka payloads, persistence records, repository read
+   records, and source-data envelopes is explicit and representative-gated; see
+   `docs/architecture/mapping-anti-corruption-boundary.md`.
+12. Application workflows use runtime provider ports for current time, monotonic elapsed duration,
    TTL decisions, and generated IDs; see `docs/standards/runtime-provider-port-standard.md`.
-12. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
+13. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
    providers and HTTP policy translation live in `app/dependencies.py`; see
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
-13. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
+14. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
    publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
-14. Transaction replay stays split across pure replay planning, reader ports, and publisher
+15. Transaction replay stays split across pure replay planning, reader ports, and publisher
    adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
-15. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
+16. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
    adapters, and pure dispatch planning; see
    `docs/standards/aggregation-scheduler-boundary-standard.md`.
-16. Position calculation rules and backdated replay decisions stay pure and separate from
+17. Position calculation rules and backdated replay decisions stay pure and separate from
    persistence, outbox, metrics, and epoch-fencing orchestration; see
    `docs/standards/position-reducer-boundary-standard.md`.
-17. Repositories own persistence access.
-18. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+18. Repositories own persistence access.
+19. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-19. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+20. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
