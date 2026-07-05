@@ -21,6 +21,7 @@ from ..services.ingestion_service import (
 )
 from .job_bookkeeping import mark_job_queued_after_publish_or_raise
 from .publish_errors import (
+    ingestion_conflict_response_with_idempotency_example,
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
     raise_ingestion_publish_unavailable,
@@ -58,10 +59,13 @@ REPROCESSING_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     status_code=status.HTTP_202_ACCEPTED,
     response_model=BatchIngestionAcceptedResponse,
     responses={
-        status.HTTP_409_CONFLICT: {
-            "description": "Reprocessing publication is currently blocked by policy controls.",
-            "content": {"application/json": {"example": REPROCESSING_BLOCKED_EXAMPLE}},
-        },
+        status.HTTP_409_CONFLICT: ingestion_conflict_response_with_idempotency_example(
+            description=(
+                "Reprocessing publication is blocked by policy controls or the idempotency key "
+                "was reused with a different canonical request payload."
+            ),
+            policy_blocked_example=REPROCESSING_BLOCKED_EXAMPLE,
+        ),
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the reprocessing request.",
             "content": {"application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}},

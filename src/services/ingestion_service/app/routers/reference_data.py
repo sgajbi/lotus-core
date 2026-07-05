@@ -41,6 +41,7 @@ from ..services.reference_data_ingestion_service import (
     ReferenceDataIngestionService,
 )
 from .job_bookkeeping import mark_job_queued_after_publish_or_raise
+from .publish_errors import ingestion_idempotency_conflict_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -150,6 +151,7 @@ async def _handle_reference_ingestion(
 
 
 REFERENCE_INGESTION_RESPONSES = {
+    status.HTTP_409_CONFLICT: ingestion_idempotency_conflict_response(),
     status.HTTP_429_TOO_MANY_REQUESTS: {
         "description": "Write-rate protection blocked the reference-data request.",
         "content": {"application/json": {"example": REFERENCE_RATE_LIMIT_EXCEEDED_EXAMPLE}},

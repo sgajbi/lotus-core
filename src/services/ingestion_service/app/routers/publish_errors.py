@@ -10,6 +10,16 @@ from ..services.ingestion_service import IngestionPublishError
 INGESTION_PUBLISH_RETRY_AFTER_SECONDS = 30
 INGESTION_PUBLISH_FAILED_CODE = "INGESTION_PUBLISH_FAILED"
 INGESTION_PUBLISH_DEPENDENCY = "kafka"
+INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+        "message": (
+            "Ingestion idempotency key was reused for the same endpoint with a different payload."
+        ),
+        "endpoint": "/ingest/transactions",
+        "idempotency_key": "ingestion-transactions-batch-20260301-001",
+    }
+}
 
 
 def ingestion_publish_failed_detail(
@@ -90,6 +100,40 @@ def ingestion_unavailable_response(
                     "publish_failed": {
                         "summary": "Kafka publish dependency failed.",
                         "value": publish_failed_example,
+                    },
+                }
+            }
+        },
+    }
+
+
+def ingestion_idempotency_conflict_response() -> dict[str, object]:
+    return {
+        "description": (
+            "Idempotency key was reused for the same endpoint with a different canonical "
+            "request payload."
+        ),
+        "content": {"application/json": {"example": INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE}},
+    }
+
+
+def ingestion_conflict_response_with_idempotency_example(
+    *,
+    description: str,
+    policy_blocked_example: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "description": description,
+        "content": {
+            "application/json": {
+                "examples": {
+                    "policy_blocked": {
+                        "summary": "Policy controls blocked the command.",
+                        "value": policy_blocked_example,
+                    },
+                    "idempotency_conflict": {
+                        "summary": "Idempotency key payload conflict.",
+                        "value": INGESTION_IDEMPOTENCY_CONFLICT_EXAMPLE,
                     },
                 }
             }

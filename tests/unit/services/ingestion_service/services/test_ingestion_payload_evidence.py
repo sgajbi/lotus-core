@@ -42,12 +42,16 @@ class _FakeBegin:
 class _FakeCreateSession:
     def __init__(self):
         self.added_rows = []
+        self.lock_calls = []
 
     def begin(self):
         return _FakeBegin()
 
     def add(self, row):
         self.added_rows.append(row)
+
+    async def execute(self, stmt, params=None):
+        self.lock_calls.append((str(stmt), params))
 
     async def flush(self):
         row = self.added_rows[-1]
@@ -62,12 +66,16 @@ class _FakeExistingSession:
     def __init__(self, existing):
         self.existing = existing
         self.added_rows = []
+        self.lock_calls = []
 
     def begin(self):
         return _FakeBegin()
 
     async def scalar(self, _stmt):
         return self.existing
+
+    async def execute(self, stmt, params=None):
+        self.lock_calls.append((str(stmt), params))
 
     def add(self, row):
         self.added_rows.append(row)
@@ -77,12 +85,13 @@ def _existing_job(
     *,
     request_payload: dict,
     request_payload_fingerprint: str | None = None,
+    status: str = "accepted",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         job_id="job_existing",
         endpoint="/ingest/transactions",
         entity_type="transaction",
-        status="accepted",
+        status=status,
         accepted_count=1,
         idempotency_key="idem_1",
         correlation_id="corr_existing",
@@ -179,6 +188,7 @@ async def test_create_or_get_job_persists_source_safe_request_payload():
     assert session.added_rows[0].request_payload_fingerprint == ingestion_payload_fingerprint(
         payload
     )
+    assert session.lock_calls == []
     assert payload["transactions"][0]["authorization"] == "Bearer secret-token"
 
 
@@ -207,6 +217,42 @@ async def test_create_or_get_job_replays_same_idempotency_key_and_same_payload()
 
     assert result.created is False
     assert result.job.job_id == "job_existing"
+    assert session.lock_calls == [
+        (
+            "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
+            {"lock_key": "/ingest/transactions|idem_1"},
+        )
+    ]
+    assert session.added_rows == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["accepted", "queued", "failed"])
+async def test_create_or_get_job_replays_existing_lifecycle_statuses(status: str):
+    payload = {"transactions": [{"transaction_id": "T1", "amount": "10"}]}
+    session = _FakeExistingSession(
+        _existing_job(
+            request_payload=source_safe_request_payload(payload),
+            request_payload_fingerprint=ingestion_payload_fingerprint(payload),
+            status=status,
+        )
+    )
+
+    result = await create_or_get_job_result(
+        job_id="job_new",
+        endpoint="/ingest/transactions",
+        entity_type="transaction",
+        accepted_count=1,
+        idempotency_key="idem_1",
+        correlation_id="corr_1",
+        request_id="req_1",
+        trace_id="trace_1",
+        request_payload=payload,
+        session_factory=lambda: _SingleSessionAsyncIterable(session),
+    )
+
+    assert result.created is False
+    assert result.job.status == status
     assert session.added_rows == []
 
 
@@ -236,6 +282,12 @@ async def test_create_or_get_job_rejects_same_idempotency_key_with_different_pay
 
     assert exc_info.value.endpoint == "/ingest/transactions"
     assert exc_info.value.idempotency_key == "idem_1"
+    assert session.lock_calls == [
+        (
+            "SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))",
+            {"lock_key": "/ingest/transactions|idem_1"},
+        )
+    ]
     assert session.added_rows == []
 
 

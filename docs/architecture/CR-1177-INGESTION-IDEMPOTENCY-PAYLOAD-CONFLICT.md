@@ -41,11 +41,11 @@ the first job.
 ## Documentation And Wiki Decision
 
 Updated this ledger entry, the quality scorecard/health report, and repo-local Ingestion Service
-wiki source. Route-level OpenAPI response metadata is intentionally left as follow-up because every
-ingestion route needs the same 409 response contract added consistently.
+wiki source. CR-1380 completes the route-level OpenAPI response metadata, concurrent keyed-create
+guard, lifecycle replay policy tests, and diagnostics classification.
 
 ## Follow-Up
 
-Issue #554 remains open pending PR, GitHub CI, QA evidence, route-level OpenAPI 409 documentation,
-schema-backed payload fingerprints, and broader lifecycle policy for in-progress, completed,
-failed, concurrent, and retained/expired idempotency records.
+Issue #554 remains open pending PR, GitHub CI, QA evidence, merge to `main`, and post-merge closure.
+Retention/expiry policy remains a future operational policy slice because no expiry mechanism is
+implemented today.

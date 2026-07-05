@@ -896,7 +896,13 @@ Most relevant current governance:
     runtime wiring may use SQLAlchemy-backed adapters, but `IngestionJobService` must call the
     ports for job creation/idempotency and replay audit workflows. `make architecture-guard` now
     runs `scripts/ingestion_store_port_guard.py`; keep it green when adding diagnostics, DLQ event,
-    ops-control, unit-of-work, or publisher ports.
+    ops-control, unit-of-work, or publisher ports. Ingestion job idempotency is endpoint plus
+    `X-Idempotency-Key` plus canonical request payload fingerprint: keyed create/replay must
+    acquire the transaction-scoped database lock before lookup/create, same payload replays the
+    existing job across accepted/queued/failed states, different payload returns
+    `409 INGESTION_IDEMPOTENCY_CONFLICT`, OpenAPI must expose the shared 409 response on every
+    job-backed ingestion route, and diagnostics must classify same-endpoint payload conflicts
+    separately from cross-endpoint key reuse.
 64. Application event publishing must use `portfolio_common.event_publisher` ports rather than
     concrete Kafka producer APIs. `EventPublishRequest` carries topic, key, payload, headers,
     outbox id, and delivery callback metadata. `EventPublishResult` reports `success`,

@@ -13,7 +13,7 @@ from portfolio_common.monitoring import (
     INGESTION_JOBS_FAILED_TOTAL,
     INGESTION_JOBS_RETRIED_TOTAL,
 )
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, desc, func, select, text, update
 
 from ..domain.ingestion_job_lifecycle_policy import (
     IngestionJobStatus,
@@ -103,6 +103,11 @@ async def create_or_get_job_result(
     async for db in session_factory():
         async with db.begin():
             if idempotency_key:
+                await _acquire_idempotency_key_lock(
+                    db,
+                    endpoint=endpoint,
+                    idempotency_key=idempotency_key,
+                )
                 existing = await db.scalar(
                     select(DBIngestionJob)
                     .where(
@@ -153,6 +158,13 @@ async def create_or_get_job_result(
 
     msg = "Unable to create ingestion job due to unavailable database session."
     raise RuntimeError(msg)
+
+
+async def _acquire_idempotency_key_lock(db, *, endpoint: str, idempotency_key: str) -> None:
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+        {"lock_key": f"{endpoint}|{idempotency_key}"},
+    )
 
 
 async def mark_job_queued(
