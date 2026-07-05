@@ -1502,11 +1502,14 @@ Most relevant current governance:
      `ValuationWatermarkAdvancer` now owns latest-date input loading, lagging and terminal
      reprocessing reads, first-open-date support lookups, active reprocessing gauges, terminal
      normalization, contiguous snapshot lookup, epoch-fenced watermark update construction, and
-     stale-skip warnings/metrics. Keep publisher/Kafka flush logic, backfill planning, and
-     watermark policy out of `ValuationScheduler`; remaining scheduler slices should continue
-     extracting loop cadence, instrument reprocessing coordination, stale reset, and DB
-     session/repository factory ownership into separately testable collaborators before issue #545
-     is marked fixed-local.
+     stale-skip warnings/metrics. `InstrumentReprocessingCoordinator` now owns pending trigger
+     metrics, bounded instrument trigger claiming, durable `RESET_WATERMARKS` replay-job creation,
+     trigger correlation propagation, and trigger consume logging. Keep publisher/Kafka flush
+     logic, backfill planning, watermark policy, and instrument trigger coordination out of
+     `ValuationScheduler`; remaining scheduler slices should continue extracting loop cadence,
+     stale reset, claimed-job dispatch orchestration/recovery ownership, and DB session/repository
+     factory ownership into separately testable collaborators before issue #545 is marked
+     fixed-local.
 
 ## Context Maintenance Rule
 

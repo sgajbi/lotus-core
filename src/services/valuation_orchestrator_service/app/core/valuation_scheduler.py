@@ -9,7 +9,6 @@ from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
-    INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
     observe_valuation_scheduler_budget_exhausted,
     observe_valuation_scheduler_jobs_claimed,
     observe_valuation_scheduler_poll_duration,
@@ -29,6 +28,7 @@ from portfolio_common.valuation_job_repository import ValuationJobRepository
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
+from .instrument_reprocessing_coordinator import InstrumentReprocessingCoordinator
 from .valuation_backfill_planner import ValuationBackfillPlanner
 from .valuation_job_dispatcher import ValuationJobDispatcher
 from .valuation_job_publisher import (
@@ -56,6 +56,7 @@ class ValuationScheduler:
         valuation_job_dispatcher: ValuationJobDispatcher | None = None,
         valuation_backfill_planner: ValuationBackfillPlanner | None = None,
         valuation_watermark_advancer: ValuationWatermarkAdvancer | None = None,
+        instrument_reprocessing_coordinator: InstrumentReprocessingCoordinator | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -99,6 +100,11 @@ class ValuationScheduler:
             if valuation_watermark_advancer is not None
             else ValuationWatermarkAdvancer(batch_size=self._batch_size)
         )
+        self._instrument_reprocessing_coordinator = (
+            instrument_reprocessing_coordinator
+            if instrument_reprocessing_coordinator is not None
+            else InstrumentReprocessingCoordinator(batch_size=self._batch_size)
+        )
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
@@ -117,8 +123,7 @@ class ValuationScheduler:
     async def _update_reprocessing_metrics(self, db):
         """Queries for and sets key gauges related to reprocessing workload."""
         repo = ValuationRepository(db)
-        pending_triggers = await repo.get_instrument_reprocessing_triggers_count()
-        INSTRUMENT_REPROCESSING_TRIGGERS_PENDING.set(pending_triggers)
+        await self._instrument_reprocessing_coordinator.update_reprocessing_metrics(repo=repo)
 
     async def _update_queue_metrics(self, db):
         repo = ValuationRepository(db)
@@ -141,42 +146,9 @@ class ValuationScheduler:
         """
         repo = ValuationRepository(db)
         repro_job_repo = ReprocessingJobRepository(db)
-
-        triggers = await repo.claim_instrument_reprocessing_triggers(self._batch_size)
-        if not triggers:
-            return
-
-        logger.info(
-            "Instrument-level reprocessing triggers claimed.",
-            extra=operation_log_extra(
-                event_name="valuation.scheduler.instrument_triggers_claimed",
-                operation="valuation.scheduler.process_instrument_triggers",
-                status="started",
-                reason_code="triggers_claimed",
-                trigger_count=len(triggers),
-            ),
-        )
-
-        for trigger in triggers:
-            payload = {
-                "security_id": trigger.security_id,
-                "earliest_impacted_date": trigger.earliest_impacted_date.isoformat(),
-            }
-            await repro_job_repo.create_job(
-                job_type="RESET_WATERMARKS",
-                payload=payload,
-                correlation_id=trigger.correlation_id,
-            )
-        logger.info(
-            "Consumed %s instrument-level triggers into durable replay jobs.",
-            len(triggers),
-            extra=operation_log_extra(
-                event_name="valuation.scheduler.instrument_triggers_consumed",
-                operation="valuation.scheduler.process_instrument_triggers",
-                status="succeeded",
-                reason_code="jobs_created",
-                trigger_count=len(triggers),
-            ),
+        await self._instrument_reprocessing_coordinator.process_instrument_level_triggers(
+            repo=repo,
+            reprocessing_job_repo=repro_job_repo,
         )
 
     async def _advance_watermarks(self, db):
