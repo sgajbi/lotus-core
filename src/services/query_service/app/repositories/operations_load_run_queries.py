@@ -233,6 +233,24 @@ def load_run_progress_scalar_statements(
     )
 
 
+def load_run_progress_scalar_row_statement(
+    *,
+    portfolio_pattern: str,
+    transaction_pattern: str,
+    business_date: date,
+    as_of: datetime | None,
+    has_superseding_valuation_epoch,
+):
+    scalar_statements = load_run_progress_scalar_statements(
+        portfolio_pattern=portfolio_pattern,
+        transaction_pattern=transaction_pattern,
+        business_date=business_date,
+        as_of=as_of,
+        has_superseding_valuation_epoch=has_superseding_valuation_epoch,
+    )
+    return select(*(statement.scalar_subquery() for statement in scalar_statements))
+
+
 def load_run_progress_execute_statements(
     *,
     portfolio_pattern: str,

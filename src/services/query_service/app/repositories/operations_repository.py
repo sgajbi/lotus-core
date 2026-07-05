@@ -46,7 +46,7 @@ from .operations_lineage_queries import (
 )
 from .operations_load_run_queries import (
     load_run_progress_execute_statements,
-    load_run_progress_scalar_statements,
+    load_run_progress_scalar_row_statement,
     load_run_progress_summary_from_rows,
 )
 from .operations_missing_fx_queries import (
@@ -186,7 +186,7 @@ class OperationsRepository:
     ) -> LoadRunProgressSummary:
         portfolio_pattern = f"LOAD_{run_id}_PF_%"
         transaction_pattern = f"LOAD_{run_id}_TX_%"
-        scalar_statements = load_run_progress_scalar_statements(
+        scalar_row_statement = load_run_progress_scalar_row_statement(
             portfolio_pattern=portfolio_pattern,
             transaction_pattern=transaction_pattern,
             business_date=business_date,
@@ -200,7 +200,7 @@ class OperationsRepository:
             has_superseding_valuation_epoch=has_superseding_valuation_epoch(as_of=as_of),
         )
 
-        scalar_values = [await self.db.scalar(stmt) for stmt in scalar_statements]
+        scalar_values = (await self.db.execute(scalar_row_statement)).one()
         execute_rows = [(await self.db.execute(stmt)).one() for stmt in execute_statements]
         return load_run_progress_summary_from_rows(
             scalar_values=scalar_values,

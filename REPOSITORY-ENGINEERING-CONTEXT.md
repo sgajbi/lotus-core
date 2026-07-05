@@ -1258,6 +1258,11 @@ Most relevant current governance:
      idempotency and stale-epoch filtering in `ValuationJobRepository.upsert_jobs(...)`; do not
      reintroduce scheduler loops that call `upsert_jobs(...)` once per state or bypass the
      repository's correlation-lineage normalization.
+103. Operator summary repositories should compose same-scope scalar aggregates into a bounded row
+     query rather than awaiting many independent `db.scalar(...)` calls. `get_load_run_progress`
+     now returns its 14 scalar facts through one composed scalar-row statement plus four explicit
+     aggregate row queries; preserve that query-count test before adding new load-run progress
+     facts.
 
 ## Context Maintenance Rule
 

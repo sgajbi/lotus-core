@@ -257,24 +257,24 @@ async def test_get_analytics_export_job_health_summary(
 async def test_get_load_run_progress_aggregates_run_scoped_counts(
     repository: OperationsRepository, mock_db_session: AsyncMock
 ):
-    mock_db_session.scalar = AsyncMock(
-        side_effect=[
-            1000,
-            100000,
-            173,
-            17288,
-            92,
-            1832,
-            85,
-            85,
-            7,
-            date(2026, 4, 17),
-            datetime(2026, 4, 18, 7, 28, tzinfo=timezone.utc),
-            datetime(2026, 4, 18, 7, 27, tzinfo=timezone.utc),
-            date(2026, 4, 17),
-            datetime(2026, 4, 18, 7, 26, tzinfo=timezone.utc),
-        ]
+    scalar_result = MagicMock()
+    scalar_result.one.return_value = (
+        1000,
+        100000,
+        173,
+        17288,
+        92,
+        1832,
+        85,
+        85,
+        7,
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 28, tzinfo=timezone.utc),
+        datetime(2026, 4, 18, 7, 27, tzinfo=timezone.utc),
+        date(2026, 4, 17),
+        datetime(2026, 4, 18, 7, 26, tzinfo=timezone.utc),
     )
+    mock_db_session.scalar = AsyncMock()
     valuation_result = MagicMock()
     valuation_result.one.return_value = (
         13,
@@ -299,15 +299,27 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
         4,
         datetime(2026, 4, 18, 6, 45, tzinfo=timezone.utc),
     )
-    mock_db_session.execute = AsyncMock(
-        side_effect=[valuation_result, aggregation_result, latency_result, waiting_result]
-    )
+    mock_db_session.execute.side_effect = [
+        scalar_result,
+        valuation_result,
+        aggregation_result,
+        latency_result,
+        waiting_result,
+    ]
 
     summary = await repository.get_load_run_progress(
         "20260418T065154Z",
         business_date=date(2026, 4, 17),
         as_of=datetime(2026, 4, 18, 7, 29, tzinfo=timezone.utc),
     )
+
+    assert mock_db_session.scalar.await_count == 0
+    assert mock_db_session.execute.await_count == 5
+    scalar_stmt = mock_db_session.execute.await_args_list[0].args[0]
+    compiled_scalar_stmt = str(scalar_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert compiled_scalar_stmt.lower().count("select count") >= 8
+    assert "LOAD_20260418T065154Z_PF_%" in compiled_scalar_stmt
+    assert "LOAD_20260418T065154Z_TX_%" in compiled_scalar_stmt
 
     assert summary.portfolios_ingested == 1000
     assert summary.transactions_ingested == 100000
@@ -353,10 +365,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     assert summary.valuation_to_position_timeseries_latency_p95_seconds == 8.9
     assert summary.valuation_to_position_timeseries_latency_max_seconds == 21.3
 
-    scalar_sql = [
-        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
-        for call in mock_db_session.scalar.call_args_list
-    ]
+    scalar_sql = [compiled_scalar_stmt]
     assert any("from portfolios" in compiled.lower() for compiled in scalar_sql)
     assert any("from transactions" in compiled.lower() for compiled in scalar_sql)
     assert any("from daily_position_snapshots" in compiled.lower() for compiled in scalar_sql)
@@ -380,7 +389,7 @@ async def test_get_load_run_progress_aggregates_run_scoped_counts(
     )
     execute_sql = [
         str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
-        for call in mock_db_session.execute.call_args_list
+        for call in mock_db_session.execute.call_args_list[1:]
     ]
     assert any(
         "position_timeseries.created_at <= '2026-04-18 07:29:00+00:00'" in compiled
