@@ -166,6 +166,15 @@ def test_source_ingestion_events_are_idempotent_and_auditable() -> None:
         assert INGESTION_EVIDENCE_BUNDLE in definition.supportability_evidence
 
 
+def test_all_event_families_require_governed_envelope_metadata() -> None:
+    assert EVENT_FAMILY_DEFINITIONS
+    for definition in EVENT_FAMILY_DEFINITIONS:
+        assert definition.idempotency_required is True
+        assert definition.correlation_required is True
+        assert definition.schema_version_required is True
+        assert definition.source_data_products or definition.supportability_evidence
+
+
 def test_reconciliation_events_bind_to_reconciliation_evidence() -> None:
     reconciliation_events = [
         definition

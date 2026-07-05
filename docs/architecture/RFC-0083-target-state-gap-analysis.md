@@ -512,10 +512,10 @@ family definitions, schema model bindings, required idempotency/correlation/sche
 operator supportability surfaces, operator-only security profile bindings for support evidence, and
 actual outbox `event_type`/topic alignment against runtime emissions. `OutboxRepository` now
 centrally enriches payloads with `event_type`, `schema_version`, and
-`correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. Shared event
-models inherit from `CoreEventModel`, which explicitly ignores envelope metadata that is not part of a
-specific domain payload. This slice does not change Kafka topics, generated OpenAPI, persistence schema,
-or downstream contract shape.
+`correlation_id` supportability metadata and rejects conflicting caller-supplied metadata. Shared
+event models inherit from `CoreEventModel`, which accepts governed envelope metadata and rejects
+non-governed extra fields so unsupported payload drift is not silently dropped. This slice does not
+change Kafka topics, generated OpenAPI, persistence schema, or downstream contract shape.
 
 ## Slice 11 Completion Note
 
