@@ -41,6 +41,9 @@ from src.services.valuation_orchestrator_service.app.core.valuation_job_publishe
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
+from src.services.valuation_orchestrator_service.app.core.valuation_stale_job_resetter import (
+    ValuationStaleJobResetter,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer import (
     ValuationWatermarkAdvancer,
 )
@@ -1051,6 +1054,18 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._backfill_upsert_chunk_size == 13
     assert scheduler._stale_timeout_minutes == 12
     assert scheduler._max_attempts == 6
+
+
+async def test_stale_job_resetter_forwards_timeout_and_attempt_policy():
+    resetter = ValuationStaleJobResetter(stale_timeout_minutes=12, max_attempts=6)
+    mock_repo = AsyncMock(spec=ValuationRepository)
+
+    await resetter.reset_stale_jobs(repo=mock_repo)
+
+    mock_repo.find_and_reset_stale_jobs.assert_awaited_once_with(
+        timeout_minutes=12,
+        max_attempts=6,
+    )
 
 
 async def test_scheduler_claim_loop_stops_after_partial_batch(
