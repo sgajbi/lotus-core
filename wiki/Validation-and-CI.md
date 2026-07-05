@@ -29,6 +29,7 @@
 - `make openapi-gate`
 - `make quality-openapi-spectral-gate`
 - `make quality-wiki-docs-gate`
+- `make docs-evidence-pack`
 - `make architecture-guard`
 - `make security-control-coverage-guard`
 
@@ -111,3 +112,12 @@ The PR Merge Gate runs this command as a blocking validation gate. The job check
 command so domain-product contract validation uses the governed platform validator and vocabulary.
 If static contracts, supported-feature truth, or deterministic runtime smoke fail, the PR gate fails
 and still uploads the generated evidence for diagnosis.
+
+## Documentation Evidence Pack
+
+`make docs-evidence-pack` writes `output/documentation-evidence/documentation-evidence-pack.json`.
+Use it for release, PR, and demo documentation review when README, wiki, API, RFC, runbook, or
+supported-feature claims need one citable evidence source. The pack records the command, UTC
+timestamp, git SHA, runtime profile, status, generated artifacts, affected documentation surfaces,
+wiki validation, API vocabulary generation, RFC ledger checks, supported-feature truth, and runbook
+validation.

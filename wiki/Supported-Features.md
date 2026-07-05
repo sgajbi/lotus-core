@@ -157,7 +157,7 @@ business APIs unless the route family explicitly supports that use.
 | Sensitive-data posture | Source-data security profiles, access classifications, audit requirements, retention posture, and service-local production enterprise auth/audit defaults are governed through RFC-0083 security/tenancy/lifecycle material. Full ingress/IAM closure remains platform-runtime evidence. | [Security and Governance](Security-and-Governance), `docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md` |
 | Observability | Portfolio readiness publishes bounded supportability metric labels; ingestion and support routes expose operational health, SLO, backlog, and saturation views. | [API Surface](API-Surface), [Operations Runbook](Operations-Runbook) |
 | Degraded and unavailable states | DPM readiness and external treasury/OMS products fail closed with explicit missing-data families and blocked capabilities instead of inventing unsupported data. | [Mesh Data Products](Mesh-Data-Products), source-product methodologies |
-| App-level validation evidence | `make lotus-core-validate` runs static contract checks plus deterministic runtime smoke across ingestion, event replay/ops, query reads, support and lineage, integration policy/capabilities, core snapshot, simulation, and source-data contract governance. | `scripts/certify_lotus_core_app.py`, PR Merge Gate blocking validation artifact |
+| App-level validation evidence | `make lotus-core-validate` runs static contract checks plus deterministic runtime smoke across ingestion, event replay/ops, query reads, support and lineage, integration policy/capabilities, core snapshot, simulation, and source-data contract governance. `make docs-evidence-pack` writes the documentation evidence manifest for README, wiki, API, RFC, runbook, and supported-feature claims. | `scripts/certify_lotus_core_app.py`, `scripts/generate_documentation_evidence_pack.py`, PR Merge Gate blocking validation artifact |
 
 ## Demo And Pitch Guidance
 
@@ -193,8 +193,8 @@ business APIs unless the route family explicitly supports that use.
 - Some products are Core producer-certified while downstream consumer proof remains owned by the
   consuming app.
 - `make lotus-core-validate` is an evidence command, not a standing readiness claim. Treat a run as
-  valid only when the generated JSON evidence reports `status: passed` for the runtime under
-  review.
+  valid only when the generated JSON evidence under `output/lotus-core-validation/` reports
+  `status: passed` for the runtime under review.
 - Wiki publication is a post-merge step. Repo-local `wiki/` is the authored source; the GitHub wiki
   publication target must not be hand-edited.
 

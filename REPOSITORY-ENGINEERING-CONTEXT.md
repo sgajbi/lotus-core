@@ -423,6 +423,8 @@ Use these commands as the primary local contract:
    `make domain-product-validate`
 12. app-level supported-surface validation
    `make lotus-core-validate`
+13. documentation release evidence pack
+   `make docs-evidence-pack`
 
 ## Validation And CI Expectations
 
