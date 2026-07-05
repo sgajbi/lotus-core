@@ -2,6 +2,15 @@
 
 Generated: `2026-03-07`
 
+Machine-readable status ledger:
+
+- `docs/standards/rfc-status-ledger.v1.json`
+- Guard: `make rfc-status-ledger-guard`
+
+The ledger covers this core RFC index, transaction RFC/spec documents, architecture RFC material,
+and operations RFC playbooks. It is the governed coverage check for new RFC files; this Markdown
+index remains the human review summary for numbered core RFCs.
+
 Status vocabulary for review loop:
 - Draft
 - Approved

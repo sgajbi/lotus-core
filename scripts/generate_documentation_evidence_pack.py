@@ -19,8 +19,10 @@ DOCUMENTATION_SURFACES = (
     "README.md",
     "docs/architecture/README.md",
     "docs/architecture/CODEBASE-REVIEW-LEDGER.md",
+    "docs/standards/rfc-status-ledger.v1.json",
     "docs/operations-runbook.md",
     "docs/supported-features.md",
+    "wiki/RFC-Index.md",
     "wiki/Supported-Features.md",
     "wiki/Validation-and-CI.md",
     "wiki/Operations-Runbook.md",
@@ -199,6 +201,10 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
         _run_command(
             name="rfc_ledger_check",
             command=[sys.executable, "scripts/rfc0083_closure_guard.py"],
+        ),
+        _run_command(
+            name="rfc_status_ledger_check",
+            command=[sys.executable, "scripts/rfc_status_ledger_guard.py"],
         ),
         _validate_supported_features(),
         _validate_runbooks(),

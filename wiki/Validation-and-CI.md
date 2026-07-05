@@ -1,5 +1,18 @@
 # Validation and CI
 
+## Current Scope
+
+This page maps `lotus-core` validation commands to the contracts they protect. Use it to choose the
+smallest evidence command for a change, then cite generated artifacts from the relevant gate or from
+`make docs-evidence-pack`.
+
+| Need | Primary Evidence | Notes |
+|---|---|---|
+| Local feature confidence | `make ci-local` | Fastest repo-native feature-lane parity check. |
+| PR merge readiness | `make ci` | Pull-request merge-gate parity before opening or updating a PR. |
+| Release/main posture | `make ci-main` | Main-push releasability parity. |
+| Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
+
 ## Lane model
 
 `lotus-core` uses:
@@ -26,6 +39,7 @@
 - `make analytics-input-consumer-contract-guard`
 - `make event-runtime-contract-guard`
 - `make rfc0083-closure-guard`
+- `make rfc-status-ledger-guard`
 - `make openapi-gate`
 - `make quality-openapi-spectral-gate`
 - `make quality-wiki-docs-gate`
@@ -47,6 +61,9 @@
   protects eventing and supportability contract posture
 - `make rfc0083-closure-guard`
   protects the machine-readable RFC-0083 implementation-closure ledger
+- `make rfc-status-ledger-guard`
+  protects the repository-wide RFC status ledger across core RFCs, transaction RFC/spec documents,
+  architecture RFC material, and operations RFC playbooks
 - `make openapi-gate`
   protects consumer-facing contract quality and OpenAPI completeness
 - `make quality-openapi-spectral-gate`
@@ -88,6 +105,7 @@
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata
 - production-readiness closure evidence
+- RFC status, ownership, evidence, supported-feature, registry, wiki, and supersession metadata
 - FastAPI security-control coverage
 
 ## Reading path when a gate fails
@@ -133,5 +151,5 @@ and still uploads the generated evidence for diagnosis.
 Use it for release, PR, and demo documentation review when README, wiki, API, RFC, runbook, or
 supported-feature claims need one citable evidence source. The pack records the command, UTC
 timestamp, git SHA, runtime profile, status, generated artifacts, affected documentation surfaces,
-wiki validation, API vocabulary generation, RFC ledger checks, supported-feature truth, and runbook
-validation.
+wiki validation, API vocabulary generation, RFC-0083 closure checks, RFC status ledger checks,
+supported-feature truth, and runbook validation.

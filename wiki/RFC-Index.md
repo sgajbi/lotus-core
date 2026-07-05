@@ -1,5 +1,23 @@
 # RFC Index
 
+## Current Scope
+
+This page is the wiki navigation view. The full governed inventory lives in
+[`docs/standards/rfc-status-ledger.v1.json`](../docs/standards/rfc-status-ledger.v1.json) and is
+checked by `make rfc-status-ledger-guard`.
+
+The ledger covers:
+
+| Family | Coverage | Why It Matters |
+|---|---|---|
+| Core RFCs | `docs/RFCs/RFC*.md` plus the human `RFC-INDEX.md` and delta backlog | Prevents historical or partial RFCs from being mistaken for current behavior. |
+| Transaction RFCs | `docs/rfc-transaction-specs/**/*.md` | Keeps transaction specifications tied to the canonical transaction type registry and supported-feature claims. |
+| Architecture RFC material | `docs/architecture/RFC-*.md` | Connects RFC-0082/RFC-0083 target models and closure evidence to current architecture truth. |
+| Operations RFC playbooks | `docs/operations/RFC-*.md` | Keeps operator-facing RFC playbooks statused with the same metadata standard. |
+
+New RFC files must be added to the ledger in the same slice, with owner, status, evidence,
+docs/wiki links, supported-feature posture, and supersession/deprecation metadata.
+
 ## Most relevant current RFCs
 
 - `RFC-0082`

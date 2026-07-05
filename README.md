@@ -269,6 +269,9 @@ Important runtime note:
   eventing and supportability contract enforcement
 - `make rfc0083-closure-guard`
   RFC-0083 closure ledger enforcement
+- `make rfc-status-ledger-guard`
+  full RFC status ledger coverage across core RFCs, transaction specs, architecture RFC material,
+  and operations RFC playbooks
 - `make image-provenance-guard`
   OCI label, CI build-arg, CI-only image release, release-manifest, digest-deploy,
   no-build-secret, and `/version` metadata enforcement

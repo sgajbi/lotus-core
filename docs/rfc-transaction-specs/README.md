@@ -2,6 +2,12 @@
 
 This document set defines the canonical transaction-processing requirements for lotus-core.
 
+Machine-readable RFC status metadata for this document set lives in
+`docs/standards/rfc-status-ledger.v1.json` and is enforced by `make rfc-status-ledger-guard`.
+Transaction RFC rows in that ledger must link to the canonical transaction type registry and
+supported-feature claims so new transaction specifications do not drift away from implementation
+evidence.
+
 It is structured so that:
 
 * **shared documents** define reusable platform-wide standards
