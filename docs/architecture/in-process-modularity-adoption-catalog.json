@@ -1,0 +1,56 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "standardPath": "docs/standards/in-process-modularity-package-standard.md",
+  "representativeAdoptions": [
+    {
+      "serviceId": "ingestion_service",
+      "servicePath": "src/services/ingestion_service",
+      "status": "representative-adopted-with-legacy-folders",
+      "requiredPackagePaths": [
+        "src/services/ingestion_service/app/application",
+        "src/services/ingestion_service/app/domain",
+        "src/services/ingestion_service/app/ports",
+        "src/services/ingestion_service/app/adapters",
+        "src/services/ingestion_service/app/infrastructure",
+        "src/services/ingestion_service/app/routers",
+        "src/services/ingestion_service/app/repositories"
+      ],
+      "runtimeCompositionFiles": [
+        "src/services/ingestion_service/app/dependencies.py",
+        "src/services/ingestion_service/app/main.py"
+      ],
+      "deliveryPackagePaths": [
+        "src/services/ingestion_service/app/routers",
+        "src/services/ingestion_service/app/consumers"
+      ],
+      "legacyFolders": [
+        {
+          "path": "src/services/ingestion_service/app/DTOs",
+          "migrationGuidance": "API DTO compatibility remains at delivery boundaries; migrate individual DTO families only when application commands/results already exist."
+        },
+        {
+          "path": "src/services/ingestion_service/app/services",
+          "migrationGuidance": "Keep legacy services stable while extracting cohesive workflows into app/application, app/domain, app/ports, and adapters."
+        },
+        {
+          "path": "src/services/ingestion_service/app/transformers",
+          "migrationGuidance": "Move transformer behavior behind explicit mapping helpers or adapters when touched by source-data or event-contract slices."
+        },
+        {
+          "path": "src/services/ingestion_service/app/producers",
+          "migrationGuidance": "Preserve producer compatibility while new publication paths use event publisher ports and adapters."
+        }
+      ],
+      "evidence": [
+        "docs/standards/ingestion-service-framework-boundary-standard.md",
+        "docs/standards/bulk-upload-component-boundary-standard.md",
+        "docs/standards/application-command-result-standard.md",
+        "docs/standards/application-dependency-inversion-standard.md",
+        "docs/architecture/CR-1319-INGESTION-SERVICE-FRAMEWORK-BOUNDARY.md",
+        "docs/architecture/CR-1320-BULK-UPLOAD-COMPONENT-BOUNDARY.md"
+      ],
+      "noRuntimeSplitRationale": "This representative adoption improves package-level design modularity inside the existing ingestion deployable. It does not introduce a new deployable service, database, queue, or operational ownership boundary."
+    }
+  ]
+}

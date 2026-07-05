@@ -997,6 +997,18 @@ Most relevant current governance:
     `current-state-revalidation-required`; that is current-state documentation, not retrospective
     approval. In-process-only refactors must record a no-runtime-split rationale in their CR, RFC,
     or ledger entry.
+82. Deployable service internals should follow the in-process modularity package standard before
+    any runtime split is considered. The repo-local standard lives at
+    `docs/standards/in-process-modularity-package-standard.md`; representative adoption is tracked
+    in `docs/architecture/in-process-modularity-adoption-catalog.json`; and `make
+    architecture-guard` runs `scripts/in_process_modularity_guard.py`. The standard recommends
+    `domain`, `application`, `ports`, `adapters`, delivery/routers, repositories/persistence,
+    runtime composition files, and optional `proof_builders`, while keeping API DTOs at delivery,
+    application commands/results in application, domain objects in domain, and persistence models
+    in adapters/repositories. `ingestion_service` is the representative adopted service with
+    explicit legacy-folder migration scope for `DTOs`, `services`, `transformers`, and `producers`.
+    Do not perform broad folder renames; migrate cohesive workflows into the standard packages as
+    issue slices touch them.
 
 ## Context Maintenance Rule
 
