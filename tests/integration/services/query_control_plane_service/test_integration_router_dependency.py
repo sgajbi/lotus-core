@@ -681,6 +681,48 @@ async def test_core_snapshot_success(async_test_client):
     ]
 
 
+async def test_core_snapshot_accepts_portfolio_state_and_totals_sections(async_test_client):
+    client, mock_core_snapshot_service, mock_integration_service = async_test_client
+    mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
+        consumer_system="lotus-idea",
+        tenant_id="default",
+        generated_at="2026-04-10T00:00:00Z",
+        policy_provenance=PolicyProvenanceMetadata(
+            policy_version="tenant-default-v1",
+            policy_source="default",
+            matched_rule_id="default",
+            strict_mode=False,
+        ),
+        allowed_sections=["PORTFOLIO_STATE", "PORTFOLIO_TOTALS"],
+        warnings=[],
+    )
+
+    response = await client.post(
+        "/integration/portfolios/PB_SG_GLOBAL_BAL_001/core-snapshot",
+        json={
+            "as_of_date": "2026-04-10",
+            "snapshot_mode": "BASELINE",
+            "reporting_currency": "SGD",
+            "sections": ["portfolio_state", "portfolio_totals"],
+            "consumer_system": "lotus-idea",
+            "tenant_id": "default",
+        },
+    )
+
+    assert response.status_code == 200
+    mock_integration_service.get_effective_policy.assert_called_once_with(
+        consumer_system="lotus-idea",
+        tenant_id="default",
+        include_sections=["PORTFOLIO_STATE", "PORTFOLIO_TOTALS"],
+    )
+    core_snapshot_call = mock_core_snapshot_service.get_core_snapshot.await_args.kwargs
+    called_request = core_snapshot_call["request"]
+    assert [section.value for section in called_request.sections] == [
+        "portfolio_state",
+        "portfolio_totals",
+    ]
+
+
 async def test_effective_integration_policy_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(

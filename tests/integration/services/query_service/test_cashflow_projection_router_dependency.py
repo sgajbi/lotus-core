@@ -6,18 +6,22 @@ import pytest
 import pytest_asyncio
 
 from src.services.query_service.app.dependencies import get_cashflow_projection_service
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+)
 from src.services.query_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
 
 
 def _source_metadata(as_of_date: date) -> dict[str, object]:
-    return {
-        "generated_at": datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
-        "data_quality_status": "COMPLETE",
-        "latest_evidence_timestamp": datetime(2026, 3, 1, 1, 4, tzinfo=UTC),
-        "source_batch_fingerprint": f"cashflow_projection:P1:{as_of_date}:fixture",
-    }
+    return source_data_product_runtime_metadata(
+        as_of_date=as_of_date,
+        generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
+        data_quality_status="COMPLETE",
+        latest_evidence_timestamp=datetime(2026, 3, 1, 1, 4, tzinfo=UTC),
+        source_batch_fingerprint=f"cashflow_projection:P1:{as_of_date}:fixture",
+    )
 
 
 @pytest_asyncio.fixture

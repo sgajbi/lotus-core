@@ -1,4 +1,8 @@
+import hashlib
+import json
 from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import Any
 
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.reconciliation_quality import UNKNOWN
@@ -75,6 +79,40 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         description="Deterministic snapshot identity when the product scope has one.",
         examples=["pss_0123456789abcdef0123456789abcdef"],
     )
+    content_hash: str = Field(
+        ...,
+        description=(
+            "Deterministic SHA-256 hash of the source-owned response content and proof basis, "
+            "excluding volatile response-generation timestamps."
+        ),
+        examples=["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+    )
+    source_digest: str = Field(
+        ...,
+        description=(
+            "Alias of content_hash for downstream proof tooling that uses source digest "
+            "terminology."
+        ),
+        examples=["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+    )
+    source_refs: list[str] = Field(
+        default_factory=list,
+        description="Deterministic source references used to assemble this product response.",
+        examples=[["lotus-core://source/PortfolioStateSnapshot/PF-001/2026-04-10"]],
+    )
+    lineage: dict[str, str] = Field(
+        default_factory=dict,
+        description="Bounded source lineage identifiers for support and proof validation.",
+        examples=[{"source_product": "PortfolioStateSnapshot", "source_owner": "lotus-core"}],
+    )
+    source_evidence_current: bool = Field(
+        ...,
+        description=(
+            "Whether Core considers the returned source evidence current for the requested "
+            "as-of scope."
+        ),
+        examples=[True],
+    )
     policy_version: str | None = Field(
         None,
         description="Policy version applied to this product response when applicable.",
@@ -98,8 +136,37 @@ def source_data_product_runtime_metadata(
     source_batch_fingerprint: str | None = None,
     snapshot_id: str | None = None,
     policy_version: str | None = None,
+    content_hash: str | None = None,
+    source_digest: str | None = None,
+    source_refs: list[str] | None = None,
+    lineage: dict[str, str] | None = None,
+    source_evidence_current: bool | None = None,
 ) -> dict[str, object]:
     resolved_generated_at = generated_at or datetime.now(UTC)
+    normalized_refs = [
+        ref for ref in (normalize_lineage_value(ref) for ref in source_refs or []) if ref
+    ]
+    normalized_lineage = {
+        key: value
+        for key, value in (
+            (str(key), normalize_lineage_value(value)) for key, value in (lineage or {}).items()
+        )
+        if value
+    }
+    resolved_content_hash = content_hash or stable_content_hash(
+        {
+            "as_of_date": as_of_date,
+            "restatement_version": CURRENT_RESTATEMENT_VERSION,
+            "reconciliation_status": reconciliation_status,
+            "data_quality_status": data_quality_status,
+            "latest_evidence_timestamp": latest_evidence_timestamp,
+            "source_batch_fingerprint": normalize_lineage_value(source_batch_fingerprint),
+            "snapshot_id": normalize_lineage_value(snapshot_id),
+            "policy_version": normalize_lineage_value(policy_version),
+            "source_refs": normalized_refs,
+            "lineage": normalized_lineage,
+        }
+    )
     return {
         "tenant_id": normalize_lineage_value(tenant_id),
         "generated_at": resolved_generated_at,
@@ -110,6 +177,44 @@ def source_data_product_runtime_metadata(
         "latest_evidence_timestamp": latest_evidence_timestamp,
         "source_batch_fingerprint": normalize_lineage_value(source_batch_fingerprint),
         "snapshot_id": normalize_lineage_value(snapshot_id),
+        "content_hash": resolved_content_hash,
+        "source_digest": source_digest or resolved_content_hash,
+        "source_refs": normalized_refs,
+        "lineage": normalized_lineage,
+        "source_evidence_current": (
+            _default_source_evidence_current(
+                data_quality_status=data_quality_status,
+                latest_evidence_timestamp=latest_evidence_timestamp,
+            )
+            if source_evidence_current is None
+            else source_evidence_current
+        ),
         "policy_version": normalize_lineage_value(policy_version),
         "correlation_id": normalize_lineage_value(correlation_id_var.get()),
     }
+
+
+def stable_content_hash(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_json_default,
+    )
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
+def _json_default(value: Any) -> str:
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return str(value)
+    return str(value)
+
+
+def _default_source_evidence_current(
+    *, data_quality_status: str, latest_evidence_timestamp: datetime | None
+) -> bool:
+    return data_quality_status.strip().upper() in {"COMPLETE", "PARTIAL"} and (
+        latest_evidence_timestamp is not None
+    )

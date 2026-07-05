@@ -8,6 +8,9 @@ from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionPoint,
     CashflowProjectionResponse,
 )
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+)
 from src.services.query_service.app.routers.cashflow_projection import (
     get_cashflow_projection,
     get_cashflow_projection_service,
@@ -22,9 +25,7 @@ async def test_get_cashflow_projection_success() -> None:
     service = MagicMock(spec=CashflowProjectionService)
     service.get_cashflow_projection = AsyncMock(
         return_value=CashflowProjectionResponse(
-            generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
             portfolio_id="P1",
-            as_of_date=date(2026, 3, 1),
             range_start_date=date(2026, 3, 1),
             range_end_date=date(2026, 3, 11),
             include_projected=True,
@@ -42,6 +43,12 @@ async def test_get_cashflow_projection_success() -> None:
             booked_total_net_cashflow=1,
             projected_settlement_total_cashflow=0,
             projection_days=10,
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 3, 1),
+                generated_at=datetime(2026, 3, 1, 1, 5, tzinfo=UTC),
+                data_quality_status="COMPLETE",
+                latest_evidence_timestamp=datetime(2026, 3, 1, 1, 4, tzinfo=UTC),
+            ),
         )
     )
 

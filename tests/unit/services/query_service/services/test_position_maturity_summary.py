@@ -86,6 +86,26 @@ def test_maturity_summary_counts_maturing_holdings_and_next_date() -> None:
     assert summary.freshness_status == "CURRENT"
     assert summary.request_fingerprint.startswith("maturity_summary:")
     assert summary.source_batch_fingerprint is None
+    assert summary.content_hash.startswith("sha256:")
+    assert summary.source_digest == summary.content_hash
+    assert summary.source_refs == [
+        "lotus-core://source/PortfolioMaturitySummary/P1/2026-03-10/2026-06-08"
+    ]
+    assert summary.lineage == {
+        "source_owner": "lotus-core",
+        "source_product": "PortfolioMaturitySummary",
+        "upstream_product": "HoldingsAsOf",
+        "upstream_content_hash": holdings.content_hash,
+    }
+    assert summary.source_evidence_current is True
+
+    repeat_summary = portfolio_maturity_summary_response(
+        portfolio_id="P1",
+        holdings=holdings,
+        horizon_days=90,
+        include_projected=False,
+    )
+    assert repeat_summary.content_hash == summary.content_hash
 
 
 def test_maturity_summary_degrades_when_bond_maturity_fact_is_missing() -> None:

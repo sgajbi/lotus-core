@@ -31,6 +31,7 @@ DEFAULT_REQUIRED_METADATA_FIELDS = (
     "latest_evidence_timestamp",
     "source_batch_fingerprint",
     "snapshot_id",
+    "content_hash",
     "policy_version",
     "correlation_id",
 )

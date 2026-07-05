@@ -12,7 +12,10 @@ from ..dtos.position_dto import (
     PortfolioPositionsResponse,
     Position,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
 MATURITY_BEARING_TERMS = (
     "BOND",
@@ -102,12 +105,27 @@ def portfolio_maturity_summary_response(
         ),
         "supportability_reasons": reasons,
     }
+    request_fingerprint = _maturity_summary_fingerprint(
+        holdings=holdings,
+        response_values=response_values,
+    )
+    content_hash = stable_content_hash(
+        {
+            "product_name": "PortfolioMaturitySummary",
+            "product_version": "v1",
+            "source_product_name": holdings.product_name,
+            "source_product_version": holdings.product_version,
+            "portfolio_id": portfolio_id,
+            "request_fingerprint": request_fingerprint,
+            "response_values": response_values,
+            "holdings_content_hash": holdings.content_hash,
+            "holdings_snapshot_id": holdings.snapshot_id,
+            "latest_evidence_timestamp": holdings.latest_evidence_timestamp,
+        }
+    )
     return PortfolioMaturitySummaryResponse(
         **response_values,
-        request_fingerprint=_maturity_summary_fingerprint(
-            holdings=holdings,
-            response_values=response_values,
-        ),
+        request_fingerprint=request_fingerprint,
         **source_data_product_runtime_metadata(
             as_of_date=holdings.as_of_date,
             data_quality_status=_summary_data_quality_status(
@@ -117,6 +135,17 @@ def portfolio_maturity_summary_response(
             latest_evidence_timestamp=holdings.latest_evidence_timestamp,
             snapshot_id=holdings.snapshot_id,
             policy_version=holdings.policy_version,
+            content_hash=content_hash,
+            source_refs=[
+                "lotus-core://source/PortfolioMaturitySummary/"
+                f"{portfolio_id}/{window_start_date.isoformat()}/{window_end_date.isoformat()}"
+            ],
+            lineage={
+                "source_owner": "lotus-core",
+                "source_product": "PortfolioMaturitySummary",
+                "upstream_product": holdings.product_name,
+                "upstream_content_hash": holdings.content_hash,
+            },
         ),
         freshness_status=_freshness_status(holdings.data_quality_status),
     )
