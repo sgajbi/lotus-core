@@ -31,6 +31,7 @@
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
 - `make architecture-guard`
+- `make image-provenance-guard`
 - `make security-control-coverage-guard`
 
 ## Guard-to-contract mapping
@@ -59,6 +60,10 @@
   to compare authored and published pages
 - `make architecture-guard`
   protects layering and repository boundary posture
+- `make image-provenance-guard`
+  protects OCI image labels, CI build args, CI-only image publication, Git SHA image tags, digest
+  release manifests, SBOM/provenance/signing/scan controls, digest-based Kubernetes references,
+  same-image promotion evidence, no-build-secret posture, and the shared `/version` endpoint
 - `make security-control-coverage-guard`
   protects the FastAPI app security-control matrix for standard bootstrap, secure headers, CORS,
   metrics access, auth/audit, payload limits, upload limits, allowlists, and safe errors
@@ -73,6 +78,7 @@
 - portable Spectral OpenAPI linting
 - wiki source publication readiness
 - architecture boundaries
+- image provenance, release supply-chain, and runtime version metadata
 - production-readiness closure evidence
 - FastAPI security-control coverage
 

@@ -697,6 +697,17 @@ Most relevant current governance:
     failure-recovery, and institutional-completion gates. E2E diagnostics should be captured by the
     pytest fixture through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level
     `docker compose logs` capture is only fallback evidence after fixture ownership is gone.
+    Service Dockerfiles must keep the governed image provenance block: OCI labels and matching
+    runtime environment values for Git commit SHA, Git branch, build timestamp, repo URL, image
+    version, image digest, and CI pipeline/run ID. `configure_standard_http_app` registers
+    `GET /version` so API services and worker health web apps expose the same metadata.
+    `scripts/prebuild_ci_images.py` supplies build args in CI, `scripts/write_build_provenance.py`
+    records the same metadata in build evidence, `.github/workflows/image-release.yml` is the only
+    image-push path, and `scripts/write_image_release_manifest.py` records digest, SBOM, scan,
+    signing, provenance-attestation, digest-deploy, and same-image-promotion evidence. `make
+    image-provenance-guard` blocks drift, including secret-like Dockerfile/workflow build ARG or
+    ENV additions. Local builds may report `LOTUS_IMAGE_DIGEST=unknown` until a release lane or
+    deploy manifest supplies the resolved digest.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
     Dockerfile. Routine Dependabot version-update PR churn is currently paused with

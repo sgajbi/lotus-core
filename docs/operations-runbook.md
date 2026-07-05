@@ -50,6 +50,51 @@ The dependency status label uses only `ok`, `unavailable`, `timeout`, `misconfig
 Do not add raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation
 IDs as health metric labels.
 
+## Runtime Version Metadata
+
+Runtime-facing API services and worker health web apps expose:
+
+```text
+GET /version
+```
+
+The response mirrors image provenance embedded during build:
+
+- Git commit SHA
+- Git branch
+- build timestamp
+- repo URL
+- image version
+- image digest
+- CI pipeline/run ID
+
+The same values are carried as OCI labels and runtime environment variables. Local builds default
+`LOTUS_IMAGE_DIGEST` to `unknown` because an image cannot know its registry digest until the
+build/release lane resolves it; release automation should supply the resolved digest when
+available.
+
+## Image Release Supply Chain
+
+Immutable service images are published only by `.github/workflows/image-release.yml`. The release
+lane:
+
+1. tags every image with the Git SHA,
+2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
+3. pushes images to GHCR from CI only,
+4. captures the resolved image digest in a release manifest,
+5. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact,
+6. fails on high or critical Trivy findings,
+7. signs the digest reference with Cosign,
+8. records digest-based Kubernetes deployment and same-image promotion evidence, and
+9. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
+   `make image-provenance-guard`.
+
+The enforcement command is:
+
+```powershell
+make image-provenance-guard
+```
+
 ## Metric Vocabulary Guard
 
 Metric labels are governed by `portfolio_common.observability_contracts` and enforced by:
