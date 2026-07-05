@@ -1540,6 +1540,9 @@ Most relevant current governance:
      Core snapshot freshness-to-data-quality classification belongs in
      `core_snapshot_quality.py`; do not re-add `COMPLETE`/`PARTIAL`/`UNKNOWN` policy mapping to the
      broad service.
+     Core snapshot response section assembly belongs in `core_snapshot_sections.py`; do not re-add
+     requested-section branching, projected/delta/totals population, or snapshot enrichment field
+     mapping to the broad service.
 
 ## Context Maintenance Rule
 
