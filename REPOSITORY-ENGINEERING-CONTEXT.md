@@ -1507,10 +1507,12 @@ Most relevant current governance:
      trigger correlation propagation, and trigger consume logging. Keep publisher/Kafka flush
      logic, backfill planning, watermark policy, and instrument trigger coordination out of
      `ValuationScheduler`. `ValuationStaleJobResetter` owns stale valuation job reset invocation
-     with scheduler-configured timeout and maximum-attempt policy. Remaining scheduler slices
-     should continue extracting loop cadence, claimed-job dispatch orchestration/recovery
-     ownership, and DB session/repository factory ownership into separately testable collaborators
-     before issue #545 is marked fixed-local.
+     with scheduler-configured timeout and maximum-attempt policy. `ValuationDispatchCoordinator`
+     owns claimed-job polling rounds, poll-budget enforcement, eligible-job claiming, dispatch
+     callback orchestration, dispatch failure observation, and recovery repository calls through an
+     explicit session provider and repository factory. Remaining scheduler slices should continue
+     extracting loop cadence plus DB poll-step session/repository factory ownership into separately
+     testable collaborators before issue #545 is marked fixed-local.
 
 ## Context Maintenance Rule
 
