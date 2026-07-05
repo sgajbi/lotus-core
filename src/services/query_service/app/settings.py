@@ -7,6 +7,7 @@ from typing import Any
 from portfolio_common.runtime_settings import (
     RuntimeConfigurationError,
     production_security_profile_enabled,
+    strict_config_validation_enabled,
 )
 from portfolio_common.runtime_settings import env_bool as shared_env_bool
 from portfolio_common.runtime_settings import env_int as shared_env_int
@@ -14,6 +15,8 @@ from portfolio_common.runtime_settings import env_json_map as shared_env_json_ma
 from portfolio_common.runtime_settings import env_str as shared_env_str
 
 QUERY_SERVICE_NAME = "query service"
+DEFAULT_PAGE_TOKEN_SECRET = "lotus-core-local-dev"
+DEFAULT_PAGE_TOKEN_KEY_ID = "local-dev"
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -52,6 +55,9 @@ class QueryServiceSettings:
     integration_snapshot_policy_json: str
     capability_tenant_overrides_json: str
     page_token_secret: str
+    page_token_key_id: str
+    page_token_previous_keys: dict[str, str]
+    page_token_ttl_seconds: int
     analytics_export_stale_timeout_minutes: int
     analytics_export_execution_timeout_seconds: int
     has_database_url: bool
@@ -76,7 +82,10 @@ def load_query_service_settings() -> QueryServiceSettings:
         lotus_core_policy_version=env_str("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
         integration_snapshot_policy_json=env_str("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", ""),
         capability_tenant_overrides_json=env_str("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", ""),
-        page_token_secret=env_str("LOTUS_CORE_PAGE_TOKEN_SECRET", "lotus-core-local-dev"),
+        page_token_secret=_page_token_secret(),
+        page_token_key_id=_page_token_key_id(),
+        page_token_previous_keys=_page_token_previous_keys(),
+        page_token_ttl_seconds=env_int("LOTUS_CORE_PAGE_TOKEN_TTL_SECONDS", 900, minimum=60),
         analytics_export_stale_timeout_minutes=env_int(
             "LOTUS_CORE_ANALYTICS_EXPORT_STALE_TIMEOUT_MINUTES", 15, minimum=1
         ),
@@ -110,3 +119,45 @@ def load_query_service_settings() -> QueryServiceSettings:
 
 
 QueryServiceConfigurationError = RuntimeConfigurationError
+
+
+def _page_token_secret() -> str:
+    secret = env_str("LOTUS_CORE_PAGE_TOKEN_SECRET", DEFAULT_PAGE_TOKEN_SECRET).strip()
+    if strict_config_validation_enabled() and (not secret or secret == DEFAULT_PAGE_TOKEN_SECRET):
+        raise QueryServiceConfigurationError(
+            "Invalid query service configuration for LOTUS_CORE_PAGE_TOKEN_SECRET: "
+            "non-local profiles require a non-default page-token secret"
+        )
+    return secret
+
+
+def _page_token_key_id() -> str:
+    key_id = env_str("LOTUS_CORE_PAGE_TOKEN_KEY_ID", DEFAULT_PAGE_TOKEN_KEY_ID).strip()
+    if strict_config_validation_enabled() and (not key_id or key_id == DEFAULT_PAGE_TOKEN_KEY_ID):
+        raise QueryServiceConfigurationError(
+            "Invalid query service configuration for LOTUS_CORE_PAGE_TOKEN_KEY_ID: "
+            "non-local profiles require a non-default page-token key id"
+        )
+    return key_id
+
+
+def _page_token_previous_keys() -> dict[str, str]:
+    decoded = env_json_map("LOTUS_CORE_PAGE_TOKEN_PREVIOUS_KEYS_JSON")
+    previous_keys: dict[str, str] = {}
+    for key_id, secret in decoded.items():
+        if not isinstance(key_id, str) or not key_id.strip():
+            if strict_config_validation_enabled():
+                raise QueryServiceConfigurationError(
+                    "Invalid query service configuration for "
+                    "LOTUS_CORE_PAGE_TOKEN_PREVIOUS_KEYS_JSON: key ids must be non-empty strings"
+                )
+            continue
+        if not isinstance(secret, str) or not secret.strip():
+            if strict_config_validation_enabled():
+                raise QueryServiceConfigurationError(
+                    "Invalid query service configuration for "
+                    "LOTUS_CORE_PAGE_TOKEN_PREVIOUS_KEYS_JSON: secrets must be non-empty strings"
+                )
+            continue
+        previous_keys[key_id] = secret
+    return previous_keys

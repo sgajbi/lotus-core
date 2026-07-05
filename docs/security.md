@@ -54,4 +54,6 @@ Current runtime posture:
    `/openapi.json`, `/docs`, `/redoc`, and `/version` unauthenticated for operational access,
 7. ingestion upload APIs reject payloads above `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`,
 8. ingestion write APIs have service-owned default capability rules instead of depending only on
-   `ENTERPRISE_CAPABILITY_RULES_JSON`.
+   `ENTERPRISE_CAPABILITY_RULES_JSON`,
+9. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
+   closed unless `LOTUS_CORE_PAGE_TOKEN_SECRET` and `LOTUS_CORE_PAGE_TOKEN_KEY_ID` are non-default.

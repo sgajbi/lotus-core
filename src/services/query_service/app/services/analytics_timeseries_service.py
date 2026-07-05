@@ -177,6 +177,9 @@ class AnalyticsTimeseriesService:
         self.export_repo = AnalyticsExportRepository(db)
         settings = load_query_service_settings()
         self._page_token_secret = settings.page_token_secret
+        self._page_token_key_id = settings.page_token_key_id
+        self._page_token_previous_keys = settings.page_token_previous_keys
+        self._page_token_ttl_seconds = settings.page_token_ttl_seconds
         self._analytics_export_stale_timeout_minutes = (
             settings.analytics_export_stale_timeout_minutes
         )
@@ -188,11 +191,23 @@ class AnalyticsTimeseriesService:
         return request_fingerprint(payload)
 
     def _encode_page_token(self, payload: dict) -> str:
-        return encode_analytics_page_token(payload=payload, secret=self._page_token_secret)
+        return encode_analytics_page_token(
+            payload=payload,
+            secret=self._page_token_secret,
+            active_kid=self._page_token_key_id,
+            previous_secrets=self._page_token_previous_keys,
+            ttl_seconds=self._page_token_ttl_seconds,
+        )
 
     def _decode_page_token(self, token: str | None) -> dict:
         try:
-            return decode_analytics_page_token(token=token, secret=self._page_token_secret)
+            return decode_analytics_page_token(
+                token=token,
+                secret=self._page_token_secret,
+                active_kid=self._page_token_key_id,
+                previous_secrets=self._page_token_previous_keys,
+                ttl_seconds=self._page_token_ttl_seconds,
+            )
         except AnalyticsPageTokenSignatureError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
         except AnalyticsPageTokenError as exc:

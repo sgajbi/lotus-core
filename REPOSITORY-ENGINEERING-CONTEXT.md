@@ -1185,6 +1185,12 @@ Most relevant current governance:
     `ENTERPRISE_CAPABILITY_RULES_JSON` alone for production write-plane policy. Shared enterprise
     middleware keeps health, metrics, OpenAPI, docs, ReDoc, and version endpoints on an explicit
     unauthenticated operational allowlist even when read authorization is enabled.
+92. Query-service cursor/page tokens use the shared `PageTokenCodec` versioned envelope with
+    `kid`, expiry, issuer/audience, optional route/tenant binding, and active/previous key support.
+    Non-local or strict profiles must set non-default `LOTUS_CORE_PAGE_TOKEN_SECRET` and
+    `LOTUS_CORE_PAGE_TOKEN_KEY_ID`; local defaults are developer-only compatibility. Do not add a
+    parallel page-token HMAC helper or unversioned payload/signature envelope. Analytics page tokens
+    must continue to route through the shared codec.
 
 ## Context Maintenance Rule
 
