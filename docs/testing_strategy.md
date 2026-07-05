@@ -38,6 +38,10 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `make event-contract-test-pack-guard` after adding, renaming, or changing governed event
    families, direct Kafka topics, payload models, schema versions, consumer validation behavior,
    producer envelope metadata, DLQ payloads, or replay envelopes.
+7. Synthetic fixtures, API examples, seed examples, and generated evidence safety are governed by
+   `docs/standards/synthetic-test-data-governance.v1.json`. Run
+   `make synthetic-fixture-leakage-guard` after adding or changing fixtures, golden examples, seed
+   data, generated proof artifacts, logs, snapshots, or API example catalogs.
 
 ## Proof-Family Markers
 

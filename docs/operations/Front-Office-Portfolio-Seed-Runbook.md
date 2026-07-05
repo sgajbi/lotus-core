@@ -35,7 +35,7 @@ seed. Governed Workbench and platform QA startup must run `lotus-core` with
 ## Seeded Portfolio
 
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
-- client id: `CIF_SG_000184`
+- client id: `CIF_SG_000184` (cataloged synthetic seed identifier)
 - booking centre: `Singapore`
 - mandate: global balanced discretionary
 - base currency: `USD`

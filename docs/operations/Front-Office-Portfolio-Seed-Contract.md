@@ -56,7 +56,7 @@ Recommended example:
 - portfolio id: `PB_SG_GLOBAL_BAL_001`
 - client id: `CIF_SG_000184`
 - portfolio display name: `Global Balanced Mandate`
-- client display name: `Anjali Raman`
+- client display name: `SYNTH_CLIENT_GLOBAL_BALANCED`
 - advisor id: `advisor_sg_001`
 - booking centre: `Singapore`
 - strategy: global balanced discretionary mandate

@@ -345,6 +345,13 @@ Current repository posture:
     authorization denial, not-found, idempotency conflict, dependency timeout, degraded source data,
     or pagination/filtering/sorting must extend the catalog with source-test references, synthetic
     identifiers, correlation IDs, and standard problem metadata before wiki prose points to them.
+    Synthetic fixtures, API examples, seed examples, and generated evidence safety are governed by
+    `docs/standards/synthetic-test-data-governance.v1.json` and
+    `make synthetic-fixture-leakage-guard` through `make lint`. New reusable fixtures should prefer
+    `SYNTH_*` identifiers, must model required private-banking relationships when representative,
+    and must not commit concrete bearer tokens, credentialed database URLs, personal emails,
+    natural-person client names, uncataloged CIF-style identifiers, concrete account numbers, API
+    keys, secrets, or passwords.
 41. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when

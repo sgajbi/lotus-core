@@ -1,0 +1,115 @@
+{
+  "schema_version": "synthetic-test-data-governance.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#610",
+  "guard_command": "make synthetic-fixture-leakage-guard",
+  "policy": {
+    "summary": "Committed fixtures, API examples, seed examples, generated proof artifacts, logs, and snapshots must use explicitly synthetic private-banking data and must not carry secrets or client-identifying data.",
+    "required_identifier_posture": [
+      "Prefer SYNTH_* identifiers for new reusable fixtures.",
+      "Existing canonical front-office seed identifiers that look client-like must be cataloged here before they appear in committed fixture, example, seed, or evidence surfaces.",
+      "Do not use real client names, personal emails, external account numbers, access tokens, authorization credentials, database connection strings, or API keys in committed fixtures."
+    ],
+    "realism_requirements": [
+      "Representative private-banking fixtures must model client, account, portfolio, custody, instrument, transaction, cash, FX, benchmark, and reporting-currency relationships.",
+      "Golden vectors may remain calculation-focused only when they do not include client, account, portfolio, or credential-like fields.",
+      "Generated evidence must be redacted before publication and must not be committed under output/."
+    ]
+  },
+  "leakage_guard": {
+    "scanned_path_globs": [
+      "tests/fixtures/**/*",
+      "docs/standards/verified-api-examples.v1.json",
+      "docs/standards/synthetic-test-data-governance.v1.json",
+      "tools/demo_data_pack.py",
+      "tools/front_office_portfolio_seed.py",
+      "tools/front_office_seed_contract.py",
+      "tools/manual_performance_seed.py"
+    ],
+    "optional_generated_evidence_globs": [
+      "output/**/*.json",
+      "output/**/*.md",
+      "output/**/*.log"
+    ],
+    "allowed_redacted_values": [
+      "<redacted>",
+      "<token>",
+      "<api-key>",
+      "<password>",
+      "Bearer <redacted>"
+    ],
+    "forbidden_patterns": [
+      "concrete authorization bearer credentials",
+      "database URLs carrying credentials",
+      "personal email addresses",
+      "client names that look like natural-person names",
+      "uncataloged CIF-style client identifiers",
+      "account_number fields with concrete values",
+      "secret, password, API key, or access-token fields with concrete values"
+    ]
+  },
+  "canonical_synthetic_identifiers": [
+    {
+      "identifier": "CIF_SG_000184",
+      "kind": "client_id",
+      "usage": "Canonical front-office seed portfolio PB_SG_GLOBAL_BAL_001.",
+      "synthetic_evidence": "Authored deterministic seed identifier; not sourced from a bank client system."
+    },
+    {
+      "identifier": "CIF_SG_000219",
+      "kind": "client_id",
+      "usage": "Source-only DPM universe candidate PB_SG_GLOBAL_INC_002.",
+      "synthetic_evidence": "Authored deterministic seed identifier; not sourced from a bank client system."
+    },
+    {
+      "identifier": "CIF_SG_000227",
+      "kind": "client_id",
+      "usage": "Source-only DPM universe candidate PB_SG_GLOBAL_GROWTH_003.",
+      "synthetic_evidence": "Authored deterministic seed identifier; not sourced from a bank client system."
+    }
+  ],
+  "fixture_catalog": [
+    {
+      "fixture_id": "private_banking_portfolio_fixture.v1",
+      "path": "tests/fixtures/private-banking-portfolio-fixture.v1.json",
+      "purpose": "Reusable representative synthetic private-banking portfolio fixture for API, integration, and E2E-style contract tests.",
+      "synthetic_data": true,
+      "relationship_coverage": [
+        "client",
+        "account",
+        "portfolio",
+        "custody",
+        "instrument",
+        "transaction",
+        "cash",
+        "fx",
+        "benchmark",
+        "reporting_currency"
+      ],
+      "safe_for_committed_tests": true
+    },
+    {
+      "fixture_id": "rounding-golden-vectors.v1",
+      "path": "tests/fixtures/rounding-golden-vectors.json",
+      "purpose": "Calculation-only golden vectors with no client, account, portfolio, or credential-like data.",
+      "synthetic_data": true,
+      "relationship_coverage": [],
+      "safe_for_committed_tests": true
+    }
+  ],
+  "remediation_log": [
+    {
+      "path": "docs/operations/Front-Office-Portfolio-Seed-Contract.md",
+      "remediation": "Human-looking client display name replaced with a synthetic label.",
+      "issue": "sgajbi/lotus-core#610"
+    }
+  ],
+  "guidance": {
+    "adding_new_fixtures": [
+      "Use SYNTH_* client/account identifiers unless the identifier is already a governed canonical front-office seed identifier.",
+      "Add reusable fixtures to fixture_catalog in this file.",
+      "Run make synthetic-fixture-leakage-guard and cite it in issue/PR evidence.",
+      "If an existing fixture is ambiguous but cannot be changed safely in the current slice, create or cite a follow-up issue in remediation_log."
+    ]
+  }
+}
