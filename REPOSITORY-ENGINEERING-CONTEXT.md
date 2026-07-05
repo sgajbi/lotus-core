@@ -1168,9 +1168,11 @@ Most relevant current governance:
 89. Resilience-critical runtime settings should use `portfolio_common.runtime_settings` so invalid
     values fail fast in strict or non-local profiles while local fallback remains explicit and
     logged. Current migrated families include ingestion, query service, query-control-plane,
-    common outbox, valuation runtime, and portfolio aggregation runtime controls. When changing
-    remaining legacy settings in `portfolio_common.config`, do not add another local silent parser;
-    either migrate to the shared helper or document and test the compatibility fallback.
+    common outbox, valuation runtime, portfolio aggregation runtime controls, and shared
+    `portfolio_common.config` integer, boolean, and Kafka consumer override JSON settings. Do not
+    add local silent parsers for resilience, cache, retry, scheduler, consumer, or guardrail
+    settings; either use the shared helper or document and test an explicit local-compatibility
+    fallback.
 
 ## Context Maintenance Rule
 
