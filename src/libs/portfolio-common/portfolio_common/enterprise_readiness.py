@@ -34,6 +34,7 @@ READ_AUDIT_METHODS = {"GET", "HEAD"}
 READ_AUTHZ_METHODS = {"GET", "HEAD"}
 CAPABILITY_RULE_METHODS = WRITE_METHODS | READ_AUTHZ_METHODS
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
+CAPABILITY_SUBTREE_WILDCARD = "/**"
 
 
 class EnterpriseSettings(Protocol):
@@ -412,10 +413,13 @@ def _capabilities_from_headers(normalized_headers: dict[str, str]) -> set[str]:
 def _path_matches_rule(path: str, rule_path: str) -> bool:
     normalized_rule = rule_path.rstrip("/")
     if not normalized_rule or normalized_rule == "/":
-        return True
+        return _normalize_path(path) == "/"
+    if normalized_rule.endswith(CAPABILITY_SUBTREE_WILDCARD):
+        subtree_rule = normalized_rule[: -len(CAPABILITY_SUBTREE_WILDCARD)] or "/"
+        return _path_prefix_matches_rule(path, subtree_rule)
     if _is_path_template(normalized_rule):
         return _path_template_matches(path, normalized_rule)
-    return path == normalized_rule or path.startswith(f"{normalized_rule}/")
+    return _normalize_path(path) == normalized_rule
 
 
 def _normalize_capability_rule(key: Any, capability: Any) -> tuple[str, str] | None:
@@ -454,12 +458,28 @@ def _is_path_template(rule_path: str) -> bool:
 def _path_template_matches(path: str, rule_path: str) -> bool:
     path_segments = _path_segments(path)
     rule_segments = _path_segments(rule_path)
+    if len(path_segments) != len(rule_segments):
+        return False
+    for path_segment, rule_segment in zip(path_segments, rule_segments):
+        if not _path_segment_matches_rule(path_segment, rule_segment):
+            return False
+    return True
+
+
+def _path_prefix_matches_rule(path: str, rule_path: str) -> bool:
+    path_segments = _path_segments(path)
+    rule_segments = _path_segments(rule_path)
     if len(path_segments) < len(rule_segments):
         return False
     for path_segment, rule_segment in zip(path_segments, rule_segments):
         if not _path_segment_matches_rule(path_segment, rule_segment):
             return False
     return True
+
+
+def _normalize_path(path: str) -> str:
+    normalized = path.rstrip("/")
+    return normalized or "/"
 
 
 def _path_segments(path: str) -> list[str]:

@@ -90,7 +90,7 @@ def test_authorize_write_request_enforces_capability_rules() -> None:
         authz_enabled=True,
         settings=_Settings(
             enterprise_primary_key_id="primary",
-            enterprise_capability_rules={"POST /transactions": "transactions.write"},
+            enterprise_capability_rules={"POST /transactions/**": "transactions.write"},
         ),
     )
     headers = {
@@ -156,7 +156,7 @@ def test_default_enterprise_runtime_loads_shared_env_settings(monkeypatch) -> No
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
     monkeypatch.setenv(
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        '{"GET /portfolios": "portfolios.read"}',
+        '{"GET /portfolios/**": "portfolios.read"}',
     )
 
     runtime = create_default_enterprise_readiness_runtime(
@@ -215,7 +215,7 @@ def test_authorize_request_enforces_read_capability_rules_when_enabled() -> None
         read_authz_enabled=True,
         settings=_Settings(
             enterprise_primary_key_id="primary",
-            enterprise_capability_rules={"GET /portfolios": "portfolios.read"},
+            enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"},
         ),
     )
     headers = {
@@ -360,19 +360,48 @@ def test_authorize_request_rejects_blank_service_identity() -> None:
 
 def test_required_capability_matches_only_path_segments() -> None:
     runtime = _runtime(
-        settings=_Settings(enterprise_capability_rules={"GET /portfolios": "portfolios.read"}),
+        settings=_Settings(enterprise_capability_rules={"GET /portfolios/**": "portfolios.read"}),
     )
 
     assert runtime.required_capability("GET", "/portfolios/P1") == "portfolios.read"
     assert runtime.required_capability("GET", "/portfolios-v2/P1") is None
 
 
+def test_required_capability_template_rules_match_exact_segment_count() -> None:
+    runtime = _runtime(
+        settings=_Settings(
+            enterprise_capability_rules={
+                "GET /portfolios/{portfolio_id}": "portfolio.summary.read",
+            }
+        ),
+    )
+
+    assert runtime.required_capability("GET", "/portfolios/P1") == "portfolio.summary.read"
+    assert runtime.required_capability("GET", "/portfolios/P1/analytics") is None
+
+
+def test_required_capability_template_subtree_requires_explicit_wildcard() -> None:
+    runtime = _runtime(
+        settings=_Settings(
+            enterprise_capability_rules={
+                "GET /portfolios/{portfolio_id}/**": "portfolio.subtree.read",
+            }
+        ),
+    )
+
+    assert runtime.required_capability("GET", "/portfolios/P1") == "portfolio.subtree.read"
+    assert (
+        runtime.required_capability("GET", "/portfolios/P1/analytics/reference")
+        == "portfolio.subtree.read"
+    )
+
+
 def test_required_capability_prefers_more_specific_rule() -> None:
     runtime = _runtime(
         settings=_Settings(
             enterprise_capability_rules={
-                "GET /portfolios": "portfolios.read",
-                "GET /portfolios/P1/analytics": "portfolio.analytics.read",
+                "GET /portfolios/**": "portfolios.read",
+                "GET /portfolios/P1/analytics/**": "portfolio.analytics.read",
             }
         ),
     )
@@ -387,7 +416,7 @@ def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
     runtime = _runtime(
         settings=_Settings(
             enterprise_capability_rules={
-                "get /portfolios/": " portfolios.read ",
+                "get /portfolios/**": " portfolios.read ",
                 "GET portfolios": "missing.leading.slash",
                 "GET": "missing.path",
                 "TRACE /portfolios": "unsupported.method",
@@ -397,7 +426,7 @@ def test_capability_rules_keep_only_actionable_method_path_mappings() -> None:
         )
     )
 
-    assert runtime.load_capability_rules()["GET /portfolios"] == "portfolios.read"
+    assert runtime.load_capability_rules()["GET /portfolios/**"] == "portfolios.read"
     assert (
         runtime.load_capability_rules()[
             "POST /integration/portfolios/{portfolio_id}/analytics/reference"
