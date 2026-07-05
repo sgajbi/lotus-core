@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
-from fastapi import Depends
-from portfolio_common.db import get_async_db_session
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.runtime_providers import Clock, SystemClock
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -172,7 +170,7 @@ class CoreSnapshotService:
 
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
-        return request_fingerprint(payload)
+        return cast(str, request_fingerprint(payload))
 
     @staticmethod
     def _identity_command_from_request(
@@ -215,18 +213,18 @@ class CoreSnapshotService:
         baseline_count: int,
     ) -> str:
         if baseline_count <= 0:
-            return UNKNOWN
+            return cast(str, UNKNOWN)
         freshness_status = CoreSnapshotService._normalize_freshness_status(
             freshness.freshness_status
         )
         if freshness_status == "HISTORICAL_FALLBACK":
-            return PARTIAL
+            return cast(str, PARTIAL)
         if CoreSnapshotService._is_complete_current_snapshot(
             freshness=freshness,
             freshness_status=freshness_status,
         ):
-            return COMPLETE
-        return PARTIAL
+            return cast(str, COMPLETE)
+        return cast(str, PARTIAL)
 
     @staticmethod
     def _is_complete_current_snapshot(
@@ -937,9 +935,12 @@ class CoreSnapshotService:
         if not requested_ids:
             raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
         instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
-        return instrument_enrichment_records(
-            requested_ids=requested_ids,
-            instruments=instruments,
+        return cast(
+            list[InstrumentEnrichmentRecord],
+            instrument_enrichment_records(
+                requested_ids=requested_ids,
+                instruments=instruments,
+            ),
         )
 
     async def _get_fx_rate_or_raise(
@@ -970,10 +971,4 @@ class CoreSnapshotService:
         resolved_value = decimal_or_none(value)
         if resolved_value is None:
             raise CoreSnapshotUnavailableSectionError(message)
-        return resolved_value
-
-
-def get_core_snapshot_service(
-    db: AsyncSession = Depends(get_async_db_session),
-) -> CoreSnapshotService:
-    return CoreSnapshotService(db)
+        return cast(Decimal, resolved_value)
