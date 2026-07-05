@@ -48,6 +48,9 @@ from src.services.query_service.app.services.benchmark_reference_integration_ser
 from src.services.query_service.app.services.client_profile_income_integration_service import (
     ClientProfileIncomeIntegrationService,
 )
+from src.services.query_service.app.services.dpm_portfolio_management_integration_service import (
+    DpmPortfolioManagementIntegrationService,
+)
 from src.services.query_service.app.services.dpm_readiness_integration_service import (
     DpmReadinessIntegrationService,
 )
@@ -2628,6 +2631,35 @@ async def test_client_profile_income_family_service_runs_without_full_integratio
         as_of_date=date(2026, 1, 1),
         mandate_id="MANDATE_SG_001",
         include_inactive_schedules=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_dpm_portfolio_management_family_service_runs_without_full_facade() -> None:
+    portfolio_repository = SimpleNamespace(
+        list_portfolio_manager_book_members=AsyncMock(return_value=[]),
+    )
+    service = DpmPortfolioManagementIntegrationService(
+        reference_repository_provider=lambda: SimpleNamespace(),
+        portfolio_repository_provider=lambda: portfolio_repository,
+        decode_page_token=lambda token: {"token": token} if token else {},
+        encode_page_token=lambda payload: f"token:{payload['scope_fingerprint']}",
+    )
+
+    response = await service.resolve_portfolio_manager_book_membership(
+        "PM_SG_DPM_001",
+        portfolio_manager_book_request(date(2026, 1, 1)),
+    )
+
+    assert response.product_name == "PortfolioManagerBookMembership"
+    assert response.portfolio_manager_id == "PM_SG_DPM_001"
+    assert response.supportability.state == "INCOMPLETE"
+    portfolio_repository.list_portfolio_manager_book_members.assert_awaited_once_with(
+        portfolio_manager_id="PM_SG_DPM_001",
+        as_of_date=date(2026, 1, 1),
+        booking_center_code="Singapore",
+        portfolio_types=["DISCRETIONARY"],
+        include_inactive=False,
     )
 
 
