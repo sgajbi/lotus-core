@@ -1566,6 +1566,17 @@ Most relevant current governance:
      test in `tests/unit/services/query_service/dtos/test_reference_integration_dto.py` guards
      `reference_integration_dto.py` against reintroducing downstream app names or downstream-owned
      campaign/ranking/execution/client-communication workflow phrases.
+125. Active/current source-data lifecycle predicates belong in
+     `portfolio_common.source_lifecycle_predicates`, not as scattered persistence-model SQL strings
+     or repository literals. Use the named predicate contract for DPM discretionary mandate
+     authority, client restriction/preference/tax/income/reserve/withdrawal products,
+     model-portfolio targets, benchmark definitions, and index definitions before adding or
+     changing partial indexes or repository filters. Keep effective-window predicates explicit in
+     repositories and index definitions, but share the governed status vocabulary and predicate
+     intent through the contract module. Add or update
+     `tests/unit/libs/portfolio-common/test_source_lifecycle_predicates.py`,
+     `tests/unit/libs/portfolio-common/test_database_models.py`, and the relevant query repository
+     tests when introducing a new active/current source-data family.
 
 ## Context Maintenance Rule
 

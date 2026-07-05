@@ -29,6 +29,18 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
+from portfolio_common.source_lifecycle_predicates import (
+    CLIENT_INCOME_NEEDS_ACTIVE,
+    CLIENT_RESTRICTION_ACTIVE,
+    CLIENT_TAX_PROFILE_ACTIVE,
+    CLIENT_TAX_RULE_SET_ACTIVE,
+    DISCRETIONARY_MANDATE_TYPE,
+    DPM_DISCRETIONARY_MANDATE_ACTIVE,
+    LIQUIDITY_RESERVE_ACTIVE,
+    MODEL_PORTFOLIO_TARGET_ACTIVE,
+    PLANNED_WITHDRAWAL_ACTIVE,
+    SUSTAINABILITY_PREFERENCE_ACTIVE,
+)
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,7 +134,9 @@ class ReferenceDataRepository:
             ),
         ]
         if not include_inactive_targets:
-            predicates.append(ModelPortfolioTarget.target_status == "active")
+            predicates.append(
+                MODEL_PORTFOLIO_TARGET_ACTIVE.sqlalchemy_filter(ModelPortfolioTarget.target_status)
+            )
 
         ranked = ranked_model_portfolio_target_ids(*predicates)
         stmt = (
@@ -144,7 +158,7 @@ class ReferenceDataRepository:
     ) -> list[PortfolioMandateBinding]:
         predicates = [
             PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
-            PortfolioMandateBinding.mandate_type == "discretionary",
+            PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
             effective_filter(
                 PortfolioMandateBinding.effective_from,
                 PortfolioMandateBinding.effective_to,
@@ -154,7 +168,11 @@ class ReferenceDataRepository:
         if booking_center_code:
             predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
         if not include_inactive_mandates:
-            predicates.append(PortfolioMandateBinding.discretionary_authority_status == "active")
+            predicates.append(
+                DPM_DISCRETIONARY_MANDATE_ACTIVE.sqlalchemy_filter(
+                    PortfolioMandateBinding.discretionary_authority_status
+                )
+            )
 
         ranked = ranked_portfolio_mandate_binding_ids(*predicates)
         stmt = (
@@ -202,7 +220,7 @@ class ReferenceDataRepository:
             select(PortfolioMandateBinding)
             .where(
                 PortfolioMandateBinding.portfolio_id == portfolio_id,
-                PortfolioMandateBinding.mandate_type == "discretionary",
+                PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
                 effective_filter(
                     PortfolioMandateBinding.effective_from,
                     PortfolioMandateBinding.effective_to,
@@ -250,7 +268,11 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_restrictions:
-            predicates.append(ClientRestrictionProfile.restriction_status == "active")
+            predicates.append(
+                CLIENT_RESTRICTION_ACTIVE.sqlalchemy_filter(
+                    ClientRestrictionProfile.restriction_status
+                )
+            )
 
         ranked = ranked_latest_effective_ids(
             ClientRestrictionProfile,
@@ -304,7 +326,11 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_preferences:
-            predicates.append(SustainabilityPreferenceProfile.preference_status == "active")
+            predicates.append(
+                SUSTAINABILITY_PREFERENCE_ACTIVE.sqlalchemy_filter(
+                    SustainabilityPreferenceProfile.preference_status
+                )
+            )
 
         ranked = ranked_latest_effective_ids(
             SustainabilityPreferenceProfile,
@@ -358,7 +384,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_profiles:
-            predicates.append(ClientTaxProfile.profile_status == "active")
+            predicates.append(
+                CLIENT_TAX_PROFILE_ACTIVE.sqlalchemy_filter(ClientTaxProfile.profile_status)
+            )
 
         ranked = ranked_latest_effective_ids(
             ClientTaxProfile,
@@ -408,7 +436,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_rules:
-            predicates.append(ClientTaxRuleSet.rule_status == "active")
+            predicates.append(
+                CLIENT_TAX_RULE_SET_ACTIVE.sqlalchemy_filter(ClientTaxRuleSet.rule_status)
+            )
 
         ranked = ranked_latest_effective_ids(
             ClientTaxRuleSet,
@@ -464,7 +494,9 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_schedules:
-            predicates.append(ClientIncomeNeedsSchedule.need_status == "active")
+            predicates.append(
+                CLIENT_INCOME_NEEDS_ACTIVE.sqlalchemy_filter(ClientIncomeNeedsSchedule.need_status)
+            )
 
         ranked = ranked_latest_effective_ids(
             ClientIncomeNeedsSchedule,
@@ -513,7 +545,11 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_requirements:
-            predicates.append(LiquidityReserveRequirement.reserve_status == "active")
+            predicates.append(
+                LIQUIDITY_RESERVE_ACTIVE.sqlalchemy_filter(
+                    LiquidityReserveRequirement.reserve_status
+                )
+            )
 
         ranked = ranked_latest_effective_ids(
             LiquidityReserveRequirement,
@@ -562,7 +598,11 @@ class ReferenceDataRepository:
                 )
             )
         if not include_inactive_withdrawals:
-            predicates.append(PlannedWithdrawalSchedule.withdrawal_status == "active")
+            predicates.append(
+                PLANNED_WITHDRAWAL_ACTIVE.sqlalchemy_filter(
+                    PlannedWithdrawalSchedule.withdrawal_status
+                )
+            )
 
         ranked = ranked_latest_effective_ids(
             PlannedWithdrawalSchedule,

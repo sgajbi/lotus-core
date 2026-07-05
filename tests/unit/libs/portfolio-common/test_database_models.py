@@ -37,6 +37,19 @@ from portfolio_common.database_models import (
     Transaction,
     TransactionCost,
 )
+from portfolio_common.source_lifecycle_predicates import (
+    BENCHMARK_DEFINITION_ACTIVE,
+    CLIENT_INCOME_NEEDS_ACTIVE,
+    CLIENT_RESTRICTION_ACTIVE,
+    CLIENT_TAX_PROFILE_ACTIVE,
+    CLIENT_TAX_RULE_SET_ACTIVE,
+    DPM_DISCRETIONARY_MANDATE_ACTIVE,
+    INDEX_DEFINITION_ACTIVE,
+    LIQUIDITY_RESERVE_ACTIVE,
+    MODEL_PORTFOLIO_TARGET_ACTIVE,
+    PLANNED_WITHDRAWAL_ACTIVE,
+    SUSTAINABILITY_PREFERENCE_ACTIVE,
+)
 
 
 def test_database_identifier_names_fit_postgresql_limit():
@@ -133,8 +146,8 @@ def test_portfolio_mandate_binding_declares_dpm_source_index():
         "mandate_id",
     ]
     assert (
-        str(dpm_source.dialect_options["postgresql"]["where"]) == "mandate_type = 'discretionary' "
-        "AND discretionary_authority_status = 'active'"
+        str(dpm_source.dialect_options["postgresql"]["where"])
+        == DPM_DISCRETIONARY_MANDATE_ACTIVE.sql
     )
 
 
@@ -163,7 +176,10 @@ def test_model_portfolio_tables_declare_dpm_source_indexes():
         "model_portfolio_targets.effective_from DESC",
         "model_portfolio_targets.effective_to",
     ]
-    assert str(active_target.dialect_options["postgresql"]["where"]) == "target_status = 'active'"
+    assert (
+        str(active_target.dialect_options["postgresql"]["where"])
+        == MODEL_PORTFOLIO_TARGET_ACTIVE.sql
+    )
 
 
 def test_instrument_eligibility_declares_normalized_effective_index():
@@ -197,7 +213,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "client_restriction_profiles.restriction_version DESC",
                 "client_restriction_profiles.updated_at DESC",
             ],
-            "restriction_status = 'active'",
+            CLIENT_RESTRICTION_ACTIVE.sql,
         ),
         (
             SustainabilityPreferenceProfile,
@@ -213,7 +229,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "sustainability_preference_profiles.preference_version DESC",
                 "sustainability_preference_profiles.updated_at DESC",
             ],
-            "preference_status = 'active'",
+            SUSTAINABILITY_PREFERENCE_ACTIVE.sql,
         ),
         (
             ClientTaxProfile,
@@ -228,7 +244,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "client_tax_profiles.profile_version DESC",
                 "client_tax_profiles.updated_at DESC",
             ],
-            "profile_status = 'active'",
+            CLIENT_TAX_PROFILE_ACTIVE.sql,
         ),
         (
             ClientTaxRuleSet,
@@ -245,7 +261,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "client_tax_rule_sets.rule_version DESC",
                 "client_tax_rule_sets.updated_at DESC",
             ],
-            "rule_status = 'active'",
+            CLIENT_TAX_RULE_SET_ACTIVE.sql,
         ),
         (
             ClientIncomeNeedsSchedule,
@@ -259,7 +275,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "client_income_needs_schedules.observed_at DESC NULLS LAST",
                 "client_income_needs_schedules.updated_at DESC",
             ],
-            "need_status = 'active'",
+            CLIENT_INCOME_NEEDS_ACTIVE.sql,
         ),
         (
             LiquidityReserveRequirement,
@@ -274,7 +290,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "liquidity_reserve_requirements.requirement_version DESC",
                 "liquidity_reserve_requirements.updated_at DESC",
             ],
-            "reserve_status = 'active'",
+            LIQUIDITY_RESERVE_ACTIVE.sql,
         ),
         (
             PlannedWithdrawalSchedule,
@@ -287,7 +303,7 @@ def test_client_source_data_tables_declare_active_source_indexes():
                 "planned_withdrawal_schedules.observed_at DESC NULLS LAST",
                 "planned_withdrawal_schedules.updated_at DESC",
             ],
-            "withdrawal_status = 'active'",
+            PLANNED_WITHDRAWAL_ACTIVE.sql,
         ),
     ]
 
@@ -313,14 +329,14 @@ def test_market_reference_definition_tables_declare_active_source_indexes():
     ]
     assert (
         str(active_benchmark.dialect_options["postgresql"]["where"])
-        == "benchmark_status = 'active'"
+        == BENCHMARK_DEFINITION_ACTIVE.sql
     )
     assert [str(expression) for expression in active_index.expressions] == [
         "index_definitions.index_id",
         "index_definitions.effective_from DESC",
         "index_definitions.effective_to",
     ]
-    assert str(active_index.dialect_options["postgresql"]["where"]) == "index_status = 'active'"
+    assert str(active_index.dialect_options["postgresql"]["where"]) == INDEX_DEFINITION_ACTIVE.sql
 
 
 def test_benchmark_composition_declares_latest_effective_index():
