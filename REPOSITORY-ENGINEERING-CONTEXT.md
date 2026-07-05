@@ -1253,6 +1253,11 @@ Most relevant current governance:
      jobs through the existing durable dispatch recovery path. Do not increase scheduler batch
      sizes or dispatch rounds without preserving time-budget stop behavior and source-safe
      carry-forward semantics.
+102. Valuation backfill staging must aggregate generated jobs across states and write them through
+     bounded chunks controlled by `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE`. Keep duplicate
+     idempotency and stale-epoch filtering in `ValuationJobRepository.upsert_jobs(...)`; do not
+     reintroduce scheduler loops that call `upsert_jobs(...)` once per state or bypass the
+     repository's correlation-lineage normalization.
 
 ## Context Maintenance Rule
 

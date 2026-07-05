@@ -173,6 +173,65 @@ async def test_scheduler_rearms_completed_jobs_after_watermark_reset(
     )
 
 
+async def test_scheduler_batches_backfill_jobs_across_states_in_bounded_chunks(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    scheduler._backfill_upsert_chunk_size = 3
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+
+    latest_business_date = date(2025, 8, 13)
+    states_to_backfill = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            updated_at=datetime(2025, 8, 10, 9, 30, tzinfo=timezone.utc),
+        ),
+        PositionState(
+            portfolio_id="P1",
+            security_id="S2",
+            watermark_date=date(2025, 8, 11),
+            epoch=1,
+            updated_at=datetime(2025, 8, 11, 9, 30, tzinfo=timezone.utc),
+        ),
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_states_needing_backfill.return_value = states_to_backfill
+    mock_repo.get_first_open_dates_for_keys.return_value = {
+        ("P1", "S1", 1): date(2025, 8, 10),
+        ("P1", "S2", 1): date(2025, 8, 11),
+    }
+    mock_job_repo.upsert_jobs.side_effect = [3, 2]
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    assert mock_job_repo.upsert_jobs.await_count == 2
+    first_chunk = mock_job_repo.upsert_jobs.await_args_list[0].args[0]
+    second_chunk = mock_job_repo.upsert_jobs.await_args_list[1].args[0]
+
+    assert [job.security_id for job in first_chunk] == ["S1", "S1", "S1"]
+    assert [job.valuation_date for job in first_chunk] == [
+        date(2025, 8, 11),
+        date(2025, 8, 12),
+        date(2025, 8, 13),
+    ]
+    assert [job.security_id for job in second_chunk] == ["S2", "S2"]
+    assert [job.valuation_date for job in second_chunk] == [
+        date(2025, 8, 12),
+        date(2025, 8, 13),
+    ]
+    assert first_chunk[0].correlation_id == (
+        "SCHEDULER_BACKFILL:P1:S1:1:2025-08-11:2025-08-10T09:30:00+00:00"
+    )
+    assert second_chunk[0].correlation_id == (
+        "SCHEDULER_BACKFILL:P1:S2:1:2025-08-12:2025-08-11T09:30:00+00:00"
+    )
+
+
 async def test_scheduler_normalizes_non_reprocessing_keys_with_no_position_history(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,
@@ -834,6 +893,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_BUDGET_SECONDS", "8")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", "5")
+    monkeypatch.setenv("VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE", "13")
     monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
     monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
@@ -846,6 +906,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._dispatch_rounds_per_poll == 4
     assert scheduler._poll_budget_seconds == 8
     assert scheduler._dispatch_budget_seconds == 5
+    assert scheduler._backfill_upsert_chunk_size == 13
     assert scheduler._stale_timeout_minutes == 12
     assert scheduler._max_attempts == 6
 

@@ -72,6 +72,9 @@ class ValuationScheduler:
         self._dispatch_rounds_per_poll = runtime_settings.valuation_scheduler_dispatch_rounds
         self._poll_budget_seconds = runtime_settings.valuation_scheduler_poll_budget_seconds
         self._dispatch_budget_seconds = runtime_settings.valuation_scheduler_dispatch_budget_seconds
+        self._backfill_upsert_chunk_size = (
+            runtime_settings.valuation_scheduler_backfill_upsert_chunk_size
+        )
         self._stale_timeout_minutes = runtime_settings.valuation_scheduler_stale_timeout_minutes
         self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
@@ -505,23 +508,59 @@ class ValuationScheduler:
 
         return job_requests
 
-    async def _stage_backfill_jobs_for_state(
+    def _iter_backfill_job_chunks(
+        self,
+        states_to_backfill,
+        first_open_dates: Dict[tuple[str, str, int], Any],
+        latest_business_date,
+    ):
+        chunk: list[ValuationJobUpsert] = []
+        for state in states_to_backfill:
+            self._observe_backfill_gap_metrics(state, latest_business_date)
+            key = (state.portfolio_id, state.security_id, state.epoch)
+            first_open_date = first_open_dates.get(key)
+
+            if not first_open_date:
+                self._log_missing_current_epoch_history(state, latest_business_date)
+                continue
+
+            job_requests = self._build_backfill_job_requests(
+                state, first_open_date, latest_business_date
+            )
+            if not job_requests:
+                continue
+
+            logger.info(
+                "Backfill valuation jobs planned for state.",
+                extra=operation_log_extra(
+                    event_name="valuation.scheduler.backfill_jobs_planned_for_state",
+                    operation="valuation.scheduler.create_backfill_jobs",
+                    status="succeeded",
+                    reason_code="jobs_planned",
+                    requested_count=len(job_requests),
+                    epoch=state.epoch,
+                ),
+            )
+
+            for job_request in job_requests:
+                chunk.append(job_request)
+                if len(chunk) >= self._backfill_upsert_chunk_size:
+                    yield chunk
+                    chunk = []
+        if chunk:
+            yield chunk
+
+    async def _stage_backfill_job_chunk(
         self,
         job_repo: ValuationJobRepository,
-        state,
-        first_open_date,
-        latest_business_date,
+        job_requests: list[ValuationJobUpsert],
+        *,
+        chunk_index: int,
     ) -> None:
-        job_requests = self._build_backfill_job_requests(
-            state, first_open_date, latest_business_date
-        )
-        if not job_requests:
-            return
-
         staged_count = await job_repo.upsert_jobs(job_requests)
         VALUATION_JOBS_CREATED_TOTAL.labels(job_type="backfill").inc(staged_count)
         logger.info(
-            "Backfill valuation jobs staged.",
+            "Backfill valuation jobs staged in bounded chunk.",
             extra=operation_log_extra(
                 event_name="valuation.scheduler.backfill_jobs_staged",
                 operation="valuation.scheduler.create_backfill_jobs",
@@ -529,7 +568,8 @@ class ValuationScheduler:
                 reason_code="jobs_staged",
                 staged_count=staged_count,
                 requested_count=len(job_requests),
-                epoch=state.epoch,
+                chunk_index=chunk_index,
+                chunk_size_limit=self._backfill_upsert_chunk_size,
             ),
         )
 
@@ -540,17 +580,17 @@ class ValuationScheduler:
         first_open_dates: Dict[tuple[str, str, int], Any],
         latest_business_date,
     ) -> None:
-        for state in states_to_backfill:
-            self._observe_backfill_gap_metrics(state, latest_business_date)
-            key = (state.portfolio_id, state.security_id, state.epoch)
-            first_open_date = first_open_dates.get(key)
-
-            if not first_open_date:
-                self._log_missing_current_epoch_history(state, latest_business_date)
-                continue
-
-            await self._stage_backfill_jobs_for_state(
-                job_repo, state, first_open_date, latest_business_date
+        for chunk_index, job_requests in enumerate(
+            self._iter_backfill_job_chunks(
+                states_to_backfill,
+                first_open_dates,
+                latest_business_date,
+            )
+        ):
+            await self._stage_backfill_job_chunk(
+                job_repo,
+                job_requests,
+                chunk_index=chunk_index,
             )
 
     async def _create_backfill_jobs(self, db):

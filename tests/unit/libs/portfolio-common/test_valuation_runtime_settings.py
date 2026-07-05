@@ -14,6 +14,7 @@ def test_get_valuation_runtime_settings_uses_defaults_when_env_missing(monkeypat
         "VALUATION_SCHEDULER_DISPATCH_ROUNDS",
         "VALUATION_SCHEDULER_POLL_BUDGET_SECONDS",
         "VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS",
+        "VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE",
         "VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES",
         "VALUATION_SCHEDULER_MAX_ATTEMPTS",
         "REPROCESSING_WORKER_POLL_INTERVAL_SECONDS",
@@ -30,6 +31,7 @@ def test_get_valuation_runtime_settings_uses_defaults_when_env_missing(monkeypat
     assert settings.valuation_scheduler_dispatch_rounds == 10
     assert settings.valuation_scheduler_poll_budget_seconds == 30
     assert settings.valuation_scheduler_dispatch_budget_seconds == 10
+    assert settings.valuation_scheduler_backfill_upsert_chunk_size == 100
     assert settings.valuation_scheduler_stale_timeout_minutes == 15
     assert settings.valuation_scheduler_max_attempts == 3
     assert settings.reprocessing_worker_poll_interval_seconds == 10
@@ -45,6 +47,7 @@ def test_get_valuation_runtime_settings_clamps_invalid_env_values(monkeypatch):
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "abc")
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_BUDGET_SECONDS", "-20")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", "0")
+    monkeypatch.setenv("VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE", "-4")
     monkeypatch.setenv("REPROCESSING_WORKER_BATCH_SIZE", "2")
 
     settings = get_valuation_runtime_settings(scheduler_dispatch_rounds_default=7)
@@ -54,6 +57,7 @@ def test_get_valuation_runtime_settings_clamps_invalid_env_values(monkeypatch):
     assert settings.valuation_scheduler_dispatch_rounds == 7
     assert settings.valuation_scheduler_poll_budget_seconds == 1
     assert settings.valuation_scheduler_dispatch_budget_seconds == 1
+    assert settings.valuation_scheduler_backfill_upsert_chunk_size == 1
     assert settings.reprocessing_worker_batch_size == 2
 
 
