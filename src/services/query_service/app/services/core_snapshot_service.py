@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, cast
 
-from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.runtime_providers import Clock, SystemClock
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,6 +60,7 @@ from .core_snapshot_projected_positions import (
     missing_projected_security_ids,
     new_projected_position,
 )
+from .core_snapshot_quality import snapshot_data_quality_status
 from .decimal_amounts import decimal_or_none
 
 
@@ -141,45 +141,6 @@ class CoreSnapshotService:
         self.price_repo = dependencies.price_repo
         self.fx_repo = dependencies.fx_repo
         self.instrument_repo = dependencies.instrument_repo
-
-    @staticmethod
-    def _normalize_freshness_status(status: str | None) -> str | None:
-        if status is None:
-            return None
-        normalized_status = status.strip().upper()
-        return normalized_status or None
-
-    @staticmethod
-    def _snapshot_data_quality_status(
-        *,
-        freshness: CoreSnapshotFreshnessMetadata,
-        baseline_count: int,
-    ) -> str:
-        if baseline_count <= 0:
-            return cast(str, UNKNOWN)
-        freshness_status = CoreSnapshotService._normalize_freshness_status(
-            freshness.freshness_status
-        )
-        if freshness_status == "HISTORICAL_FALLBACK":
-            return cast(str, PARTIAL)
-        if CoreSnapshotService._is_complete_current_snapshot(
-            freshness=freshness,
-            freshness_status=freshness_status,
-        ):
-            return cast(str, COMPLETE)
-        return cast(str, PARTIAL)
-
-    @staticmethod
-    def _is_complete_current_snapshot(
-        *,
-        freshness: CoreSnapshotFreshnessMetadata,
-        freshness_status: str | None,
-    ) -> bool:
-        return (
-            freshness_status == "CURRENT_SNAPSHOT"
-            and freshness.snapshot_timestamp is not None
-            and freshness.snapshot_epoch is not None
-        )
 
     async def get_core_snapshot(
         self,
@@ -571,7 +532,7 @@ class CoreSnapshotService:
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 tenant_id=governance.tenant_id,
-                data_quality_status=self._snapshot_data_quality_status(
+                data_quality_status=snapshot_data_quality_status(
                     freshness=freshness,
                     baseline_count=baseline_count,
                 ),
