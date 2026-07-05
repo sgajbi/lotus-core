@@ -64,6 +64,11 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    replay/repair/ops-control commands, reconciliation control commands, idempotency behavior,
    runtime-mode gating, dependency-failure mapping, bookkeeping recovery, or security-denied
    command responses.
+12. Observability contract evidence is governed by
+   `docs/standards/observability-contract-test-pack.v1.json`. Run
+   `make observability-contract-test-pack-guard` after changing HTTP middleware, health/version
+   app bootstrap, metrics labels, trace/correlation headers, structured logging, or source-safe
+   diagnostics.
 
 ## Proof-Family Markers
 

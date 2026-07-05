@@ -893,6 +893,7 @@
           "proof_family": "contract_schema",
           "gap_status": "covered",
           "current_coverage": [
+            "make observability-contract-test-pack-guard",
             "make structured-log-guard",
             "make metric-vocabulary-guard"
           ]
@@ -906,11 +907,11 @@
         },
         {
           "proof_family": "performance_resilience",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
+            "make observability-contract-test-pack-guard",
             "make test-latency-gate"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#571"
+          ]
         }
       ]
     }
