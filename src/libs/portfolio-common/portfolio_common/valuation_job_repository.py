@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .database_models import PortfolioValuationJob
+from .durable_correlation import durable_correlation_diagnostics
 from .logging_utils import normalize_lineage_value
 
 logger = logging.getLogger(__name__)
@@ -258,23 +259,37 @@ def _valuation_job_upsert_stmt(eligible_jobs: list[ValuationJobUpsert]):
 def _valuation_job_insert_values(
     eligible_jobs: list[ValuationJobUpsert],
 ) -> list[dict[str, object]]:
-    return [
-        {
-            "portfolio_id": job.portfolio_id,
-            "security_id": job.security_id,
-            "valuation_date": job.valuation_date,
-            "epoch": job.epoch,
-            "status": "PENDING",
-            "correlation_id": job.correlation_id,
-        }
-        for job in eligible_jobs
-    ]
+    values: list[dict[str, object]] = []
+    for job in eligible_jobs:
+        diagnostics = durable_correlation_diagnostics(
+            correlation_id=job.correlation_id,
+            record_family="valuation_job",
+            portfolio_id=job.portfolio_id,
+            security_id=job.security_id,
+            valuation_date=job.valuation_date,
+            epoch=job.epoch,
+        )
+        values.append(
+            {
+                "portfolio_id": job.portfolio_id,
+                "security_id": job.security_id,
+                "valuation_date": job.valuation_date,
+                "epoch": job.epoch,
+                "status": "PENDING",
+                "correlation_id": diagnostics.correlation_id,
+                "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                "alternate_lookup_key": diagnostics.alternate_lookup_key,
+            }
+        )
+    return values
 
 
 def _valuation_job_update_values(stmt) -> dict[str, object]:
     return {
         "status": "PENDING",
         "correlation_id": stmt.excluded.correlation_id,
+        "correlation_missing_reason": stmt.excluded.correlation_missing_reason,
+        "alternate_lookup_key": stmt.excluded.alternate_lookup_key,
         "updated_at": func.now(),
     }
 

@@ -233,6 +233,38 @@ async def test_create_job_backfills_missing_correlation_for_same_impacted_date(
     assert len(rows) == 1
     assert rows[0].payload["earliest_impacted_date"] == "2025-01-05"
     assert rows[0].correlation_id == "corr-fill"
+    assert rows[0].correlation_missing_reason is None
+    assert rows[0].alternate_lookup_key is None
+
+
+async def test_create_job_records_missing_correlation_diagnostics(
+    clean_db, async_db_session: AsyncSession
+):
+    repository = ReprocessingJobRepository(async_db_session)
+
+    job = await repository.create_job(
+        "RESET_WATERMARKS",
+        {"security_id": "S9", "earliest_impacted_date": "2025-01-05"},
+        correlation_id=None,
+    )
+    await async_db_session.commit()
+
+    persisted = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob).where(ReprocessingJob.id == job.id)
+            )
+        )
+        .scalars()
+        .one()
+    )
+
+    assert persisted.correlation_id is None
+    assert persisted.correlation_missing_reason == "correlation_id_not_supplied"
+    assert persisted.alternate_lookup_key == (
+        "reprocessing_job|earliest_impacted_date=2025-01-05|job_type=RESET_WATERMARKS|"
+        "security_id=S9"
+    )
 
 
 async def test_create_job_preserves_existing_correlation_when_earlier_date_has_none(

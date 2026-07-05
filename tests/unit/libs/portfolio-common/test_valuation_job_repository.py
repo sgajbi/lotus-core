@@ -119,6 +119,10 @@ async def test_upsert_job_normalizes_sentinel_correlation(
 
     values_args = mock_pg_insert.return_value.values.call_args.args[0]
     assert values_args[0]["correlation_id"] is None
+    assert values_args[0]["correlation_missing_reason"] == "correlation_id_not_supplied"
+    assert values_args[0]["alternate_lookup_key"] == (
+        "valuation_job|epoch=1|portfolio_id=P1|security_id=S1|valuation_date=2025-08-10"
+    )
 
 
 @patch("portfolio_common.valuation_job_repository.pg_insert")

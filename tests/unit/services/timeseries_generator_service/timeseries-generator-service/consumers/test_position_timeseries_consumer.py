@@ -537,6 +537,30 @@ async def test_stage_aggregation_jobs_deduplicates_dates_before_bulk_insert(
     assert compiled_stmt.count("'2025-08-14'") == 1
 
 
+async def test_stage_aggregation_job_records_missing_correlation_diagnostics(
+    consumer: PositionTimeseriesConsumer,
+    mock_dependencies: dict,
+):
+    await consumer._stage_aggregation_job(
+        mock_dependencies["db_session"],
+        "PORT_TS_POS_01",
+        date(2025, 8, 12),
+        None,
+    )
+
+    executed_stmt = mock_dependencies["db_session"].execute.call_args[0][0]
+    compiled_stmt = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    )
+
+    assert "correlation_missing_reason" in compiled_stmt
+    assert "alternate_lookup_key" in compiled_stmt
+    assert "correlation_id_not_supplied" in compiled_stmt
+    assert (
+        "aggregation_job|aggregation_date=2025-08-12|portfolio_id=PORT_TS_POS_01" in compiled_stmt
+    )
+
+
 async def test_process_message_warns_only_when_future_chain_exceeds_cap(
     consumer: PositionTimeseriesConsumer,
     mock_kafka_message: MagicMock,
