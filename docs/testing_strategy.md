@@ -52,6 +52,12 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `make concurrency-duplicate-delivery-guard` after adding or changing idempotency keys,
    consumer replay behavior, outbox claim/result handling, worker claim/reset logic, epoch fences,
    dirty-window propagation, or correction/cancellation recalculation behavior.
+10. Cross-product transaction and corporate-action golden examples are governed by
+   `docs/standards/cross-product-golden-regression-pack.v1.json` and reusable fixture data in
+   `tests/fixtures/cross-product-transaction-golden-scenarios.v1.json`. Run
+   `make cross-product-golden-regression-guard` after changing transaction type behavior,
+   corporate-action legs, cash/product leg mapping, cost basis, income/cashflow classification,
+   valuation assumptions, lineage/correlation fields, or reusable golden examples.
 
 ## Proof-Family Markers
 

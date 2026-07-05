@@ -367,6 +367,16 @@ Current repository posture:
     operator-visible job/retry state. Do not rely on unbounded sleeps as the primary concurrency
     trigger; use barriers, callback outcomes, database constraints, claim tokens, and explicit
     transactions.
+    Cross-product transaction and corporate-action golden examples now live in
+    `tests/fixtures/cross-product-transaction-golden-scenarios.v1.json` with governance in
+    `docs/standards/cross-product-golden-regression-pack.v1.json`; `make
+    cross-product-golden-regression-guard` is wired into lint. When changing transaction lifecycle,
+    cash/product leg mapping, cost basis, income/cashflow classification, valuation assumptions,
+    corporate-action legs, or lineage/correlation behavior, update the reusable fixture and add
+    executable lowest-meaningful-level assertions first. Product families that are not yet fully
+    executable must remain explicit `documented_gap` or `implemented_with_gaps` entries with
+    expected state sections and linked follow-up ownership instead of disappearing from the golden
+    pack.
 41. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
