@@ -1031,6 +1031,15 @@ Most relevant current governance:
     or changes the boundary. Important modules default to no runtime split until scale, deployment
     cadence, operations ownership, persistence ownership, failure isolation, security, or SLO
     evidence changes that decision.
+85. Evidence-producing capabilities should use typed in-process proof builders before anyone
+    considers a proof service. The repo-local standard lives at
+    `docs/standards/proof-builder-pattern-standard.md`; shared typed proof contracts live in
+    `portfolio_common.proof_builders`; and `make architecture-guard` runs
+    `scripts/proof_builder_pattern_guard.py`. The first contract families cover source-data
+    supportability, ingestion/replay evidence, reconciliation evidence, and app validation
+    evidence. Proof builders accept application/domain/support inputs and return typed artifacts;
+    routers map artifacts to API DTOs, repositories own persistence reads, and runbooks document
+    operator behavior. A separate proof service requires the runtime-boundary decision process.
 
 ## Context Maintenance Rule
 
