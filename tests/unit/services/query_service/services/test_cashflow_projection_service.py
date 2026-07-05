@@ -74,20 +74,19 @@ async def test_projection_defaults_to_latest_business_date(mock_repo: AsyncMock)
         assert response.portfolio_currency == "USD"
         assert response.data_quality_status == "COMPLETE"
         assert response.latest_evidence_timestamp == datetime(2026, 3, 3, 12, 30, tzinfo=UTC)
-        assert response.source_batch_fingerprint == (
-            "cashflow_projection:P1:2026-03-01:2026-03-11:include_projected=true"
-        )
         assert response.content_hash.startswith("sha256:")
+        assert response.source_batch_fingerprint == response.content_hash
         assert response.source_digest == response.content_hash
         assert response.source_refs == [
             "lotus-core://source/PortfolioCashflowProjection/P1/2026-03-01/2026-03-11"
         ]
-        assert response.lineage == {
+        assert response.source_lineage == {
             "source_owner": "lotus-core",
             "source_product": "PortfolioCashflowProjection",
             "portfolio_id": "P1",
         }
         assert response.source_evidence_current is True
+        assert response.freshness_status == "CURRENT"
         assert response.points[0].projected_cumulative_cashflow == Decimal("-1000")
         assert response.points[0].booked_net_cashflow == Decimal("-1000")
         assert response.points[0].projected_settlement_cashflow == Decimal("0")

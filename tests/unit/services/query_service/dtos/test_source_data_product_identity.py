@@ -70,8 +70,9 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
     assert metadata["content_hash"].startswith("sha256:")
     assert metadata["source_digest"] == metadata["content_hash"]
     assert metadata["source_refs"] == []
-    assert metadata["lineage"] == {}
+    assert metadata["source_lineage"] == {}
     assert metadata["source_evidence_current"] is False
+    assert metadata["freshness_status"] == "UNAVAILABLE"
     assert metadata == {
         "tenant_id": None,
         "generated_at": generated_at,
@@ -85,8 +86,9 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         "content_hash": metadata["content_hash"],
         "source_digest": metadata["content_hash"],
         "source_refs": [],
-        "lineage": {},
+        "source_lineage": {},
         "source_evidence_current": False,
+        "freshness_status": "UNAVAILABLE",
         "policy_version": None,
         "correlation_id": None,
     }
@@ -135,8 +137,21 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
     assert metadata["content_hash"] == "sha256:" + "a" * 64
     assert metadata["source_digest"] == "sha256:" + "a" * 64
     assert metadata["source_refs"] == ["lotus-core://source/HoldingsAsOf/P1"]
-    assert metadata["lineage"] == {"source_owner": "lotus-core"}
+    assert metadata["source_lineage"] == {"source_owner": "lotus-core"}
     assert metadata["source_evidence_current"] is True
+    assert metadata["freshness_status"] == "CURRENT"
+
+
+def test_source_data_product_runtime_metadata_can_emit_proof_compatible_fingerprint() -> None:
+    metadata = source_data_product_runtime_metadata(
+        as_of_date=date(2026, 3, 26),
+        generated_at=datetime(2026, 4, 15, 1, 30, tzinfo=UTC),
+        source_batch_fingerprint="legacy_source_batch",
+        content_hash="sha256:" + "b" * 64,
+        use_content_hash_as_source_batch_fingerprint=True,
+    )
+
+    assert metadata["source_batch_fingerprint"] == "sha256:" + "b" * 64
 
 
 def test_stable_content_hash_ignores_dictionary_order() -> None:

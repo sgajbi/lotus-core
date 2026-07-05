@@ -468,9 +468,27 @@ def portfolio_positions_response_data(
     return PortfolioPositionsResponse(
         portfolio_id=portfolio_id,
         positions=positions,
+        maturity_summary=holdings_maturity_summary_payload(positions),
         **source_data_product_runtime_metadata(
             as_of_date=response_as_of_date,
             data_quality_status=data_quality_status,
             latest_evidence_timestamp=latest_evidence_timestamp,
+            use_content_hash_as_source_batch_fingerprint=True,
         ),
     )
+
+
+def holdings_maturity_summary_payload(positions: list[Position]) -> dict[str, Any]:
+    maturity_dates = sorted(
+        position.maturity_date for position in positions if position.maturity_date is not None
+    )
+    next_maturity_date = maturity_dates[0] if maturity_dates else None
+    maturing_position_count = len(maturity_dates)
+    return {
+        "maturity_basis": "CONTRACTUAL_INSTRUMENT_MATURITY_DATE",
+        "source_reported_next_maturity_date": next_maturity_date,
+        "next_maturity_date": next_maturity_date,
+        "source_reported_maturing_position_count": maturing_position_count,
+        "maturing_position_count": maturing_position_count,
+        "maturing_holding_count": maturing_position_count,
+    }

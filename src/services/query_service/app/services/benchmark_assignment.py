@@ -59,5 +59,6 @@ def build_benchmark_assignment_response(
                 "benchmark_id": row.benchmark_id,
                 "assignment_version": str(int(row.assignment_version)),
             },
+            use_content_hash_as_source_batch_fingerprint=True,
         ),
     )

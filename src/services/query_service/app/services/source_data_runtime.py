@@ -14,6 +14,7 @@ def source_product_runtime_metadata(
     content_hash: str | None = None,
     source_refs: list[str] | None = None,
     lineage: dict[str, str] | None = None,
+    use_content_hash_as_source_batch_fingerprint: bool = False,
 ) -> dict[str, object]:
     return source_data_product_runtime_metadata(
         as_of_date=as_of_date,
@@ -23,6 +24,7 @@ def source_product_runtime_metadata(
         content_hash=content_hash,
         source_refs=source_refs,
         lineage=lineage,
+        use_content_hash_as_source_batch_fingerprint=(use_content_hash_as_source_batch_fingerprint),
     )
 
 
@@ -35,6 +37,7 @@ def source_product_runtime_metadata_without_as_of_date(
     content_hash: str | None = None,
     source_refs: list[str] | None = None,
     lineage: dict[str, str] | None = None,
+    use_content_hash_as_source_batch_fingerprint: bool = False,
 ) -> dict[str, object]:
     metadata = source_product_runtime_metadata(
         as_of_date,
@@ -44,6 +47,7 @@ def source_product_runtime_metadata_without_as_of_date(
         content_hash=content_hash,
         source_refs=source_refs,
         lineage=lineage,
+        use_content_hash_as_source_batch_fingerprint=(use_content_hash_as_source_batch_fingerprint),
     )
     metadata.pop("as_of_date")
     return metadata

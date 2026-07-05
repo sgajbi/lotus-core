@@ -9,6 +9,10 @@ from portfolio_common.reconciliation_quality import UNKNOWN
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
 from pydantic import BaseModel, Field
 
+SOURCE_METADATA_UNAVAILABLE_HASH = (
+    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+)
+
 
 def product_name_field(product_name: str):
     return Field(
@@ -68,11 +72,12 @@ class SourceDataProductRuntimeMetadata(BaseModel):
     source_batch_fingerprint: str | None = Field(
         None,
         description=(
-            "Upstream source-batch fingerprint when the product can be traced to source-batch "
-            "evidence. Request-scope and snapshot identities must use request/snapshot fields, "
-            "not this lineage field."
+            "Source-owned deterministic SHA-256 fingerprint for this response evidence. When a "
+            "caller supplies a legacy source-batch label, Core still emits the canonical content "
+            "hash here so downstream proof tooling can validate the response without deriving "
+            "source authority itself."
         ),
-        examples=["sbf_9c3f13c0a5d14f3e"],
+        examples=["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
     )
     snapshot_id: str | None = Field(
         None,
@@ -80,7 +85,7 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         examples=["pss_0123456789abcdef0123456789abcdef"],
     )
     content_hash: str = Field(
-        ...,
+        SOURCE_METADATA_UNAVAILABLE_HASH,
         description=(
             "Deterministic SHA-256 hash of the source-owned response content and proof basis, "
             "excluding volatile response-generation timestamps."
@@ -88,7 +93,7 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         examples=["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
     )
     source_digest: str = Field(
-        ...,
+        SOURCE_METADATA_UNAVAILABLE_HASH,
         description=(
             "Alias of content_hash for downstream proof tooling that uses source digest "
             "terminology."
@@ -100,18 +105,26 @@ class SourceDataProductRuntimeMetadata(BaseModel):
         description="Deterministic source references used to assemble this product response.",
         examples=[["lotus-core://source/PortfolioStateSnapshot/PF-001/2026-04-10"]],
     )
-    lineage: dict[str, str] = Field(
+    source_lineage: dict[str, str] = Field(
         default_factory=dict,
         description="Bounded source lineage identifiers for support and proof validation.",
         examples=[{"source_product": "PortfolioStateSnapshot", "source_owner": "lotus-core"}],
     )
     source_evidence_current: bool = Field(
-        ...,
+        False,
         description=(
             "Whether Core considers the returned source evidence current for the requested "
             "as-of scope."
         ),
         examples=[True],
+    )
+    freshness_status: str = Field(
+        "UNAVAILABLE",
+        description=(
+            "Text freshness posture for downstream proof tooling. CURRENT means Core considers "
+            "the source evidence current for the requested as-of scope."
+        ),
+        examples=["CURRENT"],
     )
     policy_version: str | None = Field(
         None,
@@ -141,8 +154,11 @@ def source_data_product_runtime_metadata(
     source_refs: list[str] | None = None,
     lineage: dict[str, str] | None = None,
     source_evidence_current: bool | None = None,
+    freshness_status: str | None = None,
+    use_content_hash_as_source_batch_fingerprint: bool = False,
 ) -> dict[str, object]:
     resolved_generated_at = generated_at or datetime.now(UTC)
+    normalized_source_batch_fingerprint = normalize_lineage_value(source_batch_fingerprint)
     normalized_refs = [
         ref for ref in (normalize_lineage_value(ref) for ref in source_refs or []) if ref
     ]
@@ -160,12 +176,20 @@ def source_data_product_runtime_metadata(
             "reconciliation_status": reconciliation_status,
             "data_quality_status": data_quality_status,
             "latest_evidence_timestamp": latest_evidence_timestamp,
-            "source_batch_fingerprint": normalize_lineage_value(source_batch_fingerprint),
+            "source_batch_fingerprint": normalized_source_batch_fingerprint,
             "snapshot_id": normalize_lineage_value(snapshot_id),
             "policy_version": normalize_lineage_value(policy_version),
             "source_refs": normalized_refs,
-            "lineage": normalized_lineage,
+            "source_lineage": normalized_lineage,
         }
+    )
+    resolved_source_evidence_current = (
+        _default_source_evidence_current(
+            data_quality_status=data_quality_status,
+            latest_evidence_timestamp=latest_evidence_timestamp,
+        )
+        if source_evidence_current is None
+        else source_evidence_current
     )
     return {
         "tenant_id": normalize_lineage_value(tenant_id),
@@ -175,19 +199,23 @@ def source_data_product_runtime_metadata(
         "reconciliation_status": reconciliation_status,
         "data_quality_status": data_quality_status,
         "latest_evidence_timestamp": latest_evidence_timestamp,
-        "source_batch_fingerprint": normalize_lineage_value(source_batch_fingerprint),
+        "source_batch_fingerprint": _accepted_source_fingerprint(
+            normalized_source_batch_fingerprint,
+            content_hash=resolved_content_hash,
+            use_content_hash_as_source_batch_fingerprint=(
+                use_content_hash_as_source_batch_fingerprint
+            ),
+        ),
         "snapshot_id": normalize_lineage_value(snapshot_id),
         "content_hash": resolved_content_hash,
         "source_digest": source_digest or resolved_content_hash,
         "source_refs": normalized_refs,
-        "lineage": normalized_lineage,
-        "source_evidence_current": (
-            _default_source_evidence_current(
-                data_quality_status=data_quality_status,
-                latest_evidence_timestamp=latest_evidence_timestamp,
-            )
-            if source_evidence_current is None
-            else source_evidence_current
+        "source_lineage": normalized_lineage,
+        "source_evidence_current": resolved_source_evidence_current,
+        "freshness_status": freshness_status
+        or _default_freshness_status(
+            data_quality_status=data_quality_status,
+            source_evidence_current=resolved_source_evidence_current,
         ),
         "policy_version": normalize_lineage_value(policy_version),
         "correlation_id": normalize_lineage_value(correlation_id_var.get()),
@@ -218,3 +246,22 @@ def _default_source_evidence_current(
     return data_quality_status.strip().upper() in {"COMPLETE", "PARTIAL"} and (
         latest_evidence_timestamp is not None
     )
+
+
+def _accepted_source_fingerprint(
+    value: str | None,
+    *,
+    content_hash: str,
+    use_content_hash_as_source_batch_fingerprint: bool,
+) -> str | None:
+    if use_content_hash_as_source_batch_fingerprint:
+        return content_hash
+    return value
+
+
+def _default_freshness_status(*, data_quality_status: str, source_evidence_current: bool) -> str:
+    if source_evidence_current:
+        return "CURRENT"
+    if data_quality_status.strip().upper() == "STALE":
+        return "STALE"
+    return "UNAVAILABLE"

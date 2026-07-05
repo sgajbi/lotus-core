@@ -44,6 +44,7 @@
     "latest_evidence_timestamp": "2026-04-19T00:00:00Z",
     "source_batch_fingerprint": "sha256:portfolio-state-snapshot-demo-batch",
     "snapshot_id": "PB_SG_GLOBAL_BAL_001:2026-04-19",
+    "content_hash": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "policy_version": "portfolio-state-snapshot-policy.v1",
     "correlation_id": "rfc-0087-lotus-core-portfolio-state-snapshot"
   },

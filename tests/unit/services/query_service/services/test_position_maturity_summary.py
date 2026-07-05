@@ -85,13 +85,13 @@ def test_maturity_summary_counts_maturing_holdings_and_next_date() -> None:
     assert summary.data_quality_status == COMPLETE
     assert summary.freshness_status == "CURRENT"
     assert summary.request_fingerprint.startswith("maturity_summary:")
-    assert summary.source_batch_fingerprint is None
+    assert summary.source_batch_fingerprint == summary.content_hash
     assert summary.content_hash.startswith("sha256:")
     assert summary.source_digest == summary.content_hash
     assert summary.source_refs == [
         "lotus-core://source/PortfolioMaturitySummary/P1/2026-03-10/2026-06-08"
     ]
-    assert summary.lineage == {
+    assert summary.source_lineage == {
         "source_owner": "lotus-core",
         "source_product": "PortfolioMaturitySummary",
         "upstream_product": "HoldingsAsOf",
