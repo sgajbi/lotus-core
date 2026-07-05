@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, TransactionEvent
 
 from src.services.pipeline_orchestrator_service.app.consumers import (
     processed_transaction_stage_consumer as consumer_module,
@@ -38,6 +38,8 @@ def mock_event() -> TransactionEvent:
         trade_currency="USD",
         currency="USD",
         epoch=0,
+        event_type="ProcessedTransactionPersisted",
+        schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
 
 

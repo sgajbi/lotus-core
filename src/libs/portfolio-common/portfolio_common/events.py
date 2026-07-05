@@ -55,6 +55,7 @@ class CoreEventModel(BaseModel):
     traceparent: Optional[str] = Field(None)
 
 
+GOVERNED_EVENT_SCHEMA_VERSION = "1.0.0"
 GOVERNED_EVENT_SCHEMA_FIELDS = frozenset({"event_type", "schema_version"})
 GOVERNED_EVENT_ENVELOPE_FIELDS = frozenset(
     {*GOVERNED_EVENT_SCHEMA_FIELDS, "correlation_id", "traceparent"}

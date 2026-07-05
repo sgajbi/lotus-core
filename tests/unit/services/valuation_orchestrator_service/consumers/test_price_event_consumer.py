@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import MarketPricePersistedEvent
+from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,8 @@ def mock_event() -> MarketPricePersistedEvent:
         price_date=date(2025, 8, 5),
         price=150.0,
         currency="USD",
+        event_type="MarketPricePersisted",
+        schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
 
 

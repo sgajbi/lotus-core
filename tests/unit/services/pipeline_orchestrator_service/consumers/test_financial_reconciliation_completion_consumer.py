@@ -3,7 +3,10 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import FinancialReconciliationCompletedEvent
+from portfolio_common.events import (
+    GOVERNED_EVENT_SCHEMA_VERSION,
+    FinancialReconciliationCompletedEvent,
+)
 
 from src.services.pipeline_orchestrator_service.app.consumers import (
     financial_reconciliation_completion_consumer as consumer_module,
@@ -40,6 +43,8 @@ def mock_event() -> FinancialReconciliationCompletedEvent:
         error_count=1,
         warning_count=0,
         correlation_id="corr-ctrl",
+        event_type="FinancialReconciliationCompleted",
+        schema_version=GOVERNED_EVENT_SCHEMA_VERSION,
     )
 
 

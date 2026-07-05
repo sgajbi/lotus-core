@@ -2,7 +2,11 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
+from portfolio_common.event_mapping import (
+    EventContractValidationError,
+    decode_kafka_event_payload,
+    validate_kafka_event_payload,
+)
 from portfolio_common.events import TransactionEvent
 from portfolio_common.kafka_consumer import BaseConsumer
 from pydantic import ValidationError
@@ -25,7 +29,11 @@ class ProcessedTransactionStageConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         try:
             decoded_payload = decode_kafka_event_payload(msg)
-            event = validate_kafka_event_payload(decoded_payload, TransactionEvent)
+            event = validate_kafka_event_payload(
+                decoded_payload,
+                TransactionEvent,
+                expected_event_type="ProcessedTransactionPersisted",
+            )
             with self._message_correlation_context(msg) as correlation_id:
                 handler = get_pipeline_stage_message_handler()
                 await handler.handle_processed_transaction(
@@ -34,7 +42,7 @@ class ProcessedTransactionStageConsumer(BaseConsumer):
                     correlation_id=correlation_id,
                 )
 
-        except (json.JSONDecodeError, ValidationError):
+        except (json.JSONDecodeError, ValidationError, EventContractValidationError):
             logger.error(
                 "Invalid processed transaction stage payload; sending to DLQ.",
                 exc_info=True,

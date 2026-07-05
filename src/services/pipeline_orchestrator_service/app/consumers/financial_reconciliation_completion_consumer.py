@@ -2,7 +2,11 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
+from portfolio_common.event_mapping import (
+    EventContractValidationError,
+    decode_kafka_event_payload,
+    validate_kafka_event_payload,
+)
 from portfolio_common.events import FinancialReconciliationCompletedEvent
 from portfolio_common.kafka_consumer import BaseConsumer
 from pydantic import ValidationError
@@ -26,7 +30,9 @@ class FinancialReconciliationCompletionConsumer(BaseConsumer):
         try:
             decoded_payload = decode_kafka_event_payload(msg)
             event = validate_kafka_event_payload(
-                decoded_payload, FinancialReconciliationCompletedEvent
+                decoded_payload,
+                FinancialReconciliationCompletedEvent,
+                expected_event_type="FinancialReconciliationCompleted",
             )
             with self._message_correlation_context(
                 msg,
@@ -40,7 +46,7 @@ class FinancialReconciliationCompletionConsumer(BaseConsumer):
                     correlation_id=correlation_id,
                 )
 
-        except (json.JSONDecodeError, ValidationError):
+        except (json.JSONDecodeError, ValidationError, EventContractValidationError):
             logger.error(
                 "Invalid financial reconciliation completion payload; sending to DLQ.",
                 exc_info=True,

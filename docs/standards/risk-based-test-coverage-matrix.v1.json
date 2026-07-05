@@ -249,11 +249,11 @@
         },
         {
           "proof_family": "contract_schema",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
-            "make source-data-product-contract-guard"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#604"
+            "make source-data-product-contract-guard",
+            "make event-contract-test-pack-guard"
+          ]
         },
         {
           "proof_family": "integration",
@@ -658,7 +658,8 @@
           "gap_status": "covered",
           "current_coverage": [
             "make ingestion-contract-gate",
-            "make source-data-product-contract-guard"
+            "make source-data-product-contract-guard",
+            "make event-contract-test-pack-guard"
           ]
         },
         {
@@ -717,11 +718,11 @@
         },
         {
           "proof_family": "contract_schema",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
-            "make event-runtime-contract-guard"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#604"
+            "make event-runtime-contract-guard",
+            "make event-contract-test-pack-guard"
+          ]
         },
         {
           "proof_family": "integration",
