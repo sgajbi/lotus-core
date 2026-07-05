@@ -67,6 +67,7 @@ The response mirrors image provenance embedded during build:
 - image version
 - image digest
 - CI pipeline/run ID
+- OCI label map for the same values
 
 The same values are carried as OCI labels and runtime environment variables. Local builds default
 `LOTUS_IMAGE_DIGEST` to `unknown` because an image cannot know its registry digest until the
@@ -78,14 +79,15 @@ available.
 Immutable service images are published only by `.github/workflows/image-release.yml`. The release
 lane:
 
-1. tags every image with the Git SHA,
-2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
+1. tags every image with the full Git SHA,
+2. adds OCI labels for commit, branch, repo URL, image version, build time, digest, and CI run ID,
 3. pushes images to GHCR from CI only,
 4. captures the resolved image digest in a release manifest,
 5. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact,
 6. fails on high or critical Trivy findings,
 7. signs the digest reference with Cosign,
-8. records digest-based Kubernetes deployment and same-image promotion evidence, and
+8. records digest-based Kubernetes deployment and same-image promotion evidence across `dev`,
+   `uat`, and `prod`, and
 9. rejects secret-like Dockerfile or workflow build ARG/ENV additions through
    `make image-provenance-guard`.
 

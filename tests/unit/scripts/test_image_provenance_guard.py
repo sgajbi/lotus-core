@@ -13,6 +13,24 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
         or 'def configure_standard_http_app():\n    create_version_router(service_name=service_name)\n"/version"\n',
         encoding="utf-8",
     )
+    root.joinpath(
+        "src", "libs", "portfolio-common", "portfolio_common", "build_metadata.py"
+    ).write_text(
+        "\n".join(
+            [
+                "OCI_METADATA_LABELS",
+                "org.opencontainers.image.revision",
+                "org.opencontainers.image.ref.name",
+                "org.opencontainers.image.created",
+                "org.opencontainers.image.source",
+                "org.opencontainers.image.version",
+                "org.opencontainers.image.digest",
+                "org.opencontainers.image.ci.run_id",
+                "oci_labels",
+            ]
+        ),
+        encoding="utf-8",
+    )
     scripts_dir = root / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     scripts_dir.joinpath("prebuild_ci_images.py").write_text(
@@ -45,6 +63,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
                 "kubernetes_deploys_by_digest",
                 "same_image_promoted_across_environments",
                 "runtime_env",
+                "oci_labels",
             ]
         ),
         encoding="utf-8",
@@ -149,3 +168,21 @@ def test_image_provenance_guard_requires_standard_version_endpoint(tmp_path: Pat
     findings = find_image_provenance_findings(tmp_path)
 
     assert any("missing /version route" in f.detail for f in findings)
+
+
+def test_image_provenance_guard_requires_version_endpoint_oci_label_parity(
+    tmp_path: Path,
+) -> None:
+    _write_required_sources(tmp_path)
+    build_metadata = (
+        tmp_path / "src" / "libs" / "portfolio-common" / "portfolio_common" / "build_metadata.py"
+    )
+    build_metadata.write_text("oci_labels\n", encoding="utf-8")
+    _write_dockerfile(tmp_path, _complete_dockerfile())
+
+    findings = find_image_provenance_findings(tmp_path)
+
+    assert any(
+        "version endpoint metadata omits org.opencontainers.image.digest" in f.detail
+        for f in findings
+    )

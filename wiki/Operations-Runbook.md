@@ -114,8 +114,9 @@ When app-local runtime is unhealthy, check this order:
 Runtime-facing API services and worker health web apps expose `/health/live`, `/health/ready`, and
 `/metrics`. They also expose `GET /version`, which returns the image provenance values embedded
 during build or deployment: Git commit SHA, Git branch, build timestamp, repo URL, image version,
-image digest, and CI pipeline/run ID. Local builds report `image_digest: "unknown"` unless the
-build/release lane or deploy manifest supplies `LOTUS_IMAGE_DIGEST`.
+image digest, CI pipeline/run ID, and the corresponding OCI label map. Local builds report
+`image_digest: "unknown"` unless the build/release lane or deploy manifest supplies
+`LOTUS_IMAGE_DIGEST`.
 
 Health responses include `X-Correlation-ID`, `X-Request-Id`, `X-Trace-Id`, and
 `traceparent` headers so incident triage can tie probe behavior to request logs and route-template
@@ -140,9 +141,10 @@ Prometheus labels. Service-local metrics must either move to `portfolio_common.m
 registered with an owner in `SERVICE_LOCAL_METRIC_OWNERS`.
 
 Image provenance is guarded by `make image-provenance-guard`. It checks service Dockerfile OCI
-labels, CI prebuild build args, CI-only image publication, Git SHA image tags, release digest
+labels, CI prebuild build args, CI-only image publication, full Git SHA image tags, release digest
 manifests, SBOM artifact/provenance/signing/scan workflow controls, digest-based Kubernetes image
-references, no secret-like build ARG/ENV additions, and the shared `/version` route.
+references, same-image promotion evidence across `dev`, `uat`, and `prod`, no secret-like build
+ARG/ENV additions, and the shared `/version` route.
 
 Kafka consumers inheriting `BaseConsumer` emit:
 

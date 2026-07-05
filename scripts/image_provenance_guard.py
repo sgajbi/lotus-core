@@ -254,12 +254,36 @@ def _source_contract_findings(root: Path) -> list[ImageProvenanceFinding]:
         "kubernetes_deploys_by_digest",
         "same_image_promoted_across_environments",
         "runtime_env",
+        "oci_labels",
     ):
         if required_field not in release_manifest_content:
             findings.append(
                 ImageProvenanceFinding(
                     _relative(release_manifest, root),
                     f"image release manifest omits {required_field}",
+                )
+            )
+
+    build_metadata = (
+        root / "src" / "libs" / "portfolio-common" / "portfolio_common" / "build_metadata.py"
+    )
+    build_metadata_content = build_metadata.read_text(encoding="utf-8")
+    for required_source_term in (
+        "OCI_METADATA_LABELS",
+        "org.opencontainers.image.revision",
+        "org.opencontainers.image.ref.name",
+        "org.opencontainers.image.created",
+        "org.opencontainers.image.source",
+        "org.opencontainers.image.version",
+        "org.opencontainers.image.digest",
+        "org.opencontainers.image.ci.run_id",
+        "oci_labels",
+    ):
+        if required_source_term not in build_metadata_content:
+            findings.append(
+                ImageProvenanceFinding(
+                    _relative(build_metadata, root),
+                    f"version endpoint metadata omits {required_source_term}",
                 )
             )
     return findings

@@ -707,14 +707,16 @@ Most relevant current governance:
     Service Dockerfiles must keep the governed image provenance block: OCI labels and matching
     runtime environment values for Git commit SHA, Git branch, build timestamp, repo URL, image
     version, image digest, and CI pipeline/run ID. `configure_standard_http_app` registers
-    `GET /version` so API services and worker health web apps expose the same metadata.
+    `GET /version` so API services and worker health web apps expose the same metadata plus the
+    OCI label map used for release-manifest parity checks.
     `scripts/prebuild_ci_images.py` supplies build args in CI, `scripts/write_build_provenance.py`
     records the same metadata in build evidence, `.github/workflows/image-release.yml` is the only
-    image-push path, and `scripts/write_image_release_manifest.py` records digest, SBOM, scan,
-    signing, provenance-attestation, digest-deploy, and same-image-promotion evidence. `make
-    image-provenance-guard` blocks drift, including secret-like Dockerfile/workflow build ARG or
-    ENV additions. Local builds may report `LOTUS_IMAGE_DIGEST=unknown` until a release lane or
-    deploy manifest supplies the resolved digest.
+    image-push path, and `scripts/write_image_release_manifest.py` records digest, OCI label
+    parity, SBOM, scan, signing, provenance-attestation, digest-deploy, and same-image-promotion
+    evidence across `dev`, `uat`, and `prod`. `make image-provenance-guard` blocks drift,
+    including secret-like Dockerfile/workflow build ARG or ENV additions. Local builds may report
+    `LOTUS_IMAGE_DIGEST=unknown` until a release lane or deploy manifest supplies the resolved
+    digest.
     Architecture documentation metadata is now governed by
     `docs/architecture/architecture-documentation-catalog.v1.json`. The catalog distinguishes
     current-state truth, review evidence, historical context, templates, and catalog metadata, and
