@@ -20,6 +20,7 @@ from .consumers.price_event_consumer import PriceEventConsumer
 from .consumers.valuation_readiness_consumer import ValuationReadinessConsumer
 from .core.reprocessing_worker import ReprocessingWorker
 from .core.valuation_scheduler import ValuationScheduler
+from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ class ConsumerManager:
             tasks=self.tasks,
             shutdown_event=self._shutdown_event,
             logger=logger,
+            readiness_service_name=WORKER_READINESS_SERVICE_NAME,
         )
 
         await shutdown_runtime_components(

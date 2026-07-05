@@ -18,10 +18,16 @@ from .downstream_access import DownstreamAccessPolicy, load_downstream_access_po
 from .logging_utils import log_operation_event
 from .monitoring import observe_health_dependency_check, set_health_readiness_state
 from .runtime_settings import env_str
+from .worker_readiness import (
+    WORKER_RUNTIME_DEPENDENCY,
+    WORKER_RUNTIME_HEALTH_NAME,
+    check_worker_runtime_health_status,
+    worker_runtime_configured,
+)
 
 logger = logging.getLogger(__name__)
 
-DependencyCheck = Callable[[], Awaitable[bool]]
+DependencyCheck = Callable[[], Awaitable[bool | str]]
 DependencyConfigurationCheck = Callable[[], bool]
 
 READINESS_OK = "ok"
@@ -29,6 +35,19 @@ READINESS_UNAVAILABLE = "unavailable"
 READINESS_TIMEOUT = "timeout"
 READINESS_ERROR = "error"
 READINESS_MISCONFIGURED = "misconfigured"
+READINESS_FAILED = "failed"
+READINESS_STOPPING = "stopping"
+DEPENDENCY_READINESS_STATUSES = frozenset(
+    {
+        READINESS_OK,
+        READINESS_UNAVAILABLE,
+        READINESS_TIMEOUT,
+        READINESS_ERROR,
+        READINESS_MISCONFIGURED,
+        READINESS_FAILED,
+        READINESS_STOPPING,
+    }
+)
 HEALTH_METADATA_MAX_LENGTH = 256
 RUNTIME_PROFILE_ENV = "LOTUS_RUNTIME_PROFILE"
 ENVIRONMENT_ENV = "ENVIRONMENT"
@@ -224,7 +243,7 @@ async def _run_dependency_check(
         )
 
     try:
-        is_ready = await asyncio.wait_for(check(), timeout=timeout_seconds)
+        readiness = await asyncio.wait_for(check(), timeout=timeout_seconds)
     except TimeoutError:
         log_operation_event(
             logger,
@@ -262,13 +281,21 @@ async def _run_dependency_check(
             started_at=started_at,
         )
 
-    status_value = READINESS_OK if is_ready else READINESS_UNAVAILABLE
+    status_value = _dependency_status_value(readiness)
     return _dependency_readiness_result(
         service_name=service_name,
         dependency_name=dependency_name,
         status_value=status_value,
         started_at=started_at,
     )
+
+
+def _dependency_status_value(readiness: bool | str) -> str:
+    if isinstance(readiness, bool):
+        return READINESS_OK if readiness else READINESS_UNAVAILABLE
+    if readiness in DEPENDENCY_READINESS_STATUSES:
+        return readiness
+    return READINESS_ERROR
 
 
 def _coerce_dependency_result(
@@ -335,6 +362,11 @@ def create_health_router(
     dep_map = {
         "db": ("database", check_db_health, _database_dependency_configured),
         "kafka": ("kafka", check_kafka_health, _kafka_dependency_configured),
+        WORKER_RUNTIME_DEPENDENCY: (
+            WORKER_RUNTIME_HEALTH_NAME,
+            lambda: check_worker_runtime_health_status(service_name=service_name),
+            lambda: worker_runtime_configured(service_name=service_name),
+        ),
     }
     readiness_cache_ttl_seconds = max(0.0, readiness_cache_ttl_seconds)
     dependency_timeout_seconds = max(0.001, dependency_timeout_seconds)

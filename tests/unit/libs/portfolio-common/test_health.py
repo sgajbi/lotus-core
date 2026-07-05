@@ -411,3 +411,73 @@ async def test_readiness_probe_reports_mixed_dependency_states(monkeypatch):
         exc_info.value.detail,
         dependencies={"database": "ok", "kafka": "error"},
     )
+
+
+async def test_readiness_probe_reports_worker_runtime_failed_state(monkeypatch):
+    service_name = "worker_service_web"
+
+    monkeypatch.setattr(
+        health_module,
+        "worker_runtime_configured",
+        lambda service_name: True,
+    )
+
+    async def _worker_runtime_failed(*, service_name: str) -> str:
+        return "failed"
+
+    monkeypatch.setattr(
+        health_module,
+        "check_worker_runtime_health_status",
+        _worker_runtime_failed,
+    )
+
+    router = health_module.create_health_router(
+        "worker_runtime",
+        service_name=service_name,
+        readiness_cache_ttl_seconds=0,
+    )
+    readiness_probe = _readiness_endpoint(router)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await readiness_probe()
+
+    assert exc_info.value.status_code == 503
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"worker_runtime": "failed"},
+        service_name=service_name,
+    )
+
+
+async def test_readiness_probe_reports_unregistered_worker_runtime_misconfigured(monkeypatch):
+    monkeypatch.setattr(
+        health_module,
+        "worker_runtime_configured",
+        lambda service_name: False,
+    )
+
+    async def _worker_runtime_should_not_run(*, service_name: str) -> str:
+        raise AssertionError("worker runtime check should not run without registered tasks")
+
+    monkeypatch.setattr(
+        health_module,
+        "check_worker_runtime_health_status",
+        _worker_runtime_should_not_run,
+    )
+
+    router = health_module.create_health_router(
+        "worker_runtime",
+        service_name="worker_service_web",
+        readiness_cache_ttl_seconds=0,
+    )
+    readiness_probe = _readiness_endpoint(router)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await readiness_probe()
+
+    assert exc_info.value.status_code == 503
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"worker_runtime": "misconfigured"},
+        service_name="worker_service_web",
+    )
