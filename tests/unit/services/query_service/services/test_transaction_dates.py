@@ -2,6 +2,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 
 from src.services.query_service.app.services.transaction_dates import (
     realized_tax_effective_as_of_date,
@@ -48,7 +49,9 @@ async def test_transaction_ledger_effective_as_of_date_uses_latest_business_date
     )
 
     assert effective_as_of_date == date(2025, 1, 15)
-    repository.get_latest_business_date.assert_awaited_once_with()
+    repository.get_latest_business_date.assert_awaited_once_with(
+        calendar_code=DEFAULT_BUSINESS_CALENDAR_CODE
+    )
 
 
 async def test_transaction_ledger_effective_as_of_date_falls_back_to_today() -> None:
@@ -87,7 +90,9 @@ async def test_realized_tax_effective_as_of_date_uses_latest_business_date() -> 
     )
 
     assert effective_as_of_date == date(2025, 1, 15)
-    repository.get_latest_business_date.assert_awaited_once_with()
+    repository.get_latest_business_date.assert_awaited_once_with(
+        calendar_code=DEFAULT_BUSINESS_CALENDAR_CODE
+    )
 
 
 async def test_realized_tax_effective_as_of_date_falls_back_to_today() -> None:

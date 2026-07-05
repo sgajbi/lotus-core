@@ -7,6 +7,10 @@ import pytest
 from portfolio_common.database_models import Cashflow, Transaction, TransactionCost
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    transaction_ledger_query_spec,
+)
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
 
 pytestmark = pytest.mark.asyncio
@@ -101,6 +105,24 @@ def _performance_economics_transaction(
     return transaction
 
 
+def _filters(**overrides: object) -> TransactionLedgerFilters:
+    values = {"portfolio_id": "P1", **overrides}
+    return TransactionLedgerFilters(**values)
+
+
+def _query_spec(
+    *,
+    sort_by: str | None = None,
+    sort_order: str | None = "desc",
+    **filter_overrides: object,
+):
+    return transaction_ledger_query_spec(
+        filters=_filters(**filter_overrides),
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+
+
 async def test_get_transactions_default_sort(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
@@ -109,7 +131,7 @@ async def test_get_transactions_default_sort(
     WHEN get_transactions is called
     THEN the query should order by transaction_date descending.
     """
-    await repository.get_transactions(portfolio_id="P1", skip=0, limit=100)
+    await repository.get_transactions(query_spec=_query_spec(), skip=0, limit=100)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
@@ -121,8 +143,7 @@ async def test_get_transactions_security_drill_down_defaults_to_latest_first(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1",
-        security_id=" SEC-HOLDING-1 ",
+        query_spec=_query_spec(security_id=" SEC-HOLDING-1 "),
         skip=0,
         limit=25,
     )
@@ -143,7 +164,9 @@ async def test_get_transactions_custom_sort(
     THEN the query should use the specified order.
     """
     await repository.get_transactions(
-        portfolio_id="P1", skip=0, limit=100, sort_by="quantity", sort_order="asc"
+        query_spec=_query_spec(sort_by="quantity", sort_order="asc"),
+        skip=0,
+        limit=100,
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -152,49 +175,13 @@ async def test_get_transactions_custom_sort(
     assert "ORDER BY transactions.quantity ASC, transactions.id ASC" in compiled_query
 
 
-async def test_get_transactions_invalid_sort_field_fails_fast(
-    repository: TransactionRepository, mock_db_session: AsyncMock
-):
-    """
-    GIVEN an invalid sort field
-    WHEN get_transactions is called
-    THEN the repository should reject the request instead of silently changing ordering.
-    """
-    with pytest.raises(ValueError, match="Unsupported transaction sort parameter sort_by"):
-        await repository.get_transactions(
-            portfolio_id="P1",
-            skip=0,
-            limit=100,
-            sort_by="invalid_field",
-        )
-
-    mock_db_session.execute.assert_not_awaited()
-
-
-async def test_get_transactions_invalid_sort_order_fails_fast(
-    repository: TransactionRepository, mock_db_session: AsyncMock
-):
-    with pytest.raises(ValueError, match="Unsupported transaction sort parameter sort_order"):
-        await repository.get_transactions(
-            portfolio_id="P1",
-            skip=0,
-            limit=100,
-            sort_by="quantity",
-            sort_order="invalid",
-        )
-
-    mock_db_session.execute.assert_not_awaited()
-
-
 async def test_get_transactions_settlement_date_sort_uses_stable_tie_breaker(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1",
+        query_spec=_query_spec(sort_by="settlement_date", sort_order="asc"),
         skip=0,
         limit=100,
-        sort_by="settlement_date",
-        sort_order="asc",
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -212,12 +199,13 @@ async def test_get_transactions_with_all_filters(
     THEN the query should contain all corresponding WHERE clauses.
     """
     await repository.get_transactions(
-        portfolio_id="P1",
+        query_spec=_query_spec(
+            security_id=" S1 ",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        ),
         skip=0,
         limit=100,
-        security_id=" S1 ",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -233,16 +221,17 @@ async def test_get_transactions_with_fx_filters(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1",
+        query_spec=_query_spec(
+            transaction_type="FX_SWAP",
+            component_type="FX_CONTRACT_OPEN",
+            linked_transaction_group_id="LTG-FX-001",
+            fx_contract_id="FXC-001",
+            swap_event_id="FXSWAP-001",
+            near_leg_group_id="FXSWAP-001-NEAR",
+            far_leg_group_id="FXSWAP-001-FAR",
+        ),
         skip=0,
         limit=100,
-        transaction_type="FX_SWAP",
-        component_type="FX_CONTRACT_OPEN",
-        linked_transaction_group_id="LTG-FX-001",
-        fx_contract_id="FXC-001",
-        swap_event_id="FXSWAP-001",
-        near_leg_group_id="FXSWAP-001-NEAR",
-        far_leg_group_id="FXSWAP-001-FAR",
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -261,10 +250,9 @@ async def test_get_transactions_with_as_of_date_filter(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1",
+        query_spec=_query_spec(as_of_date=date(2025, 1, 15)),
         skip=0,
         limit=100,
-        as_of_date=date(2025, 1, 15),
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -276,10 +264,9 @@ async def test_get_transactions_applies_instrument_filter_and_eager_loads_relate
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1",
+        query_spec=_query_spec(instrument_id="INST-AAPL-USD"),
         skip=0,
         limit=25,
-        instrument_id="INST-AAPL-USD",
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -298,7 +285,7 @@ async def test_get_transactions_count(
     WHEN get_transactions_count is called
     THEN it should build the correct count query and return the scalar result.
     """
-    count = await repository.get_transactions_count(portfolio_id="P1", security_id=" S1 ")
+    count = await repository.get_transactions_count(filters=_filters(security_id=" S1 "))
 
     assert count == 10
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -316,7 +303,7 @@ async def test_get_transactions_count_returns_zero_when_scalar_none(
     mock_result_scalar_none.scalar.return_value = None
     mock_db_session.execute = AsyncMock(return_value=mock_result_scalar_none)
 
-    count = await repository.get_transactions_count(portfolio_id="P_EMPTY")
+    count = await repository.get_transactions_count(filters=_filters(portfolio_id="P_EMPTY"))
 
     assert count == 0
 
@@ -325,17 +312,18 @@ async def test_get_transactions_count_applies_identity_and_date_filters(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        instrument_id="INST-AAPL-USD",
-        transaction_type="BUY",
-        component_type="SECURITY_TRADE",
-        linked_transaction_group_id="LTG-001",
-        fx_contract_id="FXC-001",
-        swap_event_id="SWAP-001",
-        near_leg_group_id="NEAR-001",
-        far_leg_group_id="FAR-001",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
+        filters=_filters(
+            instrument_id="INST-AAPL-USD",
+            transaction_type="BUY",
+            component_type="SECURITY_TRADE",
+            linked_transaction_group_id="LTG-001",
+            fx_contract_id="FXC-001",
+            swap_event_id="SWAP-001",
+            near_leg_group_id="NEAR-001",
+            far_leg_group_id="FAR-001",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        ),
     )
 
     assert count == 10
@@ -402,9 +390,10 @@ async def test_get_transactions_count_with_date_filters(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
+        filters=_filters(
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+        ),
     )
 
     assert count == 2
@@ -421,10 +410,7 @@ async def test_get_transactions_count_with_as_of_date(
     mock_result.scalar.return_value = 3
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        as_of_date=date(2025, 1, 15),
-    )
+    count = await repository.get_transactions_count(filters=_filters(as_of_date=date(2025, 1, 15)))
 
     assert count == 3
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -663,10 +649,11 @@ async def test_list_realized_tax_evidence_transactions_filters_explicit_tax_evid
     mock_db_session.execute = AsyncMock(return_value=mock_rows)
 
     rows = await repository.list_realized_tax_evidence_transactions(
-        portfolio_id="P1",
-        start_date=date(2026, 4, 1),
-        end_date=date(2026, 4, 30),
-        as_of_date=date(2026, 5, 3),
+        filters=_filters(
+            start_date=date(2026, 4, 1),
+            end_date=date(2026, 4, 30),
+            as_of_date=date(2026, 5, 3),
+        ),
     )
 
     assert len(rows) == 1
@@ -691,8 +678,7 @@ async def test_get_transactions_count_applies_instrument_filter(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        instrument_id="INST-AAPL-USD",
+        filters=_filters(instrument_id="INST-AAPL-USD"),
     )
 
     assert count == 6
@@ -709,7 +695,7 @@ async def test_get_latest_business_date(
     mock_result.scalar_one_or_none.return_value = date(2025, 1, 31)
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
-    latest = await repository.get_latest_business_date()
+    latest = await repository.get_latest_business_date(calendar_code="GLOBAL")
 
     assert latest == date(2025, 1, 31)
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -786,14 +772,15 @@ async def test_get_transactions_count_with_component_and_fx_filters(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        transaction_type="FX_SWAP",
-        component_type="FX_CONTRACT_OPEN",
-        linked_transaction_group_id="LTG-1",
-        fx_contract_id="FXC-1",
-        swap_event_id="SWAP-1",
-        near_leg_group_id="NEAR-1",
-        far_leg_group_id="FAR-1",
+        filters=_filters(
+            transaction_type="FX_SWAP",
+            component_type="FX_CONTRACT_OPEN",
+            linked_transaction_group_id="LTG-1",
+            fx_contract_id="FXC-1",
+            swap_event_id="SWAP-1",
+            near_leg_group_id="NEAR-1",
+            far_leg_group_id="FAR-1",
+        ),
     )
 
     assert count == 4
@@ -815,11 +802,12 @@ async def test_get_transactions_count_with_fx_filters(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     count = await repository.get_transactions_count(
-        portfolio_id="P1",
-        transaction_type="FX_FORWARD",
-        component_type="FX_CASH_SETTLEMENT_BUY",
-        fx_contract_id="FXC-001",
-        swap_event_id="FXSWAP-001",
+        filters=_filters(
+            transaction_type="FX_FORWARD",
+            component_type="FX_CASH_SETTLEMENT_BUY",
+            fx_contract_id="FXC-001",
+            swap_event_id="FXSWAP-001",
+        ),
     )
 
     assert count == 4
@@ -840,12 +828,13 @@ async def test_get_latest_evidence_timestamp_applies_transaction_window_filters(
     mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     result = await repository.get_latest_evidence_timestamp(
-        portfolio_id="P1",
-        security_id=" S1 ",
-        transaction_type="FX_FORWARD",
-        start_date=date(2025, 1, 1),
-        end_date=date(2025, 1, 31),
-        as_of_date=date(2025, 1, 15),
+        filters=_filters(
+            security_id=" S1 ",
+            transaction_type="FX_FORWARD",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 1, 31),
+            as_of_date=date(2025, 1, 15),
+        ),
     )
 
     assert result == updated_at

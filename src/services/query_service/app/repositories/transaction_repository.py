@@ -20,7 +20,7 @@ from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager, joinedload
 
-from ..application.transaction_sorting import normalize_transaction_sort
+from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
 from ..read_models import (
     PerformanceEconomicsCashflowReadRecord,
     PerformanceEconomicsCostReadRecord,
@@ -180,6 +180,20 @@ def _apply_transaction_date_filters(
     return stmt
 
 
+def _ledger_identity_filters(filters: TransactionLedgerFilters) -> dict[str, str]:
+    return _identity_filter_kwargs(
+        portfolio_id=filters.portfolio_id,
+        instrument_id=filters.instrument_id,
+        transaction_type=filters.transaction_type,
+        component_type=filters.component_type,
+        linked_transaction_group_id=filters.linked_transaction_group_id,
+        fx_contract_id=filters.fx_contract_id,
+        swap_event_id=filters.swap_event_id,
+        near_leg_group_id=filters.near_leg_group_id,
+        far_leg_group_id=filters.far_leg_group_id,
+    )
+
+
 class TransactionRepository:
     """
     Handles read-only database queries for transaction data.
@@ -204,9 +218,12 @@ class TransactionRepository:
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
-    async def get_latest_business_date(self) -> Optional[date]:
+    async def get_latest_business_date(
+        self,
+        calendar_code: str = DEFAULT_BUSINESS_CALENDAR_CODE,
+    ) -> Optional[date]:
         stmt = select(func.max(BusinessDate.date)).where(
-            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+            BusinessDate.calendar_code == calendar_code
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
@@ -257,56 +274,20 @@ class TransactionRepository:
         self,
         stmt,
         *,
-        portfolio_id: str,
-        instrument_id: Optional[str] = None,
-        security_id: Optional[str] = None,
-        transaction_type: Optional[str] = None,
-        component_type: Optional[str] = None,
-        linked_transaction_group_id: Optional[str] = None,
-        fx_contract_id: Optional[str] = None,
-        swap_event_id: Optional[str] = None,
-        near_leg_group_id: Optional[str] = None,
-        far_leg_group_id: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
+        filters: TransactionLedgerFilters,
     ):
-        identity_filters = {
-            "instrument_id": instrument_id,
-            "transaction_type": transaction_type,
-            "component_type": component_type,
-            "linked_transaction_group_id": linked_transaction_group_id,
-            "fx_contract_id": fx_contract_id,
-            "swap_event_id": swap_event_id,
-            "near_leg_group_id": near_leg_group_id,
-            "far_leg_group_id": far_leg_group_id,
-        }
-        stmt = stmt.filter_by(
-            **_identity_filter_kwargs(portfolio_id=portfolio_id, **identity_filters)
-        )
-        stmt = _apply_security_filter(stmt, security_id)
+        stmt = stmt.filter_by(**_ledger_identity_filters(filters))
+        stmt = _apply_security_filter(stmt, filters.security_id)
         return _apply_transaction_date_filters(
             stmt,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
+            start_date=filters.start_date,
+            end_date=filters.end_date,
+            as_of_date=filters.as_of_date,
         )
 
     def _get_base_query(
         self,
-        portfolio_id: str,
-        instrument_id: Optional[str] = None,
-        security_id: Optional[str] = None,
-        transaction_type: Optional[str] = None,
-        component_type: Optional[str] = None,
-        linked_transaction_group_id: Optional[str] = None,
-        fx_contract_id: Optional[str] = None,
-        swap_event_id: Optional[str] = None,
-        near_leg_group_id: Optional[str] = None,
-        far_leg_group_id: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
+        filters: TransactionLedgerFilters,
     ):
         """
         Constructs a base query with all the common filters.
@@ -316,67 +297,25 @@ class TransactionRepository:
         )
         return self._apply_filters(
             stmt,
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
+            filters=filters,
         )
 
     @async_timed(repository="TransactionRepository", method="get_transactions")
     async def get_transactions(
         self,
-        portfolio_id: str,
+        *,
+        query_spec: TransactionLedgerQuerySpec,
         skip: int,
         limit: int,
-        sort_by: Optional[str] = None,
-        sort_order: Optional[str] = "desc",
-        instrument_id: Optional[str] = None,
-        security_id: Optional[str] = None,
-        transaction_type: Optional[str] = None,
-        component_type: Optional[str] = None,
-        linked_transaction_group_id: Optional[str] = None,
-        fx_contract_id: Optional[str] = None,
-        swap_event_id: Optional[str] = None,
-        near_leg_group_id: Optional[str] = None,
-        far_leg_group_id: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
     ) -> List[Transaction]:
         """
         Retrieves a paginated list of transactions with optional filters.
         """
-        stmt = self._get_base_query(
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
-        )
+        filters = query_spec.filters
+        stmt = self._get_base_query(filters=filters)
 
-        sort_field, normalized_sort_order = normalize_transaction_sort(
-            sort_by=sort_by,
-            sort_order=sort_order,
-        )
-        sort_direction = asc if normalized_sort_order == "asc" else desc
-        order_clause = sort_direction(getattr(Transaction, sort_field))
+        sort_direction = asc if query_spec.sort.order == "asc" else desc
+        order_clause = sort_direction(getattr(Transaction, query_spec.sort.field))
         tie_breaker_clause = sort_direction(Transaction.id)
 
         stmt = stmt.order_by(order_clause, tie_breaker_clause)
@@ -391,13 +330,13 @@ class TransactionRepository:
                 status="succeeded",
                 reason_code="query_completed",
                 result_count=len(transactions),
-                has_instrument_filter=instrument_id is not None,
-                has_security_filter=security_id is not None,
-                has_transaction_type_filter=transaction_type is not None,
-                has_component_type_filter=component_type is not None,
-                has_start_date_filter=start_date is not None,
-                has_end_date_filter=end_date is not None,
-                has_as_of_date_filter=as_of_date is not None,
+                has_instrument_filter=filters.instrument_id is not None,
+                has_security_filter=filters.security_id is not None,
+                has_transaction_type_filter=filters.transaction_type is not None,
+                has_component_type_filter=filters.component_type is not None,
+                has_start_date_filter=filters.start_date is not None,
+                has_end_date_filter=filters.end_date is not None,
+                has_as_of_date_filter=filters.as_of_date is not None,
             ),
         )
         return transactions
@@ -405,38 +344,15 @@ class TransactionRepository:
     @async_timed(repository="TransactionRepository", method="get_transactions_count")
     async def get_transactions_count(
         self,
-        portfolio_id: str,
-        instrument_id: Optional[str] = None,
-        security_id: Optional[str] = None,
-        transaction_type: Optional[str] = None,
-        component_type: Optional[str] = None,
-        linked_transaction_group_id: Optional[str] = None,
-        fx_contract_id: Optional[str] = None,
-        swap_event_id: Optional[str] = None,
-        near_leg_group_id: Optional[str] = None,
-        far_leg_group_id: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
+        *,
+        filters: TransactionLedgerFilters,
     ) -> int:
         """
         Returns the total count of transactions for the given filters.
         """
         stmt = self._apply_filters(
             select(func.count(Transaction.id)),
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
+            filters=filters,
         )
 
         count = (await self.db.execute(stmt)).scalar() or 0
@@ -698,55 +614,26 @@ class TransactionRepository:
 
     async def get_latest_evidence_timestamp(
         self,
-        portfolio_id: str,
-        instrument_id: Optional[str] = None,
-        security_id: Optional[str] = None,
-        transaction_type: Optional[str] = None,
-        component_type: Optional[str] = None,
-        linked_transaction_group_id: Optional[str] = None,
-        fx_contract_id: Optional[str] = None,
-        swap_event_id: Optional[str] = None,
-        near_leg_group_id: Optional[str] = None,
-        far_leg_group_id: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
+        *,
+        filters: TransactionLedgerFilters,
     ) -> Optional[datetime]:
         """
         Returns the latest durable transaction evidence timestamp for the filtered ledger window.
         """
         stmt = self._apply_filters(
             select(func.max(Transaction.updated_at)),
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            security_id=security_id,
-            transaction_type=transaction_type,
-            component_type=component_type,
-            linked_transaction_group_id=linked_transaction_group_id,
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
+            filters=filters,
         )
         return (await self.db.execute(stmt)).scalar_one_or_none()
 
     async def list_realized_tax_evidence_transactions(
         self,
         *,
-        portfolio_id: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        as_of_date: Optional[date] = None,
+        filters: TransactionLedgerFilters,
     ) -> List[Transaction]:
         stmt = self._apply_filters(
             select(Transaction).where(self._realized_tax_evidence_predicate()),
-            portfolio_id=portfolio_id,
-            start_date=start_date,
-            end_date=end_date,
-            as_of_date=as_of_date,
+            filters=filters,
         ).order_by(
             Transaction.currency.asc(),
             Transaction.transaction_date.asc(),

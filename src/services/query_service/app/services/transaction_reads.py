@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from ..application.transaction_query import (
+    TransactionLedgerFilters,
+    transaction_ledger_query_spec,
+)
 from .transaction_metadata import (
     latest_transaction_evidence_timestamp,
     missing_transaction_instrument_security_ids,
@@ -27,13 +31,18 @@ class RealizedTaxEvidenceRead:
 async def read_transaction_ledger_page(
     *,
     repository: Any,
-    ledger_filters: dict[str, Any],
+    ledger_filters: TransactionLedgerFilters,
     skip: int,
     limit: int,
     sort_by: str | None,
     sort_order: str | None,
 ) -> TransactionLedgerPage:
-    total_count = await repository.get_transactions_count(**ledger_filters)
+    query_spec = transaction_ledger_query_spec(
+        filters=ledger_filters,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    total_count = await repository.get_transactions_count(filters=query_spec.filters)
     if total_count == 0:
         return TransactionLedgerPage(
             total_count=0,
@@ -45,13 +54,13 @@ async def read_transaction_ledger_page(
     rows = await repository.get_transactions(
         skip=skip,
         limit=limit,
-        sort_by=sort_by,
-        sort_order=sort_order,
-        **ledger_filters,
+        query_spec=query_spec,
     )
 
     if skip > 0 or limit < total_count or len(rows) != total_count:
-        latest_evidence_timestamp = await repository.get_latest_evidence_timestamp(**ledger_filters)
+        latest_evidence_timestamp = await repository.get_latest_evidence_timestamp(
+            filters=query_spec.filters
+        )
     else:
         latest_evidence_timestamp = latest_transaction_evidence_timestamp(rows)
 
@@ -74,11 +83,11 @@ async def read_transaction_ledger_page(
 async def read_realized_tax_evidence(
     *,
     repository: Any,
-    ledger_filters: dict[str, Any],
+    ledger_filters: TransactionLedgerFilters,
 ) -> RealizedTaxEvidenceRead:
-    source_transaction_count = await repository.get_transactions_count(**ledger_filters)
+    source_transaction_count = await repository.get_transactions_count(filters=ledger_filters)
     tax_transactions = await repository.list_realized_tax_evidence_transactions(
-        **ledger_filters,
+        filters=ledger_filters,
     )
     latest_evidence_timestamp = latest_transaction_evidence_timestamp(tax_transactions)
 
