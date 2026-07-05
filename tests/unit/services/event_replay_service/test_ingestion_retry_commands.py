@@ -138,6 +138,25 @@ def test_ingestion_job_retry_partial_unsupported_uses_recovery_detail() -> None:
     assert "full stored payload" in exc_info.value.detail["remediation"]
 
 
+def test_ingestion_job_retry_missing_partial_record_keys_uses_recovery_detail() -> None:
+    context = SimpleNamespace(
+        endpoint="/ingest/transactions",
+        request_payload={"transactions": [{"transaction_id": "T1"}]},
+    )
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        _retry_service()._retry_payload_or_error(
+            context=context,
+            retry_request=IngestionRetryRequest(record_keys=["T1", "T2"]),
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "INGESTION_PARTIAL_RETRY_RECORDS_NOT_FOUND"
+    assert exc_info.value.detail["outcome"] == "partial_retry_records_not_found"
+    assert exc_info.value.detail["missing_record_keys"] == ["T2"]
+    assert "stored replay payload" in exc_info.value.detail["remediation"]
+
+
 @pytest.mark.asyncio
 async def test_ingestion_job_retry_blocked_uses_recovery_detail() -> None:
     ingestion_job_service = MagicMock()

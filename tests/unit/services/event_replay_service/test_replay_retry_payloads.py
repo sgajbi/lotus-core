@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 
 from src.services.event_replay_service.app.application.replay_retry_payloads import (
+    MissingReplayRecordKeysError,
     deterministic_replay_fingerprint,
     filter_payload_by_record_keys,
     payload_record_count,
@@ -79,6 +80,39 @@ def test_filter_payload_by_record_keys_rejects_unsupported_partial_retry_endpoin
             payload={"market_prices": [{"security_id": "S1"}]},
             record_keys=["S1"],
         )
+
+
+@pytest.mark.parametrize(
+    ("endpoint", "payload", "record_keys", "missing_record_keys"),
+    [
+        (
+            "/ingest/transactions",
+            {"transactions": [{"transaction_id": "T1"}]},
+            ["T1", "T2"],
+            ["T2"],
+        ),
+        (
+            "/reprocess/transactions",
+            {"transaction_ids": ["T1"]},
+            ["T2", "T3"],
+            ["T2", "T3"],
+        ),
+    ],
+)
+def test_filter_payload_by_record_keys_rejects_missing_requested_keys(
+    endpoint: str,
+    payload: dict,
+    record_keys: list[str],
+    missing_record_keys: list[str],
+) -> None:
+    with pytest.raises(MissingReplayRecordKeysError) as exc_info:
+        filter_payload_by_record_keys(
+            endpoint=endpoint,
+            payload=payload,
+            record_keys=record_keys,
+        )
+
+    assert exc_info.value.missing_record_keys == missing_record_keys
 
 
 def test_payload_record_count_uses_largest_list_payload() -> None:

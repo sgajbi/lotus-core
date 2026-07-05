@@ -22,7 +22,7 @@ from ..services.ingestion_service import (
     IngestionPublishError,
     IngestionService,
 )
-from .job_bookkeeping import raise_post_publish_bookkeeping_failure
+from .job_bookkeeping import mark_job_queued_after_publish_or_raise
 from .publish_errors import (
     ingestion_publish_failed_example,
     ingestion_unavailable_response,
@@ -244,15 +244,11 @@ async def _mark_business_date_job_queued(
     job_id: str,
     published_record_count: int,
 ) -> None:
-    try:
-        await ingestion_job_service.mark_queued(job_id)
-    except Exception as exc:
-        await raise_post_publish_bookkeeping_failure(
-            ingestion_job_service=ingestion_job_service,
-            job_id=job_id,
-            failure_reason=str(exc),
-            published_record_count=published_record_count,
-        )
+    await mark_job_queued_after_publish_or_raise(
+        ingestion_job_service=ingestion_job_service,
+        job_id=job_id,
+        published_record_count=published_record_count,
+    )
 
 
 def _business_date_ack(
