@@ -26,6 +26,9 @@ from portfolio_common.scheduler_dispatch_recovery import (
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.valuation_orchestrator_service.app.core.instrument_reprocessing_coordinator import (
+    InstrumentReprocessingCoordinator,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_backfill_planner import (
     ValuationBackfillPlanner,
 )
@@ -1390,6 +1393,32 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
         correlation_id="corr-trigger-1",
     )
     mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(scheduler._batch_size)
+
+
+async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler_loop():
+    coordinator = InstrumentReprocessingCoordinator(batch_size=25)
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
+    triggers = [
+        InstrumentReprocessingState(
+            security_id="S1",
+            earliest_impacted_date=date(2025, 8, 5),
+            correlation_id="corr-trigger-1",
+        )
+    ]
+    mock_repo.claim_instrument_reprocessing_triggers.return_value = triggers
+
+    await coordinator.process_instrument_level_triggers(
+        repo=mock_repo,
+        reprocessing_job_repo=mock_repro_job_repo,
+    )
+
+    mock_repo.claim_instrument_reprocessing_triggers.assert_awaited_once_with(25)
+    mock_repro_job_repo.create_job.assert_awaited_once_with(
+        job_type="RESET_WATERMARKS",
+        payload={"security_id": "S1", "earliest_impacted_date": "2025-08-05"},
+        correlation_id="corr-trigger-1",
+    )
 
 
 async def test_scheduler_stop_interrupts_poll_sleep(
