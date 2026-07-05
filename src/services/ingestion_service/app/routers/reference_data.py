@@ -1,9 +1,13 @@
 import logging
-from typing import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
+from ..application.reference_data_ingestion_registry import (
+    REFERENCE_DATA_INGESTION_REGISTRY,
+    ReferenceDataIngestionCommand,
+    ReferenceDataPayload,
+)
 from ..dependencies import get_reference_data_ingestion_service
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reference_data_dto import (
@@ -70,14 +74,15 @@ REFERENCE_PERSIST_FAILED_EXAMPLE = {
 async def _handle_reference_ingestion(
     *,
     http_request: Request,
-    endpoint: str,
-    entity_type: str,
-    accepted_count: int,
-    request_payload: dict,
-    persist_fn: Callable[[], Awaitable[None]],
+    command: ReferenceDataIngestionCommand,
+    request: ReferenceDataPayload,
+    reference_data_service: ReferenceDataIngestionService,
     ingestion_job_service: IngestionJobService,
 ) -> BatchIngestionAcceptedResponse:
     idempotency_key = resolve_idempotency_key(http_request)
+    endpoint = command.endpoint
+    entity_type = command.entity_type
+    accepted_count = command.accepted_count(request)
     try:
         await ingestion_job_service.assert_ingestion_writable()
     except PermissionError as exc:
@@ -104,7 +109,7 @@ async def _handle_reference_ingestion(
         correlation_id=correlation_id,
         request_id=request_id,
         trace_id=trace_id,
-        request_payload=request_payload,
+        request_payload=command.request_payload(request),
     )
     if not job_result.created:
         return build_batch_ack(
@@ -116,7 +121,7 @@ async def _handle_reference_ingestion(
         )
 
     try:
-        await persist_fn()
+        await command.persist(reference_data_service, request)
     except Exception as exc:
         await ingestion_job_service.mark_failed(
             job_result.job.job_id,
@@ -191,13 +196,9 @@ async def ingest_benchmark_assignments(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/benchmark-assignments",
-        entity_type="benchmark_assignment",
-        accepted_count=len(request.benchmark_assignments),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_portfolio_benchmark_assignments(
-            [item.model_dump() for item in request.benchmark_assignments]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_assignment"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -228,13 +229,9 @@ async def ingest_model_portfolios(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/model-portfolios",
-        entity_type="model_portfolio",
-        accepted_count=len(request.model_portfolios),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_model_portfolio_definitions(
-            [item.model_dump() for item in request.model_portfolios]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("model_portfolio"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -265,13 +262,9 @@ async def ingest_model_portfolio_targets(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/model-portfolio-targets",
-        entity_type="model_portfolio_target",
-        accepted_count=len(request.model_portfolio_targets),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_model_portfolio_targets(
-            [item.model_dump() for item in request.model_portfolio_targets]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("model_portfolio_target"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -302,13 +295,9 @@ async def ingest_instrument_eligibility_profiles(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/instrument-eligibility",
-        entity_type="instrument_eligibility_profile",
-        accepted_count=len(request.eligibility_profiles),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_instrument_eligibility_profiles(
-            [item.model_dump() for item in request.eligibility_profiles]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_eligibility_profile"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -340,13 +329,9 @@ async def ingest_mandate_bindings(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/mandate-bindings",
-        entity_type="mandate_binding",
-        accepted_count=len(request.mandate_bindings),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_discretionary_mandate_bindings(
-            [item.model_dump() for item in request.mandate_bindings]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("mandate_binding"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -377,13 +362,9 @@ async def ingest_client_restriction_profiles(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/client-restriction-profiles",
-        entity_type="client_restriction_profile",
-        accepted_count=len(request.restriction_profiles),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_client_restriction_profiles(
-            [item.model_dump() for item in request.restriction_profiles]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_restriction_profile"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -415,13 +396,9 @@ async def ingest_sustainability_preference_profiles(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/sustainability-preferences",
-        entity_type="sustainability_preference_profile",
-        accepted_count=len(request.sustainability_preferences),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_sustainability_preference_profiles(
-            [item.model_dump() for item in request.sustainability_preferences]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("sustainability_preference_profile"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -452,13 +429,9 @@ async def ingest_client_tax_profiles(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/client-tax-profiles",
-        entity_type="client_tax_profile",
-        accepted_count=len(request.tax_profiles),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_client_tax_profiles(
-            [item.model_dump() for item in request.tax_profiles]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_tax_profile"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -490,13 +463,9 @@ async def ingest_client_tax_rule_sets(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/client-tax-rule-sets",
-        entity_type="client_tax_rule_set",
-        accepted_count=len(request.tax_rule_sets),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_client_tax_rule_sets(
-            [item.model_dump() for item in request.tax_rule_sets]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_tax_rule_set"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -527,13 +496,9 @@ async def ingest_client_income_needs_schedules(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/client-income-needs-schedules",
-        entity_type="client_income_needs_schedule",
-        accepted_count=len(request.income_needs_schedules),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_client_income_needs_schedules(
-            [item.model_dump() for item in request.income_needs_schedules]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_income_needs_schedule"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -564,13 +529,9 @@ async def ingest_liquidity_reserve_requirements(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/liquidity-reserve-requirements",
-        entity_type="liquidity_reserve_requirement",
-        accepted_count=len(request.liquidity_reserve_requirements),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_liquidity_reserve_requirements(
-            [item.model_dump() for item in request.liquidity_reserve_requirements]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("liquidity_reserve_requirement"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -601,13 +562,9 @@ async def ingest_planned_withdrawal_schedules(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/planned-withdrawal-schedules",
-        entity_type="planned_withdrawal_schedule",
-        accepted_count=len(request.planned_withdrawal_schedules),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_planned_withdrawal_schedules(
-            [item.model_dump() for item in request.planned_withdrawal_schedules]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("planned_withdrawal_schedule"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -635,13 +592,9 @@ async def ingest_benchmark_definitions(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/benchmark-definitions",
-        entity_type="benchmark_definition",
-        accepted_count=len(request.benchmark_definitions),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_benchmark_definitions(
-            [item.model_dump() for item in request.benchmark_definitions]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_definition"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -669,13 +622,9 @@ async def ingest_benchmark_compositions(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/benchmark-compositions",
-        entity_type="benchmark_composition",
-        accepted_count=len(request.benchmark_compositions),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_benchmark_compositions(
-            [item.model_dump() for item in request.benchmark_compositions]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_composition"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -703,13 +652,9 @@ async def ingest_indices(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/indices",
-        entity_type="index_definition",
-        accepted_count=len(request.indices),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_indices(
-            [item.model_dump() for item in request.indices]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_definition"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -737,13 +682,9 @@ async def ingest_index_price_series(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/index-price-series",
-        entity_type="index_price_series",
-        accepted_count=len(request.index_price_series),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_index_price_series(
-            [item.model_dump() for item in request.index_price_series]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_price_series"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -771,13 +712,9 @@ async def ingest_index_return_series(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/index-return-series",
-        entity_type="index_return_series",
-        accepted_count=len(request.index_return_series),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_index_return_series(
-            [item.model_dump() for item in request.index_return_series]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_return_series"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -805,13 +742,9 @@ async def ingest_benchmark_return_series(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/benchmark-return-series",
-        entity_type="benchmark_return_series",
-        accepted_count=len(request.benchmark_return_series),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_benchmark_return_series(
-            [item.model_dump() for item in request.benchmark_return_series]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_return_series"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -839,13 +772,9 @@ async def ingest_risk_free_series(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/risk-free-series",
-        entity_type="risk_free_series",
-        accepted_count=len(request.risk_free_series),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_risk_free_series(
-            [item.model_dump() for item in request.risk_free_series]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("risk_free_series"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -873,13 +802,9 @@ async def ingest_classification_taxonomy(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/reference/classification-taxonomy",
-        entity_type="classification_taxonomy",
-        accepted_count=len(request.classification_taxonomy),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_classification_taxonomy(
-            [item.model_dump() for item in request.classification_taxonomy]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("classification_taxonomy"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -908,13 +833,9 @@ async def ingest_cash_account_masters(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/reference/cash-accounts",
-        entity_type="cash_account_master",
-        accepted_count=len(request.cash_accounts),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_cash_account_masters(
-            [item.model_dump() for item in request.cash_accounts]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("cash_account_master"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
 
@@ -943,12 +864,8 @@ async def ingest_instrument_lookthrough_components(
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
-        endpoint="/ingest/reference/instrument-lookthrough-components",
-        entity_type="instrument_lookthrough_component",
-        accepted_count=len(request.lookthrough_components),
-        request_payload=request.model_dump(mode="json"),
-        persist_fn=lambda: reference_data_service.upsert_instrument_lookthrough_components(
-            [item.model_dump() for item in request.lookthrough_components]
-        ),
+        command=REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_lookthrough_component"),
+        request=request,
+        reference_data_service=reference_data_service,
         ingestion_job_service=ingestion_job_service,
     )
