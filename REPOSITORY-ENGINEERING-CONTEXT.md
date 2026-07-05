@@ -69,7 +69,12 @@ Current repository posture:
    `docs/standards/critical-path-coverage.v1.json`, is checked by
    `make critical-path-coverage-guard`, and is reported by `make coverage-gate` under
    `output/coverage/critical-path-coverage-report.json` so aggregate, changed-code, and
-   critical-path coverage cannot be conflated,
+   critical-path coverage cannot be conflated. Risk-based test-family coverage governance lives in
+   `docs/standards/risk-based-test-coverage-matrix.v1.json`, is checked by
+   `make risk-based-test-coverage-matrix-guard`, and maps instruments, accounts, positions, cash,
+   transactions, corporate actions, valuation, cashflow, cost, reconciliation, ingestion, replay,
+   operations, security, and observability to required proof families, concrete test/Make evidence,
+   gap status, and follow-up issue ownership,
 20. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
 21. app-local compose keeps the ingestion service write payload cap at 16 MiB through
     `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` so the governed local `demo_data_loader` bundle can seed
