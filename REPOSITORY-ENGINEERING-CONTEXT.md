@@ -1484,8 +1484,9 @@ Most relevant current governance:
      products. `TransactionEconomicsIntegrationService` owns transaction-cost and performance
      economics repository/page-token wiring. `BenchmarkReferenceIntegrationService` owns
      benchmark, index, risk-free, coverage, and classification reference repository/page-token
-     wiring. Do not add new cohesive source-data product families directly to the full
-     `IntegrationService` facade.
+     wiring. `ClientProfileIncomeIntegrationService` owns client suitability, tax, income,
+     liquidity reserve, and planned-withdrawal reference repository wiring. Do not add new
+     cohesive source-data product families directly to the full `IntegrationService` facade.
 120. Kafka consumers should keep transport responsibilities separate from valid-message
      application orchestration. The cost-calculation consumer now routes valid transaction events
      through `CostCalculationEventProcessor` and `CostCalculationProcessorDependencies`, with

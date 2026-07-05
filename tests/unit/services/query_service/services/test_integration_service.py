@@ -45,6 +45,9 @@ from src.services.query_service.app.services.integration_policy import (
 from src.services.query_service.app.services.benchmark_reference_integration_service import (
     BenchmarkReferenceIntegrationService,
 )
+from src.services.query_service.app.services.client_profile_income_integration_service import (
+    ClientProfileIncomeIntegrationService,
+)
 from src.services.query_service.app.services.dpm_readiness_integration_service import (
     DpmReadinessIntegrationService,
 )
@@ -2587,6 +2590,45 @@ async def test_benchmark_reference_family_service_runs_without_full_integration_
     assert response.product_name == "BenchmarkAssignment"
     assert response.benchmark_id == "B1"
     repository.resolve_benchmark_assignment.assert_awaited_once_with("P1", date(2026, 1, 1))
+
+
+@pytest.mark.asyncio
+async def test_client_profile_income_family_service_runs_without_full_integration_facade() -> None:
+    repository = SimpleNamespace(
+        resolve_discretionary_mandate_binding=AsyncMock(
+            return_value=SimpleNamespace(
+                client_id="CIF_SG_000184",
+                mandate_id="MANDATE_SG_001",
+                updated_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        ),
+        list_client_income_needs_schedules=AsyncMock(return_value=[]),
+    )
+    service = ClientProfileIncomeIntegrationService(
+        reference_repository_provider=lambda: repository,
+    )
+
+    response = await service.get_client_income_needs_schedule(
+        "P1",
+        ClientIncomeNeedsScheduleRequest(as_of_date=date(2026, 1, 1), tenant_id="default"),
+    )
+
+    assert response is not None
+    assert response.product_name == "ClientIncomeNeedsSchedule"
+    assert response.client_id == "CIF_SG_000184"
+    assert response.supportability.state == "INCOMPLETE"
+    repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
+        portfolio_id="P1",
+        as_of_date=date(2026, 1, 1),
+        mandate_id=None,
+    )
+    repository.list_client_income_needs_schedules.assert_awaited_once_with(
+        portfolio_id="P1",
+        client_id="CIF_SG_000184",
+        as_of_date=date(2026, 1, 1),
+        mandate_id="MANDATE_SG_001",
+        include_inactive_schedules=False,
+    )
 
 
 @pytest.mark.asyncio
