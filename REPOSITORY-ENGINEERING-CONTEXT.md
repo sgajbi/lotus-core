@@ -439,6 +439,12 @@ Important validation expectations:
 6. service-runtime packaging/import checks are part of architecture validation: when a slice touches
    service app imports, Dockerfiles, compose mounts, or package metadata, run `make architecture-guard`
    plus a focused runtime import proof such as `PYTHONPATH=src/services/<service>;src/libs/portfolio-common python -c "import app.main"` for the affected service.
+7. PR documentation acceptance is explicit: if a change affects routes, contracts,
+   supported features, operational behavior, security posture, validation lanes, service
+   boundaries, README, architecture docs, API catalog, RFCs, runbooks, wiki source,
+   repository context, or platform context, update the relevant source-of-truth docs in the
+   same slice or record a concrete no-doc-change rationale in the PR template. Wiki source
+   changes require a post-merge publication evidence plan.
 
 ## Standards And RFCs That Govern This Repository
 
