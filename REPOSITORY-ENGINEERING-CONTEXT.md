@@ -1543,6 +1543,11 @@ Most relevant current governance:
      Core snapshot response section assembly belongs in `core_snapshot_sections.py`; do not re-add
      requested-section branching, projected/delta/totals population, or snapshot enrichment field
      mapping to the broad service.
+     Core snapshot projected valuation belongs in `core_snapshot_projected_valuation.py`; do not
+     re-add simulation change normalization, new-security instrument seeding, price lookup,
+     market-to-portfolio FX selection, or projected market-value calculation to the broad service.
+     Shared FX lookup and decimal validation belong in `core_snapshot_market_data.py` rather than
+     service-private helpers.
 
 ## Context Maintenance Rule
 
