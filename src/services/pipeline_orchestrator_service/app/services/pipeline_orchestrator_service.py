@@ -1,27 +1,29 @@
-from portfolio_common.config import (
-    KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-    KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
-    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
-    KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
-)
 from portfolio_common.events import (
     CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
-    FinancialReconciliationRequestedEvent,
     PortfolioAggregationDayCompletedEvent,
-    PortfolioDayControlsEvaluatedEvent,
-    PortfolioDayReadyForValuationEvent,
     TransactionEvent,
-    TransactionProcessingCompletedEvent,
 )
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import requires_cashflow_processing
 
-from ..adapters.outbox_event_mapper import pipeline_outbox_event_payload
+from ..adapters.pipeline_event_factory import (
+    PipelineOutboxMessage,
+    financial_reconciliation_requested_message,
+    portfolio_day_controls_evaluated_message,
+    portfolio_day_ready_for_valuation_message,
+    transaction_processing_completed_message,
+)
+from ..domain.pipeline_stage_state_machine import (
+    FINANCIAL_RECONCILIATION_STAGE,
+    TRANSACTION_PROCESSING_STAGE,
+    decide_transaction_stage_readiness,
+    should_emit_control_stage_for_epoch,
+)
+from ..domain.pipeline_stage_state_machine import (
+    is_control_stage_blocking as is_control_stage_blocking_status,
+)
 from ..repositories.pipeline_stage_repository import PipelineStageRepository
-
-TRANSACTION_PROCESSING_STAGE = "TRANSACTION_PROCESSING"
-FINANCIAL_RECONCILIATION_STAGE = "FINANCIAL_RECONCILIATION"
 
 
 class PipelineOrchestratorService:
@@ -75,18 +77,11 @@ class PipelineOrchestratorService:
         event: PortfolioAggregationDayCompletedEvent,
         correlation_id: str | None,
     ) -> None:
-        reconciliation_event = FinancialReconciliationRequestedEvent(
-            portfolio_id=event.portfolio_id,
-            business_date=event.aggregation_date,
-            epoch=event.epoch,
-            correlation_id=correlation_id,
-        )
-        await self.outbox_repo.create_outbox_event(
-            aggregate_type="FinancialReconciliation",
-            aggregate_id=f"{event.portfolio_id}:{event.aggregation_date}:{event.epoch}",
-            event_type="FinancialReconciliationRequested",
-            topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
-            payload=pipeline_outbox_event_payload(reconciliation_event),
+        await self._publish_outbox_message(
+            financial_reconciliation_requested_message(
+                event=event,
+                correlation_id=correlation_id,
+            ),
             correlation_id=correlation_id,
         )
 
@@ -108,33 +103,25 @@ class PipelineOrchestratorService:
             portfolio_id=event.portfolio_id,
             business_date=event.business_date,
         )
-        if latest_epoch is not None and latest_epoch != event.epoch:
+        if not should_emit_control_stage_for_epoch(
+            latest_epoch=latest_epoch,
+            event_epoch=event.epoch,
+        ):
             return
-        controls_blocking = self.is_control_stage_blocking(stage.status)
-        controls_event = PortfolioDayControlsEvaluatedEvent(
-            portfolio_id=event.portfolio_id,
-            business_date=event.business_date,
-            epoch=event.epoch,
-            status=stage.status,
-            controls_blocking=controls_blocking,
-            publish_allowed=not controls_blocking,
-            blocking_reconciliation_types=event.blocking_reconciliation_types,
-            error_count=event.error_count,
-            warning_count=event.warning_count,
-            correlation_id=correlation_id,
-        )
-        await self.outbox_repo.create_outbox_event(
-            aggregate_type="PipelineStage",
-            aggregate_id=f"{event.portfolio_id}:{event.business_date}:{event.epoch}",
-            event_type="PortfolioDayControlsEvaluated",
-            topic=KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-            payload=pipeline_outbox_event_payload(controls_event),
+        controls_blocking = is_control_stage_blocking_status(stage.status)
+        await self._publish_outbox_message(
+            portfolio_day_controls_evaluated_message(
+                event=event,
+                stage_status=stage.status,
+                controls_blocking=controls_blocking,
+                correlation_id=correlation_id,
+            ),
             correlation_id=correlation_id,
         )
 
     @staticmethod
     def is_control_stage_blocking(status: str) -> bool:
-        return status in {"FAILED", "REQUIRES_REPLAY"}
+        return is_control_stage_blocking_status(status)
 
     async def _emit_if_ready(
         self,
@@ -143,49 +130,43 @@ class PipelineOrchestratorService:
         *,
         readiness_reason: str = "cost_and_cashflow_completed",
     ) -> None:
-        if stage.status == "COMPLETED":
-            return
-        if not stage.cost_event_seen or not stage.cashflow_event_seen:
+        readiness_decision = decide_transaction_stage_readiness(stage)
+        if not readiness_decision.should_complete:
             return
         if not await self.repo.mark_stage_completed_if_pending(stage):
             return
 
-        completion_event = TransactionProcessingCompletedEvent(
-            transaction_id=stage.transaction_id,
-            portfolio_id=stage.portfolio_id,
-            security_id=stage.security_id,
-            business_date=stage.business_date,
-            epoch=stage.epoch,
-            cost_event_seen=True,
-            cashflow_event_seen=True,
-            readiness_reason=readiness_reason,
-            correlation_id=correlation_id,
-        )
-        await self.outbox_repo.create_outbox_event(
-            aggregate_type="PipelineStage",
-            aggregate_id=f"{stage.portfolio_id}:{stage.transaction_id}:{stage.epoch}",
-            event_type="TransactionProcessingCompleted",
-            topic=KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
-            payload=pipeline_outbox_event_payload(completion_event),
+        await self._publish_outbox_message(
+            transaction_processing_completed_message(
+                stage=stage,
+                readiness_reason=readiness_reason,
+                correlation_id=correlation_id,
+            ),
             correlation_id=correlation_id,
         )
 
-        if stage.security_id:
-            readiness_event = PortfolioDayReadyForValuationEvent(
-                portfolio_id=stage.portfolio_id,
-                security_id=stage.security_id,
-                valuation_date=stage.business_date,
-                epoch=stage.epoch,
-                readiness_reason=readiness_reason,
+        readiness_message = portfolio_day_ready_for_valuation_message(
+            stage=stage,
+            readiness_reason=readiness_reason,
+            correlation_id=correlation_id,
+        )
+        if readiness_message is not None:
+            await self._publish_outbox_message(
+                readiness_message,
                 correlation_id=correlation_id,
             )
-            await self.outbox_repo.create_outbox_event(
-                aggregate_type="ValuationReadiness",
-                aggregate_id=(
-                    f"{stage.portfolio_id}:{stage.security_id}:{stage.business_date}:{stage.epoch}"
-                ),
-                event_type="PortfolioDayReadyForValuation",
-                topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
-                payload=pipeline_outbox_event_payload(readiness_event),
-                correlation_id=correlation_id,
-            )
+
+    async def _publish_outbox_message(
+        self,
+        message: PipelineOutboxMessage,
+        *,
+        correlation_id: str | None,
+    ) -> None:
+        await self.outbox_repo.create_outbox_event(
+            aggregate_type=message.aggregate_type,
+            aggregate_id=message.aggregate_id,
+            event_type=message.event_type,
+            topic=message.topic,
+            payload=message.payload,
+            correlation_id=correlation_id,
+        )

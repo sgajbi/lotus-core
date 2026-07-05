@@ -60,9 +60,21 @@ REQUIRED_SNIPPETS = {
         "def pipeline_outbox_event_payload",
         "outbox_event_payload",
     ),
+    Path("src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py"): (
+        "financial_reconciliation_requested_message",
+        "portfolio_day_controls_evaluated_message",
+        "portfolio_day_ready_for_valuation_message",
+        "transaction_processing_completed_message",
+        "pipeline_outbox_event_payload",
+    ),
     Path(
         "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
-    ): ("pipeline_outbox_event_payload",),
+    ): (
+        "decide_transaction_stage_readiness",
+        "financial_reconciliation_requested_message",
+        "portfolio_day_controls_evaluated_message",
+        "transaction_processing_completed_message",
+    ),
     Path("src/services/query_service/app/read_models.py"): (
         "class PortfolioTaxLotReadRecord",
         "class PerformanceEconomicsTransactionReadRecord",
@@ -105,6 +117,7 @@ FORBIDDEN_SNIPPETS = {
     Path(
         "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
     ): (
+        "pipeline_outbox_event_payload",
         "payload=outbox_event_payload(",
         "payload = outbox_event_payload(",
         '.model_dump(mode="json")',

@@ -932,6 +932,14 @@ Most relevant current governance:
     payloads, DB retryable errors, or defensive failures to existing retry/DLQ behavior. Keep
     SQLAlchemy sessions, idempotency repository, pipeline stage repository, outbox repository, and
     `PipelineOrchestratorService` assembly behind the pipeline stage unit-of-work adapter.
+    Pipeline stage transition policy belongs in
+    `pipeline_orchestrator_service.app.domain.pipeline_stage_state_machine`; outbox topic, event
+    type, aggregate ID, and payload mapping belong in
+    `pipeline_orchestrator_service.app.adapters.pipeline_event_factory`; and
+    `PipelineOrchestratorService` should coordinate repository updates plus returned outbox
+    messages only. Do not reintroduce readiness, blocking, or stale-epoch decisions in outbox event
+    mapping, and do not put event-topic construction inside domain state-machine code. This is
+    in-process design modularity inside the existing deployable, not a runtime service split.
 65. Application/source-data repository dependencies should use capability-specific ports before
     broad concrete repositories. `PortfolioTaxLotWindow:v1` now depends on
     `PortfolioTaxLotReader`, and financial reconciliation service orchestration now depends on
