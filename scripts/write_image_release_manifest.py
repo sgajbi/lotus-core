@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 SCHEMA_VERSION = "lotus-core.image-release-manifest.v1"
+REQUIRED_VULNERABILITY_SCAN_STATUS = "passed"
 
 
 def _bool_arg(value: str) -> bool:
@@ -23,6 +24,41 @@ def _digest_image_ref(image_ref: str, image_digest: str) -> str:
     if not image_digest.startswith("sha256:"):
         raise SystemExit("image digest must start with sha256:")
     return f"{image_ref}@{image_digest}"
+
+
+def _require_truthful_release_evidence(
+    *,
+    image_tag: str,
+    git_commit_sha: str,
+    image_version: str,
+    image_digest: str,
+    vulnerability_scan_status: str,
+    sbom_generated: bool,
+    image_signed: bool,
+    provenance_attestation_generated: bool,
+    kubernetes_deploys_by_digest: bool,
+    promotion_environments: list[str],
+) -> None:
+    if not git_commit_sha.strip():
+        raise SystemExit("git commit SHA is required")
+    if not image_tag.endswith(f":{git_commit_sha}"):
+        raise SystemExit("image tag must be the Git commit SHA tag")
+    if image_version != git_commit_sha:
+        raise SystemExit("image version must match the Git commit SHA")
+    if len(image_digest.removeprefix("sha256:")) != 64:
+        raise SystemExit("image digest must be a sha256 digest with 64 hexadecimal characters")
+    if vulnerability_scan_status != REQUIRED_VULNERABILITY_SCAN_STATUS:
+        raise SystemExit("vulnerability scan status must be passed")
+    if not sbom_generated:
+        raise SystemExit("SBOM generation evidence is required")
+    if not image_signed:
+        raise SystemExit("image signing evidence is required")
+    if not provenance_attestation_generated:
+        raise SystemExit("provenance attestation evidence is required")
+    if not kubernetes_deploys_by_digest:
+        raise SystemExit("Kubernetes deployment must use digest references")
+    if not promotion_environments:
+        raise SystemExit("at least one promotion environment is required")
 
 
 def build_release_manifest(
@@ -45,6 +81,18 @@ def build_release_manifest(
     kubernetes_deploys_by_digest: bool,
     promotion_environments: list[str],
 ) -> dict[str, object]:
+    _require_truthful_release_evidence(
+        image_tag=image_tag,
+        git_commit_sha=git_commit_sha,
+        image_version=image_version,
+        image_digest=image_digest,
+        vulnerability_scan_status=vulnerability_scan_status,
+        sbom_generated=sbom_generated,
+        image_signed=image_signed,
+        provenance_attestation_generated=provenance_attestation_generated,
+        kubernetes_deploys_by_digest=kubernetes_deploys_by_digest,
+        promotion_environments=promotion_environments,
+    )
     digest_ref = _digest_image_ref(image_ref, image_digest)
     promotions = [
         {"environment": environment, "image_ref": digest_ref}
