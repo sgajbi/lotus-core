@@ -1476,6 +1476,15 @@ Most relevant current governance:
      representative pattern: keep `from_session(...)` construction at the FastAPI/deployment wiring
      boundary, support fake dependencies in focused tests, and require repository additions to
      change a visible dependency factory or bundle.
+120. Kafka consumers should keep transport responsibilities separate from valid-message
+     application orchestration. The cost-calculation consumer now routes valid transaction events
+     through `CostCalculationEventProcessor` and `CostCalculationProcessorDependencies`, with
+     concrete `CostCalculatorRepository`, `IdempotencyRepository`, and `OutboxRepository`
+     construction isolated in `CostCalculationProcessorDependencyFactory.from_session(...)`.
+     Future consumers with idempotency claims, repository reads/writes, outbox staging, or
+     reconciliation diagnostics should follow the processor/dependency-factory pattern so workflow
+     sequencing is testable without Kafka consumer objects and concrete infrastructure remains at
+     the runtime wiring boundary.
 
 ## Context Maintenance Rule
 

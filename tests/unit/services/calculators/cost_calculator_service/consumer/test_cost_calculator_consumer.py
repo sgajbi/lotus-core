@@ -34,6 +34,10 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
     PortfolioNotFoundError,
     _normalize_fee_amount,
 )
+from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
+    CostCalculationEventProcessor,
+    CostCalculationProcessorDependencies,
+)
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
@@ -107,15 +111,15 @@ def mock_dependencies():
             new=get_session_gen,
         ),
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.CostCalculatorRepository",
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_processor.CostCalculatorRepository",
             return_value=mock_repo,
         ),
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.IdempotencyRepository",
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_processor.IdempotencyRepository",
             return_value=mock_idempotency_repo,
         ),
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.OutboxRepository",
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_processor.OutboxRepository",
             return_value=mock_outbox_repo,
         ),
     ):
@@ -180,6 +184,107 @@ def mock_buy_kafka_message() -> MagicMock:
     mock_msg.offset.return_value = 2
     mock_msg.headers.return_value = []
     return mock_msg
+
+
+async def test_cost_calculation_processor_executes_workflow_without_kafka_consumer():
+    event = TransactionEvent(
+        transaction_id="BUY-PROC-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150.0"),
+        gross_transaction_amount=Decimal("1500.0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    instrument_event = MagicMock()
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    idempotency_repo = AsyncMock(spec=IdempotencyRepository)
+    outbox_repo = AsyncMock(spec=OutboxRepository)
+    repo.get_portfolio.return_value = Portfolio(base_currency="USD", portfolio_id="PORT_COST_01")
+    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    idempotency_repo.claim_event_processing.return_value = True
+
+    workflow = MagicMock()
+    workflow._prepare_transaction_event = AsyncMock(return_value=(event, "BUY", "FIFO"))
+    workflow._assert_required_instrument_reference_available = MagicMock()
+    workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
+    workflow._build_emitted_transaction_events = AsyncMock(return_value=[event])
+    workflow._publish_transaction_events = AsyncMock()
+    workflow._publish_instrument_events = AsyncMock()
+
+    await CostCalculationEventProcessor(workflow).process_valid_event(
+        event=event,
+        event_id="transactions.persisted-0-42",
+        correlation_id="cost-corr-id",
+        dependencies=CostCalculationProcessorDependencies(
+            repo=repo,
+            idempotency_repo=idempotency_repo,
+            outbox_repo=outbox_repo,
+        ),
+    )
+
+    idempotency_repo.claim_event_processing.assert_awaited_once_with(
+        "transactions.persisted-0-42",
+        "PORT_COST_01",
+        "cost-calculator",
+        "cost-corr-id",
+    )
+    workflow._build_emitted_transaction_events.assert_awaited_once_with(
+        events_to_publish=[event],
+        repo=repo,
+        correlation_id="cost-corr-id",
+    )
+    workflow._publish_transaction_events.assert_awaited_once_with(
+        original_event=event,
+        emitted_events=[event],
+        outbox_repo=outbox_repo,
+        correlation_id="cost-corr-id",
+    )
+    workflow._publish_instrument_events.assert_awaited_once_with(
+        instrument_events=[instrument_event],
+        outbox_repo=outbox_repo,
+        correlation_id="cost-corr-id",
+    )
+
+
+async def test_cost_calculation_processor_skips_duplicate_claim_without_domain_work():
+    event = TransactionEvent(
+        transaction_id="BUY-DUP-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150.0"),
+        gross_transaction_amount=Decimal("1500.0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    idempotency_repo = AsyncMock(spec=IdempotencyRepository)
+    outbox_repo = AsyncMock(spec=OutboxRepository)
+    idempotency_repo.claim_event_processing.return_value = False
+    workflow = MagicMock()
+    workflow._prepare_transaction_event = AsyncMock()
+
+    await CostCalculationEventProcessor(workflow).process_valid_event(
+        event=event,
+        event_id="transactions.persisted-0-43",
+        correlation_id="cost-corr-id",
+        dependencies=CostCalculationProcessorDependencies(
+            repo=repo,
+            idempotency_repo=idempotency_repo,
+            outbox_repo=outbox_repo,
+        ),
+    )
+
+    repo.get_portfolio.assert_not_awaited()
+    workflow._prepare_transaction_event.assert_not_awaited()
 
 
 @pytest.fixture
