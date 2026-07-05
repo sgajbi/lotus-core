@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, cast
 
@@ -149,20 +150,48 @@ from .transaction_cost_curve import (
 logger = logging.getLogger(__name__)
 
 
-class IntegrationService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
-        self._reference_repository = ReferenceDataRepository(db)
-        self._buy_state_repository = BuyStateRepository(db)
-        self._portfolio_repository = PortfolioRepository(db)
-        self._transaction_repository = TransactionRepository(db)
+@dataclass(frozen=True)
+class IntegrationServiceDependencies:
+    reference_repository: ReferenceDataRepository
+    buy_state_repository: BuyStateRepository
+    portfolio_repository: PortfolioRepository
+    transaction_repository: TransactionRepository
+    page_token_codec: PageTokenCodec
+
+    @classmethod
+    def from_session(cls, db: AsyncSession) -> "IntegrationServiceDependencies":
         settings = load_query_service_settings()
-        self._page_token_codec = PageTokenCodec(
-            secret=settings.page_token_secret,
-            active_kid=settings.page_token_key_id,
-            previous_secrets=settings.page_token_previous_keys,
-            ttl_seconds=settings.page_token_ttl_seconds,
+        return cls(
+            reference_repository=ReferenceDataRepository(db),
+            buy_state_repository=BuyStateRepository(db),
+            portfolio_repository=PortfolioRepository(db),
+            transaction_repository=TransactionRepository(db),
+            page_token_codec=PageTokenCodec(
+                secret=settings.page_token_secret,
+                active_kid=settings.page_token_key_id,
+                previous_secrets=settings.page_token_previous_keys,
+                ttl_seconds=settings.page_token_ttl_seconds,
+            ),
         )
+
+
+class IntegrationService:
+    def __init__(
+        self,
+        db: AsyncSession | None = None,
+        *,
+        dependencies: IntegrationServiceDependencies | None = None,
+    ):
+        if dependencies is None:
+            if db is None:
+                raise ValueError("IntegrationService requires db or dependencies")
+            dependencies = IntegrationServiceDependencies.from_session(db)
+        self.db = db
+        self._reference_repository = dependencies.reference_repository
+        self._buy_state_repository = dependencies.buy_state_repository
+        self._portfolio_repository = dependencies.portfolio_repository
+        self._transaction_repository = dependencies.transaction_repository
+        self._page_token_codec = dependencies.page_token_codec
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))

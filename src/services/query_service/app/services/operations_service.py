@@ -1,4 +1,5 @@
 from collections.abc import Awaitable
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import TypeVar
 
@@ -85,9 +86,27 @@ _PagedRowT = TypeVar("_PagedRowT")
 MAX_OUTBOX_RECOVERY_REASON_LENGTH = 512
 
 
+@dataclass(frozen=True)
+class OperationsServiceDependencies:
+    repository: OperationsRepository
+
+    @classmethod
+    def from_session(cls, db: AsyncSession) -> "OperationsServiceDependencies":
+        return cls(repository=OperationsRepository(db))
+
+
 class OperationsService:
-    def __init__(self, db: AsyncSession):
-        self.repo = OperationsRepository(db)
+    def __init__(
+        self,
+        db: AsyncSession | None = None,
+        *,
+        dependencies: OperationsServiceDependencies | None = None,
+    ):
+        if dependencies is None:
+            if db is None:
+                raise ValueError("OperationsService requires db or dependencies")
+            dependencies = OperationsServiceDependencies.from_session(db)
+        self.repo = dependencies.repository
 
     @staticmethod
     def _evidence_product_runtime_metadata(

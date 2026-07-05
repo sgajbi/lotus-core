@@ -42,7 +42,10 @@ from src.services.query_service.app.services.integration_policy import (
     resolve_consumer_sections,
     resolve_policy_context,
 )
-from src.services.query_service.app.services.integration_service import IntegrationService
+from src.services.query_service.app.services.integration_service import (
+    IntegrationService,
+    IntegrationServiceDependencies,
+)
 from src.services.query_service.app.services.market_reference_coverage import (
     market_reference_coverage_response,
 )
@@ -59,6 +62,35 @@ from src.services.query_service.app.services.transaction_cost_curve import (
 
 def make_service() -> IntegrationService:
     return IntegrationService(AsyncMock(spec=AsyncSession))
+
+
+def test_integration_service_accepts_explicit_dependencies_without_session() -> None:
+    reference_repository = AsyncMock()
+    buy_state_repository = AsyncMock()
+    portfolio_repository = AsyncMock()
+    transaction_repository = AsyncMock()
+    page_token_codec = SimpleNamespace(
+        encode=lambda payload: f"encoded:{payload['scope']}",
+        decode=lambda token: {"token": token},
+    )
+
+    service = IntegrationService(
+        dependencies=IntegrationServiceDependencies(
+            reference_repository=reference_repository,
+            buy_state_repository=buy_state_repository,
+            portfolio_repository=portfolio_repository,
+            transaction_repository=transaction_repository,
+            page_token_codec=page_token_codec,
+        )
+    )
+
+    assert service.db is None
+    assert service._reference_repository is reference_repository  # pylint: disable=protected-access
+    assert service._buy_state_repository is buy_state_repository  # pylint: disable=protected-access
+    assert service._portfolio_repository is portfolio_repository  # pylint: disable=protected-access
+    assert service._transaction_repository is transaction_repository  # pylint: disable=protected-access
+    assert service._encode_page_token({"scope": "benchmark"}) == "encoded:benchmark"
+    assert service._decode_page_token("token-1") == {"token": "token-1"}
 
 
 def transaction_cost_row(

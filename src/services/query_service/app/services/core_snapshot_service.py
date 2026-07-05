@@ -128,21 +128,47 @@ class _BaselinePositionRows:
     use_snapshot: bool
 
 
+@dataclass(frozen=True)
+class CoreSnapshotDependencies:
+    position_repo: PositionRepository
+    portfolio_repo: PortfolioRepository
+    simulation_repo: SimulationRepository
+    price_repo: MarketPriceRepository
+    fx_repo: FxRateRepository
+    instrument_repo: InstrumentRepository
+
+    @classmethod
+    def from_session(cls, db: AsyncSession) -> "CoreSnapshotDependencies":
+        return cls(
+            position_repo=PositionRepository(db),
+            portfolio_repo=PortfolioRepository(db),
+            simulation_repo=SimulationRepository(db),
+            price_repo=MarketPriceRepository(db),
+            fx_repo=FxRateRepository(db),
+            instrument_repo=InstrumentRepository(db),
+        )
+
+
 class CoreSnapshotService:
     def __init__(
         self,
-        db: AsyncSession,
+        db: AsyncSession | None = None,
         *,
         clock: Clock | None = None,
+        dependencies: CoreSnapshotDependencies | None = None,
     ):
+        if dependencies is None:
+            if db is None:
+                raise ValueError("CoreSnapshotService requires db or dependencies")
+            dependencies = CoreSnapshotDependencies.from_session(db)
         self.db = db
         self._clock = clock or SystemClock()
-        self.position_repo = PositionRepository(db)
-        self.portfolio_repo = PortfolioRepository(db)
-        self.simulation_repo = SimulationRepository(db)
-        self.price_repo = MarketPriceRepository(db)
-        self.fx_repo = FxRateRepository(db)
-        self.instrument_repo = InstrumentRepository(db)
+        self.position_repo = dependencies.position_repo
+        self.portfolio_repo = dependencies.portfolio_repo
+        self.simulation_repo = dependencies.simulation_repo
+        self.price_repo = dependencies.price_repo
+        self.fx_repo = dependencies.fx_repo
+        self.instrument_repo = dependencies.instrument_repo
 
     @staticmethod
     def _request_fingerprint(payload: dict[str, Any]) -> str:
