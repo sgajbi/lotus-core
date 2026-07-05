@@ -1009,6 +1009,17 @@ Most relevant current governance:
     explicit legacy-folder migration scope for `DTOs`, `services`, `transformers`, and `producers`.
     Do not perform broad folder renames; migrate cohesive workflows into the standard packages as
     issue slices touch them.
+83. In-process package dependency direction is now guarded across service-local `domain`,
+    `application`, `use_cases`, `ports`, `adapters`, and `proof_builders` packages. The repo-local
+    standard lives at `docs/standards/in-process-boundary-contract-standard.md`; transitional
+    exceptions live at `docs/standards/in-process-boundary-exceptions.json`; and `make
+    architecture-guard` runs `scripts/in_process_boundary_guard.py`. Domain packages must stay
+    framework-free, infrastructure-free, and persistence-free; application packages may depend on
+    domain and ports but not routers, concrete adapters, infrastructure, repositories, API DTOs, or
+    legacy service packages; ports must stay framework-neutral and persistence-neutral; adapters may
+    depend on concrete infrastructure while implementing ports; and proof builders must assemble
+    evidence from application/domain outputs rather than routers or persistence models. Exceptions
+    require owner, expiry, follow-up issue, and reason, and stale exceptions fail the guard.
 
 ## Context Maintenance Rule
 
