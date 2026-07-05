@@ -1322,6 +1322,13 @@ Most relevant current governance:
      local permissive parsers unless an explicit versioned compatibility contract preserves unknown
      fields as typed extension metadata and includes producer/consumer, DLQ, redaction, and replay
      tests.
+112. Event-envelope metadata posture belongs in `portfolio_common.event_supportability`, not in
+     scattered optional DTO fields or local consumer assumptions. Every event-family definition must
+     require idempotency, correlation, schema versioning, and a source-data product or supportability
+     evidence link; every direct Kafka topic must support idempotency and correlation headers; and
+     supportability surfaces must remain operator-only and evidence-backed. Update the catalog and
+     its tests before adding, renaming, or relaxing event families, topics, replay/supportability
+     paths, or envelope metadata behavior.
 
 ## Context Maintenance Rule
 
