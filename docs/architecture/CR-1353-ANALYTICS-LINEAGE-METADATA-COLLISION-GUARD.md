@@ -46,6 +46,14 @@ Focused local validation:
    - Result: passed
 4. `make quality-wiki-docs-gate`
    - Result: passed
+5. Direct live Core query-control-plane repro probes against `http://localhost:8202`:
+   - `POST /integration/portfolios/PB_SG_GLOBAL_BAL_001/analytics/portfolio-timeseries`
+     returned `200 OK` with product `PortfolioTimeseriesInput`, a single response `lineage`,
+     `content_hash`, and matching `source_digest`. The response reported
+     `freshness_status=STALE`, so downstream proof freshness closure remains separate work.
+   - `POST /integration/portfolios/PB_SG_GLOBAL_BAL_001/analytics/reference` returned `200 OK`
+     with product `PortfolioAnalyticsReference`, `freshness_status=CURRENT`, a single response
+     `lineage`, `content_hash`, and matching `source_digest`.
 
 ## Documentation, Wiki, Context, And Skill Decision
 
@@ -61,6 +69,6 @@ requires source-proof metadata fixes to update repo context and tests.
 
 ## Remaining Work
 
-Re-run the live local Core query-control-plane endpoints, then downstream `lotus-performance`,
-`lotus-risk`, and `lotus-idea` proof generators after the changed Core image/service is refreshed.
-This slice locally fixes #705 pending PR CI, live downstream proof, merge, and issue closure.
+Re-run downstream `lotus-performance`, `lotus-risk`, and `lotus-idea` proof generators after the
+changed Core branch is pushed through PR CI. This slice locally fixes the direct Core 500s in #705
+pending PR CI, downstream proof reruns, merge, and issue closure.
