@@ -11,6 +11,7 @@ from .kafka_producer_policy import (
     load_kafka_producer_policy,
 )
 from .logging_utils import operation_log_extra
+from .monitoring import observe_kafka_producer_event
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,38 @@ class KafkaProducer:
                 callback=_delivery_report_callback(outbox_id, on_delivery),
             )
             self.producer.poll(0)
+            observe_kafka_producer_event(
+                service=self.service_name,
+                topic=topic,
+                outcome="accepted",
+                reason="produce_queued",
+            )
+        except BufferError:
+            observe_kafka_producer_event(
+                service=self.service_name,
+                topic=topic,
+                outcome="back_pressure",
+                reason="queue_full",
+            )
+            logger.warning(
+                "Kafka producer local queue is saturated.",
+                extra=operation_log_extra(
+                    event_name="kafka.producer.back_pressure",
+                    operation="kafka.produce",
+                    status="failed",
+                    reason_code="queue_full",
+                    topic=topic,
+                    service=self.service_name,
+                ),
+            )
+            raise
         except Exception as e:
+            observe_kafka_producer_event(
+                service=self.service_name,
+                topic=topic,
+                outcome="failed",
+                reason="producer_publish_error",
+            )
             logger.error(
                 "Kafka message production failed.",
                 exc_info=True,

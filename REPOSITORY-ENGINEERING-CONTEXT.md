@@ -1233,6 +1233,13 @@ Most relevant current governance:
     request timeout, or queue bounds. Use the shared `LOTUS_CORE_KAFKA_PRODUCER_*` variables and
     service override JSON; keep idempotence, `acks=all`, and safe in-flight request limits as
     adapter-owned invariants rather than caller-overridable settings.
+99. Kafka publish back-pressure has a first-class shared contract. `KafkaProducer.publish_message`
+    emits `kafka_producer_events_total` with bounded `service`, `topic`, `outcome`, and `reason`
+    labels and logs local queue saturation as `kafka.producer.back_pressure` with reason
+    `queue_full`; `KafkaEventPublisher` maps `BufferError` to retryable
+    `KafkaPublishBackPressure` and flush timeout/exception paths to uncertain delivery. Schedulers
+    and outbox/replay publishers must preserve this distinction so queue saturation defers or
+    recovers work instead of marking it dispatched or collapsing it into a generic terminal error.
 
 ## Context Maintenance Rule
 

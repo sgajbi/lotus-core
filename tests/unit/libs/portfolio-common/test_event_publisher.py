@@ -86,3 +86,19 @@ def test_kafka_event_publisher_maps_flush_timeout_to_uncertain_publish() -> None
         "undelivered_count": "2",
     }
     producer.flush.assert_called_once_with(timeout=5)
+
+
+def test_kafka_event_publisher_maps_flush_exception_to_uncertain_publish() -> None:
+    producer = MagicMock(spec=KafkaProducer)
+    producer.flush.side_effect = TimeoutError("delivery confirmation timed out")
+    publisher = KafkaEventPublisher(producer)
+
+    result = publisher.confirm_delivery(timeout_seconds=7)
+
+    assert result.status == EventPublishStatus.UNCERTAIN
+    assert result.undelivered_count == 1
+    assert result.error_message == "delivery confirmation timed out"
+    assert isinstance(result.infrastructure_error, KafkaPublishUncertain)
+    assert result.infrastructure_error.reason_code == "kafka_publish_uncertain"
+    assert result.infrastructure_error.safe_context == {"timeout_seconds": "7"}
+    producer.flush.assert_called_once_with(timeout=7)

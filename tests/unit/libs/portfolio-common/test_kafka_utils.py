@@ -101,8 +101,9 @@ def test_kafka_producer_policy_rejects_unsupported_override_key(monkeypatch):
         load_kafka_producer_policy()
 
 
+@patch("portfolio_common.kafka_utils.observe_kafka_producer_event")
 @patch("portfolio_common.kafka_utils.Producer")
-def test_publish_message_calls_produce(MockProducer):
+def test_publish_message_calls_produce(MockProducer, mock_observe_producer_event):
     """
     Tests that the publish_message method correctly calls the underlying client's produce method.
     """
@@ -126,6 +127,60 @@ def test_publish_message_calls_produce(MockProducer):
         callback=ANY,  # The callback is an inner function, so we just check it exists
     )
     mock_confluent_producer.poll.assert_called_with(0)
+    mock_observe_producer_event.assert_called_once_with(
+        service="portfolio_common",
+        topic="test-topic",
+        outcome="accepted",
+        reason="produce_queued",
+    )
+
+
+@patch("portfolio_common.kafka_utils.observe_kafka_producer_event")
+@patch("portfolio_common.kafka_utils.Producer")
+def test_publish_message_handles_queue_full_as_back_pressure(
+    MockProducer, mock_observe_producer_event
+):
+    mock_confluent_producer = MagicMock()
+    mock_confluent_producer.produce.side_effect = BufferError("queue full")
+    MockProducer.return_value = mock_confluent_producer
+    producer = KafkaProducer(service_name="valuation_orchestrator_service")
+
+    with patch("portfolio_common.kafka_utils.logger.warning") as mock_warning:
+        with pytest.raises(BufferError, match="queue full"):
+            producer.publish_message(topic="valuation.job.requested", key="k", value={"id": "1"})
+
+    mock_observe_producer_event.assert_called_once_with(
+        service="valuation_orchestrator_service",
+        topic="valuation.job.requested",
+        outcome="back_pressure",
+        reason="queue_full",
+    )
+    mock_warning.assert_called_once()
+    extra = mock_warning.call_args.kwargs["extra"]
+    assert extra["event_name"] == "kafka.producer.back_pressure"
+    assert extra["reason_code"] == "queue_full"
+    assert extra["topic"] == "valuation.job.requested"
+
+
+@patch("portfolio_common.kafka_utils.observe_kafka_producer_event")
+@patch("portfolio_common.kafka_utils.Producer")
+def test_publish_message_observes_generic_publish_failure(
+    MockProducer, mock_observe_producer_event
+):
+    mock_confluent_producer = MagicMock()
+    mock_confluent_producer.produce.side_effect = RuntimeError("broker unavailable")
+    MockProducer.return_value = mock_confluent_producer
+    producer = KafkaProducer()
+
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        producer.publish_message(topic="transactions.raw.received", key="k", value={"id": "1"})
+
+    mock_observe_producer_event.assert_called_once_with(
+        service="portfolio_common",
+        topic="transactions.raw.received",
+        outcome="failed",
+        reason="producer_publish_error",
+    )
 
 
 @patch("portfolio_common.kafka_utils.Producer")
