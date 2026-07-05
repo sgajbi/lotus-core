@@ -7,7 +7,6 @@ from typing import Any, Awaitable, Callable, Dict, List
 
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import PortfolioValuationRequiredEvent
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
     INSTRUMENT_REPROCESSING_TRIGGERS_PENDING,
@@ -19,7 +18,6 @@ from portfolio_common.monitoring import (
     observe_reprocessing_stale_skips,
     observe_valuation_scheduler_budget_exhausted,
     observe_valuation_scheduler_jobs_claimed,
-    observe_valuation_scheduler_jobs_dispatched,
     observe_valuation_scheduler_poll_duration,
     observe_valuation_scheduler_producer_backpressure,
     set_control_queue_failed_stored,
@@ -30,16 +28,14 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from portfolio_common.scheduler_dispatch_recovery import (
     DISPATCH_BUDGET_EXHAUSTED_PHASE,
-    DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
-    DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
     dispatch_failure_reason,
-    present_job_ids,
 )
 from portfolio_common.valuation_job_repository import ValuationJobRepository, ValuationJobUpsert
 
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
+from .valuation_job_dispatcher import ValuationJobDispatcher
 from .valuation_job_publisher import (
     ValuationJobPublisher,
     ValuationJobPublishError,
@@ -61,6 +57,7 @@ class ValuationScheduler:
         poll_interval: int = 30,
         batch_size: int = 100,
         valuation_job_publisher: ValuationJobPublisher | None = None,
+        valuation_job_dispatcher: ValuationJobDispatcher | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -83,6 +80,14 @@ class ValuationScheduler:
             valuation_job_publisher
             if valuation_job_publisher is not None
             else get_valuation_job_publisher()
+        )
+        self._valuation_job_dispatcher = (
+            valuation_job_dispatcher
+            if valuation_job_dispatcher is not None
+            else ValuationJobDispatcher(
+                valuation_job_publisher=self._valuation_job_publisher,
+                dispatch_budget_seconds=self._dispatch_budget_seconds,
+            )
         )
 
     def stop(self):
@@ -228,7 +233,7 @@ class ValuationScheduler:
         if not updates:
             return 0
 
-        updated_count = await position_state_repo.bulk_update_states(updates)
+        updated_count = int(await position_state_repo.bulk_update_states(updates))
         stale_skipped_count = len(updates) - updated_count
 
         if stale_skipped_count:
@@ -648,189 +653,12 @@ class ValuationScheduler:
             latest_business_date,
         )
 
-    def _valuation_job_record_key(self, job: PortfolioValuationJob) -> str:
-        return f"{job.portfolio_id}|{job.security_id}|{job.valuation_date.isoformat()}|{job.epoch}"
-
-    def _valuation_job_headers(self, job: PortfolioValuationJob) -> list[tuple[str, bytes]]:
-        if not job.correlation_id:
-            return []
-        return [("correlation_id", job.correlation_id.encode("utf-8"))]
-
-    def _valuation_required_event(self, job: PortfolioValuationJob) -> dict[str, Any]:
-        event = PortfolioValuationRequiredEvent(
-            portfolio_id=job.portfolio_id,
-            security_id=job.security_id,
-            valuation_date=job.valuation_date,
-            epoch=job.epoch,
-            correlation_id=job.correlation_id,
-        )
-        return event.model_dump(mode="json")
-
-    def _publish_valuation_job(self, job: PortfolioValuationJob) -> None:
-        self._valuation_job_publisher.publish_job_requested(
-            key=job.portfolio_id,
-            value=self._valuation_required_event(job),
-            headers=self._valuation_job_headers(job),
-        )
-
     @staticmethod
     def _budget_exhausted(*, started_at: float, budget_seconds: int) -> bool:
         return time.monotonic() - started_at >= budget_seconds
 
-    def _raise_dispatch_budget_exhausted(
-        self,
-        *,
-        queued_count: int,
-        published_jobs: list[PortfolioValuationJob],
-        published_record_keys: list[str],
-        remaining_jobs: list[PortfolioValuationJob],
-        remaining_record_keys: list[str],
-    ) -> None:
-        if published_record_keys:
-            undelivered_count = self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
-            if undelivered_count:
-                affected_record_keys = [*published_record_keys, *remaining_record_keys]
-                affected_keys = ", ".join(affected_record_keys)
-                raise SchedulerDispatchError(
-                    message=(
-                        "Delivery confirmation timed out while stopping valuation dispatch "
-                        f"after budget exhaustion. Affected job keys: {affected_keys}."
-                    ),
-                    recovery_job_ids=present_job_ids([*published_jobs, *remaining_jobs]),
-                    recovery_record_keys=tuple(affected_record_keys),
-                    published_record_keys=tuple(published_record_keys),
-                    failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
-                )
-            observe_valuation_scheduler_jobs_dispatched(len(published_jobs))
-
-        remaining_keys = ", ".join(remaining_record_keys)
-        raise SchedulerDispatchError(
-            message=(
-                "Valuation scheduler dispatch budget exhausted after "
-                f"{queued_count} job(s) were queued. Remaining job keys: {remaining_keys}."
-            ),
-            recovery_job_ids=present_job_ids(remaining_jobs),
-            recovery_record_keys=tuple(remaining_record_keys),
-            published_record_keys=tuple(published_record_keys),
-            failure_phase=DISPATCH_BUDGET_EXHAUSTED_PHASE,
-        )
-
-    def _raise_dispatch_failure(
-        self,
-        *,
-        queued_count: int,
-        published_jobs: list[PortfolioValuationJob],
-        published_record_keys: list[str],
-        remaining_jobs: list[PortfolioValuationJob],
-        remaining_record_keys: list[str],
-        cause: Exception,
-    ) -> None:
-        undelivered_count = self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
-        if undelivered_count:
-            affected_record_keys = [*published_record_keys, *remaining_record_keys]
-            affected_keys = ", ".join(affected_record_keys)
-            raise SchedulerDispatchError(
-                message=(
-                    "Delivery confirmation timed out while recovering from valuation dispatch "
-                    f"failure. Affected job keys: {affected_keys}."
-                ),
-                recovery_job_ids=present_job_ids([*published_jobs, *remaining_jobs]),
-                recovery_record_keys=tuple(affected_record_keys),
-                published_record_keys=tuple(published_record_keys),
-                failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
-            ) from cause
-        if published_jobs:
-            observe_valuation_scheduler_jobs_dispatched(len(published_jobs))
-        remaining_keys = ", ".join(remaining_record_keys)
-        raise SchedulerDispatchError(
-            message=(
-                "Failed to dispatch valuation jobs after "
-                f"{queued_count} earlier job(s) were queued. Remaining job keys: {remaining_keys}."
-            ),
-            recovery_job_ids=present_job_ids(remaining_jobs),
-            recovery_record_keys=tuple(remaining_record_keys),
-            published_record_keys=tuple(published_record_keys),
-            failure_phase=DISPATCH_PUBLISH_FAILURE_PHASE,
-        ) from cause
-
-    def _confirm_dispatched_jobs(self, record_keys: list[str]) -> None:
-        undelivered_count = self._valuation_job_publisher.confirm_delivery(timeout_seconds=10)
-        if not undelivered_count:
-            return
-        affected_keys = ", ".join(record_keys)
-        raise SchedulerDispatchError(
-            message=(
-                "Delivery confirmation timed out while dispatching valuation jobs. "
-                f"Affected job keys: {affected_keys}."
-            ),
-            recovery_job_ids=(),
-            recovery_record_keys=tuple(record_keys),
-            published_record_keys=tuple(record_keys),
-            failure_phase=DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
-        )
-
     async def _dispatch_jobs(self, jobs: List[PortfolioValuationJob]):
-        """Publishes a batch of claimed jobs to Kafka."""
-
-        if not jobs:
-            return
-
-        logger.info(
-            "Claimed valuation jobs dispatch started.",
-            extra=operation_log_extra(
-                event_name="valuation.scheduler.dispatch_started",
-                operation="valuation.scheduler.dispatch_jobs",
-                status="started",
-                reason_code="jobs_claimed",
-                job_count=len(jobs),
-            ),
-        )
-        record_keys = [self._valuation_job_record_key(job) for job in jobs]
-        dispatch_started_at = time.monotonic()
-        for idx, job in enumerate(jobs):
-            if self._budget_exhausted(
-                started_at=dispatch_started_at,
-                budget_seconds=self._dispatch_budget_seconds,
-            ):
-                self._raise_dispatch_budget_exhausted(
-                    queued_count=idx,
-                    published_jobs=jobs[:idx],
-                    published_record_keys=record_keys[:idx],
-                    remaining_jobs=jobs[idx:],
-                    remaining_record_keys=record_keys[idx:],
-                )
-            try:
-                self._publish_valuation_job(job)
-            except Exception as exc:
-                self._raise_dispatch_failure(
-                    queued_count=idx,
-                    published_jobs=jobs[:idx],
-                    published_record_keys=record_keys[:idx],
-                    remaining_jobs=jobs[idx:],
-                    remaining_record_keys=record_keys[idx:],
-                    cause=exc,
-                )
-        try:
-            self._confirm_dispatched_jobs(record_keys)
-        except SchedulerDispatchError as exc:
-            raise SchedulerDispatchError(
-                message=exc.message,
-                recovery_job_ids=present_job_ids(jobs),
-                recovery_record_keys=exc.recovery_record_keys,
-                published_record_keys=exc.published_record_keys,
-                failure_phase=exc.failure_phase,
-            ) from exc
-        observe_valuation_scheduler_jobs_dispatched(len(jobs))
-        logger.info(
-            "Claimed valuation jobs dispatch flushed.",
-            extra=operation_log_extra(
-                event_name="valuation.scheduler.dispatch_flushed",
-                operation="valuation.scheduler.dispatch_jobs",
-                status="succeeded",
-                reason_code="producer_flush_completed",
-                job_count=len(jobs),
-            ),
-        )
+        await self._valuation_job_dispatcher.dispatch_jobs(jobs)
 
     async def _recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
         if not failure.recovery_job_ids:

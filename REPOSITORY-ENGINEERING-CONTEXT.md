@@ -1493,6 +1493,14 @@ Most relevant current governance:
      staging. Future backfill, replay, or batch valuation entry points should reuse the processor
      with an injected session provider/dependency factory instead of copying consumer workflow
      logic.
+122. Valuation orchestration scheduler refactoring is in progress under GitHub issue #545.
+     `ValuationJobDispatcher` now owns valuation job dispatch payload mapping, correlation
+     headers, dispatch-budget enforcement, publisher delivery confirmation, and dispatch recovery
+     metadata. Keep publisher/Kafka flush logic out of `ValuationScheduler`; remaining scheduler
+     slices should continue extracting loop cadence, instrument reprocessing coordination,
+     watermark advancement, backfill planning/staging, stale reset, and DB session/repository
+     factory ownership into separately testable collaborators before issue #545 is marked
+     fixed-local.
 
 ## Context Maintenance Rule
 
