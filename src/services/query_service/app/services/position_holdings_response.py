@@ -12,6 +12,7 @@ from .position_holdings import (
     portfolio_positions_response_data,
     position_held_since_requests,
 )
+from .position_holdings_degradation import holdings_degradation_summary
 from .position_holdings_reads import (
     fallback_holdings_valuation_map,
     holdings_position_source_rows,
@@ -69,15 +70,25 @@ async def portfolio_holdings_response(
         held_since_requests=held_since_requests,
         response_as_of_date=response_as_of_date,
     )
+    data_quality_status = holdings_data_quality_status(
+        positions=positions,
+        history_supplements=history_supplements,
+        response_as_of_date=response_as_of_date,
+        latest_market_price_dates=latest_market_price_dates,
+    )
+    latest_evidence_timestamp = latest_holdings_evidence_timestamp(db_results)
     return portfolio_positions_response_data(
         portfolio_id=portfolio_id,
         positions=positions,
         response_as_of_date=response_as_of_date,
-        data_quality_status=holdings_data_quality_status(
+        data_quality_status=data_quality_status,
+        latest_evidence_timestamp=latest_evidence_timestamp,
+        degradation=holdings_degradation_summary(
             positions=positions,
             history_supplements=history_supplements,
+            fallback_valuation_map=fallback_valuation_map,
             response_as_of_date=response_as_of_date,
             latest_market_price_dates=latest_market_price_dates,
+            latest_evidence_timestamp=latest_evidence_timestamp,
         ),
-        latest_evidence_timestamp=latest_holdings_evidence_timestamp(db_results),
     )

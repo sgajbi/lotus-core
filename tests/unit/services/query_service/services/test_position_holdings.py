@@ -10,6 +10,9 @@ from portfolio_common.database_models import (
 )
 
 from src.services.query_service.app.dtos.position_dto import Position
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    SOURCE_METADATA_UNAVAILABLE_HASH,
+)
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.position_holdings import (
     apply_held_since_dates,
@@ -17,6 +20,7 @@ from src.services.query_service.app.services.position_holdings import (
     effective_holdings_as_of_date,
     fallback_valuation_security_ids,
     held_since_security_epoch_pairs,
+    holdings_content_hash,
     holdings_data_quality_status,
     holdings_response_as_of_date,
     latest_holdings_evidence_timestamp,
@@ -31,6 +35,9 @@ from src.services.query_service.app.services.position_holdings import (
     position_weight_base_value,
     should_fetch_fallback_valuation_map,
     should_use_default_holdings_as_of_date,
+)
+from src.services.query_service.app.services.position_holdings_degradation import (
+    holdings_degradation_summary,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -304,10 +311,63 @@ async def test_portfolio_positions_response_data_adds_runtime_metadata() -> None
     assert response.as_of_date == date(2025, 1, 1)
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == evidence_timestamp
+    assert response.source_batch_fingerprint == response.content_hash
+    assert response.content_hash.startswith("sha256:")
+    assert response.content_hash != SOURCE_METADATA_UNAVAILABLE_HASH
+    assert response.source_digest == response.content_hash
+    assert response.source_refs == ["lotus-core://source/HoldingsAsOf/P1/2025-01-01"]
+    assert response.source_lineage == {
+        "source_owner": "lotus-core",
+        "source_product": "HoldingsAsOf",
+        "source_product_version": "v1",
+        "degradation_status": "NONE",
+    }
+    assert response.degradation.status == "NONE"
+    assert response.degradation.details == []
     assert response.restatement_version == "current"
     assert response.reconciliation_status == "UNKNOWN"
     assert response.correlation_id is None
     assert response.generated_at.tzinfo is not None
+
+
+async def test_holdings_content_hash_is_deterministic_for_same_holdings_evidence() -> None:
+    evidence_timestamp = datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
+    position = Position(
+        security_id="SEC_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="Instrument",
+    )
+    degradation = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={},
+        latest_evidence_timestamp=evidence_timestamp,
+    )
+
+    first = holdings_content_hash(
+        portfolio_id="P1",
+        positions=[position],
+        response_as_of_date=date(2025, 1, 1),
+        data_quality_status="COMPLETE",
+        latest_evidence_timestamp=evidence_timestamp,
+        degradation=degradation,
+    )
+    second = holdings_content_hash(
+        portfolio_id="P1",
+        positions=[position],
+        response_as_of_date=date(2025, 1, 1),
+        data_quality_status="COMPLETE",
+        latest_evidence_timestamp=evidence_timestamp,
+        degradation=degradation,
+    )
+
+    assert first == second
+    assert first.startswith("sha256:")
+    assert first != SOURCE_METADATA_UNAVAILABLE_HASH
 
 
 async def test_position_valuation_data_maps_snapshot_row_values() -> None:
@@ -862,6 +922,115 @@ async def test_holdings_data_quality_status_marks_history_supplement_partial() -
         )
         == "PARTIAL"
     )
+
+
+async def test_holdings_degradation_summary_reports_fallback_valuation_detail() -> None:
+    evidence_timestamp = datetime(2025, 1, 1, 10, 5, tzinfo=UTC)
+    position = Position(
+        security_id=" HIST_A ",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="History supplement",
+        reprocessing_status="CURRENT",
+        valuation=ValuationData(market_price=Decimal("10"), market_value=Decimal("100")),
+    )
+
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[(PositionHistory(security_id="HIST_A"), None, None)],
+        fallback_valuation_map={"HIST_A": {"market_price": Decimal("10")}},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={"HIST_A": date(2025, 1, 1)},
+        latest_evidence_timestamp=evidence_timestamp,
+    )
+
+    assert summary.status == "PARTIAL"
+    assert summary.reason_codes == ["HOLDINGS_VALUATION_FALLBACK"]
+    assert len(summary.details) == 1
+    detail = summary.details[0]
+    assert detail.record_key == "security_id:HIST_A"
+    assert detail.source_kind == "FALLBACK"
+    assert detail.freshness_status == "PARTIAL"
+    assert detail.source_as_of_date == date(2025, 1, 1)
+    assert detail.latest_evidence_timestamp == evidence_timestamp
+    assert detail.affected_fields == [
+        "valuation.market_price",
+        "valuation.market_value",
+        "valuation.unrealized_gain_loss",
+        "valuation.market_value_local",
+        "valuation.unrealized_gain_loss_local",
+    ]
+
+
+async def test_holdings_degradation_summary_reports_stale_market_price_detail() -> None:
+    position = Position(
+        security_id=" EQ_A ",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 2),
+        instrument_name="Priced holding",
+        asset_class="Equity",
+        reprocessing_status="CURRENT",
+        valuation=ValuationData(market_price=Decimal("10"), market_value=Decimal("100")),
+    )
+
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 2),
+        latest_market_price_dates={"EQ_A": date(2025, 1, 1)},
+        latest_evidence_timestamp=datetime(2025, 1, 2, 10, 0, tzinfo=UTC),
+    )
+
+    assert summary.status == "STALE"
+    assert summary.reason_codes == ["MARKET_PRICE_STALE"]
+    assert summary.details[0].record_key == "security_id:EQ_A"
+    assert summary.details[0].source_kind == "AUTHORITATIVE"
+    assert summary.details[0].source_as_of_date == date(2025, 1, 1)
+    assert summary.details[0].freshness_status == "STALE"
+
+
+async def test_holdings_degradation_summary_reports_unavailable_fallback_detail() -> None:
+    position = Position(
+        security_id="HIST_A",
+        quantity=Decimal("1"),
+        cost_basis=Decimal("100"),
+        position_date=date(2025, 1, 1),
+        instrument_name="History supplement",
+        reprocessing_status="CURRENT",
+        valuation=ValuationData(market_price=None, market_value=Decimal("100")),
+    )
+
+    summary = holdings_degradation_summary(
+        positions=[position],
+        history_supplements=[(PositionHistory(security_id="HIST_A"), None, None)],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={},
+        latest_evidence_timestamp=None,
+    )
+
+    assert summary.status == "UNAVAILABLE"
+    assert summary.reason_codes == ["SNAPSHOT_VALUATION_FALLBACK_UNAVAILABLE"]
+    assert summary.details[0].source_kind == "DERIVED_DEFAULT"
+    assert summary.details[0].freshness_status == "UNAVAILABLE"
+
+
+async def test_holdings_degradation_summary_reports_empty_holdings_unavailable() -> None:
+    summary = holdings_degradation_summary(
+        positions=[],
+        history_supplements=[],
+        fallback_valuation_map={},
+        response_as_of_date=date(2025, 1, 1),
+        latest_market_price_dates={},
+        latest_evidence_timestamp=None,
+    )
+
+    assert summary.status == "UNAVAILABLE"
+    assert summary.reason_codes == ["HOLDINGS_EMPTY"]
+    assert summary.details[0].affected_fields == ["positions"]
 
 
 async def test_latest_holdings_evidence_timestamp_uses_latest_row_or_state_timestamp() -> None:

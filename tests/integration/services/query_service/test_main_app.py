@@ -26,6 +26,13 @@ SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS = {
     "latest_evidence_timestamp",
     "source_batch_fingerprint",
     "snapshot_id",
+    "content_hash",
+    "source_digest",
+    "source_refs",
+    "source_lineage",
+    "degradation",
+    "source_evidence_current",
+    "freshness_status",
     "policy_version",
     "correlation_id",
 }
@@ -121,6 +128,23 @@ async def test_openapi_exposes_holdings_as_of_runtime_supportability_metadata(
         assert SOURCE_DATA_PRODUCT_RUNTIME_METADATA_FIELDS <= set(response_schema["properties"])
         assert response_schema["properties"]["product_name"]["default"] == "HoldingsAsOf"
         assert response_schema["properties"]["product_version"]["default"] == "v1"
+        degradation_ref = response_schema["properties"]["degradation"]["$ref"]
+        assert degradation_ref.endswith("/SourceDataDegradationSummary")
+
+    degradation_summary = components["SourceDataDegradationSummary"]
+    degradation_detail = components["SourceDataDegradationDetail"]
+    assert {"status", "reason_codes", "details"} <= set(degradation_summary["properties"])
+    assert {
+        "section",
+        "record_key",
+        "affected_fields",
+        "source_kind",
+        "source_product_name",
+        "source_as_of_date",
+        "latest_evidence_timestamp",
+        "freshness_status",
+        "reason_code",
+    } <= set(degradation_detail["properties"])
 
 
 async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadata(

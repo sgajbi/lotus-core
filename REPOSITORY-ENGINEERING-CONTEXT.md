@@ -1280,6 +1280,13 @@ Most relevant current governance:
      and emit bounded `cashflow_rule_cache_events_total` outcomes. Multi-process invalidation is
      source-owned through `cashflow_rules.updated_at`; do not add rule caches that lack source
      version/effective metadata, stale-read behavior, invalidation ownership, and cache metrics.
+106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now
+     exposes reusable `SourceDataDegradationSummary` / `SourceDataDegradationDetail` metadata for
+     fallback, stale, partial, unavailable, and empty evidence, plus deterministic content hash,
+     source digest, source refs, and bounded source lineage. Do not add new fallback or
+     supplemental read-model behavior that only changes aggregate `data_quality_status`, hides
+     fallback-derived fields, emits the empty source metadata hash, or forces downstream consumers
+     such as `lotus-idea` to infer Core freshness/provenance.
 
 ## Context Maintenance Rule
 
