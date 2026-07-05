@@ -1,0 +1,8 @@
+from __future__ import annotations
+
+from .adapters.pipeline_stage_unit_of_work import sqlalchemy_pipeline_stage_unit_of_work
+from .application.pipeline_stage_message_handler import PipelineStageMessageHandler
+
+
+def get_pipeline_stage_message_handler() -> PipelineStageMessageHandler:
+    return PipelineStageMessageHandler(unit_of_work_factory=sqlalchemy_pipeline_stage_unit_of_work)

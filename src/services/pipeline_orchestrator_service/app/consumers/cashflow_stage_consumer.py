@@ -2,21 +2,16 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.db import get_async_db_session
 from portfolio_common.event_mapping import decode_kafka_event_payload, validate_kafka_event_payload
 from portfolio_common.events import CashflowCalculatedEvent
-from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from ..repositories.pipeline_stage_repository import PipelineStageRepository
-from ..services.pipeline_orchestrator_service import PipelineOrchestratorService
+from ..dependencies import get_pipeline_stage_message_handler
 
 logger = logging.getLogger(__name__)
-SERVICE_NAME = "pipeline-orchestrator-cashflow"
 
 
 class CashflowStageConsumer(BaseConsumer):
@@ -32,22 +27,12 @@ class CashflowStageConsumer(BaseConsumer):
             decoded_payload = decode_kafka_event_payload(msg)
             event = validate_kafka_event_payload(decoded_payload, CashflowCalculatedEvent)
             with self._message_correlation_context(msg) as correlation_id:
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        idempotency_repo = IdempotencyRepository(db)
-                        if not await idempotency_repo.claim_event_processing(
-                            decoded_payload.event_id,
-                            event.portfolio_id,
-                            SERVICE_NAME,
-                            correlation_id,
-                        ):
-                            return
-
-                        service = PipelineOrchestratorService(
-                            repo=PipelineStageRepository(db),
-                            outbox_repo=OutboxRepository(db),
-                        )
-                        await service.register_cashflow_calculated(event, correlation_id)
+                handler = get_pipeline_stage_message_handler()
+                await handler.handle_cashflow_calculated(
+                    event_id=decoded_payload.event_id,
+                    event=event,
+                    correlation_id=correlation_id,
+                )
 
         except (json.JSONDecodeError, ValidationError):
             logger.error("Invalid cashflow stage payload; sending to DLQ.", exc_info=True)

@@ -1,33 +1,15 @@
 import json
 from datetime import date
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.events import FinancialReconciliationCompletedEvent
-from portfolio_common.idempotency_repository import IdempotencyRepository
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.pipeline_orchestrator_service.app.consumers import (
     financial_reconciliation_completion_consumer as consumer_module,
 )
 
 pytestmark = pytest.mark.asyncio
-
-
-class _SingleSessionAsyncIterable:
-    def __init__(self, session):
-        self._session = session
-        self._yielded = False
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self):
-        if self._yielded:
-            raise StopAsyncIteration
-        self._yielded = True
-        return self._session
 
 
 @pytest.fixture
@@ -74,61 +56,30 @@ def mock_kafka_message(mock_event: FinancialReconciliationCompletedEvent) -> Mag
 
 
 @pytest.fixture
-def mock_dependencies():
-    mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
-    mock_service = AsyncMock()
-    mock_db_session = AsyncMock(spec=AsyncSession)
+def mock_handler():
+    handler = MagicMock()
+    handler.handle_reconciliation_completed = AsyncMock()
 
-    with (
-        patch(
-            "src.services.pipeline_orchestrator_service.app.consumers.financial_reconciliation_completion_consumer.get_async_db_session",
-            new=lambda: _SingleSessionAsyncIterable(mock_db_session),
-        ),
-        patch(
-            "src.services.pipeline_orchestrator_service.app.consumers.financial_reconciliation_completion_consumer.IdempotencyRepository",
-            return_value=mock_idempotency_repo,
-        ),
-        patch(
-            "src.services.pipeline_orchestrator_service.app.consumers.financial_reconciliation_completion_consumer.PipelineOrchestratorService",
-            return_value=mock_service,
-        ),
-        patch(
-            "src.services.pipeline_orchestrator_service.app.consumers.financial_reconciliation_completion_consumer.PipelineStageRepository",
-            return_value=SimpleNamespace(),
-        ),
-        patch(
-            "src.services.pipeline_orchestrator_service.app.consumers.financial_reconciliation_completion_consumer.OutboxRepository",
-            return_value=SimpleNamespace(),
-        ),
+    with patch(
+        "src.services.pipeline_orchestrator_service.app.consumers."
+        "financial_reconciliation_completion_consumer.get_pipeline_stage_message_handler",
+        return_value=handler,
     ):
-        yield {
-            "idempotency_repo": mock_idempotency_repo,
-            "service": mock_service,
-            "db_session": mock_db_session,
-        }
+        yield handler
 
 
 async def test_completion_consumer_updates_orchestrator_stage_and_marks_idempotency(
     consumer: consumer_module.FinancialReconciliationCompletionConsumer,
     mock_kafka_message: MagicMock,
     mock_event: FinancialReconciliationCompletedEvent,
-    mock_dependencies: dict,
+    mock_handler: MagicMock,
 ):
-    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
-    mock_service = mock_dependencies["service"]
-    mock_idempotency_repo.claim_event_processing.return_value = True
-
     await consumer.process_message(mock_kafka_message)
 
-    mock_service.register_reconciliation_completed.assert_awaited_once_with(
-        mock_event,
-        "corr-ctrl",
-    )
-    mock_idempotency_repo.claim_event_processing.assert_awaited_once_with(
-        "portfolio_day.reconciliation.completed-0-9",
-        mock_event.portfolio_id,
-        consumer_module.SERVICE_NAME,
-        "corr-ctrl",
+    mock_handler.handle_reconciliation_completed.assert_awaited_once_with(
+        event_id="portfolio_day.reconciliation.completed-0-9",
+        event=mock_event,
+        correlation_id="corr-ctrl",
     )
 
 
@@ -152,17 +103,14 @@ async def test_completion_consumer_preserves_payload_correlation_over_header_ove
     consumer: consumer_module.FinancialReconciliationCompletionConsumer,
     mock_kafka_message: MagicMock,
     mock_event: FinancialReconciliationCompletedEvent,
-    mock_dependencies: dict,
+    mock_handler: MagicMock,
 ):
-    mock_idempotency_repo = mock_dependencies["idempotency_repo"]
-    mock_service = mock_dependencies["service"]
-    mock_idempotency_repo.claim_event_processing.return_value = True
     mock_kafka_message.headers.return_value = [("correlation_id", b"header-corr")]
 
     await consumer.process_message(mock_kafka_message)
 
-    mock_service.register_reconciliation_completed.assert_awaited_once_with(
-        mock_event,
-        "corr-ctrl",
+    mock_handler.handle_reconciliation_completed.assert_awaited_once_with(
+        event_id="portfolio_day.reconciliation.completed-0-9",
+        event=mock_event,
+        correlation_id="corr-ctrl",
     )
-    assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "corr-ctrl"
