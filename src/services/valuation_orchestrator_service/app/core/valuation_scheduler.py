@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, List
 
@@ -9,10 +10,7 @@ from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.monitoring import (
-    observe_valuation_scheduler_budget_exhausted,
-    observe_valuation_scheduler_jobs_claimed,
     observe_valuation_scheduler_poll_duration,
-    observe_valuation_scheduler_producer_backpressure,
     set_control_queue_failed_stored,
     set_control_queue_oldest_pending_age_seconds,
     set_control_queue_pending,
@@ -20,9 +18,7 @@ from portfolio_common.monitoring import (
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from portfolio_common.scheduler_dispatch_recovery import (
-    DISPATCH_BUDGET_EXHAUSTED_PHASE,
     SchedulerDispatchError,
-    dispatch_failure_reason,
 )
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 
@@ -30,10 +26,14 @@ from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
 from .instrument_reprocessing_coordinator import InstrumentReprocessingCoordinator
 from .valuation_backfill_planner import ValuationBackfillPlanner
+from .valuation_dispatch_coordinator import (
+    SessionProvider,
+    ValuationDispatchCoordinator,
+    ValuationDispatchRepositoryFactory,
+)
 from .valuation_job_dispatcher import ValuationJobDispatcher
 from .valuation_job_publisher import (
     ValuationJobPublisher,
-    ValuationJobPublishError,
     get_valuation_job_publisher,
 )
 from .valuation_stale_job_resetter import ValuationStaleJobResetter
@@ -59,6 +59,8 @@ class ValuationScheduler:
         valuation_watermark_advancer: ValuationWatermarkAdvancer | None = None,
         instrument_reprocessing_coordinator: InstrumentReprocessingCoordinator | None = None,
         valuation_stale_job_resetter: ValuationStaleJobResetter | None = None,
+        valuation_dispatch_coordinator: ValuationDispatchCoordinator | None = None,
+        session_provider: SessionProvider | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -77,6 +79,7 @@ class ValuationScheduler:
         self._max_attempts = runtime_settings.valuation_scheduler_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
+        self._session_provider = session_provider
         self._valuation_job_publisher = (
             valuation_job_publisher
             if valuation_job_publisher is not None
@@ -115,6 +118,24 @@ class ValuationScheduler:
                 max_attempts=self._max_attempts,
             )
         )
+        self._valuation_dispatch_coordinator = (
+            valuation_dispatch_coordinator
+            if valuation_dispatch_coordinator is not None
+            else ValuationDispatchCoordinator(
+                batch_size=self._batch_size,
+                dispatch_rounds_per_poll=self._dispatch_rounds_per_poll,
+                poll_budget_seconds=self._poll_budget_seconds,
+                max_attempts=self._max_attempts,
+                session_provider=self._open_session,
+                repository_factory=ValuationDispatchRepositoryFactory(
+                    valuation_repository_factory=lambda db: ValuationRepository(db)
+                ),
+            )
+        )
+
+    def _open_session(self) -> AsyncIterator[Any]:
+        session_provider = self._session_provider or get_async_db_session
+        return session_provider()
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
@@ -196,81 +217,18 @@ class ValuationScheduler:
         await self._valuation_job_dispatcher.dispatch_jobs(jobs)
 
     async def _recover_dispatch_failure(self, failure: SchedulerDispatchError) -> None:
-        if not failure.recovery_job_ids:
-            logger.warning(
-                "Valuation scheduler dispatch failure had no durable job ids to recover.",
-                extra=operation_log_extra(
-                    event_name="valuation.scheduler.dispatch_recovery_skipped",
-                    operation="valuation.scheduler.dispatch_jobs",
-                    status="skipped",
-                    reason_code="missing_recovery_job_ids",
-                    failure_phase=failure.failure_phase,
-                    recovery_record_count=len(failure.recovery_record_keys),
-                    published_record_count=len(failure.published_record_keys),
-                ),
-            )
-            return
-        async for db in get_async_db_session():
-            async with db.begin():
-                repo = ValuationRepository(db)
-                await repo.recover_dispatch_failed_jobs(
-                    list(failure.recovery_job_ids),
-                    max_attempts=self._max_attempts,
-                    failure_reason=dispatch_failure_reason(
-                        failure_phase=failure.failure_phase,
-                        record_keys=failure.recovery_record_keys,
-                    ),
-                )
+        await self._valuation_dispatch_coordinator.recover_dispatch_failure(failure)
 
     def _observe_dispatch_stop(self, failure: SchedulerDispatchError) -> None:
-        if failure.failure_phase == DISPATCH_BUDGET_EXHAUSTED_PHASE:
-            observe_valuation_scheduler_budget_exhausted("dispatch")
-            return
-        cause = failure.__cause__
-        if (
-            isinstance(cause, ValuationJobPublishError)
-            and cause.reason_code == "kafka_publish_back_pressure"
-        ):
-            observe_valuation_scheduler_producer_backpressure()
+        self._valuation_dispatch_coordinator.observe_dispatch_stop(failure)
 
     async def _claim_and_dispatch_ready_jobs(self) -> None:
-        poll_started_at = time.monotonic()
-        for _ in range(self._dispatch_rounds_per_poll):
-            if self._budget_exhausted(
-                started_at=poll_started_at,
-                budget_seconds=self._poll_budget_seconds,
-            ):
-                observe_valuation_scheduler_budget_exhausted("poll")
-                logger.info(
-                    "Valuation scheduler poll budget exhausted before next dispatch round.",
-                    extra=operation_log_extra(
-                        event_name="valuation.scheduler.poll_budget_exhausted",
-                        operation="valuation.scheduler.claim_and_dispatch",
-                        status="deferred",
-                        reason_code="poll_budget_exhausted",
-                        poll_budget_seconds=self._poll_budget_seconds,
-                    ),
-                )
-                break
-            claimed_jobs: list[PortfolioValuationJob] = []
-            async for db in get_async_db_session():
-                async with db.begin():
-                    repo = ValuationRepository(db)
-                    claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
-            if not claimed_jobs:
-                break
-            observe_valuation_scheduler_jobs_claimed(len(claimed_jobs))
-            try:
-                await self._dispatch_jobs(claimed_jobs)
-            except SchedulerDispatchError as exc:
-                self._observe_dispatch_stop(exc)
-                await self._recover_dispatch_failure(exc)
-                raise
-            if len(claimed_jobs) < self._batch_size:
-                break
+        await self._valuation_dispatch_coordinator.claim_and_dispatch_ready_jobs(
+            dispatch_jobs=self._dispatch_jobs
+        )
 
     async def _run_db_poll_step(self, step: Callable[[Any], Awaitable[None]]) -> None:
-        async for db in get_async_db_session():
+        async for db in self._open_session():
             async with db.begin():
                 await step(db)
 

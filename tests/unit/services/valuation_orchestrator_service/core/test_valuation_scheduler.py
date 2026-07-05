@@ -32,6 +32,10 @@ from src.services.valuation_orchestrator_service.app.core.instrument_reprocessin
 from src.services.valuation_orchestrator_service.app.core.valuation_backfill_planner import (
     ValuationBackfillPlanner,
 )
+from src.services.valuation_orchestrator_service.app.core.valuation_dispatch_coordinator import (
+    ValuationDispatchCoordinator,
+    ValuationDispatchRepositoryFactory,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_job_dispatcher import (
     ValuationJobDispatcher,
 )
@@ -1131,6 +1135,62 @@ async def test_scheduler_claim_loop_stops_after_partial_batch(
     )
 
 
+async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop():
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    claimed_batch_1 = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+    claimed_batch_2 = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 13),
+            epoch=1,
+            correlation_id="corr-3",
+        )
+    ]
+    mock_repo.find_and_claim_eligible_jobs.side_effect = [claimed_batch_1, claimed_batch_2]
+
+    async def get_session_gen():
+        yield mock_db_session
+
+    coordinator = ValuationDispatchCoordinator(
+        batch_size=2,
+        dispatch_rounds_per_poll=10,
+        poll_budget_seconds=30,
+        max_attempts=5,
+        session_provider=get_session_gen,
+        repository_factory=ValuationDispatchRepositoryFactory(
+            valuation_repository_factory=lambda db: mock_repo
+        ),
+    )
+    dispatch_jobs = AsyncMock()
+
+    await coordinator.claim_and_dispatch_ready_jobs(dispatch_jobs=dispatch_jobs)
+
+    assert mock_repo.find_and_claim_eligible_jobs.await_count == 2
+    dispatch_jobs.assert_has_awaits(
+        [
+            call(claimed_batch_1),
+            call(claimed_batch_2),
+        ]
+    )
+
+
 async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
     mock_kafka_producer: MagicMock,
 ):
@@ -1229,7 +1289,7 @@ async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exh
             side_effect=[0.0, 0.0, 2.0],
         ),
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_budget_exhausted"
+            "src.services.valuation_orchestrator_service.app.core.valuation_dispatch_coordinator.observe_valuation_scheduler_budget_exhausted"
         ) as mock_budget_exhausted,
     ):
         mock_repo = AsyncMock()
@@ -1288,7 +1348,7 @@ async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_j
             side_effect=[0.0, 0.0, 0.0, 0.0, 11.0],
         ),
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_budget_exhausted"
+            "src.services.valuation_orchestrator_service.app.core.valuation_dispatch_coordinator.observe_valuation_scheduler_budget_exhausted"
         ) as mock_budget_exhausted,
     ):
         mock_repo = AsyncMock()
@@ -1347,7 +1407,7 @@ async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
             "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
         ) as mock_repo_factory,
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_producer_backpressure"
+            "src.services.valuation_orchestrator_service.app.core.valuation_dispatch_coordinator.observe_valuation_scheduler_producer_backpressure"
         ) as mock_backpressure,
     ):
         mock_repo = AsyncMock()
