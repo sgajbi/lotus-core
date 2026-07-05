@@ -10,9 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.core_snapshot_dto import (
     CoreSnapshotFreshnessMetadata,
     CoreSnapshotGovernanceMetadata,
-    CoreSnapshotInstrumentEnrichmentRecord,
     CoreSnapshotMode,
-    CoreSnapshotPortfolioTotals,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
     CoreSnapshotSection,
@@ -37,11 +35,10 @@ from .core_snapshot_baseline_metadata import baseline_freshness_metadata
 from .core_snapshot_baseline_positions import baseline_position_entries
 from .core_snapshot_calculations import (
     assign_baseline_weights,
-    assign_projected_weights,
-    build_delta_section,
     total_market_value_baseline,
     total_market_value_projected,
 )
+from .core_snapshot_errors import CoreSnapshotUnavailableSectionError
 from .core_snapshot_instrument_enrichment import (
     instrument_enrichment_records,
     requested_instrument_security_ids,
@@ -61,6 +58,7 @@ from .core_snapshot_projected_positions import (
     new_projected_position,
 )
 from .core_snapshot_quality import snapshot_data_quality_status
+from .core_snapshot_sections import build_core_snapshot_sections
 from .decimal_amounts import decimal_or_none
 
 
@@ -73,10 +71,6 @@ class CoreSnapshotNotFoundError(ValueError):
 
 
 class CoreSnapshotConflictError(ValueError):
-    pass
-
-
-class CoreSnapshotUnavailableSectionError(ValueError):
     pass
 
 
@@ -166,17 +160,6 @@ class CoreSnapshotService:
             include_zero=request.options.include_zero_quantity_positions,
         )
 
-        sections_payload = CoreSnapshotSections()
-
-        if CoreSnapshotSection.POSITIONS_BASELINE in request.sections:
-            sections_payload.positions_baseline = [
-                item["position_record"] for item in baseline_positions.values()
-            ]
-        if CoreSnapshotSection.PORTFOLIO_STATE in request.sections:
-            sections_payload.portfolio_state = [
-                item["position_record"] for item in baseline_positions.values()
-            ]
-
         baseline_total = total_market_value_baseline(baseline_positions)
         projection = await self._snapshot_projection(
             portfolio_id=portfolio_id,
@@ -186,10 +169,8 @@ class CoreSnapshotService:
             baseline_positions=baseline_positions,
         )
         projected_positions = projection.positions
-
-        self._populate_requested_snapshot_sections(
-            sections_payload=sections_payload,
-            request=request,
+        sections_payload = build_core_snapshot_sections(
+            requested_sections=request.sections,
             baseline_positions=baseline_positions,
             projected_positions=projected_positions,
             baseline_total=baseline_total,
@@ -310,133 +291,6 @@ class CoreSnapshotService:
             raise CoreSnapshotBadRequestError(
                 "Projected and delta sections require snapshot_mode=SIMULATION"
             )
-
-    def _populate_requested_snapshot_sections(
-        self,
-        *,
-        sections_payload: CoreSnapshotSections,
-        request: CoreSnapshotRequest,
-        baseline_positions: dict[str, dict[str, Any]],
-        projected_positions: dict[str, dict[str, Any]] | None,
-        baseline_total: Decimal,
-        projected_total: Decimal,
-    ) -> None:
-        self._populate_projected_positions_section(
-            sections_payload=sections_payload,
-            requested_sections=request.sections,
-            projected_positions=projected_positions,
-            projected_total=projected_total,
-        )
-        self._populate_delta_section(
-            sections_payload=sections_payload,
-            requested_sections=request.sections,
-            baseline_positions=baseline_positions,
-            projected_positions=projected_positions,
-            baseline_total=baseline_total,
-            projected_total=projected_total,
-        )
-        self._populate_portfolio_totals_section(
-            sections_payload=sections_payload,
-            requested_sections=request.sections,
-            baseline_total=baseline_total,
-            projected_positions=projected_positions,
-            projected_total=projected_total,
-        )
-        self._populate_instrument_enrichment_section(
-            sections_payload=sections_payload,
-            requested_sections=request.sections,
-            baseline_positions=baseline_positions,
-        )
-
-    def _populate_projected_positions_section(
-        self,
-        *,
-        sections_payload: CoreSnapshotSections,
-        requested_sections: list[CoreSnapshotSection],
-        projected_positions: dict[str, dict[str, Any]] | None,
-        projected_total: Decimal,
-    ) -> None:
-        if CoreSnapshotSection.POSITIONS_PROJECTED not in requested_sections:
-            return
-        if projected_positions is None:
-            raise CoreSnapshotUnavailableSectionError("positions_projected unavailable")
-        assign_projected_weights(projected_positions, projected_total)
-        sections_payload.positions_projected = [
-            item["position_record"] for item in projected_positions.values()
-        ]
-
-    def _populate_delta_section(
-        self,
-        *,
-        sections_payload: CoreSnapshotSections,
-        requested_sections: list[CoreSnapshotSection],
-        baseline_positions: dict[str, dict[str, Any]],
-        projected_positions: dict[str, dict[str, Any]] | None,
-        baseline_total: Decimal,
-        projected_total: Decimal,
-    ) -> None:
-        if CoreSnapshotSection.POSITIONS_DELTA not in requested_sections:
-            return
-        if projected_positions is None:
-            raise CoreSnapshotUnavailableSectionError("positions_delta unavailable")
-        sections_payload.positions_delta = build_delta_section(
-            baseline_positions=baseline_positions,
-            projected_positions=projected_positions,
-            baseline_total=baseline_total,
-            projected_total=projected_total,
-        )
-
-    @staticmethod
-    def _populate_portfolio_totals_section(
-        *,
-        sections_payload: CoreSnapshotSections,
-        requested_sections: list[CoreSnapshotSection],
-        baseline_total: Decimal,
-        projected_positions: dict[str, dict[str, Any]] | None,
-        projected_total: Decimal,
-    ) -> None:
-        if CoreSnapshotSection.PORTFOLIO_TOTALS not in requested_sections:
-            return
-        sections_payload.portfolio_totals = CoreSnapshotPortfolioTotals(
-            baseline_total_market_value_base=baseline_total,
-            projected_total_market_value_base=(
-                projected_total if projected_positions is not None else None
-            ),
-            delta_total_market_value_base=(
-                projected_total - baseline_total if projected_positions is not None else None
-            ),
-        )
-
-    def _populate_instrument_enrichment_section(
-        self,
-        *,
-        sections_payload: CoreSnapshotSections,
-        requested_sections: list[CoreSnapshotSection],
-        baseline_positions: dict[str, dict[str, Any]],
-    ) -> None:
-        if CoreSnapshotSection.INSTRUMENT_ENRICHMENT not in requested_sections:
-            return
-        sections_payload.instrument_enrichment = [
-            self._core_snapshot_instrument_enrichment(item) for item in baseline_positions.values()
-        ]
-
-    @staticmethod
-    def _core_snapshot_instrument_enrichment(
-        item: dict[str, Any],
-    ) -> CoreSnapshotInstrumentEnrichmentRecord:
-        return CoreSnapshotInstrumentEnrichmentRecord(
-            security_id=item["security_id"],
-            isin=item["isin"],
-            asset_class=item["asset_class"],
-            sector=item["sector"],
-            country_of_risk=item["country_of_risk"],
-            instrument_name=item["instrument_name"],
-            issuer_id=item["issuer_id"],
-            issuer_name=item["issuer_name"],
-            ultimate_parent_issuer_id=item["ultimate_parent_issuer_id"],
-            ultimate_parent_issuer_name=item["ultimate_parent_issuer_name"],
-            liquidity_tier=item["liquidity_tier"],
-        )
 
     @staticmethod
     def _snapshot_governance_resolution(
