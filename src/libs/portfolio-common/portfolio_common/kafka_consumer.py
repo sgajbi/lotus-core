@@ -7,6 +7,7 @@ import logging
 import time
 import traceback
 from abc import ABC, abstractmethod
+from collections import defaultdict, deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Dict, Iterator, Optional
@@ -24,6 +25,10 @@ from .config import (
 from .database_models import ConsumerDlqEvent
 from .db import get_async_db_session
 from .exceptions import RetryableConsumerError
+from .kafka_consumer_execution import (
+    KafkaConsumerExecutionProfile,
+    load_kafka_consumer_execution_profile,
+)
 from .kafka_utils import get_kafka_producer
 from .logging_utils import (
     REDACTED_VALUE,
@@ -37,8 +42,11 @@ from .logging_utils import (
     traceparent_var,
 )
 from .monitoring import (
+    observe_kafka_consumer_backlog_pressure,
     observe_kafka_consumer_event,
+    observe_kafka_consumer_poll_idle_duration,
     observe_kafka_consumer_processing_duration,
+    set_kafka_consumer_in_flight,
 )
 
 logger = logging.getLogger(__name__)
@@ -202,6 +210,7 @@ class BaseConsumer(ABC):
         dlq_topic: Optional[str] = None,
         service_prefix: str = "SVC",
         metrics: Optional[Dict] = None,
+        execution_profile: KafkaConsumerExecutionProfile | None = None,
     ):
         self.topic = topic
         self.dlq_topic = dlq_topic
@@ -231,6 +240,27 @@ class BaseConsumer(ABC):
         self._retryable_failure_max_attempts = KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS
         self._retryable_failure_max_elapsed_seconds = (
             KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS
+        )
+        self.execution_profile = execution_profile or load_kafka_consumer_execution_profile(
+            group_id
+        )
+        self._active_ordering_keys: set[str] = set()
+        self._pending_messages_by_key: dict[str, deque[Message]] = defaultdict(deque)
+        self._pending_message_count = 0
+        self._in_flight_tasks: set[asyncio.Task[None]] = set()
+        self._in_flight_task_keys: dict[asyncio.Task[None], str] = {}
+        self._log_consumer_event(
+            logging.INFO,
+            "Kafka consumer execution profile configured.",
+            event_name="kafka.consumer.execution_profile_configured",
+            status="configured",
+            reason_code="execution_profile_configured",
+            poll_timeout_seconds=self.execution_profile.poll_timeout_seconds,
+            max_in_flight_messages=self.execution_profile.max_in_flight_messages,
+            ordering_key=self.execution_profile.ordering_key,
+            per_key_concurrency=self.execution_profile.per_key_concurrency,
+            shutdown_drain_timeout_seconds=(self.execution_profile.shutdown_drain_timeout_seconds),
+            overload_behavior=self.execution_profile.overload_behavior,
         )
 
         if self.dlq_topic:
@@ -573,22 +603,188 @@ class BaseConsumer(ABC):
                 status="started",
                 reason_code="consumer_loop_started",
             )
-            while self._running:
-                msg = await loop.run_in_executor(None, self._consumer.poll, 1.0)
-
-                if msg is None:
-                    continue
-                if self._should_skip_polled_message(msg):
-                    if not self._running:
-                        break
-                    continue
-
-                await self._process_polled_message(msg, loop)
+            if self.execution_profile.max_in_flight_messages == 1:
+                await self._run_serial_consumer_loop(loop)
+            else:
+                await self._run_concurrent_consumer_loop(loop)
         except Exception:
             self._record_consumer_event("critical_loop_exit", "unhandled_exception")
             raise
         finally:
             self.shutdown()
+
+    async def _run_serial_consumer_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        while self._running:
+            msg = await self._poll_next_message(loop)
+            if msg is None:
+                continue
+            if self._should_skip_polled_message(msg):
+                if not self._running:
+                    break
+                continue
+
+            await self._process_polled_message(msg, loop)
+
+    async def _run_concurrent_consumer_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._set_in_flight_metric()
+        while self._running:
+            await self._drain_completed_processing_tasks(loop)
+            self._schedule_pending_messages(loop)
+            if self._at_in_flight_capacity():
+                self._record_backlog_pressure("max_in_flight_reached")
+                await self._wait_for_next_processing_task(loop)
+                continue
+            if self._pending_message_count > 0:
+                self._record_backlog_pressure("ordered_pending_messages")
+                await self._wait_for_next_processing_task(loop)
+                continue
+
+            msg = await self._poll_next_message(loop)
+            if msg is None:
+                continue
+            if self._should_skip_polled_message(msg):
+                if not self._running:
+                    break
+                continue
+            self._dispatch_or_queue_message(msg, loop)
+
+        await self._drain_in_flight_on_shutdown(loop)
+
+    async def _poll_next_message(self, loop: asyncio.AbstractEventLoop) -> Message | None:
+        started_at = time.monotonic()
+        msg = await loop.run_in_executor(
+            None,
+            self._consumer.poll,
+            self.execution_profile.poll_timeout_seconds,
+        )
+        if msg is None:
+            observe_kafka_consumer_poll_idle_duration(
+                service=self._metric_service_label(),
+                topic=self.topic,
+                group_id=self._consumer_config["group.id"],
+                duration_seconds=time.monotonic() - started_at,
+            )
+        return msg
+
+    def _dispatch_or_queue_message(
+        self,
+        msg: Message,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        ordering_key = self._message_ordering_key(msg)
+        if self._can_schedule_ordering_key(ordering_key):
+            self._schedule_processing_task(msg, loop, ordering_key)
+            return
+        self._pending_messages_by_key[ordering_key].append(msg)
+        self._pending_message_count += 1
+        self._record_backlog_pressure(
+            "ordering_key_busy" if ordering_key in self._active_ordering_keys else "capacity_full"
+        )
+
+    def _schedule_pending_messages(self, loop: asyncio.AbstractEventLoop) -> None:
+        for ordering_key in list(self._pending_messages_by_key):
+            if self._at_in_flight_capacity():
+                return
+            pending = self._pending_messages_by_key[ordering_key]
+            if not pending:
+                self._pending_messages_by_key.pop(ordering_key, None)
+                continue
+            if ordering_key in self._active_ordering_keys:
+                continue
+            self._pending_message_count -= 1
+            self._schedule_processing_task(pending.popleft(), loop, ordering_key)
+            if not pending:
+                self._pending_messages_by_key.pop(ordering_key, None)
+
+    def _schedule_processing_task(
+        self,
+        msg: Message,
+        loop: asyncio.AbstractEventLoop,
+        ordering_key: str,
+    ) -> None:
+        self._active_ordering_keys.add(ordering_key)
+        task = asyncio.create_task(self._process_polled_message(msg, loop))
+        self._in_flight_tasks.add(task)
+        self._in_flight_task_keys[task] = ordering_key
+        self._set_in_flight_metric()
+
+    async def _drain_completed_processing_tasks(
+        self,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        completed = [task for task in self._in_flight_tasks if task.done()]
+        for task in completed:
+            self._finalize_processing_task(task, loop)
+
+    async def _wait_for_next_processing_task(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> bool:
+        if not self._in_flight_tasks:
+            return False
+        done, _ = await asyncio.wait(
+            self._in_flight_tasks,
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if not done:
+            return False
+        for task in done:
+            self._finalize_processing_task(task, loop)
+        self._schedule_pending_messages(loop)
+        return True
+
+    async def _drain_in_flight_on_shutdown(self, loop: asyncio.AbstractEventLoop) -> None:
+        deadline = time.monotonic() + self.execution_profile.shutdown_drain_timeout_seconds
+        while self._in_flight_tasks:
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining <= 0:
+                self._record_consumer_event("shutdown_failed", "in_flight_drain_timeout")
+                for task in self._in_flight_tasks:
+                    task.cancel()
+                self._set_in_flight_metric()
+                return
+            await self._wait_for_next_processing_task(loop, timeout_seconds=remaining)
+
+    def _finalize_processing_task(
+        self,
+        task: asyncio.Task[None],
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        self._in_flight_tasks.discard(task)
+        ordering_key = self._in_flight_task_keys.pop(task, None)
+        if ordering_key is not None:
+            self._active_ordering_keys.discard(ordering_key)
+        self._set_in_flight_metric()
+        task.result()
+
+    def _message_ordering_key(self, msg: Message) -> str:
+        return f"partition:{msg.topic()}:{_message_attr_or_unknown(msg, 'partition')}"
+
+    def _can_schedule_ordering_key(self, ordering_key: str) -> bool:
+        return not self._at_in_flight_capacity() and ordering_key not in self._active_ordering_keys
+
+    def _at_in_flight_capacity(self) -> bool:
+        return len(self._in_flight_tasks) >= self.execution_profile.max_in_flight_messages
+
+    def _set_in_flight_metric(self) -> None:
+        set_kafka_consumer_in_flight(
+            service=self._metric_service_label(),
+            topic=self.topic,
+            group_id=self._consumer_config["group.id"],
+            count=len(self._in_flight_tasks),
+        )
+
+    def _record_backlog_pressure(self, reason: str) -> None:
+        observe_kafka_consumer_backlog_pressure(
+            service=self._metric_service_label(),
+            topic=self.topic,
+            group_id=self._consumer_config["group.id"],
+            reason=reason,
+        )
+        self._record_consumer_event("backlog_pressure", reason)
 
     async def _process_polled_message(
         self,

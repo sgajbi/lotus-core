@@ -1263,6 +1263,16 @@ Most relevant current governance:
      now returns its 14 scalar facts through one composed scalar-row statement plus four explicit
      aggregate row queries; preserve that query-count test before adding new load-run progress
      facts.
+104. Kafka consumer worker execution policy belongs in
+     `portfolio_common.kafka_consumer_execution` and `BaseConsumer`, not in service-local poll
+     loops. Defaults preserve serial processing with `poll_timeout_seconds=1.0` and
+     `max_in_flight_messages=1`; operators may override profiles through
+     `LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON` and
+     `LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON`. Concurrent profiles must preserve
+     one active message per partition, pause polling for ordered pending work, commit offsets only
+     after processing or DLQ publication succeeds, and expose in-flight, idle-poll, processing, and
+     backlog-pressure metrics. Do not add worker-local concurrency or poll-timeout settings without
+     extending the shared profile and tests.
 
 ## Context Maintenance Rule
 

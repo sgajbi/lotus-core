@@ -88,6 +88,25 @@ KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS = Histogram(
     buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
 )
 
+KAFKA_CONSUMER_IN_FLIGHT_MESSAGES = Gauge(
+    "kafka_consumer_in_flight_messages",
+    "Kafka consumer messages currently in application processing.",
+    labelnames=("service", "topic", "group_id"),
+)
+
+KAFKA_CONSUMER_POLL_IDLE_SECONDS = Histogram(
+    "kafka_consumer_poll_idle_seconds",
+    "Kafka consumer poll calls that returned no message.",
+    labelnames=("service", "topic", "group_id"),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+)
+
+KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL = Counter(
+    "kafka_consumer_backlog_pressure_total",
+    "Kafka consumer times polling paused or messages were queued because worker capacity was full.",
+    labelnames=("service", "topic", "group_id", "reason"),
+)
+
 HEALTH_DEPENDENCY_CHECKS_TOTAL = Counter(
     "health_dependency_check_total",
     "Health dependency check outcomes by service, dependency, and bounded status.",
@@ -173,6 +192,38 @@ def observe_kafka_consumer_processing_duration(
     KAFKA_CONSUMER_PROCESSING_DURATION_SECONDS.labels(service, topic, group_id).observe(
         max(0.0, duration_seconds)
     )
+
+
+def set_kafka_consumer_in_flight(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    count: int,
+) -> None:
+    KAFKA_CONSUMER_IN_FLIGHT_MESSAGES.labels(service, topic, group_id).set(max(0, count))
+
+
+def observe_kafka_consumer_poll_idle_duration(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    duration_seconds: float,
+) -> None:
+    KAFKA_CONSUMER_POLL_IDLE_SECONDS.labels(service, topic, group_id).observe(
+        max(0.0, duration_seconds)
+    )
+
+
+def observe_kafka_consumer_backlog_pressure(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    reason: str,
+) -> None:
+    KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL.labels(service, topic, group_id, reason).inc()
 
 
 def observe_health_dependency_check(
