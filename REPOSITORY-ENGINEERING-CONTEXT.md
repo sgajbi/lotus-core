@@ -107,8 +107,9 @@ Current repository posture:
     workflow-provided `lotus-platform` checkout for domain-product contract validation.
 22. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
-    `docs/architecture/mapping-anti-corruption-boundary.md`. It currently protects representative
-    transaction event, persistence event-envelope, portfolio tax-lot, and
+    `docs/architecture/mapping-anti-corruption-boundary.md`; `make architecture-guard` also runs
+    `scripts/mapping_anti_corruption_guard.py` as the representative contract index. It currently
+    protects representative transaction event, persistence event-envelope, portfolio tax-lot, and
     performance-economics source-data mappings.
     Ingestion publish workflows must route API DTO serialization through
     `ingestion_service.app.services.ingestion_event_payloads` before Kafka publication; do not add
