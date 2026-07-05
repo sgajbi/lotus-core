@@ -63,7 +63,13 @@ Current repository posture:
     distinguishes canonical sources from summary/navigation pages, verifies critical README links,
     wiki home links, sidebar pages, and PR documentation/no-doc-change checklist terms, and is part
     of `quality-wiki-docs-gate`,
-19. the repository already enforces a broad banking-grade CI contract including architecture, OpenAPI, warning, coverage, latency, Docker, and operational gates,
+19. the repository already enforces a broad banking-grade CI contract including architecture,
+   OpenAPI, warning, aggregate branch-aware coverage, changed-code and critical-path coverage
+   reporting, latency, Docker, and operational gates. Critical-path coverage governance lives in
+   `docs/standards/critical-path-coverage.v1.json`, is checked by
+   `make critical-path-coverage-guard`, and is reported by `make coverage-gate` under
+   `output/coverage/critical-path-coverage-report.json` so aggregate, changed-code, and
+   critical-path coverage cannot be conflated,
 20. canonical shared infrastructure ownership now lives in `lotus-platform`, while `lotus-core` still supports app-local stacks for isolated development,
 21. app-local compose keeps the ingestion service write payload cap at 16 MiB through
     `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` so the governed local `demo_data_loader` bundle can seed

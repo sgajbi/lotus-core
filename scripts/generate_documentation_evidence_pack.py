@@ -20,6 +20,7 @@ DOCUMENTATION_SURFACES = (
     "docs/architecture/README.md",
     "docs/architecture/CODEBASE-REVIEW-LEDGER.md",
     "docs/standards/api-route-catalog.v1.json",
+    "docs/standards/critical-path-coverage.v1.json",
     "docs/standards/front-door-sync.v1.json",
     "docs/standards/rfc-status-ledger.v1.json",
     "docs/operations-runbook.md",
@@ -211,6 +212,14 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
             artifact_paths=(REPO_ROOT / "docs" / "standards" / "api-route-catalog.v1.json",),
         ),
         _run_command(
+            name="critical_path_coverage_contract_check",
+            command=[sys.executable, "scripts/critical_path_coverage_guard.py", "--contract-only"],
+            artifact_paths=(
+                REPO_ROOT / "docs" / "standards" / "critical-path-coverage.v1.json",
+                REPO_ROOT / "output" / "coverage" / "critical-path-coverage-report.json",
+            ),
+        ),
+        _run_command(
             name="rfc_ledger_check",
             command=[sys.executable, "scripts/rfc0083_closure_guard.py"],
         ),
@@ -226,6 +235,7 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
         manifest_path,
         api_vocabulary_artifact,
         REPO_ROOT / "docs" / "standards" / "api-route-catalog.v1.json",
+        REPO_ROOT / "docs" / "standards" / "critical-path-coverage.v1.json",
         REPO_ROOT / "docs" / "standards" / "front-door-sync.v1.json",
     ]
     return {

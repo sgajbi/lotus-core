@@ -46,6 +46,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make front-door-sync-guard`
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
+- `make critical-path-coverage-guard`
 - `make architecture-guard`
 - `make image-provenance-guard`
 - `make security-control-coverage-guard`
@@ -78,6 +79,11 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make front-door-sync-guard`
   protects README, wiki home/sidebar, canonical documentation links, and PR documentation
   no-change decision terms
+- `make critical-path-coverage-guard`
+  protects the critical-path coverage contract for transaction lifecycle, calculations,
+  position/cash state, corporate actions, auth/audit/security, ingestion/replay/outbox,
+  repository/database hot paths, and API/error mapping. `make coverage-gate` also writes separate
+  aggregate, changed-code, and critical-path coverage reports under `output/coverage/`.
 - `make quality-wiki-docs-gate`
   validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
   pages, publication-safe page names, first headings, and local relative links; when a published
@@ -112,6 +118,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - generated API route catalog coverage
 - README/wiki front-door synchronization
 - wiki source publication readiness
+- aggregate, changed-code, and critical-path coverage reporting
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata
 - production-readiness closure evidence
@@ -137,6 +144,10 @@ smallest evidence command for a change, then cite generated artifacts from the r
   update `contracts/security/security-control-coverage.v1.json` and the app bootstrap together;
   do not add a matrix entry that claims live ingress, IAM, or WAF evidence without separate runtime
   proof
+- critical-path coverage failure:
+  update `docs/standards/critical-path-coverage.v1.json`, the affected tests, and the relevant
+  Makefile suite together. Do not add an exception without owner, reason, follow-up issue, and
+  expiry.
 
 ## Related references
 
@@ -163,5 +174,5 @@ Use it for release, PR, and demo documentation review when README, wiki, API, RF
 supported-feature claims need one citable evidence source. The pack records the command, UTC
 timestamp, git SHA, runtime profile, status, generated artifacts, affected documentation surfaces,
 wiki validation, README/wiki front-door synchronization, API vocabulary generation, generated API
-route catalog checks, RFC-0083 closure checks, RFC status ledger checks, supported-feature truth,
-and runbook validation.
+route catalog checks, critical-path coverage contract checks, RFC-0083 closure checks, RFC status
+ledger checks, supported-feature truth, and runbook validation.

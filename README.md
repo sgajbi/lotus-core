@@ -99,7 +99,8 @@ Current repo truth:
    platform vocabulary and validator.
 7. `make docs-evidence-pack` writes a documentation release evidence manifest under
    `output/documentation-evidence/`, covering README/wiki link validation, API vocabulary artifact
-   generation, RFC ledger checks, supported-feature truth, and runbook validation.
+   generation, critical-path coverage contract validation, RFC ledger checks,
+   supported-feature truth, and runbook validation.
    Supported-feature publication is backed by
    `contracts/supported-features/lotus-core-supported-features.v1.json` and
    `make supported-features-guard`.
@@ -274,6 +275,8 @@ Important runtime note:
   and operations RFC playbooks
 - `make front-door-sync-guard`
   README/wiki/sidebar/documentation front-door synchronization and PR documentation decision check
+- `make critical-path-coverage-guard`
+  critical-path coverage contract and changed-code coverage reporting guard
 - `make api-route-catalog-guard`
   generated API route catalog drift check across OpenAPI and route-family governance
 - `make image-provenance-guard`
@@ -302,6 +305,18 @@ Important lane mapping:
   PR merge gate parity
 - `make ci-main`
   main releasability parity
+
+Coverage posture:
+
+- `make coverage-gate` still enforces the combined branch-aware 98% aggregate threshold.
+- It now also writes `output/coverage/coverage.json` and
+  `output/coverage/critical-path-coverage-report.json`, separating aggregate coverage,
+  measured changed-code coverage, and measured critical-path coverage for transaction lifecycle,
+  calculations, position/cash state, corporate actions, auth/audit/security, ingestion/replay/
+  outbox, repository/database hot paths, and API/error-mapping paths.
+- `docs/standards/critical-path-coverage.v1.json` is the governed contract for critical-path
+  module groups, minimum measured coverage expectations, test-family expectations, and exception
+  policy.
 
 Because this repo has a heavy validation contract, targeted local proof plus GitHub-backed heavy
 execution is often the right workflow.

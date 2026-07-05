@@ -18,16 +18,10 @@ def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts(
     ) in emitted_contracts
 
 
-def test_discover_direct_kafka_publishes_finds_current_ingestion_topics() -> None:
+def test_current_runtime_uses_event_publisher_ports_instead_of_direct_kafka_publishes() -> None:
     publishes = guard.discover_direct_kafka_publishes()
-    topics = {publish.topic for publish in publishes}
 
-    assert "portfolios.raw.received" in topics
-    assert "transactions.raw.received" in topics
-    assert "market_prices.raw.received" in topics
-    assert "transactions.reprocessing.requested" in topics
-    assert "valuation.job.requested" in topics
-    assert "portfolio_day.aggregation.job.requested" in topics
+    assert publishes == ()
 
 
 def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> None:

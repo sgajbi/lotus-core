@@ -117,6 +117,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -124,6 +126,8 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Enforce combined coverage threshold
+        env:
+          LOTUS_COVERAGE_CHANGED_BASE: HEAD~1
         run: make coverage-gate
 
   docker-build:
