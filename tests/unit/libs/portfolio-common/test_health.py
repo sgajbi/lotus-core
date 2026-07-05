@@ -267,6 +267,17 @@ async def test_readiness_probe_classifies_kafka_timeout(monkeypatch):
     _assert_not_ready_payload(exc_info.value.detail, dependencies={"kafka": "timeout"})
 
 
+async def test_kafka_health_uses_downstream_request_timeout(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_DOWNSTREAM_REQUEST_TIMEOUT_MS", "1234")
+    admin_client = MagicMock()
+    admin_client_cls = MagicMock(return_value=admin_client)
+    monkeypatch.setattr(health_module, "AdminClient", admin_client_cls)
+
+    assert await health_module.check_kafka_health() is True
+
+    admin_client.list_topics.assert_called_once_with(timeout=1.234)
+
+
 async def test_readiness_probe_classifies_kafka_misconfiguration(monkeypatch):
     observe_health_dependency_check = MagicMock()
 

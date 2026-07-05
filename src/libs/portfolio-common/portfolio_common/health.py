@@ -14,6 +14,7 @@ from sqlalchemy import text
 from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .db import AsyncSessionLocal
+from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 from .logging_utils import log_operation_event
 from .monitoring import observe_health_dependency_check, set_health_readiness_state
 from .runtime_settings import env_str
@@ -142,11 +143,15 @@ async def check_db_health() -> bool:
         return False
 
 
-async def check_kafka_health() -> bool:
+async def check_kafka_health(policy: DownstreamAccessPolicy | None = None) -> bool:
     """Checks if a connection can be established with Kafka."""
+    resolved_policy = policy or load_downstream_access_policy()
     try:
         admin_client = AdminClient({"bootstrap.servers": KAFKA_BOOTSTRAP_SERVERS})
-        await asyncio.to_thread(admin_client.list_topics, timeout=5)
+        await asyncio.to_thread(
+            admin_client.list_topics,
+            timeout=resolved_policy.request_timeout_seconds,
+        )
         return True
     except Exception:
         log_operation_event(
@@ -299,7 +304,7 @@ def create_health_router(
     service_name: str = "lotus-core-service",
     app_version: str = "unknown",
     readiness_cache_ttl_seconds: float = 5.0,
-    readiness_dependency_timeout_seconds: float = 5.0,
+    readiness_dependency_timeout_seconds: float | None = None,
 ) -> APIRouter:
     """
     Creates a standardized health check router.
@@ -321,12 +326,18 @@ def create_health_router(
     """
     router = APIRouter(tags=["Health"])
 
+    downstream_policy = load_downstream_access_policy()
+    dependency_timeout_seconds = (
+        downstream_policy.request_timeout_seconds
+        if readiness_dependency_timeout_seconds is None
+        else readiness_dependency_timeout_seconds
+    )
     dep_map = {
         "db": ("database", check_db_health, _database_dependency_configured),
         "kafka": ("kafka", check_kafka_health, _kafka_dependency_configured),
     }
     readiness_cache_ttl_seconds = max(0.0, readiness_cache_ttl_seconds)
-    readiness_dependency_timeout_seconds = max(0.001, readiness_dependency_timeout_seconds)
+    dependency_timeout_seconds = max(0.001, dependency_timeout_seconds)
     cached_until = 0.0
     cached_all_ok = False
     cached_dep_status: dict[str, str] | None = None
@@ -513,7 +524,7 @@ def create_health_router(
                         check,
                         configuration_check=configuration_check,
                         service_name=service_name,
-                        timeout_seconds=readiness_dependency_timeout_seconds,
+                        timeout_seconds=dependency_timeout_seconds,
                     )
                     for dependency_name, check, configuration_check in resolved_dependencies
                 ],

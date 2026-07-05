@@ -2,8 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from confluent_kafka import KafkaException
+from portfolio_common.downstream_access import DownstreamAccessPolicy
 from portfolio_common.kafka_admin import (
     KafkaTopicVerificationError,
+    _existing_topic_names,
     ensure_topics_exist,
 )
 
@@ -43,3 +45,22 @@ def test_ensure_topics_exist_raises_typed_error_for_unexpected_failures(mock_adm
 
     assert "Unexpected error while verifying Kafka topics." in str(exc_info.value)
     assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+def test_existing_topic_names_uses_supplied_downstream_timeout():
+    admin_client = MagicMock()
+    admin_client.list_topics.return_value.topics.keys.return_value = {"topic-a"}
+    policy = DownstreamAccessPolicy(
+        connect_timeout_seconds=0.1,
+        request_timeout_seconds=1.25,
+        retry_max_attempts=2,
+        retry_backoff_seconds=0.05,
+        retry_max_elapsed_seconds=2.0,
+        circuit_breaker_enabled=False,
+        max_page_size=100,
+        max_batch_size=50,
+        cache_allowed=True,
+    )
+
+    assert set(_existing_topic_names(admin_client, policy=policy)) == {"topic-a"}
+    admin_client.list_topics.assert_called_once_with(timeout=1.25)
