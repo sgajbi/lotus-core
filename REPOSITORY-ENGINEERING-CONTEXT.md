@@ -258,7 +258,14 @@ Current repository posture:
     `TELEMETRY_METRIC_ALLOWED_LABELS`, must not be listed in `TELEMETRY_METRIC_FORBIDDEN_LABELS`,
     and service-local metrics outside `portfolio_common.monitoring` must be registered in
     `SERVICE_LOCAL_METRIC_OWNERS` with an owning service.
-32. Kafka consumers inheriting `portfolio_common.kafka_consumer.BaseConsumer` emit the standard
+32. Standard FastAPI service apps and health-only worker web apps are covered by the shared HTTP
+    middleware-chain contract in `tests/test_support/http_middleware_contract.py` and
+    `tests/unit/test_http_middleware_chain_contract.py`. The contract proves `/version` metadata,
+    correlation/request/trace headers, `traceparent`, secure response headers, safe unhandled
+    exception responses, and route-template HTTP metrics across every app entrypoint that uses
+    `configure_standard_http_app` or `create_standard_health_app`. Do not add a new FastAPI app
+    entrypoint without extending that matrix.
+33. Kafka consumers inheriting `portfolio_common.kafka_consumer.BaseConsumer` emit the standard
     `kafka_consumer_events_total` and `kafka_consumer_processing_duration_seconds` metrics. Keep
     processing attempts, success, retryable/terminal failure, DLQ, commit, poll, critical-exit, and
     shutdown telemetry on the shared consumer boundary; add service-local metrics only as
@@ -272,13 +279,13 @@ Current repository posture:
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS` to route repeatedly retryable messages
     to DLQ after a bounded in-process budget, committing only after DLQ success.
-33. Structured operational logging is governed by
+34. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,
     query, replay, and scheduler paths must use constant messages plus `event_name`, `operation`,
     `status`, and `reason_code`; do not embed portfolio, account, client, security, request,
     correlation, or trace identifiers in free-text operational log messages.
-34. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
+35. Query-control-plane routes (QCP routes under `query_control_plane_service`) migrated to the
     shared `QueryControlPlaneProblem` contract must
     document error responses as `application/problem+json` with stable QCP error codes,
     correlation IDs, and bounded metadata. Routes not yet migrated must remain explicitly
@@ -298,7 +305,7 @@ Current repository posture:
     authorization denial, not-found, idempotency conflict, dependency timeout, degraded source data,
     or pagination/filtering/sorting must extend the catalog with source-test references, synthetic
     identifiers, correlation IDs, and standard problem metadata before wiki prose points to them.
-35. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
+36. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
     `LOTUS_CORE_STRICT_CONFIG_VALIDATION=true` or non-local `ENVIRONMENT` is active; local profiles
@@ -316,12 +323,12 @@ Current repository posture:
     default budgets, bounded denial labels, and platform-runtime validation boundary synchronized.
     `make monetary-float-guard` uses token-aware money-like matching and currently has zero active
     findings and zero allowlisted suppressions.
-36. Service runtime import correctness is now part of the architecture guard. Service code under
+37. Service runtime import correctness is now part of the architecture guard. Service code under
     `src/services/<service>/app` must not import its own application package through the repo-root
     path `src.services.<service>.app...`; use relative imports so the same code works in repo-root
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
-37. Canonical transaction-type classification now starts in
+38. Canonical transaction-type classification now starts in
     `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
     cashflow, position, query, validation, or RFC target work must be classified there first.
     `OTHER` is migration-only and not production-booking allowed. Redemption and
