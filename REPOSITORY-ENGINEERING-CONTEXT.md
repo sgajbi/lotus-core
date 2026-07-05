@@ -1287,6 +1287,15 @@ Most relevant current governance:
      supplemental read-model behavior that only changes aggregate `data_quality_status`, hides
      fallback-derived fields, emits the empty source metadata hash, or forces downstream consumers
      such as `lotus-idea` to infer Core freshness/provenance.
+107. Degraded-state contract coverage belongs in representative source-data tests, not scattered
+     incidental assertions. When adding or changing source-data fallbacks, stale observations,
+     partial pages, missing reference profiles, unavailable source evidence, dependency timeout
+     handling, or blocking control states, update
+     `tests/unit/services/query_service/services/test_degraded_source_data_contracts.py` or an
+     equivalent focused suite. Assert data-quality status, freshness/current evidence semantics,
+     supportability, source hash/lineage or fallback detail where applicable, namespaced reason
+     codes, and correlation ID. Also update the guarded API example catalog when the response
+     pattern is public or downstream-facing.
 
 ## Context Maintenance Rule
 
