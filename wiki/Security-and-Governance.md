@@ -53,7 +53,7 @@ matrix and has implementation anchors for:
 - metrics access policy
 - enterprise auth/audit middleware on business and operator APIs
 - unauthenticated health and metrics allowlist
-- payload limits and ingestion upload byte limits where relevant
+- payload limits and ingestion upload byte/parser budgets where relevant
 - safe unhandled-error responses
 
 For `ingestion_service`, the service-owned enterprise wrapper is also the default source of
@@ -99,6 +99,8 @@ posture evidence, not as a code default.
 - upload preview is source-safe by default: `sample_rows` stays empty unless
   `include_sample_rows=true` is backed by signed `ingestion.uploads.preview_samples.read`, and
   privileged samples are still field-redacted
+- upload preview and commit enforce byte, row, column, cell-length, content-type, and rate/abuse
+  controls before or during parser work
 - privileged ingestion ops JWTs must require issuer, audience, expiry, issued-at, replay id,
   principal identity, required ops scope/capability, and `kid`; key rotation uses an active HS256
   key plus previous-key JSON and non-local static-token fallback requires explicit approval

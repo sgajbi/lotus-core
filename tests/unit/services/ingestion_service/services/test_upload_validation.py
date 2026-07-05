@@ -9,7 +9,10 @@ from src.services.ingestion_service.app.application.errors import (
     UnsupportedOperation,
     ValidationRejected,
 )
-from src.services.ingestion_service.app.services.upload_validation import BulkUploadValidator
+from src.services.ingestion_service.app.services.upload_validation import (
+    BulkUploadValidator,
+    UploadParserBudget,
+)
 
 
 def _csv_bytes(content: str) -> bytes:
@@ -115,3 +118,89 @@ def test_upload_validator_rejects_invalid_csv_bytes() -> None:
         )
 
     assert exc_info.value.reason_code == "invalid_csv_content"
+
+
+def test_upload_validator_rejects_csv_above_row_budget() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "security_id,name,isin,currency,product_type",
+                "SEC1,Bond A,ISIN1,USD,Bond",
+                "SEC2,Bond B,ISIN2,USD,Bond",
+            ]
+        )
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        BulkUploadValidator(budget=UploadParserBudget(max_rows=1)).validate(
+            entity_type="instruments",
+            filename="instruments.csv",
+            content=content,
+        )
+
+    assert exc_info.value.reason_code == "upload_parser_budget_exceeded"
+    assert exc_info.value.detail["budget"] == "max_rows"
+
+
+def test_upload_validator_rejects_csv_above_column_budget() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "security_id,name,isin,currency,product_type,extra",
+                "SEC1,Bond A,ISIN1,USD,Bond,ignored",
+            ]
+        )
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        BulkUploadValidator(budget=UploadParserBudget(max_columns=5)).validate(
+            entity_type="instruments",
+            filename="instruments.csv",
+            content=content,
+        )
+
+    assert exc_info.value.reason_code == "upload_parser_budget_exceeded"
+    assert exc_info.value.detail["budget"] == "max_columns"
+    assert exc_info.value.detail["row_number"] == 1
+
+
+def test_upload_validator_rejects_csv_above_cell_length_budget() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                "security_id,name,isin,currency,product_type",
+                "SEC1,VeryLongBondName,ISIN1,USD,Bond",
+            ]
+        )
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        BulkUploadValidator(budget=UploadParserBudget(max_cell_length=12)).validate(
+            entity_type="instruments",
+            filename="instruments.csv",
+            content=content,
+        )
+
+    assert exc_info.value.reason_code == "upload_parser_budget_exceeded"
+    assert exc_info.value.detail["budget"] == "max_cell_length"
+    assert exc_info.value.detail["row_number"] == 2
+
+
+def test_upload_validator_rejects_xlsx_above_row_budget_without_materializing_workbook() -> None:
+    content = _xlsx_bytes(
+        headers=["security_id", "name", "isin", "currency", "product_type"],
+        rows=[
+            ["SEC1", "Bond A", "ISIN1", "USD", "Bond"],
+            ["SEC2", "Bond B", "ISIN2", "USD", "Bond"],
+        ],
+    )
+
+    with pytest.raises(ValidationRejected) as exc_info:
+        BulkUploadValidator(budget=UploadParserBudget(max_rows=1)).validate(
+            entity_type="instruments",
+            filename="instruments.xlsx",
+            content=content,
+        )
+
+    assert exc_info.value.reason_code == "upload_parser_budget_exceeded"
+    assert exc_info.value.detail["budget"] == "max_rows"

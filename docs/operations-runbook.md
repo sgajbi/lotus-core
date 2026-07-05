@@ -239,6 +239,9 @@ Operational knobs:
 | `ENTERPRISE_REQUIRE_CAPABILITY_RULES` | `false` | Requires a capability mapping for protected routes. |
 | `ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES` | `1048576` | Rejects oversized write requests in enterprise middleware. |
 | `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` | `5242880` | Rejects oversized bulk upload files with `INGESTION_UPLOAD_TOO_LARGE`. |
+| `LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS` | `5000` | Rejects bulk upload files with more parsed data rows than the parser budget. |
+| `LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS` | `200` | Rejects bulk upload files with more columns than the parser budget. |
+| `LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH` | `8192` | Rejects bulk upload files containing a cell value longer than the parser budget. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.

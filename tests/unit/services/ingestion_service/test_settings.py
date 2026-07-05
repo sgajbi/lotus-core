@@ -36,6 +36,9 @@ def test_load_ingestion_service_settings_defaults(monkeypatch):
     assert settings.rate_limit.enforcement_scope == "local_process"
     assert settings.rate_limit.gateway_policy_id == ""
     assert settings.adapter_mode.upload_max_bytes == 5_242_880
+    assert settings.adapter_mode.upload_max_rows == 5_000
+    assert settings.adapter_mode.upload_max_columns == 200
+    assert settings.adapter_mode.upload_max_cell_length == 8_192
 
 
 def test_load_ingestion_service_settings_invalid_json_falls_back(monkeypatch):
@@ -91,12 +94,18 @@ def test_load_ingestion_service_settings_adapter_mode_flags(monkeypatch):
     monkeypatch.setenv("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", "false")
     monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "0")
     monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES", "1024")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS", "50")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS", "25")
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH", "256")
 
     settings = load_ingestion_service_settings()
 
     assert settings.adapter_mode.portfolio_bundle_enabled is False
     assert settings.adapter_mode.upload_apis_enabled is False
     assert settings.adapter_mode.upload_max_bytes == 1024
+    assert settings.adapter_mode.upload_max_rows == 50
+    assert settings.adapter_mode.upload_max_columns == 25
+    assert settings.adapter_mode.upload_max_cell_length == 256
 
 
 def test_load_ingestion_service_settings_invalid_rate_limit_scope_falls_back(monkeypatch):

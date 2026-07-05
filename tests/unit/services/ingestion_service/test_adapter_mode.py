@@ -26,6 +26,9 @@ def _settings(
             portfolio_bundle_enabled=portfolio_bundle_enabled,
             upload_apis_enabled=upload_apis_enabled,
             upload_max_bytes=1024,
+            upload_max_rows=100,
+            upload_max_columns=50,
+            upload_max_cell_length=1024,
         ),
         ops_auth=None,  # type: ignore[arg-type]
         rate_limit=None,  # type: ignore[arg-type]

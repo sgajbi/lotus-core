@@ -853,8 +853,9 @@ Most relevant current governance:
     audit/authorization middleware; health-only worker apps must be explicitly classified as
     health-only. Ingestion upload APIs are bounded by
     `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES` and return `INGESTION_UPLOAD_TOO_LARGE` for oversized
-    payloads. The guard is static repo evidence only; live ingress, IAM, WAF, network, and
-    penetration-test proof remain separate higher-lane evidence.
+    payloads. Upload parsers must also enforce configured row, column, and cell-length budgets
+    rather than relying only on HTTP byte limits. The guard is static repo evidence only; live
+    ingress, IAM, WAF, network, and penetration-test proof remain separate higher-lane evidence.
 59. App-level supported-surface validation is blocking in PR Merge Gate. The
     `lotus-core-validation-report` workflow job is retained as the stable job id, but its check name
     is `PR Merge Gate / Lotus Core Validation Gate`, it checks out `sgajbi/lotus-platform` into the
@@ -1034,7 +1035,8 @@ Most relevant current governance:
     without FastAPI, Kafka, database, or ingestion-service dependencies. `UploadIngestionService`
     owns preview/commit policy and depends on the `UploadRecordPublisher` port. The
     `IngestionServiceUploadPublisher` adapter dispatches validated records to existing canonical
-    ingestion publish methods. `make architecture-guard` runs
+    ingestion publish methods. Upload parsing must stay budgeted by bytes, rows, columns, and cell
+    length and must stream XLSX rows without materializing the whole worksheet. `make architecture-guard` runs
     `scripts/upload_component_boundary_guard.py` so upload parsing and entity-specific publish
     dispatch do not drift back into the orchestration service.
 77. Transaction replay planning is split from SQLAlchemy and Kafka adapters. The repo-local
@@ -1211,6 +1213,13 @@ Most relevant current governance:
     `ingestion.uploads.preview_samples.read` capability. Privileged sample rows must still be
     redacted for sensitive identifiers, monetary, fee, tax, price, quantity, notional, balance, and
     market-value fields. Do not reintroduce default normalized row disclosure in preview responses.
+96. Bulk upload preview and commit must enforce resource budgets before and during parser work.
+    Use `LOTUS_CORE_INGEST_UPLOAD_MAX_BYTES`, `LOTUS_CORE_INGEST_UPLOAD_MAX_ROWS`,
+    `LOTUS_CORE_INGEST_UPLOAD_MAX_COLUMNS`, and
+    `LOTUS_CORE_INGEST_UPLOAD_MAX_CELL_LENGTH`; reject parser-budget breaches with
+    `INGESTION_UPLOAD_PARSER_BUDGET_EXCEEDED`. Preview must have rate/abuse protection because it
+    performs parsing work even though it does not publish records. Do not reintroduce full-file XLSX
+    worksheet materialization or unbounded CSV row collection.
 
 ## Context Maintenance Rule
 
