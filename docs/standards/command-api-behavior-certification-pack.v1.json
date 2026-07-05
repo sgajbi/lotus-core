@@ -1,0 +1,169 @@
+{
+  "schema_version": "lotus-core.command-api-behavior-certification-pack.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#605",
+  "guard_command": "make command-api-behavior-certification-guard",
+  "named_ci_lane": "test-ops-contract",
+  "scope": [
+    "ingestion write commands",
+    "event replay and ingestion operations commands",
+    "financial reconciliation control commands",
+    "long-running operational command surfaces"
+  ],
+  "required_response_assertions": [
+    "http_status",
+    "response_schema",
+    "correlation_or_operation_identity",
+    "idempotency_or_duplicate_semantics",
+    "operator_reason_code"
+  ],
+  "scenarios": [
+    {
+      "id": "valid_command_returns_stable_accepted_response",
+      "status": "implemented",
+      "command_family": "ingestion,reconciliation",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingestion_endpoints_return_canonical_ack_contract",
+        "test_transaction_cashflow_run_persists_missing_cashflow_finding"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "correlation_or_operation_identity",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "duplicate_command_returns_replay_safe_response",
+      "status": "implemented",
+      "command_family": "ingestion",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingestion_jobs_idempotency_replays_existing_job",
+        "test_reference_data_ingestion_replays_duplicate_idempotency_key"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "correlation_or_operation_identity",
+        "idempotency_or_duplicate_semantics"
+      ]
+    },
+    {
+      "id": "same_idempotency_key_different_payload_returns_conflict",
+      "status": "implemented",
+      "command_family": "ingestion",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/ingestion_service/services/test_ingestion_payload_evidence.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingest_transactions_rejects_same_idempotency_key_with_different_payload"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "idempotency_or_duplicate_semantics",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "malformed_payload_returns_structured_validation_error",
+      "status": "implemented",
+      "command_family": "ingestion,upload,replay",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/event_replay_service/test_ops_control_commands.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingest_business_dates_rejects_empty_payload_with_canonical_error",
+        "test_upload_commit_rejects_malformed_xlsx"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "command_blocked_by_runtime_mode_or_policy_returns_truthful_non_success",
+      "status": "implemented",
+      "command_family": "ingestion,replay,reconciliation",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingest_business_dates_returns_503_when_mode_blocks_writes",
+        "test_ingestion_job_retry_blocks_unsupported_partial_scope_and_paused_mode",
+        "test_enterprise_middleware_denies_reconciliation_write_missing_capability"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "dependency_timeout_or_retryable_failure_maps_standard_error_contract",
+      "status": "implemented",
+      "command_family": "ingestion,replay",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/event_replay_service/test_ingestion_retry_commands.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingest_single_transaction_returns_failed_record_keys_when_publish_fails",
+        "test_ingestion_job_retry_publish_failure_uses_recovery_detail"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "partial_publish_or_bookkeeping_failure_is_not_misleading_success",
+      "status": "implemented",
+      "command_family": "ingestion,replay",
+      "evidence": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/event_replay_service/test_bookkeeping_repair_commands.py"
+      ],
+      "route_surface_evidence": [
+        "test_ingest_transactions_reports_bookkeeping_failure_after_publish",
+        "test_replay_consumer_dlq_event_reports_bookkeeping_failure_after_publish"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "correlation_or_operation_identity",
+        "operator_reason_code"
+      ]
+    },
+    {
+      "id": "security_denied_command_uses_standard_problem_contract",
+      "status": "implemented",
+      "command_family": "reconciliation,ingestion",
+      "evidence": [
+        "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py",
+        "tests/unit/services/ingestion_service/routers/test_uploads.py"
+      ],
+      "route_surface_evidence": [
+        "test_enterprise_middleware_denies_reconciliation_write_without_headers",
+        "test_authorize_preview_sample_rows_requires_signed_capability"
+      ],
+      "response_assertions": [
+        "http_status",
+        "response_schema",
+        "operator_reason_code"
+      ]
+    }
+  ]
+}
