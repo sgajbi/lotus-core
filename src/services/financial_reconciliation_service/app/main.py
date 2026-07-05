@@ -2,21 +2,21 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from portfolio_common.enterprise_readiness import (
-    build_default_enterprise_audit_middleware,
-    validate_default_enterprise_runtime_config,
-)
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
 
+from .enterprise_readiness import (
+    build_enterprise_audit_middleware,
+    validate_enterprise_runtime_config,
+)
 from .routers import router as reconciliation_router
 
 SERVICE_PREFIX = "FRC"
 SERVICE_NAME = "financial_reconciliation_service"
 setup_logging()
 logger = logging.getLogger(__name__)
-validate_default_enterprise_runtime_config(service_name=SERVICE_NAME, logger=logger)
+validate_enterprise_runtime_config()
 
 
 @asynccontextmanager
@@ -40,9 +40,7 @@ app = FastAPI(
     contact={"name": "Lotus Platform Engineering"},
     lifespan=lifespan,
 )
-app.middleware("http")(
-    build_default_enterprise_audit_middleware(service_name=SERVICE_NAME, logger=logger)
-)
+app.middleware("http")(build_enterprise_audit_middleware())
 configure_standard_http_app(
     app,
     service_name=SERVICE_NAME,

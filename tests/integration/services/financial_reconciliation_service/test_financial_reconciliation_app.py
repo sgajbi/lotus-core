@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from time import time
 
 import httpx
 import pytest
@@ -17,11 +18,38 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.db import get_async_db_session
+from portfolio_common.enterprise_readiness import (
+    _enterprise_auth_context_signature,
+    _normalize_headers,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.financial_reconciliation_service.app.main import app, lifespan
 
 pytestmark = pytest.mark.asyncio
+
+
+def _enterprise_headers(capabilities: str) -> dict[str, str]:
+    headers = {
+        "X-Actor-Id": "actor-1",
+        "X-Tenant-Id": "tenant-1",
+        "X-Role": "ops",
+        "X-Correlation-Id": "corr-1",
+        "X-Service-Identity": "lotus-gateway",
+        "X-Capabilities": capabilities,
+        "X-Enterprise-Auth-Key-Id": "kms-key-1",
+        "X-Enterprise-Auth-Timestamp": str(int(time())),
+    }
+    headers["X-Enterprise-Auth-Signature"] = _enterprise_auth_context_signature(
+        _normalize_headers(headers),
+        "auth-context-secret",
+    )
+    return headers
+
+
+def _configure_auth_context_env(monkeypatch) -> None:
+    monkeypatch.setenv("ENTERPRISE_PRIMARY_KEY_ID", "kms-key-1")
+    monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
 
 
 @pytest_asyncio.fixture
@@ -101,6 +129,79 @@ async def test_openapi_contains_reconciliation_endpoints(async_test_client: http
     assert "/reconciliation/runs/position-valuation" in paths
     assert "/reconciliation/runs/timeseries-integrity" in paths
     assert "/reconciliation/runs/{run_id}/findings" in paths
+
+
+async def test_enterprise_middleware_denies_reconciliation_write_without_headers(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-R1", "business_date": "2026-03-08"},
+    )
+
+    assert response.status_code == 403
+    detail = response.json()
+    assert detail["detail"] == "authorization_policy_denied"
+    assert detail["reason"].startswith("missing_headers:")
+
+
+async def test_enterprise_middleware_denies_reconciliation_write_missing_capability(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+
+    response = await async_test_client.post(
+        "/reconciliation/runs/transaction-cashflow",
+        json={"portfolio_id": "PORT-R1", "business_date": "2026-03-08"},
+        headers=_enterprise_headers("financial_reconciliation.controls.read"),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "authorization_policy_denied",
+        "reason": "missing_capability:financial_reconciliation.controls.run",
+    }
+
+
+async def test_enterprise_middleware_denies_reconciliation_read_missing_capability(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    _configure_auth_context_env(monkeypatch)
+
+    response = await async_test_client.get(
+        "/reconciliation/runs/FRR-001/findings",
+        headers=_enterprise_headers("financial_reconciliation.controls.run"),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "authorization_policy_denied",
+        "reason": "missing_capability:financial_reconciliation.controls.read",
+    }
+
+
+async def test_enterprise_middleware_keeps_reconciliation_operational_paths_unauthenticated(
+    async_test_client: httpx.AsyncClient,
+    monkeypatch,
+):
+    monkeypatch.setenv("ENTERPRISE_ENFORCE_READ_AUTHZ", "true")
+    monkeypatch.setenv("ENTERPRISE_REQUIRE_CAPABILITY_RULES", "true")
+
+    live_response = await async_test_client.get("/health/live")
+    metrics_response = await async_test_client.get("/metrics")
+    openapi_response = await async_test_client.get("/openapi.json")
+
+    assert live_response.status_code == 200
+    assert metrics_response.status_code == 200
+    assert openapi_response.status_code == 200
+    assert live_response.headers["X-Enterprise-Policy-Version"]
 
 
 async def test_openapi_includes_reconciliation_examples(async_test_client: httpx.AsyncClient):
