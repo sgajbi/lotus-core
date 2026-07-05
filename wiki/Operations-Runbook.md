@@ -123,9 +123,11 @@ When app-local runtime is unhealthy, check this order:
 Runtime-facing API services and worker health web apps expose `/health/live`, `/health/ready`, and
 `/metrics`. They also expose `GET /version`, which returns the image provenance values embedded
 during build or deployment: Git commit SHA, Git branch, build timestamp, repo URL, image version,
-image digest, CI pipeline/run ID, and the corresponding OCI label map. Local builds report
-`image_digest: "unknown"` unless the build/release lane or deploy manifest supplies
-`LOTUS_IMAGE_DIGEST`.
+image digest resolved after push, CI pipeline/run ID, and the corresponding OCI label/release
+metadata map. Local builds report `image_digest: "unknown"` unless the build/release lane or deploy
+manifest supplies `LOTUS_IMAGE_DIGEST`. The final registry digest is release/deployment metadata;
+it cannot be truthfully baked as a self-digest label during the same image build because changing
+that label changes the digest.
 
 `/health/live` and `/health/ready` include a bounded `runtime` block with service name, app
 version, environment, runtime profile, router started-at time, uptime seconds, and the same shared

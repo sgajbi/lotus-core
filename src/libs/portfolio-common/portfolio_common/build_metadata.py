@@ -63,7 +63,8 @@ class BuildMetadataResponse(BaseModel):
     )
     oci_labels: dict[str, str] = Field(
         description=(
-            "OCI label names and values expected on the released image for direct parity checks."
+            "OCI label names plus release-resolved metadata values used for manifest and runtime "
+            "parity checks."
         )
     )
 

@@ -39,7 +39,9 @@ promotion environments, and malformed digests instead of producing misleading re
 
 Local builds may still report `LOTUS_IMAGE_DIGEST=unknown`: a final registry digest cannot be known
 before the build/push resolves it. Release manifests and deployment/runtime metadata carry the
-resolved digest for release and operator parity.
+resolved digest for release and operator parity. The resolved digest is intentionally treated as
+post-push release/deployment metadata rather than a build-time self-digest OCI label value; changing
+that label would produce a different image digest.
 
 ## Validation Evidence
 
