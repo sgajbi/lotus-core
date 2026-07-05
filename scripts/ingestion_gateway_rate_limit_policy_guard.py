@@ -32,6 +32,9 @@ FORBIDDEN_OBSERVABILITY_LABELS = {
     "trace_id",
     "payload",
 }
+GATEWAY_WRITE_POLICY_EXCLUDED_ENDPOINTS = {
+    "/ingest/uploads/preview": "preview parse-rate protection is local and not a write-commit endpoint",
+}
 DOC_REQUIRED_PHRASES = {
     "docs/operations/ingestion-api-gold-standard.md": (
         "lotus-core-ingestion-write-global-v1",
@@ -47,19 +50,42 @@ def _load_policy(policy_path: Path = POLICY_PATH) -> dict[str, Any]:
     return json.loads(policy_path.read_text(encoding="utf-8"))
 
 
-def _literal_endpoint_keywords(router_root: Path = ROUTER_ROOT) -> set[str]:
+def _literal_write_route_templates(router_root: Path = ROUTER_ROOT) -> set[str]:
     endpoints: set[str] = set()
     for path in router_root.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 continue
-            for keyword in node.keywords:
-                if keyword.arg != "endpoint":
+            for decorator in node.decorator_list:
+                if not isinstance(decorator, ast.Call):
                     continue
-                if isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
-                    endpoints.add(keyword.value.value)
+                if not (
+                    isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr.lower() == "post"
+                    and isinstance(decorator.func.value, ast.Name)
+                    and decorator.func.value.id == "router"
+                ):
+                    continue
+                route_template = _route_template_from_decorator(decorator)
+                if (
+                    route_template is not None
+                    and route_template not in GATEWAY_WRITE_POLICY_EXCLUDED_ENDPOINTS
+                ):
+                    endpoints.add(route_template)
     return endpoints
+
+
+def _route_template_from_decorator(decorator: ast.Call) -> str | None:
+    if decorator.args:
+        value = decorator.args[0]
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return value.value
+    for keyword in decorator.keywords:
+        if keyword.arg == "path" and isinstance(keyword.value, ast.Constant):
+            if isinstance(keyword.value.value, str):
+                return keyword.value.value
+    return None
 
 
 def _docs_with_missing_phrases(
@@ -151,7 +177,7 @@ def evaluate_gateway_rate_limit_policy(
     required_phrases: dict[str, tuple[str, ...]] = DOC_REQUIRED_PHRASES,
 ) -> list[dict[str, object]]:
     policy = policy or _load_policy()
-    router_endpoints = router_endpoints or _literal_endpoint_keywords()
+    router_endpoints = router_endpoints or _literal_write_route_templates()
 
     findings: list[dict[str, object]] = []
     policy_findings = _policy_shape_findings(policy)

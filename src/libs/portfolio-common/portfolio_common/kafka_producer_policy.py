@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -150,8 +149,8 @@ def _base_policy_values(service_name: str) -> dict[str, Any]:
 
 
 def _service_identity_default(service_name: str) -> dict[str, str]:
-    configured = os.getenv("LOTUS_CORE_KAFKA_PRODUCER_CLIENT_ID")
-    if configured is not None and configured.strip():
+    configured = env_str("LOTUS_CORE_KAFKA_PRODUCER_CLIENT_ID", "")
+    if configured.strip():
         return {}
     if service_name == DEFAULT_PRODUCER_SERVICE:
         return {}
@@ -159,9 +158,6 @@ def _service_identity_default(service_name: str) -> dict[str, str]:
 
 
 def _load_defaults_json() -> dict[str, Any]:
-    raw = os.getenv(DEFAULTS_JSON_ENV, "").strip()
-    if not raw:
-        return {}
     return _sanitize_config_map(
         env_json_map(DEFAULTS_JSON_ENV, service_name=SERVICE_NAME),
         context=DEFAULTS_JSON_ENV,
@@ -169,9 +165,6 @@ def _load_defaults_json() -> dict[str, Any]:
 
 
 def _load_service_override_json(service_name: str) -> dict[str, Any]:
-    raw = os.getenv(SERVICE_OVERRIDES_JSON_ENV, "").strip()
-    if not raw:
-        return {}
     overrides = env_json_map(SERVICE_OVERRIDES_JSON_ENV, service_name=SERVICE_NAME)
     service_config = overrides.get(service_name)
     if service_config is None:

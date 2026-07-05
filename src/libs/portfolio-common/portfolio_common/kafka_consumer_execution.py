@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -104,9 +103,6 @@ def load_kafka_consumer_execution_profile(group_id: str) -> KafkaConsumerExecuti
 
 
 def _load_default_execution_profile() -> KafkaConsumerExecutionProfile:
-    raw_text = os.getenv(DEFAULTS_ENV, "").strip()
-    if not raw_text:
-        return KafkaConsumerExecutionProfile()
     raw = env_json_map(DEFAULTS_ENV, service_name=CONFIG_SERVICE_NAME)
     if not raw:
         return KafkaConsumerExecutionProfile()
@@ -117,9 +113,6 @@ def _load_default_execution_profile() -> KafkaConsumerExecutionProfile:
 
 
 def _load_group_execution_override(group_id: str) -> dict[str, object]:
-    raw_text = os.getenv(GROUP_OVERRIDES_ENV, "").strip()
-    if not raw_text:
-        return {}
     raw = env_json_map(GROUP_OVERRIDES_ENV, service_name=CONFIG_SERVICE_NAME)
     if not raw:
         return {}
