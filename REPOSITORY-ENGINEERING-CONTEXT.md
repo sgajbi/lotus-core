@@ -1354,6 +1354,13 @@ Most relevant current governance:
      operator-searchable records with nullable `correlation_id` unless they either require
      correlation at the schema boundary or persist the same diagnostic fields with migration,
      backfill, index, and tests.
+114. Cashflow event dates must be resolved through an explicit calculation policy, not by
+     hard-coding `transaction_date` in cashflow assembly, query consumers, or downstream proof
+     scripts. `CashflowLogic` now uses `synthetic_flow_effective_date` when supplied, uses
+     `settlement_date` for settlement/value/payment-dated cash movements, and falls back to
+     `transaction_date` only when the event lacks the relevant source timing field. Current Core
+     events do not expose first-class `payment_date` or `value_date`; do not document or consume
+     unsupported fields until the transaction-event schema is intentionally extended and tested.
 
 ## Context Maintenance Rule
 

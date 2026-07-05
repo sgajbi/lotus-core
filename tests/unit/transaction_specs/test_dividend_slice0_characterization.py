@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -151,6 +151,7 @@ def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) 
         instrument_id="SEC_EQ_US_001",
         security_id="SEC_EQ_US_001",
         transaction_date=datetime(2026, 1, 20, 10, 0, 0),
+        settlement_date=datetime(2026, 1, 25, 9, 30, 0),
         transaction_type="DIVIDEND",
         quantity=Decimal("0"),
         price=Decimal("0"),
@@ -170,6 +171,7 @@ def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) 
 
     assert cashflow.amount == Decimal("600.0")
     assert cashflow.amount > 0
+    assert cashflow.cashflow_date == date(2026, 1, 25)
     assert cashflow.classification == "INCOME"
     mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
     mock_metric.labels.return_value.inc.assert_called_once()

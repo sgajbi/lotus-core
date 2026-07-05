@@ -81,7 +81,7 @@ document them explicitly.
 | `position_date` | position history and position DTOs | Keep for position snapshot date. Slice 3 may align this with `as_of_date` at product boundary. |
 | `price_date` | market price models and DTOs | Keep for price observation business date. Pair with `observed_at` when source observation time matters. |
 | `rate_date` | FX rate models and DTOs | Keep for FX observation business date. Pair with `observed_at` when source observation time matters. |
-| `cashflow_date` | cashflow model and buy/sell linkage DTOs | Keep for cashflow event date. Document settlement or booking relationship when cash ledger is hardened. |
+| `cashflow_date` | cashflow model and buy/sell linkage DTOs | Keep for cashflow event date. Cashflow generation must resolve it through the cashflow-date policy: synthetic effective date when supplied, settlement date for settlement/value/payment-dated cash movements, and transaction date only as the documented fallback when no source timing field exists. |
 | `acquisition_date` | lot state DTOs and lot-state model | Keep for lot acquisition semantics. |
 | `open_date`, `close_date` | portfolio lifecycle | Keep for portfolio lifecycle. |
 | `opened_on`, `closed_on` | cash account master | Keep for account lifecycle; future cleanup may align to `open_date`/`close_date` only if no semantic loss. |

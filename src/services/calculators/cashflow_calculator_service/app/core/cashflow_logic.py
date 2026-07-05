@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from decimal import Decimal
 from typing import Optional, Protocol, cast
 
@@ -18,6 +19,17 @@ logger = logging.getLogger(__name__)
 _TRANSFER_SIGNING_LIFECYCLE_FAMILIES = {"transfer", "corporate_action", "rights"}
 _TRANSFER_SIGNING_INFLOW_CASH_EFFECT_TYPES = {"RIGHTS_REFUND"}
 _TRANSFER_SIGNING_FALLBACK_TYPES = {"CASH_IN_LIEU"}
+_SETTLEMENT_DATED_CASHFLOW_TYPES = frozenset(
+    {
+        "BUY",
+        "SELL",
+        "DEPOSIT",
+        "WITHDRAWAL",
+        "FX_CASH_SETTLEMENT_BUY",
+        "FX_CASH_SETTLEMENT_SELL",
+    }
+)
+_PAYMENT_DATED_CASHFLOW_TYPES = frozenset({"DIVIDEND", "INTEREST"})
 
 
 def _transfer_signing_types_for_position_effect(position_effect: str) -> frozenset[str]:
@@ -47,6 +59,38 @@ CLASSIFICATION_SIGN_FACTORS = {
 
 def _normalize_code(value: object, default: str = "") -> str:
     return str(value or default).strip().upper()
+
+
+def _normalize_classification(value: object) -> str:
+    if isinstance(value, CashflowClassification):
+        return value.value
+    return _normalize_code(value)
+
+
+def _transaction_date(transaction: TransactionEvent) -> date:
+    return transaction.transaction_date.date()
+
+
+def _settlement_date_or_transaction_date(transaction: TransactionEvent) -> date:
+    if transaction.settlement_date is not None:
+        return transaction.settlement_date.date()
+    return _transaction_date(transaction)
+
+
+def _resolve_cashflow_date(
+    transaction: TransactionEvent,
+    rule: "CashflowRuleView",
+    transaction_type: str,
+) -> date:
+    if transaction.synthetic_flow_effective_date is not None:
+        return transaction.synthetic_flow_effective_date
+    if transaction_type in _SETTLEMENT_DATED_CASHFLOW_TYPES:
+        return _settlement_date_or_transaction_date(transaction)
+    if transaction_type in _PAYMENT_DATED_CASHFLOW_TYPES:
+        return _settlement_date_or_transaction_date(transaction)
+    if _normalize_classification(rule.classification) in {"FX_BUY", "FX_SELL"}:
+        return _settlement_date_or_transaction_date(transaction)
+    return _transaction_date(transaction)
 
 
 def _resolve_cashflow_trade_fee(transaction: TransactionEvent) -> Decimal:
@@ -149,7 +193,7 @@ class CashflowLogic:
             transaction_id=transaction.transaction_id,
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
-            cashflow_date=transaction.transaction_date.date(),
+            cashflow_date=_resolve_cashflow_date(transaction, rule, transaction_type),
             amount=amount,
             currency=transaction.currency,
             classification=rule.classification,
