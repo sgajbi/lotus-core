@@ -4,6 +4,11 @@ from datetime import datetime
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
+from .ingestion_validation_errors import (
+    INVALID_QUALITY_STATUS,
+    raise_ingestion_validation_error,
+)
+
 
 class SourceObservationLineage(BaseModel):
     source_system: str | None = Field(
@@ -42,5 +47,9 @@ class SourceObservationLineage(BaseModel):
             return "accepted"
         normalized = str(value).strip().lower()
         if not normalized:
-            raise ValueError("quality_status must not be blank")
+            raise_ingestion_validation_error(
+                INVALID_QUALITY_STATUS,
+                field_path="quality_status",
+                message="quality_status must not be blank",
+            )
         return normalized

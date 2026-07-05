@@ -1454,6 +1454,14 @@ Most relevant current governance:
      embedded runtime task exits surface as bounded readiness dependency states instead of leaving
      `/health/ready` green from database reachability alone. Keep liveness lightweight and do not
      expose raw exception strings or unbounded task details in readiness responses.
+117. Ingestion DTO domain validation must use
+     `ingestion_service.app.DTOs.ingestion_validation_errors` for stable machine-readable codes,
+     field paths, remediation hints, duplicate-source-key detection, effective-window checks,
+     lineage checks, quality-status checks, and identifier/lifecycle-link validation. Do not add new
+     local `ValueError` strings for reusable ingestion domain rules. Bulk upload row errors preserve
+     the legacy `message` field but should carry `code`, `severity`, `field_path`, `record_key`,
+     `remediation`, and source-safe `source_lineage` where available; update focused DTO,
+     upload-validation, and OpenAPI contract tests when changing this behavior.
 
 ## Context Maintenance Rule
 

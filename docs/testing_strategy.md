@@ -69,6 +69,11 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `make observability-contract-test-pack-guard` after changing HTTP middleware, health/version
    app bootstrap, metrics labels, trace/correlation headers, structured logging, or source-safe
    diagnostics.
+13. Ingestion DTO domain validation should use the shared
+   `ingestion_validation_errors.py` taxonomy for stable validation codes, field paths,
+   remediation hints, and source-safe upload row evidence. Update focused DTO, upload-validation,
+   and OpenAPI contract tests after changing effective-window, duplicate-key, lineage,
+   quality-status, identifier, threshold, or lifecycle-link validation.
 
 ## Proof-Family Markers
 

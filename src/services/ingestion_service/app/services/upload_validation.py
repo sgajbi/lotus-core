@@ -16,6 +16,14 @@ from ..application.errors import UnsupportedOperation, ValidationRejected
 from ..application.upload_commands import UploadEntity, UploadRowIssue
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
+from ..DTOs.ingestion_validation_errors import (
+    code_from_pydantic_error,
+    field_path_from_pydantic_error,
+    record_key_from_payload,
+    remediation_from_pydantic_error,
+    safe_source_lineage_from_payload,
+    severity_from_pydantic_error,
+)
 from ..DTOs.instrument_dto import Instrument
 from ..DTOs.market_price_dto import MarketPrice
 from ..DTOs.portfolio_dto import Portfolio
@@ -76,7 +84,13 @@ class BulkUploadValidator:
             try:
                 model = model_cls.model_validate(normalized_row)
             except ValidationError as exc:
-                errors.append(_row_issue(row_number=index, exc=exc))
+                errors.append(
+                    _row_issue(
+                        row_number=index,
+                        row={**row, **normalized_row},
+                        exc=exc,
+                    )
+                )
                 continue
 
             valid_models.append(model)
@@ -91,12 +105,23 @@ class BulkUploadValidator:
         )
 
 
-def _row_issue(*, row_number: int, exc: ValidationError) -> UploadRowIssue:
+def _row_issue(*, row_number: int, row: dict[str, Any], exc: ValidationError) -> UploadRowIssue:
     issues: list[str] = []
-    for error in exc.errors():
+    validation_errors = exc.errors()
+    first_error = validation_errors[0] if validation_errors else {}
+    for error in validation_errors:
         location = ".".join(str(part) for part in error.get("loc", ()))
         issues.append(f"{location}: {error.get('msg', 'invalid value')}")
-    return UploadRowIssue(row_number=row_number, message="; ".join(issues))
+    return UploadRowIssue(
+        row_number=row_number,
+        message="; ".join(issues),
+        code=code_from_pydantic_error(first_error),
+        severity=severity_from_pydantic_error(first_error),
+        field_path=field_path_from_pydantic_error(first_error),
+        record_key=record_key_from_payload(row),
+        remediation=remediation_from_pydantic_error(first_error),
+        source_lineage=safe_source_lineage_from_payload(row),
+    )
 
 
 def _normalized_key(value: str) -> str:

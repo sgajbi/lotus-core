@@ -633,7 +633,9 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/services/ingestion_service/domain/test_ingestion_job_lifecycle_policy.py",
-            "tests/unit/services/ingestion_service/test_transaction_model.py"
+            "tests/unit/services/ingestion_service/test_transaction_model.py",
+            "tests/unit/services/ingestion_service/test_reference_data_dto.py",
+            "tests/unit/services/ingestion_service/services/test_upload_validation.py"
           ]
         },
         {
@@ -641,7 +643,8 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/services/ingestion_service/services/test_ingestion_service.py",
-            "tests/unit/services/ingestion_service/services/test_business_date_ingestion_commands.py"
+            "tests/unit/services/ingestion_service/services/test_business_date_ingestion_commands.py",
+            "tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py"
           ]
         },
         {
@@ -666,7 +669,8 @@
           "current_coverage": [
             "make ingestion-contract-gate",
             "make source-data-product-contract-guard",
-            "make event-contract-test-pack-guard"
+            "make event-contract-test-pack-guard",
+            "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py"
           ]
         },
         {

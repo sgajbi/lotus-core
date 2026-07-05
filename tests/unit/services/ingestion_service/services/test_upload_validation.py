@@ -9,6 +9,10 @@ from src.services.ingestion_service.app.application.errors import (
     UnsupportedOperation,
     ValidationRejected,
 )
+from src.services.ingestion_service.app.DTOs.ingestion_validation_errors import (
+    BLANK_IDENTIFIER,
+    SCHEMA_VALIDATION_FAILED,
+)
 from src.services.ingestion_service.app.services.upload_validation import (
     BulkUploadValidator,
     UploadParserBudget,
@@ -95,7 +99,47 @@ def test_upload_validator_reports_invalid_rows_without_publish_dependency() -> N
     assert report.total_rows == 1
     assert report.valid_models == []
     assert report.errors[0].row_number == 2
+    assert report.errors[0].code == SCHEMA_VALIDATION_FAILED
+    assert report.errors[0].field_path == "transaction_date"
+    assert report.errors[0].record_key == "transaction_id:T1"
     assert "transaction_date" in report.errors[0].message
+
+
+def test_upload_validator_reports_structured_row_validation_metadata() -> None:
+    content = _csv_bytes(
+        "\n".join(
+            [
+                (
+                    "transaction_id,portfolio_id,instrument_id,security_id,transaction_date,"
+                    "transaction_type,quantity,price,gross_transaction_amount,trade_currency,"
+                    "currency,source_system,source_record_id,observed_at"
+                ),
+                (
+                    "  ,P1,I1,S1,2026-01-02T10:00:00Z,BUY,10,100,1000,USD,USD,"
+                    "OMS,txn-source-001,2026-01-02T10:05:00Z"
+                ),
+            ]
+        )
+    )
+
+    report = BulkUploadValidator().validate(
+        entity_type="transactions",
+        filename="transactions.csv",
+        content=content,
+    )
+
+    assert report.valid_models == []
+    error = report.errors[0]
+    assert error.code == BLANK_IDENTIFIER
+    assert error.severity == "error"
+    assert error.field_path == "transaction_id"
+    assert error.record_key == "source_record_id:txn-source-001"
+    assert error.remediation == "Provide a non-blank source-owned identifier."
+    assert error.source_lineage == {
+        "source_system": "OMS",
+        "source_record_id": "txn-source-001",
+        "observed_at": "2026-01-02T10:05:00Z",
+    }
 
 
 def test_upload_validator_rejects_unsupported_file_format() -> None:
