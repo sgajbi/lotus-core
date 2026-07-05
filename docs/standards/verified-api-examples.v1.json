@@ -43,7 +43,7 @@
     {
       "service": "query_service",
       "family": "Operational Read",
-      "exampleIds": ["operational-read-success"]
+      "exampleIds": ["operational-read-success", "holdings-fallback-degradation"]
     }
   ],
   "examples": [
@@ -378,6 +378,71 @@
       "sensitivity": {
         "syntheticOnly": true,
         "redactionPolicy": "Portfolio and security identifiers are synthetic."
+      }
+    },
+    {
+      "id": "holdings-fallback-degradation",
+      "category": "degraded_source_data",
+      "service": "query_service",
+      "family": "Operational Read",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/positions",
+      "sourceTests": [
+        "tests/unit/services/query_service/services/test_degraded_source_data_contracts.py",
+        "tests/unit/services/query_service/services/test_position_holdings_response.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-010"
+        },
+        "path": {
+          "portfolio_id": "PF_API_EXAMPLE_001"
+        },
+        "query": {
+          "as_of_date": "2026-03-28"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "product_name": "HoldingsAsOf",
+          "portfolio_id": "PF_API_EXAMPLE_001",
+          "data_quality_status": "PARTIAL",
+          "data_quality": {
+            "state": "PARTIAL",
+            "reason": "HOLDINGS_VALUATION_FALLBACK"
+          },
+          "supportability": {
+            "degraded": true,
+            "reason_code": "HOLDINGS_VALUATION_FALLBACK"
+          },
+          "freshness_status": "CURRENT",
+          "source_evidence_current": true,
+          "content_hash": "sha256:synthetic-holdings-fingerprint",
+          "source_batch_fingerprint": "sha256:synthetic-holdings-fingerprint",
+          "source_refs": [
+            "HoldingsAsOf:PF_API_EXAMPLE_001:2026-03-28:SEC_SYNTH_EQ_001"
+          ],
+          "degradation": {
+            "status": "PARTIAL",
+            "reason_codes": ["HOLDINGS_VALUATION_FALLBACK"],
+            "details": [
+              {
+                "section": "positions",
+                "record_key": "security_id:SEC_SYNTH_EQ_001",
+                "affected_fields": ["valuation.market_price", "valuation.market_value"],
+                "source_kind": "FALLBACK",
+                "reason_code": "HOLDINGS_VALUATION_FALLBACK",
+                "freshness_status": "PARTIAL"
+              }
+            ]
+          },
+          "correlation_id": "corr-api-example-010"
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Portfolio and security identifiers are synthetic; hash value is illustrative."
       }
     },
     {
