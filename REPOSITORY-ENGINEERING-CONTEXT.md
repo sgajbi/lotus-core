@@ -1462,6 +1462,13 @@ Most relevant current governance:
      the legacy `message` field but should carry `code`, `severity`, `field_path`, `record_key`,
      `remediation`, and source-safe `source_lineage` where available; update focused DTO,
      upload-validation, and OpenAPI contract tests when changing this behavior.
+118. Capability and integration policy endpoints must keep source/config loading separate from
+     policy resolution and response assembly. The integration capabilities API uses
+     `query_service.app.services.capability_policy` for its catalog, environment-backed policy
+     source, tenant override parsing, policy resolver, and response assembler; keep env/settings
+     reads in the policy source adapter, exercise policy logic with explicit in-memory inputs, and
+     preserve public capability DTO compatibility unless a contract change is intentional,
+     documented, and tested.
 
 ## Context Maintenance Rule
 
