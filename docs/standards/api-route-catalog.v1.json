@@ -4118,6 +4118,11 @@
           "status_code": "422",
           "schema": "HTTPValidationError",
           "description": "Validation Error"
+        },
+        {
+          "status_code": "429",
+          "schema": "none",
+          "description": "Preview parse-rate protection blocked the request."
         }
       ],
       "pagination": [],
