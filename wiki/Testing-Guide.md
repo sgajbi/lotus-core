@@ -82,6 +82,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make source-data-product-contract-guard`
 - `make analytics-input-consumer-contract-guard`
 - `make event-runtime-contract-guard`
+- `make synthetic-fixture-leakage-guard`
 - `make rfc0083-closure-guard`
 
 If one of these fails, the change is not validated, even if a narrow pytest target passed.

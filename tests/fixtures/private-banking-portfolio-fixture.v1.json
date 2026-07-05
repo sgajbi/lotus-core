@@ -1,0 +1,50 @@
+{
+  "schema_version": "private-banking-portfolio-fixture.v1",
+  "fixture_id": "private_banking_portfolio_fixture.v1",
+  "synthetic_data": true,
+  "safe_for_committed_tests": true,
+  "relationships": {
+    "client": {
+      "client_id": "SYNTH_CLIENT_GLOBAL_BALANCED_001",
+      "client_display_label": "SYNTH_CLIENT_GLOBAL_BALANCED",
+      "domicile": "SG"
+    },
+    "account": {
+      "account_id": "SYNTH_ACCOUNT_GLOBAL_BALANCED_001",
+      "account_type": "discretionary_private_banking"
+    },
+    "portfolio": {
+      "portfolio_id": "PB_SYNTH_GLOBAL_BAL_001",
+      "base_currency": "USD",
+      "mandate": "global_balanced_discretionary"
+    },
+    "custody": {
+      "custodian_id": "SYNTH_CUSTODY_SG_001",
+      "booking_center": "Singapore"
+    },
+    "instrument": {
+      "instrument_id": "SYNTH_BOND_USD_IG_001",
+      "security_id": "SYNTH_BOND_USD_IG_001",
+      "asset_class": "fixed_income"
+    },
+    "transaction": {
+      "transaction_id": "SYNTH_TXN_BUY_BOND_001",
+      "transaction_type": "BUY",
+      "trade_currency": "USD",
+      "settlement_currency": "USD"
+    },
+    "cash": {
+      "cash_account_id": "SYNTH_CASH_USD_001",
+      "currency": "USD"
+    },
+    "fx": {
+      "currency_pair": "USD/SGD",
+      "rate_date": "2026-04-10"
+    },
+    "benchmark": {
+      "benchmark_id": "SYNTH_BMK_GLOBAL_BALANCED_60_40",
+      "assignment_version": "2026.04"
+    },
+    "reporting_currency": "SGD"
+  }
+}

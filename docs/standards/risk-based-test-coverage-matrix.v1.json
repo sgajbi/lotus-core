@@ -832,12 +832,12 @@
         },
         {
           "proof_family": "security",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "make quality-bandit-gate",
-            "make security-audit"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#610"
+            "make security-audit",
+            "make synthetic-fixture-leakage-guard"
+          ]
         },
         {
           "proof_family": "integration",

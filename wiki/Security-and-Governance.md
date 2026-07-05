@@ -40,6 +40,8 @@ It is enforced through:
   `src/libs/portfolio-common/portfolio_common/source_data_security.py`
 - FastAPI app security-control coverage in
   `contracts/security/security-control-coverage.v1.json`
+- synthetic fixture, API example, seed example, and generated-evidence leakage governance in
+  `docs/standards/synthetic-test-data-governance.v1.json`
 
 ## HTTP app security controls
 
@@ -101,6 +103,9 @@ posture evidence, not as a code default.
   privileged samples are still field-redacted
 - upload preview and commit enforce byte, row, column, cell-length, content-type, and rate/abuse
   controls before or during parser work
+- committed fixtures, seed examples, API examples, and generated proof artifacts must pass
+  `make synthetic-fixture-leakage-guard`; new reusable fixtures should use `SYNTH_*` identifiers
+  and avoid real-looking client names, emails, account numbers, credentials, and connection strings
 - privileged ingestion ops JWTs must require issuer, audience, expiry, issued-at, replay id,
   principal identity, required ops scope/capability, and `kid`; key rotation uses an active HS256
   key plus previous-key JSON and non-local static-token fallback requires explicit approval
