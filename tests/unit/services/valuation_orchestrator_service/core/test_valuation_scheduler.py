@@ -29,6 +29,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.valuation_orchestrator_service.app.core.valuation_job_publisher import (
     KafkaValuationJobPublisher,
 )
+from src.services.valuation_orchestrator_service.app.core.valuation_job_dispatcher import (
+    ValuationJobDispatcher,
+)
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
@@ -665,6 +668,45 @@ async def test_scheduler_dispatches_claimed_jobs(
     ]
 
     await scheduler._dispatch_jobs(claimed_jobs)
+
+    mock_kafka_producer.publish_message.assert_called_once_with(
+        topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+        key="P1",
+        value={
+            "event_type": None,
+            "schema_version": None,
+            "correlation_id": "corr-1",
+            "traceparent": None,
+            "portfolio_id": "P1",
+            "security_id": "S1",
+            "valuation_date": "2025-08-11",
+            "epoch": 1,
+        },
+        headers=[("correlation_id", b"corr-1")],
+    )
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+
+
+async def test_job_dispatcher_dispatches_claimed_jobs_without_scheduler_loop(
+    mock_kafka_producer: MagicMock,
+):
+    dispatcher = ValuationJobDispatcher(
+        valuation_job_publisher=KafkaValuationJobPublisher(
+            KafkaEventPublisher(mock_kafka_producer)
+        ),
+        dispatch_budget_seconds=10,
+    )
+    claimed_jobs = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+    ]
+
+    await dispatcher.dispatch_jobs(claimed_jobs)
 
     mock_kafka_producer.publish_message.assert_called_once_with(
         topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
