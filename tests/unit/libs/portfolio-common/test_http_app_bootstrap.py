@@ -102,6 +102,8 @@ def test_standard_health_app_exposes_shared_observability_contract():
         schema = client.get("/openapi.json").json()
 
     assert response.status_code == 200
+    assert response.json()["runtime"]["service_name"] == "worker_service_web"
+    assert response.json()["runtime"]["app_version"] == "1.0.0"
     assert response.headers["X-Correlation-ID"] == "WRK-id"
     assert response.headers["X-Request-Id"] == "REQ-id"
     trace_id = response.headers["X-Trace-Id"]

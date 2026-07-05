@@ -8,8 +8,92 @@ from fastapi import HTTPException
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture(autouse=True)
+def _stable_health_metadata_env(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_RUNTIME_PROFILE", raising=False)
+    for env_name in (
+        "LOTUS_GIT_COMMIT_SHA",
+        "LOTUS_GIT_BRANCH",
+        "LOTUS_BUILD_TIMESTAMP",
+        "LOTUS_REPO_URL",
+        "LOTUS_IMAGE_VERSION",
+        "LOTUS_IMAGE_DIGEST",
+        "LOTUS_CI_RUN_ID",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
+
 def _readiness_endpoint(router):
     return next(route.endpoint for route in router.routes if route.path == "/health/ready")
+
+
+def _liveness_endpoint(router):
+    return next(route.endpoint for route in router.routes if route.path == "/health/live")
+
+
+def _assert_runtime_metadata(
+    payload: dict,
+    *,
+    service_name: str = "lotus-core-service",
+    app_version: str = "unknown",
+) -> None:
+    runtime = payload["runtime"]
+    assert runtime["service_name"] == service_name
+    assert runtime["app_version"] == app_version
+    assert runtime["environment"] == "local"
+    assert runtime["runtime_profile"] == "local"
+    assert runtime["started_at_utc"].endswith("Z")
+    assert runtime["uptime_seconds"] >= 0
+    build = runtime["build"]
+    assert build["service_name"] == service_name
+    assert build["git_commit_sha"] == "unknown"
+    assert build["git_branch"] == "unknown"
+    assert build["build_timestamp"] == "unknown"
+    assert build["repo_url"] == "unknown"
+    assert build["image_version"] == "unknown"
+    assert build["image_digest"] == "unknown"
+    assert build["ci_pipeline_run_id"] == "unknown"
+    assert build["oci_labels"]["org.opencontainers.image.revision"] == "unknown"
+
+
+def _assert_ready_payload(
+    payload: dict,
+    *,
+    dependencies: dict[str, str],
+    service_name: str = "lotus-core-service",
+    app_version: str = "unknown",
+) -> None:
+    assert payload["status"] == "ready"
+    assert payload["dependencies"] == dependencies
+    _assert_runtime_metadata(payload, service_name=service_name, app_version=app_version)
+
+
+def _assert_not_ready_payload(
+    payload: dict,
+    *,
+    dependencies: dict[str, str],
+    service_name: str = "lotus-core-service",
+    app_version: str = "unknown",
+) -> None:
+    assert payload["status"] == "not_ready"
+    assert payload["dependencies"] == dependencies
+    _assert_runtime_metadata(payload, service_name=service_name, app_version=app_version)
+
+
+async def test_liveness_probe_includes_safe_runtime_metadata(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_RUNTIME_PROFILE", raising=False)
+    router = health_module.create_health_router(
+        service_name="query_service",
+        app_version="0.2.0",
+    )
+    liveness_probe = _liveness_endpoint(router)
+
+    response = await liveness_probe()
+
+    assert response["status"] == "alive"
+    _assert_runtime_metadata(response, service_name="query_service", app_version="0.2.0")
 
 
 async def test_readiness_probe_ignores_unknown_dependencies_between_valid_checks():
@@ -33,10 +117,10 @@ async def test_readiness_probe_ignores_unknown_dependencies_between_valid_checks
         health_module.check_kafka_health = original_kafka
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"database": "ok", "kafka": "unavailable"},
-    }
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"database": "ok", "kafka": "unavailable"},
+    )
 
 
 async def test_readiness_probe_returns_ready_for_known_dependencies_only():
@@ -45,7 +129,7 @@ async def test_readiness_probe_returns_ready_for_known_dependencies_only():
 
     response = await readiness_probe()
 
-    assert response == {"status": "ready", "dependencies": {}}
+    _assert_ready_payload(response, dependencies={})
 
 
 async def test_readiness_probe_caches_dependency_results_within_ttl(monkeypatch):
@@ -75,8 +159,16 @@ async def test_readiness_probe_caches_dependency_results_within_ttl(monkeypatch)
     )
     readiness_probe = _readiness_endpoint(router)
 
-    assert await readiness_probe() == {"status": "ready", "dependencies": {"database": "ok"}}
-    assert await readiness_probe() == {"status": "ready", "dependencies": {"database": "ok"}}
+    _assert_ready_payload(
+        await readiness_probe(),
+        dependencies={"database": "ok"},
+        service_name="query_service",
+    )
+    _assert_ready_payload(
+        await readiness_probe(),
+        dependencies={"database": "ok"},
+        service_name="query_service",
+    )
 
     assert calls == 1
     observe_health_dependency_check.assert_called_once()
@@ -142,10 +234,11 @@ async def test_readiness_probe_classifies_db_timeout(monkeypatch):
         await readiness_probe()
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"database": "timeout"},
-    }
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"database": "timeout"},
+        service_name="query_service",
+    )
     observe_health_dependency_check.assert_called_once()
     assert observe_health_dependency_check.call_args.kwargs["service"] == "query_service"
     assert observe_health_dependency_check.call_args.kwargs["dependency"] == "database"
@@ -171,10 +264,7 @@ async def test_readiness_probe_classifies_kafka_timeout(monkeypatch):
         await readiness_probe()
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"kafka": "timeout"},
-    }
+    _assert_not_ready_payload(exc_info.value.detail, dependencies={"kafka": "timeout"})
 
 
 async def test_readiness_probe_classifies_kafka_misconfiguration(monkeypatch):
@@ -202,10 +292,11 @@ async def test_readiness_probe_classifies_kafka_misconfiguration(monkeypatch):
         await readiness_probe()
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"kafka": "misconfigured"},
-    }
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"kafka": "misconfigured"},
+        service_name="event_replay_service",
+    )
     observe_health_dependency_check.assert_called_once()
     assert observe_health_dependency_check.call_args.kwargs["service"] == "event_replay_service"
     assert observe_health_dependency_check.call_args.kwargs["dependency"] == "kafka"
@@ -238,10 +329,11 @@ async def test_readiness_probe_classifies_dependency_exception(monkeypatch):
         await readiness_probe()
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"database": "error"},
-    }
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"database": "error"},
+        service_name="query_service",
+    )
     observe_health_dependency_check.assert_called_once()
     assert observe_health_dependency_check.call_args.kwargs["service"] == "query_service"
     assert observe_health_dependency_check.call_args.kwargs["dependency"] == "database"
@@ -272,13 +364,13 @@ async def test_readiness_probe_caches_not_ready_dependency_results(monkeypatch):
     with pytest.raises(HTTPException) as second_exc_info:
         await readiness_probe()
 
-    assert (
-        first_exc_info.value.detail
-        == second_exc_info.value.detail
-        == {
-            "status": "not_ready",
-            "dependencies": {"database": "unavailable"},
-        }
+    _assert_not_ready_payload(
+        first_exc_info.value.detail,
+        dependencies={"database": "unavailable"},
+    )
+    _assert_not_ready_payload(
+        second_exc_info.value.detail,
+        dependencies={"database": "unavailable"},
     )
     assert calls == 1
 
@@ -304,7 +396,7 @@ async def test_readiness_probe_reports_mixed_dependency_states(monkeypatch):
         await readiness_probe()
 
     assert exc_info.value.status_code == 503
-    assert exc_info.value.detail == {
-        "status": "not_ready",
-        "dependencies": {"database": "ok", "kafka": "error"},
-    }
+    _assert_not_ready_payload(
+        exc_info.value.detail,
+        dependencies={"database": "ok", "kafka": "error"},
+    )

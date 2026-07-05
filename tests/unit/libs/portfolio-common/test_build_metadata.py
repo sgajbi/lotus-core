@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from portfolio_common.build_metadata import (
     BUILD_METADATA_RESPONSE_FIELDS,
+    MAX_METADATA_VALUE_LENGTH,
     OCI_METADATA_LABELS,
     build_metadata_payload,
 )
@@ -27,6 +28,23 @@ def test_build_metadata_payload_uses_unknown_for_missing_values(monkeypatch) -> 
     for field_name in BUILD_METADATA_RESPONSE_FIELDS:
         assert getattr(payload, field_name) == "unknown"
     assert payload.oci_labels == {label_name: "unknown" for label_name in OCI_METADATA_LABELS}
+
+
+def test_build_metadata_payload_bounds_and_sanitizes_values(monkeypatch) -> None:
+    long_branch = "feature/" + ("a" * (MAX_METADATA_VALUE_LENGTH + 20)) + "\nunsafe"
+    monkeypatch.setenv("LOTUS_GIT_COMMIT_SHA", "abc123")
+    monkeypatch.setenv("LOTUS_GIT_BRANCH", long_branch)
+    monkeypatch.setenv("LOTUS_BUILD_TIMESTAMP", "2026-07-05T12:34:56Z")
+    monkeypatch.setenv("LOTUS_REPO_URL", "https://github.com/example/lotus-core")
+    monkeypatch.setenv("LOTUS_IMAGE_VERSION", "abc123")
+    monkeypatch.setenv("LOTUS_IMAGE_DIGEST", "sha256:123")
+    monkeypatch.setenv("LOTUS_CI_RUN_ID", "987654")
+
+    payload = build_metadata_payload(service_name="query_service")
+
+    assert len(payload.git_branch) == MAX_METADATA_VALUE_LENGTH
+    assert "\n" not in payload.git_branch
+    assert payload.oci_labels["org.opencontainers.image.ref.name"] == payload.git_branch
 
 
 def test_version_endpoint_exposes_embedded_image_metadata(monkeypatch) -> None:

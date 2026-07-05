@@ -554,5 +554,8 @@ def create_standard_health_app(
         cors_allow_origins=cors_allow_origins,
         trusted_hosts=trusted_hosts,
     )
-    include_routers(app, create_health_router(*dependencies, service_name=service_name))
+    include_routers(
+        app,
+        create_health_router(*dependencies, service_name=service_name, app_version=version),
+    )
     return app
