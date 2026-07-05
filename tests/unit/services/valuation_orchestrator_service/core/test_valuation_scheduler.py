@@ -26,11 +26,14 @@ from portfolio_common.scheduler_dispatch_recovery import (
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.valuation_orchestrator_service.app.core.valuation_job_publisher import (
-    KafkaValuationJobPublisher,
+from src.services.valuation_orchestrator_service.app.core.valuation_backfill_planner import (
+    ValuationBackfillPlanner,
 )
 from src.services.valuation_orchestrator_service.app.core.valuation_job_dispatcher import (
     ValuationJobDispatcher,
+)
+from src.services.valuation_orchestrator_service.app.core.valuation_job_publisher import (
+    KafkaValuationJobPublisher,
 )
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
@@ -180,7 +183,7 @@ async def test_scheduler_batches_backfill_jobs_across_states_in_bounded_chunks(
     scheduler: ValuationScheduler,
     mock_dependencies: dict,
 ):
-    scheduler._backfill_upsert_chunk_size = 3
+    scheduler._valuation_backfill_planner = ValuationBackfillPlanner(backfill_upsert_chunk_size=3)
     mock_repo = mock_dependencies["repo"]
     mock_job_repo = mock_dependencies["job_repo"]
 
@@ -232,6 +235,50 @@ async def test_scheduler_batches_backfill_jobs_across_states_in_bounded_chunks(
     )
     assert second_chunk[0].correlation_id == (
         "SCHEDULER_BACKFILL:P1:S2:1:2025-08-12:2025-08-11T09:30:00+00:00"
+    )
+
+
+async def test_backfill_planner_batches_jobs_without_scheduler_loop():
+    planner = ValuationBackfillPlanner(backfill_upsert_chunk_size=2)
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_job_repo = AsyncMock(spec=ValuationJobRepository)
+    mock_state_repo = AsyncMock(spec=PositionStateRepository)
+    latest_business_date = date(2025, 8, 12)
+    states_to_backfill = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            updated_at=datetime(2025, 8, 10, 9, 30, tzinfo=timezone.utc),
+        )
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_states_needing_backfill.return_value = states_to_backfill
+    mock_repo.get_first_open_dates_for_keys.return_value = {("P1", "S1", 1): date(2025, 8, 10)}
+    mock_job_repo.upsert_jobs.return_value = 2
+
+    await planner.create_backfill_jobs(
+        repo=mock_repo,
+        job_repo=mock_job_repo,
+        position_state_repo=mock_state_repo,
+        batch_size=100,
+    )
+
+    mock_repo.get_states_needing_backfill.assert_awaited_once_with(
+        latest_business_date,
+        100,
+    )
+    mock_state_repo.bulk_update_states.assert_not_awaited()
+    mock_job_repo.upsert_jobs.assert_awaited_once()
+    scheduled_jobs = mock_job_repo.upsert_jobs.await_args.args[0]
+    assert [job.valuation_date for job in scheduled_jobs] == [
+        date(2025, 8, 11),
+        date(2025, 8, 12),
+    ]
+    assert scheduled_jobs[0].correlation_id == (
+        "SCHEDULER_BACKFILL:P1:S1:1:2025-08-11:2025-08-10T09:30:00+00:00"
     )
 
 
