@@ -28,6 +28,9 @@ This repository adopts the platform-wide standard defined in lotus-platform/Scal
 - lotus-core does not allow hidden in-memory caches for persistence-critical transaction, position, or valuation state.
 - Any cache use must define TTL, invalidation ownership, and stale-read behavior before release.
 - Invalidation ownership remains with the service that owns the source domain entity and write path.
+- Reference-data caches must carry source version or effective timestamp metadata, verify the
+  source version before serving fresh cached values when rule changes affect calculations, and emit
+  bounded hit/miss/reload/stale/missing-rule metrics.
 
 ## Availability Baseline
 

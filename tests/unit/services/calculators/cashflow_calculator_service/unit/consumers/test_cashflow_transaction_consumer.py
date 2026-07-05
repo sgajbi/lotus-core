@@ -1,7 +1,7 @@
 # tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py  # noqa: E501
 import asyncio
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
@@ -23,6 +23,7 @@ from src.services.calculators.cashflow_calculator_service.app.repositories.cashf
     CashflowRepository,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_rules_repository import (  # noqa: E501
+    CashflowRuleSetVersion,
     CashflowRulesRepository,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
@@ -541,6 +542,10 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
             )
         ],
     ]
+    rules_repo.get_rule_set_version.side_effect = [
+        CashflowRuleSetVersion(rule_count=1, latest_updated_at=None),
+        CashflowRuleSetVersion(rule_count=1, latest_updated_at=None),
+    ]
 
     with (
         patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
@@ -552,6 +557,9 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
             "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
             side_effect=[10.0, 11.0, 400.0, 401.0, 402.0, 403.0],
         ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.observe_cashflow_rule_cache_event"
+        ) as cache_metric,
     ):
         first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
         second_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
@@ -563,6 +571,16 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
         assert second_rule.timing == "BOD"
         assert third_rule.timing == "EOD"
         assert rules_repo.get_all_rules.await_count == 2
+        assert rules_repo.get_rule_set_version.await_count == 1
+        cache_metric.assert_has_calls(
+            [
+                call("miss", "empty"),
+                call("reload", "repository_load"),
+                call("hit", "fresh"),
+                call("stale", "ttl_expired"),
+                call("reload", "repository_load"),
+            ]
+        )
 
 
 async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
@@ -583,6 +601,10 @@ async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
             is_portfolio_flow=False,
         )
     ]
+    rules_repo.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
 
     with (
         patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
@@ -600,6 +622,7 @@ async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
         assert rule is not None
         assert rule.classification == "INVESTMENT_OUTFLOW"
         assert rules_repo.get_all_rules.await_count == 1
+        rules_repo.get_rule_set_version.assert_not_awaited()
 
 
 async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
@@ -631,6 +654,10 @@ async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
             )
         ],
     ]
+    rules_repo.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
 
     with (
         patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
@@ -642,12 +669,24 @@ async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
             "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
             side_effect=[100.0, 110.0],
         ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.observe_cashflow_rule_cache_event"
+        ) as cache_metric,
     ):
         rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "DIVIDEND")
         assert rule is not None
         assert rule.classification == "INCOME"
         assert isinstance(rule, CachedCashflowRule)
         assert rules_repo.get_all_rules.await_count == 2
+        rules_repo.get_rule_set_version.assert_not_awaited()
+        cache_metric.assert_has_calls(
+            [
+                call("miss", "empty"),
+                call("reload", "repository_load"),
+                call("missing_rule", "reload"),
+                call("reload", "repository_load"),
+            ]
+        )
 
 
 async def test_invalidate_cashflow_rule_cache_forces_reload(
@@ -679,6 +718,10 @@ async def test_invalidate_cashflow_rule_cache_forces_reload(
             )
         ],
     ]
+    rules_repo.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
 
     with (
         patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
@@ -699,6 +742,7 @@ async def test_invalidate_cashflow_rule_cache_forces_reload(
         assert reloaded_rule is not None
         assert reloaded_rule.timing == "EOD"
         assert rules_repo.get_all_rules.await_count == 2
+        rules_repo.get_rule_set_version.assert_not_awaited()
 
 
 async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
@@ -715,6 +759,10 @@ async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
             is_portfolio_flow=False,
         )
     ]
+    rules_repo.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
 
     with patch(
         "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
@@ -726,6 +774,7 @@ async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
     assert isinstance(rule, CachedCashflowRule)
     assert rule.classification == "FX_BUY"
     assert rule.timing == "EOD"
+    assert rule.rule_set_version == "cashflow-rules:v1:count=1:latest_updated_at=none"
 
 
 async def test_process_message_skips_non_cash_fx_contract_lifecycle_components(
@@ -1407,6 +1456,10 @@ async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
             is_portfolio_flow=False,
         )
     ]
+    rules_repo.get_rule_set_version.return_value = CashflowRuleSetVersion(
+        rule_count=1,
+        latest_updated_at=None,
+    )
 
     with (
         patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
@@ -1426,3 +1479,66 @@ async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
         assert results[0] is not None
         assert results[1] is not None
         assert rules_repo.get_all_rules.await_count == 1
+        assert rules_repo.get_rule_set_version.await_count <= 1
+
+
+async def test_get_rule_for_transaction_reloads_when_source_version_changes(
+    cashflow_consumer: CashflowCalculatorConsumer,
+):
+    from src.services.calculators.cashflow_calculator_service.app.consumers import (
+        transaction_consumer,
+    )
+
+    first_updated_at = datetime(2026, 4, 10, 8, 0, tzinfo=timezone.utc)
+    second_updated_at = datetime(2026, 4, 10, 9, 0, tzinfo=timezone.utc)
+    mock_db_session = AsyncMock(spec=AsyncSession)
+    rules_repo = AsyncMock(spec=CashflowRulesRepository)
+    rules_repo.get_all_rules.side_effect = [
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="BOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+                updated_at=first_updated_at,
+            )
+        ],
+        [
+            CashflowRule(
+                transaction_type="BUY",
+                classification="INVESTMENT_OUTFLOW",
+                timing="EOD",
+                is_position_flow=True,
+                is_portfolio_flow=False,
+                updated_at=second_updated_at,
+            )
+        ],
+    ]
+    rules_repo.get_rule_set_version.side_effect = [
+        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_updated_at),
+        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_updated_at),
+    ]
+
+    with (
+        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            return_value=rules_repo,
+        ),
+        patch(
+            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            side_effect=[10.0, 11.0, 12.0, 13.0],
+        ),
+    ):
+        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        second_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+
+    assert first_rule is not None
+    assert second_rule is not None
+    assert first_rule.timing == "BOD"
+    assert second_rule.timing == "EOD"
+    assert first_rule.rule_set_version != second_rule.rule_set_version
+    assert second_rule.rule_set_effective_at_utc == second_updated_at
+    assert rules_repo.get_all_rules.await_count == 2
+    assert rules_repo.get_rule_set_version.await_count == 2
