@@ -29,7 +29,6 @@ from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
-    get_core_snapshot_service,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -1079,11 +1078,6 @@ async def test_static_helpers_cover_zero_total_and_delta_paths():
         projected_total=Decimal("0"),
     )
     assert delta_rows[0].delta_quantity == Decimal("-1")
-
-
-async def test_get_core_snapshot_service_factory_returns_service():
-    service = get_core_snapshot_service(db=AsyncMock())
-    assert isinstance(service, CoreSnapshotService)
 
 
 async def test_core_snapshot_request_fingerprint_is_deterministic(mock_dependencies):

@@ -1528,6 +1528,9 @@ Most relevant current governance:
      provider so the loop can be tested without real repositories or Kafka. Keep the scheduler as a
      small cadence/compatibility wrapper; do not reintroduce backfill, watermark, reprocessing,
      stale-reset, dispatch, publisher, or repository construction policy into the loop.
+123. Core snapshot HTTP dependency factories belong in the query-control-plane dependency module,
+     not in `CoreSnapshotService`. Keep `CoreSnapshotService` free of FastAPI dependency imports;
+     bounded snapshot composition collaborators should remain delivery-framework agnostic.
 
 ## Context Maintenance Rule
 
