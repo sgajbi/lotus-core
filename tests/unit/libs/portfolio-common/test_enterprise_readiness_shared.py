@@ -513,6 +513,37 @@ async def test_shared_enterprise_middleware_uses_injected_audit_emitter_on_denia
 
 
 @pytest.mark.asyncio
+async def test_shared_enterprise_middleware_allows_operational_paths_without_headers() -> None:
+    runtime = _runtime(read_authz_enabled=True, require_capability_rules=True)
+    audit_emitter = Mock()
+    middleware = build_enterprise_audit_middleware(
+        runtime=runtime,
+        audit_emitter=audit_emitter,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/health/live",
+            "headers": [],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "client": ("127.0.0.1", 1234),
+            "scheme": "http",
+        }
+    )
+
+    async def _call_next(_: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware(request, _call_next)
+
+    assert response.status_code == 200
+    assert response.headers["X-Enterprise-Policy-Version"] == "policy-v1"
+    audit_emitter.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_shared_enterprise_middleware_normalizes_audit_identity_values() -> None:
     runtime = _runtime(read_authz_enabled=True)
     audit_emitter = Mock()

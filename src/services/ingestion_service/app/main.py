@@ -4,15 +4,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
-from portfolio_common.enterprise_readiness import (
-    build_default_enterprise_audit_middleware,
-    validate_default_enterprise_runtime_config,
-)
 from portfolio_common.health import create_health_router
 from portfolio_common.http_app_bootstrap import configure_standard_http_app, include_routers
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.logging_utils import generate_correlation_id, setup_logging
 
+from .enterprise_readiness import (
+    build_ingestion_enterprise_audit_middleware,
+    validate_enterprise_runtime_config,
+)
 from .ops_controls import (
     ingestion_write_rate_limit_contract,
     validate_ingestion_write_rate_limit_contract,
@@ -38,7 +38,7 @@ UPLOAD_MULTIPART_OVERHEAD_BYTES = 64 * 1024
 UPLOAD_WRITE_ENDPOINTS = frozenset({"/ingest/uploads/preview", "/ingest/uploads/commit"})
 setup_logging()
 logger = logging.getLogger(__name__)
-validate_default_enterprise_runtime_config(service_name=SERVICE_NAME, logger=logger)
+validate_enterprise_runtime_config()
 
 app_state = {}
 
@@ -103,9 +103,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.middleware("http")(
-    build_default_enterprise_audit_middleware(
-        service_name=SERVICE_NAME,
-        logger=logger,
+    build_ingestion_enterprise_audit_middleware(
         max_write_payload_bytes_resolver=_ingestion_write_payload_budget,
     )
 )

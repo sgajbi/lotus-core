@@ -1178,6 +1178,13 @@ Most relevant current governance:
     `/**` suffixes such as `GET /portfolios/{portfolio_id}/**` only when the rule intentionally
     authorizes a subtree. Do not rely on prefix matching for authorization examples, tests, source
     data rules, or service-local capability overrides.
+91. Ingestion write APIs use a service-local enterprise-readiness wrapper over
+    `portfolio_common.enterprise_readiness` with default capability rules for every canonical
+    `/ingest/*` and `/reprocess/*` write route. Future ingestion write routes must update
+    `ingestion_write_capability_rules()` and keep the route-coverage test green; do not rely on
+    `ENTERPRISE_CAPABILITY_RULES_JSON` alone for production write-plane policy. Shared enterprise
+    middleware keeps health, metrics, OpenAPI, docs, ReDoc, and version endpoints on an explicit
+    unauthenticated operational allowlist even when read authorization is enabled.
 
 ## Context Maintenance Rule
 

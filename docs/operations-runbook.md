@@ -224,7 +224,8 @@ This guard must pass when adding a FastAPI app, changing an app bootstrap path, 
 HTTP security behavior. It checks that every FastAPI app is listed in the matrix and that required
 controls have implementation anchors for secure response headers, deny-by-default CORS, trusted
 host enforcement, metrics access policy, safe unhandled-error responses, auth/audit middleware,
-payload limits, and upload limits where relevant.
+payload limits, upload limits where relevant, and the explicit operational unauthenticated
+allowlist for health, metrics, OpenAPI/docs, and version routes.
 
 Operational knobs:
 

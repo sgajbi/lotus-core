@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Protocol
 
@@ -35,6 +35,17 @@ READ_AUTHZ_METHODS = {"GET", "HEAD"}
 CAPABILITY_RULE_METHODS = WRITE_METHODS | READ_AUTHZ_METHODS
 REQUIRED_HEADERS = {"x-actor-id", "x-tenant-id", "x-role", "x-correlation-id"}
 CAPABILITY_SUBTREE_WILDCARD = "/**"
+ENTERPRISE_UNAUTHENTICATED_PATHS = frozenset(
+    {
+        "/docs",
+        "/health/live",
+        "/health/ready",
+        "/metrics",
+        "/openapi.json",
+        "/redoc",
+        "/version",
+    }
+)
 
 
 class EnterpriseSettings(Protocol):
@@ -73,6 +84,7 @@ class EnterpriseReadinessRuntime:
     env_bool: Callable[[str, bool], bool]
     env_int: Callable[[str, int], int]
     logger: logging.Logger
+    default_capability_rules: Callable[[], dict[str, str]] = field(default=lambda: {})
 
     def env_enabled(self, name: str, default: str = "true") -> bool:
         settings_attr = {
@@ -156,6 +168,7 @@ class EnterpriseReadinessRuntime:
     def load_capability_rules(self) -> dict[str, str]:
         rules = {
             **source_data_capability_rules(),
+            **self.default_capability_rules(),
             **self.load_json_map("ENTERPRISE_CAPABILITY_RULES_JSON"),
         }
         normalized: dict[str, str] = {}
@@ -522,6 +535,11 @@ def build_enterprise_audit_middleware(
         if request.method in WRITE_METHODS and content_length > max_write_payload_bytes:
             return JSONResponse(status_code=413, content={"detail": "payload_too_large"})
 
+        if _is_unauthenticated_enterprise_path(request.url.path):
+            response = await call_next(request)
+            response.headers["X-Enterprise-Policy-Version"] = runtime.enterprise_policy_version()
+            return response
+
         authorized, reason = runtime.authorize_request(
             request.method, request.url.path, dict(request.headers)
         )
@@ -571,6 +589,10 @@ def build_enterprise_audit_middleware(
         return response
 
     return middleware
+
+
+def _is_unauthenticated_enterprise_path(path: str) -> bool:
+    return _normalize_path(path) in ENTERPRISE_UNAUTHENTICATED_PATHS
 
 
 def _request_header_value(request: Request, name: str, default: str) -> str:
