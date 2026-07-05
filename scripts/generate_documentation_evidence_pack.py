@@ -20,6 +20,7 @@ DOCUMENTATION_SURFACES = (
     "docs/architecture/README.md",
     "docs/architecture/CODEBASE-REVIEW-LEDGER.md",
     "docs/standards/api-route-catalog.v1.json",
+    "docs/standards/front-door-sync.v1.json",
     "docs/standards/rfc-status-ledger.v1.json",
     "docs/operations-runbook.md",
     "docs/supported-features.md",
@@ -190,6 +191,11 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
             command=[sys.executable, "scripts/wiki_validation_guard.py"],
         ),
         _run_command(
+            name="front_door_sync_check",
+            command=[sys.executable, "scripts/front_door_sync_guard.py"],
+            artifact_paths=(REPO_ROOT / "docs" / "standards" / "front-door-sync.v1.json",),
+        ),
+        _run_command(
             name="api_catalog_generation",
             command=[
                 sys.executable,
@@ -220,6 +226,7 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
         manifest_path,
         api_vocabulary_artifact,
         REPO_ROOT / "docs" / "standards" / "api-route-catalog.v1.json",
+        REPO_ROOT / "docs" / "standards" / "front-door-sync.v1.json",
     ]
     return {
         "app": "lotus-core",
