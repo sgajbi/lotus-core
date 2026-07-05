@@ -1,4 +1,5 @@
 # tests/unit/libs/portfolio-common/test_kafka_consumer.py
+import asyncio
 import json
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ from portfolio_common.kafka_consumer import (
     RetryableConsumerError,
     classify_dlq_reason_code,
 )
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from portfolio_common.logging_utils import correlation_id_var, traceparent_var
 from pydantic import ValidationError
 
@@ -138,6 +140,175 @@ async def test_run_loop_success_path(
     # ASSERT
     test_consumer.process_message_mock.assert_awaited_once_with(mock_msg)
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+
+
+async def test_run_loop_uses_configured_poll_timeout(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    timeouts = []
+    mock_msg = create_mock_message("key-poll-timeout", {"data": "value"})
+
+    def poll(timeout):
+        timeouts.append(timeout)
+        return None if len(timeouts) == 1 else mock_msg
+
+    mock_confluent_consumer.poll.side_effect = poll
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(poll_timeout_seconds=0.25),
+    )
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        consumer.shutdown()
+
+    consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer", return_value=mock_kafka_producer
+        ),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_poll_idle_duration"),
+    ):
+        await consumer.run()
+
+    assert timeouts == [0.25, 0.25]
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+
+
+async def test_concurrent_profile_does_not_commit_before_processing_completion(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    msg_partition_0 = create_mock_message(
+        "key-concurrent-0",
+        {"data": "value-0"},
+        partition=0,
+        offset=1,
+    )
+    msg_partition_1 = create_mock_message(
+        "key-concurrent-1",
+        {"data": "value-1"},
+        partition=1,
+        offset=2,
+    )
+    mock_confluent_consumer.poll.side_effect = [msg_partition_0, msg_partition_1]
+    both_started = asyncio.Event()
+    release_processing = asyncio.Event()
+    started_partitions = []
+    completed_partitions = []
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(max_in_flight_messages=2),
+    )
+
+    async def process_message(msg):
+        started_partitions.append(msg.partition())
+        if len(started_partitions) == 2:
+            both_started.set()
+        await release_processing.wait()
+        completed_partitions.append(msg.partition())
+        if len(completed_partitions) == 2:
+            consumer.shutdown()
+
+    consumer.process_message_mock.side_effect = process_message
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer", return_value=mock_kafka_producer
+        ),
+        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
+    ):
+        run_task = asyncio.create_task(consumer.run())
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+        mock_confluent_consumer.commit.assert_not_called()
+        release_processing.set()
+        await run_task
+
+    assert sorted(started_partitions) == [0, 1]
+    assert sorted(completed_partitions) == [0, 1]
+    assert mock_confluent_consumer.commit.call_count == 2
+
+
+async def test_concurrent_profile_preserves_partition_order(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    first_msg = create_mock_message(
+        "key-same-partition-1",
+        {"data": "value-1"},
+        partition=0,
+        offset=1,
+    )
+    second_msg = create_mock_message(
+        "key-same-partition-2",
+        {"data": "value-2"},
+        partition=0,
+        offset=2,
+    )
+    polled_messages = [first_msg, second_msg]
+
+    def poll(_timeout):
+        return polled_messages.pop(0) if polled_messages else None
+
+    mock_confluent_consumer.poll.side_effect = poll
+    first_started = asyncio.Event()
+    second_started = asyncio.Event()
+    release_first = asyncio.Event()
+    processed_offsets = []
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(
+            max_in_flight_messages=2,
+            poll_timeout_seconds=0.01,
+        ),
+    )
+
+    async def process_message(msg):
+        if msg.offset() == 1:
+            first_started.set()
+            await release_first.wait()
+        else:
+            second_started.set()
+            consumer.shutdown()
+        processed_offsets.append(msg.offset())
+
+    consumer.process_message_mock.side_effect = process_message
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer", return_value=mock_kafka_producer
+        ),
+        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
+    ):
+        run_task = asyncio.create_task(consumer.run())
+        await asyncio.wait_for(first_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert not second_started.is_set()
+        mock_confluent_consumer.commit.assert_not_called()
+        release_first.set()
+        await asyncio.wait_for(second_started.wait(), timeout=1)
+        await run_task
+
+    assert processed_offsets == [1, 2]
+    committed_messages = [
+        call.kwargs["message"] for call in mock_confluent_consumer.commit.call_args_list
+    ]
+    assert committed_messages == [first_msg, second_msg]
 
 
 async def test_run_loop_failure_sends_to_dlq_and_commits(

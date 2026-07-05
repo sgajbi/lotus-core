@@ -10,6 +10,10 @@ from portfolio_common.config import (
     _validate_consumer_override_relationships,
     get_kafka_consumer_runtime_overrides,
 )
+from portfolio_common.kafka_consumer_execution import (
+    KafkaConsumerExecutionProfile,
+    load_kafka_consumer_execution_profile,
+)
 from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 
@@ -295,6 +299,64 @@ def test_kafka_retryable_failure_budget_strict_profile_rejects_invalid_env(monke
         importlib.reload(config_module)
     monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS")
     importlib.reload(config_module)
+
+
+def test_kafka_consumer_execution_profile_defaults_preserve_serial_behavior(monkeypatch):
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON", raising=False)
+    monkeypatch.delenv("LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON", raising=False)
+
+    profile = load_kafka_consumer_execution_profile("test-group")
+
+    assert profile == KafkaConsumerExecutionProfile()
+    assert profile.poll_timeout_seconds == 1.0
+    assert profile.max_in_flight_messages == 1
+    assert profile.ordering_key == "partition"
+    assert profile.per_key_concurrency == 1
+
+
+def test_kafka_consumer_execution_profile_merges_group_override(monkeypatch):
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",
+        '{"poll_timeout_seconds": 0.5, "shutdown_drain_timeout_seconds": 15}',
+    )
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON",
+        '{"test-group": {"max_in_flight_messages": 2}}',
+    )
+
+    profile = load_kafka_consumer_execution_profile("test-group")
+
+    assert profile.poll_timeout_seconds == 0.5
+    assert profile.max_in_flight_messages == 2
+    assert profile.shutdown_drain_timeout_seconds == 15
+    assert profile.ordering_key == "partition"
+
+
+def test_kafka_consumer_execution_profile_local_invalid_falls_back(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",
+        '{"poll_timeout_seconds": 0}',
+    )
+
+    profile = load_kafka_consumer_execution_profile("test-group")
+
+    assert profile == KafkaConsumerExecutionProfile()
+
+
+def test_kafka_consumer_execution_profile_strict_rejects_invalid(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",
+        '{"per_key_concurrency": 2}',
+    )
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match="LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON",
+    ):
+        load_kafka_consumer_execution_profile("test-group")
 
 
 def test_canonical_topic_env_overrides_default_runtime_name(monkeypatch):

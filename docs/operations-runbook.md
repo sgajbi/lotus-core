@@ -161,10 +161,29 @@ telemetry:
 | --- | --- | --- |
 | `kafka_consumer_events_total` | `service`, `topic`, `group_id`, `outcome`, `reason` | Count processing attempts, successes, retryable failures, terminal failures, DLQ outcomes, commit failures, poll errors, critical loop exits, and shutdown failures. |
 | `kafka_consumer_processing_duration_seconds` | `service`, `topic`, `group_id` | Track processing duration for every consumed message. |
+| `kafka_consumer_in_flight_messages` | `service`, `topic`, `group_id` | Track messages currently in application processing. |
+| `kafka_consumer_poll_idle_seconds` | `service`, `topic`, `group_id` | Track poll calls that returned no message. |
+| `kafka_consumer_backlog_pressure_total` | `service`, `topic`, `group_id`, `reason` | Count times polling paused or messages queued because in-flight or partition-order capacity was full. |
 
 Use these for worker fleet dashboards and incident triage. Keep message keys, offsets, payload
 fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
 metric labels; use logs, DLQ evidence, replay audit, and support APIs for drill-through.
+
+## Kafka Consumer Execution Profiles
+
+Consumers that inherit `BaseConsumer` load a shared execution profile. Defaults preserve historical
+serial behavior:
+
+```powershell
+LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_DEFAULTS_JSON='{"poll_timeout_seconds":1,"max_in_flight_messages":1,"ordering_key":"partition","per_key_concurrency":1,"shutdown_drain_timeout_seconds":30,"overload_behavior":"pause_poll"}'
+LOTUS_CORE_KAFKA_CONSUMER_EXECUTION_GROUP_OVERRIDES_JSON='{"consumer-group-id":{"poll_timeout_seconds":0.5,"max_in_flight_messages":2}}'
+```
+
+Only raise `max_in_flight_messages` for workers that are safe to process concurrently across Kafka
+partitions. The shared loop still processes at most one message per partition at a time, pauses
+polling when ordered same-partition work is queued, and commits offsets only after processing or DLQ
+publication completes. `per_key_concurrency` must remain `1` until a separate ordered commit manager
+is designed and tested.
 
 ## Kafka Producer Metrics
 
