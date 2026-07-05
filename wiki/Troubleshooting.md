@@ -2,6 +2,16 @@
 
 ## Common issues
 
+Executable incident playbooks are maintained in
+`contracts/operations/incident-playbooks.v1.json`, summarized in
+[Incident Playbooks](../docs/operations/Incident-Playbooks.md), and validated by
+`make incident-playbook-guard`.
+
+Use the guarded playbook IDs for incident classification: `ingestion-stuck-failed`, `dlq-growth`,
+`replay-failure`, `outbox-backlog`, `valuation-aggregation-lag`, `stale-source-data`,
+`reconciliation-failure`, `readiness-failure`, `database-connectivity`, `kafka-connectivity`, and
+`security-audit-denial-spikes`.
+
 ### A route exists but you are unsure which service should own it
 
 Use:

@@ -68,6 +68,10 @@
   protects `docs/supported-features.md` and `wiki/Supported-Features.md` against unsupported
   capability claims, missing evidence links, stale feature status, and missing fail-closed or
   downstream ownership caveats
+- `make incident-playbook-guard`
+  protects executable incident playbooks for ingestion, DLQ, replay, outbox, valuation,
+  aggregation, stale source data, reconciliation, readiness, database, Kafka, and security/audit
+  incidents, including safe command and read-only database-check posture
 - `make security-control-coverage-guard`
   protects the FastAPI app security-control matrix for standard bootstrap, secure headers, CORS,
   metrics access, auth/audit, payload limits, upload limits, allowlists, and safe errors

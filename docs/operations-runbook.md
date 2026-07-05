@@ -5,6 +5,19 @@
 This runbook summarizes operator-facing posture for `lotus-core` quality, readiness, and validation.
 Detailed product and scenario-specific runbooks remain under `docs/operations/`.
 
+Executable incident playbooks are maintained in
+`contracts/operations/incident-playbooks.v1.json` and summarized in
+`docs/operations/Incident-Playbooks.md`. They are validated by:
+
+```powershell
+make incident-playbook-guard
+```
+
+The guarded playbook set covers `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`,
+`outbox-backlog`, `valuation-aggregation-lag`, `stale-source-data`, `reconciliation-failure`,
+`readiness-failure`, `database-connectivity`, `kafka-connectivity`, and
+`security-audit-denial-spikes`.
+
 ## Initial Quality Baseline Commands
 
 ```powershell

@@ -468,6 +468,13 @@ Important validation expectations:
    owner, implementation modules/routes, source-data products, tests, validation evidence,
    current status, fail-closed limitations, safe demo claims, prohibited claims, and downstream
    ownership caveats.
+9. Incident playbooks are contract-backed. Keep
+   `contracts/operations/incident-playbooks.v1.json`,
+   `docs/operations/Incident-Playbooks.md`, `docs/operations-runbook.md`,
+   `wiki/Operations-Runbook.md`, and `wiki/Troubleshooting.md` aligned through
+   `make incident-playbook-guard`. Every runtime failure family must include symptoms, metrics,
+   API checks, read-only database checks, expected fields, containment, escalation, and
+   post-incident evidence. Do not add destructive commands to operator playbooks.
 
 ## Standards And RFCs That Govern This Repository
 

@@ -156,7 +156,12 @@ def _validate_runbooks() -> DocumentationEvidenceCheck:
             REPO_ROOT / "wiki/Operations-Runbook.md",
         ),
     )
-    ok = not missing_terms and link_check.ok
+    incident_playbook_check = _run_command(
+        name="incident_playbook_guard",
+        command=[sys.executable, "scripts/incident_playbook_guard.py"],
+        artifact_paths=(REPO_ROOT / "contracts" / "operations" / "incident-playbooks.v1.json",),
+    )
+    ok = not missing_terms and link_check.ok and incident_playbook_check.ok
     return _check(
         "runbook_validation",
         ok,
@@ -164,6 +169,7 @@ def _validate_runbooks() -> DocumentationEvidenceCheck:
             "required_terms": list(RUNBOOK_TERMS),
             "missing_terms": missing_terms,
             "link_validation": link_check.details,
+            "incident_playbook_guard": incident_playbook_check.details,
         },
     )
 
