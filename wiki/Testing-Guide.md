@@ -84,6 +84,7 @@ Use the manifest instead of inventing ad hoc pytest selections when you need par
 - `make event-runtime-contract-guard`
 - `make synthetic-fixture-leakage-guard`
 - `make test-lane-governance-guard`
+- `make concurrency-duplicate-delivery-guard`
 - `make rfc0083-closure-guard`
 
 If one of these fails, the change is not validated, even if a narrow pytest target passed.
@@ -97,3 +98,6 @@ If one of these fails, the change is not validated, even if a narrow pytest targ
 5. avoid superficial coverage that does not meaningfully protect the system-of-record contract
 6. keep integration, DB-backed, and live-worker tests in their governed lanes; flaky quarantine
    requires an owner, issue, reason, and expiry in the test-lane governance contract
+7. prove idempotency, replay/live collision, outbox partial-delivery, and worker recovery races
+   with deterministic barriers, database fences, claim tokens, explicit callbacks, and durable
+   final-state assertions

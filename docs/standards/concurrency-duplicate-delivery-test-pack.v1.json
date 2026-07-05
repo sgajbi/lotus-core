@@ -1,0 +1,218 @@
+{
+  "schema_version": "lotus-core.concurrency-duplicate-delivery-test-pack.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#608",
+  "guard_command": "make concurrency-duplicate-delivery-guard",
+  "ci_lane": "integration-all",
+  "runtime_expectation": "DB-backed race tests run in integration-all because they require dockerized PostgreSQL; representative unit tests remain in the unit lane when they prove pure idempotency-key or scheduler policy behavior.",
+  "determinism_policy": {
+    "primary_synchronization": "Use database uniqueness, transactions, claim tokens, asyncio.Event barriers, and explicit callback outcomes. Do not rely on unbounded sleeps as the primary race trigger.",
+    "state_assertions": "Race tests must assert final durable state, emitted/published event count when applicable, epoch or version behavior when applicable, and operator-visible status or retry state when the workflow owns one.",
+    "lineage": "Concurrency evidence must keep correlation, idempotency key, claim token, outbox id, job id, portfolio id, security id, and epoch visible enough for support diagnosis without exposing source payloads."
+  },
+  "scenarios": [
+    {
+      "id": "same_idempotency_key_concurrent_submit",
+      "description": "Concurrent claims of the same processed-event fence converge to one durable processed_events row.",
+      "status": "implemented",
+      "lane": "integration-all",
+      "evidence": [
+        "tests/integration/libs/portfolio-common/test_idempotency_repository.py"
+      ],
+      "deterministic_primitives": [
+        "asyncio.Event worker barrier",
+        "PostgreSQL ON CONFLICT processed_events fence"
+      ],
+      "state_assertions": [
+        "one claim returns true",
+        "one claim returns false",
+        "one processed_events row remains",
+        "portfolio_id and correlation_id remain support-visible"
+      ],
+      "protected_failure_modes": [
+        "duplicate transaction processing",
+        "double outbox staging from duplicate business command",
+        "operator confusion from duplicate processed-event rows"
+      ]
+    },
+    {
+      "id": "same_semantic_event_different_transport_offsets",
+      "description": "Representative persistence consumers derive idempotency from transaction business identity even when Kafka transport offsets differ.",
+      "status": "representative_implemented",
+      "lane": "unit",
+      "evidence": [
+        "tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py",
+        "src/services/persistence_service/app/consumers/base_consumer.py"
+      ],
+      "deterministic_primitives": [
+        "synthetic Kafka message offsets",
+        "semantic transaction_id idempotency key"
+      ],
+      "state_assertions": [
+        "transport event_id changes by offset",
+        "idempotency_key remains transaction_id",
+        "portfolio_id remains business-owned"
+      ],
+      "protected_failure_modes": [
+        "duplicate processing on Kafka redelivery with a new offset",
+        "transport-offset-only idempotency for transaction persistence consumers"
+      ],
+      "remaining_scope": "Issue sgajbi/lotus-core#553 remains the global migration for every event consumer family that still uses transport-offset fences."
+    },
+    {
+      "id": "concurrent_price_update_same_instrument_window",
+      "description": "Valuation and scheduler tests preserve epoch and stale-skip behavior when price-driven recalculation work overlaps for the same security/date window.",
+      "status": "implemented",
+      "lane": "unit-and-integration-all",
+      "evidence": [
+        "tests/integration/services/calculators/position_valuation_calculator/test_int_valuation_consumer_persistence.py",
+        "tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py"
+      ],
+      "deterministic_primitives": [
+        "explicit portfolio/security/date fixtures",
+        "epoch fence assertions"
+      ],
+      "state_assertions": [
+        "snapshot epoch is preserved",
+        "stale epoch updates are skipped",
+        "valuation job state remains operator-visible"
+      ],
+      "protected_failure_modes": [
+        "stale valuation overwrite",
+        "missing dirty valuation window",
+        "silent stale-skip without operator evidence"
+      ]
+    },
+    {
+      "id": "concurrent_transaction_update_same_lot_window",
+      "description": "Cost and position tests preserve transaction lifecycle, lot offsets, epoch propagation, and duplicate-event skips for same portfolio/security lot windows.",
+      "status": "implemented",
+      "lane": "unit-and-integration-all",
+      "evidence": [
+        "tests/integration/services/calculators/cost_calculator_service/test_int_cost_consumer_persistence.py",
+        "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py",
+        "tests/unit/services/calculators/position_calculator/consumers/test_position_calculator_consumer.py"
+      ],
+      "deterministic_primitives": [
+        "explicit transaction ids",
+        "canonical lot/offset state assertions",
+        "epoch field assertions"
+      ],
+      "state_assertions": [
+        "cost/outbox rows are created once for accepted events",
+        "duplicate claims skip processing",
+        "lot and accrued-income offset state remain consistent"
+      ],
+      "protected_failure_modes": [
+        "duplicate cost output",
+        "incorrect lot offset state",
+        "stale position recalculation"
+      ]
+    },
+    {
+      "id": "valuation_aggregation_claim_race_and_stale_lease_reset",
+      "description": "Worker claim and stale-reset paths fence job ownership and preserve operator-visible retry/failure state.",
+      "status": "implemented",
+      "lane": "unit-and-integration-all",
+      "evidence": [
+        "tests/integration/services/calculators/position_valuation_calculator/test_int_reprocessing_job_repository.py",
+        "tests/unit/libs/portfolio-common/test_reprocessing_job_repository.py",
+        "tests/unit/services/valuation_orchestrator_service/core/test_reprocessing_worker.py",
+        "tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py"
+      ],
+      "deterministic_primitives": [
+        "FOR UPDATE SKIP LOCKED claim",
+        "status and updated_at stale-reset predicate",
+        "asyncio.gather claim race"
+      ],
+      "state_assertions": [
+        "only one worker claims a pending job",
+        "attempt_count increments once",
+        "completed rows are not reset",
+        "over-limit stale rows become FAILED"
+      ],
+      "protected_failure_modes": [
+        "double worker claim",
+        "completed job reset to pending",
+        "lost stale-job recovery evidence"
+      ]
+    },
+    {
+      "id": "outbox_dispatch_success_failure_split",
+      "description": "Outbox dispatch accounts per-message delivery results and preserves retry metadata when one callback succeeds and another fails.",
+      "status": "implemented",
+      "lane": "integration-all",
+      "evidence": [
+        "tests/integration/libs/portfolio-common/test_outbox_dispatcher_delivery_results.py",
+        "tests/integration/libs/portfolio-common/test_outbox_dispatcher.py"
+      ],
+      "deterministic_primitives": [
+        "explicit delivery callbacks",
+        "claim token fencing",
+        "durable retry_count and next_attempt_at"
+      ],
+      "state_assertions": [
+        "successful rows become PROCESSED",
+        "failed rows remain PENDING or FAILED according to retry policy",
+        "claim_token and claim_expires_at clear only for owned updates"
+      ],
+      "protected_failure_modes": [
+        "batch success hiding partial publish failure",
+        "duplicate outbox publication",
+        "claim-lost dispatcher marking reclaimed rows processed"
+      ]
+    },
+    {
+      "id": "replay_and_live_consumer_same_business_event",
+      "description": "Pipeline and replay tests prove duplicate business-event claims skip registration while replay audit remains support-visible.",
+      "status": "implemented",
+      "lane": "unit-and-integration-all",
+      "evidence": [
+        "tests/unit/services/pipeline_orchestrator_service/application/test_pipeline_stage_message_handler.py",
+        "tests/unit/services/event_replay_service/test_consumer_dlq_replay_commands.py",
+        "tests/unit/services/ingestion_service/services/test_ingestion_replay_audits.py"
+      ],
+      "deterministic_primitives": [
+        "fake unit-of-work claim outcomes",
+        "typed replay audit records"
+      ],
+      "state_assertions": [
+        "duplicate claims do not register stage state",
+        "replay/audit fields remain typed",
+        "correlation remains support-visible"
+      ],
+      "protected_failure_modes": [
+        "live plus replay double-registration",
+        "text-only replay evidence",
+        "replay audit without durable correlation"
+      ]
+    },
+    {
+      "id": "cancellation_correction_during_recalculation",
+      "description": "Transaction lifecycle and cost tests preserve correction/cancellation-style zero-quantity and no-outbox behavior during recalculation windows.",
+      "status": "representative_implemented",
+      "lane": "unit-and-transaction-contract",
+      "evidence": [
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
+        "tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py",
+        "tests/unit/transaction_specs/test_sell_slice0_characterization.py"
+      ],
+      "deterministic_primitives": [
+        "explicit transaction correction payloads",
+        "outbox call-count assertions",
+        "transaction contract characterization tests"
+      ],
+      "state_assertions": [
+        "no unsupported correction outbox is emitted",
+        "epoch propagation is preserved",
+        "transaction processor output is deterministic"
+      ],
+      "protected_failure_modes": [
+        "unsupported correction published as successful recalculation",
+        "stale cost output after cancellation-like update",
+        "silent position/cost divergence"
+      ],
+      "remaining_scope": "Broader corporate-action correction/cancellation golden scenarios remain tracked by sgajbi/lotus-core#607."
+    }
+  ]
+}

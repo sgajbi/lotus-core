@@ -422,12 +422,14 @@
         },
         {
           "proof_family": "performance_resilience",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "make test-performance-load-gate",
-            "make test-failure-recovery-gate"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#608"
+            "make test-failure-recovery-gate",
+            "make concurrency-duplicate-delivery-guard",
+            "tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py",
+            "tests/integration/services/calculators/position_valuation_calculator/test_int_reprocessing_job_repository.py"
+          ]
         }
       ]
     },
@@ -680,12 +682,14 @@
         },
         {
           "proof_family": "performance_resilience",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
             "make ingestion-rate-limit-scope-guard",
-            "make ingestion-gateway-rate-limit-policy-guard"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#608"
+            "make ingestion-gateway-rate-limit-policy-guard",
+            "make concurrency-duplicate-delivery-guard",
+            "tests/integration/libs/portfolio-common/test_idempotency_repository.py",
+            "tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py"
+          ]
         }
       ]
     },
@@ -734,11 +738,13 @@
         },
         {
           "proof_family": "performance_resilience",
-          "gap_status": "partial",
+          "gap_status": "covered",
           "current_coverage": [
-            "make test-failure-recovery-gate"
-          ],
-          "follow_up_issue": "sgajbi/lotus-core#608"
+            "make test-failure-recovery-gate",
+            "make concurrency-duplicate-delivery-guard",
+            "tests/unit/services/pipeline_orchestrator_service/application/test_pipeline_stage_message_handler.py",
+            "tests/unit/services/event_replay_service/test_consumer_dlq_replay_commands.py"
+          ]
         }
       ]
     },
