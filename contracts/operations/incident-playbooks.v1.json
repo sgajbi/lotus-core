@@ -1,0 +1,674 @@
+{
+  "schema_version": "lotus-core.incident-playbooks.v1",
+  "repository": "lotus-core",
+  "guard_command": "make incident-playbook-guard",
+  "documentation_surfaces": [
+    "docs/operations/Incident-Playbooks.md",
+    "docs/operations-runbook.md",
+    "wiki/Operations-Runbook.md",
+    "wiki/Troubleshooting.md"
+  ],
+  "playbooks": [
+    {
+      "id": "ingestion-stuck-failed",
+      "title": "Ingestion stuck or failed",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Ingestion jobs remain in accepted, queued, processing, failed, or partial status longer than the operating band.",
+        "New source files or API ingests do not appear in portfolio support overview or load-run progress."
+      ],
+      "dashboards_metrics": [
+        "ingestion job status counts by status and age",
+        "kafka_consumer_events_total{outcome,reason}",
+        "http_request_completed for ingestion routes"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/ingestion/jobs?status=failed&limit=25",
+          "expected_fields": ["items", "job_id", "status", "created_at", "updated_at"]
+        },
+        {
+          "method": "GET",
+          "path": "/ingestion/jobs/{job_id}/failures",
+          "expected_fields": ["items", "failure_id", "failure_phase", "failure_reason"]
+        },
+        {
+          "method": "GET",
+          "path": "/support/load-runs/{run_id}?business_date=YYYY-MM-DD",
+          "expected_fields": ["run_id", "business_date", "status", "supportability"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only the affected job row and recent failure history.",
+          "read_only": true,
+          "query": "SELECT job_id, status, correlation_id, created_at, updated_at FROM ingestion_jobs WHERE job_id = :job_id;"
+        }
+      ],
+      "repository_native_commands": [
+        "make test-ops-contract",
+        "python scripts/docker_endpoint_smoke.py --skip-compose --output-dir output/incident-evidence"
+      ],
+      "expected_response_fields": [
+        "job_id",
+        "status",
+        "correlation_id",
+        "failure_phase",
+        "failure_reason",
+        "supportability_reason_code"
+      ],
+      "containment_actions": [
+        "Pause new bulk submissions for the affected source family.",
+        "Use governed retry or bookkeeping repair endpoints only when failure details mark the action as supported.",
+        "Do not rerun source files blindly when the response marks retry_safe as false."
+      ],
+      "escalation_path": [
+        "Escalate to the ingestion owner when job failure phase is validation, persistence, publish, or bookkeeping.",
+        "Escalate to platform operations when readiness points to database, Kafka, or topic bootstrap."
+      ],
+      "post_incident_evidence": [
+        "Affected job IDs and correlation IDs",
+        "failure list response",
+        "load-run response",
+        "operator action taken and outcome"
+      ]
+    },
+    {
+      "id": "dlq-growth",
+      "title": "Consumer DLQ growth",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "DLQ event counts increase for one topic or consumer group.",
+        "Kafka consumer telemetry shows terminal failure, dlq, or validation-error outcomes."
+      ],
+      "dashboards_metrics": [
+        "kafka_consumer_events_total{outcome=\"dlq\"}",
+        "kafka_consumer_events_total{outcome=\"terminal_failure\"}",
+        "consumer DLQ event age and count"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/operations/consumer-dlq/events?limit=25",
+          "expected_fields": ["items", "event_id", "topic", "group_id", "correlation_id"]
+        },
+        {
+          "method": "GET",
+          "path": "/operations/consumer-dlq/events/{event_id}",
+          "expected_fields": ["event_id", "payload_excerpt", "error_reason", "replay_status"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only recent DLQ records for the affected topic and group.",
+          "read_only": true,
+          "query": "SELECT event_id, topic, group_id, correlation_id, replay_status, created_at FROM consumer_dlq_events WHERE topic = :topic ORDER BY created_at DESC LIMIT 25;"
+        }
+      ],
+      "repository_native_commands": [
+        "make event-runtime-contract-guard",
+        "make test-ops-contract"
+      ],
+      "expected_response_fields": [
+        "event_id",
+        "topic",
+        "group_id",
+        "correlation_id",
+        "error_reason",
+        "replay_status"
+      ],
+      "containment_actions": [
+        "Stop replay attempts until the error family is understood.",
+        "Preserve redacted payload excerpts and correlation IDs for forensic evidence.",
+        "Do not copy raw DLQ payloads into tickets or logs."
+      ],
+      "escalation_path": [
+        "Escalate validation-error families to the producing service owner.",
+        "Escalate repeated publish or commit failures to platform Kafka operations."
+      ],
+      "post_incident_evidence": [
+        "DLQ event IDs",
+        "topic and group ID",
+        "replay status",
+        "error family summary",
+        "consumer-owner follow-up"
+      ]
+    },
+    {
+      "id": "replay-failure",
+      "title": "Replay failure",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Replay requests return conflict, duplicate-blocked, publish-failed, or audit-write-failed outcomes.",
+        "Replay audit records do not show a successful terminal outcome."
+      ],
+      "dashboards_metrics": [
+        "http_request_completed for replay routes",
+        "kafka_consumer_events_total{outcome=\"retryable_failure\"}",
+        "consumer DLQ replay audit outcome counts"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/operations/replay/audits?correlation_id={correlation_id}",
+          "expected_fields": ["items", "audit_id", "outcome", "recovery_path"]
+        },
+        {
+          "method": "POST",
+          "path": "/operations/consumer-dlq/events/{event_id}/replay",
+          "expected_fields": ["outcome", "recovery_path", "correlation_id"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only replay audit rows for the affected correlation ID.",
+          "read_only": true,
+          "query": "SELECT audit_id, correlation_id, outcome, recovery_path, created_at FROM consumer_dlq_replay_audit WHERE correlation_id = :correlation_id ORDER BY created_at DESC LIMIT 25;"
+        }
+      ],
+      "repository_native_commands": [
+        "make event-runtime-contract-guard",
+        "python -m pytest tests/unit/services/event_replay_service -q"
+      ],
+      "expected_response_fields": [
+        "outcome",
+        "recovery_path",
+        "correlation_id",
+        "audit_id",
+        "replay_status"
+      ],
+      "containment_actions": [
+        "Do not issue repeated replay commands for the same event without checking replay audit.",
+        "If audit persistence fails, restore the audit dependency before retrying.",
+        "Use only governed replay endpoints; do not republish directly to Kafka."
+      ],
+      "escalation_path": [
+        "Escalate publish failures to Kafka/platform operations.",
+        "Escalate stale lifecycle conflicts to the ingestion owner."
+      ],
+      "post_incident_evidence": [
+        "Replay request body fingerprint",
+        "audit IDs",
+        "outcome and recovery path",
+        "operator actor and reason"
+      ]
+    },
+    {
+      "id": "outbox-backlog",
+      "title": "Outbox backlog",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Outbox pending, retry-waiting, or terminal-failed counts grow.",
+        "Downstream consumers stop receiving expected source-ingestion or recovery events."
+      ],
+      "dashboards_metrics": [
+        "outbox pending count",
+        "outbox retry-eligible count",
+        "outbox terminal failed count"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/support/outbox/failed-events?limit=25",
+          "expected_fields": ["items", "outbox_id", "event_type", "topic", "status"]
+        },
+        {
+          "method": "GET",
+          "path": "/support/outbox/recovery-audits?limit=25",
+          "expected_fields": ["items", "outbox_id", "outcome", "requested_by"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only status counts by topic and event type.",
+          "read_only": true,
+          "query": "SELECT topic, event_type, status, count(*) FROM outbox_events GROUP BY topic, event_type, status;"
+        }
+      ],
+      "repository_native_commands": [
+        "make event-runtime-contract-guard",
+        "make test-failure-recovery-gate"
+      ],
+      "expected_response_fields": [
+        "outbox_id",
+        "event_type",
+        "topic",
+        "status",
+        "next_attempt_at",
+        "outcome"
+      ],
+      "containment_actions": [
+        "Check whether failures are retry-waiting before requeueing.",
+        "Use governed requeue endpoints only for terminal failed events with operator reason.",
+        "Do not update outbox status directly in the database."
+      ],
+      "escalation_path": [
+        "Escalate topic or producer failures to platform Kafka operations.",
+        "Escalate payload contract failures to the producing service owner."
+      ],
+      "post_incident_evidence": [
+        "Outbox IDs",
+        "topic and event type",
+        "recovery audit IDs",
+        "before and after status counts"
+      ]
+    },
+    {
+      "id": "valuation-aggregation-lag",
+      "title": "Valuation or aggregation lag",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Portfolio valuations, position time series, or aggregation state remain stale after ingestion.",
+        "Support overview shows queued or processing job counts that are not draining."
+      ],
+      "dashboards_metrics": [
+        "valuation job pending and processing counts",
+        "aggregation job pending and stale processing counts",
+        "health_readiness_state{service,state}"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/support/portfolios/{portfolio_id}/overview",
+          "expected_fields": ["portfolio_id", "supportability", "jobs"]
+        },
+        {
+          "method": "GET",
+          "path": "/support/portfolios/{portfolio_id}/readiness?as_of_date=YYYY-MM-DD",
+          "expected_fields": ["state", "reason", "freshness_bucket"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only job status counts for the affected portfolio.",
+          "read_only": true,
+          "query": "SELECT status, count(*) FROM portfolio_valuation_jobs WHERE portfolio_id = :portfolio_id GROUP BY status;"
+        }
+      ],
+      "repository_native_commands": [
+        "make test-failure-recovery-gate",
+        "make test-performance-load-gate"
+      ],
+      "expected_response_fields": [
+        "supportability",
+        "state",
+        "reason",
+        "freshness_bucket",
+        "jobs"
+      ],
+      "containment_actions": [
+        "Avoid reseeding or replaying transactions until job lag cause is classified.",
+        "Verify scheduler publish and delivery-confirmation posture before resetting stale jobs.",
+        "Use support pages to identify whether lag is valuation, aggregation, or upstream source-data related."
+      ],
+      "escalation_path": [
+        "Escalate valuation job failures to the valuation owner.",
+        "Escalate aggregation queue and scheduler failures to pipeline orchestration owner."
+      ],
+      "post_incident_evidence": [
+        "Portfolio ID",
+        "as-of date",
+        "job status counts",
+        "support overview and readiness responses"
+      ]
+    },
+    {
+      "id": "stale-source-data",
+      "title": "Stale source data",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Source-data product reports degraded, stale, partial, or unavailable supportability.",
+        "Market data, FX, benchmark, or readiness evidence is older than the requested as-of date."
+      ],
+      "dashboards_metrics": [
+        "lotus_core_portfolio_supportability_total{state,reason,freshness_bucket}",
+        "source-data product readiness states",
+        "HTTP route-template status counts for integration routes"
+      ],
+      "api_checks": [
+        {
+          "method": "POST",
+          "path": "/integration/market-data/coverage",
+          "expected_fields": ["product_name", "product_version", "supportability", "latest_evidence_timestamp"]
+        },
+        {
+          "method": "GET",
+          "path": "/support/portfolios/{portfolio_id}/readiness?as_of_date=YYYY-MM-DD",
+          "expected_fields": ["state", "reason", "freshness_bucket"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only latest source observation timestamps for the affected identifiers.",
+          "read_only": true,
+          "query": "SELECT security_id, max(price_date) AS latest_price_date FROM market_prices WHERE security_id = ANY(:security_ids) GROUP BY security_id;"
+        }
+      ],
+      "repository_native_commands": [
+        "make source-data-product-contract-guard",
+        "make domain-product-validate",
+        "make live-dpm-source-validate"
+      ],
+      "expected_response_fields": [
+        "product_name",
+        "product_version",
+        "supportability",
+        "latest_evidence_timestamp",
+        "freshness_bucket"
+      ],
+      "containment_actions": [
+        "Do not fabricate market, FX, benchmark, or external treasury evidence.",
+        "Keep degraded or unavailable posture visible to downstream services.",
+        "Route missing external data families to the owning bank-source integration backlog."
+      ],
+      "escalation_path": [
+        "Escalate market/reference gaps to source-data operations.",
+        "Escalate external treasury or OMS gaps to the owning external integration team."
+      ],
+      "post_incident_evidence": [
+        "Product response with supportability state",
+        "missing or stale identifier list",
+        "latest evidence timestamp",
+        "owner follow-up"
+      ]
+    },
+    {
+      "id": "reconciliation-failure",
+      "title": "Reconciliation failure",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "Reconciliation run status is failed or completed with open findings.",
+        "Transaction-to-cashflow, position-valuation, or timeseries integrity checks report drift."
+      ],
+      "dashboards_metrics": [
+        "reconciliation run status counts",
+        "HTTP route-template status counts for reconciliation routes",
+        "portfolio supportability reason counts"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/support/portfolios/{portfolio_id}/reconciliation-runs",
+          "expected_fields": ["items", "run_id", "status", "business_date"]
+        },
+        {
+          "method": "GET",
+          "path": "/reconciliation/runs/{run_id}/findings",
+          "expected_fields": ["items", "finding_id", "severity", "status"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only reconciliation run and finding status for the affected run.",
+          "read_only": true,
+          "query": "SELECT run_id, status, business_date, completed_at FROM reconciliation_runs WHERE run_id = :run_id;"
+        }
+      ],
+      "repository_native_commands": [
+        "make test-ops-contract",
+        "python -m pytest tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py -q"
+      ],
+      "expected_response_fields": [
+        "run_id",
+        "status",
+        "business_date",
+        "finding_id",
+        "severity",
+        "finding_type"
+      ],
+      "containment_actions": [
+        "Keep affected portfolio supportability degraded until the finding is explained or remediated.",
+        "Do not mark breaks closed without source evidence.",
+        "Use reconciliation findings rather than free-text logs for follow-up."
+      ],
+      "escalation_path": [
+        "Escalate data-quality breaks to the owning source-data family.",
+        "Escalate calculator consistency breaks to the owning calculator service."
+      ],
+      "post_incident_evidence": [
+        "Run ID",
+        "finding IDs",
+        "before and after status",
+        "source evidence used for closure"
+      ]
+    },
+    {
+      "id": "readiness-failure",
+      "title": "Readiness failure",
+      "severity_floor": "sev2",
+      "symptoms": [
+        "One or more services returns HTTP 503 from /health/ready.",
+        "Dependency statuses show timeout, unavailable, misconfigured, or error."
+      ],
+      "dashboards_metrics": [
+        "health_dependency_check_total{service,dependency,status}",
+        "health_dependency_check_duration_seconds{service,dependency}",
+        "health_readiness_state{service,state}"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/health/ready",
+          "expected_fields": ["status", "dependencies"]
+        },
+        {
+          "method": "GET",
+          "path": "/version",
+          "expected_fields": ["git_commit_sha", "git_branch", "image_digest", "ci_pipeline_run_id"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "No database inspection is required until the readiness dependency map names database as degraded.",
+          "read_only": true,
+          "query": "SELECT 1;"
+        }
+      ],
+      "repository_native_commands": [
+        "docker compose ps",
+        "make test-docker-smoke"
+      ],
+      "expected_response_fields": [
+        "status",
+        "dependencies",
+        "git_commit_sha",
+        "image_digest",
+        "ci_pipeline_run_id"
+      ],
+      "containment_actions": [
+        "Do not route production traffic to services that fail readiness.",
+        "Use /version to confirm the running image before debugging a stale deployment.",
+        "Classify dependency failure before restarting services."
+      ],
+      "escalation_path": [
+        "Escalate shared ingress or platform runtime issues to lotus-platform.",
+        "Escalate service-specific readiness code failures to the owning service."
+      ],
+      "post_incident_evidence": [
+        "Ready response",
+        "dependency map",
+        "version response",
+        "deployment image digest"
+      ]
+    },
+    {
+      "id": "database-connectivity",
+      "title": "Database connectivity",
+      "severity_floor": "sev1",
+      "symptoms": [
+        "Readiness reports database timeout, unavailable, misconfigured, or error.",
+        "API routes fail with database connection errors or pool exhaustion."
+      ],
+      "dashboards_metrics": [
+        "health_dependency_check_total{dependency=\"database\"}",
+        "database connection pool utilization",
+        "HTTP 5xx counts by route template"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/health/ready",
+          "expected_fields": ["status", "dependencies"]
+        },
+        {
+          "method": "GET",
+          "path": "/support/portfolios/{portfolio_id}/overview",
+          "expected_fields": ["portfolio_id", "supportability"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Check Alembic state and a trivial read once connectivity is restored.",
+          "read_only": true,
+          "query": "python -m alembic current"
+        }
+      ],
+      "repository_native_commands": [
+        "python -m alembic current",
+        "make migration-smoke",
+        "docker compose logs --tail=200 postgres"
+      ],
+      "expected_response_fields": [
+        "dependencies",
+        "status",
+        "portfolio_id",
+        "supportability"
+      ],
+      "containment_actions": [
+        "Do not run migrations or repair commands during active connectivity instability.",
+        "Preserve service logs and readiness responses before restarting.",
+        "Use app-local compose diagnostics only for local incidents."
+      ],
+      "escalation_path": [
+        "Escalate managed database/network problems to platform operations.",
+        "Escalate schema drift to the migration owner."
+      ],
+      "post_incident_evidence": [
+        "Readiness dependency details",
+        "Alembic current output",
+        "database logs or provider incident reference",
+        "affected request correlation IDs"
+      ]
+    },
+    {
+      "id": "kafka-connectivity",
+      "title": "Kafka connectivity",
+      "severity_floor": "sev1",
+      "symptoms": [
+        "Consumers cannot poll, publish, commit, or route to DLQ.",
+        "Kafka topic creator fails or required topics are missing."
+      ],
+      "dashboards_metrics": [
+        "kafka_consumer_events_total{outcome=\"poll_error\"}",
+        "kafka_consumer_events_total{outcome=\"commit_failure\"}",
+        "producer publish failure counts"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/operations/ingestion/health",
+          "expected_fields": ["status", "topics", "consumer_groups"]
+        },
+        {
+          "method": "GET",
+          "path": "/health/ready",
+          "expected_fields": ["status", "dependencies"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Read only ingestion/outbox backlog to determine blast radius after Kafka stabilizes.",
+          "read_only": true,
+          "query": "SELECT status, count(*) FROM ingestion_jobs GROUP BY status;"
+        }
+      ],
+      "repository_native_commands": [
+        "docker compose logs --tail=200 kafka-topic-creator",
+        "make event-runtime-contract-guard",
+        "make test-failure-recovery-gate"
+      ],
+      "expected_response_fields": [
+        "status",
+        "topics",
+        "consumer_groups",
+        "dependencies"
+      ],
+      "containment_actions": [
+        "Pause replay and bulk ingestion while publish or commit failures are active.",
+        "Do not manually create topics outside the governed topic creator path.",
+        "Preserve DLQ and outbox evidence before any service restart."
+      ],
+      "escalation_path": [
+        "Escalate broker, ACL, or topic-bootstrap failures to platform Kafka operations.",
+        "Escalate producer payload contract failures to the producing service owner."
+      ],
+      "post_incident_evidence": [
+        "Topic creator logs",
+        "consumer outcome metrics",
+        "affected topics and groups",
+        "backlog counts after recovery"
+      ]
+    },
+    {
+      "id": "security-audit-denial-spikes",
+      "title": "Security or audit denial spikes",
+      "severity_floor": "sev1",
+      "symptoms": [
+        "Enterprise authorization, read authorization, capability-rule, metrics-token, CORS, trusted-host, or payload-limit denials spike.",
+        "Audit write failures or missing audit evidence appear for protected operations."
+      ],
+      "dashboards_metrics": [
+        "HTTP 401, 403, 413, and 400 counts by route template",
+        "enterprise authorization denial logs by bounded reason code",
+        "metrics access denied responses"
+      ],
+      "api_checks": [
+        {
+          "method": "GET",
+          "path": "/version",
+          "expected_fields": ["git_commit_sha", "git_branch", "image_digest", "oci_labels"]
+        },
+        {
+          "method": "GET",
+          "path": "/health/ready",
+          "expected_fields": ["status", "dependencies"]
+        }
+      ],
+      "database_safe_checks": [
+        {
+          "description": "Use audit tables or log aggregation only; do not inspect protected payload values.",
+          "read_only": true,
+          "query": "SELECT event_name, reason_code, count(*) FROM audit_events WHERE created_at >= :window_start GROUP BY event_name, reason_code;"
+        }
+      ],
+      "repository_native_commands": [
+        "make security-control-coverage-guard",
+        "make security-audit",
+        "make structured-log-guard"
+      ],
+      "expected_response_fields": [
+        "git_commit_sha",
+        "image_digest",
+        "status",
+        "dependencies",
+        "reason_code"
+      ],
+      "containment_actions": [
+        "Do not disable production security controls to clear denials.",
+        "Verify actor, role, capability, tenant, trusted host, CORS origin, and payload-size configuration.",
+        "Keep audit evidence source-safe; do not copy protected payload fields into incident notes."
+      ],
+      "escalation_path": [
+        "Escalate IAM, ingress, WAF, and network policy issues to platform security operations.",
+        "Escalate service-local capability map drift to the owning service."
+      ],
+      "post_incident_evidence": [
+        "Bounded denial reason counts",
+        "affected route templates",
+        "runtime version metadata",
+        "configuration change reference"
+      ]
+    }
+  ]
+}

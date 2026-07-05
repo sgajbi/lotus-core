@@ -9,6 +9,15 @@
 - reconciliation runs
 - demo data pack loading
 
+Executable incident playbooks are maintained in
+`contracts/operations/incident-playbooks.v1.json`, summarized in
+[Incident Playbooks](../docs/operations/Incident-Playbooks.md), and validated by
+`make incident-playbook-guard`.
+
+Guarded incident IDs: `ingestion-stuck-failed`, `dlq-growth`, `replay-failure`, `outbox-backlog`,
+`valuation-aggregation-lag`, `stale-source-data`, `reconciliation-failure`, `readiness-failure`,
+`database-connectivity`, `kafka-connectivity`, and `security-audit-denial-spikes`.
+
 ## Useful commands
 
 ```bash
