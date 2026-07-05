@@ -65,6 +65,12 @@ markers = [
     "integration_db: mark tests that require dockerized database infrastructure",
     "db_direct: mark tests that exercise direct database-backed runtime without live worker reliance",
     "live_worker: mark tests that require live worker/background service runtime semantics",
+    "api: mark tests that prove HTTP API request, response, pagination, or error contracts",
+    "contract: mark tests that prove schema, event, OpenAPI, source-data, or governance contracts",
+    "middleware: mark tests that prove HTTP middleware, auth, audit, header, or diagnostics behavior",
+    "security: mark tests that prove authorization, privacy, secrets, or abuse-boundary controls",
+    "regression: mark tests that protect golden scenarios or previously fixed defects",
+    "e2e: mark tests that exercise multi-service end-to-end workflows",
 ]
 filterwarnings = [
     "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",

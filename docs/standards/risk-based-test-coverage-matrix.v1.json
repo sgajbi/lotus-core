@@ -1,0 +1,905 @@
+{
+  "schema_version": "risk-based-test-coverage-matrix.v1",
+  "owning_repository": "lotus-core",
+  "issue": "sgajbi/lotus-core#602",
+  "update_policy": {
+    "required_when": [
+      "adding or changing high-risk business behavior",
+      "adding or changing API, middleware, event, replay, source-data, security, observability, or resilience contracts",
+      "moving tests between CI lanes or changing Make/test-manifest suite ownership"
+    ],
+    "engineer_guidance": "Update this matrix in the same slice as high-risk behavior changes. Use covered only when the listed tests or Make targets prove the proof family; use partial or deferred with a follow-up issue when evidence is incomplete.",
+    "gate_command": "make risk-based-test-coverage-matrix-guard"
+  },
+  "proof_families": [
+    "unit_domain",
+    "application_use_case",
+    "api",
+    "middleware",
+    "contract_schema",
+    "integration",
+    "regression_golden",
+    "security",
+    "e2e",
+    "performance_resilience"
+  ],
+  "allowed_gap_statuses": [
+    "covered",
+    "partial",
+    "missing",
+    "deliberately_deferred"
+  ],
+  "required_domains": [
+    "instruments",
+    "accounts",
+    "positions",
+    "cash",
+    "transactions",
+    "corporate_actions",
+    "valuation",
+    "cashflow",
+    "cost",
+    "reconciliation",
+    "ingestion",
+    "replay",
+    "operations",
+    "security",
+    "observability"
+  ],
+  "domains": [
+    {
+      "id": "instruments",
+      "owner": "lotus-core/reference-data",
+      "risk": "Instrument master, classification, eligibility, price, and reference lookup drift can make portfolio evidence appear complete when source identity is weak.",
+      "required_proof_families": [
+        "unit_domain",
+        "api",
+        "contract_schema",
+        "integration",
+        "regression_golden"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_instrument_service.py",
+            "tests/unit/libs/portfolio-common/test_market_reference_quality.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/e2e/test_persistence_query_pipeline.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make source-data-product-contract-guard",
+            "make api-vocabulary-gate"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#557"
+        },
+        {
+          "proof_family": "regression_golden",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/unit/docs/test_rfc0082_downstream_endpoint_audit_doc.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#607"
+        }
+      ]
+    },
+    {
+      "id": "accounts",
+      "owner": "lotus-core/portfolio-master",
+      "risk": "Account and portfolio master-data drift affects entitlement, cash, position, and downstream proof scope.",
+      "required_proof_families": [
+        "unit_domain",
+        "api",
+        "contract_schema",
+        "integration"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_portfolio_service.py",
+            "tests/unit/services/query_service/services/test_portfolio_validation.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/query_service/test_portfolios_router_dependency.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make route-contract-family-guard",
+            "make source-data-product-contract-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/e2e/test_portfolio_query_pipeline.py",
+            "make test-e2e-smoke"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#603"
+        }
+      ]
+    },
+    {
+      "id": "positions",
+      "owner": "lotus-core/position-state",
+      "risk": "Position state defects propagate into holdings, tax lots, analytics snapshots, and downstream opportunity proofs.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration",
+        "e2e"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/calculators/position_calculator/core/test_position_logic.py",
+            "tests/unit/services/query_service/services/test_position_holdings.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_position_service.py",
+            "tests/unit/services/query_service/services/test_position_holdings_response.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/query_service/test_positions_router_dependency.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make source-data-product-contract-guard",
+            "make critical-path-coverage-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/query_service/test_positions_router_dependency.py",
+            "tests/integration/services/query_service/test_query_position_repository.py",
+            "make test-integration-lite"
+          ]
+        },
+        {
+          "proof_family": "e2e",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/e2e/test_portfolio_query_pipeline.py",
+            "tests/e2e/test_complex_portfolio_lifecycle.py"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cash",
+      "owner": "lotus-core/cash-ledger",
+      "risk": "Cash account, cash movement, and cash balance defects directly affect client economics and downstream income/cashflow evidence.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_cash_movement_service.py",
+            "tests/unit/services/query_service/services/test_transaction_records.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_cash_account_service.py",
+            "tests/unit/services/query_service/services/test_cash_balance_service.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/routers/test_cash_movements_router.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make source-data-product-contract-guard"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#604"
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/e2e/test_cashflow_pipeline.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#603"
+        }
+      ]
+    },
+    {
+      "id": "transactions",
+      "owner": "lotus-core/transaction-lifecycle",
+      "risk": "Transaction ingestion, validation, linkage, sorting, and replay defects can corrupt the book of record.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration",
+        "regression_golden",
+        "e2e"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
+            "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
+            "tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_transaction_service.py",
+            "tests/unit/services/query_service/services/test_transaction_reads.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/query_service/test_transactions_router.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make test-transaction-buy-contract",
+            "make test-transaction-sell-contract",
+            "make test-transaction-dividend-contract",
+            "make test-transaction-interest-contract",
+            "make test-transaction-fx-contract"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/persistence_service/repositories/test_repositories.py",
+            "tests/integration/services/query_service/test_transactions_router.py"
+          ]
+        },
+        {
+          "proof_family": "regression_golden",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/e2e/test_transaction_type_coverage_matrix.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#607"
+        },
+        {
+          "proof_family": "e2e",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/e2e/test_transaction_type_dual_leg.py",
+            "tests/e2e/test_complex_portfolio_lifecycle.py"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "corporate_actions",
+      "owner": "lotus-core/transaction-lifecycle",
+      "risk": "Corporate actions change positions, cash, cost basis, and entitlement state without ordinary trade flow.",
+      "required_proof_families": [
+        "unit_domain",
+        "contract_schema",
+        "regression_golden"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/libs/portfolio_common/test_ca_bundle_a_validation.py",
+            "tests/unit/libs/portfolio_common/test_ca_bundle_a_reconciliation.py",
+            "tests/unit/libs/portfolio_common/test_ca_bundle_a_ordering.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make test-transaction-portfolio-flow-bundle-contract"
+          ]
+        },
+        {
+          "proof_family": "regression_golden",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#607"
+        }
+      ]
+    },
+    {
+      "id": "valuation",
+      "owner": "lotus-core/valuation",
+      "risk": "Valuation defects affect position market value, portfolio totals, reporting currency values, and analytics windows.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "contract_schema",
+        "integration",
+        "performance_resilience"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/libs/portfolio-common/test_valuation_prices.py",
+            "tests/unit/services/calculators/position_valuation_calculator/logic/test_valuation_logic.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py",
+            "tests/unit/libs/portfolio-common/test_valuation_job_repository.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make source-data-product-contract-guard",
+            "make critical-path-coverage-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/valuation_orchestrator_service/test_valuation_scheduler_integration.py"
+          ]
+        },
+        {
+          "proof_family": "performance_resilience",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make test-performance-load-gate",
+            "make test-failure-recovery-gate"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#608"
+        }
+      ]
+    },
+    {
+      "id": "cashflow",
+      "owner": "lotus-core/cashflow",
+      "risk": "Cashflow event-date, income schedule, and projection defects break downstream income and opportunity proof closure.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration",
+        "regression_golden"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
+            "tests/unit/libs/portfolio-common/test_analytics_cashflow_semantics.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_cashflow_projection_service.py",
+            "tests/unit/services/query_service/services/test_cashflow_evidence_window.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/routers/test_cashflow_projection_router.py",
+            "make openapi-gate"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make source-data-product-contract-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/calculators/cashflow_calculator_service/test_cashflow_rule_contract.py",
+            "tests/e2e/test_cashflow_pipeline.py"
+          ]
+        },
+        {
+          "proof_family": "regression_golden",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
+            "tests/unit/transaction_specs/test_interest_slice0_characterization.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#607"
+        }
+      ]
+    },
+    {
+      "id": "cost",
+      "owner": "lotus-core/cost-basis",
+      "risk": "Cost-basis and realized P&L defects directly affect taxable and performance-sensitive figures.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "contract_schema",
+        "integration",
+        "regression_golden"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/libs/portfolio_common/test_cost_basis.py",
+            "tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make test-transaction-buy-contract",
+            "make test-transaction-sell-contract"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py"
+          ]
+        },
+        {
+          "proof_family": "regression_golden",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
+            "tests/unit/transaction_specs/test_sell_slice0_characterization.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#607"
+        }
+      ]
+    },
+    {
+      "id": "reconciliation",
+      "owner": "lotus-core/reconciliation",
+      "risk": "Reconciliation defects can certify incorrect load, control, or stage state and hide failed recovery.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration",
+        "security"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/libs/portfolio-common/test_reconciliation_quality.py",
+            "tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/financial_reconciliation_service/test_reconciliation_use_cases.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make route-contract-family-guard",
+            "make qcp-problem-details-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/financial_reconciliation_service/test_int_reconciliation_repository.py"
+          ]
+        },
+        {
+          "proof_family": "security",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/financial_reconciliation_service/test_enterprise_readiness.py"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ingestion",
+      "owner": "lotus-core/ingestion",
+      "risk": "Ingestion defects can accept invalid source data, lose idempotency, or publish unsafe evidence.",
+      "required_proof_families": [
+        "unit_domain",
+        "application_use_case",
+        "api",
+        "middleware",
+        "contract_schema",
+        "integration",
+        "security",
+        "performance_resilience"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/ingestion_service/domain/test_ingestion_job_lifecycle_policy.py",
+            "tests/unit/services/ingestion_service/test_transaction_model.py"
+          ]
+        },
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/ingestion_service/services/test_ingestion_service.py",
+            "tests/unit/services/ingestion_service/services/test_business_date_ingestion_commands.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+            "make ingestion-contract-gate"
+          ]
+        },
+        {
+          "proof_family": "middleware",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/ingestion_service/test_enterprise_readiness.py",
+            "tests/unit/test_http_middleware_chain_contract.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make ingestion-contract-gate",
+            "make source-data-product-contract-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py",
+            "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+          ]
+        },
+        {
+          "proof_family": "security",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make security-control-coverage-guard",
+            "make quality-bandit-gate"
+          ]
+        },
+        {
+          "proof_family": "performance_resilience",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make ingestion-rate-limit-scope-guard",
+            "make ingestion-gateway-rate-limit-policy-guard"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#608"
+        }
+      ]
+    },
+    {
+      "id": "replay",
+      "owner": "lotus-core/replay-recovery",
+      "risk": "Replay, DLQ, and idempotency defects can duplicate work, hide poison messages, or lose operator evidence.",
+      "required_proof_families": [
+        "application_use_case",
+        "api",
+        "contract_schema",
+        "integration",
+        "performance_resilience"
+      ],
+      "coverage": [
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/event_replay_service/test_consumer_dlq_replay_commands.py",
+            "tests/unit/services/event_replay_service/test_replay_retry_payloads.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/services/event_replay_service/test_event_replay_app.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make event-runtime-contract-guard"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#604"
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/integration/tools/test_dlq_replayer.py",
+            "tests/integration/services/event_replay_service/test_event_replay_app.py"
+          ]
+        },
+        {
+          "proof_family": "performance_resilience",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make test-failure-recovery-gate"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#608"
+        }
+      ]
+    },
+    {
+      "id": "operations",
+      "owner": "lotus-core/operator-support",
+      "risk": "Weak operator diagnostics make incidents slow to triage and can expose unsafe details.",
+      "required_proof_families": [
+        "application_use_case",
+        "api",
+        "middleware",
+        "contract_schema",
+        "integration",
+        "security"
+      ],
+      "coverage": [
+        {
+          "proof_family": "application_use_case",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/query_service/services/test_operations_service.py",
+            "tests/unit/services/event_replay_service/test_ingestion_operations_queries.py"
+          ]
+        },
+        {
+          "proof_family": "api",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/services/event_replay_service/test_ingestion_operations.py",
+            "make test-ops-contract"
+          ]
+        },
+        {
+          "proof_family": "middleware",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/test_http_middleware_chain_contract.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make qcp-problem-details-guard",
+            "make incident-playbook-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/integration/services/event_replay_service/test_event_replay_app.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#570"
+        },
+        {
+          "proof_family": "security",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make security-control-coverage-guard"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "owner": "lotus-core/security-controls",
+      "risk": "Authorization, secrets, privacy, and unsafe artifact regressions can expose sensitive private-banking data.",
+      "required_proof_families": [
+        "middleware",
+        "contract_schema",
+        "security",
+        "integration"
+      ],
+      "coverage": [
+        {
+          "proof_family": "middleware",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/test_http_middleware_chain_contract.py",
+            "tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make security-control-coverage-guard",
+            "make image-provenance-guard"
+          ]
+        },
+        {
+          "proof_family": "security",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make quality-bandit-gate",
+            "make security-audit"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#610"
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "partial",
+          "current_coverage": [
+            "tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#605"
+        }
+      ]
+    },
+    {
+      "id": "observability",
+      "owner": "lotus-core/observability",
+      "risk": "Missing or unsafe telemetry makes support, tracing, and proof closure unreliable.",
+      "required_proof_families": [
+        "unit_domain",
+        "middleware",
+        "contract_schema",
+        "integration",
+        "performance_resilience"
+      ],
+      "coverage": [
+        {
+          "proof_family": "unit_domain",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/libs/portfolio-common/test_monitoring.py",
+            "tests/unit/libs/portfolio-common/test_logging_utils.py"
+          ]
+        },
+        {
+          "proof_family": "middleware",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/unit/test_http_middleware_chain_contract.py",
+            "tests/unit/test_app_local_observability_contract.py"
+          ]
+        },
+        {
+          "proof_family": "contract_schema",
+          "gap_status": "covered",
+          "current_coverage": [
+            "make structured-log-guard",
+            "make metric-vocabulary-guard"
+          ]
+        },
+        {
+          "proof_family": "integration",
+          "gap_status": "covered",
+          "current_coverage": [
+            "tests/e2e/test_query_service_observability.py"
+          ]
+        },
+        {
+          "proof_family": "performance_resilience",
+          "gap_status": "partial",
+          "current_coverage": [
+            "make test-latency-gate"
+          ],
+          "follow_up_issue": "sgajbi/lotus-core#571"
+        }
+      ]
+    }
+  ]
+}
