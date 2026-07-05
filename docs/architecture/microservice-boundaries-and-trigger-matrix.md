@@ -10,7 +10,7 @@ not approval evidence for new deployable splits. New or expanded deployable boun
 
 Related boundary records:
 
-1. Architecture map: `docs/architecture.md`
+1. Current-state architecture map: `docs/architecture/current-state-architecture-map.md`
 2. Target architecture: `docs/architecture/lotus-core-target-architecture.md`
 3. Runtime-boundary decision standard: `docs/standards/runtime-boundary-decision-standard.md`
 4. Runtime-boundary decision catalog: `docs/architecture/runtime-boundary-decision-catalog.json`

@@ -139,7 +139,7 @@ For detailed source-data products and boundary caveats, use
 - Engineers:
   [Getting Started](wiki/Getting-Started.md), [Development Workflow](wiki/Development-Workflow.md),
   [Validation and CI](wiki/Validation-and-CI.md), and
-  [Architecture Index](docs/architecture/README.md)
+  [Current-State Architecture Map](docs/architecture/current-state-architecture-map.md)
 - API and contract reviewers:
   [API Surface](wiki/API-Surface.md), [RFC Index](wiki/RFC-Index.md), and
   [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
