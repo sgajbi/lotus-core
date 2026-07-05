@@ -439,6 +439,21 @@ def create_version_router(*, service_name: str) -> APIRouter:
                             "image_version": "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc",
                             "image_digest": "sha256:abc123",
                             "ci_pipeline_run_id": "1234567890",
+                            "oci_labels": {
+                                "org.opencontainers.image.revision": (
+                                    "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                ),
+                                "org.opencontainers.image.ref.name": "main",
+                                "org.opencontainers.image.created": "2026-07-05T12:34:56Z",
+                                "org.opencontainers.image.source": (
+                                    "https://github.com/example/lotus-core"
+                                ),
+                                "org.opencontainers.image.version": (
+                                    "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                ),
+                                "org.opencontainers.image.digest": "sha256:abc123",
+                                "org.opencontainers.image.ci.run_id": "1234567890",
+                            },
                         }
                     }
                 },

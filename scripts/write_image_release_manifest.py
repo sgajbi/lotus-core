@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 SCHEMA_VERSION = "lotus-core.image-release-manifest.v1"
 REQUIRED_VULNERABILITY_SCAN_STATUS = "passed"
+FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+REQUIRED_PROMOTION_ENVIRONMENTS = ("dev", "uat", "prod")
+
+OCI_METADATA_LABELS = {
+    "org.opencontainers.image.revision": "git_commit_sha",
+    "org.opencontainers.image.ref.name": "git_branch",
+    "org.opencontainers.image.created": "build_timestamp",
+    "org.opencontainers.image.source": "repo_url",
+    "org.opencontainers.image.version": "image_version",
+    "org.opencontainers.image.digest": "image_digest",
+    "org.opencontainers.image.ci.run_id": "ci_pipeline_run_id",
+}
 
 
 def _bool_arg(value: str) -> bool:
@@ -30,8 +43,12 @@ def _require_truthful_release_evidence(
     *,
     image_tag: str,
     git_commit_sha: str,
+    git_branch: str,
     image_version: str,
     image_digest: str,
+    build_timestamp: str,
+    repo_url: str,
+    ci_pipeline_run_id: str,
     vulnerability_scan_status: str,
     sbom_generated: bool,
     image_signed: bool,
@@ -39,13 +56,24 @@ def _require_truthful_release_evidence(
     kubernetes_deploys_by_digest: bool,
     promotion_environments: list[str],
 ) -> None:
-    if not git_commit_sha.strip():
-        raise SystemExit("git commit SHA is required")
+    if not FULL_GIT_SHA_PATTERN.fullmatch(git_commit_sha):
+        raise SystemExit("git commit SHA must be a full 40-character lowercase hexadecimal SHA")
+    for field_name, field_value in {
+        "git branch": git_branch,
+        "build timestamp": build_timestamp,
+        "repo URL": repo_url,
+        "CI pipeline run ID": ci_pipeline_run_id,
+    }.items():
+        if not field_value.strip() or field_value == "unknown":
+            raise SystemExit(f"{field_name} is required")
     if not image_tag.endswith(f":{git_commit_sha}"):
         raise SystemExit("image tag must be the Git commit SHA tag")
     if image_version != git_commit_sha:
         raise SystemExit("image version must match the Git commit SHA")
-    if len(image_digest.removeprefix("sha256:")) != 64:
+    if not repo_url.startswith(("https://", "git@")):
+        raise SystemExit("repo URL must be an HTTPS or SSH repository URL")
+    digest_hex = image_digest.removeprefix("sha256:")
+    if not image_digest.startswith("sha256:") or not re.fullmatch(r"[0-9a-f]{64}", digest_hex):
         raise SystemExit("image digest must be a sha256 digest with 64 hexadecimal characters")
     if vulnerability_scan_status != REQUIRED_VULNERABILITY_SCAN_STATUS:
         raise SystemExit("vulnerability scan status must be passed")
@@ -57,8 +85,15 @@ def _require_truthful_release_evidence(
         raise SystemExit("provenance attestation evidence is required")
     if not kubernetes_deploys_by_digest:
         raise SystemExit("Kubernetes deployment must use digest references")
-    if not promotion_environments:
-        raise SystemExit("at least one promotion environment is required")
+    missing_environments = sorted(
+        set(REQUIRED_PROMOTION_ENVIRONMENTS) - set(promotion_environments)
+    )
+    if missing_environments:
+        raise SystemExit(
+            "promotion environments must include "
+            + ", ".join(REQUIRED_PROMOTION_ENVIRONMENTS)
+            + f"; missing {', '.join(missing_environments)}"
+        )
 
 
 def build_release_manifest(
@@ -84,8 +119,12 @@ def build_release_manifest(
     _require_truthful_release_evidence(
         image_tag=image_tag,
         git_commit_sha=git_commit_sha,
+        git_branch=git_branch,
         image_version=image_version,
         image_digest=image_digest,
+        build_timestamp=build_timestamp,
+        repo_url=repo_url,
+        ci_pipeline_run_id=ci_pipeline_run_id,
         vulnerability_scan_status=vulnerability_scan_status,
         sbom_generated=sbom_generated,
         image_signed=image_signed,
@@ -98,6 +137,24 @@ def build_release_manifest(
         {"environment": environment, "image_ref": digest_ref}
         for environment in promotion_environments
     ]
+    runtime_env = {
+        "LOTUS_GIT_COMMIT_SHA": git_commit_sha,
+        "LOTUS_GIT_BRANCH": git_branch,
+        "LOTUS_BUILD_TIMESTAMP": build_timestamp,
+        "LOTUS_REPO_URL": repo_url,
+        "LOTUS_IMAGE_VERSION": image_version,
+        "LOTUS_IMAGE_DIGEST": image_digest,
+        "LOTUS_CI_RUN_ID": ci_pipeline_run_id,
+    }
+    metadata_values = {
+        "git_commit_sha": git_commit_sha,
+        "git_branch": git_branch,
+        "build_timestamp": build_timestamp,
+        "repo_url": repo_url,
+        "image_version": image_version,
+        "image_digest": image_digest,
+        "ci_pipeline_run_id": ci_pipeline_run_id,
+    }
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": datetime.now(UTC).isoformat(),
@@ -122,14 +179,10 @@ def build_release_manifest(
             promotion["image_ref"] == digest_ref for promotion in promotions
         ),
         "promotions": promotions,
-        "runtime_env": {
-            "LOTUS_GIT_COMMIT_SHA": git_commit_sha,
-            "LOTUS_GIT_BRANCH": git_branch,
-            "LOTUS_BUILD_TIMESTAMP": build_timestamp,
-            "LOTUS_REPO_URL": repo_url,
-            "LOTUS_IMAGE_VERSION": image_version,
-            "LOTUS_IMAGE_DIGEST": image_digest,
-            "LOTUS_CI_RUN_ID": ci_pipeline_run_id,
+        "runtime_env": runtime_env,
+        "oci_labels": {
+            label_name: metadata_values[field_name]
+            for label_name, field_name in OCI_METADATA_LABELS.items()
         },
     }
 

@@ -38,6 +38,16 @@ BUILD_METADATA_RESPONSE_FIELDS: Final[tuple[str, ...]] = (
     "ci_pipeline_run_id",
 )
 
+OCI_METADATA_LABELS: Final[dict[str, str]] = {
+    "org.opencontainers.image.revision": "git_commit_sha",
+    "org.opencontainers.image.ref.name": "git_branch",
+    "org.opencontainers.image.created": "build_timestamp",
+    "org.opencontainers.image.source": "repo_url",
+    "org.opencontainers.image.version": "image_version",
+    "org.opencontainers.image.digest": "image_digest",
+    "org.opencontainers.image.ci.run_id": "ci_pipeline_run_id",
+}
+
 
 class BuildMetadataResponse(BaseModel):
     service_name: str = Field(description="Lotus Core service reporting this runtime metadata.")
@@ -50,6 +60,11 @@ class BuildMetadataResponse(BaseModel):
     ci_pipeline_run_id: str = Field(
         description="CI pipeline or GitHub Actions run identifier embedded in the image."
     )
+    oci_labels: dict[str, str] = Field(
+        description=(
+            "OCI label names and values expected on the released image for direct parity checks."
+        )
+    )
 
 
 def _metadata_value(env_name: str) -> str:
@@ -58,7 +73,7 @@ def _metadata_value(env_name: str) -> str:
 
 
 def build_metadata_payload(*, service_name: str) -> BuildMetadataResponse:
-    return BuildMetadataResponse(
+    payload = BuildMetadataResponse(
         service_name=service_name,
         git_commit_sha=_metadata_value(GIT_COMMIT_SHA_ENV),
         git_branch=_metadata_value(GIT_BRANCH_ENV),
@@ -67,4 +82,10 @@ def build_metadata_payload(*, service_name: str) -> BuildMetadataResponse:
         image_version=_metadata_value(IMAGE_VERSION_ENV),
         image_digest=_metadata_value(IMAGE_DIGEST_ENV),
         ci_pipeline_run_id=_metadata_value(CI_PIPELINE_RUN_ID_ENV),
+        oci_labels={},
     )
+    payload.oci_labels = {
+        label_name: getattr(payload, field_name)
+        for label_name, field_name in OCI_METADATA_LABELS.items()
+    }
+    return payload
