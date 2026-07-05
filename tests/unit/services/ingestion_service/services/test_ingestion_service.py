@@ -1,5 +1,6 @@
 # tests/unit/services/ingestion-service/services/test_ingestion_service.py
 from datetime import date, datetime
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -77,9 +78,9 @@ async def test_publish_transactions(
             security_id="S1",
             transaction_date=datetime.now(),
             transaction_type="BUY",
-            quantity=1,
-            price=1,
-            gross_transaction_amount=1,
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
             trade_currency="USD",
             currency="USD",
         )
@@ -107,9 +108,9 @@ async def test_publish_transactions_normalizes_partition_key(
             security_id="S1",
             transaction_date=datetime.now(),
             transaction_type="BUY",
-            quantity=1,
-            price=1,
-            gross_transaction_amount=1,
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
             trade_currency="USD",
             currency="USD",
         )
@@ -132,9 +133,9 @@ async def test_publish_transactions_rejects_empty_partition_key(
             security_id="S1",
             transaction_date=datetime.now(),
             transaction_type="BUY",
-            quantity=1,
-            price=1,
-            gross_transaction_amount=1,
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
             trade_currency="USD",
             currency="USD",
         )
