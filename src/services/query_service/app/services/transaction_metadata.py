@@ -1,8 +1,14 @@
 from datetime import date, datetime
-from typing import Any, cast
+from typing import cast
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
+from ..application.transaction_query import (
+    TransactionLedgerFilters,
+)
+from ..application.transaction_query import (
+    transaction_ledger_filters as build_transaction_ledger_filters,
+)
 from ..repositories.identifier_normalization import normalize_security_id
 
 TRANSACTION_LEDGER_READY = "TRANSACTION_LEDGER_READY"
@@ -101,22 +107,22 @@ def transaction_ledger_filters(
     start_date: date | None,
     end_date: date | None,
     as_of_date: date | None,
-) -> dict[str, Any]:
-    return {
-        "portfolio_id": portfolio_id,
-        "instrument_id": instrument_id,
-        "security_id": security_id,
-        "transaction_type": transaction_type,
-        "component_type": component_type,
-        "linked_transaction_group_id": linked_transaction_group_id,
-        "fx_contract_id": fx_contract_id,
-        "swap_event_id": swap_event_id,
-        "near_leg_group_id": near_leg_group_id,
-        "far_leg_group_id": far_leg_group_id,
-        "start_date": start_date,
-        "end_date": end_date,
-        "as_of_date": as_of_date,
-    }
+) -> TransactionLedgerFilters:
+    return build_transaction_ledger_filters(
+        portfolio_id=portfolio_id,
+        instrument_id=instrument_id,
+        security_id=security_id,
+        transaction_type=transaction_type,
+        component_type=component_type,
+        linked_transaction_group_id=linked_transaction_group_id,
+        fx_contract_id=fx_contract_id,
+        swap_event_id=swap_event_id,
+        near_leg_group_id=near_leg_group_id,
+        far_leg_group_id=far_leg_group_id,
+        start_date=start_date,
+        end_date=end_date,
+        as_of_date=as_of_date,
+    )
 
 
 def realized_tax_summary_filters(
@@ -125,10 +131,10 @@ def realized_tax_summary_filters(
     start_date: date | None,
     end_date: date | None,
     as_of_date: date,
-) -> dict[str, Any]:
-    return {
-        "portfolio_id": portfolio_id,
-        "start_date": start_date,
-        "end_date": end_date,
-        "as_of_date": as_of_date,
-    }
+) -> TransactionLedgerFilters:
+    return TransactionLedgerFilters(
+        portfolio_id=portfolio_id,
+        start_date=start_date,
+        end_date=end_date,
+        as_of_date=as_of_date,
+    )

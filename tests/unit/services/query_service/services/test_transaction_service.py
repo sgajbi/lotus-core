@@ -8,6 +8,10 @@ from portfolio_common.database_models import Cashflow, Transaction
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    transaction_ledger_query_spec,
+)
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.repositories.transaction_repository import TransactionRepository
 from src.services.query_service.app.services.fx_conversion import CachedFxRateConverter
@@ -136,7 +140,7 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
         response_dto = await service.get_transactions(**params)
 
         # ASSERT
-        mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
+        expected_filters = TransactionLedgerFilters(
             portfolio_id=params["portfolio_id"],
             instrument_id=params["instrument_id"],
             security_id=params["security_id"],
@@ -150,25 +154,21 @@ async def test_get_transactions(mock_transaction_repo: AsyncMock):
             start_date=params["start_date"],
             end_date=params["end_date"],
             as_of_date=date(2025, 1, 15),
+        )
+        mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
+            filters=expected_filters,
         )
         mock_transaction_repo.get_transactions.assert_awaited_once_with(
-            **params,
-            as_of_date=date(2025, 1, 15),
+            query_spec=transaction_ledger_query_spec(
+                filters=expected_filters,
+                sort_by=params["sort_by"],
+                sort_order=params["sort_order"],
+            ),
+            skip=params["skip"],
+            limit=params["limit"],
         )
         mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
-            portfolio_id=params["portfolio_id"],
-            instrument_id=params["instrument_id"],
-            security_id=params["security_id"],
-            transaction_type=params["transaction_type"],
-            component_type=params["component_type"],
-            linked_transaction_group_id=params["linked_transaction_group_id"],
-            fx_contract_id=params["fx_contract_id"],
-            swap_event_id=params["swap_event_id"],
-            near_leg_group_id=params["near_leg_group_id"],
-            far_leg_group_id=params["far_leg_group_id"],
-            start_date=params["start_date"],
-            end_date=params["end_date"],
-            as_of_date=date(2025, 1, 15),
+            filters=expected_filters,
         )
 
         assert response_dto.total == 25
@@ -374,35 +374,12 @@ async def test_get_transactions_include_projected_skips_business_date_default(
         )
 
         mock_transaction_repo.get_latest_business_date.assert_not_awaited()
+        projected_filters = TransactionLedgerFilters(portfolio_id="P1")
         mock_transaction_repo.get_transactions_count.assert_awaited_once_with(
-            portfolio_id="P1",
-            instrument_id=None,
-            security_id=None,
-            transaction_type=None,
-            component_type=None,
-            linked_transaction_group_id=None,
-            fx_contract_id=None,
-            swap_event_id=None,
-            near_leg_group_id=None,
-            far_leg_group_id=None,
-            start_date=None,
-            end_date=None,
-            as_of_date=None,
+            filters=projected_filters,
         )
         mock_transaction_repo.get_latest_evidence_timestamp.assert_awaited_once_with(
-            portfolio_id="P1",
-            instrument_id=None,
-            security_id=None,
-            transaction_type=None,
-            component_type=None,
-            linked_transaction_group_id=None,
-            fx_contract_id=None,
-            swap_event_id=None,
-            near_leg_group_id=None,
-            far_leg_group_id=None,
-            start_date=None,
-            end_date=None,
-            as_of_date=None,
+            filters=projected_filters,
         )
 
 
@@ -416,8 +393,9 @@ async def test_get_transactions_reads_portfolio_exists_and_default_date_sequenti
         assert portfolio_id == "P1"
         return True
 
-    async def get_latest_business_date() -> date:
+    async def get_latest_business_date(*, calendar_code: str) -> date:
         call_order.append("date")
+        assert calendar_code == "GLOBAL"
         return date(2025, 1, 15)
 
     repo.portfolio_exists.side_effect = portfolio_exists
@@ -623,11 +601,14 @@ async def test_get_realized_tax_summary_aggregates_explicit_tax_evidence(
         )
 
     mock_transaction_repo.get_portfolio_base_currency.assert_awaited_once_with("P1")
-    mock_transaction_repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+    expected_tax_filters = TransactionLedgerFilters(
         portfolio_id="P1",
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
         as_of_date=date(2025, 1, 15),
+    )
+    mock_transaction_repo.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+        filters=expected_tax_filters,
     )
     assert not hasattr(mock_transaction_repo, "get_latest_realized_tax_evidence_timestamp")
     assert summary.product_name == "PortfolioRealizedTaxSummary"
@@ -674,12 +655,10 @@ async def test_get_realized_tax_summary_delegates_tax_evidence_read() -> None:
     assert summary.tax_evidence_transaction_count == 0
     read_realized_tax_evidence.assert_awaited_once_with(
         repository=repo,
-        ledger_filters={
-            "portfolio_id": "P1",
-            "start_date": None,
-            "end_date": None,
-            "as_of_date": date(2025, 1, 15),
-        },
+        ledger_filters=TransactionLedgerFilters(
+            portfolio_id="P1",
+            as_of_date=date(2025, 1, 15),
+        ),
     )
 
 
@@ -694,8 +673,9 @@ async def test_get_realized_tax_summary_reads_base_currency_and_default_date_seq
         assert portfolio_id == "P1"
         return "USD"
 
-    async def get_latest_business_date() -> date:
+    async def get_latest_business_date(*, calendar_code: str) -> date:
         call_order.append("date")
+        assert calendar_code == "GLOBAL"
         return date(2025, 1, 15)
 
     repo.get_portfolio_base_currency.side_effect = get_portfolio_base_currency

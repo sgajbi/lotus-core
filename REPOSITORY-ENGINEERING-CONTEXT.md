@@ -1308,6 +1308,13 @@ Most relevant current governance:
      endpoints must use cursor/page-token pagination, offset pagination with a max limit, mandatory
      bounded windows, or a documented small-cardinality contract with tests. Do not add optional
      date filters that allow full-history scans by omission.
+110. API/query filter, sort, and as-of policy must be application-owned before repository access.
+     The transaction ledger uses `query_service.app.application.transaction_query` to build
+     `TransactionLedgerFilters`, `TransactionSortSpec`, and `TransactionLedgerQuerySpec`; repository
+     methods translate those typed specs to SQL and must not accept raw route/query parameters for
+     ledger reads. Default business-calendar selection belongs in service date policy, passed
+     explicitly to repository queries. Extend this spec pattern for future ledger-style reads rather
+     than adding repository-local API vocabulary, silent fallbacks, or as-of default rules.
 
 ## Context Maintenance Rule
 

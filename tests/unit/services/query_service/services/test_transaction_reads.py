@@ -4,6 +4,10 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.database_models import Transaction
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+    transaction_ledger_query_spec,
+)
 from src.services.query_service.app.services.transaction_reads import (
     read_realized_tax_evidence,
     read_transaction_ledger_page,
@@ -12,13 +16,13 @@ from src.services.query_service.app.services.transaction_reads import (
 pytestmark = pytest.mark.asyncio
 
 
-def _ledger_filters() -> dict[str, object]:
-    return {
-        "portfolio_id": "P1",
-        "instrument_id": "I1",
-        "start_date": date(2025, 1, 1),
-        "end_date": date(2025, 1, 31),
-    }
+def _ledger_filters() -> TransactionLedgerFilters:
+    return TransactionLedgerFilters(
+        portfolio_id="P1",
+        instrument_id="I1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+    )
 
 
 async def test_read_transaction_ledger_page_skips_page_read_for_empty_window() -> None:
@@ -81,6 +85,11 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_partial_wi
     ]
     repository.get_latest_evidence_timestamp.return_value = datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
     ledger_filters = _ledger_filters()
+    expected_query_spec = transaction_ledger_query_spec(
+        filters=ledger_filters,
+        sort_by="transaction_date",
+        sort_order="desc",
+    )
 
     page = await read_transaction_ledger_page(
         repository=repository,
@@ -96,11 +105,9 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_partial_wi
     repository.get_transactions.assert_awaited_once_with(
         skip=10,
         limit=10,
-        sort_by="transaction_date",
-        sort_order="desc",
-        **ledger_filters,
+        query_spec=expected_query_spec,
     )
-    repository.get_latest_evidence_timestamp.assert_awaited_once_with(**ledger_filters)
+    repository.get_latest_evidence_timestamp.assert_awaited_once_with(filters=ledger_filters)
 
 
 async def test_read_transaction_ledger_page_reads_global_evidence_for_short_page() -> None:
@@ -126,7 +133,7 @@ async def test_read_transaction_ledger_page_reads_global_evidence_for_short_page
 
     assert page.total_count == 2
     assert page.latest_evidence_timestamp == datetime(2025, 1, 20, 9, 0, tzinfo=UTC)
-    repository.get_latest_evidence_timestamp.assert_awaited_once_with(**ledger_filters)
+    repository.get_latest_evidence_timestamp.assert_awaited_once_with(filters=ledger_filters)
 
 
 async def test_read_realized_tax_evidence_reads_count_and_tax_rows_sequentially() -> None:
@@ -143,12 +150,17 @@ async def test_read_realized_tax_evidence_reads_count_and_tax_rows_sequentially(
         ),
     ]
 
-    async def get_transactions_count(**_: object) -> int:
+    async def get_transactions_count(*, filters: TransactionLedgerFilters) -> int:
         call_order.append("count")
+        assert filters == ledger_filters
         return 2
 
-    async def list_realized_tax_evidence_transactions(**_: object) -> list[Transaction]:
+    async def list_realized_tax_evidence_transactions(
+        *,
+        filters: TransactionLedgerFilters,
+    ) -> list[Transaction]:
         call_order.append("tax_evidence")
+        assert filters == ledger_filters
         return tax_transactions
 
     repository.get_transactions_count.side_effect = get_transactions_count
@@ -166,8 +178,10 @@ async def test_read_realized_tax_evidence_reads_count_and_tax_rows_sequentially(
     assert evidence.tax_transactions == tax_transactions
     assert evidence.latest_evidence_timestamp == datetime(2025, 1, 16, 9, 0, tzinfo=UTC)
     assert call_order == ["count", "tax_evidence"]
-    repository.get_transactions_count.assert_awaited_once_with(**ledger_filters)
-    repository.list_realized_tax_evidence_transactions.assert_awaited_once_with(**ledger_filters)
+    repository.get_transactions_count.assert_awaited_once_with(filters=ledger_filters)
+    repository.list_realized_tax_evidence_transactions.assert_awaited_once_with(
+        filters=ledger_filters
+    )
 
 
 async def test_read_realized_tax_evidence_reports_empty_evidence_timestamp() -> None:
