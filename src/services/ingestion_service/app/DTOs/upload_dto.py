@@ -53,11 +53,14 @@ class UploadPreviewResponse(BaseModel):
     )
     sample_rows: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Normalized and validated sample rows for UI preview.",
+        description=(
+            "Redacted valid sample rows returned only when include_sample_rows=true and the "
+            "caller has the signed preview-sample capability. Defaults to an empty list."
+        ),
         examples=[
             [
                 {
-                    "portfolioId": "PORT_001",
+                    "portfolioId": "***REDACTED***",
                     "baseCurrency": "USD",
                     "status": "Active",
                 }

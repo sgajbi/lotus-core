@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from ..application.errors import ApplicationError
 from ..application.upload_commands import (
@@ -16,6 +16,7 @@ from ..DTOs.upload_dto import (
     UploadPreviewResponse,
     UploadRowError,
 )
+from ..enterprise_readiness import authorize_capability, emit_audit_event
 from ..ops_controls import enforce_ingestion_write_rate_limit
 from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from ..services.ingestion_service import (
@@ -35,6 +36,7 @@ from .publish_errors import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+UPLOAD_PREVIEW_SAMPLE_CAPABILITY = "ingestion.uploads.preview_samples.read"
 HTTP_422_UNPROCESSABLE_CONTENT = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 UPLOAD_APPLICATION_ERROR_STATUS = {
     "unsupported_upload_file_format": status.HTTP_400_BAD_REQUEST,
@@ -103,12 +105,14 @@ def upload_preview_command_from_api(
     filename: str,
     content: bytes,
     sample_size: int,
+    include_sample_rows: bool = False,
 ) -> UploadPreviewCommand:
     return UploadPreviewCommand(
         entity_type=entity_type,
         filename=filename,
         content=content,
         sample_size=sample_size,
+        include_sample_rows=include_sample_rows,
     )
 
 
@@ -179,6 +183,39 @@ async def _read_bounded_upload_content(file: UploadFile) -> bytes:
     return b"".join(chunks)
 
 
+def _authorize_preview_sample_rows(request: Request) -> None:
+    allowed, reason = authorize_capability(
+        dict(request.headers),
+        UPLOAD_PREVIEW_SAMPLE_CAPABILITY,
+    )
+    if not allowed:
+        emit_audit_event(
+            action="DENY POST /ingest/uploads/preview sample_rows",
+            actor_id=request.headers.get("X-Actor-Id", "unknown"),
+            tenant_id=request.headers.get("X-Tenant-Id", "default"),
+            role=request.headers.get("X-Role", "unknown"),
+            correlation_id=request.headers.get("X-Correlation-Id"),
+            metadata={"reason": reason, "capability": UPLOAD_PREVIEW_SAMPLE_CAPABILITY},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "INGESTION_UPLOAD_SAMPLE_ROWS_FORBIDDEN",
+                "message": "Upload preview sample rows require a signed privileged capability.",
+                "reason": reason,
+                "capability": UPLOAD_PREVIEW_SAMPLE_CAPABILITY,
+            },
+        )
+    emit_audit_event(
+        action="POST /ingest/uploads/preview sample_rows",
+        actor_id=request.headers.get("X-Actor-Id", "unknown"),
+        tenant_id=request.headers.get("X-Tenant-Id", "default"),
+        role=request.headers.get("X-Role", "unknown"),
+        correlation_id=request.headers.get("X-Correlation-Id"),
+        metadata={"capability": UPLOAD_PREVIEW_SAMPLE_CAPABILITY},
+    )
+
+
 @router.post(
     "/ingest/uploads/preview",
     response_model=UploadPreviewResponse,
@@ -207,6 +244,7 @@ async def _read_bounded_upload_content(file: UploadFile) -> bytes:
     ),
 )
 async def preview_upload(
+    request: Request,
     entity_type: UploadEntityType = Form(
         ...,
         description="Entity family expected in the uploaded file.",
@@ -221,12 +259,22 @@ async def preview_upload(
         20,
         ge=1,
         le=100,
-        description="Maximum number of valid normalized sample rows to include in the preview.",
+        description="Maximum number of validation errors and privileged sample rows to include.",
         examples=[20],
+    ),
+    include_sample_rows: bool = Form(
+        False,
+        description=(
+            "Return redacted valid sample rows. Requires the signed "
+            "ingestion.uploads.preview_samples.read capability."
+        ),
+        examples=[False],
     ),
     _: None = Depends(require_upload_adapter_enabled),
     upload_service: UploadIngestionService = Depends(get_upload_ingestion_service),
 ):
+    if include_sample_rows:
+        _authorize_preview_sample_rows(request)
     content = await _read_bounded_upload_content(file)
     try:
         result = upload_service.preview_upload(
@@ -235,6 +283,7 @@ async def preview_upload(
                 filename=file.filename or "upload.csv",
                 content=content,
                 sample_size=sample_size,
+                include_sample_rows=include_sample_rows,
             )
         )
     except ApplicationError as exc:

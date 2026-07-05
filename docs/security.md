@@ -57,9 +57,11 @@ Current runtime posture:
    `ENTERPRISE_CAPABILITY_RULES_JSON`,
 9. enterprise capability checks consume a signed service-principal auth context rather than trusting
    arbitrary `X-Capabilities` or `X-Service-Identity` headers,
-10. privileged ingestion ops JWTs require issuer, audience, expiry, issued-at, replay id, principal
+10. bulk upload preview returns no sample rows by default; privileged sample rows require signed
+   `ingestion.uploads.preview_samples.read` and field redaction,
+11. privileged ingestion ops JWTs require issuer, audience, expiry, issued-at, replay id, principal
    identity, required ops scope/capability, `kid`, and active/previous-key validation,
-11. non-local ingestion profiles cannot use static ops-token fallback unless
+12. non-local ingestion profiles cannot use static ops-token fallback unless
    `LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED=true` and a non-default token are set,
-12. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
+13. query-service page tokens use versioned, keyed, expiring envelopes and non-local profiles fail
    closed unless `LOTUS_CORE_PAGE_TOKEN_SECRET` and `LOTUS_CORE_PAGE_TOKEN_KEY_ID` are non-default.

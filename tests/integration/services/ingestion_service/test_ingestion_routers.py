@@ -6632,7 +6632,7 @@ async def test_upload_preview_accepts_all_supported_entity_families(
     assert body["total_rows"] == 1
     assert body["valid_rows"] == 1
     assert body["invalid_rows"] == 0
-    assert case["expected_sample_key"] in body["sample_rows"][0]
+    assert body["sample_rows"] == []
     assert body["errors"] == []
     mock_kafka_producer.publish_message.assert_not_called()
 
@@ -6719,7 +6719,7 @@ async def test_upload_preview_limits_sample_rows_and_errors(
     assert body["total_rows"] == 3
     assert body["valid_rows"] == 1
     assert body["invalid_rows"] == 2
-    assert [row["transaction_id"] for row in body["sample_rows"]] == ["T1"]
+    assert body["sample_rows"] == []
     assert len(body["errors"]) == 1
     assert body["errors"][0]["row_number"] == 3
     mock_kafka_producer.publish_message.assert_not_called()
