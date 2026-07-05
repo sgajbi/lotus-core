@@ -198,8 +198,8 @@ def build_dpm_portfolio_universe_response(
             ],
             downstream_boundary=(
                 "Candidate membership is not relationship householding, suitability approval, "
-                "portfolio-manager ranking, execution readiness, client communication "
-                "workflow, or external workflow ownership."
+                "manager assignment, trading authorization, client notification authority, or "
+                "external process ownership."
             ),
         ),
         lineage={

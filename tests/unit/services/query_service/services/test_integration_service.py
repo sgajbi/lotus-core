@@ -566,7 +566,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_returns_source_owned_pa
         "active authority unless include_inactive_mandates=true",
     ]
     assert "suitability approval" in response.selection_basis.downstream_boundary
-    assert "execution readiness" in response.selection_basis.downstream_boundary
+    assert "trading authorization" in response.selection_basis.downstream_boundary
     assert response.page.next_page_token is None
     assert response.lineage["source_table"] == "portfolio_mandate_bindings"
     assert response.snapshot_id is not None

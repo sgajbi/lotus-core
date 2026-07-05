@@ -1,10 +1,12 @@
 import importlib
+import inspect
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from src.services.query_service.app.dtos.integration_dto import InstrumentEnrichmentBulkResponse
+from src.services.query_service.app.dtos import reference_integration_dto
 from src.services.query_service.app.dtos.reference_integration_dpm_source_readiness_dto import (
     DpmSourceReadinessRequest,
 )
@@ -320,3 +322,47 @@ def test_source_data_product_responses_declare_product_identity_defaults(
 
     assert product_field.default == product_name
     assert version_field.default == "v1"
+
+
+def test_reference_integration_dto_metadata_uses_domain_neutral_examples() -> None:
+    forbidden_terms = {
+        "lotus-manage",
+        "lotus-idea",
+        "lotus-performance",
+        "lotus-risk",
+        "lotus-advise",
+        "lotus-report",
+        "lotus-workbench",
+        "portfolio-manager ranking",
+        "client communication workflow",
+        "external workflow ownership",
+    }
+    findings: list[str] = []
+
+    for model_name, model_type in inspect.getmembers(reference_integration_dto, inspect.isclass):
+        if not issubclass(model_type, BaseModel):
+            continue
+        for field_name, field in model_type.model_fields.items():
+            values = [str(field.description or "")]
+            values.extend(str(value) for value in (field.examples or []))
+            joined = " ".join(values).lower()
+            for term in forbidden_terms:
+                if term in joined:
+                    findings.append(f"{model_name}.{field_name}: {term}")
+
+    assert findings == []
+
+    boundary_field = DpmPortfolioUniverseCandidateResponse.model_fields[
+        "selection_basis"
+    ].description
+    selection_boundary = reference_integration_dto.DpmPortfolioUniverseCandidateSelectionBasis
+    boundary_values = [
+        str(selection_boundary.model_fields["downstream_boundary"].description or ""),
+        *(str(value) for value in selection_boundary.model_fields["downstream_boundary"].examples),
+    ]
+    boundary_text = " ".join(boundary_values).lower()
+    assert boundary_field is not None
+    assert "portfolio-manager ranking" not in boundary_text
+    assert "execution readiness" not in boundary_text
+    assert "client communication workflow" not in boundary_text
+    assert "external workflow ownership" not in boundary_text

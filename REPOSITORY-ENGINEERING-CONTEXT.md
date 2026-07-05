@@ -1559,6 +1559,13 @@ Most relevant current governance:
      empty-request rejection, instrument repository lookup, or enrichment DTO assembly delegation to
      the broad service. Pure enrichment record mapping remains in
      `core_snapshot_instrument_enrichment.py`.
+124. Reference integration DTO metadata must remain domain-neutral and source-authority oriented.
+     Do not justify defaults or examples by naming a downstream Lotus application unless the field
+     is explicitly a consumer-policy contract. Use neutral source-system examples, mandate-policy
+     evidence language, request-context wording, and source-authority boundaries. The regression
+     test in `tests/unit/services/query_service/dtos/test_reference_integration_dto.py` guards
+     `reference_integration_dto.py` against reintroducing downstream app names or downstream-owned
+     campaign/ranking/execution/client-communication workflow phrases.
 
 ## Context Maintenance Rule
 
