@@ -64,6 +64,10 @@
   protects OCI image labels, CI build args, CI-only image publication, Git SHA image tags, digest
   release manifests, SBOM/provenance/signing/scan controls, digest-based Kubernetes references,
   same-image promotion evidence, no-build-secret posture, and the shared `/version` endpoint
+- `make supported-features-guard`
+  protects `docs/supported-features.md` and `wiki/Supported-Features.md` against unsupported
+  capability claims, missing evidence links, stale feature status, and missing fail-closed or
+  downstream ownership caveats
 - `make security-control-coverage-guard`
   protects the FastAPI app security-control matrix for standard bootstrap, secure headers, CORS,
   metrics access, auth/audit, payload limits, upload limits, allowlists, and safe errors

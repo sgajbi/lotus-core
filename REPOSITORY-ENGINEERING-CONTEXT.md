@@ -461,6 +461,13 @@ Important validation expectations:
    repository context, or platform context, update the relevant source-of-truth docs in the
    same slice or record a concrete no-doc-change rationale in the PR template. Wiki source
    changes require a post-merge publication evidence plan.
+8. Supported-feature publication is manifest-backed. Keep
+   `contracts/supported-features/lotus-core-supported-features.v1.json`,
+   `docs/supported-features.md`, and `wiki/Supported-Features.md` aligned through
+   `make supported-features-guard`. The manifest is the canonical place to record capability
+   owner, implementation modules/routes, source-data products, tests, validation evidence,
+   current status, fail-closed limitations, safe demo claims, prohibited claims, and downstream
+   ownership caveats.
 
 ## Standards And RFCs That Govern This Repository
 

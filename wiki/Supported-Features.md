@@ -8,6 +8,12 @@ the repository has implementation evidence in code, contracts, tests, RFCs, or r
 source. Broader ecosystem claims still belong in `lotus-platform` or in the consuming application
 that owns the client-facing experience.
 
+Canonical capability evidence is maintained in
+`contracts/supported-features/lotus-core-supported-features.v1.json` and checked by
+`make supported-features-guard`. That manifest maps each claim to owner, status, modules, routes,
+source-data products, tests, validation evidence, limitations, safe demo claims, prohibited claims,
+and downstream ownership caveats.
+
 ## Executive Summary
 
 `lotus-core` is the Lotus system of record for foundational portfolio, booking, transaction,
@@ -37,6 +43,21 @@ The implementation-backed value proposition is:
 | Ingestion and replay | API-first ingestion, portfolio bundle ingestion, file preview/commit, job bookkeeping, retry/replay, DLQ diagnostics, idempotency diagnostics, and operational health views. | Operations, engineering | [Ingestion Service](Ingestion-Service), [Event Replay Service](Event-Replay-Service), [Operations Runbook](Operations-Runbook) |
 | Reconciliation and supportability | Financial reconciliation runs/findings, readiness, support overview, calculator SLOs, lineage keys, load-run progress, queue/job health, and bounded portfolio supportability metrics. | Operations, SRE, engineering, demos | [Financial Reconciliation](Financial-Reconciliation), [Support and Lineage](Support-and-Lineage), [Operations Runbook](Operations-Runbook) |
 | Simulation and advisory source effects | Simulation sessions, projected state, and canonical advisory proposal execution simulation effects as source-owned proposal impact evidence. | Advisory, gateway, engineering | [API Surface](API-Surface), `src/services/query_control_plane_service/app/routers/simulation.py`, `src/services/query_control_plane_service/app/routers/advisory_simulation.py` |
+
+## Manifest Status Map
+
+| Capability | Manifest status | Publication boundary |
+| --- | --- | --- |
+| Portfolio and account source of record | `supported` | Source truth only; downstream apps own analytics and product experience. |
+| Transaction and booking evidence | `supported` | Booking and ledger evidence only; tax advice, execution, and reporting interpretation are downstream-owned. |
+| Position, valuation, and cashflow calculators | `supported` | Source-data foundations only; performance, risk, advice, and liquidity conclusions are downstream-owned. |
+| Operational read plane | `supported` | Operational reads must not drift into report composition, advice, risk, or performance ownership. |
+| Query control plane | `supported` | Source-data products and control-plane evidence only; consumer adoption proof remains downstream-owned. |
+| DPM source-data products | `supported_with_fail_closed_dependencies` | Core publishes source readiness and fail-closed external dependency posture; DPM decisions remain `lotus-manage` owned. |
+| Market/reference products | `supported` | Coverage and reference evidence only; attribution and risk conclusions remain downstream-owned. |
+| Ingestion and replay | `supported` | Operational ingestion, replay, DLQ, and recovery evidence only; downstream semantic outcomes remain consumer-owned. |
+| Reconciliation and supportability | `supported` | Operator evidence only unless a route family explicitly supports product use. |
+| Simulation and advisory source effects | `producer_certified_downstream_owned` | Deterministic source-effect evidence only; advisory decisioning remains `lotus-advise` owned. |
 
 ## Functional Flow
 

@@ -68,7 +68,7 @@ def test_lotus_core_validation_fails_on_runtime_smoke_failure(tmp_path: Path, mo
     def fake_run(_command, **_kwargs):
         nonlocal calls
         calls += 1
-        return Completed(1 if calls == 6 else 0)
+        return Completed(1 if calls == 7 else 0)
 
     monkeypatch.setattr(validator.subprocess, "run", fake_run)
 
@@ -81,10 +81,15 @@ def test_lotus_core_validation_fails_on_runtime_smoke_failure(tmp_path: Path, mo
 
 
 def test_lotus_core_validation_skip_modes_are_explicit(tmp_path: Path, monkeypatch) -> None:
+    class Completed:
+        returncode = 0
+        stdout = "supported features ok"
+        stderr = ""
+
     monkeypatch.setattr(
         validator.subprocess,
         "run",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not run")),
+        lambda *_args, **_kwargs: Completed(),
     )
 
     evidence = validator.run_validation(
@@ -99,6 +104,13 @@ def test_lotus_core_validation_skip_modes_are_explicit(tmp_path: Path, monkeypat
     }
     assert skipped["openapi_contract"] is True
     assert skipped["runtime_app_surface_smoke"] is True
+    supported_feature_check = next(
+        check for check in evidence["checks"] if check["name"] == "supported_feature_truth"
+    )
+    assert supported_feature_check["details"]["command"] == [
+        sys.executable,
+        "scripts/supported_features_guard.py",
+    ]
 
 
 def test_lotus_core_validation_cli_writes_json(tmp_path: Path, monkeypatch, capsys) -> None:
