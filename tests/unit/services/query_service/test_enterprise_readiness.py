@@ -7,11 +7,14 @@ from fastapi.responses import Response
 from portfolio_common.logging_utils import correlation_id_var
 
 from src.services.query_service.app.enterprise_readiness import (
+    _required_capability,
     authorize_request,
     authorize_write_request,
     build_enterprise_audit_middleware,
+    enterprise_policy_version,
     emit_audit_event,
     is_feature_enabled,
+    load_capability_rules,
     load_feature_flags,
     redact_sensitive,
     validate_enterprise_runtime_config,
@@ -135,6 +138,18 @@ def test_load_feature_flags_returns_empty_on_invalid_json(monkeypatch):
 def test_load_feature_flags_returns_empty_for_non_object_payload(monkeypatch):
     monkeypatch.setenv("ENTERPRISE_FEATURE_FLAGS_JSON", "[]")
     assert load_feature_flags() == {}
+
+
+def test_enterprise_policy_and_capability_rules_use_runtime_settings(monkeypatch):
+    monkeypatch.setenv("ENTERPRISE_POLICY_VERSION", "policy-2026-07")
+    monkeypatch.setenv(
+        "ENTERPRISE_CAPABILITY_RULES_JSON",
+        json.dumps({"GET /portfolios": "portfolios.read"}),
+    )
+
+    assert enterprise_policy_version() == "policy-2026-07"
+    assert load_capability_rules()["GET /portfolios"] == "portfolios.read"
+    assert _required_capability("GET", "/portfolios/PB1") == "portfolios.read"
 
 
 def test_authorize_write_request_requires_service_identity_when_headers_present(monkeypatch):

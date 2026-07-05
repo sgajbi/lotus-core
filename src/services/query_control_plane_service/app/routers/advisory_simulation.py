@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Header, Response, status
+from fastapi.responses import JSONResponse
+from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 
 from src.services.query_service.app.advisory_simulation.models import (
     ProposalResult,
@@ -21,6 +24,15 @@ from ..contracts import (
 )
 
 router = APIRouter(prefix="/integration/advisory/proposals", tags=["Integration"])
+logger = logging.getLogger(__name__)
+
+
+def _problem_correlation_id(header_correlation_id: str | None) -> str:
+    return (
+        normalize_lineage_value(header_correlation_id)
+        or normalize_lineage_value(correlation_id_var.get())
+        or "QCP:unknown"
+    )
 
 
 @router.post(
@@ -86,7 +98,7 @@ async def simulate_advisory_execution(
             description="Optional caller correlation identifier propagated into the result.",
         ),
     ] = None,
-) -> ProposalResult:
+) -> ProposalResult | JSONResponse:
     if contract_version is not None and contract_version != ADVISORY_SIMULATION_CONTRACT_VERSION:
         raise CanonicalSimulationContractError(
             status_code=status.HTTP_412_PRECONDITION_FAILED,
@@ -97,13 +109,35 @@ async def simulate_advisory_execution(
             ),
         )
 
-    result = execute_advisory_simulation(
-        request=request,
-        request_hash=x_request_hash,
-        idempotency_key=idempotency_key,
-        correlation_id=x_correlation_id,
-        simulation_contract_version=ADVISORY_SIMULATION_CONTRACT_VERSION,
-    )
+    try:
+        result = execute_advisory_simulation(
+            request=request,
+            request_hash=x_request_hash,
+            idempotency_key=idempotency_key,
+            correlation_id=x_correlation_id,
+            simulation_contract_version=ADVISORY_SIMULATION_CONTRACT_VERSION,
+        )
+    except Exception:
+        logger.exception("Canonical simulation execution failed")
+        correlation_id = _problem_correlation_id(x_correlation_id)
+        problem = CanonicalSimulationProblemDetails(
+            type="https://lotus.local/problems/canonical-simulation/canonical_simulation_execution_failed",
+            title="Canonical Simulation Execution Failed",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Canonical simulation execution failed inside lotus-core.",
+            instance="/integration/advisory/proposals/simulate-execution",
+            error_code=CanonicalSimulationErrorCode.EXECUTION_FAILED,
+            contract_version=ADVISORY_SIMULATION_CONTRACT_VERSION,
+            correlation_id=correlation_id,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            media_type="application/problem+json",
+            content=problem.model_dump(mode="json"),
+            headers={
+                ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER: ADVISORY_SIMULATION_CONTRACT_VERSION
+            },
+        )
     response.headers[ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER] = (
         ADVISORY_SIMULATION_CONTRACT_VERSION
     )

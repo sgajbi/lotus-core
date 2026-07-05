@@ -36,7 +36,7 @@ from src.services.calculators.cost_calculator_service.app.cost_engine.processing
 from src.services.calculators.cost_calculator_service.app.cost_engine.processing.sorter import (
     _CASH_OUTFLOW_TRANSACTION_TYPES as COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES,
 )
-from src.services.calculators.position_calculator.app.core.position_logic import (
+from src.services.calculators.position_calculator.app.core.position_reducer import (
     CASH_POSITION_DELTA_TRANSACTION_TYPES,
     POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES,
     POSITION_TRANSFER_TRANSACTION_TYPES,

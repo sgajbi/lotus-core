@@ -14,6 +14,9 @@ if str(REPO_ROOT) not in sys.path:
 # Coverage.py enforces the displayed integer total for the combined
 # branch-aware unit + integration-lite gate.
 FAIL_UNDER = "98"
+COVERAGE_OUTPUT_DIR = REPO_ROOT / "output" / "coverage"
+COVERAGE_JSON = COVERAGE_OUTPUT_DIR / "coverage.json"
+CRITICAL_PATH_REPORT = COVERAGE_OUTPUT_DIR / "critical-path-coverage-report.json"
 
 
 def run(cmd: list[str]) -> None:
@@ -47,6 +50,18 @@ def main() -> int:
         ]
     )
     run([sys.executable, "-m", "coverage", "report", f"--fail-under={FAIL_UNDER}"])
+    COVERAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    run([sys.executable, "-m", "coverage", "json", "-o", str(COVERAGE_JSON)])
+    run(
+        [
+            sys.executable,
+            "scripts/critical_path_coverage_guard.py",
+            "--coverage-json",
+            str(COVERAGE_JSON.relative_to(REPO_ROOT)),
+            "--output",
+            str(CRITICAL_PATH_REPORT.relative_to(REPO_ROOT)),
+        ]
+    )
     return 0
 
 

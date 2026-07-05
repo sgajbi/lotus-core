@@ -17,8 +17,7 @@ def test_core_snapshot_service_keeps_system_time_behind_clock_provider() -> None
     service_text = (
         REPO_ROOT / "src/services/query_service/app/services/core_snapshot_service.py"
     ).read_text(encoding="utf-8")
-    direct_time_lines = [
-        line.strip() for line in service_text.splitlines() if "datetime.now(UTC)" in line
-    ]
 
-    assert direct_time_lines == ["self._clock = clock or (lambda: datetime.now(UTC))"]
+    assert "datetime.now(UTC)" not in service_text
+    assert "self._clock = clock or SystemClock()" in service_text
+    assert "generated_at = self._clock.utc_now()" in service_text

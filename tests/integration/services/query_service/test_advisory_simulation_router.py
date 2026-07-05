@@ -141,6 +141,7 @@ def test_advisory_simulation_execution_router_returns_problem_details_on_executi
     body = response.json()
     assert body["error_code"] == "CANONICAL_SIMULATION_EXECUTION_FAILED"
     assert body["contract_version"] == ADVISORY_SIMULATION_CONTRACT_VERSION
+    assert body["correlation_id"].startswith("QCP:")
 
 
 def test_advisory_simulation_execution_openapi_documents_contract_header_and_errors():
