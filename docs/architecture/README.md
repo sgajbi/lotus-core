@@ -5,6 +5,12 @@ This index provides the fastest grounded path through the `lotus-core` deep arch
 Use it when you need more than the README or wiki summary but do not want to scan the full
 `docs/architecture/` directory blindly.
 
+The searchable metadata source is
+[architecture-documentation-catalog.v1.json](./architecture-documentation-catalog.v1.json). It
+classifies architecture files as `current-state truth`, `review evidence`, `historical context`,
+templates, or catalog metadata. `make architecture-docs-catalog-guard` fails when a new
+architecture `.md` or `.json` file lacks explicit metadata or an intentional coverage rule.
+
 ## Start Here
 
 Read these first:
@@ -65,6 +71,14 @@ Pick the smallest correct reading path:
    start with the relevant RFC-0083 supportability target model and then the matching `CR-*` review
 4. broad repo orientation:
    start with the target architecture and this index, then move into the wiki
+
+Use the catalog before broad scans:
+
+1. `current-state truth` entries are safe starting points for implementation decisions.
+2. `review evidence` entries prove a specific refactor or issue slice, but the review ledger is the
+   current status index.
+3. `historical context` entries explain why a decision happened; re-check current guards, docs, and
+   tests before using them as implementation guidance.
 
 ## Related References
 

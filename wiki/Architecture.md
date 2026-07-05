@@ -83,6 +83,7 @@ Control execution and reconciliation run contracts.
 ## Architecture references
 
 - [Architecture Index](../docs/architecture/README.md)
+- [Architecture Documentation Catalog](../docs/architecture/architecture-documentation-catalog.v1.json)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
 - [Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
