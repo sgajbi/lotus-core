@@ -97,9 +97,12 @@ Current repo truth:
    `output/lotus-core-validation/` and is blocking in the PR Merge Gate. The workflow checks out
    `lotus-platform` validation contracts so repo-native domain-product validation has its required
    platform vocabulary and validator.
-7. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
+7. `make docs-evidence-pack` writes a documentation release evidence manifest under
+   `output/documentation-evidence/`, covering README/wiki link validation, API vocabulary artifact
+   generation, RFC ledger checks, supported-feature truth, and runbook validation.
+8. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
    [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
-8. Production-like deployments default to the governed service-local enterprise security profile:
+9. Production-like deployments default to the governed service-local enterprise security profile:
    write authorization, read authorization, read auditing, capability-rule enforcement, and
    runtime configuration enforcement are on unless explicitly overridden through
    `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false`. This does not replace gateway/platform ingress

@@ -47,3 +47,5 @@ ingestion.
    deterministic synthetic data through the runtime smoke path, calls real Core APIs and
    calculations, checks contract/doc truth, writes JSON evidence under
    `output/lotus-core-validation/`, and exits non-zero on weak proof.
+7. `make docs-evidence-pack`, which writes `output/documentation-evidence/` with a release-ready
+   manifest for README, wiki, API vocabulary, RFC ledger, supported-feature, and runbook evidence.
