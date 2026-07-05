@@ -302,6 +302,8 @@ Operational knobs:
 | `LOTUS_CORE_KAFKA_PRODUCER_QUEUE_BUFFERING_MAX_KBYTES` | `1048576` | Default local producer queue memory bound in KiB. |
 | `LOTUS_CORE_KAFKA_PRODUCER_DEFAULTS_JSON` | empty | JSON object of default producer overrides using Kafka config keys such as `linger.ms` or `batch.num.messages`. |
 | `LOTUS_CORE_KAFKA_PRODUCER_SERVICE_OVERRIDES_JSON` | empty | JSON object keyed by service name for service-specific producer overrides. |
+| `VALUATION_SCHEDULER_POLL_BUDGET_SECONDS` | `30` | Maximum valuation scheduler poll work budget before deferring remaining dispatch rounds to a later poll. |
+| `VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS` | `10` | Maximum valuation scheduler per-batch dispatch budget before confirming queued work and recovering remaining claimed jobs. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.
@@ -310,6 +312,14 @@ Kafka producer durability settings `enable.idempotence=true`, `acks=all`, and
 `max.in.flight.requests.per.connection=5` are adapter-owned invariants, not runtime override
 settings. Invalid producer timeout, retry, batch, compression, queue, or override relationships fail
 with source-safe `RuntimeConfigurationError` messages before producer construction.
+
+Valuation scheduler throughput is bounded by batch size, dispatch rounds, poll budget, and dispatch
+budget together. Operators should watch `valuation_scheduler_poll_duration_seconds`,
+`valuation_scheduler_jobs_claimed_total`, `valuation_scheduler_jobs_dispatched_total`,
+`valuation_scheduler_budget_exhausted_total`, and
+`valuation_scheduler_producer_backpressure_total` before raising batch size or dispatch rounds.
+Budget exhaustion and producer back-pressure defer remaining work through the durable job recovery
+path; they are not evidence that Kafka payloads, keys, headers, or consumers changed.
 
 Health, readiness, and standard API responses include `X-Correlation-ID`, `X-Request-Id`,
 `X-Trace-Id`, and `traceparent` headers. A valid incoming W3C `traceparent` is preserved. When only

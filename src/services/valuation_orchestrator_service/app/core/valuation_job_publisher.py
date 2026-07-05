@@ -11,6 +11,13 @@ from portfolio_common.event_publisher import (
 )
 
 
+class ValuationJobPublishError(RuntimeError):
+    def __init__(self, message: str, *, reason_code: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+        self.retryable = retryable
+
+
 class ValuationJobPublisher(Protocol):
     def publish_job_requested(
         self,
@@ -43,7 +50,20 @@ class KafkaValuationJobPublisher:
             )
         )
         if not result.succeeded:
-            raise RuntimeError(result.error_message or result.status.value)
+            infrastructure_error = result.infrastructure_error
+            reason_code = (
+                infrastructure_error.reason_code
+                if infrastructure_error is not None
+                else result.status.value
+            )
+            retryable = (
+                infrastructure_error.retryable if infrastructure_error is not None else False
+            )
+            raise ValuationJobPublishError(
+                result.error_message or result.status.value,
+                reason_code=reason_code,
+                retryable=retryable,
+            )
 
     def confirm_delivery(self, *, timeout_seconds: int) -> int:
         result = self.event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)

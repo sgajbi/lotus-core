@@ -18,6 +18,7 @@ from portfolio_common.monitoring import (
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from portfolio_common.scheduler_dispatch_recovery import (
+    DISPATCH_BUDGET_EXHAUSTED_PHASE,
     DISPATCH_CONFIRMATION_TIMEOUT_PHASE,
     DISPATCH_PUBLISH_FAILURE_PHASE,
     SchedulerDispatchError,
@@ -831,6 +832,8 @@ async def test_scheduler_reads_max_attempts_from_environment(
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "9")
     monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "17")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
+    monkeypatch.setenv("VALUATION_SCHEDULER_POLL_BUDGET_SECONDS", "8")
+    monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", "5")
     monkeypatch.setenv("VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES", "12")
     monkeypatch.setenv("VALUATION_SCHEDULER_MAX_ATTEMPTS", "6")
 
@@ -841,6 +844,8 @@ async def test_scheduler_reads_max_attempts_from_environment(
     assert scheduler._poll_interval == 9
     assert scheduler._batch_size == 17
     assert scheduler._dispatch_rounds_per_poll == 4
+    assert scheduler._poll_budget_seconds == 8
+    assert scheduler._dispatch_budget_seconds == 5
     assert scheduler._stale_timeout_minutes == 12
     assert scheduler._max_attempts == 6
 
@@ -955,6 +960,188 @@ async def test_scheduler_claim_loop_recovers_dispatch_failure_before_next_poll(
         with pytest.raises(SchedulerDispatchError):
             await scheduler._claim_and_dispatch_ready_jobs()
 
+    mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
+        [301],
+        max_attempts=scheduler._max_attempts,
+        failure_reason=(
+            "Scheduler dispatch publish failed before queueing record keys: P1|S1|2025-08-11|1"
+        ),
+    )
+
+
+async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exhausted(
+    mock_kafka_producer: MagicMock,
+):
+    scheduler = ValuationScheduler(
+        poll_interval=1,
+        batch_size=2,
+        valuation_job_publisher=KafkaValuationJobPublisher(mock_kafka_producer),
+    )
+    claimed_batch = [
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+        patch.object(scheduler, "_dispatch_jobs", new=AsyncMock()) as mock_dispatch_jobs,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.time.monotonic",
+            side_effect=[0.0, 0.0, 2.0],
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_budget_exhausted"
+        ) as mock_budget_exhausted,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = claimed_batch
+        mock_repo_factory.return_value = mock_repo
+
+        await scheduler._claim_and_dispatch_ready_jobs()
+
+    mock_repo.find_and_claim_eligible_jobs.assert_awaited_once_with(2)
+    mock_dispatch_jobs.assert_awaited_once_with(claimed_batch)
+    mock_budget_exhausted.assert_called_once_with("poll")
+
+
+async def test_scheduler_dispatch_budget_exhaustion_recovers_remaining_claimed_jobs(
+    mock_kafka_producer: MagicMock,
+):
+    scheduler = ValuationScheduler(
+        poll_interval=30,
+        batch_size=2,
+        valuation_job_publisher=KafkaValuationJobPublisher(
+            KafkaEventPublisher(mock_kafka_producer)
+        ),
+    )
+    claimed_batch = [
+        PortfolioValuationJob(
+            id=301,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        ),
+        PortfolioValuationJob(
+            id=302,
+            portfolio_id="P1",
+            security_id="S2",
+            valuation_date=date(2025, 8, 12),
+            epoch=1,
+            correlation_id="corr-2",
+        ),
+    ]
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.time.monotonic",
+            side_effect=[0.0, 0.0, 0.0, 0.0, 11.0],
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_budget_exhausted"
+        ) as mock_budget_exhausted,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = claimed_batch
+        mock_repo_factory.return_value = mock_repo
+
+        with pytest.raises(SchedulerDispatchError) as exc_info:
+            await scheduler._claim_and_dispatch_ready_jobs()
+
+    assert exc_info.value.failure_phase == DISPATCH_BUDGET_EXHAUSTED_PHASE
+    assert exc_info.value.recovery_job_ids == (302,)
+    assert exc_info.value.published_record_keys == ("P1|S1|2025-08-11|1",)
+    mock_kafka_producer.publish_message.assert_called_once()
+    mock_kafka_producer.flush.assert_called_once_with(timeout=10)
+    mock_budget_exhausted.assert_called_once_with("dispatch")
+    mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
+        [302],
+        max_attempts=scheduler._max_attempts,
+        failure_reason=(
+            "Scheduler dispatch budget exhausted before queueing record keys: P1|S2|2025-08-12|1"
+        ),
+    )
+
+
+async def test_scheduler_counts_producer_backpressure_and_recovers_claimed_jobs(
+    mock_kafka_producer: MagicMock,
+):
+    scheduler = ValuationScheduler(
+        poll_interval=30,
+        batch_size=1,
+        valuation_job_publisher=KafkaValuationJobPublisher(
+            KafkaEventPublisher(mock_kafka_producer)
+        ),
+    )
+    claimed_batch = [
+        PortfolioValuationJob(
+            id=301,
+            portfolio_id="P1",
+            security_id="S1",
+            valuation_date=date(2025, 8, 11),
+            epoch=1,
+            correlation_id="corr-1",
+        )
+    ]
+    mock_kafka_producer.publish_message.side_effect = BufferError("queue full")
+
+    async def get_session_gen():
+        yield AsyncMock(spec=AsyncSession)
+
+    with (
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.get_async_db_session",
+            new=get_session_gen,
+        ),
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.ValuationRepository"
+        ) as mock_repo_factory,
+        patch(
+            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_valuation_scheduler_producer_backpressure"
+        ) as mock_backpressure,
+    ):
+        mock_repo = AsyncMock()
+        mock_repo.find_and_claim_eligible_jobs.return_value = claimed_batch
+        mock_repo_factory.return_value = mock_repo
+
+        with pytest.raises(SchedulerDispatchError) as exc_info:
+            await scheduler._claim_and_dispatch_ready_jobs()
+
+    assert exc_info.value.failure_phase == DISPATCH_PUBLISH_FAILURE_PHASE
+    assert exc_info.value.recovery_job_ids == (301,)
+    mock_backpressure.assert_called_once_with()
     mock_repo.recover_dispatch_failed_jobs.assert_awaited_once_with(
         [301],
         max_attempts=scheduler._max_attempts,

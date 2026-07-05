@@ -434,6 +434,33 @@ VALUATION_JOBS_FAILED_TOTAL = Counter(
     labelnames=("reason",),
 )
 
+VALUATION_SCHEDULER_POLL_DURATION_SECONDS = Histogram(
+    "valuation_scheduler_poll_duration_seconds",
+    "Duration of valuation scheduler poll work in seconds.",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60),
+)
+
+VALUATION_SCHEDULER_JOBS_CLAIMED_TOTAL = Counter(
+    "valuation_scheduler_jobs_claimed_total",
+    "Total number of valuation jobs claimed by the scheduler for dispatch.",
+)
+
+VALUATION_SCHEDULER_JOBS_DISPATCHED_TOTAL = Counter(
+    "valuation_scheduler_jobs_dispatched_total",
+    "Total number of valuation jobs confirmed or handed off for dispatch by the scheduler.",
+)
+
+VALUATION_SCHEDULER_BUDGET_EXHAUSTED_TOTAL = Counter(
+    "valuation_scheduler_budget_exhausted_total",
+    "Number of valuation scheduler poll or dispatch budget exhaustion events.",
+    labelnames=("stage",),
+)
+
+VALUATION_SCHEDULER_PRODUCER_BACKPRESSURE_TOTAL = Counter(
+    "valuation_scheduler_producer_backpressure_total",
+    "Number of valuation scheduler dispatch stops caused by producer back-pressure.",
+)
+
 VALUATION_WORKER_JOBS_CLAIMED_TOTAL = Counter(
     "valuation_worker_jobs_claimed_total",
     "Total number of valuation jobs claimed for processing.",
@@ -588,6 +615,26 @@ def observe_reprocessing_duplicates_normalized(scope: str, count: int = 1) -> No
 
 def observe_reprocessing_stale_skips(stage: str, count: int = 1) -> None:
     REPROCESSING_STALE_SKIPS_TOTAL.labels(stage).inc(count)
+
+
+def observe_valuation_scheduler_poll_duration(duration_seconds: float) -> None:
+    VALUATION_SCHEDULER_POLL_DURATION_SECONDS.observe(max(duration_seconds, 0.0))
+
+
+def observe_valuation_scheduler_jobs_claimed(count: int = 1) -> None:
+    VALUATION_SCHEDULER_JOBS_CLAIMED_TOTAL.inc(count)
+
+
+def observe_valuation_scheduler_jobs_dispatched(count: int = 1) -> None:
+    VALUATION_SCHEDULER_JOBS_DISPATCHED_TOTAL.inc(count)
+
+
+def observe_valuation_scheduler_budget_exhausted(stage: str, count: int = 1) -> None:
+    VALUATION_SCHEDULER_BUDGET_EXHAUSTED_TOTAL.labels(stage).inc(count)
+
+
+def observe_valuation_scheduler_producer_backpressure(count: int = 1) -> None:
+    VALUATION_SCHEDULER_PRODUCER_BACKPRESSURE_TOTAL.inc(count)
 
 
 def observe_valuation_worker_jobs_claimed(count: int = 1) -> None:
