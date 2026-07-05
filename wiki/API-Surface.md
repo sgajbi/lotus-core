@@ -1,5 +1,19 @@
 # API Surface
 
+## Current Scope
+
+This page is the navigation view for API families and common route examples. The generated
+implementation-backed catalog lives in
+[`docs/standards/api-route-catalog.v1.json`](../docs/standards/api-route-catalog.v1.json) and is
+checked by `make api-route-catalog-guard`.
+
+| Need | Primary Evidence | Notes |
+|---|---|---|
+| Implemented route inventory | Generated API route catalog | Generated from OpenAPI and route-family governance. |
+| Route-family ownership | Route contract-family registry | Guarded by `make route-contract-family-guard`. |
+| Copy-paste examples | Verified API examples catalog | Guarded by `make api-example-catalog-guard`. |
+| Human navigation | This wiki page | Keep prose focused on usage and route-family orientation. |
+
 ## Contract families
 
 ### `query_service`
@@ -143,6 +157,7 @@ POST /integration/advisory/proposals/simulate-execution
 
 For detailed classification, use:
 
+- [Generated API Route Catalog](../docs/standards/api-route-catalog.v1.json)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Route Contract-Family Registry](../docs/standards/route-contract-family-registry.json)
 - [Endpoint Consolidation Watchlist](../docs/standards/endpoint-consolidation-watchlist.json)

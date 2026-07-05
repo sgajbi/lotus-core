@@ -45,8 +45,10 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
     assert any(
         path.endswith("api-vocabulary-inventory.json") for path in evidence["artifact_paths"]
     )
+    assert "docs/standards/api-route-catalog.v1.json" in evidence["artifact_paths"]
     rendered_commands = [" ".join(command) for command in commands]
     assert any("api_vocabulary_inventory.py" in command for command in rendered_commands)
+    assert any("generate_api_route_catalog.py --check" in command for command in rendered_commands)
     assert any("wiki_validation_guard.py" in command for command in rendered_commands)
     assert any("rfc0083_closure_guard.py" in command for command in rendered_commands)
     assert any("rfc_status_ledger_guard.py" in command for command in rendered_commands)
@@ -55,6 +57,7 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
         "readme_link_validation",
         "wiki_link_validation",
         "api_catalog_generation",
+        "api_route_catalog_check",
         "rfc_ledger_check",
         "rfc_status_ledger_check",
         "supported_features_manifest",

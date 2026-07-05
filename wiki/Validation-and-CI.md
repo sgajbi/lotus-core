@@ -42,6 +42,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make rfc-status-ledger-guard`
 - `make openapi-gate`
 - `make quality-openapi-spectral-gate`
+- `make api-route-catalog-guard`
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
 - `make architecture-guard`
@@ -70,6 +71,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
   generates stable per-service OpenAPI artifacts under `output/openapi/` and enforces the portable
   Spectral blocker subset for operation IDs, descriptions, summaries, tags, and common successful
   `2xx` responses
+- `make api-route-catalog-guard`
+  protects the generated API route catalog against drift from FastAPI OpenAPI output and
+  route-family governance metadata
 - `make quality-wiki-docs-gate`
   validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
   pages, publication-safe page names, first headings, and local relative links; when a published
@@ -101,6 +105,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - eventing and supportability posture
 - OpenAPI quality
 - portable Spectral OpenAPI linting
+- generated API route catalog coverage
 - wiki source publication readiness
 - architecture boundaries
 - image provenance, release supply-chain, and runtime version metadata
@@ -116,8 +121,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
   start with [Operations Runbook](Operations-Runbook), then the RFC-0083 eventing/supportability
   docs from the architecture index
 - architecture or OpenAPI guard failure:
-  start with [Architecture](Architecture), [API Surface](API-Surface), and the deep architecture
-  index before changing code or docs
+  start with [Architecture](Architecture), [API Surface](API-Surface), the
+  [generated API route catalog](../docs/standards/api-route-catalog.v1.json), and the deep
+  architecture index before changing code or docs
 - wiki docs gate failure:
   update repo-local `wiki/` source first, keep `_Sidebar.md` aligned with every publishable page,
   and run the optional published-wiki parity check only against a generated or cloned publication
@@ -151,5 +157,5 @@ and still uploads the generated evidence for diagnosis.
 Use it for release, PR, and demo documentation review when README, wiki, API, RFC, runbook, or
 supported-feature claims need one citable evidence source. The pack records the command, UTC
 timestamp, git SHA, runtime profile, status, generated artifacts, affected documentation surfaces,
-wiki validation, API vocabulary generation, RFC-0083 closure checks, RFC status ledger checks,
-supported-feature truth, and runbook validation.
+wiki validation, API vocabulary generation, generated API route catalog checks, RFC-0083 closure
+checks, RFC status ledger checks, supported-feature truth, and runbook validation.

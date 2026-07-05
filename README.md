@@ -272,6 +272,8 @@ Important runtime note:
 - `make rfc-status-ledger-guard`
   full RFC status ledger coverage across core RFCs, transaction specs, architecture RFC material,
   and operations RFC playbooks
+- `make api-route-catalog-guard`
+  generated API route catalog drift check across OpenAPI and route-family governance
 - `make image-provenance-guard`
   OCI label, CI build-arg, CI-only image release, release-manifest, digest-deploy,
   no-build-secret, and `/version` metadata enforcement
@@ -346,6 +348,8 @@ Architecture and contract truth:
   [docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - route-family registry:
   [docs/standards/route-contract-family-registry.json](docs/standards/route-contract-family-registry.json)
+- generated API route catalog:
+  [docs/standards/api-route-catalog.v1.json](docs/standards/api-route-catalog.v1.json)
 - endpoint consolidation watchlist:
   [docs/standards/endpoint-consolidation-watchlist.json](docs/standards/endpoint-consolidation-watchlist.json)
 - temporal vocabulary:
