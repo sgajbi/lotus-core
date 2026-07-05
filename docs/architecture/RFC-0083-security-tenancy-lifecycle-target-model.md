@@ -160,6 +160,14 @@ The shared enterprise middleware has an explicit unauthenticated operational all
 This preserves probe, metrics, API documentation, and version access under read-authorization
 enforcement while keeping business and operator routes protected by capability rules.
 
+Privileged ingestion operations may accept bearer JWTs, but the policy is intentionally stricter
+than local static-token compatibility. JWTs must include `exp`, `iat`, `iss`, `aud`, `jti`, one
+principal identity claim from `sub`, `client_id`, or `azp`, the configured ops scope/capability,
+and `kid`. The ingestion ops verifier supports an active HS256 key plus previous keys for rotation.
+Production-like and strict profiles must configure JWT issuer, audience, active key id, active
+secret, and required scope; static `X-Lotus-Ops-Token` fallback requires explicit non-local
+approval and a non-default token.
+
 Each service keeps a local `enterprise_readiness.py` wrapper so existing imports, tests, settings,
 and service-specific patch points remain stable. The shared helper removes duplicated middleware
 logic and gives future runtime security work one implementation point, but it does not by itself

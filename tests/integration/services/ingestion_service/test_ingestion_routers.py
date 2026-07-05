@@ -5600,8 +5600,8 @@ async def test_ingestion_replay_audit_detail_returns_not_found_for_missing_row(
     }
 
 
-def _build_hs256_jwt(secret: str, payload: dict) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
+def _build_hs256_jwt(secret: str, payload: dict, *, kid: str = "ops-key-current") -> str:
+    header = {"alg": "HS256", "typ": "JWT", "kid": kid}
 
     def _b64(value: dict) -> str:
         raw = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -5624,9 +5624,20 @@ async def test_ingestion_ops_supports_bearer_jwt(
     for module in {ops_controls, app_ops_controls}:
         monkeypatch.setattr(module, "OPS_AUTH_MODE", "token_or_jwt")
         monkeypatch.setattr(module, "OPS_JWT_HS256_SECRET", secret)
-        monkeypatch.setattr(module, "OPS_JWT_ISSUER", "")
-        monkeypatch.setattr(module, "OPS_JWT_AUDIENCE", "")
-    payload = {"sub": "ops-jwt-user", "exp": now_epoch + 600}
+        monkeypatch.setattr(module, "OPS_JWT_KEY_ID", "ops-key-current")
+        monkeypatch.setattr(module, "OPS_JWT_PREVIOUS_KEYS", {})
+        monkeypatch.setattr(module, "OPS_JWT_ISSUER", "lotus-core-ingest-ops")
+        monkeypatch.setattr(module, "OPS_JWT_AUDIENCE", "lotus-core-ingestion-ops")
+        monkeypatch.setattr(module, "OPS_JWT_REQUIRED_SCOPE", "lotus-core.ingestion.ops")
+    payload = {
+        "sub": "ops-jwt-user",
+        "iss": "lotus-core-ingest-ops",
+        "aud": "lotus-core-ingestion-ops",
+        "iat": now_epoch - 30,
+        "exp": now_epoch + 600,
+        "jti": "ops-jwt-router-test-001",
+        "scope": "lotus-core.ingestion.ops",
+    }
     token = _build_hs256_jwt(secret, payload)
 
     response = await event_replay_test_client.get(
