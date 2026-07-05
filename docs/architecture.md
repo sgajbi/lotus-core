@@ -32,23 +32,25 @@ transaction domain data in the Lotus ecosystem.
 8. In-process domain, application, ports, adapters, and proof-builder packages are protected by
    import contracts with owned expiring exceptions; see
    `docs/standards/in-process-boundary-contract-standard.md`.
-9. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
+9. Evidence-producing capabilities use typed in-process proof builders before any proof-service
+   runtime split is considered; see `docs/standards/proof-builder-pattern-standard.md`.
+10. Ingestion business services and adapter-mode policy stay framework-neutral; FastAPI dependency
    providers and HTTP policy translation live in `app/dependencies.py`; see
    `docs/standards/ingestion-service-framework-boundary-standard.md`.
-10. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
+11. Bulk upload handling stays split across pure parsing/validation, commit orchestration, and a
    publisher adapter; see `docs/standards/bulk-upload-component-boundary-standard.md`.
-11. Transaction replay stays split across pure replay planning, reader ports, and publisher
+12. Transaction replay stays split across pure replay planning, reader ports, and publisher
    adapters; see `docs/standards/transaction-replay-boundary-standard.md`.
-12. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
+13. Portfolio aggregation scheduler policy stays split across scheduler ports, infrastructure
    adapters, and pure dispatch planning; see
    `docs/standards/aggregation-scheduler-boundary-standard.md`.
-13. Position calculation rules and backdated replay decisions stay pure and separate from
+14. Position calculation rules and backdated replay decisions stay pure and separate from
    persistence, outbox, metrics, and epoch-fencing orchestration; see
    `docs/standards/position-reducer-boundary-standard.md`.
-14. Repositories own persistence access.
-15. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
+15. Repositories own persistence access.
+16. Shared cross-cutting behavior lives in `portfolio_common` or platform-owned standards where
    appropriate.
-16. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
+17. API contracts remain source-data-product aware, metadata-rich, and implementation-backed.
 
 ## Current Refactor Evidence
 
