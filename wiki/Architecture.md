@@ -84,6 +84,7 @@ Control execution and reconciliation run contracts.
 
 - [Architecture Index](../docs/architecture/README.md)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
+- [Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)
@@ -98,3 +99,9 @@ the change belongs in architecture review before implementation.
 If a proposed change adds route-local database sessions, repository construction, external clients,
 file access, or business workflow logic, it must either move behind a service/use-case boundary or
 be registered as explicit transitional debt in the API-router boundary exception registry.
+
+If a proposed change adds or expands a deployable service, worker, scheduler, or runtime boundary,
+first prove the in-process package/use-case/port/adapter boundary is insufficient and record the
+runtime-boundary decision evidence. Important modules default to `no split yet` until scale,
+deployment cadence, operations ownership, persistence ownership, failure isolation, security, or
+SLO evidence changes that decision.
