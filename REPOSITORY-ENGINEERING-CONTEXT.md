@@ -1240,6 +1240,12 @@ Most relevant current governance:
     `KafkaPublishBackPressure` and flush timeout/exception paths to uncertain delivery. Schedulers
     and outbox/replay publishers must preserve this distinction so queue saturation defers or
     recovers work instead of marking it dispatched or collapsing it into a generic terminal error.
+100. Retry behavior for Kafka admin/startup checks and DB-backed consumers belongs in
+     `portfolio_common.retry_policy`, not service-local `wait_fixed(...)` and
+     `stop_after_attempt(...)` decorators. Use the shared profiles with bounded exponential jitter,
+     max attempts, max elapsed budgets, explicit retryable exception classes, and
+     `retry_policy_events_total` telemetry. Unexpected exceptions should remain non-retryable unless
+     a domain policy explicitly classifies them as transient.
 
 ## Context Maintenance Rule
 

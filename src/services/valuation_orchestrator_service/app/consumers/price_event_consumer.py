@@ -8,10 +8,11 @@ from portfolio_common.event_mapping import decode_kafka_event_payload, validate_
 from portfolio_common.events import MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
-from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from tenacity import retry
 
 from ..repositories.instrument_reprocessing_state_repository import (
     InstrumentReprocessingStateRepository,
@@ -39,11 +40,11 @@ class PriceEventConsumer(BaseConsumer):
     """
 
     @retry(
-        wait=wait_fixed(3),
-        stop=stop_after_attempt(5),
-        before=before_log(logger, logging.INFO),
-        retry=retry_if_exception_type((DBAPIError, OperationalError)),
-        reraise=True,
+        **tenacity_retry_kwargs(
+            profile=CONSUMER_DB_SHORT_RETRY,
+            retry_exceptions=(DBAPIError, OperationalError),
+            logger=logger,
+        )
     )
     async def process_message(self, msg: Message):
         key = msg.key().decode("utf-8") if msg.key() else "NoKey"

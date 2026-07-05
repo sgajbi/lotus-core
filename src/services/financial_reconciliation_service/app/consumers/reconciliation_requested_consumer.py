@@ -11,9 +11,10 @@ from portfolio_common.events import (
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.retry_policy import CONSUMER_DB_SHORT_RETRY, tenacity_retry_kwargs
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+from tenacity import retry
 
 from ..dtos import ReconciliationRunRequest
 from ..repositories import ReconciliationRepository
@@ -25,11 +26,11 @@ SERVICE_NAME = "financial-reconciliation-requested"
 
 class ReconciliationRequestedConsumer(BaseConsumer):
     @retry(
-        wait=wait_fixed(2),
-        stop=stop_after_attempt(8),
-        before=before_log(logger, logging.INFO),
-        retry=retry_if_exception_type((DBAPIError, IntegrityError)),
-        reraise=True,
+        **tenacity_retry_kwargs(
+            profile=CONSUMER_DB_SHORT_RETRY,
+            retry_exceptions=(DBAPIError, IntegrityError),
+            logger=logger,
+        )
     )
     async def process_message(self, msg: Message):
         value = msg.value().decode("utf-8")

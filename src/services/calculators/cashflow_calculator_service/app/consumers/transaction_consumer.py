@@ -21,6 +21,7 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
+from portfolio_common.retry_policy import CONSUMER_DB_EXTENDED_RETRY, tenacity_retry_kwargs
 from portfolio_common.transaction_domain import (
     assert_ca_bundle_a_transaction_valid,
     assert_portfolio_flow_cash_entry_mode_allowed,
@@ -34,7 +35,7 @@ from portfolio_common.transaction_domain.control_code_normalization import (
 )
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
-from tenacity import before_log, retry, stop_after_attempt, wait_fixed
+from tenacity import retry
 
 from ..core.cashflow_logic import CashflowLogic
 from ..repositories.cashflow_repository import CashflowRepository
@@ -342,7 +343,13 @@ class CashflowCalculatorConsumer(BaseConsumer):
     async def process_message(self, msg: Message):
         await self._process_message_with_retry(msg)
 
-    @retry(wait=wait_fixed(2), stop=stop_after_attempt(15), before=before_log(logger, logging.INFO))
+    @retry(
+        **tenacity_retry_kwargs(
+            profile=CONSUMER_DB_EXTENDED_RETRY,
+            retry_exceptions=(IntegrityError,),
+            logger=logger,
+        )
+    )
     async def _process_message_with_retry(self, msg: Message):
         key = _message_key(msg)
         try:
