@@ -277,6 +277,8 @@ Important runtime note:
   README/wiki/sidebar/documentation front-door synchronization and PR documentation decision check
 - `make critical-path-coverage-guard`
   critical-path coverage contract and changed-code coverage reporting guard
+- `make generated-artifact-tracking-guard`
+  tracked generated-artifact guard for build, cache, package, and output evidence paths
 - `make api-route-catalog-guard`
   generated API route catalog drift check across OpenAPI and route-family governance
 - `make image-provenance-guard`
