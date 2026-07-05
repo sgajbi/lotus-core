@@ -113,8 +113,10 @@ Current repo truth:
 10. Service images carry OCI provenance labels and matching runtime environment metadata for Git
     commit SHA, Git branch, build timestamp, repo URL, image version, image digest, and CI run ID.
     API-facing and worker health web apps expose the same values and OCI label map at
-    `GET /version`; local builds use `LOTUS_IMAGE_DIGEST=unknown` unless the build/release lane or
-    deploy manifest supplies a resolved digest.
+    `GET /version`; `/health/live` and `/health/ready` also include a bounded `runtime` block with
+    service name, app version, environment, runtime profile, started-at, uptime, and build
+    metadata for incident triage. Local builds use `LOTUS_IMAGE_DIGEST=unknown` unless the
+    build/release lane or deploy manifest supplies a resolved digest.
 11. Immutable image publication is CI-only through `.github/workflows/image-release.yml`: images
     are tagged with the full Git SHA, pushed to GHCR, scanned, signed, emitted with BuildKit SBOM
     and provenance attestations, exported with CycloneDX SBOM artifacts, and recorded in per-image

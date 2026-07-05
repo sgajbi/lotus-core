@@ -87,6 +87,11 @@ The same values are carried as OCI labels and runtime environment variables. Loc
 build/release lane resolves it; release automation should supply the resolved digest when
 available.
 
+`/health/live` and `/health/ready` include a bounded `runtime` block for the same incident triage
+path. It carries service name, app version, environment, runtime profile, router started-at time,
+uptime seconds, and the shared build metadata payload. Missing build metadata is reported as
+`unknown` in local development rather than failing probes.
+
 ## Image Release Supply Chain
 
 Immutable service images are published only by `.github/workflows/image-release.yml`. The release

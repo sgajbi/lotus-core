@@ -127,6 +127,11 @@ image digest, CI pipeline/run ID, and the corresponding OCI label map. Local bui
 `image_digest: "unknown"` unless the build/release lane or deploy manifest supplies
 `LOTUS_IMAGE_DIGEST`.
 
+`/health/live` and `/health/ready` include a bounded `runtime` block with service name, app
+version, environment, runtime profile, router started-at time, uptime seconds, and the same shared
+build metadata payload. Missing build metadata is explicit as `unknown` in local development and
+does not fail probes.
+
 Health responses include `X-Correlation-ID`, `X-Request-Id`, `X-Trace-Id`, and
 `traceparent` headers so incident triage can tie probe behavior to request logs and route-template
 HTTP metrics. Valid incoming W3C `traceparent` headers are preserved. Requests with only

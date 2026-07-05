@@ -51,5 +51,5 @@ configure_standard_http_app(
     id_generator=lambda prefix: generate_correlation_id(prefix),
 )
 
-health_router = create_health_router("db", service_name=SERVICE_NAME)
+health_router = create_health_router("db", service_name=SERVICE_NAME, app_version=app.version)
 include_routers(app, health_router, reconciliation_router)

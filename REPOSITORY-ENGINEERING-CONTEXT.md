@@ -246,8 +246,10 @@ Current repository posture:
     through `portfolio_common.health`. Preserve the per-dependency timeout pattern and explicit
     `ok`, `unavailable`, `timeout`, `misconfigured`, and `error` status vocabulary when adding
     database, Kafka, or future dependency probes. Readiness can return HTTP 503 with dependency
-    detail without changing route paths or the top-level ready/not-ready contract. Dependency
-    telemetry must use the shared
+    detail without changing route paths or the top-level ready/not-ready contract. Health responses
+    must keep the bounded `runtime` metadata block with service name, app version, environment,
+    runtime profile, started-at, uptime, and shared build metadata so operators can correlate probes
+    to image provenance without shell access. Dependency telemetry must use the shared
     `health_dependency_check_total`, `health_dependency_check_duration_seconds`, and
     `health_readiness_state` metrics with only service, dependency, status, and readiness-state
     labels; keep raw exception text, business identifiers, request IDs, correlation IDs, and trace
@@ -722,7 +724,9 @@ Most relevant current governance:
     runtime environment values for Git commit SHA, Git branch, build timestamp, repo URL, image
     version, image digest, and CI pipeline/run ID. `configure_standard_http_app` registers
     `GET /version` so API services and worker health web apps expose the same metadata plus the
-    OCI label map used for release-manifest parity checks.
+    OCI label map used for release-manifest parity checks. `/health/live` and `/health/ready`
+    expose a bounded runtime block with the same build metadata, service app version, environment,
+    runtime profile, started-at time, and uptime for safe incident diagnostics.
     `scripts/prebuild_ci_images.py` supplies build args in CI, `scripts/write_build_provenance.py`
     records the same metadata in build evidence, `.github/workflows/image-release.yml` is the only
     image-push path, and `scripts/write_image_release_manifest.py` records digest, OCI label

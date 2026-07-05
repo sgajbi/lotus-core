@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from portfolio_common.runtime_settings import env_str
 
 UNKNOWN_METADATA_VALUE: Final = "unknown"
+MAX_METADATA_VALUE_LENGTH: Final = 512
 
 GIT_COMMIT_SHA_ENV: Final = "LOTUS_GIT_COMMIT_SHA"
 GIT_BRANCH_ENV: Final = "LOTUS_GIT_BRANCH"
@@ -69,7 +70,10 @@ class BuildMetadataResponse(BaseModel):
 
 def _metadata_value(env_name: str) -> str:
     value = env_str(env_name, "").strip()
-    return value or UNKNOWN_METADATA_VALUE
+    if not value:
+        return UNKNOWN_METADATA_VALUE
+    sanitized = "".join(character if character.isprintable() else "_" for character in value)
+    return sanitized[:MAX_METADATA_VALUE_LENGTH] or UNKNOWN_METADATA_VALUE
 
 
 def build_metadata_payload(*, service_name: str) -> BuildMetadataResponse:

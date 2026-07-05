@@ -3,6 +3,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Awaitable, Callable
 
 from confluent_kafka.admin import AdminClient
@@ -12,8 +13,10 @@ from sqlalchemy import text
 
 from .config import KAFKA_BOOTSTRAP_SERVERS
 from .db import AsyncSessionLocal
+from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .logging_utils import log_operation_event
 from .monitoring import observe_health_dependency_check, set_health_readiness_state
+from .runtime_settings import env_str
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,9 @@ READINESS_UNAVAILABLE = "unavailable"
 READINESS_TIMEOUT = "timeout"
 READINESS_ERROR = "error"
 READINESS_MISCONFIGURED = "misconfigured"
+HEALTH_METADATA_MAX_LENGTH = 256
+RUNTIME_PROFILE_ENV = "LOTUS_RUNTIME_PROFILE"
+ENVIRONMENT_ENV = "ENVIRONMENT"
 
 
 @dataclass(frozen=True)
@@ -37,8 +43,23 @@ class DependencyReadinessResult:
         return self.status == READINESS_OK
 
 
+class HealthRuntimeMetadata(BaseModel):
+    service_name: str = Field(description="Stable Lotus Core service identity.")
+    app_version: str = Field(description="FastAPI application version configured for the service.")
+    environment: str = Field(description="Bounded runtime environment name.")
+    runtime_profile: str = Field(description="Bounded runtime profile name used for operations.")
+    started_at_utc: str = Field(
+        description="UTC timestamp captured when the health router started."
+    )
+    uptime_seconds: float = Field(description="Process uptime in seconds for this health router.")
+    build: BuildMetadataResponse = Field(
+        description="Safe image and build metadata also exposed by the /version endpoint."
+    )
+
+
 class LiveHealthResponse(BaseModel):
     status: str = Field(description="Liveness state for the service process.", examples=["alive"])
+    runtime: HealthRuntimeMetadata = Field(description="Safe runtime and build metadata.")
 
 
 class ReadyHealthResponse(BaseModel):
@@ -50,6 +71,7 @@ class ReadyHealthResponse(BaseModel):
         description="Dependency-level readiness results keyed by dependency name.",
         examples=[{"database": "ok", "kafka": "ok"}],
     )
+    runtime: HealthRuntimeMetadata = Field(description="Safe runtime and build metadata.")
 
 
 class NotReadyHealthDetail(BaseModel):
@@ -60,6 +82,42 @@ class NotReadyHealthDetail(BaseModel):
     dependencies: dict[str, str] = Field(
         description="Dependency-level readiness results keyed by dependency name.",
         examples=[{"database": "ok", "kafka": "timeout"}],
+    )
+    runtime: HealthRuntimeMetadata = Field(description="Safe runtime and build metadata.")
+
+
+def _source_safe_metadata_value(value: str, *, default: str = "unknown") -> str:
+    stripped = value.strip()
+    if not stripped:
+        return default
+    sanitized = "".join(character if character.isprintable() else "_" for character in stripped)
+    return sanitized[:HEALTH_METADATA_MAX_LENGTH] or default
+
+
+def _utc_now_string() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def build_health_runtime_metadata(
+    *,
+    service_name: str,
+    app_version: str,
+    started_at_utc: str,
+    started_at_monotonic: float,
+) -> HealthRuntimeMetadata:
+    environment = _source_safe_metadata_value(env_str(ENVIRONMENT_ENV, "local"), default="local")
+    runtime_profile = _source_safe_metadata_value(
+        env_str(RUNTIME_PROFILE_ENV, environment),
+        default=environment,
+    )
+    return HealthRuntimeMetadata(
+        service_name=_source_safe_metadata_value(service_name),
+        app_version=_source_safe_metadata_value(app_version),
+        environment=environment,
+        runtime_profile=runtime_profile,
+        started_at_utc=started_at_utc,
+        uptime_seconds=round(max(0.0, time.monotonic() - started_at_monotonic), 3),
+        build=build_metadata_payload(service_name=service_name),
     )
 
 
@@ -239,6 +297,7 @@ def _coerce_dependency_result(
 def create_health_router(
     *dependencies: str,
     service_name: str = "lotus-core-service",
+    app_version: str = "unknown",
     readiness_cache_ttl_seconds: float = 5.0,
     readiness_dependency_timeout_seconds: float = 5.0,
 ) -> APIRouter:
@@ -249,6 +308,7 @@ def create_health_router(
         *dependencies: A list of strings ('db', 'kafka') specifying which
                        dependencies to check for the readiness probe.
         service_name: Stable low-cardinality service label for health metrics.
+        app_version: Version configured on the service application.
         readiness_cache_ttl_seconds: Per-process cache duration for dependency
                        readiness results. Keeps probe storms from repeatedly
                        forcing expensive dependency metadata checks.
@@ -270,6 +330,16 @@ def create_health_router(
     cached_until = 0.0
     cached_all_ok = False
     cached_dep_status: dict[str, str] | None = None
+    started_at_utc = _utc_now_string()
+    started_at_monotonic = time.monotonic()
+
+    def runtime_metadata() -> dict[str, object]:
+        return build_health_runtime_metadata(
+            service_name=service_name,
+            app_version=app_version,
+            started_at_utc=started_at_utc,
+            started_at_monotonic=started_at_monotonic,
+        ).model_dump()
 
     @router.get(
         "/health/live",
@@ -280,12 +350,53 @@ def create_health_router(
         responses={
             200: {
                 "description": "Service process is alive.",
-                "content": {"application/json": {"example": {"status": "alive"}}},
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "status": "alive",
+                            "runtime": {
+                                "service_name": "query_service",
+                                "app_version": "0.2.0",
+                                "environment": "production",
+                                "runtime_profile": "production",
+                                "started_at_utc": "2026-07-05T12:34:56Z",
+                                "uptime_seconds": 42.125,
+                                "build": {
+                                    "service_name": "query_service",
+                                    "git_commit_sha": ("9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"),
+                                    "git_branch": "main",
+                                    "build_timestamp": "2026-07-05T12:34:56Z",
+                                    "repo_url": "https://github.com/example/lotus-core",
+                                    "image_version": ("9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"),
+                                    "image_digest": "sha256:abc123",
+                                    "ci_pipeline_run_id": "1234567890",
+                                    "oci_labels": {
+                                        "org.opencontainers.image.revision": (
+                                            "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                        ),
+                                        "org.opencontainers.image.ref.name": "main",
+                                        "org.opencontainers.image.created": (
+                                            "2026-07-05T12:34:56Z"
+                                        ),
+                                        "org.opencontainers.image.source": (
+                                            "https://github.com/example/lotus-core"
+                                        ),
+                                        "org.opencontainers.image.version": (
+                                            "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                        ),
+                                        "org.opencontainers.image.digest": "sha256:abc123",
+                                        "org.opencontainers.image.ci.run_id": "1234567890",
+                                    },
+                                },
+                            },
+                        }
+                    }
+                },
             }
         },
     )
     async def liveness_probe():
-        return {"status": "alive"}
+        return {"status": "alive", "runtime": runtime_metadata()}
 
     @router.get(
         "/health/ready",
@@ -298,7 +409,45 @@ def create_health_router(
                 "description": "Service and required dependencies are ready.",
                 "content": {
                     "application/json": {
-                        "example": {"status": "ready", "dependencies": {"database": "ok"}}
+                        "example": {
+                            "status": "ready",
+                            "dependencies": {"database": "ok"},
+                            "runtime": {
+                                "service_name": "query_service",
+                                "app_version": "0.2.0",
+                                "environment": "production",
+                                "runtime_profile": "production",
+                                "started_at_utc": "2026-07-05T12:34:56Z",
+                                "uptime_seconds": 42.125,
+                                "build": {
+                                    "service_name": "query_service",
+                                    "git_commit_sha": ("9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"),
+                                    "git_branch": "main",
+                                    "build_timestamp": "2026-07-05T12:34:56Z",
+                                    "repo_url": "https://github.com/example/lotus-core",
+                                    "image_version": ("9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"),
+                                    "image_digest": "sha256:abc123",
+                                    "ci_pipeline_run_id": "1234567890",
+                                    "oci_labels": {
+                                        "org.opencontainers.image.revision": (
+                                            "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                        ),
+                                        "org.opencontainers.image.ref.name": "main",
+                                        "org.opencontainers.image.created": (
+                                            "2026-07-05T12:34:56Z"
+                                        ),
+                                        "org.opencontainers.image.source": (
+                                            "https://github.com/example/lotus-core"
+                                        ),
+                                        "org.opencontainers.image.version": (
+                                            "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc"
+                                        ),
+                                        "org.opencontainers.image.digest": "sha256:abc123",
+                                        "org.opencontainers.image.ci.run_id": "1234567890",
+                                    },
+                                },
+                            },
+                        }
                     }
                 },
             },
@@ -310,6 +459,33 @@ def create_health_router(
                             "detail": {
                                 "status": "not_ready",
                                 "dependencies": {"database": "ok", "kafka": "timeout"},
+                                "runtime": {
+                                    "service_name": "event_replay_service",
+                                    "app_version": "0.1.0",
+                                    "environment": "production",
+                                    "runtime_profile": "production",
+                                    "started_at_utc": "2026-07-05T12:34:56Z",
+                                    "uptime_seconds": 42.125,
+                                    "build": {
+                                        "service_name": "event_replay_service",
+                                        "git_commit_sha": "unknown",
+                                        "git_branch": "unknown",
+                                        "build_timestamp": "unknown",
+                                        "repo_url": "unknown",
+                                        "image_version": "unknown",
+                                        "image_digest": "unknown",
+                                        "ci_pipeline_run_id": "unknown",
+                                        "oci_labels": {
+                                            "org.opencontainers.image.revision": "unknown",
+                                            "org.opencontainers.image.ref.name": "unknown",
+                                            "org.opencontainers.image.created": "unknown",
+                                            "org.opencontainers.image.source": "unknown",
+                                            "org.opencontainers.image.version": "unknown",
+                                            "org.opencontainers.image.digest": "unknown",
+                                            "org.opencontainers.image.ci.run_id": "unknown",
+                                        },
+                                    },
+                                },
                             }
                         }
                     }
@@ -366,11 +542,15 @@ def create_health_router(
         )
 
         if all_ok:
-            return {"status": "ready", "dependencies": dep_status}
+            return {"status": "ready", "dependencies": dep_status, "runtime": runtime_metadata()}
 
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "not_ready", "dependencies": dep_status},
+            detail={
+                "status": "not_ready",
+                "dependencies": dep_status,
+                "runtime": runtime_metadata(),
+            },
         )
 
     return router
