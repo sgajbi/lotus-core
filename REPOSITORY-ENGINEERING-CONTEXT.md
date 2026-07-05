@@ -1296,6 +1296,12 @@ Most relevant current governance:
      supportability, source hash/lineage or fallback detail where applicable, namespaced reason
      codes, and correlation ID. Also update the guarded API example catalog when the response
      pattern is public or downstream-facing.
+108. Caller-controlled sorting must be typed, documented, and fail-fast. The strategic transaction
+     ledger uses `query_service.app.application.transaction_sorting` for allowed sort fields,
+     directions, defaults, and repository validation. Do not add route-local or repository-local
+     silent fallback for unsupported `sort_by` / `sort_order`; publish allowed values in OpenAPI,
+     reject invalid supplied values with structured 400 errors, and keep deterministic tie-breakers
+     for every paginated ordering.
 
 ## Context Maintenance Rule
 

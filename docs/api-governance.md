@@ -15,6 +15,10 @@ downstream platform consumers.
    product identity where applicable.
 4. Health, readiness, liveness, metrics, public, internal, and operational routes should remain
    separated and documented.
+5. Caller-controlled sorting must publish allowed fields and directions in OpenAPI, reject invalid
+   supplied values with structured 400 responses, and use deterministic tie-breakers for paginated
+   ordering. Silent fallback is only acceptable when the parameter is omitted and the default is
+   documented.
 
 ## Enforcement
 

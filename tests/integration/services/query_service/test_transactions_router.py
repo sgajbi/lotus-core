@@ -191,6 +191,34 @@ async def test_get_transactions_validation_error_maps_to_400(async_test_client):
     assert "fx rate not found" in response.json()["detail"].lower()
 
 
+async def test_get_transactions_rejects_invalid_sort_field(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/P1/transactions?sort_by=settlement_currency")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "INVALID_TRANSACTION_SORT_PARAMETER"
+    assert body["detail"]["field"] == "sort_by"
+    assert body["detail"]["rejected_value"] == "settlement_currency"
+    assert "transaction_date" in body["detail"]["allowed_values"]
+    mock_service.get_transactions.assert_not_awaited()
+
+
+async def test_get_transactions_rejects_invalid_sort_order(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/P1/transactions?sort_order=ascending")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "INVALID_TRANSACTION_SORT_PARAMETER"
+    assert body["detail"]["field"] == "sort_order"
+    assert body["detail"]["rejected_value"] == "ascending"
+    assert body["detail"]["allowed_values"] == ["asc", "desc"]
+    mock_service.get_transactions.assert_not_awaited()
+
+
 async def test_get_transactions_forwards_as_of_and_include_projected(async_test_client):
     client, mock_service = async_test_client
 

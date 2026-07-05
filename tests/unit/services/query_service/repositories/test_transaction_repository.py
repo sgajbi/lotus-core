@@ -152,33 +152,55 @@ async def test_get_transactions_custom_sort(
     assert "ORDER BY transactions.quantity ASC, transactions.id ASC" in compiled_query
 
 
-async def test_get_transactions_invalid_sort_falls_back_to_default(
+async def test_get_transactions_invalid_sort_field_fails_fast(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     """
     GIVEN an invalid sort field
     WHEN get_transactions is called
-    THEN the query should fall back to the default sort order.
+    THEN the repository should reject the request instead of silently changing ordering.
     """
-    await repository.get_transactions(portfolio_id="P1", skip=0, limit=100, sort_by="invalid_field")
+    with pytest.raises(ValueError, match="Unsupported transaction sort parameter sort_by"):
+        await repository.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=100,
+            sort_by="invalid_field",
+        )
 
-    executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-
-    assert "ORDER BY transactions.transaction_date DESC, transactions.id DESC" in compiled_query
+    mock_db_session.execute.assert_not_awaited()
 
 
-async def test_get_transactions_invalid_sort_order_falls_back_to_desc(
+async def test_get_transactions_invalid_sort_order_fails_fast(
+    repository: TransactionRepository, mock_db_session: AsyncMock
+):
+    with pytest.raises(ValueError, match="Unsupported transaction sort parameter sort_order"):
+        await repository.get_transactions(
+            portfolio_id="P1",
+            skip=0,
+            limit=100,
+            sort_by="quantity",
+            sort_order="invalid",
+        )
+
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_transactions_settlement_date_sort_uses_stable_tie_breaker(
     repository: TransactionRepository, mock_db_session: AsyncMock
 ):
     await repository.get_transactions(
-        portfolio_id="P1", skip=0, limit=100, sort_by="quantity", sort_order="invalid"
+        portfolio_id="P1",
+        skip=0,
+        limit=100,
+        sort_by="settlement_date",
+        sort_order="asc",
     )
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
     compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "ORDER BY transactions.quantity DESC, transactions.id DESC" in compiled_query
+    assert "ORDER BY transactions.settlement_date ASC, transactions.id ASC" in compiled_query
 
 
 async def test_get_transactions_with_all_filters(
