@@ -111,8 +111,10 @@ Current repo truth:
    `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false`. This does not replace gateway/platform ingress
    and IAM proof.
 10. Service images carry OCI provenance labels and matching runtime environment metadata for Git
-    commit SHA, Git branch, build timestamp, repo URL, image version, image digest, and CI run ID.
-    API-facing and worker health web apps expose the same values and OCI label map at
+    commit SHA, Git branch, build timestamp, repo URL, image version, and CI run ID. The resolved
+    image digest is captured after push in the release manifest and is supplied to deployment
+    runtime metadata because a build-time self-digest label would change the image digest. API-facing
+    and worker health web apps expose the same release metadata and OCI label map at
     `GET /version`; `/health/live` and `/health/ready` also include a bounded `runtime` block with
     service name, app version, environment, runtime profile, started-at, uptime, and build
     metadata for incident triage. Local builds use `LOTUS_IMAGE_DIGEST=unknown` unless the

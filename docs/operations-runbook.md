@@ -71,21 +71,22 @@ Runtime-facing API services and worker health web apps expose:
 GET /version
 ```
 
-The response mirrors image provenance embedded during build:
+The response mirrors image provenance embedded during build and release:
 
 - Git commit SHA
 - Git branch
 - build timestamp
 - repo URL
 - image version
-- image digest
+- image digest resolved after the image is pushed
 - CI pipeline/run ID
-- OCI label map for the same values
+- OCI label/release-metadata map for the same values
 
-The same values are carried as OCI labels and runtime environment variables. Local builds default
-`LOTUS_IMAGE_DIGEST` to `unknown` because an image cannot know its registry digest until the
-build/release lane resolves it; release automation should supply the resolved digest when
-available.
+Build-time values are carried as OCI labels and runtime environment variables. The resolved image
+digest is post-push release metadata: release automation records it in the manifest and supplies it
+to runtime metadata. Local builds default `LOTUS_IMAGE_DIGEST` to `unknown` because an image cannot
+truthfully label itself with its final registry digest during the same build; changing that label
+would change the digest.
 
 `/health/live` and `/health/ready` include a bounded `runtime` block for the same incident triage
 path. It carries service name, app version, environment, runtime profile, router started-at time,
@@ -98,9 +99,9 @@ Immutable service images are published only by `.github/workflows/image-release.
 lane:
 
 1. tags every image with the full Git SHA,
-2. adds OCI labels for commit, branch, repo URL, image version, build time, digest, and CI run ID,
+2. adds OCI labels for commit, branch, repo URL, image version, build time, and CI run ID,
 3. pushes images to GHCR from CI only,
-4. captures the resolved image digest in a release manifest,
+4. captures the resolved image digest in a release manifest and runtime metadata,
 5. generates BuildKit SBOM/provenance attestations and exports a CycloneDX SBOM artifact,
 6. fails on high or critical Trivy findings,
 7. signs the digest reference with Cosign,
