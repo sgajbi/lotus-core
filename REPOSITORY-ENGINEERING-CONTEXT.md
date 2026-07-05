@@ -927,6 +927,11 @@ Most relevant current governance:
     application publisher paths from importing `KafkaProducer` or `get_kafka_producer` directly.
     Runtime dispatchers, consumer managers, aggregation scheduler publishing, and outbox
     publication are separate follow-up slices.
+    Pipeline stage Kafka consumers must remain delivery adapters: decode and validate the event,
+    establish correlation context, delegate to `PipelineStageMessageHandler`, and map invalid
+    payloads, DB retryable errors, or defensive failures to existing retry/DLQ behavior. Keep
+    SQLAlchemy sessions, idempotency repository, pipeline stage repository, outbox repository, and
+    `PipelineOrchestratorService` assembly behind the pipeline stage unit-of-work adapter.
 65. Application/source-data repository dependencies should use capability-specific ports before
     broad concrete repositories. `PortfolioTaxLotWindow:v1` now depends on
     `PortfolioTaxLotReader`, and financial reconciliation service orchestration now depends on
