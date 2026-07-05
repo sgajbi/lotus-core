@@ -265,6 +265,9 @@ Important runtime note:
 - `make image-provenance-guard`
   OCI label, CI build-arg, CI-only image release, release-manifest, digest-deploy,
   no-build-secret, and `/version` metadata enforcement
+- `make architecture-docs-catalog-guard`
+  architecture documentation catalog, current-state/review/historical classification, and
+  uncataloged architecture document enforcement
 - `make clean`
   remove governed local caches, build byproducts, coverage files, and generated `output/`
   evidence artifacts through the reviewed cleanup script

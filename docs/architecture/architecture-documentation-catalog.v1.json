@@ -1,0 +1,396 @@
+{
+  "schema_version": "lotus-core.architecture-documentation-catalog.v1",
+  "repository": "lotus-core",
+  "owner": "lotus-core",
+  "catalog_review_date": "2026-07-05",
+  "guard": "make architecture-docs-catalog-guard",
+  "issue": "https://github.com/sgajbi/lotus-core/issues/620",
+  "truth_roles": [
+    "current-state-truth",
+    "historical-context",
+    "review-evidence",
+    "template",
+    "catalog-metadata"
+  ],
+  "related_navigation": [
+    "README.md",
+    "REPOSITORY-ENGINEERING-CONTEXT.md",
+    "docs/supported-features.md",
+    "docs/operations-runbook.md",
+    "docs/standards/verified-api-examples.v1.json",
+    "docs/standards/rfc-0083-implementation-ledger.json",
+    "wiki/Architecture.md",
+    "wiki/API-Surface.md",
+    "wiki/Supported-Features.md",
+    "wiki/Validation-and-CI.md"
+  ],
+  "entries": [
+    {
+      "path": "docs/architecture/architecture-documentation-catalog.v1.json",
+      "type": "catalog",
+      "topics": ["documentation-governance", "architecture-navigation"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [620], "rfcs": [], "prs": []},
+      "truth_role": "catalog-metadata",
+      "summary": "Searchable metadata catalog and coverage policy for architecture documentation."
+    },
+    {
+      "path": "docs/architecture/README.md",
+      "type": "index",
+      "topics": ["architecture-navigation", "reader-paths"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [620], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Task-oriented front door for the architecture documentation set."
+    },
+    {
+      "path": "docs/architecture/lotus-core-target-architecture.md",
+      "type": "target-architecture",
+      "topics": ["domain-authority", "service-boundaries", "target-state"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Current target architecture for portfolio, booking, account, holding, and transaction authority."
+    },
+    {
+      "path": "docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md",
+      "type": "boundary",
+      "topics": ["query-service", "query-control-plane", "ownership"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [465], "rfcs": [82, 83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Ownership boundary between operational reads and governed analytics-input/control-plane APIs."
+    },
+    {
+      "path": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+      "type": "boundary-matrix",
+      "topics": ["runtime-boundaries", "in-process-modularity", "no-runtime-split"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [633], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Design-vs-runtime boundary matrix for deployables and no-split-yet decisions."
+    },
+    {
+      "path": "docs/architecture/runtime-boundary-decision-catalog.json",
+      "type": "decision-catalog",
+      "topics": ["runtime-boundaries", "deployables"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [630], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Machine-readable deployable-service boundary decision catalog."
+    },
+    {
+      "path": "docs/architecture/in-process-modularity-adoption-catalog.json",
+      "type": "adoption-catalog",
+      "topics": ["in-process-modularity", "package-boundaries"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [631], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Machine-readable catalog of in-process modularity adoption and migration scope."
+    },
+    {
+      "path": "docs/architecture/application-port-capability-catalog.json",
+      "type": "port-catalog",
+      "topics": ["application-layer", "ports", "dependency-inversion"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [651, 652, 653, 654, 655], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Machine-readable application port and capability catalog."
+    },
+    {
+      "path": "docs/architecture/application-port-capability-catalog.md",
+      "type": "port-catalog-guide",
+      "topics": ["application-layer", "ports", "dependency-inversion"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [651, 652, 653, 654, 655], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Human-readable application port catalog companion."
+    },
+    {
+      "path": "docs/architecture/api-layer-router-boundary-contract.md",
+      "type": "boundary-contract",
+      "topics": ["api-layer", "thin-routers", "dependency-composition"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [635, 636, 637, 638, 639], "rfcs": [82], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "API router boundary contract and transitional exception policy."
+    },
+    {
+      "path": "docs/architecture/mapping-anti-corruption-boundary.md",
+      "type": "boundary-contract",
+      "topics": ["mapping", "anti-corruption", "dto-boundaries", "event-boundaries"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [640, 661, 662, 663], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Representative DTO, event, row, and source-data anti-corruption mapping contract."
+    },
+    {
+      "path": "docs/architecture/repository-output-shape-standard.md",
+      "type": "standard",
+      "topics": ["repositories", "typed-records", "orm-boundary"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [652, 663], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Repository output-shape standard for typed records and ORM boundary control."
+    },
+    {
+      "path": "docs/architecture/infrastructure-error-taxonomy.md",
+      "type": "standard",
+      "topics": ["infrastructure", "errors", "adapter-boundaries"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [650], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Infrastructure error taxonomy for adapter and downstream failure mapping."
+    },
+    {
+      "path": "docs/architecture/runtime-provider-port-policy.md",
+      "type": "standard",
+      "topics": ["runtime-providers", "clock", "uuid", "deterministic-tests"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [655], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Runtime provider port policy for deterministic time, elapsed duration, and generated IDs."
+    },
+    {
+      "path": "docs/architecture/CODEBASE-REVIEW-PLAYBOOK.md",
+      "type": "review-playbook",
+      "topics": ["codebase-review", "review-ledger", "quality-evidence"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [685], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "How codebase review scopes, statuses, and evidence are managed."
+    },
+    {
+      "path": "docs/architecture/CODEBASE-REVIEW-LEDGER.md",
+      "type": "review-ledger",
+      "topics": ["codebase-review", "issue-fixes", "quality-evidence"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [685], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Durable ledger for architecture, issue-fix, and refactor evidence."
+    },
+    {
+      "path": "docs/architecture/RFC-0082-contract-family-inventory.md",
+      "type": "rfc-inventory",
+      "topics": ["api-contracts", "route-families", "downstream-consumers"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [528, 531, 614], "rfcs": [82], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "RFC-0082 route-family and downstream endpoint contract inventory."
+    },
+    {
+      "path": "docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md",
+      "type": "rfc-audit",
+      "topics": ["api-contracts", "downstream-consumers", "test-coverage"],
+      "status": "review-evidence",
+      "owner": "lotus-core",
+      "freshness_date": "2026-06-23",
+      "related": {"issues": [602, 605, 614], "rfcs": [82], "prs": []},
+      "truth_role": "review-evidence",
+      "summary": "Large RFC-0082 downstream consumer and test-coverage audit evidence."
+    },
+    {
+      "path": "docs/architecture/RFC-0082-ingestion-and-operations-endpoint-certification-audit.md",
+      "type": "rfc-audit",
+      "topics": ["api-contracts", "ingestion", "operations", "endpoint-certification"],
+      "status": "review-evidence",
+      "owner": "lotus-core",
+      "freshness_date": "2026-04-18",
+      "related": {"issues": [605, 614], "rfcs": [82], "prs": []},
+      "truth_role": "review-evidence",
+      "summary": "Large RFC-0082 ingestion and operations endpoint certification audit evidence."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-target-state-gap-analysis.md",
+      "type": "rfc-target-state",
+      "topics": ["system-of-record", "gap-analysis", "source-data-products"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [453, 454, 455, 456, 457, 458, 459, 460], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "RFC-0083 target-state gap analysis for system-of-record hardening."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-portfolio-reconstruction-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["portfolio-reconstruction", "snapshot-identity", "lineage"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [453], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Portfolio reconstruction and deterministic snapshot identity target model."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-ingestion-source-lineage-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["ingestion", "source-lineage", "source-batch-evidence"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [454, 557], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Ingestion source-lineage and source-batch evidence target model."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-reconciliation-data-quality-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["reconciliation", "data-quality", "supportability"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [455], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Reconciliation and data-quality evidence target model."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-source-data-product-catalog.md",
+      "type": "rfc-target-model",
+      "topics": ["source-data-products", "data-mesh", "downstream-consumers"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [458, 459, 460, 609], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Priority source-data product catalog and downstream consumer map."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-market-reference-data-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["market-reference-data", "freshness", "lineage"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [458, 459, 460], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Benchmark, index, risk-free, price, FX, and instrument quality target model."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-endpoint-consolidation-disposition.md",
+      "type": "rfc-disposition",
+      "topics": ["api-consolidation", "route-deprecation", "source-data-products"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [461], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Endpoint consolidation disposition and bounded-use convenience route governance."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-security-tenancy-lifecycle-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["security", "tenancy", "retention", "audit"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [498, 500, 582], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Source-data product security, tenancy, retention, and audit posture."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-eventing-supportability-target-model.md",
+      "type": "rfc-target-model",
+      "topics": ["events", "outbox", "replay", "supportability"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [552, 553, 554, 555, 556, 558], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Event family, outbox, replay, and operator supportability target model."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-production-readiness-closure.md",
+      "type": "rfc-closure",
+      "topics": ["production-readiness", "closure", "validation"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [685], "rfcs": [83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "RFC-0083 target-model closure posture and validation evidence."
+    },
+    {
+      "path": "docs/architecture/RFC-0083-platform-e2e-runtime-validation-evidence.md",
+      "type": "runtime-evidence",
+      "topics": ["platform-e2e", "runtime-validation", "canonical-proof"],
+      "status": "historical",
+      "owner": "lotus-core",
+      "freshness_date": "2026-04-15",
+      "related": {"issues": [], "rfcs": [83], "prs": []},
+      "truth_role": "historical-context",
+      "summary": "Historical platform E2E validation evidence; use current CI/runtime evidence before making readiness claims."
+    },
+    {
+      "path": "docs/architecture/ENTERPRISE_BACKEND_REFACTORING_INSTRUCTIONS.md",
+      "type": "playbook-copy",
+      "topics": ["enterprise-refactor", "backend-governance"],
+      "status": "historical",
+      "owner": "lotus-core",
+      "freshness_date": "2026-06-06",
+      "related": {"issues": [], "rfcs": [], "prs": []},
+      "truth_role": "historical-context",
+      "summary": "Repo-local copy of enterprise refactor instructions; platform playbook remains authoritative."
+    }
+  ],
+  "coverage_rules": [
+    {
+      "glob": "CR-*.md",
+      "type": "codebase-review-record",
+      "status": "review-evidence",
+      "owner": "lotus-core",
+      "truth_role": "review-evidence",
+      "freshness_policy": "Use CODEBASE-REVIEW-LEDGER.md for current status and validation evidence before treating a CR record as implementation truth."
+    },
+    {
+      "glob": "adr_*.md",
+      "type": "architecture-decision-record",
+      "status": "historical",
+      "owner": "lotus-core",
+      "truth_role": "historical-context",
+      "freshness_policy": "Historical decision context only unless linked from an active catalog entry or current architecture index."
+    },
+    {
+      "glob": "templates/*.md",
+      "type": "template",
+      "status": "active",
+      "owner": "lotus-core",
+      "truth_role": "template",
+      "freshness_policy": "Template freshness is governed by the guard and the standard that references the template."
+    }
+  ]
+}

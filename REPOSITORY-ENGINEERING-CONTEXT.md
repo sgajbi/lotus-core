@@ -708,6 +708,13 @@ Most relevant current governance:
     image-provenance-guard` blocks drift, including secret-like Dockerfile/workflow build ARG or
     ENV additions. Local builds may report `LOTUS_IMAGE_DIGEST=unknown` until a release lane or
     deploy manifest supplies the resolved digest.
+    Architecture documentation metadata is now governed by
+    `docs/architecture/architecture-documentation-catalog.v1.json`. The catalog distinguishes
+    current-state truth, review evidence, historical context, templates, and catalog metadata, and
+    links architecture docs back to API catalog, RFC ledger, runbook, supported-feature, and wiki
+    surfaces. `make architecture-docs-catalog-guard` runs directly and through
+    `make architecture-guard`; it fails when a new `docs/architecture` Markdown or JSON document is
+    neither explicitly cataloged nor covered by an intentional rule such as `CR-*` review evidence.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
     Dockerfile. Routine Dependabot version-update PR churn is currently paused with
