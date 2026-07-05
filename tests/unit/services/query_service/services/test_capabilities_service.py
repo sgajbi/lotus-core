@@ -6,6 +6,12 @@ import sqlalchemy.ext.asyncio as sa_async
 
 import src.services.query_service.app.services.capabilities_service as capabilities_module
 from src.services.query_service.app.services.capabilities_service import CapabilitiesService
+from src.services.query_service.app.services.capability_policy import (
+    CapabilityPolicyInputs,
+    CapabilityPolicyResolver,
+    decode_tenant_overrides_payload,
+    normalize_tenant_overrides,
+)
 
 
 def test_capabilities_default_flags(monkeypatch):
@@ -125,6 +131,64 @@ def test_capabilities_ignores_invalid_tenant_entries_and_non_dict_workflow_overr
     workflow_map = {workflow.workflow_key: workflow.enabled for workflow in response.workflows}
     assert response.policy_version == "tenant-x-v1"
     assert workflow_map["portfolio_bulk_onboarding"] is True
+
+
+def test_tenant_override_parsing_is_independent_from_response_assembly() -> None:
+    decoded = decode_tenant_overrides_payload(
+        (
+            '{"tenant-a":{"policy_version":"tenant-a-v2"},'
+            '"tenant-b":"invalid","tenant-c":{"workflows":["invalid"]}}'
+        )
+    )
+
+    assert decoded is not None
+    normalized = normalize_tenant_overrides(decoded)
+
+    assert normalized == {
+        "tenant-a": {"policy_version": "tenant-a-v2"},
+        "tenant-c": {"workflows": ["invalid"]},
+    }
+
+
+def test_policy_resolver_applies_tenant_policy_without_env_vars(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", "true")
+    resolver = CapabilityPolicyResolver()
+    inputs = CapabilityPolicyInputs(
+        feature_states={
+            "lotus_core.support.overview_api": True,
+            "lotus_core.support.lineage_api": True,
+            "core.observability.portfolio_supportability": True,
+            "lotus_core.ingestion.bulk_upload_adapter": True,
+            "lotus_core.ingestion.portfolio_bundle_adapter": True,
+            "lotus_core.simulation.what_if": False,
+        },
+        policy_version="tenant-default-v1",
+        tenant_overrides={
+            "tenant-a": {
+                "policy_version": "tenant-a-v3",
+                "features": {
+                    "lotus_core.support.lineage_api": False,
+                    "unknown.feature": True,
+                },
+                "workflows": {"advisor_workbench_overview": False},
+                "supported_input_modes": {
+                    "lotus-gateway": ["lotus_core_ref", "inline_bundle"],
+                },
+            }
+        },
+    )
+
+    resolved = resolver.resolve(
+        consumer_system="lotus-gateway",
+        tenant_id="tenant-a",
+        inputs=inputs,
+    )
+
+    assert resolved.policy_version == "tenant-a-v3"
+    assert resolved.feature_states["lotus_core.support.lineage_api"] is False
+    assert "unknown.feature" not in resolved.feature_states
+    assert resolved.workflow_overrides == {"advisor_workbench_overview": False}
+    assert resolved.supported_input_modes == ["lotus_core_ref", "inline_bundle"]
 
 
 def test_capabilities_workflow_required_features_are_canonical() -> None:
