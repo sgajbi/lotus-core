@@ -1,0 +1,469 @@
+{
+  "specVersion": "1.0.0",
+  "application": "lotus-core",
+  "description": "Verified, synthetic API examples for representative lotus-core success, failure, pagination, security, idempotency, dependency, and degraded-source-data behavior.",
+  "routeFamilyLinks": [
+    {
+      "service": "event_replay_service",
+      "family": "Control-Plane And Policy",
+      "exampleIds": ["event-replay-idempotency-conflict"]
+    },
+    {
+      "service": "financial_reconciliation_service",
+      "family": "Control Execution",
+      "exampleIds": ["reconciliation-not-found"]
+    },
+    {
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "exampleIds": [
+        "ingestion-validation-error",
+        "ingestion-idempotency-conflict",
+        "ingestion-dependency-timeout"
+      ]
+    },
+    {
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "exampleIds": [
+        "analytics-degraded-source-data",
+        "analytics-pagination-filtering-sorting"
+      ]
+    },
+    {
+      "service": "query_control_plane_service",
+      "family": "Control-Plane And Policy",
+      "exampleIds": ["support-security-denial"]
+    },
+    {
+      "service": "query_control_plane_service",
+      "family": "Snapshot And Simulation",
+      "exampleIds": ["simulation-success"]
+    },
+    {
+      "service": "query_service",
+      "family": "Operational Read",
+      "exampleIds": ["operational-read-success"]
+    }
+  ],
+  "examples": [
+    {
+      "id": "operational-read-success",
+      "category": "success",
+      "service": "query_service",
+      "family": "Operational Read",
+      "method": "GET",
+      "path": "/portfolios/{portfolio_id}/positions",
+      "sourceTests": [
+        "tests/integration/services/query_service/test_positions_router.py",
+        "tests/unit/services/query_service/services/test_position_service.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-001"
+        },
+        "path": {
+          "portfolio_id": "PF_API_EXAMPLE_001"
+        },
+        "query": {
+          "as_of_date": "2026-03-28"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "portfolio_id": "PF_API_EXAMPLE_001",
+          "as_of_date": "2026-03-28",
+          "positions": [
+            {
+              "security_id": "SEC_SYNTH_EQ_001",
+              "quantity": "125.0000",
+              "market_value": "100000.00",
+              "currency": "USD"
+            }
+          ],
+          "correlation_id": "corr-api-example-001"
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "No client, account, person, or raw bank identifiers."
+      }
+    },
+    {
+      "id": "ingestion-validation-error",
+      "category": "validation_error",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions",
+      "sourceTests": [
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/unit/services/ingestion_service/test_transaction_dto.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-002",
+          "Idempotency-Key": "idem-api-example-validation"
+        },
+        "body": {
+          "transactions": [
+            {
+              "transaction_id": "   ",
+              "portfolio_id": "PF_API_EXAMPLE_001",
+              "security_id": "SEC_SYNTH_EQ_001"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 422,
+        "body": {
+          "code": "VALIDATION_ERROR",
+          "message": "Transaction identity fields must not be blank.",
+          "correlation_id": "corr-api-example-002",
+          "details": {
+            "field": "transaction_id"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Invalid values are synthetic and contain no PII."
+      }
+    },
+    {
+      "id": "support-security-denial",
+      "category": "auth_permission_denial",
+      "service": "query_control_plane_service",
+      "family": "Control-Plane And Policy",
+      "method": "GET",
+      "path": "/support/portfolios/{portfolio_id}/overview",
+      "sourceTests": [
+        "tests/unit/services/query_control_plane_service/test_control_plane_enterprise_readiness.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-003",
+          "Authorization": "Bearer <redacted>"
+        },
+        "path": {
+          "portfolio_id": "PF_API_EXAMPLE_001"
+        }
+      },
+      "response": {
+        "status": 403,
+        "body": {
+          "type": "https://lotus.example/problems/permission-denied",
+          "title": "Permission denied",
+          "status": 403,
+          "code": "QCP_PERMISSION_DENIED",
+          "message": "Caller is not authorized for this support surface.",
+          "correlation_id": "corr-api-example-003",
+          "details": {
+            "capability": "core.support.read"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Authorization credential is redacted."
+      }
+    },
+    {
+      "id": "reconciliation-not-found",
+      "category": "not_found",
+      "service": "financial_reconciliation_service",
+      "family": "Control Execution",
+      "method": "GET",
+      "path": "/reconciliation/runs/{run_id}",
+      "sourceTests": [
+        "tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py",
+        "tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-004"
+        },
+        "path": {
+          "run_id": "REC_RUN_SYNTH_MISSING"
+        }
+      },
+      "response": {
+        "status": 404,
+        "body": {
+          "code": "RECONCILIATION_RUN_NOT_FOUND",
+          "message": "Requested reconciliation run was not found.",
+          "correlation_id": "corr-api-example-004",
+          "details": {
+            "run_id": "REC_RUN_SYNTH_MISSING"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Run identifier is synthetic."
+      }
+    },
+    {
+      "id": "ingestion-idempotency-conflict",
+      "category": "conflict_idempotency",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions",
+      "sourceTests": [
+        "tests/unit/services/ingestion_service/services/test_ingestion_job_service_ports.py",
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-005",
+          "Idempotency-Key": "idem-api-example-conflict"
+        },
+        "body": {
+          "transactions": [
+            {
+              "transaction_id": "TXN_SYNTH_001",
+              "portfolio_id": "PF_API_EXAMPLE_001",
+              "security_id": "SEC_SYNTH_EQ_001"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "INGESTION_IDEMPOTENCY_CONFLICT",
+          "message": "Idempotency key was already used with a different payload.",
+          "correlation_id": "corr-api-example-005",
+          "idempotency_key": "idem-api-example-conflict",
+          "details": {
+            "conflict_reason": "payload_fingerprint_mismatch"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Payload identifiers are synthetic."
+      }
+    },
+    {
+      "id": "event-replay-idempotency-conflict",
+      "category": "conflict_idempotency",
+      "service": "event_replay_service",
+      "family": "Control-Plane And Policy",
+      "method": "POST",
+      "path": "/ingestion/jobs/{job_id}/retry",
+      "sourceTests": [
+        "tests/unit/services/event_replay_service/test_ingestion_retry_commands.py",
+        "tests/unit/services/event_replay_service/test_ingestion_operations.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-006",
+          "Idempotency-Key": "idem-api-example-retry"
+        },
+        "path": {
+          "job_id": "JOB_SYNTH_001"
+        },
+        "body": {
+          "dry_run": false
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "code": "INGESTION_RETRY_DUPLICATE_BLOCKED",
+          "message": "Retry is blocked because an equivalent replay is already recorded.",
+          "correlation_id": "corr-api-example-006",
+          "idempotency_key": "idem-api-example-retry",
+          "details": {
+            "outcome": "duplicate_blocked"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Job and idempotency identifiers are synthetic."
+      }
+    },
+    {
+      "id": "ingestion-dependency-timeout",
+      "category": "dependency_timeout",
+      "service": "ingestion_service",
+      "family": "Write Ingress",
+      "method": "POST",
+      "path": "/ingest/transactions",
+      "sourceTests": [
+        "tests/unit/services/ingestion_service/routers/test_publish_errors.py",
+        "tests/integration/services/ingestion_service/test_ingestion_routers.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-007",
+          "Idempotency-Key": "idem-api-example-timeout"
+        },
+        "body": {
+          "transactions": [
+            {
+              "transaction_id": "TXN_SYNTH_TIMEOUT",
+              "portfolio_id": "PF_API_EXAMPLE_001",
+              "security_id": "SEC_SYNTH_EQ_001"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 503,
+        "headers": {
+          "Retry-After": "5"
+        },
+        "body": {
+          "code": "INGESTION_PUBLISH_FAILED",
+          "message": "Kafka dependency did not confirm delivery before timeout.",
+          "correlation_id": "corr-api-example-007",
+          "details": {
+            "dependency": "kafka",
+            "retryable": true,
+            "publish_state": "delivery_timeout"
+          }
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "No raw downstream exception text is exposed."
+      }
+    },
+    {
+      "id": "analytics-degraded-source-data",
+      "category": "degraded_source_data",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/portfolios/{portfolio_id}/tax-lots",
+      "sourceTests": [
+        "tests/unit/services/query_service/services/test_portfolio_tax_lot_window.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-008"
+        },
+        "path": {
+          "portfolio_id": "PF_API_EXAMPLE_001"
+        },
+        "body": {
+          "as_of_date": "2026-03-28",
+          "limit": 50
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "source_product": "PortfolioTaxLotWindow:v1",
+          "portfolio_id": "PF_API_EXAMPLE_001",
+          "data_quality": {
+            "state": "SOURCE_LIMITED",
+            "reason": "missing_cost_lot_evidence"
+          },
+          "supportability": {
+            "degraded": true,
+            "reason_code": "SOURCE_LIMITED"
+          },
+          "correlation_id": "corr-api-example-008"
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Portfolio and security identifiers are synthetic."
+      }
+    },
+    {
+      "id": "analytics-pagination-filtering-sorting",
+      "category": "pagination_filtering_sorting",
+      "service": "query_control_plane_service",
+      "family": "Analytics Input",
+      "method": "POST",
+      "path": "/integration/portfolios/{portfolio_id}/transaction-cost-curve",
+      "sourceTests": [
+        "tests/unit/services/query_service/services/test_transaction_cost_curve.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-009"
+        },
+        "path": {
+          "portfolio_id": "PF_API_EXAMPLE_001"
+        },
+        "body": {
+          "as_of_date": "2026-03-28",
+          "transaction_type": "BUY",
+          "sort": "transaction_date",
+          "limit": 2,
+          "page_token": "txn_cost_curve_page_001"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "source_product": "TransactionCostCurve:v1",
+          "items": [
+            {
+              "transaction_id": "TXN_SYNTH_PAGE_001",
+              "transaction_type": "BUY",
+              "fee_amount": "12.34"
+            }
+          ],
+          "page": {
+            "limit": 2,
+            "next_page_token": "txn_cost_curve_page_002",
+            "sort": "transaction_date"
+          },
+          "correlation_id": "corr-api-example-009"
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Page tokens and transaction identifiers are synthetic."
+      }
+    },
+    {
+      "id": "simulation-success",
+      "category": "success",
+      "service": "query_control_plane_service",
+      "family": "Snapshot And Simulation",
+      "method": "POST",
+      "path": "/simulation-sessions",
+      "sourceTests": [
+        "tests/unit/services/query_service/services/test_simulation_service.py",
+        "tests/integration/services/query_control_plane_service/test_control_plane_app.py"
+      ],
+      "request": {
+        "headers": {
+          "X-Correlation-Id": "corr-api-example-010",
+          "Idempotency-Key": "idem-api-example-simulation"
+        },
+        "body": {
+          "portfolio_id": "PF_API_EXAMPLE_001",
+          "as_of_date": "2026-03-28"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "session_id": "SIM_SYNTH_001",
+          "portfolio_id": "PF_API_EXAMPLE_001",
+          "status": "CREATED",
+          "correlation_id": "corr-api-example-010"
+        }
+      },
+      "sensitivity": {
+        "syntheticOnly": true,
+        "redactionPolicy": "Simulation identifiers are synthetic."
+      }
+    }
+  ]
+}

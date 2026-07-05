@@ -293,6 +293,11 @@ Current repository posture:
     maps application/service failures, prefer typed service exceptions and router type dispatch
     over substring checks against exception message text; keep human-readable details bounded and
     stable in the problem-details mapper.
+    API example documentation is governed by `docs/standards/verified-api-examples.v1.json` and
+    `make api-example-catalog-guard`. New example snippets for success, validation errors,
+    authorization denial, not-found, idempotency conflict, dependency timeout, degraded source data,
+    or pagination/filtering/sorting must extend the catalog with source-test references, synthetic
+    identifiers, correlation IDs, and standard problem metadata before wiki prose points to them.
 35. Runtime configuration is becoming strict outside local/development/test profiles. Invalid
     bounded ingestion settings for rate limits, replay caps, worker polling and batching, scheduler
     dispatch, operating bands, and calculator lag JSON raise `IngestionConfigurationError` when
@@ -425,6 +430,8 @@ Use these commands as the primary local contract:
    `make lotus-core-validate`
 13. documentation release evidence pack
    `make docs-evidence-pack`
+14. verified API example catalog
+   `make api-example-catalog-guard`
 
 ## Validation And CI Expectations
 
