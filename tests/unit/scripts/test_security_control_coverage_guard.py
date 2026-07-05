@@ -40,6 +40,7 @@ def _write_minimal_guard_repo(tmp_path: Path, *, app_source: str) -> Path:
             [
                 "def configure_secure_response_headers(): pass",
                 "def configure_cors_policy(): pass",
+                "def configure_trusted_host_policy(): pass",
                 "def configure_metrics_access_policy(): pass",
                 "def unhandled_exception_handler(): pass",
             ]
