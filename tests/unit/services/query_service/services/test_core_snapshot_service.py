@@ -25,6 +25,7 @@ from src.services.query_service.app.services.core_snapshot_calculations import (
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
+    CoreSnapshotDependencies,
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
@@ -32,6 +33,27 @@ from src.services.query_service.app.services.core_snapshot_service import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_core_snapshot_service_accepts_explicit_dependencies_without_session() -> None:
+    dependencies = CoreSnapshotDependencies(
+        position_repo=AsyncMock(),
+        portfolio_repo=AsyncMock(),
+        simulation_repo=AsyncMock(),
+        price_repo=AsyncMock(),
+        fx_repo=AsyncMock(),
+        instrument_repo=AsyncMock(),
+    )
+
+    service = CoreSnapshotService(dependencies=dependencies)
+
+    assert service.db is None
+    assert service.position_repo is dependencies.position_repo
+    assert service.portfolio_repo is dependencies.portfolio_repo
+    assert service.simulation_repo is dependencies.simulation_repo
+    assert service.price_repo is dependencies.price_repo
+    assert service.fx_repo is dependencies.fx_repo
+    assert service.instrument_repo is dependencies.instrument_repo
 
 
 class _FixedClock:

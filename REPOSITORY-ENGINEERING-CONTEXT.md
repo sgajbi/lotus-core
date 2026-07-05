@@ -1469,6 +1469,13 @@ Most relevant current governance:
      reads in the policy source adapter, exercise policy logic with explicit in-memory inputs, and
      preserve public capability DTO compatibility unless a contract change is intentional,
      documented, and tested.
+119. Broad query/control-plane services should expose repository and port dependencies through
+     explicit dependency bundles or use-case ports, not only by constructing repositories from raw
+     `AsyncSession` inside service constructors. `CoreSnapshotDependencies`,
+     `IntegrationServiceDependencies`, and `OperationsServiceDependencies` provide the current
+     representative pattern: keep `from_session(...)` construction at the FastAPI/deployment wiring
+     boundary, support fake dependencies in focused tests, and require repository additions to
+     change a visible dependency factory or bundle.
 
 ## Context Maintenance Rule
 

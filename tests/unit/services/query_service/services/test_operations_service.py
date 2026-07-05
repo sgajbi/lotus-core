@@ -25,7 +25,10 @@ from src.services.query_service.app.services.load_run_progress_builder import (
     get_load_run_operator_progress_state,
     get_load_run_state,
 )
-from src.services.query_service.app.services.operations_service import OperationsService
+from src.services.query_service.app.services.operations_service import (
+    OperationsService,
+    OperationsServiceDependencies,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,6 +77,16 @@ def service(mock_ops_repo: AsyncMock) -> OperationsService:
         return_value=mock_ops_repo,
     ):
         return OperationsService(AsyncMock(spec=AsyncSession))
+
+
+async def test_operations_service_accepts_explicit_dependencies_without_session(
+    mock_ops_repo: AsyncMock,
+) -> None:
+    service = OperationsService(
+        dependencies=OperationsServiceDependencies(repository=mock_ops_repo)
+    )
+
+    assert service.repo is mock_ops_repo
 
 
 async def test_resolve_portfolio_latest_business_date_reads_validation_and_date_sequentially(
