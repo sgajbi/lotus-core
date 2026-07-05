@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -149,6 +149,133 @@ def test_calculate_sell_transaction(mock_metric, base_transaction_event: Transac
     assert cashflow.is_position_flow is True
     assert cashflow.is_portfolio_flow is False
     mock_metric.labels.assert_called_once_with(classification="INVESTMENT_INFLOW", timing="EOD")
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification"),
+    [
+        ("BUY", CashflowClassification.INVESTMENT_OUTFLOW),
+        ("SELL", CashflowClassification.INVESTMENT_INFLOW),
+        ("DEPOSIT", CashflowClassification.CASHFLOW_IN),
+        ("WITHDRAWAL", CashflowClassification.CASHFLOW_OUT),
+        ("FX_CASH_SETTLEMENT_BUY", CashflowClassification.FX_BUY),
+        ("FX_CASH_SETTLEMENT_SELL", CashflowClassification.FX_SELL),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_uses_settlement_date_for_settlement_dated_cashflows(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+    classification: CashflowClassification,
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": transaction_type,
+            "transaction_date": datetime(2026, 4, 10, 10, 0, 0),
+            "settlement_date": datetime(2026, 4, 12, 9, 30, 0),
+            "trade_fee": Decimal("0"),
+        }
+    )
+    rule = CashflowRule(
+        classification=classification,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=transaction_type in {"DEPOSIT", "WITHDRAWAL"},
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.cashflow_date == date(2026, 4, 12)
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize("transaction_type", ["DIVIDEND", "INTEREST"])
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_uses_settlement_date_as_income_payment_value_date_proxy(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": transaction_type,
+            "transaction_date": datetime(2026, 1, 20, 10, 0, 0),
+            "settlement_date": datetime(2026, 1, 25, 9, 30, 0),
+            "quantity": Decimal("0"),
+            "price": Decimal("0"),
+            "trade_fee": Decimal("0"),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.cashflow_date == date(2026, 1, 25)
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "CASH_IN_LIEU",
+            "transaction_date": datetime(2026, 5, 1, 10, 0, 0),
+            "settlement_date": datetime(2026, 5, 5, 9, 30, 0),
+            "synthetic_flow_effective_date": date(2026, 5, 3),
+            "has_synthetic_flow": True,
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.cashflow_date == date(2026, 5, 3)
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_falls_back_to_transaction_date_when_policy_source_date_missing(
+    mock_metric, base_transaction_event: TransactionEvent
+):
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "BUY",
+            "transaction_date": datetime(2026, 4, 10, 10, 0, 0),
+            "settlement_date": None,
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INVESTMENT_OUTFLOW,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.cashflow_date == date(2026, 4, 10)
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
