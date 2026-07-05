@@ -903,6 +903,14 @@ Most relevant current governance:
     `409 INGESTION_IDEMPOTENCY_CONFLICT`, OpenAPI must expose the shared 409 response on every
     job-backed ingestion route, and diagnostics must classify same-endpoint payload conflicts
     separately from cross-endpoint key reuse.
+    Business-date ingestion lifecycle orchestration belongs in
+    `BusinessDateIngestionCommandHandler`, not `routers/business_dates.py`. Keep empty payload,
+    max-future-date, and monotonic calendar advancement in `BusinessDateIngestionPolicy`; keep
+    write-mode checks, rate limiting, ingestion job create/replay, publish failure marking, and
+    queued-state bookkeeping in the command handler; and keep the router limited to HTTP metadata,
+    typed error mapping, and ACK assembly. Preserve the stable business-date failure codes when
+    extending this path. This is an in-process design-modularity boundary, not a runtime service
+    split.
 64. Application event publishing must use `portfolio_common.event_publisher` ports rather than
     concrete Kafka producer APIs. `EventPublishRequest` carries topic, key, payload, headers,
     outbox id, and delivery callback metadata. `EventPublishResult` reports `success`,

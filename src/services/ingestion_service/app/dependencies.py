@@ -9,7 +9,9 @@ from .adapter_mode import (
     ensure_upload_adapter_enabled,
 )
 from .repositories.business_calendar_repository import BusinessCalendarRepository
+from .services.business_date_ingestion_commands import BusinessDateIngestionCommandHandler
 from .services.business_date_ingestion_policy import BusinessDateIngestionPolicy
+from .services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from .services.ingestion_service import IngestionService
 from .services.reference_data_ingestion_service import ReferenceDataIngestionService
 
@@ -56,3 +58,15 @@ def get_business_date_ingestion_policy(
     ),
 ) -> BusinessDateIngestionPolicy:
     return BusinessDateIngestionPolicy(business_calendar_repository)
+
+
+def get_business_date_ingestion_command_handler(
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    business_date_policy: BusinessDateIngestionPolicy = Depends(get_business_date_ingestion_policy),
+) -> BusinessDateIngestionCommandHandler:
+    return BusinessDateIngestionCommandHandler(
+        ingestion_service=ingestion_service,
+        ingestion_job_service=ingestion_job_service,
+        business_date_policy=business_date_policy,
+    )

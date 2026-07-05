@@ -25,6 +25,7 @@ from src.services.ingestion_service.app.dependencies import (
 )
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
+from src.services.ingestion_service.app.services import business_date_ingestion_commands
 from src.services.ingestion_service.app.services.business_date_ingestion_policy import (
     BusinessDateIngestionPolicy,
 )
@@ -35,9 +36,6 @@ except ModuleNotFoundError:  # pragma: no cover - only needed in certain test pa
     app_ops_controls = ops_controls
 from src.services.event_replay_service.app.routers import (
     ingestion_operations as ingestion_operations_router,
-)
-from src.services.ingestion_service.app.routers import (
-    business_dates as business_dates_router,
 )
 from src.services.ingestion_service.app.routers import (
     fx_rates as fx_rates_router,
@@ -1088,9 +1086,6 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
         fake_job_service
     )
     app.dependency_overrides[fx_rates_router.get_ingestion_job_service] = lambda: fake_job_service
-    app.dependency_overrides[business_dates_router.get_ingestion_job_service] = lambda: (
-        fake_job_service
-    )
     app.dependency_overrides[get_business_date_ingestion_policy] = lambda: fake_business_date_policy
     app.dependency_overrides[portfolio_bundle_router.get_ingestion_job_service] = lambda: (
         fake_job_service
@@ -1123,7 +1118,6 @@ async def ingestion_test_harness(mock_kafka_producer: MagicMock):
     app.dependency_overrides.pop(instruments_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(market_prices_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(fx_rates_router.get_ingestion_job_service, None)
-    app.dependency_overrides.pop(business_dates_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(get_business_date_ingestion_policy, None)
     app.dependency_overrides.pop(portfolio_bundle_router.get_ingestion_job_service, None)
     app.dependency_overrides.pop(reprocessing_router.get_ingestion_job_service, None)
@@ -7561,7 +7555,7 @@ async def test_ingest_business_dates_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        business_dates_router,
+        business_date_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
