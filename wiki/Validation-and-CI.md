@@ -84,6 +84,10 @@ smallest evidence command for a change, then cite generated artifacts from the r
   position/cash state, corporate actions, auth/audit/security, ingestion/replay/outbox,
   repository/database hot paths, and API/error mapping. `make coverage-gate` also writes separate
   aggregate, changed-code, and critical-path coverage reports under `output/coverage/`.
+- `make generated-artifact-tracking-guard`
+  fails if disposable build, cache, package, coverage, or generated `output/` artifacts become
+  tracked repository source truth. Local ignored generated artifacts remain removable through
+  `make clean`.
 - `make quality-wiki-docs-gate`
   validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
   pages, publication-safe page names, first headings, and local relative links; when a published

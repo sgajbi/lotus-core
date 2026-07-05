@@ -879,7 +879,10 @@ Most relevant current governance:
     ignored local caches, Python bytecode, build/package byproducts, coverage files, and generated
     `output/` evidence artifacts, but must preserve source, docs, wiki source, migrations,
     contracts, `.git`, virtual environments, and dependency directories. Do not reintroduce opaque
-    inline cleanup commands in `Makefile`.
+    inline cleanup commands in `Makefile`. `make generated-artifact-tracking-guard` is the
+    source-truth companion: it must fail if generated build, cache, package, coverage, or output
+    evidence paths are tracked by Git. A local ignored `src/services/query_service/build/lib` tree
+    is disposable workspace output, not authored implementation truth.
 63. Ingestion audit and idempotency workflows must use explicit store ports before reaching
     SQLAlchemy helper functions. `IngestionJobStore` owns same-key idempotency replay/conflict
     semantics; `ReplayAuditStore` owns replay-audit duplicate lookup, audit persistence, audit
