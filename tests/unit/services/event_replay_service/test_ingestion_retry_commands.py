@@ -241,7 +241,7 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
     context = SimpleNamespace(endpoint="/ingest/transactions", idempotency_key="idem-001")
     ingestion_job_service = MagicMock()
     ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-pub")
-    ingestion_job_service.mark_failed = AsyncMock()
+    ingestion_job_service.mark_failed = AsyncMock(return_value=True)
     replay_payload_dispatcher = MagicMock()
     replay_payload_dispatcher.replay_payload = AsyncMock(
         side_effect=RuntimeError("broker timeout with sensitive downstream detail")
@@ -278,6 +278,35 @@ async def test_ingestion_job_retry_publish_failure_uses_recovery_detail() -> Non
     _, mark_failed_args = ingestion_job_service.mark_failed.await_args
     assert mark_failed_args["failure_phase"] == "retry_publish"
     assert mark_failed_args["failed_record_keys"] == ["T1"]
+
+
+@pytest.mark.asyncio
+async def test_ingestion_job_retry_publish_failure_surfaces_rejected_failure_bookkeeping() -> None:
+    context = SimpleNamespace(endpoint="/ingest/transactions", idempotency_key="idem-001")
+    ingestion_job_service = MagicMock()
+    ingestion_job_service.record_consumer_dlq_replay_audit = AsyncMock(return_value="audit-pub")
+    ingestion_job_service.mark_failed = AsyncMock(return_value=False)
+    replay_payload_dispatcher = MagicMock()
+    replay_payload_dispatcher.replay_payload = AsyncMock(side_effect=RuntimeError("broker timeout"))
+
+    with pytest.raises(ReplayCommandError) as exc_info:
+        await _retry_service(
+            ingestion_job_service=ingestion_job_service,
+            replay_payload_dispatcher=replay_payload_dispatcher,
+        )._publish_ingestion_job_retry(
+            job_id="job-001",
+            context=context,
+            retry_request=IngestionRetryRequest(record_keys=["T1"]),
+            replay_payload={"transactions": [{"transaction_id": "T1"}]},
+            replay_fingerprint="fp-001",
+            requested_by="ops",
+        )
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "INGESTION_RETRY_FAILURE_BOOKKEEPING_REJECTED"
+    assert exc_info.value.detail["outcome"] == "bookkeeping_conflict"
+    assert exc_info.value.detail["replay_audit_id"] == "audit-pub"
+    assert exc_info.value.detail["replay_fingerprint"] == "fp-001"
 
 
 @pytest.mark.asyncio

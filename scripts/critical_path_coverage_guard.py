@@ -292,7 +292,7 @@ def _coverage_files(coverage_json: dict[str, Any] | None) -> dict[str, dict[str,
 def _changed_files_from_git(*, repo_root: Path, base_ref: str | None) -> list[str]:
     if not base_ref:
         return []
-    candidates = ([base_ref, "HEAD"], [f"{base_ref}...HEAD"])
+    candidates = ([f"{base_ref}...HEAD"], [base_ref, "HEAD"])
     for args in candidates:
         completed = subprocess.run(
             ["git", "diff", "--name-only", *args],

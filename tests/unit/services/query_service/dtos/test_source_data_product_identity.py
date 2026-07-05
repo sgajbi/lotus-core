@@ -25,6 +25,7 @@ from src.services.query_service.app.dtos.reporting_dto import (
     CashBalancesResponse,
 )
 from src.services.query_service.app.dtos.source_data_product_identity import (
+    SOURCE_METADATA_UNAVAILABLE_HASH,
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
@@ -67,7 +68,7 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         generated_at=generated_at,
     )
 
-    assert metadata["content_hash"].startswith("sha256:")
+    assert metadata["content_hash"] == SOURCE_METADATA_UNAVAILABLE_HASH
     assert metadata["source_digest"] == metadata["content_hash"]
     assert metadata["source_refs"] == []
     assert metadata["source_lineage"] == {}
@@ -83,8 +84,8 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         "latest_evidence_timestamp": None,
         "source_batch_fingerprint": None,
         "snapshot_id": None,
-        "content_hash": metadata["content_hash"],
-        "source_digest": metadata["content_hash"],
+        "content_hash": SOURCE_METADATA_UNAVAILABLE_HASH,
+        "source_digest": SOURCE_METADATA_UNAVAILABLE_HASH,
         "source_refs": [],
         "source_lineage": {},
         "source_evidence_current": False,
@@ -106,7 +107,7 @@ def test_source_data_product_runtime_metadata_preserves_request_correlation_id()
 
     assert metadata["correlation_id"] == "QRY-corr-1"
     assert metadata["data_quality_status"] == UNKNOWN
-    assert metadata["content_hash"].startswith("sha256:")
+    assert metadata["content_hash"] == SOURCE_METADATA_UNAVAILABLE_HASH
 
 
 def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage() -> None:

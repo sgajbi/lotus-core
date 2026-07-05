@@ -169,20 +169,7 @@ def source_data_product_runtime_metadata(
         )
         if value
     }
-    resolved_content_hash = content_hash or stable_content_hash(
-        {
-            "as_of_date": as_of_date,
-            "restatement_version": CURRENT_RESTATEMENT_VERSION,
-            "reconciliation_status": reconciliation_status,
-            "data_quality_status": data_quality_status,
-            "latest_evidence_timestamp": latest_evidence_timestamp,
-            "source_batch_fingerprint": normalized_source_batch_fingerprint,
-            "snapshot_id": normalize_lineage_value(snapshot_id),
-            "policy_version": normalize_lineage_value(policy_version),
-            "source_refs": normalized_refs,
-            "source_lineage": normalized_lineage,
-        }
-    )
+    resolved_content_hash = content_hash or source_digest or SOURCE_METADATA_UNAVAILABLE_HASH
     resolved_source_evidence_current = (
         _default_source_evidence_current(
             data_quality_status=data_quality_status,

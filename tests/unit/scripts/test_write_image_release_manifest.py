@@ -42,7 +42,6 @@ def test_image_release_manifest_records_digest_promotion_and_runtime_metadata() 
         "LOTUS_BUILD_TIMESTAMP": "2026-07-05T12:34:56Z",
         "LOTUS_REPO_URL": "https://github.com/sgajbi/lotus-core",
         "LOTUS_IMAGE_VERSION": FULL_SHA,
-        "LOTUS_IMAGE_DIGEST": IMAGE_DIGEST,
         "LOTUS_CI_RUN_ID": "987654",
     }
     assert manifest["oci_labels"] == {
@@ -51,9 +50,9 @@ def test_image_release_manifest_records_digest_promotion_and_runtime_metadata() 
         "org.opencontainers.image.created": "2026-07-05T12:34:56Z",
         "org.opencontainers.image.source": "https://github.com/sgajbi/lotus-core",
         "org.opencontainers.image.version": FULL_SHA,
-        "org.opencontainers.image.digest": IMAGE_DIGEST,
         "org.opencontainers.image.ci.run_id": "987654",
     }
+    assert manifest["image_digest"] == IMAGE_DIGEST
     assert [promotion["image_ref"] for promotion in manifest["promotions"]] == [
         digest_ref,
         digest_ref,

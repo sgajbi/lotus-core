@@ -143,7 +143,6 @@ def build_release_manifest(
         "LOTUS_BUILD_TIMESTAMP": build_timestamp,
         "LOTUS_REPO_URL": repo_url,
         "LOTUS_IMAGE_VERSION": image_version,
-        "LOTUS_IMAGE_DIGEST": image_digest,
         "LOTUS_CI_RUN_ID": ci_pipeline_run_id,
     }
     metadata_values = {
@@ -183,6 +182,7 @@ def build_release_manifest(
         "oci_labels": {
             label_name: metadata_values[field_name]
             for label_name, field_name in OCI_METADATA_LABELS.items()
+            if field_name != "image_digest"
         },
     }
 

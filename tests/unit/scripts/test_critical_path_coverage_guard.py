@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from scripts import critical_path_coverage_guard as guard
 
@@ -160,3 +161,18 @@ def test_run_guard_writes_report_with_explicit_changed_files(tmp_path: Path) -> 
     assert findings == []
     assert report["changed_code_coverage"]["measured_line_coverage_percent"] == 100.0
     assert (tmp_path / "output/coverage/report.json").exists()
+
+
+def test_changed_files_from_git_uses_merge_base_diff_first(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
+    def _fake_run(args, **_kwargs):
+        calls.append(list(args))
+        return SimpleNamespace(returncode=0, stdout="src/app/use_case.py\n", stderr="")
+
+    monkeypatch.setattr(guard.subprocess, "run", _fake_run)
+
+    changed = guard._changed_files_from_git(repo_root=Path("."), base_ref="origin/main")
+
+    assert changed == ["src/app/use_case.py"]
+    assert calls[0] == ["git", "diff", "--name-only", "origin/main...HEAD"]
