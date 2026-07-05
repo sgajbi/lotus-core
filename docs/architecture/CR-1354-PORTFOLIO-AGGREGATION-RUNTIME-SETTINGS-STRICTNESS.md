@@ -55,8 +55,7 @@ No central Lotus skill change is required. The reusable rule already lives in th
 backend-delivery skills: fix same-pattern areas, update repo context, and validate with focused
 tests rather than adding prose-only reminders.
 
-## Remaining Work
+## Follow-Up Closure
 
-GitHub issue #600 should remain open until the remaining legacy fallback paths in
-`portfolio_common.config` are reviewed and either migrated to `portfolio_common.runtime_settings`
-or explicitly documented as local compatibility defaults with tests.
+The remaining legacy fallback paths in `portfolio_common.config` were reviewed and migrated in
+CR-1355.

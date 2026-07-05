@@ -1,15 +1,19 @@
 # libs/portfolio-common/portfolio_common/config.py
-import json
 import logging
 import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+from portfolio_common.runtime_settings import env_bool as shared_env_bool
+from portfolio_common.runtime_settings import env_int as shared_env_int
+from portfolio_common.runtime_settings import env_json_map as shared_env_json_map
+
 # Load environment variables from a .env file for local development.
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+CONFIG_SERVICE_NAME = "portfolio common config"
 HEALTH_PROBE_BIND_HOST_ENV = "LOTUS_CORE_HEALTH_PROBE_BIND_HOST"
 DEFAULT_HEALTH_PROBE_BIND_HOST = ".".join(("0", "0", "0", "0"))
 
@@ -25,13 +29,13 @@ class KafkaTopicDefinition:
 
 def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
     safe_default = _safe_int_default(default)
-    value, raw = _load_env_int_value(name, safe_default)
-    return _enforce_env_int_minimum(
-        name=name,
-        raw=raw,
-        value=value,
-        safe_default=safe_default,
+    fallback = _minimum_safe_default(safe_default, minimum=minimum)
+    return shared_env_int(
+        name,
+        fallback,
+        service_name=CONFIG_SERVICE_NAME,
         minimum=minimum,
+        minimum_fallback=fallback,
     )
 
 
@@ -42,59 +46,14 @@ def _safe_int_default(default: int) -> int:
         return 0
 
 
-def _load_env_int_value(name: str, safe_default: int) -> tuple[int, str | None]:
-    raw = os.getenv(name)
-    if raw is None:
-        return safe_default, raw
-    try:
-        return int(raw), raw
-    except Exception:
-        logger.warning(
-            "Invalid integer env setting; falling back to default.",
-            extra={"setting": name, "raw_value": raw, "default": safe_default},
-        )
-        return safe_default, raw
-
-
-def _enforce_env_int_minimum(
-    *,
-    name: str,
-    raw: str | None,
-    value: int,
-    safe_default: int,
-    minimum: int | None,
-) -> int:
-    if minimum is not None and value < minimum:
-        logger.warning(
-            "Out-of-range integer env setting; falling back to default.",
-            extra={
-                "setting": name,
-                "raw_value": raw,
-                "default": safe_default,
-                "minimum": minimum,
-            },
-        )
-        return safe_default if safe_default >= minimum else minimum
-
-    return value
+def _minimum_safe_default(default: int, *, minimum: int | None) -> int:
+    if minimum is None or default >= minimum:
+        return default
+    return minimum
 
 
 def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-
-    logger.warning(
-        "Invalid boolean env setting; falling back to default.",
-        extra={"setting": name, "raw_value": raw, "default": default},
-    )
-    return default
+    return shared_env_bool(name, default, service_name=CONFIG_SERVICE_NAME)
 
 
 def load_health_probe_bind_host() -> str:
@@ -573,30 +532,21 @@ def _load_consumer_defaults_overrides() -> dict[str, object]:
     defaults_raw = os.getenv(_CONSUMER_DEFAULTS_ENV, "").strip()
     if not defaults_raw:
         return {}
-    try:
-        defaults = json.loads(defaults_raw)
-        return _validate_consumer_override_relationships(
-            _sanitize_consumer_override_map(defaults, context=_CONSUMER_DEFAULTS_ENV),
-            context=_CONSUMER_DEFAULTS_ENV,
-        )
-    except Exception as exc:
-        logger.warning("Invalid consumer defaults JSON; ignoring.", extra={"error": str(exc)})
+    defaults = shared_env_json_map(_CONSUMER_DEFAULTS_ENV, service_name=CONFIG_SERVICE_NAME)
+    if not defaults:
         return {}
+    return _validate_consumer_override_relationships(
+        _sanitize_consumer_override_map(defaults, context=_CONSUMER_DEFAULTS_ENV),
+        context=_CONSUMER_DEFAULTS_ENV,
+    )
 
 
 def _load_consumer_group_overrides(group_id: str) -> dict[str, object]:
     group_raw = os.getenv(_CONSUMER_GROUP_OVERRIDES_ENV, "").strip()
     if not group_raw:
         return {}
-    try:
-        parsed = json.loads(group_raw)
-    except Exception as exc:
-        logger.warning(
-            "Invalid consumer group overrides JSON; ignoring.", extra={"error": str(exc)}
-        )
-        return {}
-    if not isinstance(parsed, dict):
-        logger.warning("Group overrides JSON must be an object; ignoring.")
+    parsed = shared_env_json_map(_CONSUMER_GROUP_OVERRIDES_ENV, service_name=CONFIG_SERVICE_NAME)
+    if not parsed:
         return {}
     group_cfg = parsed.get(group_id)
     if group_cfg is None:

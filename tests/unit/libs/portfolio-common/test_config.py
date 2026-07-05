@@ -10,6 +10,7 @@ from portfolio_common.config import (
     _validate_consumer_override_relationships,
     get_kafka_consumer_runtime_overrides,
 )
+from portfolio_common.runtime_settings import RuntimeConfigurationError
 
 
 def test_rejects_invalid_auto_offset_reset_value():
@@ -54,6 +55,8 @@ def test_rejects_non_string_consumer_string_setting():
 
 def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):
     caplog.set_level(logging.WARNING)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("TEST_INT_SETTING", "bad")
 
     assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
@@ -62,10 +65,20 @@ def test_env_int_falls_back_for_invalid_value(caplog, monkeypatch):
 
 def test_env_int_falls_back_for_out_of_range_value(caplog, monkeypatch):
     caplog.set_level(logging.WARNING)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("TEST_INT_SETTING", "-1")
 
     assert _env_int("TEST_INT_SETTING", 7, minimum=0) == 7
     assert "falling back to default" in caplog.text
+
+
+def test_env_int_strict_profile_rejects_invalid_value(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("TEST_INT_SETTING", "bad")
+
+    with pytest.raises(RuntimeConfigurationError, match="TEST_INT_SETTING"):
+        _env_int("TEST_INT_SETTING", 7, minimum=0)
 
 
 def test_env_bool_accepts_true_variants(monkeypatch):
@@ -76,10 +89,20 @@ def test_env_bool_accepts_true_variants(monkeypatch):
 
 def test_env_bool_falls_back_for_invalid_value(caplog, monkeypatch):
     caplog.set_level(logging.WARNING)
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("TEST_BOOL_SETTING", "maybe")
 
     assert _env_bool("TEST_BOOL_SETTING", False) is False
     assert "falling back to default" in caplog.text
+
+
+def test_env_bool_strict_profile_rejects_invalid_value(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("TEST_BOOL_SETTING", "maybe")
+
+    with pytest.raises(RuntimeConfigurationError, match="TEST_BOOL_SETTING"):
+        _env_bool("TEST_BOOL_SETTING", False)
 
 
 def test_rejects_non_positive_integer_consumer_setting():
@@ -131,7 +154,39 @@ def test_merged_defaults_and_group_overrides_drop_invalid_heartbeat_session_rela
     assert overrides == {"session.timeout.ms": 30000}
 
 
+def test_consumer_defaults_json_local_profile_ignores_invalid_json(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON", "{not-json")
+
+    assert get_kafka_consumer_runtime_overrides("test-group") == {}
+
+
+def test_consumer_defaults_json_strict_profile_rejects_invalid_json(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON", "{not-json")
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match="LOTUS_CORE_KAFKA_CONSUMER_DEFAULTS_JSON",
+    ):
+        get_kafka_consumer_runtime_overrides("test-group")
+
+
+def test_consumer_group_overrides_json_strict_profile_rejects_non_object(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON", "[]")
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match="LOTUS_CORE_KAFKA_CONSUMER_GROUP_OVERRIDES_JSON",
+    ):
+        get_kafka_consumer_runtime_overrides("test-group")
+
+
 def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "invalid")
     monkeypatch.setenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "0")
     monkeypatch.setenv("BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE", "maybe")
@@ -143,6 +198,30 @@ def test_business_date_guardrail_invalid_env_does_not_break_import(monkeypatch):
     assert reloaded.BUSINESS_DATE_MAX_FUTURE_DAYS == 0
     assert reloaded.CASHFLOW_RULE_CACHE_TTL_SECONDS == 300
     assert reloaded.BUSINESS_DATE_ENFORCE_MONOTONIC_ADVANCE is False
+
+
+def test_business_date_guardrail_strict_profile_rejects_invalid_env(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("BUSINESS_DATE_MAX_FUTURE_DAYS", "invalid")
+
+    import portfolio_common.config as config_module
+
+    with pytest.raises(RuntimeConfigurationError, match="BUSINESS_DATE_MAX_FUTURE_DAYS"):
+        importlib.reload(config_module)
+    monkeypatch.delenv("BUSINESS_DATE_MAX_FUTURE_DAYS")
+    importlib.reload(config_module)
+
+
+def test_cashflow_cache_ttl_strict_profile_rejects_non_positive_env(monkeypatch):
+    monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    monkeypatch.setenv("CASHFLOW_RULE_CACHE_TTL_SECONDS", "0")
+
+    import portfolio_common.config as config_module
+
+    with pytest.raises(RuntimeConfigurationError, match="CASHFLOW_RULE_CACHE_TTL_SECONDS"):
+        importlib.reload(config_module)
+    monkeypatch.delenv("CASHFLOW_RULE_CACHE_TTL_SECONDS")
+    importlib.reload(config_module)
 
 
 def test_dlq_failure_budget_env_is_non_negative(monkeypatch):
@@ -158,6 +237,8 @@ def test_dlq_failure_budget_env_is_non_negative(monkeypatch):
 
 
 def test_invalid_dlq_failure_budget_falls_back_to_disabled(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS", "-1")
 
     import portfolio_common.config as config_module
@@ -185,6 +266,8 @@ def test_retryable_failure_budget_env_values_are_non_negative(monkeypatch):
 
 
 def test_invalid_retryable_failure_budget_values_fall_back_to_disabled(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
     monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS", "-1")
     monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS", "bad")
 
@@ -195,6 +278,21 @@ def test_invalid_retryable_failure_budget_values_fall_back_to_disabled(monkeypat
     assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS == 0
     assert reloaded.KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS == 0
     monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS")
+    monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS")
+    importlib.reload(config_module)
+
+
+def test_kafka_retryable_failure_budget_strict_profile_rejects_invalid_env(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS", "bad")
+
+    import portfolio_common.config as config_module
+
+    with pytest.raises(
+        RuntimeConfigurationError,
+        match="KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS",
+    ):
+        importlib.reload(config_module)
     monkeypatch.delenv("KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS")
     importlib.reload(config_module)
 
