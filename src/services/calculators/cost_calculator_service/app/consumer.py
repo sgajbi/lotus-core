@@ -17,7 +17,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.exceptions import RetryableConsumerError
-from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.monitoring import (
     BUY_LIFECYCLE_STAGE_TOTAL,
@@ -50,6 +49,11 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .cost_calculation_processor import (
+    CostCalculationEventProcessor,
+    CostCalculationProcessorDependencyFactory,
+    PortfolioNotFoundError,
+)
 from .cost_engine.processing.cost_basis_strategies import (
     AverageCostBasisStrategy,
     FIFOBasisStrategy,
@@ -63,7 +67,6 @@ from .repository import CostCalculatorRepository
 from .transaction_processor import TransactionProcessor
 
 logger = logging.getLogger(__name__)
-SERVICE_NAME = "cost-calculator"
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 BUNDLE_A_RECONCILIATION_TYPE = "corporate_action_bundle_a"
 BUNDLE_A_REQUEST_OWNER = "cost-calculator"
@@ -143,12 +146,6 @@ def _stable_bundle_a_digest(payload: dict[str, object]) -> str:
 
 class FxRateNotFoundError(Exception):
     """Raised when a required FX rate is not yet available in the database."""
-
-    pass
-
-
-class PortfolioNotFoundError(Exception):
-    """Raised when the portfolio for a transaction is not yet in the database."""
 
     pass
 
@@ -1106,63 +1103,15 @@ class CostCalculatorConsumer(BaseConsumer):
         event_id: str,
         correlation_id: str,
     ) -> None:
+        dependency_factory = CostCalculationProcessorDependencyFactory()
+        processor = CostCalculationEventProcessor(self)
         async for db in get_async_db_session():
             async with db.begin():
-                repo = CostCalculatorRepository(db)
-                idempotency_repo = IdempotencyRepository(db)
-                outbox_repo = OutboxRepository(db)
-
-                if not await idempotency_repo.claim_event_processing(
-                    event_id,
-                    event.portfolio_id,
-                    SERVICE_NAME,
-                    correlation_id,
-                ):
-                    logger.warning("Event already processed. Skipping.")
-                    return
-
-                portfolio = await repo.get_portfolio(event.portfolio_id)
-                if not portfolio:
-                    raise PortfolioNotFoundError(
-                        f"Portfolio {event.portfolio_id} not found. Retrying..."
-                    )
-                (
-                    event,
-                    event_transaction_type,
-                    cost_basis_method,
-                ) = await self._prepare_transaction_event(event, portfolio)
-                instrument = await repo.get_instrument(event.security_id)
-                self._assert_required_instrument_reference_available(
+                await processor.process_valid_event(
                     event=event,
-                    event_transaction_type=event_transaction_type,
-                    instrument=instrument,
-                )
-                (
-                    events_to_publish,
-                    instrument_events_to_publish,
-                ) = await self._build_events_to_publish(
-                    event=event,
-                    event_transaction_type=event_transaction_type,
-                    portfolio=portfolio,
-                    instrument=instrument,
-                    repo=repo,
-                    cost_basis_method=cost_basis_method,
-                )
-                emitted_events = await self._build_emitted_transaction_events(
-                    events_to_publish=events_to_publish,
-                    repo=repo,
+                    event_id=event_id,
                     correlation_id=correlation_id,
-                )
-                await self._publish_transaction_events(
-                    original_event=event,
-                    emitted_events=emitted_events,
-                    outbox_repo=outbox_repo,
-                    correlation_id=correlation_id,
-                )
-                await self._publish_instrument_events(
-                    instrument_events=instrument_events_to_publish,
-                    outbox_repo=outbox_repo,
-                    correlation_id=correlation_id,
+                    dependencies=dependency_factory.from_session(db),
                 )
 
     async def _handle_process_message_error(
