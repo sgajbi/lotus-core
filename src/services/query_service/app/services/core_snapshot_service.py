@@ -13,7 +13,6 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotMode,
     CoreSnapshotRequest,
     CoreSnapshotResponse,
-    CoreSnapshotSection,
     CoreSnapshotSections,
     CoreSnapshotSimulationMetadata,
     CoreSnapshotValuationContext,
@@ -38,6 +37,9 @@ from .core_snapshot_calculations import (
     total_market_value_projected,
 )
 from .core_snapshot_errors import (
+    CoreSnapshotBadRequestError as CoreSnapshotBadRequestError,
+    CoreSnapshotConflictError as CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError as CoreSnapshotNotFoundError,
     CoreSnapshotUnavailableSectionError as CoreSnapshotUnavailableSectionError,
 )
 from .core_snapshot_instrument_enrichment import (
@@ -54,18 +56,7 @@ from .core_snapshot_market_data import get_fx_rate_or_raise
 from .core_snapshot_projected_valuation import CoreSnapshotProjectedPositionResolver
 from .core_snapshot_quality import snapshot_data_quality_status
 from .core_snapshot_sections import build_core_snapshot_sections
-
-
-class CoreSnapshotBadRequestError(ValueError):
-    pass
-
-
-class CoreSnapshotNotFoundError(ValueError):
-    pass
-
-
-class CoreSnapshotConflictError(ValueError):
-    pass
+from .core_snapshot_simulation_validation import CoreSnapshotSimulationSessionValidator
 
 
 @dataclass(frozen=True)
@@ -129,6 +120,9 @@ class CoreSnapshotService:
         self.price_repo = dependencies.price_repo
         self.fx_repo = dependencies.fx_repo
         self.instrument_repo = dependencies.instrument_repo
+        self.simulation_session_validator = CoreSnapshotSimulationSessionValidator(
+            simulation_repo=self.simulation_repo,
+        )
         self.projected_position_resolver = CoreSnapshotProjectedPositionResolver(
             simulation_repo=self.simulation_repo,
             instrument_repo=self.instrument_repo,
@@ -223,10 +217,13 @@ class CoreSnapshotService:
         baseline_positions: dict[str, dict[str, Any]],
     ) -> _CoreSnapshotProjection:
         if request.snapshot_mode != CoreSnapshotMode.SIMULATION:
-            self._validate_baseline_snapshot_sections(request.sections)
+            self.simulation_session_validator.validate_baseline_snapshot_sections(request.sections)
             return _CoreSnapshotProjection(None, Decimal(0), None)
 
-        session = await self._validated_simulation_session(portfolio_id, request)
+        session = await self.simulation_session_validator.validated_session(
+            portfolio_id=portfolio_id,
+            request=request,
+        )
         projected_positions = await self.projected_position_resolver.resolve_projected_positions(
             session_id=session.session_id,
             as_of_date=request.as_of_date,
@@ -245,53 +242,6 @@ class CoreSnapshotService:
                 baseline_as_of_date=request.as_of_date,
             ),
         )
-
-    async def _validated_simulation_session(self, portfolio_id: str, request: CoreSnapshotRequest):
-        session_opts = self._required_simulation_options(request)
-        session = await self._required_simulation_session(session_opts.session_id)
-        self._validate_simulation_portfolio(session=session, portfolio_id=portfolio_id)
-        self._validate_simulation_version(
-            session=session,
-            expected_version=session_opts.expected_version,
-        )
-        return session
-
-    @staticmethod
-    def _required_simulation_options(request: CoreSnapshotRequest):
-        session_opts = request.simulation
-        if session_opts is None:
-            raise CoreSnapshotBadRequestError(
-                "simulation options are required when snapshot_mode=SIMULATION"
-            )
-        return session_opts
-
-    async def _required_simulation_session(self, session_id: str):
-        session = await self.simulation_repo.get_session(session_id)
-        if session is None:
-            raise CoreSnapshotNotFoundError(f"Simulation session {session_id} not found")
-        return session
-
-    @staticmethod
-    def _validate_simulation_portfolio(*, session: Any, portfolio_id: str) -> None:
-        if session.portfolio_id != portfolio_id:
-            raise CoreSnapshotConflictError(
-                "Simulation session does not belong to requested portfolio"
-            )
-
-    @staticmethod
-    def _validate_simulation_version(*, session: Any, expected_version: int | None) -> None:
-        if expected_version is not None and session.version != expected_version:
-            raise CoreSnapshotConflictError("Simulation expected_version mismatch")
-
-    @staticmethod
-    def _validate_baseline_snapshot_sections(sections: list[CoreSnapshotSection]) -> None:
-        if (
-            CoreSnapshotSection.POSITIONS_PROJECTED in sections
-            or CoreSnapshotSection.POSITIONS_DELTA in sections
-        ):
-            raise CoreSnapshotBadRequestError(
-                "Projected and delta sections require snapshot_mode=SIMULATION"
-            )
 
     @staticmethod
     def _snapshot_governance_resolution(

@@ -1548,6 +1548,12 @@ Most relevant current governance:
      market-to-portfolio FX selection, or projected market-value calculation to the broad service.
      Shared FX lookup and decimal validation belong in `core_snapshot_market_data.py` rather than
      service-private helpers.
+     Core snapshot simulation option/session validation belongs in
+     `core_snapshot_simulation_validation.py`; do not re-add simulation option checks, session
+     lookup, portfolio ownership validation, expected-version validation, or baseline-mode
+     projected/delta section rejection to the broad service. Core snapshot exception classes belong
+     in `core_snapshot_errors.py`; `core_snapshot_service.py` may re-export them only for
+     compatibility with existing routers/tests.
 
 ## Context Maintenance Rule
 
