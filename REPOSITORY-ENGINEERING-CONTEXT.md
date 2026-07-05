@@ -1554,6 +1554,11 @@ Most relevant current governance:
      projected/delta section rejection to the broad service. Core snapshot exception classes belong
      in `core_snapshot_errors.py`; `core_snapshot_service.py` may re-export them only for
      compatibility with existing routers/tests.
+     Repository-backed Core snapshot instrument enrichment belongs in
+     `core_snapshot_instrument_enrichment_reader.py`; do not re-add security-id normalization,
+     empty-request rejection, instrument repository lookup, or enrichment DTO assembly delegation to
+     the broad service. Pure enrichment record mapping remains in
+     `core_snapshot_instrument_enrichment.py`.
 
 ## Context Maintenance Rule
 

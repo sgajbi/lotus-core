@@ -273,45 +273,6 @@ async def test_core_snapshot_canonicalizes_valuation_context_currencies(mock_dep
     )
 
 
-async def test_get_instrument_enrichment_bulk_preserves_order_and_unknowns(mock_dependencies):
-    (_, _, _, _, _, instrument_repo) = mock_dependencies
-    instrument_repo.get_by_security_ids.return_value = [
-        _instrument("SEC_MSFT_US"),
-        _instrument("SEC_AAPL_US"),
-    ]
-
-    service = CoreSnapshotService(AsyncMock())
-    records = await service.get_instrument_enrichment_bulk(
-        ["SEC_AAPL_US", "SEC_UNKNOWN", "SEC_MSFT_US"]
-    )
-
-    assert [record.security_id for record in records] == [
-        "SEC_AAPL_US",
-        "SEC_UNKNOWN",
-        "SEC_MSFT_US",
-    ]
-    assert records[0].issuer_id == "ISSUER_SEC_AAPL_US"
-    assert records[0].liquidity_tier == "L2"
-    assert records[1].issuer_id is None
-    assert records[1].liquidity_tier is None
-    assert records[2].issuer_id == "ISSUER_SEC_MSFT_US"
-    assert records[2].liquidity_tier == "L2"
-
-
-async def test_get_instrument_enrichment_bulk_normalizes_returned_security_ids(
-    mock_dependencies,
-):
-    (_, _, _, _, _, instrument_repo) = mock_dependencies
-    instrument_repo.get_by_security_ids.return_value = [_instrument(" SEC_AAPL_US ")]
-
-    service = CoreSnapshotService(AsyncMock())
-    records = await service.get_instrument_enrichment_bulk([" SEC_AAPL_US "])
-
-    assert records[0].security_id == "SEC_AAPL_US"
-    assert records[0].issuer_id == "ISSUER_ SEC_AAPL_US "
-    instrument_repo.get_by_security_ids.assert_awaited_once_with(["SEC_AAPL_US"])
-
-
 async def test_core_snapshot_simulation_success(mock_dependencies):
     (_, _, simulation_repo, _, _, _) = mock_dependencies
     simulation_repo.get_changes.return_value = [
@@ -706,16 +667,6 @@ async def test_resolve_baseline_positions_applies_cash_and_zero_filters(mock_dep
         include_zero=False,
     )
     assert rows == {}
-
-
-async def test_get_instrument_enrichment_bulk_rejects_empty_request(mock_dependencies):
-    service = CoreSnapshotService(AsyncMock())
-
-    with pytest.raises(
-        CoreSnapshotBadRequestError,
-        match="security_ids must contain at least one identifier",
-    ):
-        await service.get_instrument_enrichment_bulk(["", "  "])
 
 
 async def test_static_helpers_cover_zero_total_and_delta_paths():

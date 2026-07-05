@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 
 from portfolio_common.runtime_providers import Clock, SystemClock
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,10 +42,7 @@ from .core_snapshot_errors import (
     CoreSnapshotNotFoundError as CoreSnapshotNotFoundError,
     CoreSnapshotUnavailableSectionError as CoreSnapshotUnavailableSectionError,
 )
-from .core_snapshot_instrument_enrichment import (
-    instrument_enrichment_records,
-    requested_instrument_security_ids,
-)
+from .core_snapshot_instrument_enrichment_reader import CoreSnapshotInstrumentEnrichmentReader
 from .core_snapshot_governance import (
     CoreSnapshotGovernanceResolution,
     SnapshotGovernanceContext,
@@ -122,6 +119,9 @@ class CoreSnapshotService:
         self.instrument_repo = dependencies.instrument_repo
         self.simulation_session_validator = CoreSnapshotSimulationSessionValidator(
             simulation_repo=self.simulation_repo,
+        )
+        self.instrument_enrichment_reader = CoreSnapshotInstrumentEnrichmentReader(
+            instrument_repo=self.instrument_repo,
         )
         self.projected_position_resolver = CoreSnapshotProjectedPositionResolver(
             simulation_repo=self.simulation_repo,
@@ -402,14 +402,4 @@ class CoreSnapshotService:
     async def get_instrument_enrichment_bulk(
         self, security_ids: list[str]
     ) -> list[InstrumentEnrichmentRecord]:
-        requested_ids = requested_instrument_security_ids(security_ids)
-        if not requested_ids:
-            raise CoreSnapshotBadRequestError("security_ids must contain at least one identifier")
-        instruments = await self.instrument_repo.get_by_security_ids(requested_ids)
-        return cast(
-            list[InstrumentEnrichmentRecord],
-            instrument_enrichment_records(
-                requested_ids=requested_ids,
-                instruments=instruments,
-            ),
-        )
+        return await self.instrument_enrichment_reader.get_instrument_enrichment_bulk(security_ids)
