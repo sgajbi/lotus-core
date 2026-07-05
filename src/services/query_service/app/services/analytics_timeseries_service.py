@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from time import perf_counter
+from typing import Any
 from uuid import uuid4
 
 from portfolio_common.monitoring import (
@@ -135,6 +136,17 @@ ANALYTICS_EXPORT_EXECUTION_TIMEOUT_MESSAGE = (
 ANALYTICS_EXPORT_CANCELLATION_MESSAGE = (
     "Analytics export execution was cancelled before completion."
 )
+
+
+def _analytics_source_runtime_metadata(**kwargs: Any) -> dict[str, object]:
+    metadata = source_data_product_runtime_metadata(**kwargs)
+    if "lineage" in metadata:
+        raise AnalyticsInputError(
+            "UNSUPPORTED_CONFIGURATION",
+            "Analytics runtime metadata must use source_lineage and must not override "
+            "response lineage.",
+        )
+    return metadata
 
 
 @dataclass(frozen=True)
@@ -691,7 +703,7 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             observations=observations,
-            **source_data_product_runtime_metadata(
+            **_analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
@@ -859,7 +871,7 @@ class AnalyticsTimeseriesService:
                 next_page_token=next_page_token,
             ),
             rows=response_rows,
-            **source_data_product_runtime_metadata(
+            **_analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=data_quality_status,
@@ -1156,7 +1168,7 @@ class AnalyticsTimeseriesService:
                 request_fingerprint=fingerprint,
                 data_version="state_inputs_v1",
             ),
-            **source_data_product_runtime_metadata(
+            **_analytics_source_runtime_metadata(
                 as_of_date=request.as_of_date,
                 generated_at=generated_at,
                 data_quality_status=portfolio_reference_data_quality_status(
