@@ -60,6 +60,9 @@ from src.services.query_service.app.services.reference_data_helpers import (
     market_reference_data_quality_status,
 )
 from src.services.query_service.app.services.request_fingerprint import request_fingerprint
+from src.services.query_service.app.services.transaction_economics_integration_service import (
+    TransactionEconomicsIntegrationService,
+)
 from src.services.query_service.app.services.transaction_cost_curve import (
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
@@ -3836,6 +3839,38 @@ async def test_portfolio_tax_lot_window_rejects_page_token_scope_mismatch() -> N
                 page={"page_token": token},
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_transaction_economics_family_service_runs_without_full_integration_facade() -> None:
+    repository = transaction_repository_with_cost_rows(
+        [
+            transaction_cost_row(
+                transaction_id="TXN-AAPL-001",
+                security_id="EQ_US_AAPL",
+                trade_fee=Decimal("10.00"),
+            )
+        ]
+    )
+    service = TransactionEconomicsIntegrationService(
+        transaction_repository_provider=lambda: repository,
+        decode_page_token=lambda token: {"token": token} if token else {},
+        encode_page_token=lambda payload: f"token:{payload['scope_fingerprint']}",
+    )
+
+    response = await service.get_transaction_cost_curve(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=TransactionCostCurveRequest(
+            as_of_date=date(2026, 5, 3),
+            window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 30)},
+            security_ids=["EQ_US_AAPL"],
+        ),
+    )
+
+    assert response.product_name == "TransactionCostCurve"
+    assert response.supportability.state == "READY"
+    assert response.curve_points[0].security_id == "EQ_US_AAPL"
+    repository.portfolio_exists.assert_awaited_once_with("PB_SG_GLOBAL_BAL_001")
 
 
 @pytest.mark.asyncio

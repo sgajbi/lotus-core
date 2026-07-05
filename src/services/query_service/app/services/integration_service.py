@@ -107,9 +107,6 @@ from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
 )
 from .page_token_codec import PageTokenCodec
-from .performance_component_economics import (
-    resolve_performance_component_economics_response,
-)
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
 from .portfolio_manager_book_membership import (
     resolve_portfolio_manager_book_membership_response,
@@ -120,9 +117,7 @@ from .risk_free_series import resolve_risk_free_series_response
 from .sustainability_preference_profile import (
     resolve_sustainability_preference_profile_response,
 )
-from .transaction_cost_curve import (
-    resolve_transaction_cost_curve_response,
-)
+from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +172,11 @@ class IntegrationService:
         )
         self._external_hedge_service = ExternalHedgeIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
+        )
+        self._transaction_economics_service = TransactionEconomicsIntegrationService(
+            transaction_repository_provider=lambda: self._transaction_repository,
+            decode_page_token=self._decode_page_token,
+            encode_page_token=self._encode_page_token,
         )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
@@ -417,12 +417,9 @@ class IntegrationService:
         portfolio_id: str,
         request: TransactionCostCurveRequest,
     ) -> TransactionCostCurveResponse:
-        return await resolve_transaction_cost_curve_response(
-            repository=self._transaction_repository,
+        return await self._transaction_economics_service.get_transaction_cost_curve(
             portfolio_id=portfolio_id,
             request=request,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
         )
 
     async def get_performance_component_economics(
@@ -431,12 +428,9 @@ class IntegrationService:
         portfolio_id: str,
         request: PerformanceComponentEconomicsRequest,
     ) -> PerformanceComponentEconomicsResponse:
-        return await resolve_performance_component_economics_response(
-            repository=self._transaction_repository,
+        return await self._transaction_economics_service.get_performance_component_economics(
             portfolio_id=portfolio_id,
             request=request,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
         )
 
     async def get_market_data_coverage(
