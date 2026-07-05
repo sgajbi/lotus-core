@@ -4,7 +4,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, List
+from typing import Any, Awaitable, Callable, List, cast
 
 from portfolio_common.database_models import PortfolioValuationJob
 from portfolio_common.db import get_async_db_session
@@ -36,6 +36,7 @@ from .valuation_job_publisher import (
     ValuationJobPublisher,
     get_valuation_job_publisher,
 )
+from .valuation_scheduler_dependencies import ValuationSchedulerRepositoryFactory
 from .valuation_stale_job_resetter import ValuationStaleJobResetter
 from .valuation_watermark_advancer import ValuationWatermarkAdvancer
 
@@ -61,6 +62,7 @@ class ValuationScheduler:
         valuation_stale_job_resetter: ValuationStaleJobResetter | None = None,
         valuation_dispatch_coordinator: ValuationDispatchCoordinator | None = None,
         session_provider: SessionProvider | None = None,
+        repository_factory: ValuationSchedulerRepositoryFactory | None = None,
     ):
         runtime_settings = get_valuation_runtime_settings(
             scheduler_poll_interval_default=poll_interval,
@@ -80,6 +82,12 @@ class ValuationScheduler:
         self._running = True
         self._stop_event = asyncio.Event()
         self._session_provider = session_provider
+        self._repository_factory = repository_factory or ValuationSchedulerRepositoryFactory(
+            valuation_repository_factory=lambda db: ValuationRepository(db),
+            valuation_job_repository_factory=lambda db: ValuationJobRepository(db),
+            position_state_repository_factory=lambda db: PositionStateRepository(db),
+            reprocessing_job_repository_factory=lambda db: ReprocessingJobRepository(db),
+        )
         self._valuation_job_publisher = (
             valuation_job_publisher
             if valuation_job_publisher is not None
@@ -128,14 +136,15 @@ class ValuationScheduler:
                 max_attempts=self._max_attempts,
                 session_provider=self._open_session,
                 repository_factory=ValuationDispatchRepositoryFactory(
-                    valuation_repository_factory=lambda db: ValuationRepository(db)
+                    valuation_repository_factory=self._repository_factory.valuation_repository
                 ),
             )
         )
 
     def _open_session(self) -> AsyncIterator[Any]:
-        session_provider = self._session_provider or get_async_db_session
-        return session_provider()
+        if self._session_provider is not None:
+            return cast(AsyncIterator[Any], self._session_provider())
+        return cast(AsyncIterator[Any], get_async_db_session())
 
     def stop(self):
         """Signals the scheduler to gracefully shut down."""
@@ -153,11 +162,11 @@ class ValuationScheduler:
 
     async def _update_reprocessing_metrics(self, db):
         """Queries for and sets key gauges related to reprocessing workload."""
-        repo = ValuationRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
         await self._instrument_reprocessing_coordinator.update_reprocessing_metrics(repo=repo)
 
     async def _update_queue_metrics(self, db):
-        repo = ValuationRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
         queue_stats = await repo.get_job_queue_stats()
         set_control_queue_pending("valuation", queue_stats["pending_count"])
         set_control_queue_failed_stored("valuation", queue_stats["failed_count"])
@@ -175,8 +184,8 @@ class ValuationScheduler:
         Processes triggers from back-dated price events, creating persistent
         fan-out jobs instead of processing them in-memory.
         """
-        repo = ValuationRepository(db)
-        repro_job_repo = ReprocessingJobRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
+        repro_job_repo = self._repository_factory.reprocessing_job_repository(db)
         await self._instrument_reprocessing_coordinator.process_instrument_level_triggers(
             repo=repo,
             reprocessing_job_repo=repro_job_repo,
@@ -187,8 +196,8 @@ class ValuationScheduler:
         Checks all lagging keys, finds how far their snapshots are contiguous,
         and updates their watermark and status accordingly.
         """
-        repo = ValuationRepository(db)
-        position_state_repo = PositionStateRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
+        position_state_repo = self._repository_factory.position_state_repository(db)
         await self._valuation_watermark_advancer.advance_watermarks(
             repo=repo,
             position_state_repo=position_state_repo,
@@ -199,9 +208,9 @@ class ValuationScheduler:
         Finds keys with a lagging watermark and creates valuation jobs to fill the gap,
         starting from the later of the watermark date or the position's first open date.
         """
-        repo = ValuationRepository(db)
-        job_repo = ValuationJobRepository(db)
-        position_state_repo = PositionStateRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
+        job_repo = self._repository_factory.valuation_job_repository(db)
+        position_state_repo = self._repository_factory.position_state_repository(db)
         await self._valuation_backfill_planner.create_backfill_jobs(
             repo=repo,
             job_repo=job_repo,
@@ -237,7 +246,7 @@ class ValuationScheduler:
         await self._update_queue_metrics(db)
 
     async def _reset_stale_valuation_jobs(self, db) -> None:
-        repo = ValuationRepository(db)
+        repo = self._repository_factory.valuation_repository(db)
         await self._valuation_stale_job_resetter.reset_stale_jobs(repo=repo)
 
     async def _run_poll_once(self) -> None:

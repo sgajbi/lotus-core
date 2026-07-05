@@ -1510,9 +1510,11 @@ Most relevant current governance:
      with scheduler-configured timeout and maximum-attempt policy. `ValuationDispatchCoordinator`
      owns claimed-job polling rounds, poll-budget enforcement, eligible-job claiming, dispatch
      callback orchestration, dispatch failure observation, and recovery repository calls through an
-     explicit session provider and repository factory. Remaining scheduler slices should continue
-     extracting loop cadence plus DB poll-step session/repository factory ownership into separately
-     testable collaborators before issue #545 is marked fixed-local.
+     explicit session provider and repository factory. `ValuationSchedulerRepositoryFactory` owns
+     repository construction for scheduler DB steps, and the scheduler accepts an explicit session
+     provider so the loop can be tested without real repositories or Kafka. Keep the scheduler as a
+     small cadence/compatibility wrapper; do not reintroduce backfill, watermark, reprocessing,
+     stale-reset, dispatch, publisher, or repository construction policy into the loop.
 
 ## Context Maintenance Rule
 
