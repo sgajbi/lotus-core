@@ -1,10 +1,17 @@
 # services/query-service/app/dependencies.py
 from typing import Dict, Optional
 
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query, status
 from portfolio_common.db import get_async_db_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .application.transaction_sorting import (
+    DEFAULT_TRANSACTION_SORT_ORDER,
+    TRANSACTION_SORT_FIELDS,
+    TRANSACTION_SORT_ORDERS,
+    TransactionSortValidationError,
+    normalize_transaction_sort,
+)
 from .services.buy_state_service import BuyStateService
 from .services.cash_account_service import CashAccountService
 from .services.cash_balance_service import CashBalanceService
@@ -36,16 +43,43 @@ def pagination_params(
 
 def sorting_params(
     sort_by: Optional[str] = Query(
-        None, description="Field to sort by (e.g., 'transaction_date')."
+        None,
+        description=(
+            "Transaction ledger sort field. Defaults to transaction_date. "
+            "Results always use transaction id as a deterministic tie-breaker."
+        ),
+        json_schema_extra={"enum": list(TRANSACTION_SORT_FIELDS)},
+        examples=["transaction_date"],
     ),
-    sort_order: Optional[str] = Query("desc", description="Sort order: 'asc' or 'desc'."),
+    sort_order: Optional[str] = Query(
+        DEFAULT_TRANSACTION_SORT_ORDER,
+        description="Transaction ledger sort direction.",
+        json_schema_extra={"enum": list(TRANSACTION_SORT_ORDERS)},
+        examples=["desc"],
+    ),
 ) -> Dict[str, Optional[str]]:
     """
     A dependency that provides standardized sorting query parameters.
     - sort_by: The field to sort the results on.
     - sort_order: The direction of the sort (ascending or descending).
     """
-    return {"sort_by": sort_by, "sort_order": sort_order}
+    try:
+        _, normalized_sort_order = normalize_transaction_sort(
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+    except TransactionSortValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "INVALID_TRANSACTION_SORT_PARAMETER",
+                "message": str(exc),
+                "field": exc.field_name,
+                "rejected_value": exc.rejected_value,
+                "allowed_values": list(exc.allowed_values),
+            },
+        ) from exc
+    return {"sort_by": sort_by, "sort_order": normalized_sort_order}
 
 
 def get_buy_state_service(db: AsyncSession = Depends(get_async_db_session)) -> BuyStateService:

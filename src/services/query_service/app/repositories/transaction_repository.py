@@ -20,6 +20,7 @@ from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, contains_eager, joinedload
 
+from ..application.transaction_sorting import normalize_transaction_sort
 from ..read_models import (
     PerformanceEconomicsCashflowReadRecord,
     PerformanceEconomicsCostReadRecord,
@@ -30,15 +31,6 @@ from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
 
 logger = logging.getLogger(__name__)
-
-# Whitelist of columns that clients are allowed to sort by.
-ALLOWED_SORT_FIELDS = {
-    "transaction_date",
-    "settlement_date",
-    "quantity",
-    "price",
-    "gross_transaction_amount",
-}
 
 
 def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
@@ -379,11 +371,10 @@ class TransactionRepository:
             as_of_date=as_of_date,
         )
 
-        sort_field = "transaction_date"
-        if sort_by and sort_by in ALLOWED_SORT_FIELDS:
-            sort_field = sort_by
-
-        normalized_sort_order = (sort_order or "desc").lower()
+        sort_field, normalized_sort_order = normalize_transaction_sort(
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
         sort_direction = asc if normalized_sort_order == "asc" else desc
         order_clause = sort_direction(getattr(Transaction, sort_field))
         tie_breaker_clause = sort_direction(Transaction.id)

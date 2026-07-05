@@ -164,6 +164,23 @@ async def test_openapi_exposes_transaction_ledger_runtime_supportability_metadat
         assert response_schema["properties"]["product_version"]["default"] == "v1"
 
 
+async def test_openapi_exposes_transaction_sort_enums(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+    operation = response.json()["paths"]["/portfolios/{portfolio_id}/transactions"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+
+    assert parameters["sort_by"]["schema"]["enum"] == [
+        "transaction_date",
+        "settlement_date",
+        "quantity",
+        "price",
+        "gross_transaction_amount",
+    ]
+    assert parameters["sort_order"]["schema"]["enum"] == ["asc", "desc"]
+    assert "transaction id as a deterministic tie-breaker" in parameters["sort_by"]["description"]
+
+
 async def test_openapi_describes_transaction_date_as_event_timestamp(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
