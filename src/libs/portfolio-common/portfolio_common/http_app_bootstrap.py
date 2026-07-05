@@ -5,12 +5,13 @@ from hmac import compare_digest
 from typing import Any, Sequence
 from uuid import uuid4
 
-from fastapi import FastAPI, Request, status
+from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from portfolio_common.build_metadata import BuildMetadataResponse, build_metadata_payload
 from portfolio_common.health import create_health_router
 from portfolio_common.logging_utils import (
     correlation_id_var,
@@ -240,6 +241,7 @@ def configure_standard_http_app(
     metrics_access_token: str | None = None,
     cors_allow_origins: Sequence[str] | None = None,
 ) -> None:
+    include_routers(app, create_version_router(service_name=service_name))
     metrics_access_policy = resolve_metrics_access_policy(metrics_access_token)
     configured_cors_origins = configure_cors_policy(
         app,
@@ -357,6 +359,43 @@ def configure_standard_http_app(
 def include_routers(app: FastAPI, *routers: Any) -> None:
     for router in routers:
         app.include_router(router)
+
+
+def create_version_router(*, service_name: str) -> APIRouter:
+    router = APIRouter(tags=["Operations"])
+
+    @router.get(
+        "/version",
+        response_model=BuildMetadataResponse,
+        summary="Runtime image version metadata",
+        description=(
+            "Return the immutable image provenance metadata embedded as OCI labels and runtime "
+            "environment variables during the build."
+        ),
+        responses={
+            200: {
+                "description": "Runtime image provenance metadata.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "service_name": "query_service",
+                            "git_commit_sha": "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc",
+                            "git_branch": "main",
+                            "build_timestamp": "2026-07-05T12:34:56Z",
+                            "repo_url": "https://github.com/example/lotus-core",
+                            "image_version": "9f4a0b7c8d1e2f3a4b5c6d7e8f90123456789abc",
+                            "image_digest": "sha256:abc123",
+                            "ci_pipeline_run_id": "1234567890",
+                        }
+                    }
+                },
+            }
+        },
+    )
+    async def version_metadata() -> BuildMetadataResponse:
+        return build_metadata_payload(service_name=service_name)
+
+    return router
 
 
 def create_standard_health_app(

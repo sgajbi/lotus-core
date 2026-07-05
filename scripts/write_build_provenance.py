@@ -10,6 +10,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+try:
+    from scripts.prebuild_ci_images import resolve_build_metadata
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from prebuild_ci_images import resolve_build_metadata
 
 
 def _sha256(path: Path) -> str:
@@ -43,6 +47,7 @@ def main() -> int:
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "git_head": _git_head(),
         "image_tag": args.image_tag,
+        "image_build_metadata": resolve_build_metadata(),
         "dockerfile": str(dockerfile.relative_to(REPO_ROOT)),
         "dockerfile_sha256": _sha256(dockerfile),
         "base_image": _extract_base_image(dockerfile),

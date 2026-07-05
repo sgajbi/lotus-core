@@ -2,6 +2,8 @@ from pathlib import Path
 
 import yaml
 
+from scripts.prebuild_ci_images import SERVICE_BUILDS
+
 GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/pr-merge-gate.yml"),
     Path(".github/workflows/main-releasability.yml"),
@@ -251,6 +253,50 @@ def test_quality_baseline_runs_wiki_docs_gate() -> None:
     assert "quality-wiki-docs-gate:" in makefile_text
     assert "Quality Baseline / Wiki Docs Gate" in workflow_text
     assert "make quality-wiki-docs-gate" in workflow_text
+
+
+def test_image_release_workflow_enforces_supply_chain_controls() -> None:
+    workflow_text = Path(".github/workflows/image-release.yml").read_text(encoding="utf-8")
+
+    required_terms = (
+        'FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"',
+        "packages: write",
+        "id-token: write",
+        '--tag "${{ steps.meta.outputs.image_tag }}"',
+        "${GITHUB_SHA}",
+        "--sbom=true",
+        "--provenance=true",
+        "aquasec/trivy",
+        "--severity HIGH,CRITICAL",
+        "--format cyclonedx",
+        "-sbom.cdx.json",
+        "cosign sign --yes",
+        "write_image_release_manifest.py",
+        '--image-digest "${{ steps.digest.outputs.image_digest }}"',
+        "--kubernetes-deploys-by-digest true",
+        "--promotion-environments dev uat prod",
+    )
+
+    missing_terms = [term for term in required_terms if term not in workflow_text]
+
+    assert missing_terms == []
+
+
+def test_image_release_workflow_publishes_every_registered_service_image() -> None:
+    workflow_text = Path(".github/workflows/image-release.yml").read_text(encoding="utf-8")
+
+    missing_entries: list[str] = []
+    for service, (local_tag, dockerfile) in SERVICE_BUILDS.items():
+        image_name = local_tag.removeprefix("lotus-core/").removesuffix(":local")
+        for expected in (
+            f"service: {service}",
+            f"image_name: {image_name}",
+            f"dockerfile: {dockerfile}",
+        ):
+            if expected not in workflow_text:
+                missing_entries.append(expected)
+
+    assert missing_entries == []
 
 
 def test_pr_template_requires_documentation_acceptance_evidence() -> None:

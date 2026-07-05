@@ -1,0 +1,210 @@
+name: Image Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  DOCKER_BUILDKIT: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+  PYTHON_VERSION: "3.12"
+  REGISTRY: ghcr.io
+
+jobs:
+  publish-images:
+    name: Image Release / Publish ${{ matrix.service }}
+    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: kafka-topic-creator
+            image_name: kafka-topic-creator
+            dockerfile: src/services/persistence_service/Dockerfile
+          - service: migration-runner
+            image_name: migration-runner
+            dockerfile: src/services/persistence_service/Dockerfile
+          - service: ingestion_service
+            image_name: ingestion-service
+            dockerfile: src/services/ingestion_service/Dockerfile
+          - service: query_service
+            image_name: query-service
+            dockerfile: src/services/query_service/Dockerfile
+          - service: query_control_plane_service
+            image_name: query-control-plane-service
+            dockerfile: src/services/query_control_plane_service/Dockerfile
+          - service: event_replay_service
+            image_name: event-replay-service
+            dockerfile: src/services/event_replay_service/Dockerfile
+          - service: financial_reconciliation_service
+            image_name: financial-reconciliation-service
+            dockerfile: src/services/financial_reconciliation_service/Dockerfile
+          - service: persistence_service
+            image_name: persistence-service
+            dockerfile: src/services/persistence_service/Dockerfile
+          - service: cost_calculator_service
+            image_name: cost-calculator-service
+            dockerfile: src/services/calculators/cost_calculator_service/Dockerfile
+          - service: cashflow_calculator_service
+            image_name: cashflow-calculator-service
+            dockerfile: src/services/calculators/cashflow_calculator_service/Dockerfile
+          - service: position_calculator_service
+            image_name: position-calculator-service
+            dockerfile: src/services/calculators/position_calculator/Dockerfile
+          - service: pipeline_orchestrator_service
+            image_name: pipeline-orchestrator-service
+            dockerfile: src/services/pipeline_orchestrator_service/Dockerfile
+          - service: valuation_orchestrator_service
+            image_name: valuation-orchestrator-service
+            dockerfile: src/services/valuation_orchestrator_service/Dockerfile
+          - service: position_valuation_calculator
+            image_name: position-valuation-calculator
+            dockerfile: src/services/calculators/position_valuation_calculator/Dockerfile
+          - service: timeseries_generator_service
+            image_name: timeseries-generator-service
+            dockerfile: src/services/timeseries_generator_service/Dockerfile
+          - service: portfolio_aggregation_service
+            image_name: portfolio-aggregation-service
+            dockerfile: src/services/portfolio_aggregation_service/Dockerfile
+          - service: demo_data_loader
+            image_name: demo-data-loader
+            dockerfile: src/services/persistence_service/Dockerfile
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Log in to GHCR
+        run: echo "${{ github.token }}" | docker login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
+      - name: Install Cosign
+        run: |
+          go install github.com/sigstore/cosign/v2/cmd/cosign@v2.4.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Resolve immutable image metadata
+        id: meta
+        shell: bash
+        run: |
+          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          image_ref="${REGISTRY}/${GITHUB_REPOSITORY}/${{ matrix.image_name }}"
+          image_tag="${image_ref}:${GITHUB_SHA}"
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          mkdir -p output/build-evidence
+          {
+            echo "build_timestamp=${build_timestamp}"
+            echo "image_ref=${image_ref}"
+            echo "image_tag=${image_tag}"
+            echo "repo_url=${repo_url}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build and push image by Git SHA
+        shell: bash
+        run: |
+          metadata_file="output/build-evidence/${{ matrix.service }}-buildx-metadata.json"
+          docker buildx build \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${{ steps.meta.outputs.image_tag }}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.ref.name=${GITHUB_REF_NAME}" \
+            --label "org.opencontainers.image.created=${{ steps.meta.outputs.build_timestamp }}" \
+            --label "org.opencontainers.image.source=${{ steps.meta.outputs.repo_url }}" \
+            --label "org.opencontainers.image.version=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.ci.run_id=${GITHUB_RUN_ID}" \
+            --build-arg "LOTUS_GIT_COMMIT_SHA=${GITHUB_SHA}" \
+            --build-arg "LOTUS_GIT_BRANCH=${GITHUB_REF_NAME}" \
+            --build-arg "LOTUS_BUILD_TIMESTAMP=${{ steps.meta.outputs.build_timestamp }}" \
+            --build-arg "LOTUS_REPO_URL=${{ steps.meta.outputs.repo_url }}" \
+            --build-arg "LOTUS_IMAGE_VERSION=${GITHUB_SHA}" \
+            --build-arg "LOTUS_IMAGE_DIGEST=unknown" \
+            --build-arg "LOTUS_CI_RUN_ID=${GITHUB_RUN_ID}" \
+            --metadata-file "${metadata_file}" \
+            --provenance=true \
+            --sbom=true \
+            --push \
+            .
+      - name: Resolve pushed image digest
+        id: digest
+        shell: bash
+        run: |
+          digest="$(python -c "import json, pathlib; data = json.loads(pathlib.Path('output/build-evidence/${{ matrix.service }}-buildx-metadata.json').read_text()); print(data.get('containerimage.digest', ''))")"
+          if [ -z "${digest}" ]; then
+            echo "Build metadata did not include containerimage.digest" >&2
+            exit 1
+          fi
+          echo "image_digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "${{ steps.meta.outputs.image_ref }}@${digest}" > "output/build-evidence/${{ matrix.service }}-digest-ref.txt"
+      - name: Scan image digest for vulnerabilities
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "$HOME/.docker:/root/.docker:ro" \
+            -v "$PWD/output/build-evidence:/output" \
+            aquasec/trivy:0.56.2 image \
+            --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output "/output/${{ matrix.service }}-trivy.json" \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+      - name: Export image SBOM
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "$HOME/.docker:/root/.docker:ro" \
+            -v "$PWD/output/build-evidence:/output" \
+            aquasec/trivy:0.56.2 image \
+            --format cyclonedx \
+            --output "/output/${{ matrix.service }}-sbom.cdx.json" \
+            "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+      - name: Sign image digest
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: cosign sign --yes "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
+      - name: Write image release manifest
+        run: |
+          python scripts/write_image_release_manifest.py \
+            --service "${{ matrix.service }}" \
+            --image-name "${{ matrix.image_name }}" \
+            --image-ref "${{ steps.meta.outputs.image_ref }}" \
+            --image-tag "${{ steps.meta.outputs.image_tag }}" \
+            --image-digest "${{ steps.digest.outputs.image_digest }}" \
+            --git-commit-sha "${GITHUB_SHA}" \
+            --git-branch "${GITHUB_REF_NAME}" \
+            --image-version "${GITHUB_SHA}" \
+            --build-timestamp "${{ steps.meta.outputs.build_timestamp }}" \
+            --repo-url "${{ steps.meta.outputs.repo_url }}" \
+            --ci-pipeline-run-id "${GITHUB_RUN_ID}" \
+            --sbom-generated true \
+            --vulnerability-scan-status passed \
+            --image-signed true \
+            --provenance-attestation-generated true \
+            --kubernetes-deploys-by-digest true \
+            --promotion-environments dev uat prod \
+            --output "output/build-evidence/${{ matrix.service }}-image-release-manifest.json"
+      - name: Upload image release evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-release-${{ matrix.service }}
+          path: |
+            output/build-evidence/${{ matrix.service }}-buildx-metadata.json
+            output/build-evidence/${{ matrix.service }}-digest-ref.txt
+            output/build-evidence/${{ matrix.service }}-trivy.json
+            output/build-evidence/${{ matrix.service }}-sbom.cdx.json
+            output/build-evidence/${{ matrix.service }}-image-release-manifest.json
+          if-no-files-found: error
+          retention-days: 90

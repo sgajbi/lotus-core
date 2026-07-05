@@ -107,6 +107,16 @@ Current repo truth:
    runtime configuration enforcement are on unless explicitly overridden through
    `LOTUS_CORE_PRODUCTION_SECURITY_PROFILE=false`. This does not replace gateway/platform ingress
    and IAM proof.
+10. Service images carry OCI provenance labels and matching runtime environment metadata for Git
+    commit SHA, Git branch, build timestamp, repo URL, image version, image digest, and CI run ID.
+    API-facing and worker health web apps expose the same values at `GET /version`; local builds
+    use `LOTUS_IMAGE_DIGEST=unknown` unless the build/release lane or deploy manifest supplies a
+    resolved digest.
+11. Immutable image publication is CI-only through `.github/workflows/image-release.yml`: images
+    are tagged with the Git SHA, pushed to GHCR, scanned, signed, emitted with BuildKit SBOM and
+    provenance attestations, exported with CycloneDX SBOM artifacts, and recorded in per-image
+    release manifests that use digest references for Kubernetes deployment and same-image promotion
+    evidence.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use
@@ -252,6 +262,9 @@ Important runtime note:
   eventing and supportability contract enforcement
 - `make rfc0083-closure-guard`
   RFC-0083 closure ledger enforcement
+- `make image-provenance-guard`
+  OCI label, CI build-arg, CI-only image release, release-manifest, digest-deploy,
+  no-build-secret, and `/version` metadata enforcement
 - `make clean`
   remove governed local caches, build byproducts, coverage files, and generated `output/`
   evidence artifacts through the reviewed cleanup script

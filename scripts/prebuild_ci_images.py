@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,9 +86,83 @@ SERVICE_BUILDS: dict[str, tuple[str, str]] = {
     ),
 }
 
+PROVENANCE_BUILD_ARGS = (
+    "LOTUS_GIT_COMMIT_SHA",
+    "LOTUS_GIT_BRANCH",
+    "LOTUS_BUILD_TIMESTAMP",
+    "LOTUS_REPO_URL",
+    "LOTUS_IMAGE_VERSION",
+    "LOTUS_IMAGE_DIGEST",
+    "LOTUS_CI_RUN_ID",
+)
+
 
 def _run(cmd: list[str]) -> None:
     subprocess.run(cmd, cwd=REPO_ROOT, check=True)
+
+
+def _command_output(cmd: list[str]) -> str:
+    try:
+        return subprocess.check_output(cmd, cwd=REPO_ROOT, text=True).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def _resolve_repo_url() -> str:
+    explicit_repo_url = os.getenv("LOTUS_REPO_URL", "").strip()
+    if explicit_repo_url:
+        return explicit_repo_url
+    github_repository = os.getenv("GITHUB_REPOSITORY", "").strip()
+    if github_repository:
+        server_url = os.getenv("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+        return f"{server_url}/{github_repository}"
+    return _command_output(["git", "config", "--get", "remote.origin.url"]) or "unknown"
+
+
+def _resolve_git_branch() -> str:
+    for env_name in ("LOTUS_GIT_BRANCH", "GITHUB_HEAD_REF", "GITHUB_REF_NAME"):
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value
+    return _command_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]) or "unknown"
+
+
+def resolve_build_metadata() -> dict[str, str]:
+    return {
+        "LOTUS_GIT_COMMIT_SHA": (
+            os.getenv("LOTUS_GIT_COMMIT_SHA", "").strip()
+            or os.getenv("GITHUB_SHA", "").strip()
+            or _command_output(["git", "rev-parse", "HEAD"])
+            or "unknown"
+        ),
+        "LOTUS_GIT_BRANCH": _resolve_git_branch(),
+        "LOTUS_BUILD_TIMESTAMP": (
+            os.getenv("LOTUS_BUILD_TIMESTAMP", "").strip()
+            or datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        ),
+        "LOTUS_REPO_URL": _resolve_repo_url(),
+        "LOTUS_IMAGE_VERSION": (
+            os.getenv("LOTUS_IMAGE_VERSION", "").strip()
+            or os.getenv("GITHUB_REF_NAME", "").strip()
+            or os.getenv("GITHUB_SHA", "").strip()
+            or _command_output(["git", "rev-parse", "HEAD"])
+            or "unknown"
+        ),
+        "LOTUS_IMAGE_DIGEST": os.getenv("LOTUS_IMAGE_DIGEST", "").strip() or "unknown",
+        "LOTUS_CI_RUN_ID": (
+            os.getenv("LOTUS_CI_RUN_ID", "").strip()
+            or os.getenv("GITHUB_RUN_ID", "").strip()
+            or "unknown"
+        ),
+    }
+
+
+def provenance_build_args(metadata: dict[str, str] | None = None) -> list[str]:
+    resolved_metadata = metadata or resolve_build_metadata()
+    build_args: list[str] = []
+    for name in PROVENANCE_BUILD_ARGS:
+        build_args.extend(["--build-arg", f"{name}={resolved_metadata[name]}"])
+    return build_args
 
 
 def _swap_cache(cache_dir: Path, next_cache_dir: Path) -> None:
@@ -110,6 +186,7 @@ def _build(service: str, cache_dir: Path) -> None:
         dockerfile,
         "--tag",
         tag,
+        *provenance_build_args(),
         "--cache-to",
         f"type=local,dest={next_cache_dir},mode=max",
         ".",
