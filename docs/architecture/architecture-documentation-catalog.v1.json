@@ -48,6 +48,17 @@
       "summary": "Task-oriented front door for the architecture documentation set."
     },
     {
+      "path": "docs/architecture/current-state-architecture-map.md",
+      "type": "current-state-map",
+      "topics": ["bounded-contexts", "deployables", "data-ownership", "event-flows"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-05",
+      "related": {"issues": [616], "rfcs": [82, 83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Current-state bounded-context, deployable, data-ownership, event-flow, dependency-direction, and downstream-consumer map."
+    },
+    {
       "path": "docs/architecture/lotus-core-target-architecture.md",
       "type": "target-architecture",
       "topics": ["domain-authority", "service-boundaries", "target-state"],

@@ -10,6 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = Path("docs/architecture/architecture-documentation-catalog.v1.json")
 ARCHITECTURE_DIR = Path("docs/architecture")
 CATALOG_SCHEMA_VERSION = "lotus-core.architecture-documentation-catalog.v1"
+CURRENT_STATE_MAP_PATH = Path("docs/architecture/current-state-architecture-map.md")
+RUNTIME_BOUNDARY_CATALOG_PATH = Path("docs/architecture/runtime-boundary-decision-catalog.json")
 
 REQUIRED_ENTRY_FIELDS = {
     "path",
@@ -39,6 +41,34 @@ ALLOWED_TRUTH_ROLES = {
 }
 ALLOWED_STATUSES = {"active", "historical", "review-evidence", "superseded"}
 CATALOGED_SUFFIXES = {".md", ".json"}
+REQUIRED_CURRENT_STATE_MAP_TERMS = (
+    "portfolio/account",
+    "transaction booking",
+    "positions",
+    "valuation",
+    "cashflow",
+    "cost",
+    "source-data products",
+    "ingestion/replay",
+    "reconciliation",
+    "operations/supportability",
+    "security/audit",
+    "platform runtime support",
+    "event/outbox flow",
+    "database ownership",
+    "dependency direction",
+    "downstream consumers",
+    "prohibited responsibilities",
+    "route-contract-family-registry.json",
+    "RFC-0082-contract-family-inventory.md",
+    "RFC-0083-source-data-product-catalog.md",
+    "RFC-0083-eventing-supportability-target-model.md",
+    "docs/operations-runbook.md",
+    "wiki/API-Surface.md",
+    "CODEBASE-REVIEW-LEDGER.md",
+    "CR-1330",
+    "CR-1331",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +112,7 @@ def find_architecture_catalog_findings(root: Path = REPO_ROOT) -> list[Architect
     _validate_architecture_coverage(root, entries, rules, findings)
     _validate_truth_role_coverage(payload, findings)
     _validate_index_links(root, findings)
+    _validate_current_state_architecture_map(root, entries, findings)
     return findings
 
 
@@ -274,6 +305,7 @@ def _validate_index_links(root: Path, findings: list[ArchitectureCatalogFinding]
     index_path = root / ARCHITECTURE_DIR / "README.md"
     index_text = index_path.read_text(encoding="utf-8")
     required_terms = (
+        "current-state-architecture-map.md",
         "architecture-documentation-catalog.v1.json",
         "current-state truth",
         "review evidence",
@@ -288,6 +320,68 @@ def _validate_index_links(root: Path, findings: list[ArchitectureCatalogFinding]
                     term,
                 )
             )
+
+
+def _validate_current_state_architecture_map(
+    root: Path,
+    entries: list[dict[str, Any]],
+    findings: list[ArchitectureCatalogFinding],
+) -> None:
+    map_path = root / CURRENT_STATE_MAP_PATH
+    cataloged_paths = {str(entry.get("path")) for entry in entries}
+    if CURRENT_STATE_MAP_PATH.as_posix() not in cataloged_paths:
+        findings.append(
+            ArchitectureCatalogFinding(
+                CURRENT_STATE_MAP_PATH.as_posix(),
+                "current-map-not-cataloged",
+                "current-state architecture map must be an explicit current-state catalog entry",
+            )
+        )
+    if not map_path.exists():
+        findings.append(
+            ArchitectureCatalogFinding(
+                CURRENT_STATE_MAP_PATH.as_posix(),
+                "missing-current-state-map",
+                "current-state architecture map is missing",
+            )
+        )
+        return
+
+    map_text = map_path.read_text(encoding="utf-8")
+    normalized_map_text = map_text.lower()
+    for term in REQUIRED_CURRENT_STATE_MAP_TERMS:
+        if term.lower() not in normalized_map_text:
+            findings.append(
+                ArchitectureCatalogFinding(
+                    CURRENT_STATE_MAP_PATH.as_posix(),
+                    "current-map-missing-required-anchor",
+                    term,
+                )
+            )
+
+    runtime_catalog_path = root / RUNTIME_BOUNDARY_CATALOG_PATH
+    if not runtime_catalog_path.exists():
+        findings.append(
+            ArchitectureCatalogFinding(
+                CURRENT_STATE_MAP_PATH.as_posix(),
+                "current-map-missing-runtime-catalog",
+                RUNTIME_BOUNDARY_CATALOG_PATH.as_posix(),
+            )
+        )
+        return
+    runtime_catalog = json.loads(runtime_catalog_path.read_text(encoding="utf-8"))
+    for record in runtime_catalog.get("decisionRecords", []):
+        service_id = str(record.get("serviceId", "")).strip()
+        service_path = str(record.get("servicePath", "")).strip()
+        for required_value in (service_id, service_path):
+            if required_value and required_value not in map_text:
+                findings.append(
+                    ArchitectureCatalogFinding(
+                        CURRENT_STATE_MAP_PATH.as_posix(),
+                        "current-map-missing-deployable",
+                        required_value,
+                    )
+                )
 
 
 def _architecture_document_paths(root: Path) -> tuple[Path, ...]:

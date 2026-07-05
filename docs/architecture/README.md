@@ -15,14 +15,15 @@ architecture `.md` or `.json` file lacks explicit metadata or an intentional cov
 
 Read these first:
 
-1. [lotus-core target architecture](./lotus-core-target-architecture.md)
-2. [RFC-0082 contract family inventory](./RFC-0082-contract-family-inventory.md)
-3. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
-4. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
-5. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
+1. [Current-State Architecture Map](./current-state-architecture-map.md)
+2. [lotus-core target architecture](./lotus-core-target-architecture.md)
+3. [RFC-0082 contract family inventory](./RFC-0082-contract-family-inventory.md)
+4. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
+5. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+6. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
 
-These documents establish the current ownership model, downstream contract posture, runtime
-boundary posture, and the main RFC-0083 implementation program.
+These documents establish the current bounded-context map, deployable ownership model, downstream
+contract posture, runtime boundary posture, and the main RFC-0083 implementation program.
 
 ## RFC-0083 Target-Model Documents
 
@@ -70,7 +71,7 @@ Pick the smallest correct reading path:
 3. supportability or operational evidence change:
    start with the relevant RFC-0083 supportability target model and then the matching `CR-*` review
 4. broad repo orientation:
-   start with the target architecture and this index, then move into the wiki
+   start with the current-state architecture map and this index, then move into the wiki
 
 Use the catalog before broad scans:
 
