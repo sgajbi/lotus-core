@@ -1498,11 +1498,15 @@ Most relevant current governance:
      headers, dispatch-budget enforcement, publisher delivery confirmation, and dispatch recovery
      metadata. `ValuationBackfillPlanner` now owns backfill input flow, no-history normalization,
      reprocessing no-history deferral, backfill metrics, deterministic scheduler backfill
-     correlation IDs, job request construction, bounded chunks, and job upsert staging. Keep
-     publisher/Kafka flush logic and backfill planning out of `ValuationScheduler`; remaining
-     scheduler slices should continue extracting loop cadence, instrument reprocessing
-     coordination, watermark advancement, stale reset, and DB session/repository factory ownership
-     into separately testable collaborators before issue #545 is marked fixed-local.
+     correlation IDs, job request construction, bounded chunks, and job upsert staging.
+     `ValuationWatermarkAdvancer` now owns latest-date input loading, lagging and terminal
+     reprocessing reads, first-open-date support lookups, active reprocessing gauges, terminal
+     normalization, contiguous snapshot lookup, epoch-fenced watermark update construction, and
+     stale-skip warnings/metrics. Keep publisher/Kafka flush logic, backfill planning, and
+     watermark policy out of `ValuationScheduler`; remaining scheduler slices should continue
+     extracting loop cadence, instrument reprocessing coordination, stale reset, and DB
+     session/repository factory ownership into separately testable collaborators before issue #545
+     is marked fixed-local.
 
 ## Context Maintenance Rule
 

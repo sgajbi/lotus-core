@@ -38,6 +38,9 @@ from src.services.valuation_orchestrator_service.app.core.valuation_job_publishe
 from src.services.valuation_orchestrator_service.app.core.valuation_scheduler import (
     ValuationScheduler,
 )
+from src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer import (
+    ValuationWatermarkAdvancer,
+)
 from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
     ValuationRepository,
 )
@@ -455,10 +458,10 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
 
     with (
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+            "src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer.logger.warning"
         ) as mock_warning,
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+            "src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer.observe_reprocessing_stale_skips"
         ) as mock_observe_stale_skips,
     ):
         await scheduler._advance_watermarks(AsyncMock())
@@ -469,6 +472,53 @@ async def test_scheduler_warns_when_epoch_fence_skips_some_updates(
     assert warning_kwargs["extra"]["updated_count"] == 1
     assert warning_kwargs["extra"]["stale_skipped_count"] == 1
     mock_observe_stale_skips.assert_called_once_with("watermark_advance", 1)
+
+
+async def test_watermark_advancer_advances_lagging_states_without_scheduler_loop():
+    advancer = ValuationWatermarkAdvancer(batch_size=100)
+    mock_repo = AsyncMock(spec=ValuationRepository)
+    mock_state_repo = AsyncMock(spec=PositionStateRepository)
+    latest_business_date = date(2025, 8, 15)
+    lagging_states = [
+        PositionState(
+            portfolio_id="P1",
+            security_id="S1",
+            watermark_date=date(2025, 8, 10),
+            epoch=1,
+            status="REPROCESSING",
+        )
+    ]
+
+    mock_repo.get_latest_business_date.return_value = latest_business_date
+    mock_repo.get_lagging_states.return_value = lagging_states
+    mock_repo.get_terminal_reprocessing_states.return_value = []
+    mock_repo.get_first_open_dates_for_keys.return_value = {("P1", "S1", 1): date(2025, 8, 11)}
+    mock_repo.find_contiguous_snapshot_dates.return_value = {
+        ("P1", "S1"): latest_business_date,
+    }
+    mock_state_repo.bulk_update_states.return_value = 1
+
+    await advancer.advance_watermarks(
+        repo=mock_repo,
+        position_state_repo=mock_state_repo,
+    )
+
+    mock_repo.get_lagging_states.assert_awaited_once_with(latest_business_date, 100)
+    mock_repo.find_contiguous_snapshot_dates.assert_awaited_once_with(
+        lagging_states,
+        {("P1", "S1", 1): date(2025, 8, 11)},
+    )
+    mock_state_repo.bulk_update_states.assert_awaited_once_with(
+        [
+            {
+                "portfolio_id": "P1",
+                "security_id": "S1",
+                "expected_epoch": 1,
+                "watermark_date": latest_business_date,
+                "status": "CURRENT",
+            }
+        ]
+    )
 
 
 async def test_scheduler_advances_from_first_open_date_for_sentinel_watermarks(
@@ -681,10 +731,10 @@ async def test_scheduler_warns_when_terminal_normalization_is_epoch_fenced(
 
     with (
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.logger.warning"
+            "src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer.logger.warning"
         ) as mock_warning,
         patch(
-            "src.services.valuation_orchestrator_service.app.core.valuation_scheduler.observe_reprocessing_stale_skips"
+            "src.services.valuation_orchestrator_service.app.core.valuation_watermark_advancer.observe_reprocessing_stale_skips"
         ) as mock_observe_stale_skips,
     ):
         await scheduler._advance_watermarks(AsyncMock())
