@@ -1020,6 +1020,17 @@ Most relevant current governance:
     depend on concrete infrastructure while implementing ports; and proof builders must assemble
     evidence from application/domain outputs rather than routers or persistence models. Exceptions
     require owner, expiry, follow-up issue, and reason, and stale exceptions fail the guard.
+84. The microservice boundary matrix now distinguishes in-process design boundaries from runtime
+    deployable boundaries. `docs/architecture/microservice-boundaries-and-trigger-matrix.md` is the
+    current service responsibility, in-process ownership, runtime rationale, and no-split-yet
+    navigation page. Use it with `docs/standards/runtime-boundary-decision-standard.md`,
+    `docs/architecture/runtime-boundary-decision-catalog.json`,
+    `docs/standards/in-process-modularity-package-standard.md`, and
+    `docs/standards/in-process-boundary-contract-standard.md`. Existing deployables remain
+    historical/current-state revalidation unless a future decision record approves, consolidates,
+    or changes the boundary. Important modules default to no runtime split until scale, deployment
+    cadence, operations ownership, persistence ownership, failure isolation, security, or SLO
+    evidence changes that decision.
 
 ## Context Maintenance Rule
 

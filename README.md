@@ -169,6 +169,7 @@ Primary architecture references:
 - [RFC-0082 Contract Family Inventory](docs/architecture/RFC-0082-contract-family-inventory.md)
 - [RFC-0083 Target-State Gap Analysis](docs/architecture/RFC-0083-target-state-gap-analysis.md)
 - [Query Service And Control Plane Boundary](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+- [Microservice Boundaries and Trigger Matrix](docs/architecture/microservice-boundaries-and-trigger-matrix.md)
 
 ## Repository Layout
 

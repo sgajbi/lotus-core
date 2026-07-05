@@ -13,9 +13,10 @@ Read these first:
 2. [RFC-0082 contract family inventory](./RFC-0082-contract-family-inventory.md)
 3. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
 4. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+5. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
 
-These four documents establish the current ownership model, downstream contract posture, and the
-main RFC-0083 implementation program.
+These documents establish the current ownership model, downstream contract posture, runtime
+boundary posture, and the main RFC-0083 implementation program.
 
 ## RFC-0083 Target-Model Documents
 
@@ -51,7 +52,6 @@ guidance:
 1. [ADR 002 Reprocessing Scalability](./adr_002_reprocessing_scalability.md)
 2. [ADR 003 Integration Capabilities API](./adr_003_integration_capabilities_api.md)
 3. [ADR 004 Multi-Model Core Platform](./adr_004_multi_model_core_platform.md)
-4. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
 
 ## How To Use This Index
 
