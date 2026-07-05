@@ -4,7 +4,7 @@ from src.services.query_service.app.application.lookup_catalog import (
     LookupCatalogItem,
     LookupCatalogResult,
 )
-from src.services.query_service.app.routers.lookups import lookup_response_from_result
+from src.services.query_service.app.routers.lookup_mappers import lookup_response_from_result
 
 
 def test_lookup_response_from_result_preserves_api_contract() -> None:

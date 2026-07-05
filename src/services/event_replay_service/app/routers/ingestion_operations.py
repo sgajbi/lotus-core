@@ -100,6 +100,7 @@ from .ingestion_operations_examples import (
     INGESTION_SLO_STATUS_RESPONSE_EXAMPLE,
     INGESTION_STALLED_JOB_LIST_RESPONSE_EXAMPLE,
 )
+from .replay_mappers import command_error_to_http
 
 router = APIRouter(dependencies=[Depends(require_ops_token)])
 
@@ -203,7 +204,7 @@ async def repair_ingestion_job_bookkeeping(
     try:
         result = await command_service.repair_ingestion_job_bookkeeping(job_id=job_id)
     except BookkeepingRepairCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise command_error_to_http(exc) from exc
     return IngestionJobBookkeepingRepairResponse(**result.to_response_payload())
 
 
@@ -449,7 +450,7 @@ async def retry_ingestion_job(
             requested_by=ops_actor,
         )
     except ReplayCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise command_error_to_http(exc) from exc
 
 
 @router.get(
@@ -1009,7 +1010,7 @@ async def replay_consumer_dlq_event(
             ),
         )
     except ReplayCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise command_error_to_http(exc) from exc
     return ConsumerDlqReplayResponse(**result.to_response_payload())
 
 
@@ -1181,7 +1182,7 @@ async def update_ingestion_ops_control(
             )
         )
     except OpsControlCommandError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise command_error_to_http(exc) from exc
 
 
 @router.get(

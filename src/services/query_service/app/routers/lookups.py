@@ -4,17 +4,13 @@ from ..dependencies import get_lookup_catalog_service
 from ..application.lookup_catalog import (
     CurrencyLookupQuery,
     InstrumentLookupQuery,
-    LookupCatalogResult,
     PortfolioLookupQuery,
 )
-from ..dtos.lookup_dto import LookupItem, LookupResponse
+from ..dtos.lookup_dto import LookupResponse
 from ..services.lookup_catalog_service import LookupCatalogService
+from .lookup_mappers import lookup_response_from_result
 
 router = APIRouter(prefix="/lookups", tags=["Lookup Catalogs"])
-
-
-def lookup_response_from_result(result: LookupCatalogResult) -> LookupResponse:
-    return LookupResponse(items=[LookupItem(id=item.id, label=item.label) for item in result.items])
 
 
 @router.get(
