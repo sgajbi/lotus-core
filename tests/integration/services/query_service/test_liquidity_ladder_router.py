@@ -7,6 +7,9 @@ import pytest
 import pytest_asyncio
 
 from src.services.query_service.app.dependencies import get_liquidity_ladder_service
+from src.services.query_service.app.dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+)
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.liquidity_ladder_service import (
     PortfolioLiquidityLadderService,
@@ -23,17 +26,11 @@ def _runtime_metadata(as_of_date: date) -> dict:
     return {
         "product_name": "PortfolioLiquidityLadder",
         "product_version": "v1",
-        "generated_at": datetime(2026, 3, 27, 12, 0, tzinfo=UTC),
-        "as_of_date": as_of_date,
-        "restatement_version": "current",
-        "reconciliation_status": "UNKNOWN",
-        "data_quality_status": "COMPLETE",
-        "latest_evidence_timestamp": None,
-        "source_batch_fingerprint": None,
-        "snapshot_id": None,
-        "tenant_id": None,
-        "policy_version": None,
-        "correlation_id": None,
+        **source_data_product_runtime_metadata(
+            as_of_date=as_of_date,
+            generated_at=datetime(2026, 3, 27, 12, 0, tzinfo=UTC),
+            data_quality_status="COMPLETE",
+        ),
     }
 
 

@@ -26,6 +26,7 @@ from src.services.query_service.app.dtos.reporting_dto import (
 )
 from src.services.query_service.app.dtos.source_data_product_identity import (
     source_data_product_runtime_metadata,
+    stable_content_hash,
 )
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
@@ -66,6 +67,11 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         generated_at=generated_at,
     )
 
+    assert metadata["content_hash"].startswith("sha256:")
+    assert metadata["source_digest"] == metadata["content_hash"]
+    assert metadata["source_refs"] == []
+    assert metadata["lineage"] == {}
+    assert metadata["source_evidence_current"] is False
     assert metadata == {
         "tenant_id": None,
         "generated_at": generated_at,
@@ -76,6 +82,11 @@ def test_source_data_product_runtime_metadata_defaults_to_truthful_supportabilit
         "latest_evidence_timestamp": None,
         "source_batch_fingerprint": None,
         "snapshot_id": None,
+        "content_hash": metadata["content_hash"],
+        "source_digest": metadata["content_hash"],
+        "source_refs": [],
+        "lineage": {},
+        "source_evidence_current": False,
         "policy_version": None,
         "correlation_id": None,
     }
@@ -93,6 +104,7 @@ def test_source_data_product_runtime_metadata_preserves_request_correlation_id()
 
     assert metadata["correlation_id"] == "QRY-corr-1"
     assert metadata["data_quality_status"] == UNKNOWN
+    assert metadata["content_hash"].startswith("sha256:")
 
 
 def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage() -> None:
@@ -108,6 +120,9 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
         source_batch_fingerprint="sbf_abc",
         snapshot_id="pss_abc",
         policy_version="tenant-default-v1",
+        content_hash="sha256:" + "a" * 64,
+        source_refs=[" lotus-core://source/HoldingsAsOf/P1 "],
+        lineage={"source_owner": " lotus-core "},
     )
 
     assert metadata["tenant_id"] == "tenant_sg_pb"
@@ -117,3 +132,16 @@ def test_source_data_product_runtime_metadata_accepts_truthful_runtime_lineage()
     assert metadata["source_batch_fingerprint"] == "sbf_abc"
     assert metadata["snapshot_id"] == "pss_abc"
     assert metadata["policy_version"] == "tenant-default-v1"
+    assert metadata["content_hash"] == "sha256:" + "a" * 64
+    assert metadata["source_digest"] == "sha256:" + "a" * 64
+    assert metadata["source_refs"] == ["lotus-core://source/HoldingsAsOf/P1"]
+    assert metadata["lineage"] == {"source_owner": "lotus-core"}
+    assert metadata["source_evidence_current"] is True
+
+
+def test_stable_content_hash_ignores_dictionary_order() -> None:
+    left = stable_content_hash({"b": 2, "a": {"date": date(2026, 4, 10)}})
+    right = stable_content_hash({"a": {"date": date(2026, 4, 10)}, "b": 2})
+
+    assert left == right
+    assert left.startswith("sha256:")

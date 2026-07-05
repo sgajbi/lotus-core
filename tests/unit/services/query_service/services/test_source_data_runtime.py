@@ -14,6 +14,9 @@ def test_source_product_runtime_metadata_defaults_unknown_quality() -> None:
     assert metadata["reconciliation_status"] == "UNKNOWN"
     assert metadata["restatement_version"] == "current"
     assert metadata["generated_at"].tzinfo is not None
+    assert metadata["content_hash"].startswith("sha256:")
+    assert metadata["source_digest"] == metadata["content_hash"]
+    assert metadata["source_evidence_current"] is False
 
 
 def test_source_product_runtime_metadata_preserves_quality_and_evidence_timestamp() -> None:
@@ -29,6 +32,7 @@ def test_source_product_runtime_metadata_preserves_quality_and_evidence_timestam
     assert metadata["tenant_id"] == "tenant-sg"
     assert metadata["data_quality_status"] == "COMPLETE"
     assert metadata["latest_evidence_timestamp"] == evidence_timestamp
+    assert metadata["source_evidence_current"] is True
 
 
 def test_source_product_runtime_metadata_without_as_of_date_removes_duplicate_field() -> None:
@@ -41,3 +45,4 @@ def test_source_product_runtime_metadata_without_as_of_date_removes_duplicate_fi
     assert "as_of_date" not in metadata
     assert metadata["tenant_id"] == "tenant-sg"
     assert metadata["data_quality_status"] == "PARTIAL"
+    assert metadata["content_hash"].startswith("sha256:")

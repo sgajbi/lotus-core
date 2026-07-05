@@ -30,7 +30,10 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotValuationContext,
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.fx_rate_repository import FxRateRepository
 from ..repositories.identifier_normalization import normalize_security_id
@@ -239,6 +242,10 @@ class CoreSnapshotService:
 
         if CoreSnapshotSection.POSITIONS_BASELINE in request.sections:
             sections_payload.positions_baseline = [
+                item["position_record"] for item in baseline_positions.values()
+            ]
+        if CoreSnapshotSection.PORTFOLIO_STATE in request.sections:
+            sections_payload.portfolio_state = [
                 item["position_record"] for item in baseline_positions.values()
             ]
 
@@ -552,15 +559,54 @@ class CoreSnapshotService:
         baseline_count: int,
     ) -> CoreSnapshotResponse:
         generated_at = self._clock.utc_now()
+        request_fingerprint_value = self._core_snapshot_request_fingerprint(
+            portfolio_id=portfolio_id,
+            request=request,
+            governance=governance,
+        )
+        content_hash = stable_content_hash(
+            {
+                "product_name": "PortfolioStateSnapshot",
+                "product_version": "v1",
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date,
+                "snapshot_mode": request.snapshot_mode.value,
+                "request_fingerprint": request_fingerprint_value,
+                "freshness": freshness.model_dump(mode="json"),
+                "governance": {
+                    "consumer_system": governance.consumer_system,
+                    "tenant_id": governance.tenant_id,
+                    "requested_sections": [
+                        section.value for section in governance.requested_sections
+                    ],
+                    "applied_sections": [section.value for section in governance.applied_sections],
+                    "dropped_sections": [section.value for section in governance.dropped_sections],
+                    "policy_provenance": governance.policy_provenance.model_dump(mode="json"),
+                    "warnings": governance.warnings,
+                },
+                "valuation_context": {
+                    "portfolio_currency": currency_context.portfolio_currency,
+                    "reporting_currency": currency_context.reporting_currency,
+                    "position_basis": request.options.position_basis.value,
+                    "weight_basis": request.options.weight_basis.value,
+                },
+                "simulation": (
+                    simulation_metadata.model_dump(mode="json")
+                    if simulation_metadata is not None
+                    else None
+                ),
+                "sections": sections.model_dump(mode="json"),
+            }
+        )
+        source_ref = (
+            "lotus-core://source/PortfolioStateSnapshot/"
+            f"{portfolio_id}/{request.as_of_date.isoformat()}"
+        )
         return CoreSnapshotResponse(
             portfolio_id=portfolio_id,
             snapshot_mode=request.snapshot_mode,
             contract_version="rfc_081_v1",
-            request_fingerprint=self._core_snapshot_request_fingerprint(
-                portfolio_id=portfolio_id,
-                request=request,
-                governance=governance,
-            ),
+            request_fingerprint=request_fingerprint_value,
             freshness=freshness,
             governance=CoreSnapshotGovernanceMetadata(
                 consumer_system=governance.consumer_system,
@@ -589,6 +635,13 @@ class CoreSnapshotService:
                 ),
                 latest_evidence_timestamp=freshness.snapshot_timestamp,
                 policy_version=governance.policy_provenance.policy_version,
+                content_hash=content_hash,
+                source_refs=[source_ref],
+                lineage={
+                    "source_owner": "lotus-core",
+                    "source_product": "PortfolioStateSnapshot",
+                    "request_fingerprint": request_fingerprint_value,
+                },
             ),
         )
 

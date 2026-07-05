@@ -18,6 +18,7 @@ class CoreSnapshotMode(str, Enum):
 
 
 class CoreSnapshotSection(str, Enum):
+    PORTFOLIO_STATE = "portfolio_state"
     POSITIONS_BASELINE = "positions_baseline"
     POSITIONS_PROJECTED = "positions_projected"
     POSITIONS_DELTA = "positions_delta"
@@ -427,6 +428,24 @@ class CoreSnapshotPortfolioTotals(BaseModel):
 
 
 class CoreSnapshotSections(BaseModel):
+    portfolio_state: Optional[list[CoreSnapshotPositionRecord]] = Field(
+        None,
+        description=(
+            "Canonical portfolio-state position rows for as_of_date. This section is an "
+            "additive alias for baseline portfolio state and is intended for downstream proof "
+            "generators that request portfolio_state with portfolio_totals."
+        ),
+        examples=[
+            [
+                {
+                    "security_id": "SEC_AAPL_US",
+                    "quantity": "100.0000000000",
+                    "market_value_base": "19500.25",
+                    "weight": "0.1245",
+                }
+            ]
+        ],
+    )
     positions_baseline: Optional[list[CoreSnapshotPositionRecord]] = Field(
         None,
         description="Baseline positions resolved for as_of_date.",

@@ -735,17 +735,28 @@ def _policy_applied_snapshot_sections(
     applied_sections = [
         section
         for section in requested_sections
-        if section.value.upper() in allowed_policy_sections
+        if _snapshot_section_allowed_by_policy(section, allowed_policy_sections)
     ]
     dropped_sections = [
         section
         for section in requested_sections
-        if section.value.upper() not in allowed_policy_sections
+        if not _snapshot_section_allowed_by_policy(section, allowed_policy_sections)
     ]
     warnings = list(policy.warnings)
     if dropped_sections and not policy.policy_provenance.strict_mode:
         warnings.append("SECTIONS_DROPPED_NON_STRICT_MODE")
     return applied_sections, dropped_sections, warnings
+
+
+def _snapshot_section_allowed_by_policy(
+    section: CoreSnapshotSection, allowed_policy_sections: set[str]
+) -> bool:
+    if section.value.upper() in allowed_policy_sections:
+        return True
+    return (
+        section == CoreSnapshotSection.PORTFOLIO_STATE
+        and CoreSnapshotSection.POSITIONS_BASELINE.value.upper() in allowed_policy_sections
+    )
 
 
 def _assert_core_snapshot_sections_allowed(

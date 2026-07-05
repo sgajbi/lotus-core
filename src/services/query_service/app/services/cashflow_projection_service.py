@@ -7,7 +7,10 @@ from portfolio_common.reconciliation_quality import COMPLETE
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from ..dtos.source_data_product_identity import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 from ..repositories.cashflow_repository import CashflowRepository
 from .cashflow_evidence_window import read_cashflow_evidence_window
 from .decimal_amounts import decimal_or_zero
@@ -80,6 +83,27 @@ class CashflowProjectionService:
             )
             cursor += timedelta(days=1)
 
+        source_ref = (
+            "lotus-core://source/PortfolioCashflowProjection/"
+            f"{portfolio_id}/{effective_as_of_date.isoformat()}/{query_end_date.isoformat()}"
+        )
+        content_hash = stable_content_hash(
+            {
+                "product_name": "PortfolioCashflowProjection",
+                "product_version": "v1",
+                "portfolio_id": portfolio_id,
+                "as_of_date": effective_as_of_date,
+                "range_start_date": range_start_date,
+                "range_end_date": query_end_date,
+                "include_projected": include_projected,
+                "portfolio_currency": portfolio_currency,
+                "points": [point.model_dump(mode="json") for point in points],
+                "total_net_cashflow": running,
+                "booked_total_net_cashflow": booked_total,
+                "projected_settlement_total_cashflow": projected_total,
+                "latest_evidence_timestamp": cashflow_evidence.latest_evidence_timestamp,
+            }
+        )
         return CashflowProjectionResponse(
             portfolio_id=portfolio_id,
             range_start_date=range_start_date,
@@ -105,6 +129,13 @@ class CashflowProjectionService:
                     f"{portfolio_id}:{effective_as_of_date}:{query_end_date}:"
                     f"include_projected={str(include_projected).lower()}"
                 ),
+                content_hash=content_hash,
+                source_refs=[source_ref],
+                lineage={
+                    "source_owner": "lotus-core",
+                    "source_product": "PortfolioCashflowProjection",
+                    "portfolio_id": portfolio_id,
+                },
             ),
         )
 

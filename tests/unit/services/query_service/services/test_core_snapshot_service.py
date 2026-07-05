@@ -162,6 +162,7 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
         as_of_date="2026-02-27",
         snapshot_mode=CoreSnapshotMode.BASELINE,
         sections=[
+            CoreSnapshotSection.PORTFOLIO_STATE,
             CoreSnapshotSection.POSITIONS_BASELINE,
             CoreSnapshotSection.PORTFOLIO_TOTALS,
             CoreSnapshotSection.INSTRUMENT_ENRICHMENT,
@@ -171,6 +172,8 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     response = await service.get_core_snapshot("PORT_001", request)
 
     assert response.portfolio_id == "PORT_001"
+    assert response.sections.portfolio_state is not None
+    assert len(response.sections.portfolio_state) == 1
     assert response.sections.positions_baseline is not None
     assert len(response.sections.positions_baseline) == 1
     assert response.sections.portfolio_totals is not None
@@ -198,6 +201,15 @@ async def test_core_snapshot_baseline_success(mock_dependencies):
     assert response.latest_evidence_timestamp == datetime(2026, 2, 27, 10, 5, tzinfo=UTC)
     assert response.source_batch_fingerprint is None
     assert response.snapshot_id is None
+    assert response.content_hash.startswith("sha256:")
+    assert response.source_digest == response.content_hash
+    assert response.source_refs == [
+        "lotus-core://source/PortfolioStateSnapshot/PORT_001/2026-02-27"
+    ]
+    assert response.lineage["source_owner"] == "lotus-core"
+    assert response.lineage["source_product"] == "PortfolioStateSnapshot"
+    assert response.lineage["request_fingerprint"] == response.request_fingerprint
+    assert response.source_evidence_current is True
     assert response.policy_version == "snapshot.policy.inline.default"
     assert response.correlation_id is None
 

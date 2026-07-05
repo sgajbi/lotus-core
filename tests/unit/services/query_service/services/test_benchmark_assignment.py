@@ -42,3 +42,21 @@ def test_build_benchmark_assignment_response_maps_assignment_and_runtime_metadat
     assert response.assignment_version == 3
     assert response.data_quality_status == "COMPLETE"
     assert response.latest_evidence_timestamp == updated_at
+    assert response.content_hash.startswith("sha256:")
+    assert response.source_digest == response.content_hash
+    assert response.source_refs == [
+        "lotus-core://source/BenchmarkAssignment/PB_SG_GLOBAL_BAL_001/2026-01-31"
+    ]
+    assert response.lineage == {
+        "source_owner": "lotus-core",
+        "source_product": "BenchmarkAssignment",
+        "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
+        "assignment_version": "3",
+    }
+    assert response.source_evidence_current is True
+
+    repeat_response = build_benchmark_assignment_response(
+        row=row,
+        as_of_date=date(2026, 1, 31),
+    )
+    assert repeat_response.content_hash == response.content_hash
