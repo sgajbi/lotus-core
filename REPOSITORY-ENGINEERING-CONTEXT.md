@@ -1302,6 +1302,12 @@ Most relevant current governance:
      silent fallback for unsupported `sort_by` / `sort_order`; publish allowed values in OpenAPI,
      reject invalid supplied values with structured 400 errors, and keep deterministic tie-breakers
      for every paginated ordering.
+109. Raw series and collection reads must have an explicit bound. MarketPriceSeries, FxRateSeries,
+     and PositionHistorySeries use `query_service.app.application.collection_window_policy` and
+     require complete date windows capped at ten years before repository access. Future collection
+     endpoints must use cursor/page-token pagination, offset pagination with a max limit, mandatory
+     bounded windows, or a documented small-cardinality contract with tests. Do not add optional
+     date filters that allow full-history scans by omission.
 
 ## Context Maintenance Rule
 

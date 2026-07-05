@@ -690,6 +690,7 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
     assert positions_portfolio_id["description"] == "Portfolio identifier."
     assert "strategic HoldingsAsOf operational read" in latest_positions["description"]
     assert "gateway portfolio position books" in latest_positions["description"]
+    assert "at most one current holding row per security" in latest_positions["description"]
     assert "Use `as_of_date` for booked historical state" in latest_positions["description"]
     assert (
         "Do not treat this route as a substitute for performance, risk, "
@@ -729,7 +730,11 @@ async def test_openapi_describes_position_contract_examples(async_test_client):
         "security-level state inspection" in (position_history["description"])
     )
     assert (
-        "do not use it as a substitute for the strategic latest-holdings read"
+        "Callers must provide both `start_date` and `end_date`" in position_history["description"]
+    )
+    assert "window is capped at ten years" in position_history["description"]
+    assert (
+        "Do not use it as a substitute for the strategic latest-holdings read"
         in (position_history["description"])
     )
 
@@ -950,9 +955,13 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
     assert "canonical security master lookup" in instruments["description"]
     assert "do not use it as a substitute for portfolio positions" in instruments["description"]
     assert "source-owned pricing history" in prices["description"]
-    assert "do not use it as a substitute for performance analytics" in prices["description"]
+    assert "Callers must provide both `start_date` and `end_date`" in prices["description"]
+    assert "window is capped at ten years" in prices["description"]
+    assert "Do not use it as a substitute for performance analytics" in prices["description"]
     assert "source-owned FX conversion history" in fx_rates["description"]
-    assert "do not use it as a substitute for portfolio performance" in fx_rates["description"]
+    assert "Callers must provide both `start_date` and `end_date`" in fx_rates["description"]
+    assert "window is capped at ten years" in fx_rates["description"]
+    assert "Do not use it as a substitute for portfolio performance" in fx_rates["description"]
 
     instrument_security_id = next(
         parameter for parameter in instruments["parameters"] if parameter["name"] == "security_id"
@@ -963,6 +972,12 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
         parameter for parameter in prices["parameters"] if parameter["name"] == "security_id"
     )
     assert security_id["description"] == "Security identifier for the market-price series request."
+    price_start_date = next(
+        parameter for parameter in prices["parameters"] if parameter["name"] == "start_date"
+    )
+    assert price_start_date["description"] == (
+        "Required start date for the bounded price-series window (inclusive)."
+    )
 
     from_currency = next(
         parameter for parameter in fx_rates["parameters"] if parameter["name"] == "from_currency"
@@ -973,6 +988,12 @@ async def test_openapi_describes_reference_market_data_contract_examples(async_t
         parameter for parameter in fx_rates["parameters"] if parameter["name"] == "to_currency"
     )
     assert to_currency["description"] == "Quote currency code for the requested FX series."
+    fx_end_date = next(
+        parameter for parameter in fx_rates["parameters"] if parameter["name"] == "end_date"
+    )
+    assert fx_end_date["description"] == (
+        "Required end date for the bounded FX-rate-series window (inclusive)."
+    )
 
     instrument_response = components["PaginatedInstrumentResponse"]
     price_response = components["MarketPriceResponse"]

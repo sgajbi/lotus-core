@@ -44,7 +44,9 @@ async def test_get_position_history_success(async_test_client):
         ],
     }
 
-    response = await client.get("/portfolios/P1/position-history?security_id=S1")
+    response = await client.get(
+        "/portfolios/P1/position-history?security_id=S1&start_date=2025-01-01&end_date=2025-01-31"
+    )
 
     assert response.status_code == 200
     assert response.json()["security_id"] == "S1"
@@ -55,7 +57,9 @@ async def test_get_position_history_unexpected_maps_to_500(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_position_history.side_effect = RuntimeError("boom")
 
-    response = await client.get("/portfolios/P1/position-history?security_id=S1")
+    response = await client.get(
+        "/portfolios/P1/position-history?security_id=S1&start_date=2025-01-01&end_date=2025-01-31"
+    )
 
     assert response.status_code == 500
     assert response.json()["error"] == "Internal Server Error"
@@ -113,10 +117,38 @@ async def test_get_position_history_not_found_maps_to_404(async_test_client):
     client, mock_service = async_test_client
     mock_service.get_position_history.side_effect = LookupError("not found")
 
-    response = await client.get("/portfolios/P404/position-history?security_id=S1")
+    response = await client.get(
+        "/portfolios/P404/position-history?security_id=S1&start_date=2025-01-01&end_date=2025-01-31"
+    )
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+async def test_get_position_history_rejects_missing_window(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get("/portfolios/P1/position-history?security_id=S1")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "COLLECTION_WINDOW_REQUIRED"
+    assert body["detail"]["source_product"] == "PositionHistorySeries"
+    mock_service.get_position_history.assert_not_awaited()
+
+
+async def test_get_position_history_rejects_reversed_window(async_test_client):
+    client, mock_service = async_test_client
+
+    response = await client.get(
+        "/portfolios/P1/position-history?security_id=S1&start_date=2025-02-01&end_date=2025-01-01"
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "INVALID_DATE_WINDOW"
+    assert body["detail"]["source_product"] == "PositionHistorySeries"
+    mock_service.get_position_history.assert_not_awaited()
 
 
 async def test_get_latest_positions_not_found_maps_to_404(async_test_client):

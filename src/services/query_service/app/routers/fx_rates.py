@@ -4,9 +4,14 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 
+from ..application.collection_window_policy import (
+    CollectionWindowValidationError,
+    validate_required_bounded_date_window,
+)
 from ..dependencies import get_fx_rate_service
 from ..dtos.fx_rate_dto import FxRateResponse
 from ..services.fx_rate_service import FxRateService
+from .http_errors import collection_window_error_to_http
 
 router = APIRouter(prefix="/fx-rates", tags=["FX Rates"])
 
@@ -18,7 +23,8 @@ router = APIRouter(prefix="/fx-rates", tags=["FX Rates"])
     description=(
         "Returns FX rates for a currency pair over an optional date range. "
         "Use this route for source-owned FX conversion history, valuation conversion checks, and "
-        "reconciliation diagnostics; do not use it as a substitute for portfolio performance, "
+        "reconciliation diagnostics. Callers must provide both `start_date` and `end_date`; the "
+        "window is capped at ten years. Do not use it as a substitute for portfolio performance, "
         "risk analytics, or derived reporting outputs."
     ),
 )
@@ -39,19 +45,27 @@ async def get_fx_rates(
     ),
     start_date: Optional[date] = Query(
         None,
-        description="The start date for the date range filter (inclusive).",
+        description="Required start date for the bounded FX-rate-series window (inclusive).",
         examples=["2026-01-01"],
     ),
     end_date: Optional[date] = Query(
         None,
-        description="The end date for the date range filter (inclusive).",
+        description="Required end date for the bounded FX-rate-series window (inclusive).",
         examples=["2026-03-31"],
     ),
     service: FxRateService = Depends(get_fx_rate_service),
 ):
-    return await service.get_fx_rates(
-        from_currency=from_currency.upper(),
-        to_currency=to_currency.upper(),
-        start_date=start_date,
-        end_date=end_date,
-    )
+    try:
+        validate_required_bounded_date_window(
+            source_product="FxRateSeries",
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return await service.get_fx_rates(
+            from_currency=from_currency.upper(),
+            to_currency=to_currency.upper(),
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except CollectionWindowValidationError as exc:
+        raise collection_window_error_to_http(exc) from exc
