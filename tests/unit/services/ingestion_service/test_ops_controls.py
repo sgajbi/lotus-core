@@ -37,8 +37,20 @@ def _request(headers: dict[str, str]) -> Request:
     )
 
 
-def _build_hs256_jwt(secret: str, payload: dict) -> str:
-    header = {"alg": "HS256", "typ": "JWT"}
+OPS_JWT_ISSUER = "lotus-core-ingest-ops"
+OPS_JWT_AUDIENCE = "lotus-core-ingestion-ops"
+OPS_JWT_KEY_ID = "ops-key-current"
+OPS_JWT_REQUIRED_SCOPE = "lotus-core.ingestion.ops"
+
+
+def _build_hs256_jwt(
+    secret: str,
+    payload: dict,
+    *,
+    kid: str = OPS_JWT_KEY_ID,
+    alg: str = "HS256",
+) -> str:
+    header = {"alg": alg, "typ": "JWT", "kid": kid}
 
     def _b64(value: dict) -> str:
         raw = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -50,6 +62,29 @@ def _build_hs256_jwt(secret: str, payload: dict) -> str:
     signature = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).digest()
     signature_b64 = base64.urlsafe_b64encode(signature).decode("utf-8").rstrip("=")
     return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def _valid_ops_jwt_payload(*, principal_claim: str = "sub") -> dict[str, object]:
+    now_epoch = int(datetime.now(UTC).timestamp())
+    payload: dict[str, object] = {
+        "iss": OPS_JWT_ISSUER,
+        "aud": OPS_JWT_AUDIENCE,
+        "iat": now_epoch - 30,
+        "exp": now_epoch + 600,
+        "jti": "ops-jwt-test-001",
+        "scope": OPS_JWT_REQUIRED_SCOPE,
+    }
+    payload[principal_claim] = "ops-jwt-user" if principal_claim == "sub" else "ops-client"
+    return payload
+
+
+def _configure_ops_jwt(monkeypatch, secret: str, *, previous_keys: dict[str, str] | None = None):
+    monkeypatch.setattr(ops_controls, "OPS_JWT_HS256_SECRET", secret)
+    monkeypatch.setattr(ops_controls, "OPS_JWT_KEY_ID", OPS_JWT_KEY_ID)
+    monkeypatch.setattr(ops_controls, "OPS_JWT_PREVIOUS_KEYS", previous_keys or {})
+    monkeypatch.setattr(ops_controls, "OPS_JWT_ISSUER", OPS_JWT_ISSUER)
+    monkeypatch.setattr(ops_controls, "OPS_JWT_AUDIENCE", OPS_JWT_AUDIENCE)
+    monkeypatch.setattr(ops_controls, "OPS_JWT_REQUIRED_SCOPE", OPS_JWT_REQUIRED_SCOPE)
 
 
 def test_ingestion_write_rate_limit_counter_registration_is_idempotent() -> None:
@@ -96,12 +131,9 @@ async def test_require_ops_token_rejects_invalid_token_only_header(monkeypatch) 
 @pytest.mark.asyncio
 async def test_require_ops_token_accepts_jwt_only_bearer(monkeypatch) -> None:
     secret = "test-hs256-secret"
-    now_epoch = int(datetime.now(UTC).timestamp())
     monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
-    monkeypatch.setattr(ops_controls, "OPS_JWT_HS256_SECRET", secret)
-    monkeypatch.setattr(ops_controls, "OPS_JWT_ISSUER", "")
-    monkeypatch.setattr(ops_controls, "OPS_JWT_AUDIENCE", "")
-    token = _build_hs256_jwt(secret, {"sub": "ops-jwt-user", "exp": now_epoch + 600})
+    _configure_ops_jwt(monkeypatch, secret)
+    token = _build_hs256_jwt(secret, _valid_ops_jwt_payload())
 
     principal = await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
 
@@ -111,14 +143,11 @@ async def test_require_ops_token_accepts_jwt_only_bearer(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_require_ops_token_prefers_bearer_in_token_or_jwt_mode(monkeypatch) -> None:
     secret = "test-hs256-secret"
-    now_epoch = int(datetime.now(UTC).timestamp())
     monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "token_or_jwt")
     monkeypatch.setattr(ops_controls, "OPS_TOKEN_REQUIRED", True)
     monkeypatch.setattr(ops_controls, "OPS_TOKEN_VALUE", "expected-token")
-    monkeypatch.setattr(ops_controls, "OPS_JWT_HS256_SECRET", secret)
-    monkeypatch.setattr(ops_controls, "OPS_JWT_ISSUER", "")
-    monkeypatch.setattr(ops_controls, "OPS_JWT_AUDIENCE", "")
-    token = _build_hs256_jwt(secret, {"client_id": "ops-client", "exp": now_epoch + 600})
+    _configure_ops_jwt(monkeypatch, secret)
+    token = _build_hs256_jwt(secret, _valid_ops_jwt_payload(principal_claim="client_id"))
 
     principal = await ops_controls.require_ops_token(
         _request(
@@ -131,6 +160,133 @@ async def test_require_ops_token_prefers_bearer_in_token_or_jwt_mode(monkeypatch
     )
 
     assert principal == "ops-client"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_malformed_jwt(monkeypatch) -> None:
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, "test-hs256-secret")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": "Bearer not-a-jwt"}))
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_MALFORMED"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_bad_jwt_algorithm(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, secret)
+    token = _build_hs256_jwt(secret, _valid_ops_jwt_payload(), alg="none")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_UNSUPPORTED_ALG"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_missing_required_jwt_claim(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, secret)
+    payload = _valid_ops_jwt_payload()
+    payload.pop("iat")
+    token = _build_hs256_jwt(secret, payload)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_MISSING_CLAIMS"
+    assert "iat" in exc_info.value.detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_expired_jwt(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    now_epoch = int(datetime.now(UTC).timestamp())
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    monkeypatch.setattr(ops_controls, "OPS_JWT_CLOCK_SKEW_SECONDS", 0)
+    _configure_ops_jwt(monkeypatch, secret)
+    payload = _valid_ops_jwt_payload()
+    payload["exp"] = now_epoch - 1
+    token = _build_hs256_jwt(secret, payload)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 401
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_EXPIRED"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_wrong_jwt_issuer(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, secret)
+    payload = _valid_ops_jwt_payload()
+    payload["iss"] = "wrong-issuer"
+    token = _build_hs256_jwt(secret, payload)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_ISSUER_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_wrong_jwt_audience(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, secret)
+    payload = _valid_ops_jwt_payload()
+    payload["aud"] = "wrong-audience"
+    token = _build_hs256_jwt(secret, payload)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_AUDIENCE_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_rejects_missing_ops_jwt_scope(monkeypatch) -> None:
+    secret = "test-hs256-secret"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, secret)
+    payload = _valid_ops_jwt_payload()
+    payload["scope"] = "lotus-core.other"
+    token = _build_hs256_jwt(secret, payload)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["code"] == "INGESTION_OPS_JWT_SCOPE_MISSING"
+
+
+@pytest.mark.asyncio
+async def test_require_ops_token_accepts_rotated_previous_jwt_key(monkeypatch) -> None:
+    active_secret = "test-hs256-secret-active"
+    previous_secret = "test-hs256-secret-previous"
+    previous_key_id = "ops-key-previous"
+    monkeypatch.setattr(ops_controls, "OPS_AUTH_MODE", "jwt_only")
+    _configure_ops_jwt(monkeypatch, active_secret, previous_keys={previous_key_id: previous_secret})
+    token = _build_hs256_jwt(
+        previous_secret,
+        _valid_ops_jwt_payload(),
+        kid=previous_key_id,
+    )
+
+    principal = await ops_controls.require_ops_token(_request({"Authorization": f"Bearer {token}"}))
+
+    assert principal == "ops-jwt-user"
 
 
 def test_ingestion_write_rate_limit_noops_when_disabled(monkeypatch) -> None:

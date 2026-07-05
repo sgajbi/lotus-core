@@ -1191,6 +1191,13 @@ Most relevant current governance:
     `LOTUS_CORE_PAGE_TOKEN_KEY_ID`; local defaults are developer-only compatibility. Do not add a
     parallel page-token HMAC helper or unversioned payload/signature envelope. Analytics page tokens
     must continue to route through the shared codec.
+93. Privileged ingestion ops JWTs must carry required `exp`, `iat`, `iss`, `aud`, `jti`, a
+    principal identity claim, required ops scope/capability, and `kid`. `ops_controls.py` supports
+    active plus previous HS256 keys for symmetric rotation; do not add a second JWT verifier or make
+    issuer, audience, expiry, issued-at, key id, or scope optional. Non-local or strict profiles
+    must configure JWT issuer, audience, active key id, secret, and required scope. Static
+    `X-Lotus-Ops-Token` fallback in non-local profiles requires explicit
+    `LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED=true` and a non-default token.
 
 ## Context Maintenance Rule
 

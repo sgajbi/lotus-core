@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -9,6 +10,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
+from typing import Any
 
 from fastapi import HTTPException, Request, status
 from prometheus_client import REGISTRY, Counter
@@ -23,8 +25,11 @@ OPS_TOKEN_REQUIRED = _SETTINGS.ops_auth.token_required
 OPS_TOKEN_VALUE = _SETTINGS.ops_auth.token_value
 OPS_AUTH_MODE = _SETTINGS.ops_auth.auth_mode
 OPS_JWT_HS256_SECRET = _SETTINGS.ops_auth.jwt_hs256_secret
+OPS_JWT_KEY_ID = _SETTINGS.ops_auth.jwt_key_id
+OPS_JWT_PREVIOUS_KEYS = _SETTINGS.ops_auth.jwt_previous_keys
 OPS_JWT_ISSUER = _SETTINGS.ops_auth.jwt_issuer
 OPS_JWT_AUDIENCE = _SETTINGS.ops_auth.jwt_audience
+OPS_JWT_REQUIRED_SCOPE = _SETTINGS.ops_auth.jwt_required_scope
 OPS_JWT_CLOCK_SKEW_SECONDS = _SETTINGS.ops_auth.jwt_clock_skew_seconds
 
 RATE_LIMIT_ENABLED = _SETTINGS.rate_limit.enabled
@@ -210,15 +215,35 @@ def _ops_auth_error(status_code: int, *, code: str, message: str) -> HTTPExcepti
     )
 
 
-def _decode_jwt_segment(segment: str) -> dict:
-    padding = "=" * (-len(segment) % 4)
-    raw = base64.urlsafe_b64decode((segment + padding).encode("utf-8"))
-    return json.loads(raw.decode("utf-8"))
+def _decode_jwt_segment(segment: str) -> dict[str, Any]:
+    try:
+        padding = "=" * (-len(segment) % 4)
+        raw = base64.urlsafe_b64decode((segment + padding).encode("utf-8"))
+        decoded = json.loads(raw.decode("utf-8"))
+    except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_MALFORMED",
+            message="Malformed JWT.",
+        ) from exc
+    if not isinstance(decoded, dict):
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_MALFORMED",
+            message="Malformed JWT.",
+        )
+    return decoded
 
 
-def _validate_jwt_signature(*, header_b64: str, payload_b64: str, signature_b64: str) -> None:
+def _validate_jwt_signature(
+    *,
+    secret: str,
+    header_b64: str,
+    payload_b64: str,
+    signature_b64: str,
+) -> None:
     signed = f"{header_b64}.{payload_b64}".encode("utf-8")
-    expected = hmac.new(OPS_JWT_HS256_SECRET.encode("utf-8"), signed, hashlib.sha256).digest()
+    expected = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).digest()
     expected_b64 = base64.urlsafe_b64encode(expected).decode("utf-8").rstrip("=")
     if not hmac.compare_digest(expected_b64, signature_b64):
         raise _ops_auth_error(
@@ -237,16 +262,72 @@ def _validate_hs256_header(header: dict) -> None:
         )
 
 
-def _validate_jwt_time_window(payload: dict) -> None:
+def _jwt_signing_secret(header: dict[str, Any]) -> str:
+    key_id = header.get("kid")
+    if not isinstance(key_id, str) or not key_id.strip():
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_KEY_ID_MISSING",
+            message="JWT key id is required.",
+        )
+    key_id = key_id.strip()
+    if key_id == OPS_JWT_KEY_ID:
+        secret = OPS_JWT_HS256_SECRET
+    else:
+        secret = OPS_JWT_PREVIOUS_KEYS.get(key_id, "")
+    if not secret:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_KEY_ID_UNKNOWN",
+            message="JWT key id is not trusted.",
+        )
+    return secret
+
+
+def _numeric_date_claim(payload: dict[str, Any], claim_name: str) -> int:
+    value = payload.get(claim_name)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_CLAIM_INVALID",
+            message=f"JWT claim '{claim_name}' must be an integer timestamp.",
+        )
+    return value
+
+
+def _validate_required_jwt_claims(payload: dict[str, Any]) -> None:
+    missing_claims = [
+        claim for claim in ("exp", "iat", "iss", "aud", "jti") if payload.get(claim) in (None, "")
+    ]
+    if not _jwt_principal(payload):
+        missing_claims.append("sub|client_id|azp")
+    if missing_claims:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_MISSING_CLAIMS",
+            message=f"JWT is missing required claims: {', '.join(missing_claims)}.",
+        )
+
+
+def _validate_jwt_time_window(payload: dict[str, Any]) -> None:
     now_epoch = int(datetime.now(UTC).timestamp())
-    exp = payload.get("exp")
-    if isinstance(exp, int) and now_epoch > exp + OPS_JWT_CLOCK_SKEW_SECONDS:
+    exp = _numeric_date_claim(payload, "exp")
+    if now_epoch > exp + OPS_JWT_CLOCK_SKEW_SECONDS:
         raise _ops_auth_error(
             status.HTTP_401_UNAUTHORIZED,
             code="INGESTION_OPS_JWT_EXPIRED",
             message="JWT token is expired.",
         )
+    iat = _numeric_date_claim(payload, "iat")
+    if now_epoch + OPS_JWT_CLOCK_SKEW_SECONDS < iat:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_IAT_IN_FUTURE",
+            message="JWT issued-at timestamp is in the future.",
+        )
     nbf = payload.get("nbf")
+    if nbf is not None:
+        nbf = _numeric_date_claim(payload, "nbf")
     if isinstance(nbf, int) and now_epoch + OPS_JWT_CLOCK_SKEW_SECONDS < nbf:
         raise _ops_auth_error(
             status.HTTP_401_UNAUTHORIZED,
@@ -255,8 +336,14 @@ def _validate_jwt_time_window(payload: dict) -> None:
         )
 
 
-def _validate_jwt_issuer(payload: dict) -> None:
-    if OPS_JWT_ISSUER and payload.get("iss") != OPS_JWT_ISSUER:
+def _validate_jwt_issuer(payload: dict[str, Any]) -> None:
+    if not OPS_JWT_ISSUER:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_ISSUER_CONFIG_MISSING",
+            message="JWT issuer validation is required but not configured.",
+        )
+    if payload.get("iss") != OPS_JWT_ISSUER:
         raise _ops_auth_error(
             status.HTTP_403_FORBIDDEN,
             code="INGESTION_OPS_JWT_ISSUER_INVALID",
@@ -272,8 +359,14 @@ def _jwt_audience_matches(audience: object) -> bool:
     return False
 
 
-def _validate_jwt_audience(payload: dict) -> None:
-    if OPS_JWT_AUDIENCE and not _jwt_audience_matches(payload.get("aud")):
+def _validate_jwt_audience(payload: dict[str, Any]) -> None:
+    if not OPS_JWT_AUDIENCE:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_AUDIENCE_CONFIG_MISSING",
+            message="JWT audience validation is required but not configured.",
+        )
+    if not _jwt_audience_matches(payload.get("aud")):
         raise _ops_auth_error(
             status.HTTP_403_FORBIDDEN,
             code="INGESTION_OPS_JWT_AUDIENCE_INVALID",
@@ -281,12 +374,39 @@ def _validate_jwt_audience(payload: dict) -> None:
         )
 
 
-def _jwt_principal(payload: dict) -> str | None:
+def _jwt_claim_values(value: object) -> set[str]:
+    if isinstance(value, str):
+        return {item for item in value.split() if item}
+    if isinstance(value, list):
+        return {str(item) for item in value if str(item)}
+    return set()
+
+
+def _validate_jwt_scope(payload: dict[str, Any]) -> None:
+    required_scope = OPS_JWT_REQUIRED_SCOPE.strip()
+    if not required_scope:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_SCOPE_CONFIG_MISSING",
+            message="JWT required scope is not configured.",
+        )
+    granted = set()
+    for claim_name in ("scope", "scp", "capabilities"):
+        granted.update(_jwt_claim_values(payload.get(claim_name)))
+    if required_scope not in granted:
+        raise _ops_auth_error(
+            status.HTTP_403_FORBIDDEN,
+            code="INGESTION_OPS_JWT_SCOPE_MISSING",
+            message="JWT does not grant the required ingestion ops scope.",
+        )
+
+
+def _jwt_principal(payload: dict[str, Any]) -> str | None:
     principal = payload.get("sub") or payload.get("client_id") or payload.get("azp")
     return str(principal) if principal else None
 
 
-def _validate_hs256_jwt(token: str) -> str | None:
+def _validate_hs256_jwt(token: str) -> str:
     if not OPS_JWT_HS256_SECRET:
         raise _ops_auth_error(
             status.HTTP_401_UNAUTHORIZED,
@@ -301,18 +421,29 @@ def _validate_hs256_jwt(token: str) -> str | None:
             message="Malformed JWT.",
         )
     header_b64, payload_b64, signature_b64 = parts
+    header = _decode_jwt_segment(header_b64)
+    _validate_hs256_header(header)
+    secret = _jwt_signing_secret(header)
     _validate_jwt_signature(
+        secret=secret,
         header_b64=header_b64,
         payload_b64=payload_b64,
         signature_b64=signature_b64,
     )
-    header = _decode_jwt_segment(header_b64)
     payload = _decode_jwt_segment(payload_b64)
-    _validate_hs256_header(header)
+    _validate_required_jwt_claims(payload)
     _validate_jwt_time_window(payload)
     _validate_jwt_issuer(payload)
     _validate_jwt_audience(payload)
-    return _jwt_principal(payload)
+    _validate_jwt_scope(payload)
+    principal = _jwt_principal(payload)
+    if principal is None:
+        raise _ops_auth_error(
+            status.HTTP_401_UNAUTHORIZED,
+            code="INGESTION_OPS_JWT_MISSING_CLAIMS",
+            message="JWT is missing required principal claim.",
+        )
+    return principal
 
 
 def _bearer_token(request: Request) -> str:

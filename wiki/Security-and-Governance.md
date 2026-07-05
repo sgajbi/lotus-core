@@ -94,6 +94,9 @@ posture evidence, not as a code default.
   use the shared production-security profile helper
 - source-of-truth write planes need service-owned default capability maps plus tests that cover
   every registered write route
+- privileged ingestion ops JWTs must require issuer, audience, expiry, issued-at, replay id,
+  principal identity, required ops scope/capability, and `kid`; key rotation uses an active HS256
+  key plus previous-key JSON and non-local static-token fallback requires explicit approval
 - query-service cursor/page tokens must use the shared versioned `PageTokenCodec` envelope with
   `kid`, expiry, issuer/audience, optional route/tenant binding, and previous-key rotation support
 - production-like HTTP services must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; the local `*`

@@ -227,9 +227,13 @@ class IngestionOpsAuthSettings:
     token_value: str
     auth_mode: Literal["token_or_jwt", "jwt_only", "token_only"]
     jwt_hs256_secret: str
+    jwt_key_id: str
+    jwt_previous_keys: dict[str, str]
     jwt_issuer: str
     jwt_audience: str
+    jwt_required_scope: str
     jwt_clock_skew_seconds: int
+    static_token_non_local_approved: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +324,98 @@ def _load_calculator_peak_lag_age_seconds() -> dict[str, int]:
     return {key: _env_int_from_mapping(parsed, key, default) for key, default in defaults.items()}
 
 
+def _load_ops_jwt_previous_keys() -> dict[str, str]:
+    raw = os.getenv("LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        _invalid_env_setting(
+            name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+            raw=raw,
+            default={},
+            reason="expected JSON object mapping key ids to secrets",
+        )
+        return {}
+    if not isinstance(parsed, dict):
+        _invalid_env_setting(
+            name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+            raw=raw,
+            default={},
+            reason="expected JSON object mapping key ids to secrets",
+        )
+        return {}
+    previous_keys: dict[str, str] = {}
+    for key_id, secret in parsed.items():
+        if not isinstance(key_id, str) or not key_id.strip():
+            _invalid_env_setting(
+                name="LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON",
+                raw=raw,
+                default={},
+                reason="expected non-empty string key ids",
+            )
+            return {}
+        if not isinstance(secret, str) or not secret.strip():
+            _invalid_env_setting(
+                name=f"LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON.{key_id}",
+                raw=secret,
+                default="",
+                reason="expected non-empty secret value",
+            )
+            return {}
+        previous_keys[key_id.strip()] = secret
+    return previous_keys
+
+
+def _validate_ops_auth_settings(settings: IngestionOpsAuthSettings) -> None:
+    if not _strict_config_validation_enabled():
+        return
+    jwt_enabled = settings.auth_mode in {"token_or_jwt", "jwt_only"}
+    static_token_enabled = settings.auth_mode in {"token_or_jwt", "token_only"}
+
+    if jwt_enabled:
+        missing_jwt_settings = [
+            name
+            for name, value in (
+                ("LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET", settings.jwt_hs256_secret),
+                ("LOTUS_CORE_INGEST_OPS_JWT_KEY_ID", settings.jwt_key_id),
+                ("LOTUS_CORE_INGEST_OPS_JWT_ISSUER", settings.jwt_issuer),
+                ("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", settings.jwt_audience),
+                ("LOTUS_CORE_INGEST_OPS_JWT_REQUIRED_SCOPE", settings.jwt_required_scope),
+            )
+            if not value.strip()
+        ]
+        if settings.jwt_key_id.strip() == "local-dev":
+            missing_jwt_settings.append("LOTUS_CORE_INGEST_OPS_JWT_KEY_ID")
+        if settings.jwt_key_id in settings.jwt_previous_keys:
+            raise IngestionConfigurationError(
+                "Invalid ingestion service configuration for "
+                "LOTUS_CORE_INGEST_OPS_JWT_PREVIOUS_KEYS_JSON: active key id must not also be "
+                "listed as a previous key."
+            )
+        if missing_jwt_settings:
+            missing = ", ".join(sorted(set(missing_jwt_settings)))
+            raise IngestionConfigurationError(
+                "Invalid ingestion service configuration for ingestion ops JWT auth: "
+                f"strict profiles require non-local values for {missing}."
+            )
+
+    if static_token_enabled and settings.token_required:
+        if not settings.static_token_non_local_approved:
+            raise IngestionConfigurationError(
+                "Invalid ingestion service configuration for "
+                "LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED: strict profiles cannot "
+                "enable static ingestion ops token fallback unless explicitly approved."
+            )
+        if not settings.token_value.strip() or settings.token_value == "lotus-core-ops-local":
+            raise IngestionConfigurationError(
+                "Invalid ingestion service configuration for LOTUS_CORE_INGEST_OPS_TOKEN: "
+                "strict profiles require a non-default static ops token when static token auth is "
+                "explicitly approved."
+            )
+
+
 def _env_int_from_mapping(values: dict[str, object], key: str, default: int) -> int:
     raw = values.get(key)
     try:
@@ -367,7 +463,7 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
         ),
     )
 
-    return IngestionServiceSettings(
+    settings = IngestionServiceSettings(
         adapter_mode=IngestionAdapterModeSettings(
             portfolio_bundle_enabled=_env_bool("LOTUS_CORE_INGEST_PORTFOLIO_BUNDLE_ENABLED", True),
             upload_apis_enabled=_env_bool("LOTUS_CORE_INGEST_UPLOAD_APIS_ENABLED", True),
@@ -382,10 +478,19 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             token_value=_env_str("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local"),
             auth_mode=auth_mode,
             jwt_hs256_secret=_env_str("LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET", ""),
+            jwt_key_id=_env_str("LOTUS_CORE_INGEST_OPS_JWT_KEY_ID", "local-dev"),
+            jwt_previous_keys=_load_ops_jwt_previous_keys(),
             jwt_issuer=_env_str("LOTUS_CORE_INGEST_OPS_JWT_ISSUER", ""),
             jwt_audience=_env_str("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", ""),
+            jwt_required_scope=_env_str(
+                "LOTUS_CORE_INGEST_OPS_JWT_REQUIRED_SCOPE",
+                "lotus-core.ingestion.ops",
+            ),
             jwt_clock_skew_seconds=_env_int(
                 "LOTUS_CORE_INGEST_OPS_JWT_CLOCK_SKEW_SECONDS", 60, minimum=0
+            ),
+            static_token_non_local_approved=_env_bool(
+                "LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED", False
             ),
         ),
         rate_limit=IngestionRateLimitSettings(
@@ -467,6 +572,8 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
             ),
         ),
     )
+    _validate_ops_auth_settings(settings.ops_auth)
+    return settings
 
 
 def get_ingestion_service_settings() -> IngestionServiceSettings:
