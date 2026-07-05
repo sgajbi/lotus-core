@@ -130,7 +130,7 @@ SUITES: dict[str, list[str]] = {
 
 SOURCE = "src/services/query_service/app"
 SUITE_PYTEST_ARGS: dict[str, list[str]] = {
-    "unit": ["-m", "not integration_db"],
+    "unit": ["-m", "not integration_db and not db_direct and not live_worker and not e2e"],
 }
 
 SUITE_ENV_PROFILE: dict[str, str] = {

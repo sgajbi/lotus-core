@@ -42,6 +42,10 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    `docs/standards/synthetic-test-data-governance.v1.json`. Run
    `make synthetic-fixture-leakage-guard` after adding or changing fixtures, golden examples, seed
    data, generated proof artifacts, logs, snapshots, or API example catalogs.
+8. Integration/E2E lane placement, deterministic test rules, marker taxonomy, and flaky-test
+   quarantine are governed by `docs/standards/test-lane-governance.v1.json`. Run
+   `make test-lane-governance-guard` after changing pytest markers, `scripts/test_manifest.py`,
+   Make test targets, quarantine entries, or CI lane ownership.
 
 ## Proof-Family Markers
 
@@ -54,6 +58,10 @@ primary evidence type for a test module or case:
 4. `security` for authorization, privacy, secrets, or abuse-boundary controls.
 5. `regression` for golden scenarios or previously fixed defects.
 6. `e2e` for multi-service end-to-end workflows.
+7. `performance`, `resilience`, and `certification` for bounded load/latency, recovery, and
+   release or supported-feature evidence.
+8. `flaky_quarantine` only for governed temporary quarantine entries with owner, issue, reason,
+   and expiry in `docs/standards/test-lane-governance.v1.json`.
 
 Do not use marker count as proof. The risk matrix must cite concrete tests or Make targets and must
 record `partial`, `missing`, or `deliberately_deferred` with a follow-up issue when evidence is not
