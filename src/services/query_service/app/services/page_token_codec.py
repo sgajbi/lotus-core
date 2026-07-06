@@ -8,10 +8,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 PAGE_TOKEN_VERSION = 1
-DEFAULT_PAGE_TOKEN_KID = "local-dev"
+# Public local key identifier, not a secret.
+DEFAULT_PAGE_TOKEN_KID = "local-dev"  # nosec B105
 DEFAULT_PAGE_TOKEN_TTL_SECONDS = 900
-DEFAULT_PAGE_TOKEN_ISSUER = "lotus-core.query-service"
-DEFAULT_PAGE_TOKEN_AUDIENCE = "query-service.page-token"
+# JWT issuer/audience metadata, not secrets.
+DEFAULT_PAGE_TOKEN_ISSUER = "lotus-core.query-service"  # nosec B105
+DEFAULT_PAGE_TOKEN_AUDIENCE = "query-service.page-token"  # nosec B105
 
 
 @dataclass(frozen=True)

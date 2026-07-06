@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.services.ingestion_service.app.services import ingestion_publish_commands
 from src.services.ingestion_service.app.services.ingestion_publish_commands import (
     BatchPublishIngestionCommand,
     IngestionPublishBookkeepingFailed,
@@ -11,7 +12,6 @@ from src.services.ingestion_service.app.services.ingestion_publish_commands impo
     IngestionPublishUnavailable,
     SinglePublishIngestionCommand,
 )
-from src.services.ingestion_service.app.services import ingestion_publish_commands
 from src.services.ingestion_service.app.services.ingestion_service import IngestionPublishError
 
 

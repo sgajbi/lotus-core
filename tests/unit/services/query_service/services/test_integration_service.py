@@ -35,13 +35,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
-from src.services.query_service.app.services.integration_policy import (
-    canonical_consumer_system,
-    load_policy,
-    normalize_sections,
-    resolve_consumer_sections,
-    resolve_policy_context,
-)
 from src.services.query_service.app.services.benchmark_reference_integration_service import (
     BenchmarkReferenceIntegrationService,
 )
@@ -57,6 +50,13 @@ from src.services.query_service.app.services.dpm_readiness_integration_service i
 from src.services.query_service.app.services.external_hedge_integration_service import (
     ExternalHedgeIntegrationService,
 )
+from src.services.query_service.app.services.integration_policy import (
+    canonical_consumer_system,
+    load_policy,
+    normalize_sections,
+    resolve_consumer_sections,
+    resolve_policy_context,
+)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -69,12 +69,12 @@ from src.services.query_service.app.services.reference_data_helpers import (
     market_reference_data_quality_status,
 )
 from src.services.query_service.app.services.request_fingerprint import request_fingerprint
-from src.services.query_service.app.services.transaction_economics_integration_service import (
-    TransactionEconomicsIntegrationService,
-)
 from src.services.query_service.app.services.transaction_cost_curve import (
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,
+)
+from src.services.query_service.app.services.transaction_economics_integration_service import (
+    TransactionEconomicsIntegrationService,
 )
 
 

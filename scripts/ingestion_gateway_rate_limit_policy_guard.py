@@ -33,7 +33,9 @@ FORBIDDEN_OBSERVABILITY_LABELS = {
     "payload",
 }
 GATEWAY_WRITE_POLICY_EXCLUDED_ENDPOINTS = {
-    "/ingest/uploads/preview": "preview parse-rate protection is local and not a write-commit endpoint",
+    "/ingest/uploads/preview": (
+        "preview parse-rate protection is local and not a write-commit endpoint"
+    ),
 }
 DOC_REQUIRED_PHRASES = {
     "docs/operations/ingestion-api-gold-standard.md": (

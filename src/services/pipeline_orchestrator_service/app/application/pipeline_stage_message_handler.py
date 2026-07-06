@@ -18,9 +18,9 @@ class PipelineStageUnitOfWork(Protocol):
 
     async def __aexit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
     ) -> bool | None: ...
 
     async def claim_event_processing(

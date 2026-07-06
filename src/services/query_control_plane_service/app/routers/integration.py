@@ -88,15 +88,15 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
+from src.services.query_service.app.services.core_snapshot_governance import (
+    SnapshotGovernanceContext,
+)
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
-)
-from src.services.query_service.app.services.core_snapshot_governance import (
-    SnapshotGovernanceContext,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 

@@ -26,8 +26,8 @@ from portfolio_common.scheduler_dispatch_recovery import (
 from portfolio_common.valuation_job_repository import ValuationJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.valuation_orchestrator_service.app.core.instrument_reprocessing_coordinator import (
-    InstrumentReprocessingCoordinator,
+from src.services.valuation_orchestrator_service.app.core import (
+    instrument_reprocessing_coordinator,
 )
 from src.services.valuation_orchestrator_service.app.core.valuation_backfill_planner import (
     ValuationBackfillPlanner,
@@ -1569,7 +1569,9 @@ async def test_scheduler_creates_persistent_job_from_instrument_trigger(
 
 
 async def test_reprocessing_coordinator_creates_persistent_job_without_scheduler_loop():
-    coordinator = InstrumentReprocessingCoordinator(batch_size=25)
+    coordinator = instrument_reprocessing_coordinator.InstrumentReprocessingCoordinator(
+        batch_size=25
+    )
     mock_repo = AsyncMock(spec=ValuationRepository)
     mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
     triggers = [

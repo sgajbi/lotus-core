@@ -83,7 +83,8 @@ def _write_minimal_repo(repo_root: Path, contract: dict[str, object]) -> Path:
         "SUITES = {'unit': ['tests/unit'], 'e2e-smoke': ['tests/e2e/test_smoke.py']}\n"
         "SUITE_RUNTIME_MODE = {'unit': 'unit', 'e2e-smoke': 'live_worker'}\n"
         "SUITE_ENV_PROFILE = {'unit': 'unit', 'e2e-smoke': 'e2e'}\n"
-        "SUITE_PYTEST_ARGS = {'unit': ['-m', 'not integration_db and not db_direct and not live_worker and not e2e']}\n",
+        "SUITE_PYTEST_ARGS = {'unit': ['-m', "
+        "'not integration_db and not db_direct and not live_worker and not e2e']}\n",
     )
     _write(repo_root / "scripts/__init__.py", "")
     _write(repo_root / "tests/unit/test_demo.py", "def test_demo():\n    assert True\n")

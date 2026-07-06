@@ -6,6 +6,8 @@ from typing import Any
 
 from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand as ReferenceDataRegistryCommand,
+)
+from ..application.reference_data_ingestion_registry import (
     ReferenceDataPayload,
 )
 from ..ops_controls import enforce_ingestion_write_rate_limit
