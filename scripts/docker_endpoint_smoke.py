@@ -266,6 +266,10 @@ def _response_json_or_none(response: requests.Response | None) -> Any:
         return None
 
 
+def _bounded_smoke_window_query(trade_date: str) -> str:
+    return f"start_date={trade_date}&end_date={trade_date}"
+
+
 def _wait_ready(base_url: str, timeout_seconds: int) -> None:
     ready_url = f"{base_url}/health/ready"
     deadline = time.time() + timeout_seconds
@@ -467,6 +471,7 @@ def main() -> int:
     event_replay = args.event_replay_base_url
     query_control = args.query_control_plane_base_url
     ops_headers = {"X-Lotus-Ops-Token": "lotus-core-ops-local"}
+    smoke_window_query = _bounded_smoke_window_query(trade_date)
 
     _call(results, name="ing live", method="GET", url=f"{ingest}/health/live", expected={200})
     _call(results, name="ing ready", method="GET", url=f"{ingest}/health/ready", expected={200})
@@ -1022,7 +1027,10 @@ def main() -> int:
         results,
         name="position history",
         method="GET",
-        url=f"{query}/portfolios/{portfolio_id}/position-history?security_id={security_id}",
+        url=(
+            f"{query}/portfolios/{portfolio_id}/position-history?"
+            f"security_id={security_id}&{smoke_window_query}"
+        ),
         expected={200},
     )
     _call(
@@ -1092,14 +1100,14 @@ def main() -> int:
         results,
         name="prices",
         method="GET",
-        url=f"{query}/prices/?security_id={security_id}",
+        url=f"{query}/prices/?security_id={security_id}&{smoke_window_query}",
         expected={200},
     )
     _call(
         results,
         name="fx rates",
         method="GET",
-        url=f"{query}/fx-rates/?from_currency=USD&to_currency=CHF",
+        url=f"{query}/fx-rates/?from_currency=USD&to_currency=CHF&{smoke_window_query}",
         expected={200},
     )
     _call(
