@@ -127,6 +127,7 @@ def test_runtime_latency_gates_use_bounded_demo_seed_history() -> None:
         workflow_text = workflow_path.read_text(encoding="utf-8")
         assert 'DEMO_DATA_PACK_HISTORY_DAYS: "240"' in workflow_text
         assert 'DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"' in workflow_text
+        assert 'DEMO_DATA_PACK_INGEST_ONLY: "true"' in workflow_text
 
 
 def test_pr_auto_merge_does_not_probe_branch_protection_with_github_token() -> None:
