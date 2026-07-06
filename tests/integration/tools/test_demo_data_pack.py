@@ -79,6 +79,44 @@ def test_build_demo_bundle_rejects_too_short_history_window():
         demo_data_pack.build_demo_bundle(history_days=364)
 
 
+def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
+    bundle = demo_data_pack.build_demo_bundle(
+        history_days=365,
+        portfolio_ids=("DEMO_DPM_EUR_001",),
+    )
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_request_json(method: str, url: str, payload: dict[str, object] | None = None):
+        assert method == "POST"
+        assert payload is not None
+        calls.append((url, payload))
+        return 202, {"status": "accepted"}
+
+    monkeypatch.setattr(demo_data_pack, "_request_json", fake_request_json)
+
+    demo_data_pack._ingest_demo_portfolio_data("http://ingestion", bundle, batch_size=200)
+
+    assert calls[0][0] == "http://ingestion/ingest/portfolio-bundle"
+    assert "market_prices" not in calls[0][1]
+    assert "fx_rates" not in calls[0][1]
+    assert calls[0][1]["portfolios"] == bundle["portfolios"]
+    assert calls[0][1]["transactions"] == bundle["transactions"]
+
+    market_price_batches = [
+        payload["market_prices"]
+        for url, payload in calls
+        if url == "http://ingestion/ingest/market-prices"
+    ]
+    fx_rate_batches = [
+        payload["fx_rates"] for url, payload in calls if url == "http://ingestion/ingest/fx-rates"
+    ]
+
+    assert [len(batch) for batch in market_price_batches] == [200, 200, 200, 186]
+    assert [len(batch) for batch in fx_rate_batches] == [200, 200, 124]
+    assert [row for batch in market_price_batches for row in batch] == bundle["market_prices"]
+    assert [row for batch in fx_rate_batches for row in batch] == bundle["fx_rates"]
+
+
 def test_build_demo_bundle_contains_benchmark_seed_data():
     bundle = demo_data_pack.build_demo_bundle()
 

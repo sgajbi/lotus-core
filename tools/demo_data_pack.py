@@ -19,6 +19,7 @@ LOGGER = logging.getLogger("demo_data_pack")
 DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
 SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
+DEFAULT_BULK_INGEST_BATCH_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -1378,6 +1379,70 @@ def _build_portfolio_bundle_payload(bundle: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _chunk_records(records: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than zero")
+    return [records[index : index + batch_size] for index in range(0, len(records), batch_size)]
+
+
+def _post_batched_ingest_payload(
+    ingestion_base_url: str,
+    *,
+    endpoint: str,
+    payload_key: str,
+    records: list[dict[str, Any]],
+    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
+) -> None:
+    batches = _chunk_records(records, batch_size)
+    for batch_index, batch in enumerate(batches, start=1):
+        LOGGER.info(
+            "Ingesting %s batch %d/%d records=%d.",
+            payload_key,
+            batch_index,
+            len(batches),
+            len(batch),
+        )
+        _request_json("POST", f"{ingestion_base_url}{endpoint}", payload={payload_key: batch})
+
+
+def _ingest_demo_portfolio_data(
+    ingestion_base_url: str,
+    bundle: dict[str, Any],
+    *,
+    batch_size: int = DEFAULT_BULK_INGEST_BATCH_SIZE,
+) -> None:
+    payload = _build_portfolio_bundle_payload(bundle)
+    market_prices = payload.pop("market_prices")
+    fx_rates = payload.pop("fx_rates")
+    LOGGER.info(
+        (
+            "Ingesting demo pack: portfolios=%d instruments=%d transactions=%d "
+            "market_prices=%d fx_rates=%d batch_size=%d"
+        ),
+        len(payload["portfolios"]),
+        len(payload["instruments"]),
+        len(payload["transactions"]),
+        len(market_prices),
+        len(fx_rates),
+        batch_size,
+    )
+    _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
+    _post_batched_ingest_payload(
+        ingestion_base_url,
+        endpoint="/ingest/market-prices",
+        payload_key="market_prices",
+        records=market_prices,
+        batch_size=batch_size,
+    )
+    _post_batched_ingest_payload(
+        ingestion_base_url,
+        endpoint="/ingest/fx-rates",
+        payload_key="fx_rates",
+        records=fx_rates,
+        batch_size=batch_size,
+    )
+
+
 def _ingest_demo_reference_data(ingestion_base_url: str, bundle: dict[str, Any]) -> None:
     reference_payloads = (
         ("/ingest/indices", {"indices": bundle["indices"]}),
@@ -1667,19 +1732,7 @@ def main() -> int:
     demo_bundle = build_demo_bundle(history_days=args.history_days, portfolio_ids=portfolio_ids)
     if not args.verify_only:
         if args.force_ingest or not _all_demo_portfolios_exist(query_base_url, expectations):
-            payload = _build_portfolio_bundle_payload(demo_bundle)
-            LOGGER.info(
-                (
-                    "Ingesting demo pack: portfolios=%d instruments=%d "
-                    "transactions=%d market_prices=%d fx_rates=%d"
-                ),
-                len(payload["portfolios"]),
-                len(payload["instruments"]),
-                len(payload["transactions"]),
-                len(payload["market_prices"]),
-                len(payload["fx_rates"]),
-            )
-            _request_json("POST", f"{ingestion_base_url}/ingest/portfolio-bundle", payload=payload)
+            _ingest_demo_portfolio_data(ingestion_base_url, demo_bundle)
         else:
             LOGGER.info("Demo portfolios already present. Skipping ingestion.")
         _ingest_demo_reference_data(ingestion_base_url, demo_bundle)
