@@ -19,6 +19,7 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
     transaction_id = f"TXN_PQ_{suffix}"
     unpriced_security_id = f"SEC_NO_PRICE_{suffix}"
     price_date = "2025-08-15"
+    raw_series_window = f"start_date={price_date}&end_date={price_date}"
 
     # Ingest one of each entity type using the new client
     e2e_api_client.ingest(
@@ -113,11 +114,11 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
         lambda data: data.get("instruments") and len(data["instruments"]) == 1,
     )
     e2e_api_client.poll_for_data(
-        f"/prices?security_id={security_id}",
+        f"/prices?security_id={security_id}&{raw_series_window}",
         lambda data: data.get("prices") and len(data["prices"]) == 1,
     )
     e2e_api_client.poll_for_data(
-        "/fx-rates?from_currency=USD&to_currency=EUR",
+        f"/fx-rates?from_currency=USD&to_currency=EUR&{raw_series_window}",
         lambda data: data.get("rates") and len(data["rates"]) == 1,
     )
     e2e_api_client.poll_for_data(
@@ -131,6 +132,7 @@ def setup_persistence_data(clean_db_module, e2e_api_client: E2EApiClient):
         "transaction_id": transaction_id,
         "unpriced_security_id": unpriced_security_id,
         "price_date": price_date,
+        "raw_series_window": raw_series_window,
     }
 
 
@@ -156,8 +158,9 @@ def test_instrument_query(setup_persistence_data, e2e_api_client: E2EApiClient):
 
 def test_market_price_query(setup_persistence_data, e2e_api_client: E2EApiClient):
     """Tests that the ingested market price can be queried correctly."""
+    raw_series_window = setup_persistence_data["raw_series_window"]
     api_response = e2e_api_client.query(
-        f"/prices?security_id={setup_persistence_data['security_id']}"
+        f"/prices?security_id={setup_persistence_data['security_id']}&{raw_series_window}"
     )
     data = api_response.json()["prices"][0]
     assert data["price_date"] == setup_persistence_data["price_date"]
@@ -166,7 +169,10 @@ def test_market_price_query(setup_persistence_data, e2e_api_client: E2EApiClient
 
 def test_fx_rate_query(setup_persistence_data, e2e_api_client: E2EApiClient):
     """Tests that the ingested FX rate can be queried correctly."""
-    api_response = e2e_api_client.query("/fx-rates?from_currency=USD&to_currency=EUR")
+    raw_series_window = setup_persistence_data["raw_series_window"]
+    api_response = e2e_api_client.query(
+        f"/fx-rates?from_currency=USD&to_currency=EUR&{raw_series_window}"
+    )
     data = api_response.json()["rates"][0]
     assert data["rate_date"] == setup_persistence_data["price_date"]
     assert float(data["rate"]) == 0.95
@@ -190,7 +196,10 @@ def test_query_prices_for_unpriced_security_returns_empty_list(
     no price data results in a 200 OK with an empty list.
     """
     security_id_with_no_price = setup_persistence_data["unpriced_security_id"]
-    api_response = e2e_api_client.query(f"/prices?security_id={security_id_with_no_price}")
+    raw_series_window = setup_persistence_data["raw_series_window"]
+    api_response = e2e_api_client.query(
+        f"/prices?security_id={security_id_with_no_price}&{raw_series_window}"
+    )
     data = api_response.json()
     assert data["security_id"] == security_id_with_no_price
     assert data["prices"] == []

@@ -8,6 +8,7 @@ from .data_factory import unique_suffix
 def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
     suffix = unique_suffix()
     portfolio_id = f"E2E_FX_{suffix}"
+    first_business_date = "2026-01-02"
     final_business_date = "2026-01-09"
     cash_usd = f"CASH_USD_FX_{suffix}"
     cash_eur = f"CASH_EUR_FX_{suffix}"
@@ -64,7 +65,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
     }
     business_dates_payload = {
         "business_dates": [
-            {"business_date": "2026-01-02"},
+            {"business_date": first_business_date},
             {"business_date": "2026-01-03"},
             {"business_date": "2026-01-06"},
             {"business_date": final_business_date},
@@ -581,6 +582,7 @@ def setup_fx_lifecycle_data(clean_db_module, e2e_api_client: E2EApiClient):
         "cash_usd": cash_usd,
         "cash_eur": cash_eur,
         "cash_gbp": cash_gbp,
+        "first_business_date": first_business_date,
         "final_business_date": final_business_date,
     }
 
@@ -630,9 +632,15 @@ def test_fx_lifecycle_position_history_tracks_contract_open_and_close(
     portfolio_id = setup_fx_lifecycle_data["portfolio_id"]
     forward_contract_id = setup_fx_lifecycle_data["forward_contract_id"]
     swap_contract_id = setup_fx_lifecycle_data["swap_contract_id"]
+    first_business_date = setup_fx_lifecycle_data["first_business_date"]
+    final_business_date = setup_fx_lifecycle_data["final_business_date"]
+    position_history_window = f"start_date={first_business_date}&end_date={final_business_date}"
 
     forward_history = e2e_api_client.poll_for_data(
-        f"/portfolios/{portfolio_id}/position-history?security_id={forward_contract_id}",
+        (
+            f"/portfolios/{portfolio_id}/position-history?"
+            f"security_id={forward_contract_id}&{position_history_window}"
+        ),
         lambda data: len(data.get("positions", [])) >= 2,
         timeout=300,
         fail_message="Forward FX contract history did not materialize.",
@@ -640,7 +648,10 @@ def test_fx_lifecycle_position_history_tracks_contract_open_and_close(
     assert [row["quantity"] for row in forward_history["positions"]] == [1.0, 0.0]
 
     swap_history = e2e_api_client.poll_for_data(
-        f"/portfolios/{portfolio_id}/position-history?security_id={swap_contract_id}",
+        (
+            f"/portfolios/{portfolio_id}/position-history?"
+            f"security_id={swap_contract_id}&{position_history_window}"
+        ),
         lambda data: len(data.get("positions", [])) >= 2,
         timeout=300,
         fail_message="Swap FX contract history did not materialize.",
