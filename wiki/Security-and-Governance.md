@@ -1,5 +1,16 @@
 # Security and Governance
 
+Current scope: implementation-backed `lotus-core` security and governance controls, with links to
+the repository contracts, guards, middleware, and tests that prove them.
+
+## Reader Map
+
+| Reader | Use this page for | Evidence entrypoint |
+| --- | --- | --- |
+| Operations and support | Understand fail-closed runtime posture, health of security controls, and production-profile expectations. | `make security-control-coverage-guard`, `contracts/security/security-control-coverage.v1.json` |
+| Engineers and agents | Place new routes, source products, eventing changes, and auth/audit behavior in the governed layers. | `make lint`, `make architecture-guard`, `make event-runtime-contract-guard` |
+| Risk, governance, and review | Confirm current controls are implementation-backed and identify higher-lane evidence that remains outside this page. | `docs/security.md`, `docs/api-governance.md`, RFC-0082/RFC-0083 architecture docs |
+
 ## Main governance surfaces
 
 - RFC-0082 contract-family placement
