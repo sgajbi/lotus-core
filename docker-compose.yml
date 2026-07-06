@@ -573,6 +573,7 @@ services:
       DEMO_DATA_PACK_POLL_INTERVAL_SECONDS: ${DEMO_DATA_PACK_POLL_INTERVAL_SECONDS:-3}
       DEMO_DATA_PACK_HISTORY_DAYS: ${DEMO_DATA_PACK_HISTORY_DAYS:-1095}
       DEMO_DATA_PACK_PORTFOLIO_IDS: ${DEMO_DATA_PACK_PORTFOLIO_IDS:-}
+      DEMO_DATA_PACK_INGEST_ONLY: ${DEMO_DATA_PACK_INGEST_ONLY:-false}
     depends_on:
       ingestion_service:
         condition: service_healthy
@@ -602,6 +603,10 @@ services:
       if [ -n \"$$DEMO_DATA_PACK_PORTFOLIO_IDS\" ]; then
         portfolio_args=\"--portfolio-ids $$DEMO_DATA_PACK_PORTFOLIO_IDS\";
       fi;
+      ingest_only_args='';
+      if [ \"$$DEMO_DATA_PACK_INGEST_ONLY\" = \"true\" ]; then
+        ingest_only_args=\"--ingest-only\";
+      fi;
       python -m tools.demo_data_pack
       --ingestion-base-url http://ingestion_service:8000
       --query-base-url http://query_service:8001
@@ -611,6 +616,7 @@ services:
       --poll-interval-seconds $$DEMO_DATA_PACK_POLL_INTERVAL_SECONDS
       --history-days $$DEMO_DATA_PACK_HISTORY_DAYS
       $$portfolio_args
+      $$ingest_only_args
       "
     restart: "no"
     networks:

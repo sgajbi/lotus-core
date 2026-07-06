@@ -1706,7 +1706,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Calendar-day lookback window used to generate demo market, FX, benchmark, "
             "and risk-free history. The default preserves the rich app-local demo pack; "
-            "CI latency gates may use a smaller one-year window to reduce unrelated backfill."
+            "CI latency gates may use a smaller bounded window to reduce unrelated backfill."
         ),
     )
     parser.add_argument(
