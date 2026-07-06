@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
 from ..dependencies import (
+    get_ingestion_job_service,  # noqa: F401
     get_ingestion_publish_command_handler,
     require_portfolio_bundle_adapter_enabled,
 )

@@ -3,7 +3,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack, build_single_ack
-from ..dependencies import get_ingestion_publish_command_handler
+from ..dependencies import (
+    get_ingestion_job_service,  # noqa: F401
+    get_ingestion_publish_command_handler,
+)
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse, IngestionAcceptedResponse
 from ..DTOs.transaction_dto import Transaction, TransactionIngestionRequest
 from ..request_metadata import resolve_idempotency_key

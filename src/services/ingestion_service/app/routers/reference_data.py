@@ -8,7 +8,11 @@ from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand,
     ReferenceDataPayload,
 )
-from ..dependencies import get_reference_data_ingestion_command_handler
+from ..dependencies import (
+    get_ingestion_job_service,  # noqa: F401
+    get_reference_data_ingestion_command_handler,
+    get_reference_data_ingestion_service,  # noqa: F401
+)
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reference_data_dto import (
     BenchmarkCompositionIngestionRequest,

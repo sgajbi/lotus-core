@@ -4,7 +4,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
-from ..dependencies import get_ingestion_publish_command_handler
+from ..dependencies import (
+    get_ingestion_job_service,  # noqa: F401
+    get_ingestion_publish_command_handler,
+)
 from ..DTOs.fx_rate_dto import FxRateIngestionRequest
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..request_metadata import resolve_idempotency_key

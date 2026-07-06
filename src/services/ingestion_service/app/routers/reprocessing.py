@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from portfolio_common.logging_utils import operation_log_extra
 
 from ..ack_response import build_batch_ack
-from ..dependencies import get_ingestion_publish_command_handler
+from ..dependencies import (
+    get_ingestion_job_service,  # noqa: F401
+    get_ingestion_publish_command_handler,
+)
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reprocessing_dto import ReprocessingRequest
 from ..request_metadata import resolve_idempotency_key
