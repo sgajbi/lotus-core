@@ -4,23 +4,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
 from ..dependencies import (
-    get_ingestion_service,
+    get_ingestion_publish_command_handler,
     require_portfolio_bundle_adapter_enabled,
 )
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.portfolio_bundle_dto import PortfolioBundleIngestionRequest
-from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (
-    create_ingestion_job_id,
-    get_request_lineage,
-    resolve_idempotency_key,
+from ..request_metadata import resolve_idempotency_key
+from ..services.ingestion_publish_commands import (
+    IngestionPublishBookkeepingFailed,
+    IngestionPublishCommandError,
+    IngestionPublishCommandHandler,
+    IngestionPublishUnavailable,
+    PortfolioBundlePublishIngestionCommand,
 )
-from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from ..services.ingestion_service import (
-    IngestionPublishError,
-    IngestionService,
-)
-from .job_bookkeeping import mark_job_queued_after_publish_or_raise
+from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import (
     ingestion_idempotency_conflict_response,
     ingestion_publish_failed_example,
@@ -95,17 +92,11 @@ async def ingest_portfolio_bundle(
     request: PortfolioBundleIngestionRequest,
     http_request: Request,
     _: None = Depends(require_portfolio_bundle_adapter_enabled),
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    command_handler: IngestionPublishCommandHandler = Depends(
+        get_ingestion_publish_command_handler
+    ),
 ):
     idempotency_key = resolve_idempotency_key(http_request)
-    try:
-        await ingestion_job_service.assert_ingestion_writable()
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
-        ) from exc
     accepted_count = (
         len(request.business_dates)
         + len(request.portfolios)
@@ -115,73 +106,45 @@ async def ingest_portfolio_bundle(
         + len(request.fx_rates)
     )
     try:
-        enforce_ingestion_write_rate_limit(
-            endpoint="/ingest/portfolio-bundle",
-            record_count=accepted_count,
+        result = await command_handler.ingest_portfolio_bundle(
+            PortfolioBundlePublishIngestionCommand(
+                endpoint=str(http_request.url.path),
+                request=request,
+                idempotency_key=idempotency_key,
+                request_payload=request.model_dump(mode="json"),
+                accepted_count=accepted_count,
+            )
         )
-    except PermissionError as exc:
+    except IngestionPublishCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except IngestionPublishUnavailable as exc:
+        raise_ingestion_publish_unavailable(exc.publish_error, job_id=exc.job_id)
+    except IngestionPublishBookkeepingFailed as exc:
         raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=post_publish_bookkeeping_failure_detail(
+                job_id=exc.job_id,
+                failure_phase=exc.failure_phase,
+                publish_state=exc.publish_state,
+                work_state=exc.work_state,
+                published_record_count=exc.published_record_count,
+            ),
         ) from exc
-    job_id = create_ingestion_job_id()
-    correlation_id, request_id, trace_id = get_request_lineage()
-    job_result = await ingestion_job_service.create_or_get_job(
-        job_id=job_id,
-        endpoint=str(http_request.url.path),
-        entity_type="portfolio_bundle",
-        accepted_count=accepted_count,
-        idempotency_key=idempotency_key,
-        correlation_id=correlation_id,
-        request_id=request_id,
-        trace_id=trace_id,
-        request_payload=request.model_dump(mode="json"),
-    )
-    if not job_result.created:
-        return build_batch_ack(
-            message="Duplicate ingestion request accepted via idempotency replay.",
-            entity_type="portfolio_bundle",
-            job_id=job_result.job.job_id,
-            accepted_count=job_result.job.accepted_count,
-            idempotency_key=idempotency_key,
-        )
-    try:
-        published_counts = await ingestion_service.publish_portfolio_bundle(
-            request, idempotency_key=idempotency_key
-        )
-    except IngestionPublishError as exc:
-        await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
-            str(exc),
-            failed_record_keys=exc.failed_record_keys,
-        )
-        raise_ingestion_publish_unavailable(exc, job_id=job_result.job.job_id)
-    except Exception as exc:
-        await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
-        raise
 
-    await mark_job_queued_after_publish_or_raise(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_result.job.job_id,
-        published_record_count=accepted_count,
-    )
-
-    logger.info(
-        "Portfolio bundle queued for ingestion.",
-        extra={
-            "source_system": request.source_system,
-            "mode": request.mode,
-            "published_counts": published_counts,
-            "idempotency_key": idempotency_key,
-        },
-    )
+    if not result.replayed:
+        logger.info(
+            "Portfolio bundle queued for ingestion.",
+            extra={
+                "source_system": request.source_system,
+                "mode": request.mode,
+                "published_counts": (result.metadata or {}).get("published_counts", {}),
+                "idempotency_key": idempotency_key,
+            },
+        )
     return build_batch_ack(
-        message=(
-            "Portfolio bundle accepted for asynchronous ingestion processing. "
-            f"Published counts: {published_counts}"
-        ),
-        entity_type="portfolio_bundle",
-        job_id=job_result.job.job_id,
-        accepted_count=accepted_count,
+        message=result.message,
+        entity_type=result.entity_type,
+        job_id=result.job_id,
+        accepted_count=result.accepted_count,
         idempotency_key=idempotency_key,
     )

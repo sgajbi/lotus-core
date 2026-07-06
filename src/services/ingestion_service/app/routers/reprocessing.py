@@ -5,21 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from portfolio_common.logging_utils import operation_log_extra
 
 from ..ack_response import build_batch_ack
-from ..dependencies import get_ingestion_service
+from ..dependencies import get_ingestion_publish_command_handler
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reprocessing_dto import ReprocessingRequest
-from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (
-    create_ingestion_job_id,
-    get_request_lineage,
-    resolve_idempotency_key,
+from ..request_metadata import resolve_idempotency_key
+from ..services.ingestion_publish_commands import (
+    BatchPublishIngestionCommand,
+    IngestionPublishBookkeepingFailed,
+    IngestionPublishCommandError,
+    IngestionPublishCommandHandler,
+    IngestionPublishUnavailable,
 )
-from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from ..services.ingestion_service import (
-    IngestionPublishError,
-    IngestionService,
-)
-from .job_bookkeeping import mark_job_queued_after_publish_or_raise
+from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import (
     ingestion_conflict_response_with_idempotency_example,
     ingestion_publish_failed_example,
@@ -88,8 +85,9 @@ REPROCESSING_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 async def reprocess_transactions(
     request: ReprocessingRequest,
     http_request: Request,
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    command_handler: IngestionPublishCommandHandler = Depends(
+        get_ingestion_publish_command_handler
+    ),
 ):
     """
     Accepts a list of transaction IDs and publishes a reprocessing request
@@ -99,100 +97,49 @@ async def reprocess_transactions(
     num_to_reprocess = len(ordered_unique_transaction_ids)
     idempotency_key = resolve_idempotency_key(http_request)
     try:
-        await ingestion_job_service.assert_ingestion_writable()
-    except PermissionError as exc:
+        result = await command_handler.ingest_reprocessing_requests(
+            BatchPublishIngestionCommand(
+                endpoint=str(http_request.url.path),
+                entity_type="reprocessing_request",
+                records=ordered_unique_transaction_ids,
+                idempotency_key=idempotency_key,
+                request_payload={"transaction_ids": ordered_unique_transaction_ids},
+                accepted_message=(
+                    f"Successfully queued {num_to_reprocess} transactions for reprocessing."
+                ),
+            )
+        )
+    except IngestionPublishCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except IngestionPublishUnavailable as exc:
+        raise_ingestion_publish_unavailable(exc.publish_error, job_id=exc.job_id)
+    except IngestionPublishBookkeepingFailed as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=post_publish_bookkeeping_failure_detail(
+                job_id=exc.job_id,
+                failure_phase=exc.failure_phase,
+                publish_state=exc.publish_state,
+                work_state=exc.work_state,
+                published_record_count=exc.published_record_count,
+            ),
         ) from exc
-    try:
-        await ingestion_job_service.assert_reprocessing_publish_allowed(num_to_reprocess)
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "INGESTION_REPLAY_BLOCKED", "message": str(exc)},
-        ) from exc
-    try:
-        enforce_ingestion_write_rate_limit(
-            endpoint="/reprocess/transactions",
-            record_count=num_to_reprocess,
-        )
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
-        ) from exc
-    correlation_id, request_id, trace_id = get_request_lineage()
-    job_id = create_ingestion_job_id()
-    job_result = await ingestion_job_service.create_or_get_job(
-        job_id=job_id,
-        endpoint=str(http_request.url.path),
-        entity_type="reprocessing_request",
-        accepted_count=num_to_reprocess,
-        idempotency_key=idempotency_key,
-        correlation_id=correlation_id,
-        request_id=request_id,
-        trace_id=trace_id,
-        request_payload={"transaction_ids": ordered_unique_transaction_ids},
-    )
-    if not job_result.created:
-        return build_batch_ack(
-            message="Duplicate reprocessing request accepted via idempotency replay.",
-            entity_type="reprocessing_request",
-            job_id=job_result.job.job_id,
-            accepted_count=job_result.job.accepted_count,
-            idempotency_key=idempotency_key,
-        )
-    logger.info(
-        "Transaction reprocessing request accepted.",
-        extra=operation_log_extra(
-            event_name="ingestion.reprocessing.request_accepted",
-            operation="ingestion.reprocess_transactions",
-            status="accepted",
-            reason_code="request_accepted",
-            record_count=num_to_reprocess,
-        ),
-    )
 
-    try:
-        await ingestion_service.publish_reprocessing_requests(
-            ordered_unique_transaction_ids,
-            idempotency_key=idempotency_key,
+    if not result.replayed:
+        logger.info(
+            "Transaction reprocessing requests queued.",
+            extra=operation_log_extra(
+                event_name="ingestion.reprocessing.requests_queued",
+                operation="ingestion.reprocess_transactions",
+                status="queued",
+                reason_code="publish_queued",
+                record_count=num_to_reprocess,
+            ),
         )
-    except IngestionPublishError as exc:
-        await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
-            str(exc),
-            failed_record_keys=exc.failed_record_keys,
-        )
-        raise_ingestion_publish_unavailable(exc, job_id=job_result.job.job_id)
-    except Exception as exc:
-        await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
-            str(exc),
-        )
-        raise
-
-    await mark_job_queued_after_publish_or_raise(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_result.job.job_id,
-        published_record_count=num_to_reprocess,
-    )
-
-    logger.info(
-        "Transaction reprocessing requests queued.",
-        extra=operation_log_extra(
-            event_name="ingestion.reprocessing.requests_queued",
-            operation="ingestion.reprocess_transactions",
-            status="queued",
-            reason_code="publish_queued",
-            record_count=num_to_reprocess,
-        ),
-    )
     return build_batch_ack(
-        message=f"Successfully queued {num_to_reprocess} transactions for reprocessing.",
-        entity_type="reprocessing_request",
-        job_id=job_result.job.job_id,
-        accepted_count=num_to_reprocess,
+        message=result.message,
+        entity_type=result.entity_type,
+        job_id=result.job_id,
+        accepted_count=result.accepted_count,
         idempotency_key=idempotency_key,
     )

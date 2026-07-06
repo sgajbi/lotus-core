@@ -4,21 +4,18 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from ..ack_response import build_batch_ack
-from ..dependencies import get_ingestion_service
+from ..dependencies import get_ingestion_publish_command_handler
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.market_price_dto import MarketPriceIngestionRequest
-from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (
-    create_ingestion_job_id,
-    get_request_lineage,
-    resolve_idempotency_key,
+from ..request_metadata import resolve_idempotency_key
+from ..services.ingestion_publish_commands import (
+    BatchPublishIngestionCommand,
+    IngestionPublishBookkeepingFailed,
+    IngestionPublishCommandError,
+    IngestionPublishCommandHandler,
+    IngestionPublishUnavailable,
 )
-from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from ..services.ingestion_service import (
-    IngestionPublishError,
-    IngestionService,
-)
-from .job_bookkeeping import mark_job_queued_after_publish_or_raise
+from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import (
     ingestion_idempotency_conflict_response,
     ingestion_publish_failed_example,
@@ -75,79 +72,47 @@ MARKET_PRICE_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
 async def ingest_market_prices(
     request: MarketPriceIngestionRequest,
     http_request: Request,
-    ingestion_service: IngestionService = Depends(get_ingestion_service),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+    command_handler: IngestionPublishCommandHandler = Depends(
+        get_ingestion_publish_command_handler
+    ),
 ):
     idempotency_key = resolve_idempotency_key(http_request)
     try:
-        await ingestion_job_service.assert_ingestion_writable()
-    except PermissionError as exc:
+        result = await command_handler.ingest_market_prices(
+            BatchPublishIngestionCommand(
+                endpoint=str(http_request.url.path),
+                entity_type="market_price",
+                records=request.market_prices,
+                idempotency_key=idempotency_key,
+                request_payload=request.model_dump(mode="json"),
+                accepted_message="Market prices accepted for asynchronous ingestion processing.",
+            ),
+        )
+    except IngestionPublishCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except IngestionPublishUnavailable as exc:
+        raise_ingestion_publish_unavailable(exc.publish_error, job_id=exc.job_id)
+    except IngestionPublishBookkeepingFailed as exc:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=post_publish_bookkeeping_failure_detail(
+                job_id=exc.job_id,
+                failure_phase=exc.failure_phase,
+                publish_state=exc.publish_state,
+                work_state=exc.work_state,
+                published_record_count=exc.published_record_count,
+            ),
         ) from exc
-    try:
-        enforce_ingestion_write_rate_limit(
-            endpoint="/ingest/market-prices", record_count=len(request.market_prices)
-        )
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
-        ) from exc
-    num_prices = len(request.market_prices)
-    job_id = create_ingestion_job_id()
-    correlation_id, request_id, trace_id = get_request_lineage()
-    job_result = await ingestion_job_service.create_or_get_job(
-        job_id=job_id,
-        endpoint=str(http_request.url.path),
-        entity_type="market_price",
-        accepted_count=num_prices,
-        idempotency_key=idempotency_key,
-        correlation_id=correlation_id,
-        request_id=request_id,
-        trace_id=trace_id,
-        request_payload=request.model_dump(mode="json"),
-    )
-    if not job_result.created:
-        return build_batch_ack(
-            message="Duplicate ingestion request accepted via idempotency replay.",
-            entity_type="market_price",
-            job_id=job_result.job.job_id,
-            accepted_count=job_result.job.accepted_count,
-            idempotency_key=idempotency_key,
-        )
-    logger.info(
-        "Received request to ingest market prices.",
-        extra={"num_prices": num_prices, "idempotency_key": idempotency_key},
-    )
 
-    try:
-        await ingestion_service.publish_market_prices(
-            request.market_prices, idempotency_key=idempotency_key
+    if not result.replayed:
+        logger.info(
+            "Market prices successfully queued.",
+            extra={"num_prices": result.accepted_count},
         )
-    except IngestionPublishError as exc:
-        await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
-            str(exc),
-            failed_record_keys=exc.failed_record_keys,
-        )
-        raise_ingestion_publish_unavailable(exc, job_id=job_result.job.job_id)
-    except Exception as exc:
-        await ingestion_job_service.mark_failed(job_result.job.job_id, str(exc))
-        raise
-
-    await mark_job_queued_after_publish_or_raise(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_result.job.job_id,
-        published_record_count=num_prices,
-    )
-
-    logger.info("Market prices successfully queued.", extra={"num_prices": num_prices})
     return build_batch_ack(
-        message="Market prices accepted for asynchronous ingestion processing.",
-        entity_type="market_price",
-        job_id=job_result.job.job_id,
-        accepted_count=num_prices,
+        message=result.message,
+        entity_type=result.entity_type,
+        job_id=result.job_id,
+        accepted_count=result.accepted_count,
         idempotency_key=idempotency_key,
     )

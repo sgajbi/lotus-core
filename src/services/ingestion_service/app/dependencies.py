@@ -12,6 +12,8 @@ from .repositories.business_calendar_repository import BusinessCalendarRepositor
 from .services.business_date_ingestion_commands import BusinessDateIngestionCommandHandler
 from .services.business_date_ingestion_policy import BusinessDateIngestionPolicy
 from .services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
+from .services.ingestion_publish_commands import IngestionPublishCommandHandler
+from .services.reference_data_ingestion_commands import ReferenceDataIngestionCommandHandler
 from .services.ingestion_service import IngestionService
 from .services.reference_data_ingestion_service import ReferenceDataIngestionService
 
@@ -69,4 +71,26 @@ def get_business_date_ingestion_command_handler(
         ingestion_service=ingestion_service,
         ingestion_job_service=ingestion_job_service,
         business_date_policy=business_date_policy,
+    )
+
+
+def get_ingestion_publish_command_handler(
+    ingestion_service: IngestionService = Depends(get_ingestion_service),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> IngestionPublishCommandHandler:
+    return IngestionPublishCommandHandler(
+        ingestion_service=ingestion_service,
+        ingestion_job_service=ingestion_job_service,
+    )
+
+
+def get_reference_data_ingestion_command_handler(
+    reference_data_service: ReferenceDataIngestionService = Depends(
+        get_reference_data_ingestion_service
+    ),
+    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
+) -> ReferenceDataIngestionCommandHandler:
+    return ReferenceDataIngestionCommandHandler(
+        reference_data_service=reference_data_service,
+        ingestion_job_service=ingestion_job_service,
     )
