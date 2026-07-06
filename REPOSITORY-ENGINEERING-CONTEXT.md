@@ -1577,6 +1577,19 @@ Most relevant current governance:
      `tests/unit/libs/portfolio-common/test_source_lifecycle_predicates.py`,
      `tests/unit/libs/portfolio-common/test_database_models.py`, and the relevant query repository
      tests when introducing a new active/current source-data family.
+126. Backend dependency flow should move in one direction: external consumer -> API/controller/route
+     -> request DTO mapper or command construction -> application use case -> domain model and
+     domain service -> port/interface -> infrastructure adapter -> database, cache, queue, or
+     external API. Ingestion routers must stay at the API/controller layer. Publish-backed
+     transaction, portfolio, instrument, market-price, FX-rate, portfolio-bundle, and reprocessing
+     routes use
+     `IngestionPublishCommandHandler`; reference-data routes use
+     `ReferenceDataIngestionCommandHandler`; business-date ingestion uses
+     `BusinessDateIngestionCommandHandler`. Do not reintroduce job creation, request-lineage
+     resolution, rate-limit enforcement, concrete publish/persist calls, job failure marking, or
+     queue-bookkeeping into these routers. Extend the command-handler/use-case pattern and update
+     `tests/unit/services/ingestion_service/routers/test_ingestion_router_command_boundaries.py`
+     when adding or changing ingestion route families.
 
 ## Context Maintenance Rule
 

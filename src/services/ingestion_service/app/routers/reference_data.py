@@ -8,7 +8,7 @@ from ..application.reference_data_ingestion_registry import (
     ReferenceDataIngestionCommand,
     ReferenceDataPayload,
 )
-from ..dependencies import get_reference_data_ingestion_service
+from ..dependencies import get_reference_data_ingestion_command_handler
 from ..DTOs.ingestion_ack_dto import BatchIngestionAcceptedResponse
 from ..DTOs.reference_data_dto import (
     BenchmarkCompositionIngestionRequest,
@@ -34,17 +34,14 @@ from ..DTOs.reference_data_dto import (
     RiskFreeSeriesIngestionRequest,
     SustainabilityPreferenceProfileIngestionRequest,
 )
-from ..ops_controls import enforce_ingestion_write_rate_limit
-from ..request_metadata import (
-    create_ingestion_job_id,
-    get_request_lineage,
-    resolve_idempotency_key,
+from ..request_metadata import resolve_idempotency_key
+from ..services.reference_data_ingestion_commands import (
+    ReferenceDataBookkeepingFailed,
+    ReferenceDataIngestionCommand as ReferenceDataServiceCommand,
+    ReferenceDataIngestionCommandError,
+    ReferenceDataIngestionCommandHandler,
 )
-from ..services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
-from ..services.reference_data_ingestion_service import (
-    ReferenceDataIngestionService,
-)
-from .job_bookkeeping import mark_job_queued_after_publish_or_raise
+from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import ingestion_idempotency_conflict_response
 
 logger = logging.getLogger(__name__)
@@ -76,81 +73,37 @@ async def _handle_reference_ingestion(
     http_request: Request,
     command: ReferenceDataIngestionCommand,
     request: ReferenceDataPayload,
-    reference_data_service: ReferenceDataIngestionService,
-    ingestion_job_service: IngestionJobService,
+    command_handler: ReferenceDataIngestionCommandHandler,
 ) -> BatchIngestionAcceptedResponse:
     idempotency_key = resolve_idempotency_key(http_request)
-    endpoint = command.endpoint
-    entity_type = command.entity_type
-    accepted_count = command.accepted_count(request)
     try:
-        await ingestion_job_service.assert_ingestion_writable()
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"code": "INGESTION_MODE_BLOCKS_WRITES", "message": str(exc)},
-        ) from exc
-    try:
-        enforce_ingestion_write_rate_limit(endpoint=endpoint, record_count=accepted_count)
-    except PermissionError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "INGESTION_RATE_LIMIT_EXCEEDED", "message": str(exc)},
-        ) from exc
-
-    job_id = create_ingestion_job_id()
-    correlation_id, request_id, trace_id = get_request_lineage()
-    job_result = await ingestion_job_service.create_or_get_job(
-        job_id=job_id,
-        endpoint=str(http_request.url.path),
-        entity_type=entity_type,
-        accepted_count=accepted_count,
-        idempotency_key=idempotency_key,
-        correlation_id=correlation_id,
-        request_id=request_id,
-        trace_id=trace_id,
-        request_payload=command.request_payload(request),
-    )
-    if not job_result.created:
-        return build_batch_ack(
-            message="Duplicate ingestion request accepted via idempotency replay.",
-            entity_type=entity_type,
-            job_id=job_result.job.job_id,
-            accepted_count=job_result.job.accepted_count,
-            idempotency_key=idempotency_key,
+        result = await command_handler.ingest_reference_data(
+            ReferenceDataServiceCommand(
+                endpoint=str(http_request.url.path),
+                idempotency_key=idempotency_key,
+                registry_command=command,
+                request=request,
+            )
         )
-
-    try:
-        await command.persist(reference_data_service, request)
-    except Exception as exc:
-        await ingestion_job_service.mark_failed(
-            job_result.job.job_id,
-            str(exc),
-            failure_phase="persist",
-        )
+    except ReferenceDataIngestionCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ReferenceDataBookkeepingFailed as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "REFERENCE_DATA_PERSIST_FAILED",
-                "message": str(exc),
-                "job_id": job_result.job.job_id,
-            },
+            detail=post_publish_bookkeeping_failure_detail(
+                job_id=exc.job_id,
+                failure_phase=exc.failure_phase,
+                publish_state=exc.publish_state,
+                work_state=exc.work_state,
+                published_record_count=exc.published_record_count,
+            ),
         ) from exc
 
-    await mark_job_queued_after_publish_or_raise(
-        ingestion_job_service=ingestion_job_service,
-        job_id=job_result.job.job_id,
-        failure_phase="persist_bookkeeping",
-        publish_state="not_published",
-        work_state="persisted",
-        published_record_count=0,
-    )
-
     return build_batch_ack(
-        message=f"{entity_type} accepted for asynchronous ingestion processing.",
-        entity_type=entity_type,
-        job_id=job_result.job.job_id,
-        accepted_count=accepted_count,
+        message=result.message,
+        entity_type=result.entity_type,
+        job_id=result.job_id,
+        accepted_count=result.accepted_count,
         idempotency_key=idempotency_key,
     )
 
@@ -189,17 +142,15 @@ REFERENCE_INGESTION_RESPONSES = {
 async def ingest_benchmark_assignments(
     request: PortfolioBenchmarkAssignmentIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_assignment"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -222,17 +173,15 @@ async def ingest_benchmark_assignments(
 async def ingest_model_portfolios(
     request: ModelPortfolioDefinitionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("model_portfolio"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -255,17 +204,15 @@ async def ingest_model_portfolios(
 async def ingest_model_portfolio_targets(
     request: ModelPortfolioTargetIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("model_portfolio_target"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -288,17 +235,15 @@ async def ingest_model_portfolio_targets(
 async def ingest_instrument_eligibility_profiles(
     request: InstrumentEligibilityProfileIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_eligibility_profile"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -322,17 +267,15 @@ async def ingest_instrument_eligibility_profiles(
 async def ingest_mandate_bindings(
     request: DiscretionaryMandateBindingIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("mandate_binding"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -355,17 +298,15 @@ async def ingest_mandate_bindings(
 async def ingest_client_restriction_profiles(
     request: ClientRestrictionProfileIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_restriction_profile"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -389,17 +330,15 @@ async def ingest_client_restriction_profiles(
 async def ingest_sustainability_preference_profiles(
     request: SustainabilityPreferenceProfileIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("sustainability_preference_profile"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -422,17 +361,15 @@ async def ingest_sustainability_preference_profiles(
 async def ingest_client_tax_profiles(
     request: ClientTaxProfileIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_tax_profile"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -456,17 +393,15 @@ async def ingest_client_tax_profiles(
 async def ingest_client_tax_rule_sets(
     request: ClientTaxRuleSetIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_tax_rule_set"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -489,17 +424,15 @@ async def ingest_client_tax_rule_sets(
 async def ingest_client_income_needs_schedules(
     request: ClientIncomeNeedsScheduleIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("client_income_needs_schedule"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -522,17 +455,15 @@ async def ingest_client_income_needs_schedules(
 async def ingest_liquidity_reserve_requirements(
     request: LiquidityReserveRequirementIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("liquidity_reserve_requirement"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -555,17 +486,15 @@ async def ingest_liquidity_reserve_requirements(
 async def ingest_planned_withdrawal_schedules(
     request: PlannedWithdrawalScheduleIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("planned_withdrawal_schedule"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -585,17 +514,15 @@ async def ingest_planned_withdrawal_schedules(
 async def ingest_benchmark_definitions(
     request: BenchmarkDefinitionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_definition"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -615,17 +542,15 @@ async def ingest_benchmark_definitions(
 async def ingest_benchmark_compositions(
     request: BenchmarkCompositionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_composition"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -645,17 +570,15 @@ async def ingest_benchmark_compositions(
 async def ingest_indices(
     request: IndexDefinitionIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_definition"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -675,17 +598,15 @@ async def ingest_indices(
 async def ingest_index_price_series(
     request: IndexPriceSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_price_series"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -705,17 +626,15 @@ async def ingest_index_price_series(
 async def ingest_index_return_series(
     request: IndexReturnSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("index_return_series"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -735,17 +654,15 @@ async def ingest_index_return_series(
 async def ingest_benchmark_return_series(
     request: BenchmarkReturnSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("benchmark_return_series"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -765,17 +682,15 @@ async def ingest_benchmark_return_series(
 async def ingest_risk_free_series(
     request: RiskFreeSeriesIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("risk_free_series"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -795,17 +710,15 @@ async def ingest_risk_free_series(
 async def ingest_classification_taxonomy(
     request: ClassificationTaxonomyIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("classification_taxonomy"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -826,17 +739,15 @@ async def ingest_classification_taxonomy(
 async def ingest_cash_account_masters(
     request: CashAccountMasterIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("cash_account_master"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
 
 
@@ -857,15 +768,13 @@ async def ingest_cash_account_masters(
 async def ingest_instrument_lookthrough_components(
     request: InstrumentLookthroughComponentIngestionRequest,
     http_request: Request,
-    reference_data_service: ReferenceDataIngestionService = Depends(
-        get_reference_data_ingestion_service
+    command_handler: ReferenceDataIngestionCommandHandler = Depends(
+        get_reference_data_ingestion_command_handler
     ),
-    ingestion_job_service: IngestionJobService = Depends(get_ingestion_job_service),
 ) -> BatchIngestionAcceptedResponse:
     return await _handle_reference_ingestion(
         http_request=http_request,
         command=REFERENCE_DATA_INGESTION_REGISTRY.require("instrument_lookthrough_component"),
         request=request,
-        reference_data_service=reference_data_service,
-        ingestion_job_service=ingestion_job_service,
+        command_handler=command_handler,
     )
