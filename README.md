@@ -198,7 +198,7 @@ Primary architecture references:
 | --- | --- |
 | `src/services/query_service/` | Operational read-plane API for portfolio, position, transaction, cash, market, and reporting reads. |
 | `src/services/query_control_plane_service/` | Control-plane and downstream analytics-input, snapshot, simulation, support, lineage, policy, and export contracts. |
-| `src/services/ingestion_service/` | Source-data and adapter write ingress. |
+| `src/services/ingestion_service/` | Source-data and adapter write ingress. Keep routers as HTTP binding/response adapters; put write-mode, rate-limit, idempotent job lifecycle, publish/persist, failure marking, and bookkeeping orchestration behind ingestion command handlers. |
 | `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
 | `src/services/persistence_service/` | Persistence orchestration. |
 | `src/services/calculators/` | Core financial calculators. |

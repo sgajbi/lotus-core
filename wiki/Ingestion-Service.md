@@ -7,6 +7,21 @@
 It owns validation and publish initiation for supported source-data onboarding flows. It does not own
 replay, DLQ remediation, or ingestion-health diagnostics once events are already in the runtime.
 
+Current scope: API-first ingestion, portfolio-bundle onboarding, adapter upload preview/commit,
+reference-data onboarding, and controlled reprocessing initiation. The service is implementation
+backed by route tests, command-handler tests, OpenAPI guards, ingestion contract gates, and the
+architecture boundary guards; unsupported downstream readiness or analytics conclusions belong in
+their owning services.
+
+## Reader Map
+
+| Reader | Use this page for | Evidence path |
+| --- | --- | --- |
+| Operations and support | Decide which ingestion surface to use and where job lifecycle evidence should appear. | Route docs, idempotency diagnostics, operations runbooks, and ingestion job tests. |
+| Engineers | Keep routers thin and put lifecycle orchestration behind application command handlers. | `IngestionPublishCommandHandler`, `ReferenceDataIngestionCommandHandler`, `BusinessDateIngestionCommandHandler`, and router-boundary tests. |
+| API reviewers | Check supported route families and expected failure-mapping posture. | OpenAPI route metadata, ingestion endpoint contract gate, and API surface wiki. |
+| Business/demo readers | Understand what Core can currently onboard without treating ingestion as downstream analytics support. | Supported features, source-data methodology docs, and contract-family evidence. |
+
 ## What it handles
 
 Current router coverage includes:
@@ -41,13 +56,33 @@ Current router coverage includes:
 The service:
 
 1. validates incoming request payloads
-2. applies write-rate protection where the contract requires it
-3. generates or propagates correlation identity
-4. publishes supported source messages to Kafka for downstream processing
-5. records or coordinates ingestion-job evidence for upload-style flows
+2. maps HTTP requests into application commands
+3. applies write-rate protection where the contract requires it
+4. generates or propagates correlation identity
+5. publishes supported source messages to Kafka for downstream processing
+6. records or coordinates ingestion-job evidence for upload-style flows
 
 It is a write boundary, not the durable system of record itself. Canonical persistence happens later
 in `persistence_service`.
+
+## Application Boundary
+
+Ingestion routers are delivery adapters. They should bind FastAPI request data, construct command
+objects, map application exceptions to HTTP responses, and shape acknowledgement DTOs.
+
+Lifecycle orchestration belongs behind application command handlers:
+
+| Route family | Application boundary | Owns |
+| --- | --- | --- |
+| Publish-backed ingestion | `IngestionPublishCommandHandler` | write-mode checks, rate limits, idempotent job create/replay, publish failure marking, and queue bookkeeping for transaction, portfolio, instrument, market-price, FX-rate, portfolio-bundle, and reprocessing commands. |
+| Reference-data ingestion | `ReferenceDataIngestionCommandHandler` | write-mode checks, rate limits, idempotent job create/replay, reference-data persistence, failure marking, and post-persist bookkeeping. |
+| Business-date ingestion | `BusinessDateIngestionCommandHandler` | business-date validation policy plus publish-backed job lifecycle for business-date commands. |
+| Upload ingestion | Upload application services and commands | upload preview/commit parsing, validation, and bounded adapter-mode commit behavior. |
+
+Do not put request lineage creation, concrete publish/persist calls, `create_or_get_job`,
+`mark_failed`, rate-limit enforcement, or queued-state bookkeeping directly into ingestion routers.
+`tests/unit/services/ingestion_service/routers/test_ingestion_router_command_boundaries.py` protects
+the converted router families from regressing.
 
 ## Boundary rules
 
@@ -113,6 +148,8 @@ classification, and lookthrough inputs are upstream canonical data products for 
   truth
 - ingestion job lifecycle transition rules live in the pure domain policy module; persistence
   helpers consume policy-derived expected states instead of owning status strings
+- application command-handler tests cover lifecycle behavior without FastAPI; router tests should
+  prove HTTP binding and response/error mapping only
 
 ## When not to use this page
 
