@@ -1531,6 +1531,7 @@ def _format_verification_state(state: dict[str, Any]) -> str:
 def _verify_portfolio(
     query_base_url: str,
     expected: PortfolioExpectation,
+    as_of_date: str,
     wait_seconds: int,
     poll_interval_seconds: int,
 ) -> dict[str, Any]:
@@ -1567,9 +1568,19 @@ def _verify_portfolio(
         quantity_checks: list[str] = []
         for security_id, expected_quantity in expected.expected_terminal_quantities:
             try:
+                history_params = parse.urlencode(
+                    {
+                        "security_id": security_id,
+                        "start_date": as_of_date,
+                        "end_date": as_of_date,
+                    }
+                )
                 _, history_payload = _request_json(
                     "GET",
-                    f"{query_base_url}/portfolios/{expected.portfolio_id}/position-history?security_id={security_id}",
+                    (
+                        f"{query_base_url}/portfolios/{expected.portfolio_id}"
+                        f"/position-history?{history_params}"
+                    ),
                 )
             except RuntimeError as exc:
                 quantity_checks.append(f"{security_id}:error={exc}")
@@ -1747,6 +1758,7 @@ def main() -> int:
             result = _verify_portfolio(
                 query_base_url,
                 expected,
+                demo_bundle["as_of_date"],
                 args.wait_seconds,
                 args.poll_interval_seconds,
             )

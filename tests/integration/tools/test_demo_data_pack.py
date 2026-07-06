@@ -216,7 +216,9 @@ def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
             }
         if url.endswith("/transactions?limit=200"):
             return 200, {"total": 1}
-        if url.endswith("position-history?security_id=SEC_TEST"):
+        if url.endswith(
+            "position-history?security_id=SEC_TEST&start_date=2026-06-12&end_date=2026-06-12"
+        ):
             return 200, {"positions": [{"position_date": "2026-06-12", "quantity": "9"}]}
         raise AssertionError(f"unexpected url: {url}")
 
@@ -228,6 +230,7 @@ def test_verify_portfolio_timeout_reports_last_observed_state(monkeypatch):
         demo_data_pack._verify_portfolio(
             "http://query",
             expected,
+            "2026-06-12",
             wait_seconds=1,
             poll_interval_seconds=0,
         )
