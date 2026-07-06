@@ -77,9 +77,20 @@ def _write_required_artifacts(root: Path) -> None:
         "def pipeline_outbox_event_payload(): pass\noutbox_event_payload\n",
     )
     _write(
+        root / "src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py",
+        "financial_reconciliation_requested_message\n"
+        "portfolio_day_controls_evaluated_message\n"
+        "portfolio_day_ready_for_valuation_message\n"
+        "transaction_processing_completed_message\n"
+        "pipeline_outbox_event_payload\n",
+    )
+    _write(
         root / "src/services/pipeline_orchestrator_service/app/services/"
         "pipeline_orchestrator_service.py",
-        "pipeline_outbox_event_payload\n",
+        "decide_transaction_stage_readiness\n"
+        "financial_reconciliation_requested_message\n"
+        "portfolio_day_controls_evaluated_message\n"
+        "transaction_processing_completed_message\n",
     )
     _write(
         root / "src/services/query_service/app/read_models.py",
@@ -171,7 +182,12 @@ def test_mapping_anti_corruption_guard_rejects_inline_pipeline_outbox_dump(
     _write(
         tmp_path / "src/services/pipeline_orchestrator_service/app/services/"
         "pipeline_orchestrator_service.py",
-        "pipeline_outbox_event_payload\npayload = outbox_event_payload(event)\n",
+        "decide_transaction_stage_readiness\n"
+        "financial_reconciliation_requested_message\n"
+        "portfolio_day_controls_evaluated_message\n"
+        "transaction_processing_completed_message\n"
+        "pipeline_outbox_event_payload\n"
+        "payload = outbox_event_payload(event)\n",
     )
 
     findings = find_mapping_anti_corruption_findings(tmp_path)
