@@ -21,7 +21,10 @@ def test_integration_lite_suite_includes_lookup_contract_router() -> None:
 
 
 def test_unit_suite_excludes_integration_db_marker() -> None:
-    assert SUITE_PYTEST_ARGS["unit"] == ["-m", "not integration_db"]
+    assert SUITE_PYTEST_ARGS["unit"] == [
+        "-m",
+        "not integration_db and not db_direct and not live_worker and not e2e",
+    ]
 
 
 def test_unit_db_suite_tracks_db_dependent_tests() -> None:

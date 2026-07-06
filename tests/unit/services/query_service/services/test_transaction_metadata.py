@@ -3,6 +3,9 @@ from types import SimpleNamespace
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 
+from src.services.query_service.app.application.transaction_query import (
+    TransactionLedgerFilters,
+)
 from src.services.query_service.app.services.transaction_metadata import (
     TRANSACTION_LEDGER_EMPTY,
     TRANSACTION_LEDGER_INSTRUMENT_REFERENCE_MISSING,
@@ -136,21 +139,21 @@ def test_transaction_ledger_filters_preserve_repository_filter_shape() -> None:
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
         as_of_date=date(2025, 1, 15),
-    ) == {
-        "portfolio_id": "P1",
-        "instrument_id": "I1",
-        "security_id": "S1",
-        "transaction_type": "FX_FORWARD",
-        "component_type": "FX_CONTRACT_OPEN",
-        "linked_transaction_group_id": "LTG-FX-001",
-        "fx_contract_id": "FXC-001",
-        "swap_event_id": "FXSWAP-001",
-        "near_leg_group_id": "FXSWAP-001-NEAR",
-        "far_leg_group_id": "FXSWAP-001-FAR",
-        "start_date": date(2025, 1, 1),
-        "end_date": date(2025, 1, 31),
-        "as_of_date": date(2025, 1, 15),
-    }
+    ) == TransactionLedgerFilters(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_type="FX_FORWARD",
+        component_type="FX_CONTRACT_OPEN",
+        linked_transaction_group_id="LTG-FX-001",
+        fx_contract_id="FXC-001",
+        swap_event_id="FXSWAP-001",
+        near_leg_group_id="FXSWAP-001-NEAR",
+        far_leg_group_id="FXSWAP-001-FAR",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+    )
 
 
 def test_realized_tax_summary_filters_preserve_repository_filter_shape() -> None:
@@ -159,9 +162,9 @@ def test_realized_tax_summary_filters_preserve_repository_filter_shape() -> None
         start_date=date(2025, 1, 1),
         end_date=date(2025, 1, 31),
         as_of_date=date(2025, 1, 15),
-    ) == {
-        "portfolio_id": "P1",
-        "start_date": date(2025, 1, 1),
-        "end_date": date(2025, 1, 31),
-        "as_of_date": date(2025, 1, 15),
-    }
+    ) == TransactionLedgerFilters(
+        portfolio_id="P1",
+        start_date=date(2025, 1, 1),
+        end_date=date(2025, 1, 31),
+        as_of_date=date(2025, 1, 15),
+    )

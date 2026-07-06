@@ -28,6 +28,21 @@ def test_required_bounded_date_window_rejects_missing_bound() -> None:
     assert exc_info.value.source_product == "FxRateSeries"
 
 
+def test_collection_window_validation_error_preserves_traceback_assignment() -> None:
+    exc = CollectionWindowValidationError(
+        code="COLLECTION_WINDOW_REQUIRED",
+        message="window required",
+        source_product="FxRateSeries",
+        start_date=None,
+        end_date=None,
+        max_window_days=3660,
+    )
+
+    exc.__traceback__ = None
+
+    assert str(exc) == "window required"
+
+
 def test_required_bounded_date_window_rejects_reversed_window() -> None:
     with pytest.raises(CollectionWindowValidationError) as exc_info:
         validate_required_bounded_date_window(
