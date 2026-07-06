@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
 from typing import Final
 
 MAX_RAW_SERIES_WINDOW_DAYS: Final[int] = 3660
 
 
-@dataclass(frozen=True, slots=True)
 class CollectionWindowValidationError(ValueError):
-    code: str
-    message: str
-    source_product: str
-    start_date: date | None
-    end_date: date | None
-    max_window_days: int
+    def __init__(
+        self,
+        *,
+        code: str,
+        message: str,
+        source_product: str,
+        start_date: date | None,
+        end_date: date | None,
+        max_window_days: int,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.source_product = source_product
+        self.start_date = start_date
+        self.end_date = end_date
+        self.max_window_days = max_window_days
 
     def __str__(self) -> str:
         return self.message
