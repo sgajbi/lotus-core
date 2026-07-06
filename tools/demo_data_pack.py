@@ -20,6 +20,7 @@ DEFAULT_DEMO_BENCHMARK_ID = "BMK_GLOBAL_BALANCED_60_40"
 SECONDARY_DEMO_BENCHMARK_ID = "BMK_GLOBAL_GROWTH_80_20"
 DEFAULT_DEMO_BENCHMARK_PORTFOLIO_ID = "DEMO_ADV_USD_001"
 DEFAULT_BULK_INGEST_BATCH_SIZE = 100
+MIN_DEMO_HISTORY_DAYS = 240
 
 
 @dataclass(frozen=True)
@@ -481,8 +482,8 @@ def _expectations_for_portfolio_ids(
 def build_demo_bundle(
     *, history_days: int = 365 * 3, portfolio_ids: tuple[str, ...] | None = None
 ) -> dict[str, Any]:
-    if history_days < 365:
-        raise ValueError("Demo data history_days must be at least 365.")
+    if history_days < MIN_DEMO_HISTORY_DAYS:
+        raise ValueError(f"Demo data history_days must be at least {MIN_DEMO_HISTORY_DAYS}.")
     portfolio_ids = _normalize_portfolio_ids(portfolio_ids)
     start_date = date.today() - timedelta(days=history_days)
     end_date = date.today()
