@@ -25,7 +25,11 @@ from src.services.ingestion_service.app.dependencies import (
 )
 from src.services.ingestion_service.app.DTOs.ingestion_job_dto import IngestionJobResponse
 from src.services.ingestion_service.app.main import app
-from src.services.ingestion_service.app.services import business_date_ingestion_commands
+from src.services.ingestion_service.app.services import (
+    business_date_ingestion_commands,
+    ingestion_publish_commands,
+    reference_data_ingestion_commands,
+)
 from src.services.ingestion_service.app.services.business_date_ingestion_policy import (
     BusinessDateIngestionPolicy,
 )
@@ -1436,7 +1440,7 @@ async def test_ingest_portfolios_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        portfolios_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -1580,7 +1584,7 @@ async def test_ingest_single_transaction_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        transactions_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -2006,7 +2010,7 @@ async def test_ingest_transactions_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        transactions_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -2491,7 +2495,7 @@ async def test_ingest_benchmark_assignments_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -2685,7 +2689,7 @@ async def test_ingest_benchmark_definitions_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -2878,7 +2882,7 @@ async def test_ingest_benchmark_compositions_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -3055,7 +3059,7 @@ async def test_ingest_indices_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -3238,7 +3242,7 @@ async def test_ingest_index_price_series_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -3431,7 +3435,7 @@ async def test_ingest_index_return_series_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -3626,7 +3630,7 @@ async def test_ingest_benchmark_return_series_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -3814,7 +3818,7 @@ async def test_ingest_risk_free_series_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -4006,7 +4010,7 @@ async def test_ingest_classification_taxonomy_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -5804,7 +5808,7 @@ async def test_ingest_instruments_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        instruments_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -5928,7 +5932,7 @@ async def test_ingest_market_prices_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        market_prices_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -6051,7 +6055,7 @@ async def test_ingest_fx_rates_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        fx_rates_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -6313,7 +6317,7 @@ async def test_ingest_instrument_lookthrough_components_returns_429_when_rate_li
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -6503,7 +6507,7 @@ async def test_ingest_portfolio_bundle_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        portfolio_bundle_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -7358,7 +7362,7 @@ async def test_reprocess_transactions_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reprocessing_router,
+        ingestion_publish_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
@@ -7981,7 +7985,7 @@ async def test_reference_data_ingestion_returns_429_when_rate_limited(
         raise PermissionError(f"{endpoint} blocked after {record_count} records")
 
     monkeypatch.setattr(
-        reference_data_router,
+        reference_data_ingestion_commands,
         "enforce_ingestion_write_rate_limit",
         _raise_rate_limit,
     )
