@@ -5,8 +5,8 @@ from datetime import date
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from src.services.query_service.app.dtos.integration_dto import InstrumentEnrichmentBulkResponse
 from src.services.query_service.app.dtos import reference_integration_dto
+from src.services.query_service.app.dtos.integration_dto import InstrumentEnrichmentBulkResponse
 from src.services.query_service.app.dtos.reference_integration_dpm_source_readiness_dto import (
     DpmSourceReadinessRequest,
 )

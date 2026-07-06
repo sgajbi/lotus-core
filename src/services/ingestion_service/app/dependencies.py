@@ -13,8 +13,8 @@ from .services.business_date_ingestion_commands import BusinessDateIngestionComm
 from .services.business_date_ingestion_policy import BusinessDateIngestionPolicy
 from .services.ingestion_job_service import IngestionJobService, get_ingestion_job_service
 from .services.ingestion_publish_commands import IngestionPublishCommandHandler
-from .services.reference_data_ingestion_commands import ReferenceDataIngestionCommandHandler
 from .services.ingestion_service import IngestionService
+from .services.reference_data_ingestion_commands import ReferenceDataIngestionCommandHandler
 from .services.reference_data_ingestion_service import ReferenceDataIngestionService
 
 

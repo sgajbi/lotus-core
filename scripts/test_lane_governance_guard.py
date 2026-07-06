@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
 import sys
 import tomllib
-import importlib.util
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path

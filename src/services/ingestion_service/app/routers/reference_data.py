@@ -37,9 +37,11 @@ from ..DTOs.reference_data_dto import (
 from ..request_metadata import resolve_idempotency_key
 from ..services.reference_data_ingestion_commands import (
     ReferenceDataBookkeepingFailed,
-    ReferenceDataIngestionCommand as ReferenceDataServiceCommand,
     ReferenceDataIngestionCommandError,
     ReferenceDataIngestionCommandHandler,
+)
+from ..services.reference_data_ingestion_commands import (
+    ReferenceDataIngestionCommand as ReferenceDataServiceCommand,
 )
 from .job_bookkeeping import post_publish_bookkeeping_failure_detail
 from .publish_errors import ingestion_idempotency_conflict_response

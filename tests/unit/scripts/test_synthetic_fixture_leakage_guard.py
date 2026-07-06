@@ -101,7 +101,10 @@ def test_synthetic_fixture_guard_rejects_personal_and_account_data(tmp_path: Pat
     standard_path = _write_standard(tmp_path, standard)
     _write(
         tmp_path / "tests/fixtures/client.json",
-        '{"client_name":"Jane Client","email":"jane.client@example.com","account_number":"12345678"}',
+        (
+            '{"client_name":"Jane Client","email":"jane.client@example.com",'
+            '"account_number":"12345678"}'
+        ),
     )
 
     findings = guard.evaluate_synthetic_fixture_governance(

@@ -411,7 +411,8 @@ def _validate_ops_auth_settings(settings: IngestionOpsAuthSettings) -> None:
                 "LOTUS_CORE_INGEST_OPS_STATIC_TOKEN_NON_LOCAL_APPROVED: strict profiles cannot "
                 "enable static ingestion ops token fallback unless explicitly approved."
             )
-        if not settings.token_value.strip() or settings.token_value == "lotus-core-ops-local":
+        # Local sentinel is rejected in strict/non-local profiles.
+        if not settings.token_value.strip() or settings.token_value == "lotus-core-ops-local":  # nosec B105
             raise IngestionConfigurationError(
                 "Invalid ingestion service configuration for LOTUS_CORE_INGEST_OPS_TOKEN: "
                 "strict profiles require a non-default static ops token when static token auth is "
@@ -493,10 +494,16 @@ def load_ingestion_service_settings() -> IngestionServiceSettings:
         ),
         ops_auth=IngestionOpsAuthSettings(
             token_required=_env_bool("LOTUS_CORE_INGEST_OPS_TOKEN_REQUIRED", True),
-            token_value=_env_str("LOTUS_CORE_INGEST_OPS_TOKEN", "lotus-core-ops-local"),
+            token_value=_env_str(
+                "LOTUS_CORE_INGEST_OPS_TOKEN",
+                "lotus-core-ops-local",
+            ),
             auth_mode=auth_mode,
             jwt_hs256_secret=_env_str("LOTUS_CORE_INGEST_OPS_JWT_HS256_SECRET", ""),
-            jwt_key_id=_env_str("LOTUS_CORE_INGEST_OPS_JWT_KEY_ID", "local-dev"),
+            jwt_key_id=_env_str(
+                "LOTUS_CORE_INGEST_OPS_JWT_KEY_ID",
+                "local-dev",
+            ),
             jwt_previous_keys=_load_ops_jwt_previous_keys(),
             jwt_issuer=_env_str("LOTUS_CORE_INGEST_OPS_JWT_ISSUER", ""),
             jwt_audience=_env_str("LOTUS_CORE_INGEST_OPS_JWT_AUDIENCE", ""),

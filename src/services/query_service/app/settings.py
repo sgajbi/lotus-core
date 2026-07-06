@@ -15,8 +15,10 @@ from portfolio_common.runtime_settings import env_json_map as shared_env_json_ma
 from portfolio_common.runtime_settings import env_str as shared_env_str
 
 QUERY_SERVICE_NAME = "query service"
-DEFAULT_PAGE_TOKEN_SECRET = "lotus-core-local-dev"
-DEFAULT_PAGE_TOKEN_KEY_ID = "local-dev"
+# Local sentinel rejected in strict/non-local profiles.
+DEFAULT_PAGE_TOKEN_SECRET = "lotus-core-local-dev"  # nosec B105
+# Public local key identifier, not a secret.
+DEFAULT_PAGE_TOKEN_KEY_ID = "local-dev"  # nosec B105
 
 
 def env_bool(name: str, default: bool) -> bool:

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 PUBLISH_BACKED_ROUTERS = [
     "transactions.py",
     "portfolios.py",

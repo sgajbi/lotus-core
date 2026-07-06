@@ -1336,8 +1336,9 @@ class ExternalHedgeExecutionReadinessRequest(BaseModel):
     exposure_currencies: list[str] = Field(
         default_factory=list,
         description=(
-            "Optional exposure currencies to check for treasury readiness. The current source-owner posture remains unavailable until external "
-            "treasury ingestion is certified."
+            "Optional exposure currencies to check for treasury readiness. The current "
+            "source-owner posture remains unavailable until external treasury ingestion is "
+            "certified."
         ),
         examples=[["EUR", "JPY"]],
     )

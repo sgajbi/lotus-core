@@ -47,7 +47,8 @@ DATABASE_URL_RE = re.compile(
 )
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 CLIENT_NAME_JSON_RE = re.compile(
-    r'"(?:client_display_name|client_name)"\s*:\s*"((?!SYNTH_|Synthetic |Example |Demo )[A-Z][a-z]+ [A-Z][a-z]+)"'
+    r'"(?:client_display_name|client_name)"\s*:\s*"'
+    r'((?!SYNTH_|Synthetic |Example |Demo )[A-Z][a-z]+ [A-Z][a-z]+)"'
 )
 CLIENT_NAME_MD_RE = re.compile(
     r"(?i)client display name:\s*`((?!SYNTH_|Synthetic |Example |Demo )[A-Z][a-z]+ [A-Z][a-z]+)`"
@@ -261,7 +262,10 @@ def _validate_fixture_catalog(
             SyntheticFixtureFinding(
                 path=STANDARD_PATH.relative_to(REPO_ROOT).as_posix(),
                 rule="missing-representative-private-banking-fixture",
-                detail="fixture_catalog must include tests/fixtures/private-banking-portfolio-fixture.v1.json",
+                detail=(
+                    "fixture_catalog must include "
+                    "tests/fixtures/private-banking-portfolio-fixture.v1.json"
+                ),
             )
         )
 
