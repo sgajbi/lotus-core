@@ -11,6 +11,7 @@ from scripts.docker_endpoint_smoke import (
     SMOKE_SECURITY_ID,
     SMOKE_TRANSACTION_ID,
     SMOKE_TRANSACTION_ID_2,
+    _bounded_smoke_window_query,
     _wait_expected_status,
     build_smoke_cleanup_sql,
 )
@@ -33,6 +34,12 @@ def test_docker_endpoint_smoke_cleanup_sql_purges_legacy_smoke_rows():
     assert "delete from portfolios where portfolio_id like 'PORT_SMOKE_%';" in sql
     assert "delete from market_prices where security_id like 'SEC_SMOKE_%';" in sql
     assert "delete from transaction_costs where transaction_id like 'TX%_SMOKE_%';" in sql
+
+
+def test_docker_endpoint_smoke_uses_bounded_raw_series_window():
+    assert _bounded_smoke_window_query("2026-07-06") == (
+        "start_date=2026-07-06&end_date=2026-07-06"
+    )
 
 
 def test_wait_expected_status_retries_until_endpoint_is_ready(monkeypatch: pytest.MonkeyPatch):
