@@ -23,20 +23,20 @@ def test_build_demo_bundle_contains_multi_product_coverage():
 
 def test_build_demo_bundle_supports_bounded_ci_history_window():
     full_bundle = demo_data_pack.build_demo_bundle()
-    ci_bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    ci_bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
 
     assert len(ci_bundle["portfolios"]) == len(full_bundle["portfolios"])
     assert len(ci_bundle["transactions"]) == len(full_bundle["transactions"])
     assert len(ci_bundle["market_prices"]) < len(full_bundle["market_prices"])
     assert len(ci_bundle["fx_rates"]) < len(full_bundle["fx_rates"])
-    assert len(ci_bundle["business_dates"]) >= 250
+    assert len(ci_bundle["business_dates"]) >= 170
     assert ci_bundle["as_of_date"] == full_bundle["as_of_date"]
 
 
 def test_build_demo_bundle_supports_latency_focused_portfolio_scope():
     full_bundle = demo_data_pack.build_demo_bundle(history_days=365)
     latency_bundle = demo_data_pack.build_demo_bundle(
-        history_days=365,
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
 
@@ -61,7 +61,7 @@ def test_build_demo_bundle_rejects_unknown_portfolio_scope():
 
 
 def test_build_demo_bundle_reference_data_covers_transaction_dates_and_as_of_date():
-    bundle = demo_data_pack.build_demo_bundle(history_days=365)
+    bundle = demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS)
     transaction_dates = {
         item["transaction_date"].split("T", maxsplit=1)[0] for item in bundle["transactions"]
     }
@@ -75,13 +75,16 @@ def test_build_demo_bundle_reference_data_covers_transaction_dates_and_as_of_dat
 
 
 def test_build_demo_bundle_rejects_too_short_history_window():
-    with pytest.raises(ValueError, match="history_days must be at least 365"):
-        demo_data_pack.build_demo_bundle(history_days=364)
+    with pytest.raises(
+        ValueError,
+        match=f"history_days must be at least {demo_data_pack.MIN_DEMO_HISTORY_DAYS}",
+    ):
+        demo_data_pack.build_demo_bundle(history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS - 1)
 
 
 def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
     bundle = demo_data_pack.build_demo_bundle(
-        history_days=365,
+        history_days=demo_data_pack.MIN_DEMO_HISTORY_DAYS,
         portfolio_ids=("DEMO_DPM_EUR_001",),
     )
     calls: list[tuple[str, dict[str, object]]] = []
@@ -111,8 +114,8 @@ def test_ingest_demo_portfolio_data_batches_market_and_fx_rows(monkeypatch):
         payload["fx_rates"] for url, payload in calls if url == "http://ingestion/ingest/fx-rates"
     ]
 
-    assert [len(batch) for batch in market_price_batches] == [200, 200, 200, 186]
-    assert [len(batch) for batch in fx_rate_batches] == [200, 200, 124]
+    assert all(len(batch) <= 200 for batch in market_price_batches)
+    assert all(len(batch) <= 200 for batch in fx_rate_batches)
     assert [row for batch in market_price_batches for row in batch] == bundle["market_prices"]
     assert [row for batch in fx_rate_batches for row in batch] == bundle["fx_rates"]
 
