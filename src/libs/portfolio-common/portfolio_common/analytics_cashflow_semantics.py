@@ -6,6 +6,7 @@ from typing import Literal
 AnalyticsCashFlowType = Literal[
     "external_flow",
     "internal_trade_flow",
+    "corporate_action_proceeds",
     "income",
     "fee",
     "transfer",
@@ -21,6 +22,7 @@ _STATIC_CASH_FLOW_SEMANTICS: dict[str, tuple[AnalyticsCashFlowType, AnalyticsFlo
     "FX_BUY": ("internal_trade_flow", "internal"),
     "FX_SELL": ("internal_trade_flow", "internal"),
     "INTERNAL": ("internal_trade_flow", "internal"),
+    "CORPORATE_ACTION_PROCEEDS": ("corporate_action_proceeds", "operational"),
     "INCOME": ("income", "operational"),
     "EXPENSE": ("fee", "operational"),
 }
@@ -36,7 +38,12 @@ def normalize_position_flow_amount(*, amount: Decimal, classification: str) -> D
     position-timeseries and analytics payloads.
     """
     classification = str(classification or "").strip().upper()
-    if classification in {"INVESTMENT_OUTFLOW", "INVESTMENT_INFLOW", "INCOME"}:
+    if classification in {
+        "INVESTMENT_OUTFLOW",
+        "INVESTMENT_INFLOW",
+        "CORPORATE_ACTION_PROCEEDS",
+        "INCOME",
+    }:
         return -amount
     return amount
 

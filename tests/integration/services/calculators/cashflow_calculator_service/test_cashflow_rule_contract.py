@@ -92,9 +92,15 @@ def test_cashflow_rule_contract_for_transfer_and_rights_family(db_engine):
         "RIGHTS_REFUND",
         "RIGHTS_SHARE_DELIVERY",
     }
-    income_settlement_types = {"CASH_CONSIDERATION", "CASH_IN_LIEU"}
+    corporate_action_proceeds_types = {"CASH_CONSIDERATION"}
+    legacy_income_settlement_types = {"CASH_IN_LIEU"}
 
-    all_expected = portfolio_transfer_types | ca_transfer_family_types | income_settlement_types
+    all_expected = (
+        portfolio_transfer_types
+        | ca_transfer_family_types
+        | corporate_action_proceeds_types
+        | legacy_income_settlement_types
+    )
     missing = sorted(tx_type for tx_type in all_expected if tx_type not in rules)
     assert not missing, f"Missing cashflow rules for CA/rights transfer family: {missing}"
 
@@ -111,7 +117,13 @@ def test_cashflow_rule_contract_for_transfer_and_rights_family(db_engine):
         # CA transfer family should not be modeled as external investor cash movement.
         assert rule["is_portfolio_flow"] is False
 
-    for tx_type in income_settlement_types:
+    for tx_type in corporate_action_proceeds_types:
+        rule = rules[tx_type]
+        assert rule["classification"] == "CORPORATE_ACTION_PROCEEDS"
+        assert rule["is_position_flow"] is True
+        assert rule["is_portfolio_flow"] is False
+
+    for tx_type in legacy_income_settlement_types:
         rule = rules[tx_type]
         assert rule["classification"] == "INCOME"
         assert rule["is_position_flow"] is True

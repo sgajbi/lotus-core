@@ -327,7 +327,7 @@ def test_calculate_cash_consideration_remains_real_net_cashflow(
         }
     )
     rule = CashflowRule(
-        classification=CashflowClassification.INCOME,
+        classification=CashflowClassification.CORPORATE_ACTION_PROCEEDS,
         timing=CashflowTiming.EOD,
         is_position_flow=True,
         is_portfolio_flow=False,
@@ -336,6 +336,7 @@ def test_calculate_cash_consideration_remains_real_net_cashflow(
     cashflow = CashflowLogic.calculate(event, rule)
 
     assert cashflow.amount == Decimal("275")
+    assert cashflow.classification == "CORPORATE_ACTION_PROCEEDS"
     assert cashflow.currency == "USD"
     assert cashflow.calculation_type == "NET"
     assert cashflow.economic_event_id == "EVT-MIXED-01"
