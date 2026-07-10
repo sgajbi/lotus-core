@@ -78,6 +78,8 @@ def test_transaction_processing_dashboard_covers_cutover_signals() -> None:
         "Processing Failure Rate",
         "Async DB Pool State",
         "Outbox Backlog",
+        "Position Lock Wait p95",
+        "Position Coordination Rate",
     }
     assert "portfolio_transaction_processing_group" in expressions
     assert "portfolio_transaction_replay_request_group" in expressions
@@ -87,6 +89,8 @@ def test_transaction_processing_dashboard_covers_cutover_signals() -> None:
     assert "database_pool_connections" in expressions
     assert "outbox_events_pending" in expressions
     assert "outbox_events_oldest_pending_age_seconds" in expressions
+    assert "position_history_replay_lock_wait_seconds_bucket" in expressions
+    assert "position_recalculation_coordination_total" in expressions
     assert not {
         "portfolio_id",
         "transaction_id",
