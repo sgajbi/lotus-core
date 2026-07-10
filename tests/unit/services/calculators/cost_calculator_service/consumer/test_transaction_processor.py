@@ -29,6 +29,7 @@ from cost_engine.processing.sorter import (
 
 from src.services.calculators.cost_calculator_service.app.transaction_processor import (
     TransactionProcessor,
+    build_transaction_processor,
 )
 
 
@@ -46,6 +47,30 @@ def _transaction(transaction_id: str) -> Transaction:
         portfolio_base_currency="USD",
         transaction_fx_rate=Decimal("1"),
     )
+
+
+def _raw_transaction(
+    transaction_id: str,
+    transaction_date: str,
+    transaction_type: str,
+    quantity: str,
+    gross_amount: str,
+) -> dict[str, object]:
+    return {
+        "transaction_id": transaction_id,
+        "portfolio_id": "P1",
+        "instrument_id": "I1",
+        "security_id": "S1",
+        "transaction_date": transaction_date,
+        "transaction_type": transaction_type,
+        "quantity": quantity,
+        "price": "1",
+        "gross_transaction_amount": gross_amount,
+        "trade_currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": "1",
+        "trade_fee": "0",
+    }
 
 
 @pytest.fixture
@@ -167,6 +192,68 @@ def test_transaction_processor_handles_backdated_insert(
             cost_base=Decimal("800"),
         ),
     }
+
+
+@pytest.mark.parametrize("cost_basis_method", ["FIFO", "AVCO"])
+def test_increment_from_open_lot_checkpoint_matches_full_history(
+    cost_basis_method: str,
+) -> None:
+    prefix = [
+        _raw_transaction("BUY-1", "2026-01-01T10:00:00+00:00", "BUY", "10", "100"),
+        _raw_transaction("BUY-2", "2026-01-02T10:00:00+00:00", "BUY", "20", "240"),
+        _raw_transaction("SELL-1", "2026-01-03T10:00:00+00:00", "SELL", "5", "75"),
+    ]
+    appended_sell = _raw_transaction("SELL-2", "2026-01-04T10:00:00+00:00", "SELL", "10", "160")
+    prefix_processed, prefix_errors, prefix_states = build_transaction_processor(
+        cost_basis_method
+    ).process_transactions([], prefix)
+    assert prefix_errors == []
+
+    source_by_id = {row["transaction_id"]: row for row in prefix}
+    checkpoint = []
+    for source_transaction_id, state in prefix_states.items():
+        source = dict(source_by_id[source_transaction_id])
+        source["quantity"] = state.quantity
+        source["gross_transaction_amount"] = state.cost_local
+        source["net_cost_local"] = state.cost_local
+        source["net_cost"] = state.cost_base
+        checkpoint.append(source)
+
+    incremental_processed, incremental_errors, incremental_states = build_transaction_processor(
+        cost_basis_method
+    ).process_increment(
+        initial_open_lots_raw=checkpoint,
+        new_transactions_raw=[appended_sell],
+    )
+    full_processed, full_errors, full_states = build_transaction_processor(
+        cost_basis_method
+    ).process_transactions([], [*prefix, appended_sell])
+
+    assert incremental_errors == full_errors == []
+    assert [transaction.transaction_id for transaction in incremental_processed] == ["SELL-2"]
+    full_sell = next(
+        transaction for transaction in full_processed if transaction.transaction_id == "SELL-2"
+    )
+    incremental_sell = incremental_processed[0]
+    assert incremental_sell.net_cost_local == full_sell.net_cost_local
+    assert incremental_sell.net_cost == full_sell.net_cost
+    assert incremental_sell.realized_gain_loss_local == full_sell.realized_gain_loss_local
+    assert incremental_sell.realized_gain_loss == full_sell.realized_gain_loss
+    assert sum((state.quantity for state in incremental_states.values()), Decimal(0)) == sum(
+        (state.quantity for state in full_states.values()), Decimal(0)
+    )
+    assert sum((state.cost_local for state in incremental_states.values()), Decimal(0)) == sum(
+        (state.cost_local for state in full_states.values()), Decimal(0)
+    )
+    assert sum((state.cost_base for state in incremental_states.values()), Decimal(0)) == sum(
+        (state.cost_base for state in full_states.values()), Decimal(0)
+    )
+    for source_transaction_id, full_state in full_states.items():
+        incremental_state = incremental_states[source_transaction_id]
+        assert abs(incremental_state.quantity - full_state.quantity) <= Decimal("0.0000000001")
+        assert incremental_state.cost_local == full_state.cost_local
+        assert incremental_state.cost_base == full_state.cost_base
+    assert len(prefix_processed) == 3
 
 
 @patch(
