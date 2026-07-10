@@ -234,15 +234,6 @@ def evaluate_schema(schema: dict, service_name: str) -> list[str]:
 
 
 def service_schemas() -> dict[str, dict]:
-    from src.services.calculators.cashflow_calculator_service.app.web import (
-        app as cashflow_calculator_web_app,
-    )
-    from src.services.calculators.cost_calculator_service.app.web import (
-        app as cost_calculator_web_app,
-    )
-    from src.services.calculators.position_calculator.app.web import (
-        app as position_calculator_web_app,
-    )
     from src.services.calculators.position_valuation_calculator.app.web import (
         app as position_valuation_calculator_web_app,
     )
@@ -257,6 +248,9 @@ def service_schemas() -> dict[str, dict]:
     )
     from src.services.portfolio_aggregation_service.app.web import (
         app as portfolio_aggregation_web_app,
+    )
+    from src.services.portfolio_transaction_processing_service.app.web import (
+        app as portfolio_transaction_processing_web_app,
     )
     from src.services.query_control_plane_service.app.main import app as query_control_plane_app
     from src.services.query_service.app.main import app as query_app
@@ -278,9 +272,9 @@ def service_schemas() -> dict[str, dict]:
         "valuation_orchestrator_service_web": valuation_orchestrator_web_app.openapi(),
         "portfolio_aggregation_service_web": portfolio_aggregation_web_app.openapi(),
         "timeseries_generator_service_web": timeseries_generator_web_app.openapi(),
-        "position_calculator_service_web": position_calculator_web_app.openapi(),
-        "cost_calculator_service_web": cost_calculator_web_app.openapi(),
-        "cashflow_calculator_service_web": cashflow_calculator_web_app.openapi(),
+        "portfolio_transaction_processing_service_web": (
+            portfolio_transaction_processing_web_app.openapi()
+        ),
         "position_valuation_calculator_service_web": (
             position_valuation_calculator_web_app.openapi()
         ),

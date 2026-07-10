@@ -1,15 +1,6 @@
 import pytest
 from fastapi import FastAPI
 
-from src.services.calculators.cashflow_calculator_service.app.web import (
-    app as cashflow_calculator_service_app,
-)
-from src.services.calculators.cost_calculator_service.app.web import (
-    app as cost_calculator_service_app,
-)
-from src.services.calculators.position_calculator.app.web import (
-    app as position_calculator_service_app,
-)
 from src.services.calculators.position_valuation_calculator.app.web import (
     app as position_valuation_calculator_app,
 )
@@ -24,6 +15,9 @@ from src.services.pipeline_orchestrator_service.app.web import (
 )
 from src.services.portfolio_aggregation_service.app.web import (
     app as portfolio_aggregation_service_app,
+)
+from src.services.portfolio_transaction_processing_service.app.web import (
+    app as portfolio_transaction_processing_service_app,
 )
 from src.services.query_control_plane_service.app.main import (
     app as query_control_plane_service_app,
@@ -40,9 +34,10 @@ from tests.test_support.http_middleware_contract import (
 )
 
 SERVICE_APPS: tuple[tuple[str, FastAPI], ...] = (
-    ("cashflow_calculator_service_web", cashflow_calculator_service_app),
-    ("cost_calculator_service_web", cost_calculator_service_app),
-    ("position_calculator_service_web", position_calculator_service_app),
+    (
+        "portfolio_transaction_processing_service_web",
+        portfolio_transaction_processing_service_app,
+    ),
     ("position_valuation_calculator_service_web", position_valuation_calculator_app),
     ("event_replay_service", event_replay_service_app),
     ("financial_reconciliation_service", financial_reconciliation_service_app),
