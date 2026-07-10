@@ -237,7 +237,7 @@ class CashflowRepository:
                 Cashflow.portfolio_id == portfolio_id,
                 cashflow_security_id == security_id,
                 Cashflow.cashflow_date.between(start_date, end_date),
-                Transaction.transaction_type.in_(INCOME_RECOGNITION_TRANSACTION_TYPES),
+                Transaction.transaction_type.in_(sorted(INCOME_RECOGNITION_TRANSACTION_TYPES)),
             )
         )
         result = await self.db.execute(stmt)
