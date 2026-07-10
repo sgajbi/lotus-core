@@ -70,6 +70,12 @@ class CashflowEconomics:
     calculation_type: str
 
 
+@dataclass(frozen=True, slots=True)
+class CashflowLevel:
+    is_position_flow: bool
+    is_portfolio_flow: bool
+
+
 def _normalize_code(value: object, default: str = "") -> str:
     return str(value or default).strip().upper()
 
@@ -194,6 +200,26 @@ def _synthetic_transfer_economics(
     )
 
 
+def _resolve_cashflow_level(
+    transaction: TransactionEvent,
+    rule: "CashflowRuleView",
+) -> CashflowLevel:
+    if _is_linked_cash_account_settlement(transaction):
+        return CashflowLevel(is_position_flow=False, is_portfolio_flow=False)
+    return CashflowLevel(
+        is_position_flow=rule.is_position_flow,
+        is_portfolio_flow=rule.is_portfolio_flow,
+    )
+
+
+def _is_linked_cash_account_settlement(transaction: TransactionEvent) -> bool:
+    return (
+        _normalize_code(transaction.transaction_type) == "ADJUSTMENT"
+        and bool((transaction.originating_transaction_id or "").strip())
+        and _normalize_code(transaction.link_type).endswith("_TO_CASH")
+    )
+
+
 def _signed_by_classification(classification: str, amount: Decimal) -> Decimal:
     sign_factor = CLASSIFICATION_SIGN_FACTORS.get(classification, -1)
     return abs(amount) if sign_factor > 0 else -abs(amount)
@@ -242,6 +268,7 @@ class CashflowLogic:
         """
         transaction_type = _normalize_code(transaction.transaction_type)
         economics = _resolve_cashflow_economics(transaction, rule, transaction_type)
+        level = _resolve_cashflow_level(transaction, rule)
 
         # Create the Cashflow database object
         cashflow = Cashflow(
@@ -254,8 +281,8 @@ class CashflowLogic:
             classification=rule.classification,
             timing=rule.timing,
             calculation_type=economics.calculation_type,
-            is_position_flow=rule.is_position_flow,
-            is_portfolio_flow=rule.is_portfolio_flow,
+            is_position_flow=level.is_position_flow,
+            is_portfolio_flow=level.is_portfolio_flow,
             economic_event_id=transaction.economic_event_id,
             linked_transaction_group_id=transaction.linked_transaction_group_id,
             epoch=epoch or 0,
