@@ -69,9 +69,11 @@ parallelism.
 
 - Repository, workflow, and reconciliation cohort: `30 passed`.
 - PostgreSQL concurrency module: `2 passed in 35.45s`.
+- Repository-native transaction-processing contract: `31 passed in 127.07s`.
 - Dashboard contract: `4 passed`.
 - Ruff and MyPy passed for all touched Python modules.
-- The repository-native transaction-processing contract remains the aggregate acceptance gate.
+- Wiki/docs, strict architecture, domain-layer, dependency-inversion, repository-transaction,
+  modularity, and in-process boundary gates passed.
 
 ## Remaining Deployment Evidence
 
