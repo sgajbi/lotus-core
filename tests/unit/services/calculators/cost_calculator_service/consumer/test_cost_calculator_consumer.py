@@ -1834,6 +1834,7 @@ async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
 
     assert run["summary"]["reconciliation_status"] == "insufficient_cash_basis"
     assert run["summary"]["missing_cash_basis_count"] == 1
+    assert run["summary"]["cash_basis_local"] == "0"
     assert [finding["finding_type"] for finding in findings] == [
         "ca_bundle_a_insufficient_cash_basis"
     ]
