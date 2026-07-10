@@ -1601,7 +1601,12 @@ Most relevant current governance:
      backfill, and failure-isolation profile differs from transaction processing. The authoritative
      migration and rollback gates are in
      `docs/architecture/calculator-runtime-consolidation-decision.md`; the current three-worker
-     topology remains runtime truth until its parity gates pass.
+     topology remains runtime truth until its parity gates pass. The target event anti-corruption
+     boundary is
+     `portfolio_transaction_processing_service.app.delivery.kafka.transaction_event_mapper`:
+     it maps every governed `TransactionEvent` business field into immutable, framework-neutral
+     `BookedTransaction` plus `ProcessTransactionCommand` metadata and fails on field drift. Keep
+     `portfolio_common.events` out of the target domain/application packages.
 
 ## Context Maintenance Rule
 

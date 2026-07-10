@@ -1,0 +1,1 @@
+"""Transaction processing delivery adapters."""

@@ -144,6 +144,14 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         ),
     ),
     DirectImportBoundaryRule(
+        name="transaction processing domain and application must not import event DTOs",
+        source_path_prefixes=(
+            "src/services/portfolio_transaction_processing_service/app/application/",
+            "src/services/portfolio_transaction_processing_service/app/domain/",
+        ),
+        forbidden_module_prefixes=("portfolio_common.events",),
+    ),
+    DirectImportBoundaryRule(
         name="financial reconciliation service must use runtime provider ports",
         source_path_prefixes=(
             "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
