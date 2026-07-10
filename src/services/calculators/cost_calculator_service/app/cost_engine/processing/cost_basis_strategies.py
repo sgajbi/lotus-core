@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict, deque
 from decimal import ROUND_DOWN, Decimal
-from typing import Protocol, cast
+from typing import Protocol
 
 from portfolio_common.decimal_amounts import required_decimal
 
@@ -100,12 +100,12 @@ def _consume_next_fifo_lot(
 
 
 class CostBasisStrategy(Protocol):
-    def add_buy_lot(self, transaction: Transaction): ...
+    def add_buy_lot(self, transaction: Transaction) -> None: ...
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
-    def set_initial_lots(self, transactions: list[Transaction]): ...
+    def set_initial_lots(self, transactions: list[Transaction]) -> None: ...
     def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
 
 
@@ -114,12 +114,13 @@ class FIFOBasisStrategy:
     Implements the First-In, First-Out (FIFO) cost basis method.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._open_lots: dict[tuple[str, str], deque[CostLot]] = defaultdict(deque)
         self._lots_by_transaction_id: dict[str, CostLot] = {}
+        self._available_quantities: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal(0))
         logger.debug("FIFOBasisStrategy initialized.")
 
-    def add_buy_lot(self, transaction: Transaction):
+    def add_buy_lot(self, transaction: Transaction) -> None:
         validated_inputs = _validated_buy_lot_inputs(transaction)
         if validated_inputs is None:
             return
@@ -137,6 +138,7 @@ class FIFOBasisStrategy:
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
         self._lots_by_transaction_id[transaction.transaction_id] = new_lot
+        self._available_quantities[key] += quantity
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
@@ -172,13 +174,14 @@ class FIFOBasisStrategy:
             total_matched_cost_base += matched_cost_base
             total_matched_cost_local += matched_cost_local
             consumed_quantity += matched_quantity
+        self._available_quantities[key] = available_qty - consumed_quantity
         return total_matched_cost_base, total_matched_cost_local, consumed_quantity, None
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)
-        return cast(Decimal, sum(lot.remaining_quantity for lot in self._open_lots[key]))
+        return self._available_quantities[key]
 
-    def set_initial_lots(self, transactions: list[Transaction]):
+    def set_initial_lots(self, transactions: list[Transaction]) -> None:
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
@@ -196,7 +199,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
     with full support for dual-currency calculations.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._holdings: dict[tuple[str, str], dict[str, Decimal]] = defaultdict(
             lambda: {
                 "total_qty": Decimal(0),
@@ -208,7 +211,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         self._open_source_lot_states: dict[str, OpenLotState] = {}
         logger.debug("AverageCostBasisStrategy initialized.")
 
-    def add_buy_lot(self, transaction: Transaction):
+    def add_buy_lot(self, transaction: Transaction) -> None:
         validated_inputs = _validated_buy_lot_inputs(transaction)
         if validated_inputs is None:
             return
@@ -324,7 +327,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         key = (portfolio_id, instrument_id)
         return self._holdings[key]["total_qty"]
 
-    def set_initial_lots(self, transactions: list[Transaction]):
+    def set_initial_lots(self, transactions: list[Transaction]) -> None:
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
