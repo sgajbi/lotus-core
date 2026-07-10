@@ -1,3 +1,4 @@
+from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
@@ -567,6 +568,28 @@ def test_fifo_multi_lot_disposition(fifo_strategy: FIFOBasisStrategy):
     lot_key = ("P1", "FIFO_STOCK")
     assert len(fifo_strategy._open_lots[lot_key]) == 1
     assert fifo_strategy._open_lots[lot_key][0].remaining_quantity == Decimal("30")
+
+
+def test_fifo_available_quantity_does_not_scan_open_lots(
+    fifo_strategy: FIFOBasisStrategy,
+    sample_buy_transaction: Transaction,
+) -> None:
+    class IterationForbiddenDeque(deque):
+        def __iter__(self):
+            raise AssertionError("available quantity must not scan open lots")
+
+    second_buy = sample_buy_transaction.model_copy(update={"transaction_id": "FIFO_BUY_02"})
+    fifo_strategy.add_buy_lot(sample_buy_transaction)
+    fifo_strategy.add_buy_lot(second_buy)
+    lot_key = ("P1", "FIFO_STOCK")
+    fifo_strategy._open_lots[lot_key] = IterationForbiddenDeque(fifo_strategy._open_lots[lot_key])
+
+    assert fifo_strategy.get_available_quantity(*lot_key) == Decimal("200")
+    _, _, consumed_quantity, error = fifo_strategy.consume_sell_quantity(*lot_key, Decimal("40"))
+
+    assert error is None
+    assert consumed_quantity == Decimal("40")
+    assert fifo_strategy.get_available_quantity(*lot_key) == Decimal("160")
 
 
 # --- NEW TEST ---
