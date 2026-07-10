@@ -1,6 +1,6 @@
 # Lotus Core Microservice Boundaries and Trigger Matrix
 
-Last updated: 2026-07-05
+Last updated: 2026-07-10
 Source authority: RFC 081
 
 Runtime-boundary governance: this matrix documents current-state service responsibilities. It is
@@ -16,6 +16,7 @@ Related boundary records:
 4. Runtime-boundary decision catalog: `docs/architecture/runtime-boundary-decision-catalog.json`
 5. In-process modularity standard: `docs/standards/in-process-modularity-package-standard.md`
 6. In-process boundary contract: `docs/standards/in-process-boundary-contract-standard.md`
+7. Calculator consolidation decision: `docs/architecture/calculator-runtime-consolidation-decision.md`
 
 ## How To Read This Matrix
 
@@ -53,7 +54,9 @@ isolation, security, or SLO evidence proves a runtime boundary is needed.
 
 ## Runtime Split Rationale Matrix
 
-All entries below are current-state revalidation, not new runtime split approval.
+This table records current evidence. Cost, cashflow, and position rows now support planned
+consolidation; the remaining historical deployables still require explicit revalidation before
+their runtime boundary is expanded.
 
 | Deployable | Scale Driver | Deployment Cadence Driver | Operations Owner Driver | Persistence Owner Driver | Failure Isolation Driver | Security Boundary Driver |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -61,10 +64,10 @@ All entries below are current-state revalidation, not new runtime split approval
 | `event_replay_service` | Bounded by operator replay volume, not normal transaction throughput. | Changes with remediation workflows and DLQ support tools. | Operator/recovery ownership is distinct from normal ingestion. | Shares ingestion/replay audit state; persistence ownership must remain explicit. | Keeps replay/remediation failures away from normal write and read paths. | Protected operations endpoints require tighter authorization and audit. |
 | `financial_reconciliation_service` | Runs control workloads that may spike after aggregation or replay. | Control logic may evolve independently of calculators. | Financial control ownership is distinct from calculator ownership. | Owns reconciliation run and finding records. | Reconciliation failures should not stop core persistence or calculation consumers. | Control evidence surfaces need operator-only access and audit. |
 | `persistence_service` | Scales with raw domain event persistence volume. | Persistence schema and idempotency behavior can evolve apart from API routes. | Persistence/runtime ownership is event-store focused. | Owns canonical persistence writes. | Persistence lag/failures are isolated from calculators and API read surfaces. | Consumes trusted internal topics; security boundary is mainly event-ingress integrity. |
-| `cost_calculator_service` | Scales with transaction and replay cost-calculation workload. | Cost policy changes may ship independently. | Cost engine ownership is separate from ingestion and read APIs. | Owns cost and lot-state writes. | Cost failures should not block raw persistence. | Internal calculator boundary; no public API exposure. |
-| `cashflow_calculator_service` | Scales with transaction cashflow classification workload. | Cashflow policy changes may ship independently. | Cashflow processing owner is separate from cost and positions. | Owns cashflow writes and rule reads. | Cashflow failures should not block cost or raw persistence. | Internal calculator boundary; no public API exposure. |
+| `cost_calculator_service` | Same booked-transaction/replay volume as cashflow and position; no independent scale evidence. | Cost policy can ship as a bounded module inside one worker. | One transaction-processing operations owner is simpler than three worker owners. | Cost and lot tables remain module-owned behind one unit of work. | Separate runtime failure currently creates partial transaction-processing state; atomic rollback is preferred. | Same internal worker trust boundary as cashflow and position. |
+| `cashflow_calculator_service` | Same booked-transaction/replay volume as cost and position; no independent scale evidence. | Cashflow policy can ship as a bounded module inside one worker. | One transaction-processing operations owner is simpler than three worker owners. | Cashflow tables and rule reads remain module-owned behind one unit of work. | Separate runtime failure currently creates stage-wait/partial state; atomic rollback is preferred. | Same internal worker trust boundary as cost and position. |
 | `pipeline_orchestrator_service` | Scales with stage-state fan-in and readiness events. | Orchestration rules can change independently of calculators. | Stage-gate operations owner is distinct from calculator owners. | Owns pipeline stage state. | Stage-gate failures should be visible without corrupting calculator state. | Internal orchestration boundary; no public API exposure. |
-| `position_calculator_service` | Scales with transaction-to-position mutation volume and replay load. | Position policy changes may ship independently. | Position state owner is separate from cost/cashflow. | Owns position state and history writes. | Position replay/fencing failures should not block raw persistence. | Internal calculator boundary; no public API exposure. |
+| `position_calculator_service` | Same booked-transaction pipeline volume as cost/cashflow; partition ordering, not independent service scale, is the key constraint. | Position policy can ship as a bounded module inside one worker. | One transaction-processing operations owner is simpler than three worker owners. | Position state/history remain module-owned behind the combined unit of work and replay policy. | Ordered replay/fencing stays isolated at module level; normal-path partial completion is removed. | Same internal worker trust boundary as cost and cashflow. |
 | `valuation_orchestrator_service` | Scales with valuation job scheduling, reprocessing, and market-data fan-out. | Job orchestration and reprocessing policy may ship independently. | Valuation orchestration owner is separate from compute worker. | Owns valuation job and reprocessing state. | Scheduler/orchestration failure should not corrupt valuation compute writes. | Internal orchestration boundary; no public API exposure. |
 | `position_valuation_calculator` | Scales with valuation job compute volume. | Compute policy may ship independently of scheduler. | Valuation compute owner is distinct from orchestration. | Mutates valuation fields on position snapshots. | Compute failures should not stop scheduler state management. | Internal worker boundary; no public API exposure. |
 | `timeseries_generator_service` | Scales with valuation snapshot to timeseries materialization volume. | Timeseries generation policy may ship independently. | Timeseries owner is distinct from valuation and aggregation. | Owns position-timeseries writes and aggregation job staging. | Timeseries failures should not corrupt valuation snapshots. | Internal worker boundary; no public API exposure. |
@@ -81,6 +84,35 @@ All entries below are current-state revalidation, not new runtime split approval
 | Ingestion upload parser and validation policy | `ingestion_service` | Upload parsing, validation, preview, commit policy, and publishing are already separated by component and publisher-port boundaries. | Upload throughput, parser resource isolation, or security scanning requirements demand separate operation. |
 | Replay payload dispatch and DTO anti-corruption | `event_replay_service` | Replay payload compatibility belongs beside replay commands while DTO-to-command migration proceeds. | Replay volume or security requirements require isolated replay execution beyond current protected endpoints. |
 | Proof and support evidence builders | Service-local application/support packages | Evidence should be built from application/domain results inside the owning service before considering a proof service. | Proof artifact generation becomes independently scaled, independently owned, or externally published with a distinct support SLO. |
+
+## Transaction Calculator Consolidation Target
+
+Cost, cashflow, and position processing are planned to move into one
+`portfolio_transaction_processing_service` deployable. They remain separate domain/application
+modules coordinated by one `ProcessTransactionUseCase` and one normal-path unit of work. Module
+diagnostics, replay policy, DLQ reasons, metrics, and state ownership remain explicit. The current
+three-service runtime remains authoritative until the decision record's parity gates pass.
+
+`position_valuation_calculator` remains independently deployable because its job-driven compute,
+market-data dependency, scaling, backfill, and failure-isolation profile differs materially from
+transaction processing.
+
+## Enforced Stage Ownership Contracts
+
+| Stage | Owner | Input contract | Output contract | Idempotency and replay | Produced state/read model |
+| --- | --- | --- | --- | --- | --- |
+| Cost processing | `cost_calculator_service` -> target cost module | `transactions.persisted`, `transactions.reprocessing.requested` | `transactions.cost.processed` | Consumer claim plus cost replay policy; preserve transaction epoch and correlation. | Transaction cost, lot state, accrued offsets. |
+| Cashflow processing | `cashflow_calculator_service` -> target cashflow module | `transactions.persisted`, replayed `transactions.cost.processed` where applicable | `cashflows.calculated` | Transport and semantic event fences; rule-backed rerun remains deterministic. | Cashflow rows and rule evidence. |
+| Transaction stage gate | `pipeline_orchestrator_service` | `transactions.cost.processed`, `cashflows.calculated` | `transaction_processing.ready`, `portfolio_security_day.valuation.ready` | `(stage_name, transaction_id, epoch)` ownership; late/duplicate signals cannot emit twice. | Pipeline stage state and readiness evidence. |
+| Position processing | `position_calculator_service` -> target position module | `transaction_processing.ready`, cost-processed replay events | `valuation.snapshot.persisted`, reprocessing requests | Ordered reducer, semantic/transport claim, epoch fence, and backdated replay lock. | Position history, daily snapshots, position state. |
+| Valuation orchestration | `valuation_orchestrator_service` | valuation readiness and market-price facts | `valuation.job.requested` | Job identity, claim lease, epoch, dispatch recovery, and bounded backfill. | Valuation jobs and reprocessing state. |
+| Valuation compute | `position_valuation_calculator` | `valuation.job.requested` | `valuation.snapshot.persisted` | Job-event claim, snapshot mutation transaction, and outbox handoff. | Valued daily position snapshots. |
+| Timeseries and aggregation | `timeseries_generator_service`, `portfolio_aggregation_service` | valuation snapshots and aggregation jobs | `portfolio_day.aggregation.completed` | Upsert/job claim, epoch, stale reset, and completion outbox. | Position and portfolio timeseries. |
+| Financial controls | `financial_reconciliation_service`, `pipeline_orchestrator_service` | aggregation completion and reconciliation completion | reconciliation request and `portfolio_day.controls.evaluated` | Deterministic run key and monotonic control-stage status. | Reconciliation findings and publishability evidence. |
+
+Architecture CI blocks calculator imports of orchestrator/query internals and orchestrator imports
+of calculator/query internals. Event CI also requires every producer and consumer actor to resolve
+to the runtime-boundary catalog.
 
 ## Service Responsibility Map
 

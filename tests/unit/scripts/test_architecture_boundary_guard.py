@@ -1,4 +1,5 @@
 from scripts.architecture_boundary_guard import (
+    DIRECT_IMPORT_BOUNDARY_RULES,
     ApiRouterBoundaryViolation,
     DirectImportBoundaryRule,
     _evaluate_api_router_boundary,
@@ -42,6 +43,68 @@ def test_direct_import_boundary_flags_forbidden_absolute_import(tmp_path, monkey
         "src/services/query_control_plane_service/app/routers/integration.py:1: "
         "test rule: disallowed direct import "
         "'services.query_service.app.repositories.transaction_repository'"
+    ]
+
+
+def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monkeypatch) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "calculators"
+        / "position_calculator"
+        / "app"
+        / "core"
+        / "position_logic.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.pipeline_orchestrator_service.app.services "
+        "import pipeline_orchestrator_service\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports(
+        [source],
+        rules=DIRECT_IMPORT_BOUNDARY_RULES,
+    )
+
+    assert findings == [
+        "src/services/calculators/position_calculator/app/core/position_logic.py:1: "
+        "calculator modules must not import orchestrator or query internals: disallowed direct "
+        "import 'services.pipeline_orchestrator_service.app.services'"
+    ]
+
+
+def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monkeypatch) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "pipeline_orchestrator_service"
+        / "app"
+        / "services"
+        / "pipeline_orchestrator_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.calculators.cost_calculator_service.app.consumer "
+        "import CostCalculatorConsumer\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports(
+        [source],
+        rules=DIRECT_IMPORT_BOUNDARY_RULES,
+    )
+
+    assert findings == [
+        "src/services/pipeline_orchestrator_service/app/services/"
+        "pipeline_orchestrator_service.py:1: orchestrators must not import calculator or query "
+        "internals: disallowed direct import "
+        "'services.calculators.cost_calculator_service.app.consumer'"
     ]
 
 

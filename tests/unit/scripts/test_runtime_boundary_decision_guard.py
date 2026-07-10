@@ -17,8 +17,9 @@ def _record(
     service_path: str = "src/services/example_service",
     status: str = "current-state-revalidation-required",
     decision_record_path: str = "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
+    consolidation_target_service_id: str | None = None,
 ) -> dict[str, object]:
-    return {
+    record: dict[str, object] = {
         "serviceId": service_id,
         "servicePath": service_path,
         "status": status,
@@ -28,6 +29,9 @@ def _record(
         "runtimeBoundaryDrivers": ["current-state"],
         "revalidationOwner": "lotus-core engineering",
     }
+    if consolidation_target_service_id is not None:
+        record["consolidationTargetServiceId"] = consolidation_target_service_id
+    return record
 
 
 def _write_required_governance(root: Path) -> None:
@@ -138,3 +142,38 @@ def test_runtime_boundary_decision_guard_rejects_missing_decision_record(
     findings = find_runtime_boundary_decision_findings(tmp_path)
 
     assert any(finding.rule == "missing-runtime-boundary-decision-record" for finding in findings)
+
+
+def test_runtime_boundary_decision_guard_accepts_planned_baseline_consolidation(
+    tmp_path: Path,
+) -> None:
+    _write_required_governance(tmp_path)
+    _write(tmp_path / "src/services/example_service/Dockerfile", "FROM python:3.13\n")
+    _write_catalog(
+        tmp_path,
+        baseline_paths=["src/services/example_service"],
+        records=[
+            _record(
+                status="runtime-consolidation-planned",
+                consolidation_target_service_id="combined_service",
+            )
+        ],
+    )
+
+    assert find_runtime_boundary_decision_findings(tmp_path) == []
+
+
+def test_runtime_boundary_decision_guard_rejects_missing_consolidation_target(
+    tmp_path: Path,
+) -> None:
+    _write_required_governance(tmp_path)
+    _write(tmp_path / "src/services/example_service/Dockerfile", "FROM python:3.13\n")
+    _write_catalog(
+        tmp_path,
+        baseline_paths=["src/services/example_service"],
+        records=[_record(status="runtime-consolidation-planned")],
+    )
+
+    findings = find_runtime_boundary_decision_findings(tmp_path)
+
+    assert any(finding.rule == "missing-consolidation-target" for finding in findings)

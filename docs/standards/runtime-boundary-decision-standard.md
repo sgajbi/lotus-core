@@ -39,6 +39,11 @@ Future revalidation should either:
 3. plan consolidation if the runtime boundary lacks scaling, ownership, failure-isolation, or
    security evidence.
 
+Use `runtime-consolidation-planned` only for an existing baseline deployable with a named
+`consolidationTargetServiceId` and an implementation-backed decision record. Planned consolidation
+does not authorize deleting the current runtime until compatibility, failure, replay, throughput,
+operability, image provenance, and rollback evidence passes.
+
 ## Enforcement
 
 `make architecture-guard` runs `scripts/runtime_boundary_decision_guard.py`.

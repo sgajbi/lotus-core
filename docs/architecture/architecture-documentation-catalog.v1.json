@@ -86,10 +86,21 @@
       "topics": ["runtime-boundaries", "in-process-modularity", "no-runtime-split"],
       "status": "active",
       "owner": "lotus-core",
-      "freshness_date": "2026-07-05",
-      "related": {"issues": [633], "rfcs": [], "prs": []},
+      "freshness_date": "2026-07-10",
+      "related": {"issues": [468, 633], "rfcs": [], "prs": []},
       "truth_role": "current-state-truth",
-      "summary": "Design-vs-runtime boundary matrix for deployables and no-split-yet decisions."
+      "summary": "Design-vs-runtime boundary matrix, enforced pipeline stage ownership, and the planned transaction-calculator consolidation target."
+    },
+    {
+      "path": "docs/architecture/calculator-runtime-consolidation-decision.md",
+      "type": "runtime-boundary-decision",
+      "topics": ["runtime-boundaries", "calculator-consolidation", "transaction-processing"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-10",
+      "related": {"issues": [468], "rfcs": [81], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Phased decision to consolidate cost, cashflow, and position processing into one deployable while retaining valuation isolation."
     },
     {
       "path": "docs/architecture/runtime-boundary-decision-catalog.json",

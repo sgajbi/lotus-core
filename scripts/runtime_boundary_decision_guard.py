@@ -11,7 +11,13 @@ STANDARD_PATH = Path("docs/standards/runtime-boundary-decision-standard.md")
 PR_TEMPLATE_PATH = Path(".github/pull_request_template.md")
 CURRENT_STATE_STATUS = "current-state-revalidation-required"
 APPROVED_STATUS = "runtime-split-approved"
-VALID_STATUSES = {CURRENT_STATE_STATUS, APPROVED_STATUS, "runtime-split-rejected"}
+CONSOLIDATION_STATUS = "runtime-consolidation-planned"
+VALID_STATUSES = {
+    CURRENT_STATE_STATUS,
+    APPROVED_STATUS,
+    CONSOLIDATION_STATUS,
+    "runtime-split-rejected",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +178,32 @@ def _validate_record(
                 ),
             )
         )
+    if status == CONSOLIDATION_STATUS:
+        if service_path not in baseline_paths:
+            findings.append(
+                RuntimeBoundaryDecisionFinding(
+                    path=service_path,
+                    rule="new-service-cannot-use-consolidation-status",
+                    detail="only an existing baseline deployable can be planned for consolidation",
+                )
+            )
+        target_service_id = _string_field(record, "consolidationTargetServiceId")
+        if target_service_id is None:
+            findings.append(
+                RuntimeBoundaryDecisionFinding(
+                    path=service_path,
+                    rule="missing-consolidation-target",
+                    detail=("runtime-consolidation-planned requires consolidationTargetServiceId"),
+                )
+            )
+        elif target_service_id == _string_field(record, "serviceId"):
+            findings.append(
+                RuntimeBoundaryDecisionFinding(
+                    path=service_path,
+                    rule="invalid-consolidation-target",
+                    detail="consolidation target must differ from the current service id",
+                )
+            )
     for field_name in (
         "serviceId",
         "decisionRecordPath",
