@@ -1765,6 +1765,16 @@ Most relevant current governance:
      combined unit of work and fail closed together. Do not replace AVCO with FIFO subset semantics,
      infer historical checkpoint currency, or claim current historical source evidence before the
      governed backfill passes.
+136. Historical AVCO reconciliation must derive expected state from deterministic canonical
+     transaction-history replay, never from summing potentially stale pool or source rows. Route
+     operator execution through `ReconcileAverageCostPoolsUseCase` and its port; keep CLI/Make as
+     delivery only. Dry-run is default. Candidate traversal is bounded, unique, and deterministic
+     by portfolio/security keyset cursor. Apply one key per database transaction, reconstruct every
+     canonical opening source with bounded bulk upserts, persist pool plus ordering checkpoints,
+     and commit only after source count, quantity, local basis, and base basis all equal replay truth
+     in both source and pool representations. A failed post-write check must roll back and report
+     pre-write persisted evidence with a bounded reason code. Do not publish business events or
+     silently delete unmatched lineage from this maintenance path.
 
 ## Context Maintenance Rule
 

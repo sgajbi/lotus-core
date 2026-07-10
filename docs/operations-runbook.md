@@ -423,6 +423,29 @@ POST /ingestion/jobs/{job_id}/bookkeeping/repair
 The repair command only runs when failure history contains `queue_bookkeeping` or
 `persist_bookkeeping` evidence. It rejects blind repair attempts for unrelated jobs.
 
+## Historical AVCO Reconciliation
+
+Audit historical average-cost pool and source-lot state before calculator runtime cutover:
+
+```bash
+make audit-average-cost-pools AVCO_RECONCILIATION_ARGS="--limit 100 --output output/avco-audit.json"
+```
+
+Dry-run is the default and performs no writes. Review every `drifted` or `failed` assessment. Apply
+only a bounded reviewed scope:
+
+```bash
+make reconcile-average-cost-pools AVCO_RECONCILIATION_ARGS="--portfolio-id PORTFOLIO_ID --limit 100 --output output/avco-apply.json"
+```
+
+Resume with the report's `next_cursor` values using `--after-portfolio-id` and
+`--after-security-id`. Exit code `1` means dry-run drift remains; `2` means at least one key failed;
+`0` means the page was current or successfully reconciled. Each key uses an independent transaction
+and commits only after exact replay/source/pool source-count, quantity, local-basis, and base-basis
+parity. Retain reports with release evidence and rerun portfolio tax-lot source-product
+supportability checks after apply. Never infer completion from a zero exit code on a page that still
+returns `next_cursor`.
+
 ## Escalation
 
 Treat new collection failures, new architecture-boundary violations, new security findings, and new

@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Issue: #468
-Status: Hardened locally; historical backfill and deployed load proof pending
+Status: Hardened locally; historical execution and deployed load proof pending
 
 ## Objective
 
@@ -61,7 +61,8 @@ P&L methodology, or downstream source-lot response contract changed.
 
 ## Remaining Work
 
-Historical AVCO rows require an idempotent backfill that reconstructs pool checkpoints and verifies
-every source quantity/local/base sum before source products are declared current after cutover.
+CR-1480 supplies an idempotent bounded audit/apply command that reconstructs pool checkpoints and
+verifies every source count plus quantity/local/base sum. It still must run against the reviewed
+production-like estate before source products are declared current after cutover.
 Deployed query plans/counts, database p50/p95/p99, lock contention, pool use, Kafka lag, recovery,
 and shutdown drain remain part of #468 capacity certification.

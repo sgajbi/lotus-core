@@ -70,6 +70,14 @@ lineage with set-based exact-residual SQL. Full rebuilds, basis transfers, and u
 actions retain complete snapshots. Existing AVCO portfolios require governed historical backfill
 before source evidence can be declared current after cutover.
 
+Audit historical AVCO state before cutover with `make audit-average-cost-pools`. The command is
+read-only by default, processes a bounded deterministic page, compares both persisted
+representations with canonical replay truth, and returns a machine-readable resume cursor. After
+review, use `make reconcile-average-cost-pools` with a portfolio scope and bounded limit. Each key
+commits independently only after exact source-count, quantity, local-basis, and base-basis
+certification. Retain output reports as release evidence; tool availability does not prove that a
+historical estate has already been reconciled.
+
 ## Mixed corporate-action cash consideration
 
 True cash consideration is processed as a basis disposal, not income. The product marker requires
