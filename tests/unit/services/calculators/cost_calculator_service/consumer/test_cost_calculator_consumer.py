@@ -125,6 +125,11 @@ def cost_calculator_consumer():
 
 
 @pytest.fixture
+def cost_calculation_workflow() -> CostCalculationWorkflow:
+    return CostCalculationWorkflow()
+
+
+@pytest.fixture
 def mock_dependencies():
     """A fixture to patch all external dependencies for a consumer test."""
     mock_repo = AsyncMock(spec=CostCalculatorRepository)
@@ -552,7 +557,7 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
 
 
 async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_incoming(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     prior = MagicMock(transaction_id="BUY-PRIOR")
     incoming = MagicMock(transaction_id="BUY-BACKDATED")
@@ -560,11 +565,11 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
     incoming_event = MagicMock(spec=TransactionEvent)
     later_event = MagicMock(spec=TransactionEvent)
     repository = MagicMock()
-    cost_calculator_consumer._persist_processed_transaction = AsyncMock(
+    cost_calculation_workflow._persist_processed_transaction = AsyncMock(
         side_effect=(incoming_event, later_event)
     )
 
-    events = await cost_calculator_consumer._persist_affected_processed_transactions(
+    events = await cost_calculation_workflow._persist_affected_processed_transactions(
         processed=[prior, incoming, later],
         new_transaction_ids={incoming.transaction_id},
         repo=repository,
@@ -573,7 +578,7 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
     assert events == [incoming_event]
     assert [
         call.kwargs["processed_transaction"].transaction_id
-        for call in cost_calculator_consumer._persist_processed_transaction.await_args_list
+        for call in cost_calculation_workflow._persist_processed_transaction.await_args_list
     ] == ["BUY-BACKDATED", "SELL-LATER"]
 
 
@@ -593,7 +598,7 @@ async def test_recalculation_rejects_historical_engine_error_before_suffix_write
 
 
 async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_missing(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     processed_transaction = MagicMock(
         transaction_id="BUY-MISSING-CANONICAL",
@@ -606,7 +611,7 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
         ValueError,
         match="Canonical transaction row was not found during cost persistence",
     ):
-        await cost_calculator_consumer._persist_processed_transaction(
+        await cost_calculation_workflow._persist_processed_transaction(
             processed_transaction=processed_transaction,
             repo=repository,
         )
@@ -788,41 +793,41 @@ async def test_consumer_sends_negative_core_amount_to_dlq(
 
 
 async def test_transform_event_rejects_post_validation_negative_trade_fee(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
     mock_buy_kafka_message: MagicMock,
 ):
     event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
     event.trade_fee = Decimal("-0.01")
 
     with pytest.raises(ValueError, match="trade_fee"):
-        cost_calculator_consumer._transform_event_for_engine(event)
+        cost_calculation_workflow._transform_event_for_engine(event)
 
 
 async def test_transform_event_rejects_post_validation_negative_fee_component(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
     mock_buy_kafka_message: MagicMock,
 ):
     event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
     event.brokerage = Decimal("-0.01")
 
     with pytest.raises(ValueError, match="brokerage"):
-        cost_calculator_consumer._transform_event_for_engine(event)
+        cost_calculation_workflow._transform_event_for_engine(event)
 
 
 async def test_transform_event_maps_positive_trade_fee_to_brokerage_fee(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
     mock_buy_kafka_message: MagicMock,
 ):
     event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
 
-    transformed = cost_calculator_consumer._transform_event_for_engine(event)
+    transformed = cost_calculation_workflow._transform_event_for_engine(event)
 
     assert transformed["trade_fee"] == "7.50"
     assert transformed["fees"] == {"brokerage": "7.50"}
 
 
 async def test_transform_event_preserves_typed_corporate_action_metadata(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
     mock_buy_kafka_message: MagicMock,
 ) -> None:
     event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
@@ -830,7 +835,7 @@ async def test_transform_event_preserves_typed_corporate_action_metadata(
     event.synthetic_flow_amount_local = Decimal("-1200")
     event.synthetic_flow_amount_base = Decimal("-1450")
 
-    transformed = cost_calculator_consumer._transform_event_for_engine(event)
+    transformed = cost_calculation_workflow._transform_event_for_engine(event)
 
     assert transformed["synthetic_flow_effective_date"] == date(2026, 7, 5)
     assert transformed["synthetic_flow_amount_local"] == Decimal("-1200")
@@ -1145,7 +1150,7 @@ async def test_consumer_defer_when_instrument_reference_missing(
 
 
 async def test_fx_enrichment_normalizes_same_currency_without_lookup(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
     transactions = [
@@ -1156,7 +1161,7 @@ async def test_fx_enrichment_normalizes_same_currency_without_lookup(
         }
     ]
 
-    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency=" USD ",
         repo=repo,
@@ -1169,7 +1174,7 @@ async def test_fx_enrichment_normalizes_same_currency_without_lookup(
 
 
 async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     repo.get_fx_rate_window.return_value = [
@@ -1192,7 +1197,7 @@ async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
         for index, day in enumerate(transaction_dates)
     ]
 
-    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency="SGD",
         repo=repo,
@@ -1211,7 +1216,7 @@ async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
 
 
 async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_pair(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     repo.get_fx_rate_window.side_effect = [
@@ -1236,7 +1241,7 @@ async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_p
         },
     ]
 
-    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency="SGD",
         repo=repo,
@@ -1264,7 +1269,7 @@ async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_p
 
 
 async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_rate(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     repo.get_fx_rate_window.return_value = [
@@ -1272,7 +1277,7 @@ async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_ra
     ]
 
     with pytest.raises(FxRateNotFoundError, match="EUR->SGD"):
-        await cost_calculator_consumer._enrich_transactions_with_fx(
+        await cost_calculation_workflow._enrich_transactions_with_fx(
             transactions=[
                 {
                     "transaction_id": "EUR-BEFORE-FIRST-RATE",
@@ -1468,7 +1473,7 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
 
 
 async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
     processed_event = TransactionEvent(
@@ -1491,7 +1496,7 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
         ValueError,
         match="UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.",
     ):
-        await cost_calculator_consumer._validate_upstream_cash_leg(
+        await cost_calculation_workflow._validate_upstream_cash_leg(
             processed_event=processed_event,
             repo=repo,
         )
@@ -1500,7 +1505,7 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
 
 
 async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
     event = TransactionEvent(
@@ -1525,7 +1530,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         )
     }
 
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="DIVIDEND",
         open_lot_states=open_lot_states,
@@ -1542,7 +1547,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     )
 
     repo.reset_mock()
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="DIVIDEND",
         open_lot_states=open_lot_states,
@@ -1554,7 +1559,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     )
     repo.update_open_lot_states.assert_not_awaited()
 
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="SELL",
         open_lot_states=open_lot_states,
@@ -1571,7 +1576,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     )
 
     repo.reset_mock()
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="SELL",
         open_lot_states=open_lot_states,
@@ -1590,7 +1595,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
 
 
 async def test_update_open_lot_states_applies_average_cost_pool_transition(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     event = TransactionEvent(
@@ -1624,7 +1629,7 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
         explicit_sources_after={},
     )
 
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="SELL",
         open_lot_states={"BUY-1": transition.existing_sources_after},
@@ -1642,7 +1647,7 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
 
 
 async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     event = TransactionEvent(
@@ -1666,7 +1671,7 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
         )
     }
 
-    await cost_calculator_consumer._update_open_lot_states_if_required(
+    await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="DIVIDEND",
         open_lot_states=open_lot_states,
@@ -1903,7 +1908,7 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
 
 
 async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     processed_event = _bundle_a_transaction_event(
         transaction_id="CA-DEM-OUT-01",
@@ -1919,7 +1924,7 @@ async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
         ),
     ]
 
-    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
@@ -1938,7 +1943,7 @@ async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
 
 
 async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     processed_event = _bundle_a_transaction_event(
         transaction_id="CA-DEM-OUT-01",
@@ -1946,7 +1951,7 @@ async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
         net_cost_local="-100",
     )
 
-    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
@@ -1963,7 +1968,7 @@ async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
 
 
 async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     processed_event = _bundle_a_transaction_event(
         transaction_id="CA-DEM-OUT-01",
@@ -1984,7 +1989,7 @@ async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
         ),
     ]
 
-    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
@@ -2003,7 +2008,7 @@ async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
 
 
 async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
 ):
     processed_event = _bundle_a_transaction_event(
         transaction_id="CA-DEM-IN-01",
@@ -2019,12 +2024,12 @@ async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
         ),
         processed_event,
     ]
-    missing_dependencies = cost_calculator_consumer._bundle_a_missing_dependencies(
+    missing_dependencies = cost_calculation_workflow._bundle_a_missing_dependencies(
         processed_event=processed_event,
         group_events=group_events,
     )
 
-    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
@@ -2044,11 +2049,11 @@ async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
 
 
 async def test_bundle_a_reconciliation_key_skips_non_bundle_a_events(
-    cost_calculator_consumer: CostCalculatorConsumer,
+    cost_calculation_workflow: CostCalculationWorkflow,
     mock_buy_kafka_message: MagicMock,
 ):
     event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
     event.linked_transaction_group_id = "LTG-NON-CA"
     event.parent_event_reference = "PARENT-NON-CA"
 
-    assert cost_calculator_consumer._bundle_a_reconciliation_key(event) is None
+    assert cost_calculation_workflow._bundle_a_reconciliation_key(event) is None
