@@ -33,6 +33,12 @@ For an eligible processed transaction event, the service:
 The service also keeps operational rule lookup supportable through cache refresh and invalidation
 behavior rather than requiring a restart for every rule update.
 
+For mixed corporate actions, `CASH_CONSIDERATION` produces a positive position-level product flow
+classified as `CORPORATE_ACTION_PROCEEDS`; it is not income-since-inception. The real cash-account
+movement is the linked `ADJUSTMENT`. A linked settlement flow is persisted for cash-position
+accounting but has both position-flow and portfolio-flow flags disabled, preventing the settlement
+record from double counting the product economics.
+
 ## Data it owns
 
 Primary durable outputs include:
