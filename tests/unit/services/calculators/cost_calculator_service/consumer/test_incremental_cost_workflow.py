@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.cost_basis import CostBasisMethod
@@ -109,14 +109,24 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         MagicMock(cost_basis_method="FIFO"),
     )
 
-    calculation = await workflow._calculate_cost_engine(
-        event=sell_event,
-        event_transaction_type=sell_type,
-        portfolio_base_currency="USD",
-        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
-        repo=repo,
-        cost_basis_method=method,
-    )
+    with (
+        patch(
+            "src.services.calculators.cost_calculator_service.app.consumer."
+            "COST_PROCESSING_EXECUTION_TOTAL"
+        ) as execution_metric,
+        patch(
+            "src.services.calculators.cost_calculator_service.app.consumer."
+            "COST_PROCESSING_OPEN_LOTS_RESTORED"
+        ) as restore_metric,
+    ):
+        calculation = await workflow._calculate_cost_engine(
+            event=sell_event,
+            event_transaction_type=sell_type,
+            portfolio_base_currency="USD",
+            instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+            repo=repo,
+            cost_basis_method=method,
+        )
 
     assert calculation.incremental is True
     assert calculation.errored == []
@@ -124,6 +134,10 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("6")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("60")
     repo.get_transaction_history.assert_not_awaited()
+    execution_metric.labels.assert_called_once_with(mode="ordered_append", cost_basis_method="FIFO")
+    execution_metric.labels.return_value.inc.assert_called_once_with()
+    restore_metric.labels.assert_called_once_with(cost_basis_method="FIFO")
+    restore_metric.labels.return_value.observe.assert_called_once_with(1)
 
 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
@@ -139,19 +153,23 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     )
     repo.get_transaction_history.return_value = [_persisted_buy("BUY-LATER", later_date)]
 
-    calculation = await workflow._calculate_cost_engine(
-        event=_event(
-            transaction_id="BUY-EARLIER",
-            transaction_date=earlier_date,
-            transaction_type="BUY",
-            quantity="5",
-        ),
-        event_transaction_type="BUY",
-        portfolio_base_currency="USD",
-        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
-        repo=repo,
-        cost_basis_method=CostBasisMethod.FIFO,
-    )
+    with patch(
+        "src.services.calculators.cost_calculator_service.app.consumer."
+        "COST_PROCESSING_EXECUTION_TOTAL"
+    ) as execution_metric:
+        calculation = await workflow._calculate_cost_engine(
+            event=_event(
+                transaction_id="BUY-EARLIER",
+                transaction_date=earlier_date,
+                transaction_type="BUY",
+                quantity="5",
+            ),
+            event_transaction_type="BUY",
+            portfolio_base_currency="USD",
+            instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+            repo=repo,
+            cost_basis_method=CostBasisMethod.FIFO,
+        )
 
     assert calculation.incremental is False
     assert calculation.errored == []
@@ -160,3 +178,4 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         "BUY-LATER",
     ]
     repo.get_transaction_history.assert_awaited_once()
+    execution_metric.labels.assert_called_once_with(mode="full_rebuild", cost_basis_method="FIFO")
