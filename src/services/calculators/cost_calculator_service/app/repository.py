@@ -1,7 +1,7 @@
 # services/calculators/cost_calculator_service/app/repository.py
 from datetime import date
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
@@ -19,10 +19,12 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
+from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
 
@@ -200,25 +202,50 @@ class CostCalculatorRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    async def get_fx_rate(
-        self, from_currency: str, to_currency: str, a_date: date
-    ) -> Optional[FxRate]:
-        """Fetches the latest FX rate on or before a given date."""
+    async def get_fx_rate_window(
+        self,
+        from_currency: str,
+        to_currency: str,
+        *,
+        start_date: date,
+        end_date: date,
+    ) -> list[EffectiveFxRate]:
+        """Fetch the effective-rate seed and all pair rates inside a date window."""
+        if start_date > end_date:
+            raise ValueError("FX rate window start_date must be on or before end_date")
+
         normalized_from_currency = normalize_currency_code(from_currency)
         normalized_to_currency = normalize_currency_code(to_currency)
         from_currency_expr = func.upper(func.trim(FxRate.from_currency))
         to_currency_expr = func.upper(func.trim(FxRate.to_currency))
+        prior_rate = aliased(FxRate)
+        prior_rate_date = (
+            select(func.max(prior_rate.rate_date))
+            .where(
+                func.upper(func.trim(prior_rate.from_currency)) == normalized_from_currency,
+                func.upper(func.trim(prior_rate.to_currency)) == normalized_to_currency,
+                prior_rate.rate_date < start_date,
+            )
+            .scalar_subquery()
+        )
         stmt = (
             select(FxRate)
-            .filter(
+            .where(
                 from_currency_expr == normalized_from_currency,
                 to_currency_expr == normalized_to_currency,
-                FxRate.rate_date <= a_date,
+                FxRate.rate_date <= end_date,
+                or_(
+                    FxRate.rate_date >= start_date,
+                    FxRate.rate_date == prior_rate_date,
+                ),
             )
-            .order_by(FxRate.rate_date.desc())
+            .order_by(FxRate.rate_date.asc())
         )
         result = await self.db.execute(stmt)
-        return result.scalars().first()
+        return [
+            EffectiveFxRate(effective_date=row.rate_date, rate=row.rate)
+            for row in result.scalars().all()
+        ]
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: Optional[str] = None
@@ -244,7 +271,7 @@ class CostCalculatorRepository:
         )
 
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[DBTransaction], result.scalars().all())
 
     async def update_transaction_costs(
         self, transaction_result: EngineTransaction

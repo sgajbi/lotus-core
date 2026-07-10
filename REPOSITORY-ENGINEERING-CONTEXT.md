@@ -1685,6 +1685,15 @@ Most relevant current governance:
      PR Merge Gate and Main Releasability run this manifest-owned suite as blocking evidence.
      Do not add the target to Compose-backed CI service sets until the atomic deployment slice also
      removes cost, cashflow, and position legacy workers from those sets.
+130. Full-history cost FX enrichment must batch authoritative effective-dated reads by normalized
+     `(trade_currency, portfolio_base_currency)` pair. For `N` cross-currency transactions over `P`
+     distinct pairs, issue `P` indexed seed-plus-window queries, then select the latest rate on or
+     before each transaction date from immutable `EffectiveFxRate` domain records. Do not return
+     SQLAlchemy `FxRate` rows from new repository methods, issue per-transaction FX queries, cache
+     effective rates without explicit freshness/invalidation ownership, or substitute a future,
+     default, or inferred rate when the seed is missing. Same-currency rows require no FX read.
+     Preserve the deterministic full-history methodology until long-history capacity evidence or a
+     parity-proven incremental-state decision supports changing it.
 
 ## Context Maintenance Rule
 

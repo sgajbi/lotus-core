@@ -12,6 +12,7 @@ tests move with their owning module; they are not deleted merely because a servi
 ## Status Vocabulary
 
 - `implemented-local`: target replacement exists and has focused proof.
+- `partial`: a measured risk is reduced, but cutover evidence or migration work remains.
 - `required`: must change before target runtime cutover.
 - `compatibility`: retain until downstream/replay parity permits removal.
 - `candidate`: investigate usage and migration impact before deciding.
@@ -50,6 +51,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Target image package and CI release enrollment | implemented-local | CR-1460; bounded source closure avoids legacy wheel collisions, runs non-root, carries OCI/version metadata, and enters CI prebuild/release/Dependabot inventories. Release evidence is pending. |
 | Bounded module outcome and latency metrics | implemented-local | CR-1461; observer port plus Prometheus adapter attributes live/replay, idempotency, cost, cashflow, position, and commit outcomes without business-identifier labels. |
 | Target health-only security coverage | implemented-local | CR-1462; explicit shared-bootstrap, no-business-route, payload/upload, and unauthenticated operational allowlist contract with focused proof. |
+| Batched effective-dated cost FX reads | implemented-local | CR-1466; full-history replay performs one indexed seed-plus-window query per normalized currency pair and maps persistence rows to immutable domain records. |
 
 ## Required Before Runtime Cutover
 
@@ -59,7 +61,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Backdated cost correction persistence | implemented-local | CR-1463 atomically persists the deterministic affected suffix while publishing only the incoming event; CR-1464 proves FIFO, AVCO, fee-bearing multi-lot, cross-currency local/base, rollback, position epoch/basis, fee cardinality, and event count. | Runtime capacity and cutover gates remain; no stale future cost rows remain in the governed variants. |
 | Replay request path | required | CR-1450 through CR-1456 implement the path, duplicate parity, and target inline backdated epoch rebuild without activation. Existing shared/target tests cover publisher partial failure, flush timeout, retry exhaustion, DLQ, and offset handling. Add explicit ordering, throttle, and backlog proof. | Replay ordering, duplicate, partial-publish, epoch, throttle, and backlog tests pass. |
 | Historical AVCO lot evidence | required | Reconcile/backfill existing AVCO `position_lot_state` open quantities and current cost bases before treating tax-lot source products as current after cutover. | Idempotent migration, row-count/value reconciliation, rollback, and source-product supportability evidence pass. |
-| Cost-history runtime complexity | required | Characterize `CostCalculatorRepository.get_transaction_history` full portfolio/security scans under long histories. Introduce incremental state only if FIFO, AVCO, backdated, fee/FX, multi-lot, and corporate-action parity proves identical results. | Query-count/explain/load evidence meets target without weakening deterministic replay; otherwise retain full-history correctness with explicit capacity limits and diagnostics. |
+| Cost-history runtime complexity | partial | CR-1466 removes the FX N+1 pattern: `N` cross-currency timeline rows now require `P` bounded reads for `P` distinct normalized pairs. Characterize `CostCalculatorRepository.get_transaction_history` full portfolio/security scans and engine CPU/memory under long histories. Introduce incremental state only if FIFO, AVCO, backdated, fee/FX, multi-lot, and corporate-action parity proves identical results. | Query-count/explain/load evidence meets target without weakening deterministic replay; otherwise retain full-history correctness with explicit capacity limits and diagnostics. |
 | Throughput and capacity | required | Measure events/second, p50/p95/p99, DB pool utilization, query count, Kafka lag, failure recovery, and shutdown drain against three-service baseline. | No material regression; bounded in-flight and per-portfolio ordering proven. |
 | Aggregate observability | partial | CR-1457 makes task exits attributable, CR-1458 proves readiness/build metadata, and CR-1461 adds bounded module outcome/error/latency metrics. Add consumer lag, DB/Kafka/outbox diagnostics, traces, dashboard/alerts, and final support runbook. | Observability contract and failure-injection tests pass. |
 | Target image | required | CR-1460 adds the bounded non-root image, dependency definition, OCI/version metadata, and CI release enrollment. Rebuild from the committed SHA and obtain the CI release evidence. | Image SHA label/tag, repo/branch/build/run metadata, digest manifest, SBOM, scan, signature, attestation, no build secrets. |

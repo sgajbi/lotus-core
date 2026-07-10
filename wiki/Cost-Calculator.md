@@ -44,6 +44,12 @@ latest row, it remains authoritative when late or out-of-order history is introd
 engine error fails closed before suffix updates; operators should remediate the invalid historical
 row rather than accepting a partially corrected cost history.
 
+Cross-currency history is read once per normalized trade/base currency pair. Each read contains the
+latest rate before the earliest requested date plus the bounded effective-date window, and each
+transaction receives the latest rate on or before its booking date. Same-currency rows skip FX
+access. A missing effective seed fails the attempt for retry; Core never substitutes a future or
+default rate.
+
 ## Data it owns
 
 Primary durable outputs include:
@@ -90,6 +96,7 @@ Check this service when:
 - realized P&L or disposed cost basis looks wrong
 - FIFO versus AVCO behavior does not match portfolio policy
 - late transaction insertion causes downstream drift
+- cross-currency processing shows unexpected FX query growth or missing-rate retries
 - `transactions.cost.processed` lag or replay anomalies appear
 
 Check beyond this service when:

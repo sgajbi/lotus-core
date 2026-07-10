@@ -30,7 +30,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/calculators/cost_calculator_service/app/repository.py:get_bundle_a_group_transactions": (
         "Transaction",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_fx_rate": ("FxRate",),
     "src/services/calculators/cost_calculator_service/app/repository.py:get_instrument": (
         "Instrument",
     ),
