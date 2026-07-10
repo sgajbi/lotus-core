@@ -119,7 +119,8 @@ class TransactionProcessor:
             valid_new = [txn for txn in parsed_new if not txn.error_reason]
 
             RECALCULATION_DEPTH.observe(len(valid_new))
-            self._disposition_engine.set_initial_lots(valid_initial_lots)
+            sorted_initial_lots = self._sorter.sort_transactions([], valid_initial_lots)
+            self._disposition_engine.set_initial_lots(sorted_initial_lots)
             sorted_new = self._sorter.sort_transactions([], valid_new)
             processed_new = self._process_sorted_timeline(sorted_new)
             return (
