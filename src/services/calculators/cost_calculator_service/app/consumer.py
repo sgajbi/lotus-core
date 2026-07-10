@@ -46,6 +46,7 @@ from portfolio_common.transaction_domain import (
     should_auto_generate_cash_leg,
 )
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
+from portfolio_common.transaction_type_registry import get_transaction_type_definition
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
@@ -69,10 +70,29 @@ INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES = {
     "FX_FORWARD",
     "FX_SWAP",
 }
+LOT_OPENING_BEHAVIORS = {
+    "basis_allocation_in",
+    "open_lot",
+    "open_rights_lot",
+    "preserve_or_restate_lot",
+    "transfer_basis_in",
+}
+LOT_STATE_MUTATING_BEHAVIORS = LOT_OPENING_BEHAVIORS | {
+    "consume_lot",
+    "consume_rights_lot",
+    "partial_basis_transfer",
+    "preserve_or_consume_lot",
+    "transfer_basis_out",
+}
 
 
 def _normalize_event_code(value: object) -> str:
     return str(value or "").strip().upper()
+
+
+def _transaction_lot_behavior(transaction_type: object) -> str:
+    definition = get_transaction_type_definition(_normalize_event_code(transaction_type))
+    return definition.lot_behavior if definition is not None else "unknown"
 
 
 def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
@@ -181,7 +201,7 @@ class CostCalculationWorkflow:
         Transforms a TransactionEvent into a raw dictionary suitable for the
         cost-calculator-service engine package, converting fee fields to a Fees object structure.
         """
-        event_dict = cast(dict[str, Any], event.model_dump(mode="json"))
+        event_dict = cast(dict[str, Any], event.model_dump(mode="python"))
         trade_fee = _normalize_fee_amount(
             event_dict.pop("trade_fee", "0"),
             field_name="trade_fee",
@@ -222,9 +242,14 @@ class CostCalculationWorkflow:
             if trade_currency == portfolio_base_currency:
                 continue
 
-            transaction_date = datetime.fromisoformat(
-                txn_raw["transaction_date"].replace("Z", "+00:00")
-            ).date()
+            transaction_date_value = txn_raw["transaction_date"]
+            transaction_date = (
+                transaction_date_value.date()
+                if isinstance(transaction_date_value, datetime)
+                else datetime.fromisoformat(
+                    str(transaction_date_value).replace("Z", "+00:00")
+                ).date()
+            )
             transactions_by_pair.setdefault((trade_currency, portfolio_base_currency), []).append(
                 (txn_raw, transaction_date)
             )
@@ -422,7 +447,7 @@ class CostCalculationWorkflow:
         open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
     ) -> None:
-        if event_transaction_type not in {"BUY", "SELL"}:
+        if _transaction_lot_behavior(event_transaction_type) not in LOT_STATE_MUTATING_BEHAVIORS:
             return
         await repo.update_open_lot_states(
             portfolio_id=event.portfolio_id,
@@ -471,8 +496,19 @@ class CostCalculationWorkflow:
             processed_transaction.transaction_type, "persist_transaction_costs", "success"
         )
 
+        if (
+            _transaction_lot_behavior(processed_transaction.transaction_type)
+            in LOT_OPENING_BEHAVIORS
+        ):
+            await self._persist_open_lot_state(
+                processed_transaction=processed_transaction,
+                repo=repo,
+            )
         if processed_transaction.transaction_type == "BUY":
-            await self._persist_buy_state(processed_transaction=processed_transaction, repo=repo)
+            await self._persist_accrued_income_offset(
+                processed_transaction=processed_transaction,
+                repo=repo,
+            )
         if processed_transaction.transaction_type == "SELL":
             self._log_processed_transaction_state(
                 log_event="sell_state_persisted",
@@ -485,7 +521,7 @@ class CostCalculationWorkflow:
             updated_txn.trade_fee = Decimal(0)
         return TransactionEvent.model_validate(updated_txn)
 
-    async def _persist_buy_state(
+    async def _persist_open_lot_state(
         self,
         *,
         processed_transaction: Any,
@@ -498,6 +534,17 @@ class CostCalculationWorkflow:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_lot_state", "success"
         )
+        self._log_processed_transaction_state(
+            log_event="open_lot_state_persisted",
+            processed_transaction=processed_transaction,
+        )
+
+    async def _persist_accrued_income_offset(
+        self,
+        *,
+        processed_transaction: Any,
+        repo: CostCalculatorRepository,
+    ) -> None:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type,
             "persist_accrued_offset_state",
@@ -508,10 +555,6 @@ class CostCalculationWorkflow:
             processed_transaction.transaction_type,
             "persist_accrued_offset_state",
             "success",
-        )
-        self._log_processed_transaction_state(
-            log_event="buy_state_persisted",
-            processed_transaction=processed_transaction,
         )
 
     @staticmethod

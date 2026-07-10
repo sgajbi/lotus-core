@@ -803,6 +803,22 @@ async def test_transform_event_maps_positive_trade_fee_to_brokerage_fee(
     assert transformed["fees"] == {"brokerage": "7.50"}
 
 
+async def test_transform_event_preserves_typed_corporate_action_metadata(
+    cost_calculator_consumer: CostCalculatorConsumer,
+    mock_buy_kafka_message: MagicMock,
+) -> None:
+    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
+    event.synthetic_flow_effective_date = date(2026, 7, 5)
+    event.synthetic_flow_amount_local = Decimal("-1200")
+    event.synthetic_flow_amount_base = Decimal("-1450")
+
+    transformed = cost_calculator_consumer._transform_event_for_engine(event)
+
+    assert transformed["synthetic_flow_effective_date"] == date(2026, 7, 5)
+    assert transformed["synthetic_flow_amount_local"] == Decimal("-1200")
+    assert transformed["synthetic_flow_amount_base"] == Decimal("-1450")
+
+
 async def test_fee_amount_normalizer_normalizes_counted_amount_once() -> None:
     amount = _StringCountedAmount("2.50")
 
@@ -1641,7 +1657,23 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
     mock_buy_kafka_message.headers.return_value = [("correlation_id", b"cost-corr-id")]
 
     mock_idempotency_repo.is_event_processed.return_value = False
-    mock_repo.get_transaction_history.return_value = []
+    mock_repo.get_transaction_history.return_value = [
+        DBTransaction(
+            transaction_id="CA-DEM-SOURCE-BUY-01",
+            portfolio_id="PORT_COST_01",
+            instrument_id="AAPL",
+            security_id="SEC_COST_01",
+            transaction_date=datetime(2025, 1, 1),
+            transaction_type="BUY",
+            quantity=Decimal("10"),
+            price=Decimal("10"),
+            gross_transaction_amount=Decimal("100"),
+            trade_currency="USD",
+            currency="USD",
+            net_cost_local=Decimal("100"),
+            net_cost=Decimal("100"),
+        )
+    ]
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
