@@ -53,6 +53,10 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from .average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+    AverageCostPoolTransition,
+)
 from .cost_calculation_processor import (
     CostCalculationEventProcessor,
     CostCalculationProcessorDependencyFactory,
@@ -63,7 +67,7 @@ from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_engine.processing.sorter import transaction_order_key
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
-from .repository import CostCalculatorRepository
+from .repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 from .transaction_processor import TransactionProcessor, build_transaction_processor
 
 logger = logging.getLogger(__name__)
@@ -92,11 +96,13 @@ LOT_STATE_MUTATING_BEHAVIORS = LOT_OPENING_BEHAVIORS | {
 }
 STATE_DEPENDENT_LOT_BEHAVIORS = LOT_STATE_MUTATING_BEHAVIORS - LOT_OPENING_BEHAVIORS
 INCREMENTAL_SAFE_LOT_BEHAVIORS = LOT_OPENING_BEHAVIORS | STATE_DEPENDENT_LOT_BEHAVIORS | {"none"}
+AVERAGE_COST_POOL_LOT_BEHAVIORS = {"open_lot", "consume_lot"}
 
 
 class OpenLotStateUpdateScope(str, Enum):
     COMPLETE_SNAPSHOT = "complete_snapshot"
     SELECTED_LOTS = "selected_lots"
+    AVERAGE_COST_POOL = "average_cost_pool"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +112,7 @@ class CostEngineCalculation:
     open_lot_states: dict[str, OpenLotState]
     incremental: bool
     open_lot_state_update_scope: OpenLotStateUpdateScope
+    average_cost_pool_transition: AverageCostPoolTransition | None
 
 
 def _normalize_event_code(value: object) -> str:
@@ -398,6 +405,8 @@ class CostCalculationWorkflow:
             repo=repo,
             incremental=calculation.incremental,
             update_scope=calculation.open_lot_state_update_scope,
+            cost_basis_method=cost_basis_method,
+            average_cost_pool_transition=calculation.average_cost_pool_transition,
         )
         await self._persist_cost_basis_processing_checkpoint(
             processed=calculation.processed,
@@ -434,9 +443,35 @@ class CostCalculationWorkflow:
                 incoming_transaction,
                 cost_basis_method=cost_basis_method,
             ):
+                average_cost_pool_record = None
+                if (
+                    cost_basis_method is CostBasisMethod.AVCO
+                    and lot_behavior in AVERAGE_COST_POOL_LOT_BEHAVIORS
+                ):
+                    average_cost_pool_record = (
+                        await self._get_compatible_average_cost_pool_checkpoint(
+                            event=event,
+                            repo=repo,
+                        )
+                    )
+                    if average_cost_pool_record is None:
+                        return await self._calculate_full_cost_rebuild(
+                            event=event,
+                            portfolio_base_currency=portfolio_base_currency,
+                            instrument=instrument,
+                            repo=repo,
+                            cost_basis_method=cost_basis_method,
+                        )
                 initial_open_lots_raw = []
                 open_lot_state_update_scope = OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
-                if lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS:
+                if average_cost_pool_record is not None:
+                    initial_open_lots_raw = self._load_average_cost_pool_checkpoint_transaction(
+                        record=average_cost_pool_record,
+                        portfolio_base_currency=portfolio_base_currency,
+                        instrument=instrument,
+                    )
+                    open_lot_state_update_scope = OpenLotStateUpdateScope.AVERAGE_COST_POOL
+                elif lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS:
                     required_fifo_quantity = (
                         incoming_transaction.quantity
                         if cost_basis_method is CostBasisMethod.FIFO
@@ -453,6 +488,10 @@ class CostCalculationWorkflow:
                     )
                     if required_fifo_quantity is not None:
                         open_lot_state_update_scope = OpenLotStateUpdateScope.SELECTED_LOTS
+                if (
+                    average_cost_pool_record is not None
+                    or lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS
+                ):
                     COST_PROCESSING_OPEN_LOTS_RESTORED.labels(
                         cost_basis_method=cost_basis_method.value
                     ).observe(len(initial_open_lots_raw))
@@ -461,6 +500,14 @@ class CostCalculationWorkflow:
                 ).process_increment(
                     initial_open_lots_raw=initial_open_lots_raw,
                     new_transactions_raw=[incoming_raw],
+                )
+                average_cost_pool_transition = (
+                    self._build_average_cost_pool_transition(
+                        checkpoint=average_cost_pool_record.checkpoint,
+                        open_lot_states=open_lot_states,
+                    )
+                    if average_cost_pool_record is not None and not errored
+                    else None
                 )
                 COST_PROCESSING_EXECUTION_TOTAL.labels(
                     mode="ordered_append",
@@ -472,8 +519,26 @@ class CostCalculationWorkflow:
                     open_lot_states=open_lot_states,
                     incremental=True,
                     open_lot_state_update_scope=open_lot_state_update_scope,
+                    average_cost_pool_transition=average_cost_pool_transition,
                 )
 
+        return await self._calculate_full_cost_rebuild(
+            event=event,
+            portfolio_base_currency=portfolio_base_currency,
+            instrument=instrument,
+            repo=repo,
+            cost_basis_method=cost_basis_method,
+        )
+
+    async def _calculate_full_cost_rebuild(
+        self,
+        *,
+        event: TransactionEvent,
+        portfolio_base_currency: str,
+        instrument: Any,
+        repo: CostCalculatorRepository,
+        cost_basis_method: CostBasisMethod,
+    ) -> CostEngineCalculation:
         all_transactions_raw = await self._load_cost_engine_transactions(
             event=event,
             portfolio_base_currency=portfolio_base_currency,
@@ -496,6 +561,7 @@ class CostCalculationWorkflow:
             open_lot_states=open_lot_states,
             incremental=False,
             open_lot_state_update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+            average_cost_pool_transition=None,
         )
 
     async def _load_incoming_cost_engine_transaction(
@@ -515,6 +581,84 @@ class CostCalculationWorkflow:
             repo=repo,
         )
         return enriched[0]
+
+    @staticmethod
+    async def _get_compatible_average_cost_pool_checkpoint(
+        *,
+        event: TransactionEvent,
+        repo: CostCalculatorRepository,
+    ) -> AverageCostPoolCheckpointRecord | None:
+        record = await repo.get_average_cost_pool_checkpoint_record(
+            portfolio_id=event.portfolio_id,
+            security_id=event.security_id,
+        )
+        if record is None or not record.checkpoint.is_compatible(
+            portfolio_id=event.portfolio_id,
+            instrument_id=event.instrument_id,
+            security_id=event.security_id,
+        ):
+            return None
+        if record.checkpoint.quantity > Decimal(0) and record.representative_transaction is None:
+            return None
+        return record
+
+    def _load_average_cost_pool_checkpoint_transaction(
+        self,
+        *,
+        record: AverageCostPoolCheckpointRecord,
+        portfolio_base_currency: str,
+        instrument: Any,
+    ) -> list[dict[str, Any]]:
+        checkpoint = record.checkpoint
+        if checkpoint.quantity == Decimal(0):
+            return []
+        if record.representative_transaction is None:
+            raise ValueError("Open average cost pool has no representative transaction")
+        transaction_raw = self._transform_event_for_engine(
+            TransactionEvent.model_validate(record.representative_transaction)
+        )
+        transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
+        transaction_raw["quantity"] = checkpoint.quantity
+        transaction_raw["net_cost_local"] = checkpoint.cost_local
+        transaction_raw["net_cost"] = checkpoint.cost_base
+        transaction_raw["portfolio_base_currency"] = portfolio_base_currency
+        if instrument is not None:
+            self._attach_instrument_metadata(
+                transactions=[transaction_raw],
+                instrument=instrument,
+            )
+        return [transaction_raw]
+
+    @staticmethod
+    def _build_average_cost_pool_transition(
+        *,
+        checkpoint: AverageCostPoolCheckpoint,
+        open_lot_states: dict[str, OpenLotState],
+    ) -> AverageCostPoolTransition:
+        remaining_states = dict(open_lot_states)
+        if checkpoint.quantity > Decimal(0):
+            representative_source_id = checkpoint.representative_source_transaction_id
+            if representative_source_id is None:
+                raise ValueError("Open average cost pool has no representative source")
+            existing_sources_after = remaining_states.pop(
+                representative_source_id,
+                None,
+            )
+            if existing_sources_after is None:
+                raise ValueError(
+                    "Average cost calculation omitted the aggregate representative source"
+                )
+        else:
+            existing_sources_after = OpenLotState(
+                quantity=Decimal(0),
+                cost_local=Decimal(0),
+                cost_base=Decimal(0),
+            )
+        return AverageCostPoolTransition(
+            before=checkpoint,
+            existing_sources_after=existing_sources_after,
+            explicit_sources_after=remaining_states,
+        )
 
     async def _load_open_lot_checkpoint_transactions(
         self,
@@ -620,23 +764,43 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         incremental: bool,
         update_scope: OpenLotStateUpdateScope,
+        cost_basis_method: CostBasisMethod,
+        average_cost_pool_transition: AverageCostPoolTransition | None,
     ) -> None:
+        if average_cost_pool_transition is not None:
+            await repo.apply_average_cost_pool_transition(average_cost_pool_transition)
+            return
+
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
-        if incremental:
-            if lot_behavior not in LOT_STATE_MUTATING_BEHAVIORS:
-                return
-            if lot_behavior in LOT_OPENING_BEHAVIORS:
-                return
-        update_lot_states = (
-            repo.update_selected_open_lot_states
-            if update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
-            else repo.update_open_lot_states
+        mutates_lot_state = lot_behavior in LOT_STATE_MUTATING_BEHAVIORS
+        incremental_opening = incremental and lot_behavior in LOT_OPENING_BEHAVIORS
+        should_update_lot_states = (
+            not incremental and cost_basis_method is CostBasisMethod.FIFO
+        ) or (mutates_lot_state and not incremental_opening)
+        if should_update_lot_states:
+            update_lot_states = (
+                repo.update_selected_open_lot_states
+                if update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
+                else repo.update_open_lot_states
+            )
+            await update_lot_states(
+                portfolio_id=event.portfolio_id,
+                security_id=event.security_id,
+                states_by_source_transaction_id=open_lot_states,
+            )
+
+        should_persist_complete_average_cost_pool = cost_basis_method is CostBasisMethod.AVCO and (
+            not incremental or (mutates_lot_state and not incremental_opening)
         )
-        await update_lot_states(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-            states_by_source_transaction_id=open_lot_states,
-        )
+        if should_persist_complete_average_cost_pool:
+            await repo.upsert_average_cost_pool_checkpoint(
+                AverageCostPoolCheckpoint.from_open_lot_states(
+                    portfolio_id=event.portfolio_id,
+                    instrument_id=event.instrument_id,
+                    security_id=event.security_id,
+                    states_by_source_transaction_id=open_lot_states,
+                )
+            )
 
     @staticmethod
     async def _persist_cost_basis_processing_checkpoint(

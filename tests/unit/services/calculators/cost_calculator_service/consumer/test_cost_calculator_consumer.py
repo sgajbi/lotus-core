@@ -10,6 +10,7 @@ from cost_engine.domain.models.transaction import (
     Transaction as EngineTransaction,
 )
 from cost_engine.processing.cost_objects import OpenLotState
+from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
@@ -31,6 +32,10 @@ from portfolio_common.transaction_domain import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+    AverageCostPoolTransition,
+)
 from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
     CostCalculatorConsumer,
@@ -1518,6 +1523,8 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         repo=repo,
         incremental=False,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+        cost_basis_method=CostBasisMethod.FIFO,
+        average_cost_pool_transition=None,
     )
     repo.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
@@ -1533,6 +1540,8 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         repo=repo,
         incremental=True,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+        cost_basis_method=CostBasisMethod.FIFO,
+        average_cost_pool_transition=None,
     )
     repo.update_open_lot_states.assert_not_awaited()
 
@@ -1543,6 +1552,8 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         repo=repo,
         incremental=False,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+        cost_basis_method=CostBasisMethod.FIFO,
+        average_cost_pool_transition=None,
     )
     repo.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
@@ -1558,12 +1569,110 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         repo=repo,
         incremental=True,
         update_scope=OpenLotStateUpdateScope.SELECTED_LOTS,
+        cost_basis_method=CostBasisMethod.FIFO,
+        average_cost_pool_transition=None,
     )
     repo.update_selected_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
         states_by_source_transaction_id=open_lot_states,
     )
+    repo.update_open_lot_states.assert_not_awaited()
+
+
+async def test_update_open_lot_states_applies_average_cost_pool_transition(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    event = TransactionEvent(
+        transaction_id="SELL-AVCO-1",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime(2026, 1, 2),
+        transaction_type="SELL",
+        quantity=Decimal("4"),
+        price=Decimal("12"),
+        gross_transaction_amount=Decimal("48"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    transition = AverageCostPoolTransition(
+        before=AverageCostPoolCheckpoint(
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            representative_source_transaction_id="BUY-1",
+            quantity=Decimal("10"),
+            cost_local=Decimal("100"),
+            cost_base=Decimal("100"),
+        ),
+        existing_sources_after=OpenLotState(
+            quantity=Decimal("6"),
+            cost_local=Decimal("60"),
+            cost_base=Decimal("60"),
+        ),
+        explicit_sources_after={},
+    )
+
+    await cost_calculator_consumer._update_open_lot_states_if_required(
+        event=event,
+        event_transaction_type="SELL",
+        open_lot_states={"BUY-1": transition.existing_sources_after},
+        repo=repo,
+        incremental=True,
+        update_scope=OpenLotStateUpdateScope.AVERAGE_COST_POOL,
+        cost_basis_method=CostBasisMethod.AVCO,
+        average_cost_pool_transition=transition,
+    )
+
+    repo.apply_average_cost_pool_transition.assert_awaited_once_with(transition)
+    repo.update_open_lot_states.assert_not_awaited()
+    repo.update_selected_open_lot_states.assert_not_awaited()
+    repo.upsert_average_cost_pool_checkpoint.assert_not_awaited()
+
+
+async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    event = TransactionEvent(
+        transaction_id="DIV-1",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_date=datetime(2026, 1, 2),
+        transaction_type="DIVIDEND",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("20"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    open_lot_states = {
+        "BUY-1": OpenLotState(
+            quantity=Decimal("10"),
+            cost_local=Decimal("100"),
+            cost_base=Decimal("105"),
+        )
+    }
+
+    await cost_calculator_consumer._update_open_lot_states_if_required(
+        event=event,
+        event_transaction_type="DIVIDEND",
+        open_lot_states=open_lot_states,
+        repo=repo,
+        incremental=False,
+        update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+        cost_basis_method=CostBasisMethod.AVCO,
+        average_cost_pool_transition=None,
+    )
+
+    persisted_checkpoint = repo.upsert_average_cost_pool_checkpoint.await_args.args[0]
+    assert persisted_checkpoint.quantity == Decimal("10")
+    assert persisted_checkpoint.cost_local == Decimal("100")
+    assert persisted_checkpoint.cost_base == Decimal("105")
+    assert persisted_checkpoint.representative_source_transaction_id == "BUY-1"
     repo.update_open_lot_states.assert_not_awaited()
 
 
