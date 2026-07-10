@@ -2,7 +2,8 @@
 
 ## Purpose
 
-The cost calculator is the transaction-enrichment and cost-basis authority inside `lotus-core`.
+The cost module is the transaction-enrichment and cost-basis authority inside the combined
+`portfolio_transaction_processing_service` runtime.
 
 It takes persisted transaction events, applies the portfolio's governed cost-basis policy, and
 emits enriched processed transactions that downstream stages can trust for position, cashflow, and
@@ -10,7 +11,7 @@ supportability workflows.
 
 ## What it handles
 
-The current runtime centers on:
+The current app-local/CI runtime centers on:
 
 - consuming persisted transaction events
 - selecting FIFO or AVCO according to portfolio policy
@@ -23,8 +24,8 @@ basis, and portfolio-base cost basis. FIFO reflects actual lot consumption. AVCO
 remaining pooled quantity and cost pro rata across source contributions with exact aggregate
 reconciliation; AVCO source rows are supportability lineage, not disposal-order lot selection.
 
-This makes the service more than a local calculation helper. It is the stage that turns canonical
-transaction facts into governed cost-aware transaction state.
+This makes the module more than a local calculation helper. It turns canonical transaction facts
+into governed cost-aware state inside the same unit of work as cashflow and position processing.
 
 ## Runtime role
 
@@ -78,10 +79,10 @@ commits independently only after exact source-count, quantity, local-basis, and 
 certification. Retain output reports as release evidence; tool availability does not prove that a
 historical estate has already been reconciled.
 
-## Combined target replay controls
+## Combined runtime replay controls
 
-The undeployed combined transaction-processing target keeps operator replay as a second consumer in
-the same deployable. Normal booking and replay load separate group-scoped execution profiles, so
+The app-local/CI combined transaction-processing runtime keeps operator replay as a second consumer
+in the same deployable. Normal booking and replay load separate group-scoped execution profiles, so
 replay throughput can be bounded without reducing live booking capacity. The shared loop preserves
 Kafka partition order, permits only one active message per partition, reports ordered backlog
 pressure, and commits only after replay publication succeeds. After commit,

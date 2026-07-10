@@ -1804,6 +1804,19 @@ Most relevant current governance:
      keys remain available; same-key serialization is intentional and must be measured with
      connection-pool wait and partition-ordering evidence before cutover. Treat local query-count,
      index-plan, and lock-timeout tests as structural proof, not deployed p95/p99 certification.
+138. App-local Compose and every Compose-backed CI lane use
+     `portfolio_transaction_processing_service`; never add the legacy cost, cashflow, or position
+     worker shells beside it. Cost, cashflow, and position remain separate financial modules behind
+     `ProcessTransactionUseCase` and one SQLAlchemy unit of work; valuation remains a separate
+     job-driven runtime. Before an environment cutover, quiesce producers, drain and stop legacy
+     consumers, then use `scripts/transaction_processing_cutover_offsets.py` in dry-run and explicit
+     apply modes to verify inactive groups, zero source lag, aligned cost/cashflow offsets, and exact
+     live/replay target offsets. Never use earliest/latest reset policy as a handoff. Load evidence
+     must seed valid portfolio/instrument source facts, use the run business date, and measure through
+     persisted cost, cashflow, position, and combined-idempotency completion; HTTP submission rate is
+     not transaction throughput. Resolve support logs by Compose project and service identity, not
+     generated container name. Registry/Kubernetes cutover, failure recovery, canonical QA, and
+     physical legacy package removal remain required before claiming full consolidation.
 
 ## Context Maintenance Rule
 

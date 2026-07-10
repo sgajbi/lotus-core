@@ -2,7 +2,8 @@
 
 ## Purpose
 
-The position calculator maintains canonical position-history state in `lotus-core`.
+The position module maintains canonical position-history state inside the combined
+`portfolio_transaction_processing_service` runtime.
 
 It takes processed transaction events, recalculates the affected position path, and handles
 reprocessing flows when late or back-dated activity would otherwise leave downstream state
@@ -10,7 +11,7 @@ inconsistent.
 
 ## What it handles
 
-The current runtime centers on:
+The current app-local/CI runtime centers on:
 
 - consuming processed transaction events
 - recalculating next position state
@@ -39,17 +40,16 @@ remaining security position a second time. The linked `ADJUSTMENT` updates the c
 position. Current security basis plus child security basis plus cash-disposed basis therefore
 reconciles to original basis.
 
-## Consolidation transition
+## Consolidated runtime
 
-The deployed compatibility worker advances the epoch and queues ordered replay events on
-`transactions.cost.processed`. The locally implemented combined transaction-processing target uses
-the same detection, ordering, lock, epoch fence, and watermark rules, but rebuilds current-epoch
-position history inside the shared transaction. This avoids depending on a legacy replay topic that
-the final two-consumer deployable will not consume. The combined path also registers cost-stage
-pipeline readiness for every rebuilt current-epoch transaction before staging matching cashflow
-completion signals. Legacy cost publication remains limited to the incoming transaction so the
-compatibility consumers cannot double-apply the rebuilt suffix. The target remains inactive until
-its remaining load, backlog, observability, deployment, and rollback gates pass.
+The app-local/CI combined transaction processor uses the same detection, ordering, lock, epoch
+fence, and watermark rules, but rebuilds current-epoch position history inside the shared
+transaction. This avoids depending on a legacy normal-path replay consumer. The combined path also
+registers cost-stage pipeline readiness for every rebuilt current-epoch transaction before staging
+matching cashflow completion signals. Legacy cost publication remains limited to the incoming
+transaction so compatibility consumers cannot double-apply the rebuilt suffix. Compatibility events
+remain for downstream stage orchestration while registry/Kubernetes cutover and legacy package
+removal are completed.
 
 ## Data it owns
 

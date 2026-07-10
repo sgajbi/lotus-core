@@ -28,6 +28,27 @@ docker compose logs --tail=200 kafka-topic-creator
 make test-docker-smoke
 ```
 
+## Transaction-processing runtime
+
+App-local Compose runs one `portfolio_transaction_processing_service` on host port `8090`; it owns
+one live consumer and one replay-request consumer while keeping cost, cashflow, and position as
+separate internal modules. Do not start the legacy cost, cashflow, or position worker shells beside
+it. Valuation remains separately deployed.
+
+Before switching an environment, follow the
+[Transaction Processing Cutover Runbook](../docs/operations/Transaction-Processing-Cutover-Runbook.md).
+The Kafka offset command is dry-run by default and requires `--apply` to mutate target offsets.
+
+```bash
+python scripts/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
+curl http://localhost:8090/health/ready
+curl http://localhost:8090/version
+make test-performance-load-gate
+```
+
+Treat load-gate throughput as completed cost/cashflow/position processing. Request submission rate
+alone is not capacity evidence. Keep the target and legacy topologies mutually exclusive.
+
 ## Preferred diagnostics
 
 Use APIs before going directly to the database where possible:

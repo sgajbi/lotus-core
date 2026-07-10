@@ -2,27 +2,27 @@
 
 ## Purpose
 
-The cashflow calculator materializes canonical cashflow records from processed transaction events in
-`lotus-core`.
+The cashflow module materializes canonical cashflow records inside the combined
+`portfolio_transaction_processing_service` runtime.
 
 It converts transaction semantics into normalized inflow and outflow state that downstream
 timeseries, reconciliation, and supportability surfaces can rely on.
 
 ## What it handles
 
-The current runtime centers on:
+The current app-local/CI runtime centers on:
 
-- consuming cost-processed transaction events
+- receiving the cost-enriched transaction inside `ProcessTransactionUseCase`
 - resolving cashflow rules by transaction type
 - normalizing amount sign and classification semantics
 - persisting durable cashflow rows
 - emitting cashflow completion events for downstream orchestration
 
-This makes the service a governed semantic transformation stage, not a simple amount copy.
+This makes the module a governed semantic transformation stage, not a simple amount copy.
 
 ## Runtime role
 
-For an eligible processed transaction event, the service:
+For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture
 2. resolves the effective processing transaction type

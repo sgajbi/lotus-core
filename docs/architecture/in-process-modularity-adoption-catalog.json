@@ -74,24 +74,25 @@
       "legacyFolders": [
         {
           "path": "src/services/calculators/cost_calculator_service",
-          "migrationGuidance": "Move cost policy behind the target CostProcessingPort, then delete this root after combined runtime parity."
+          "migrationGuidance": "Cost policy runs behind the target CostProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
         },
         {
           "path": "src/services/calculators/cashflow_calculator_service",
-          "migrationGuidance": "Move cashflow policy behind the target CashflowProcessingPort, then delete this root after combined runtime parity."
+          "migrationGuidance": "Cashflow policy runs behind the target CashflowProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
         },
         {
           "path": "src/services/calculators/position_calculator",
-          "migrationGuidance": "Move position reduction and replay behind the target PositionProcessingPort, then delete this root after combined runtime parity."
+          "migrationGuidance": "Position reduction and replay run behind the target PositionProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
         }
       ],
       "evidence": [
         "docs/standards/application-command-result-standard.md",
         "docs/standards/in-process-boundary-contract-standard.md",
         "docs/architecture/calculator-runtime-consolidation-decision.md",
-        "docs/architecture/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md"
+        "docs/architecture/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md",
+        "docs/architecture/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md"
       ],
-      "noRuntimeSplitRationale": "This slice defines and enforces the in-process package/use-case/port structure without adding a Dockerfile, queue, database, or deployed runtime. The separately governed consolidation decision controls the later three-to-one deployment change."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Registry/Kubernetes rollout and legacy package removal remain governed follow-up work."
     }
   ]
 }

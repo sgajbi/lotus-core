@@ -25,6 +25,7 @@ Run:
 
 ```powershell
 python scripts\bank_day_load_scenario.py `
+  --compose-project-name lotus-core-app-local `
   --portfolio-count 1000 `
   --transactions-per-portfolio 100 `
   --transaction-batch-size 2000 `
@@ -53,7 +54,7 @@ The script:
    portfolio-level timeseries to converge,
 7. samples downstream APIs,
 8. runs reconciliation checks for sampled portfolios,
-9. inspects container logs for real error lines,
+9. inspects stable Compose service logs for real error lines using the configured project/file,
 10. writes a machine-readable and human-readable evidence pack.
 
 ## Deterministic Dataset Rules

@@ -1,6 +1,6 @@
 # Calculator Runtime Consolidation Decision
 
-Status: Planned, phased migration  
+Status: App-local and CI runtime cut over; release/Kubernetes/legacy removal pending
 Date: 2026-07-10  
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
@@ -43,7 +43,7 @@ Independent deployment and failure isolation therefore have current operational 
 | Cashflow | Own rule resolution, cashflow persistence, and `cashflows.calculated`. |
 | Position | Own ordered position reduction, history/snapshots, epoch fencing, and backdated replay. |
 | Transaction unit of work | Normal booked-transaction processing commits cost, cashflow, position, idempotency, and compatibility outbox effects atomically. Reprocessing uses an explicit bounded replay unit of work. |
-| Kafka | Preserve current topics, partition keys, consumer group IDs, and headers during migration. |
+| Kafka | Preserve topics, partition keys, payloads, and headers. Move live/replay offsets to the clearly named target groups through the verified cutover command; never rely on reset policy. |
 | Reliability | Use one semantic transaction-processing idempotency claim while preserving module outcome diagnostics, retry classification, DLQ reasons, and outbox compatibility. |
 | Operations | Preserve module-specific metrics and diagnostics; expose one aggregate health/version surface. |
 
@@ -62,18 +62,21 @@ combined completion contract.
 4. Add `ProcessTransactionUseCase` and one atomic normal-path unit of work while emitting existing
    compatibility outbox events.
 5. Prove duplicate delivery, replay, DLQ, rollback-on-module-failure, shutdown, and backlog behavior.
-6. Switch local/CI deployment manifests to the combined image and run canonical platform QA.
+6. Switch local/CI deployment manifests to the combined image and run local load/tie-out proof.
 7. Remove the three legacy Dockerfiles/services and the obsolete normal-path stage wait only after
-   downstream compatibility and parity evidence pass.
+   downstream compatibility, release/Kubernetes cutover, and canonical platform QA pass.
 
-The branch must not claim runtime consolidation complete before steps 3 through 7 are validated.
+Steps 1 through 6 are implemented locally. The branch must not claim full runtime consolidation
+complete before step 7 and the remaining release/deployment gates are validated.
 
 ## Rollback
 
-Retain the existing event contracts and consumer group IDs throughout migration. Before legacy
-deployables are removed, rollback is a deployment-manifest change back to the three existing
-images. Database rollback is not required because this decision introduces no schema ownership
-change.
+Retain the existing event contracts throughout migration. Use
+`scripts/transaction_processing_cutover_offsets.py` to audit and copy exact drained live/replay
+offsets into the target groups. Before legacy deployables are removed, rollback requires a
+quiesced, reviewed reverse offset handoff and one atomic deployment-manifest change back to all
+three images. Database rollback is not required because this decision introduces no schema
+ownership change.
 
 ## Acceptance Evidence
 
