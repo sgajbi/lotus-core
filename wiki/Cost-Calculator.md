@@ -36,15 +36,22 @@ must not be imported by the combined runtime.
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness
-2. reads the versioned canonical cost-processing checkpoint for the portfolio-security key
-3. normalizes the event into the cost engine's processing shape
-4. uses durable open-lot state for a strictly ordered, compatible append, or loads full history for
+2. acquires the transaction-scoped cost-basis lock for the normalized portfolio-security key
+3. reads the versioned canonical cost-processing checkpoint for that key
+4. normalizes the event into the cost engine's processing shape
+5. uses durable open-lot state for a strictly ordered, compatible append, or loads full history for
    a backdated, same-order, unsupported, missing-checkpoint, or incompatible event
-5. enriches the applicable rows with portfolio policy and FX context where required
-6. calculates the ordered append or deterministic affected history under the active cost-basis method
-7. persists the incoming row and any recalculated later suffix, plus lot, checkpoint, and support state, in one
+6. enriches the applicable rows with portfolio policy and FX context where required
+7. calculates the ordered append or deterministic affected history under the active cost-basis method
+8. persists the incoming row and any recalculated later suffix, plus lot, checkpoint, and support state, in one
    transaction
-8. publishes only the incoming enriched event so downstream position handling is not duplicated
+9. publishes only the incoming enriched event so downstream position handling is not duplicated
+
+The same key lock protects FIFO, AVCO, backdated rebuild, replay, first-write, and historical AVCO
+repair paths. A waiting calculation reads canonical state only after the prior transaction commits,
+so it cannot overwrite newer lot quantities with a stale in-memory result. Different securities
+retain independent concurrency. `cost_basis_processing_lock_wait_seconds` and the `Cost Basis Lock
+Wait p95` dashboard panel expose bounded contention without business identifiers in metric labels.
 
 Because the service recalculates the governed transaction timeline rather than only patching the
 latest row, it remains authoritative when late or out-of-order history is introduced. A timeline

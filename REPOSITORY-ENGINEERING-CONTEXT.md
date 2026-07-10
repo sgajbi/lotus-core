@@ -1881,6 +1881,17 @@ Most relevant current governance:
      same-key PostgreSQL overlap proof, different-key non-blocking proof, exact final row/value
      reconciliation, bounded lock-wait metrics, structured support logs, and deployed pool/latency
      evidence before cutover.
+144. Every mutable cost-basis transition acquires the transaction-scoped PostgreSQL advisory lock
+     for normalized portfolio/security before reading the processing checkpoint, transaction
+     history, open lots, or AVCO aggregate. This includes FIFO selected-lot updates, full rebuilds,
+     first-write upserts, replay, backdated processing, and historical AVCO reconciliation. Keep
+     the lock inside the caller-owned SQLAlchemy transaction and recompute after acquisition; Kafka
+     key ordering is not a database fence. Preserve parallelism across different securities.
+     Audit current state through the source lot's calculation policy/version plus the aggregate
+     checkpoint's cost-basis method, latest calculation transaction, and engine-state version.
+     Any lock-key or mutation-boundary change requires same-key PostgreSQL BUY/SELL/replay overlap
+     proof, different-key non-blocking proof, exact lot/checkpoint reconciliation, bounded lock-wait
+     telemetry, and deployed pool/latency evidence before cutover.
 
 ## Context Maintenance Rule
 
