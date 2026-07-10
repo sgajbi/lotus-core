@@ -50,6 +50,10 @@ def test_health_dependency_metrics_use_bounded_labels():
     assert monitoring.HEALTH_READINESS_STATES == ("ready", "not_ready")
 
 
+def test_database_pool_metric_uses_bounded_labels():
+    assert monitoring.DATABASE_POOL_CONNECTIONS._labelnames == ("pool", "state")
+
+
 def test_kafka_consumer_metrics_use_bounded_labels():
     assert monitoring.KAFKA_CONSUMER_EVENTS_TOTAL._labelnames == (
         "service",

@@ -20,6 +20,7 @@ TELEMETRY_METRIC_ALLOWED_LABELS: tuple[str, ...] = (
     "mode",
     "outcome",
     "partition",
+    "pool",
     "profile",
     "queue",
     "reason",

@@ -18,6 +18,12 @@ DB_OPERATION_LATENCY_SECONDS = Histogram(
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
 
+DATABASE_POOL_CONNECTIONS = Gauge(
+    "database_pool_connections",
+    "Current database connection-pool state sampled during readiness checks.",
+    labelnames=("pool", "state"),
+)
+
 
 def db_timer(operation: str):
     """
@@ -27,6 +33,10 @@ def db_timer(operation: str):
             ...
     """
     return DB_OPERATION_LATENCY_SECONDS.labels(repository="db", method=operation).time()
+
+
+def set_database_pool_connections(*, pool: str, state: str, count: int) -> None:
+    DATABASE_POOL_CONNECTIONS.labels(pool, state).set(max(0, count))
 
 
 # --------------------------------------------------------------------------------------
