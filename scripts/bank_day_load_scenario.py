@@ -47,7 +47,7 @@ USD_PER_CURRENCY: dict[str, Decimal] = {
 }
 LOG_SERVICE_CONTAINERS = (
     "lotus-core-app-local-persistence_service-1",
-    "lotus-core-app-local-position_calculator_service-1",
+    "lotus-core-app-local-portfolio_transaction_processing_service-1",
     "lotus-core-app-local-position_valuation_calculator-1",
     "lotus-core-app-local-portfolio_aggregation_service-1",
     "lotus-core-app-local-timeseries_generator_service-1",

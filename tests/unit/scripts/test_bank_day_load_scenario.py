@@ -2,6 +2,7 @@ from argparse import Namespace
 from decimal import Decimal
 
 from scripts.bank_day_load_scenario import (
+    LOG_SERVICE_CONTAINERS,
     ApiProbeResult,
     DatabaseTieOut,
     HealthSample,
@@ -17,6 +18,13 @@ from scripts.bank_day_load_scenario import (
     expected_portfolio_market_value,
     iter_transaction_batches,
 )
+
+
+def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None:
+    assert "lotus-core-app-local-portfolio_transaction_processing_service-1" in (
+        LOG_SERVICE_CONTAINERS
+    )
+    assert not any("calculator_service" in name for name in LOG_SERVICE_CONTAINERS)
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:
