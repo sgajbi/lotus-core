@@ -116,6 +116,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make test-transaction-processing-contract`
   protects atomic combined cost, cashflow, position, replay, rollback, fee, FX, multi-lot,
   backdated correction, epoch rebuild, and one-event-per-input behavior
+- `make profile-cost-processing-modes`
+  characterizes ordered lot-opening append, state-dependent disposal append, and deterministic
+  backdated rebuild without claiming database or Kafka throughput
 
 ## What the gates protect
 
