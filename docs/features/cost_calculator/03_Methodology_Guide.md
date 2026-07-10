@@ -44,6 +44,17 @@ The engine is designed to correctly handle portfolios that trade in multiple cur
     2.  **Cost of Goods Sold (COGS)**: The cost is retrieved using the portfolio's configured method (FIFO or AVCO). The base currency COGS is already "baked in" from the original purchase date's FX rate(s).
     3.  **Realized P&L**: The P&L is calculated in both currencies: `P&L = Proceeds - COGS`. This method correctly captures the total P&L, which is a combination of the asset's price movement and the fluctuation in the FX rate between the buy and sell dates.
 
+### Effective-Dated FX Selection
+
+For every normalized trade/base currency pair in the recalculated timeline, the service reads the
+latest seed rate before the earliest transaction date plus all rates through the latest transaction
+date. Each transaction uses the latest rate whose effective date is on or before its transaction
+date. Same-currency transactions require no FX lookup. If no rate exists on or before a required
+date, processing fails and retries rather than substituting a future, default, or inferred rate.
+
+The read is bounded once per distinct currency pair, not once per transaction. This query batching
+changes runtime complexity without changing the financial methodology or introducing a cache.
+
 ## 5. Handling of Specific Transaction Types
 
 The service uses specific strategies for different transaction types to ensure they are handled correctly:

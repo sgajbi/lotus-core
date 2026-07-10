@@ -1,8 +1,8 @@
 # tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py
 import json
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from cost_engine.domain.models.error import ErroredTransaction
@@ -34,12 +34,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
     CostCalculatorConsumer,
+    FxRateNotFoundError,
     PortfolioNotFoundError,
     _normalize_fee_amount,
 )
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationEventProcessor,
     CostCalculationProcessorDependencies,
+)
+from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.effective_fx_rate import (  # noqa: E501
+    EffectiveFxRate,
 )
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from tests.unit.test_support.async_session_iter import make_single_session_getter
@@ -427,7 +431,6 @@ async def test_consumer_integration_with_engine(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     def create_db_tx(engine_txn: EngineTransaction) -> DBTransaction:
@@ -501,7 +504,6 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     def create_db_tx(engine_txn: EngineTransaction) -> DBTransaction:
@@ -570,6 +572,30 @@ async def test_recalculation_rejects_historical_engine_error_before_suffix_write
                 )
             ]
         )
+
+
+async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_missing(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    processed_transaction = MagicMock(
+        transaction_id="BUY-MISSING-CANONICAL",
+        transaction_type="BUY",
+    )
+    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository.update_transaction_costs.return_value = None
+
+    with pytest.raises(
+        ValueError,
+        match="Canonical transaction row was not found during cost persistence",
+    ):
+        await cost_calculator_consumer._persist_processed_transaction(
+            processed_transaction=processed_transaction,
+            repo=repository,
+        )
+
+    repository.replace_transaction_cost_breakdown.assert_not_awaited()
+    repository.upsert_buy_lot_state.assert_not_awaited()
+    repository.upsert_accrued_income_offset_state.assert_not_awaited()
 
 
 async def test_consumer_processes_fx_contract_event_without_generic_engine(
@@ -804,7 +830,6 @@ async def test_consumer_uses_trade_fee_in_calculation(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     # ACT
@@ -859,7 +884,6 @@ async def test_consumer_uses_fee_breakdown_when_provided(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_buy_kafka_message)
@@ -898,7 +922,6 @@ async def test_consumer_propagates_epoch_field(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
 
     exclude_fields = {
         "portfolio_base_currency",
@@ -1021,7 +1044,6 @@ async def test_consumer_assigns_avco_sell_policy_metadata(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01", cost_basis_method="AVCO"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_sell_kafka_message)
@@ -1055,7 +1077,7 @@ async def test_consumer_defer_when_fx_rate_missing(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="SGD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
+    mock_repo.get_fx_rate_window.return_value = []
 
     with pytest.raises(RetryableConsumerError):
         await cost_calculator_consumer.process_message(mock_buy_kafka_message)
@@ -1106,10 +1128,127 @@ async def test_fx_enrichment_normalizes_same_currency_without_lookup(
         repo=repo,
     )
 
-    repo.get_fx_rate.assert_not_awaited()
+    repo.get_fx_rate_window.assert_not_awaited()
     assert enriched[0]["trade_currency"] == "USD"
     assert enriched[0]["portfolio_base_currency"] == "USD"
     assert "transaction_fx_rate" not in enriched[0]
+
+
+async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_fx_rate_window.return_value = [
+        EffectiveFxRate(
+            effective_date=date(2026, 4, 1),
+            rate=Decimal("1.40"),
+        ),
+        EffectiveFxRate(
+            effective_date=date(2026, 4, 10),
+            rate=Decimal("1.45"),
+        ),
+    ]
+    transaction_dates = ("05", "10", "15") * 100
+    transactions = [
+        {
+            "transaction_id": f"EUR-{index:03d}",
+            "transaction_date": f"2026-04-{day}T10:00:00Z",
+            "trade_currency": " eur " if index == 0 else "EUR",
+        }
+        for index, day in enumerate(transaction_dates)
+    ]
+
+    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency="SGD",
+        repo=repo,
+    )
+
+    repo.get_fx_rate_window.assert_awaited_once_with(
+        from_currency="EUR",
+        to_currency="SGD",
+        start_date=date(2026, 4, 5),
+        end_date=date(2026, 4, 15),
+    )
+    assert len(enriched) == 300
+    assert [transaction["transaction_fx_rate"] for transaction in enriched] == [
+        Decimal("1.40") if day == "05" else Decimal("1.45") for day in transaction_dates
+    ]
+
+
+async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_pair(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_fx_rate_window.side_effect = [
+        [EffectiveFxRate(effective_date=date(2026, 4, 1), rate=Decimal("1.40"))],
+        [EffectiveFxRate(effective_date=date(2026, 4, 2), rate=Decimal("1.75"))],
+    ]
+    transactions = [
+        {
+            "transaction_id": "EUR-001",
+            "transaction_date": "2026-04-05T10:00:00Z",
+            "trade_currency": "EUR",
+        },
+        {
+            "transaction_id": "EUR-002",
+            "transaction_date": "2026-04-06T10:00:00Z",
+            "trade_currency": "EUR",
+        },
+        {
+            "transaction_id": "GBP-001",
+            "transaction_date": "2026-04-07T10:00:00Z",
+            "trade_currency": "GBP",
+        },
+    ]
+
+    enriched = await cost_calculator_consumer._enrich_transactions_with_fx(
+        transactions=transactions,
+        portfolio_base_currency="SGD",
+        repo=repo,
+    )
+
+    assert repo.get_fx_rate_window.await_args_list == [
+        call(
+            from_currency="EUR",
+            to_currency="SGD",
+            start_date=date(2026, 4, 5),
+            end_date=date(2026, 4, 6),
+        ),
+        call(
+            from_currency="GBP",
+            to_currency="SGD",
+            start_date=date(2026, 4, 7),
+            end_date=date(2026, 4, 7),
+        ),
+    ]
+    assert [transaction["transaction_fx_rate"] for transaction in enriched] == [
+        Decimal("1.40"),
+        Decimal("1.40"),
+        Decimal("1.75"),
+    ]
+
+
+async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_rate(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_fx_rate_window.return_value = [
+        EffectiveFxRate(effective_date=date(2026, 4, 10), rate=Decimal("1.45"))
+    ]
+
+    with pytest.raises(FxRateNotFoundError, match="EUR->SGD"):
+        await cost_calculator_consumer._enrich_transactions_with_fx(
+            transactions=[
+                {
+                    "transaction_id": "EUR-BEFORE-FIRST-RATE",
+                    "transaction_date": "2026-04-05T10:00:00Z",
+                    "trade_currency": "EUR",
+                }
+            ],
+            portfolio_base_currency="SGD",
+            repo=repo,
+        )
 
 
 async def test_consumer_emits_sell_lifecycle_metrics(
@@ -1142,7 +1281,6 @@ async def test_consumer_emits_sell_lifecycle_metrics(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     sell_counter = MagicMock()
@@ -1182,7 +1320,6 @@ async def test_consumer_assigns_dividend_metadata_defaults(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
@@ -1212,7 +1349,6 @@ async def test_consumer_assigns_interest_metadata_defaults(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_interest_kafka_message)
@@ -1249,7 +1385,6 @@ async def test_consumer_auto_generates_adjustment_cash_leg_when_settlement_accou
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_dividend_kafka_message)
@@ -1287,7 +1422,6 @@ async def test_consumer_defers_upstream_mode_until_cash_leg_is_available(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
     mock_repo.get_transaction_by_id.return_value = None
 
@@ -1438,7 +1572,6 @@ async def test_consumer_fee_auto_generate_mode_sends_to_dlq(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_buy_kafka_message)
@@ -1475,7 +1608,6 @@ async def test_consumer_cash_consideration_missing_parent_reference_sends_to_dlq
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
 
     await cost_calculator_consumer.process_message(mock_buy_kafka_message)
@@ -1513,7 +1645,6 @@ async def test_consumer_runs_bundle_a_reconciliation_diagnostics(
     mock_repo.get_portfolio.return_value = Portfolio(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
-    mock_repo.get_fx_rate.return_value = None
     mock_repo.update_transaction_costs.side_effect = lambda arg: arg
     mock_repo.get_bundle_a_group_transactions.return_value = [
         DBTransaction(

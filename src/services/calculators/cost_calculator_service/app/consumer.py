@@ -2,7 +2,8 @@
 import hashlib
 import json
 import logging
-from datetime import datetime
+from bisect import bisect_right
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, List, cast
@@ -242,10 +243,12 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         repo: CostCalculatorRepository,
     ) -> List[dict[str, Any]]:
-        """
-        Iterates through transactions, fetching and attaching FX rates for cross-currency trades.
-        """
+        """Attach latest-on-or-before FX rates using one bounded read per currency pair."""
         portfolio_base_currency = _normalize_event_code(portfolio_base_currency)
+        transactions_by_pair: dict[
+            tuple[str, str],
+            list[tuple[dict[str, Any], date]],
+        ] = {}
         for txn_raw in transactions:
             trade_currency = _normalize_event_code(txn_raw.get("trade_currency"))
             txn_raw["trade_currency"] = trade_currency
@@ -254,21 +257,30 @@ class CostCalculationWorkflow:
             if trade_currency == portfolio_base_currency:
                 continue
 
-            fx_rate = await repo.get_fx_rate(
-                from_currency=trade_currency,
-                to_currency=portfolio_base_currency,
-                a_date=datetime.fromisoformat(
-                    txn_raw["transaction_date"].replace("Z", "+00:00")
-                ).date(),
+            transaction_date = datetime.fromisoformat(
+                txn_raw["transaction_date"].replace("Z", "+00:00")
+            ).date()
+            transactions_by_pair.setdefault((trade_currency, portfolio_base_currency), []).append(
+                (txn_raw, transaction_date)
             )
 
-            if not fx_rate:
-                raise FxRateNotFoundError(
-                    f"FX rate for {txn_raw['trade_currency']}->{portfolio_base_currency} on "
-                    f"{txn_raw['transaction_date']} not found. Retrying..."
-                )
-
-            txn_raw["transaction_fx_rate"] = fx_rate.rate
+        for (trade_currency, base_currency), pair_transactions in transactions_by_pair.items():
+            requested_dates = [transaction_date for _, transaction_date in pair_transactions]
+            fx_rates = await repo.get_fx_rate_window(
+                from_currency=trade_currency,
+                to_currency=base_currency,
+                start_date=min(requested_dates),
+                end_date=max(requested_dates),
+            )
+            rate_dates = [fx_rate.effective_date for fx_rate in fx_rates]
+            for txn_raw, transaction_date in pair_transactions:
+                effective_rate_index = bisect_right(rate_dates, transaction_date) - 1
+                if effective_rate_index < 0:
+                    raise FxRateNotFoundError(
+                        f"FX rate for {trade_currency}->{base_currency} on "
+                        f"{txn_raw['transaction_date']} not found. Retrying..."
+                    )
+                txn_raw["transaction_fx_rate"] = fx_rates[effective_rate_index].rate
 
         return transactions
 
@@ -484,6 +496,11 @@ class CostCalculationWorkflow:
             processed_transaction.transaction_type, "persist_transaction_costs", "attempt"
         )
         updated_txn = await repo.update_transaction_costs(processed_transaction)
+        if updated_txn is None:
+            raise ValueError(
+                "Canonical transaction row was not found during cost persistence: "
+                f"{processed_transaction.transaction_id}"
+            )
         await repo.replace_transaction_cost_breakdown(processed_transaction)
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_transaction_costs", "success"
