@@ -2,7 +2,7 @@
   "schema_version": "lotus-core.architecture-documentation-catalog.v1",
   "repository": "lotus-core",
   "owner": "lotus-core",
-  "catalog_review_date": "2026-07-05",
+  "catalog_review_date": "2026-07-10",
   "guard": "make architecture-docs-catalog-guard",
   "issue": "https://github.com/sgajbi/lotus-core/issues/620",
   "truth_roles": [
@@ -101,6 +101,17 @@
       "related": {"issues": [468], "rfcs": [81], "prs": []},
       "truth_role": "current-state-truth",
       "summary": "Phased decision to consolidate cost, cashflow, and position processing into one deployable while retaining valuation isolation."
+    },
+    {
+      "path": "docs/architecture/transaction-processing-consolidation-change-ledger.md",
+      "type": "migration-ledger",
+      "topics": ["calculator-consolidation", "transaction-processing", "cutover", "removal"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-10",
+      "related": {"issues": [468], "rfcs": [81, 83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Prerequisite-driven inventory of target work, compatibility retirement, retained domain tables, deployment changes, and documentation closure for transaction-processing consolidation."
     },
     {
       "path": "docs/architecture/runtime-boundary-decision-catalog.json",
