@@ -352,6 +352,58 @@ class CostCalculatorRepository:
             for lot, transaction in rows
         ]
 
+    async def get_fifo_disposal_lot_checkpoint_records(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        required_quantity: Decimal,
+    ) -> list[OpenLotCheckpointRecord]:
+        """Stream the oldest open lots needed to cover one FIFO disposal."""
+        if required_quantity <= Decimal(0):
+            raise ValueError("FIFO disposal checkpoint quantity must be positive")
+
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        stmt = (
+            select(PositionLotState, DBTransaction)
+            .join(
+                DBTransaction,
+                DBTransaction.transaction_id == PositionLotState.source_transaction_id,
+            )
+            .where(
+                func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionLotState.security_id) == normalized_security_id,
+                PositionLotState.open_quantity > Decimal(0),
+            )
+            .order_by(
+                DBTransaction.transaction_date.asc(),
+                DBTransaction.quantity.desc(),
+                DBTransaction.transaction_id.asc(),
+            )
+            .execution_options(yield_per=64)
+        )
+
+        records: list[OpenLotCheckpointRecord] = []
+        covered_quantity = Decimal(0)
+        result = await self.db.stream(stmt)
+        try:
+            async for lot, transaction in result:
+                records.append(
+                    OpenLotCheckpointRecord(
+                        transaction=transaction,
+                        quantity=lot.open_quantity,
+                        cost_local=lot.lot_cost_local,
+                        cost_base=lot.lot_cost_base,
+                    )
+                )
+                covered_quantity += lot.open_quantity
+                if covered_quantity >= required_quantity:
+                    break
+        finally:
+            await result.close()
+        return records
+
     async def update_transaction_costs(
         self, transaction_result: EngineTransaction
     ) -> DBTransaction | None:
