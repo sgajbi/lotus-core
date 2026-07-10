@@ -371,7 +371,7 @@ class CostCalculatorRepository:
                 AverageCostPoolState.portfolio_id == normalize_lookup_identifier(portfolio_id),
                 AverageCostPoolState.security_id == normalize_lookup_identifier(security_id),
             )
-            .with_for_update()
+            .with_for_update(of=AverageCostPoolState)
         )
         row = (await self.db.execute(stmt)).first()
         if row is None:

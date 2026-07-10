@@ -11,6 +11,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from sqlalchemy.dialects import postgresql
 
 from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
@@ -286,11 +287,14 @@ async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineag
         cost_base=Decimal("195"),
     )
     compiled_query = str(
-        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+        db_session.execute.call_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
     )
     assert "average_cost_pool_state.portfolio_id = 'P1'" in compiled_query
     assert "average_cost_pool_state.security_id = 'S1'" in compiled_query
-    assert "FOR UPDATE" in compiled_query
+    assert "FOR UPDATE OF average_cost_pool_state" in compiled_query
 
 
 async def test_upsert_average_cost_pool_checkpoint_is_idempotent_and_normalized() -> None:
