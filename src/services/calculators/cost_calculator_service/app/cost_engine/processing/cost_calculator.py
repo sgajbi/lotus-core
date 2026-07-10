@@ -13,6 +13,11 @@ from portfolio_common.transaction_type_registry import (
     is_production_booking_transaction_type,
 )
 
+from ..domain.corporate_action_cash_economics import (
+    CorporateActionCashEconomics,
+    CorporateActionCashEconomicsError,
+    calculate_corporate_action_cash_economics,
+)
 from ..domain.enums.transaction_type import TransactionType
 from ..domain.models.transaction import Transaction
 from .disposition_engine import DispositionEngine
@@ -70,6 +75,15 @@ def _add_interest_invariant_error(
     error_reporter.add_error(transaction.transaction_id, f"INTEREST invariant violation: {message}")
 
 
+def _add_cash_consideration_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id,
+        f"CASH_CONSIDERATION invariant violation: {message}",
+    )
+
+
 def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
     resolved_value = decimal_or_none(value)
     if resolved_value is None:
@@ -111,6 +125,13 @@ def _cash_outflow_book_cost(transaction: Transaction) -> Decimal:
 def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
     if value is None or (isinstance(value, str) and not value.strip()):
         return Decimal(0)
+    return _normalize_decimal_field(value, field_name)
+
+
+def _optional_transaction_decimal(transaction: Transaction, field_name: str) -> Decimal | None:
+    value = getattr(transaction, field_name, None)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
     return _normalize_decimal_field(value, field_name)
 
 
@@ -252,6 +273,17 @@ def _validate_buy_cost_fields(transaction: Transaction, error_reporter: ErrorRep
 def _validate_non_negative_buy_costs(
     transaction: Transaction, error_reporter: ErrorReporter
 ) -> bool:
+    if (
+        transaction.gross_cost is None
+        or transaction.net_cost_local is None
+        or transaction.net_cost is None
+    ):
+        _add_buy_invariant_error(
+            error_reporter,
+            transaction,
+            "gross_cost, book_cost_local, and book_cost_base must be calculated.",
+        )
+        return False
     if transaction.gross_cost < Decimal(0):
         _add_buy_invariant_error(error_reporter, transaction, "gross_cost must be >= 0.")
         return False
@@ -375,6 +407,13 @@ def _apply_sell_disposal_fields(
 
 
 def _validate_sell_disposal_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
+    if transaction.net_cost is None or transaction.net_cost_local is None:
+        _add_sell_invariant_error(
+            error_reporter,
+            transaction,
+            "net_cost and net_cost_local must be calculated for SELL disposal.",
+        )
+        return False
     if transaction.net_cost <= Decimal(0) and transaction.net_cost_local <= Decimal(0):
         return True
     _add_sell_invariant_error(
@@ -631,6 +670,93 @@ class IncomeStrategy:
         _apply_no_realized_pnl(transaction)
 
 
+class CashConsiderationStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        del disposition_engine
+        if not _validate_zero_quantity_and_price(
+            transaction,
+            error_reporter,
+            transaction_label="CASH_CONSIDERATION",
+            add_invariant_error=_add_cash_consideration_invariant_error,
+        ):
+            return
+        if transaction.gross_transaction_amount <= Decimal(0):
+            _add_cash_consideration_invariant_error(
+                error_reporter,
+                transaction,
+                "gross cash proceeds must be greater than 0.",
+            )
+            return
+        try:
+            economics = calculate_corporate_action_cash_economics(
+                gross_proceeds_local=transaction.gross_transaction_amount,
+                fees_local=_transaction_total_fees(transaction),
+                allocated_cost_basis_local=_optional_transaction_decimal(
+                    transaction, "allocated_cost_basis_local"
+                ),
+                allocated_cost_basis_base=_optional_transaction_decimal(
+                    transaction, "allocated_cost_basis_base"
+                ),
+                local_currency=transaction.trade_currency,
+                base_currency=transaction.portfolio_base_currency,
+                transaction_fx_rate=_transaction_fx_rate_or_one(transaction),
+                realized_capital_pnl_local=_optional_transaction_decimal(
+                    transaction, "realized_capital_pnl_local"
+                ),
+                realized_fx_pnl_local=_optional_transaction_decimal(
+                    transaction, "realized_fx_pnl_local"
+                ),
+                realized_total_pnl_local=_optional_transaction_decimal(
+                    transaction, "realized_total_pnl_local"
+                ),
+                realized_capital_pnl_base=_optional_transaction_decimal(
+                    transaction, "realized_capital_pnl_base"
+                ),
+                realized_fx_pnl_base=_optional_transaction_decimal(
+                    transaction, "realized_fx_pnl_base"
+                ),
+                realized_total_pnl_base=_optional_transaction_decimal(
+                    transaction, "realized_total_pnl_base"
+                ),
+            )
+        except (CorporateActionCashEconomicsError, ValueError) as exc:
+            _add_cash_consideration_invariant_error(error_reporter, transaction, str(exc))
+            return
+        _apply_cash_consideration_economics(transaction, economics)
+
+
+def _apply_cash_consideration_economics(
+    transaction: Transaction,
+    economics: CorporateActionCashEconomics,
+) -> None:
+    transaction.set_calculated_field(
+        "allocated_cost_basis_local", economics.allocated_cost_basis_local
+    )
+    transaction.set_calculated_field(
+        "allocated_cost_basis_base", economics.allocated_cost_basis_base
+    )
+    transaction.net_cost_local = -economics.allocated_cost_basis_local
+    transaction.net_cost = -economics.allocated_cost_basis_base
+    transaction.gross_cost = -economics.allocated_cost_basis_base
+    transaction.realized_gain_loss_local = economics.realized_total_pnl_local
+    transaction.realized_gain_loss = economics.realized_total_pnl_base
+    transaction.set_calculated_field(
+        "realized_capital_pnl_local", economics.realized_capital_pnl_local
+    )
+    transaction.set_calculated_field("realized_fx_pnl_local", economics.realized_fx_pnl_local)
+    transaction.set_calculated_field("realized_total_pnl_local", economics.realized_total_pnl_local)
+    transaction.set_calculated_field(
+        "realized_capital_pnl_base", economics.realized_capital_pnl_base
+    )
+    transaction.set_calculated_field("realized_fx_pnl_base", economics.realized_fx_pnl_base)
+    transaction.set_calculated_field("realized_total_pnl_base", economics.realized_total_pnl_base)
+
+
 class QuantityRestatementStrategy:
     def calculate_costs(
         self,
@@ -758,7 +884,7 @@ class FxBaselineStrategy:
             error_reporter.add_error(transaction.transaction_id, str(exc))
             return
         for field_name, field_value in update.items():
-            setattr(transaction, field_name, field_value)
+            transaction.set_calculated_field(field_name, field_value)
 
 
 def _validate_canonical_fx_transaction(
@@ -812,7 +938,7 @@ class CostCalculator:
             TransactionType.DEMERGER_IN: SecurityInflowStrategy(),
             TransactionType.SPIN_OFF: PartialTransferOutStrategy(),
             TransactionType.DEMERGER_OUT: PartialTransferOutStrategy(),
-            TransactionType.CASH_CONSIDERATION: IncomeStrategy(),
+            TransactionType.CASH_CONSIDERATION: CashConsiderationStrategy(),
             TransactionType.CASH_IN_LIEU: SellStrategy(),
             TransactionType.SPLIT: QuantityRestatementStrategy(),
             TransactionType.REVERSE_SPLIT: QuantityRestatementStrategy(),

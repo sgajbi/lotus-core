@@ -281,6 +281,101 @@ def test_cost_calculator_has_explicit_strategies_for_production_booking_enum_typ
     assert TransactionType.OTHER not in cost_calculator._strategies
 
 
+def _cash_consideration(**overrides: object) -> Transaction:
+    values = {
+        "transaction_id": "CA-CASH-CONSIDERATION-001",
+        "portfolio_id": "P1",
+        "instrument_id": "SOURCE-SECURITY",
+        "security_id": "SOURCE-SECURITY",
+        "transaction_type": TransactionType.CASH_CONSIDERATION,
+        "transaction_date": datetime(2026, 5, 3),
+        "quantity": Decimal("0"),
+        "price": Decimal("0"),
+        "gross_transaction_amount": Decimal("250"),
+        "trade_currency": "USD",
+        "portfolio_base_currency": "USD",
+        "transaction_fx_rate": Decimal("1"),
+        "allocated_cost_basis_local": Decimal("50"),
+        "allocated_cost_basis_base": Decimal("50"),
+    }
+    values.update(overrides)
+    return Transaction(**values)
+
+
+def test_cash_consideration_strategy_records_disposed_basis_and_realized_pnl(
+    cost_calculator, mock_disposition_engine, error_reporter
+) -> None:
+    transaction = _cash_consideration()
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert not error_reporter.has_errors_for(transaction.transaction_id)
+    assert transaction.net_cost_local == Decimal("-50")
+    assert transaction.net_cost == Decimal("-50")
+    assert transaction.gross_cost == Decimal("-50")
+    assert transaction.realized_gain_loss_local == Decimal("200")
+    assert transaction.realized_gain_loss == Decimal("200")
+    assert transaction.realized_capital_pnl_local == Decimal("200")
+    assert transaction.realized_fx_pnl_local == Decimal("0")
+    assert transaction.realized_total_pnl_local == Decimal("200")
+    assert transaction.realized_capital_pnl_base == Decimal("200")
+    assert transaction.realized_fx_pnl_base == Decimal("0")
+    assert transaction.realized_total_pnl_base == Decimal("200")
+    assert transaction.model_dump()["realized_total_pnl_base"] == Decimal("200")
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_cash_consideration_strategy_preserves_cross_currency_pnl_components(
+    cost_calculator, error_reporter
+) -> None:
+    transaction = _cash_consideration(
+        portfolio_base_currency="SGD",
+        transaction_fx_rate=Decimal("1.4"),
+        allocated_cost_basis_base=Decimal("60"),
+        realized_capital_pnl_local=Decimal("190"),
+        realized_fx_pnl_local=Decimal("10"),
+        realized_capital_pnl_base=Decimal("270"),
+        realized_fx_pnl_base=Decimal("20"),
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert not error_reporter.has_errors_for(transaction.transaction_id)
+    assert transaction.net_cost == Decimal("-60")
+    assert transaction.realized_gain_loss == Decimal("290.0")
+    assert transaction.realized_capital_pnl_base == Decimal("270")
+    assert transaction.realized_fx_pnl_base == Decimal("20")
+    assert transaction.realized_total_pnl_base == Decimal("290.0")
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"allocated_cost_basis_local": None}, "allocated_cost_basis_local is required"),
+        ({"quantity": Decimal("1")}, "quantity_delta must be 0"),
+        ({"price": Decimal("1")}, "price must be 0"),
+        ({"gross_transaction_amount": Decimal("0")}, "gross cash proceeds must be greater"),
+    ],
+)
+def test_cash_consideration_strategy_rejects_incomplete_or_invalid_product_leg(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    transaction = _cash_consideration(**overrides)
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert error_reporter.has_errors_for(transaction.transaction_id)
+    assert message in error_reporter.get_errors()[0].error_reason
+    assert transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "component_type", "extra_fields"),
     [
