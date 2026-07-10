@@ -59,6 +59,17 @@ def test_transaction_settlement_date_can_remain_none() -> None:
     assert transaction.settlement_date is None
 
 
+def test_transaction_dump_serializes_current_calculated_extra_field_value() -> None:
+    transaction = _transaction(realized_total_pnl_base=None)
+
+    transaction.realized_total_pnl_base = Decimal("125.50")
+
+    assert transaction.model_dump()["realized_total_pnl_base"] == Decimal("125.50")
+    assert transaction.model_dump(exclude_none=True)["realized_total_pnl_base"] == Decimal(
+        "125.50"
+    )
+
+
 def test_cost_engine_domain_models_do_not_import_pydantic() -> None:
     domain_root = (
         Path(__file__).resolve().parents[6]
