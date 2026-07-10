@@ -142,6 +142,8 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
 
     assert lot.original_quantity == Decimal("420")
     assert lot.open_quantity == Decimal("310")
+    assert lot.lot_cost_local == Decimal("31000")
+    assert lot.lot_cost_base == Decimal("31000")
     assert persisted_sell.net_cost == Decimal("-11000")
     assert persisted_sell.realized_gain_loss == Decimal("1100")
     assert [(row.classification, row.amount) for row in cashflows] == [

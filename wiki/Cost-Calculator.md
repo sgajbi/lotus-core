@@ -18,6 +18,11 @@ The current runtime centers on:
 - maintaining lot and related cost-basis support state
 - publishing `transactions.cost.processed` for downstream fan-out
 
+Lot-state persistence carries one remaining-state value per source BUY: open quantity, local cost
+basis, and portfolio-base cost basis. FIFO reflects actual lot consumption. AVCO allocates the
+remaining pooled quantity and cost pro rata across source contributions with exact aggregate
+reconciliation; AVCO source rows are supportability lineage, not disposal-order lot selection.
+
 This makes the service more than a local calculation helper. It is the stage that turns canonical
 transaction facts into governed cost-aware transaction state.
 

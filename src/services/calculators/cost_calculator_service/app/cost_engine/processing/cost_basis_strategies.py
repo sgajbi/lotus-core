@@ -1,12 +1,12 @@
 import logging
 from collections import defaultdict, deque
 from decimal import ROUND_DOWN, Decimal
-from typing import Deque, Dict, Optional, Protocol, Tuple, cast
+from typing import Protocol, cast
 
 from portfolio_common.decimal_amounts import required_decimal
 
 from ..domain.models.transaction import Transaction
-from .cost_objects import CostLot
+from .cost_objects import CostLot, OpenLotState
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +79,8 @@ def _non_positive_sell_quantity_error(sell_quantity: Decimal) -> str | None:
 
 
 def _consume_next_fifo_lot(
-    lots_for_instrument: Deque[CostLot],
+    lots_for_instrument: deque[CostLot],
     required_quantity: Decimal,
-    remaining_quantity_by_transaction_id: dict[str, Decimal],
 ) -> tuple[Decimal, Decimal, Decimal, Decimal]:
     current_lot = lots_for_instrument[0]
     matched_quantity = min(required_quantity, current_lot.remaining_quantity)
@@ -89,9 +88,6 @@ def _consume_next_fifo_lot(
     matched_cost_local = matched_quantity * current_lot.cost_per_share_local
 
     current_lot.remaining_quantity -= matched_quantity
-    remaining_quantity_by_transaction_id[current_lot.transaction_id] = (
-        current_lot.remaining_quantity
-    )
     if current_lot.remaining_quantity == Decimal(0):
         lots_for_instrument.popleft()
 
@@ -107,10 +103,10 @@ class CostBasisStrategy(Protocol):
     def add_buy_lot(self, transaction: Transaction): ...
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
-    ) -> Tuple[Decimal, Decimal, Decimal, Optional[str]]: ...
+    ) -> tuple[Decimal, Decimal, Decimal, str | None]: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
     def set_initial_lots(self, transactions: list[Transaction]): ...
-    def get_open_lot_quantities(self) -> dict[str, Decimal]: ...
+    def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
 
 
 class FIFOBasisStrategy:
@@ -119,8 +115,8 @@ class FIFOBasisStrategy:
     """
 
     def __init__(self):
-        self._open_lots: Dict[Tuple[str, str], Deque[CostLot]] = defaultdict(deque)
-        self._remaining_quantity_by_transaction_id: Dict[str, Decimal] = {}
+        self._open_lots: dict[tuple[str, str], deque[CostLot]] = defaultdict(deque)
+        self._lots_by_transaction_id: dict[str, CostLot] = {}
         logger.debug("FIFOBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction):
@@ -140,11 +136,11 @@ class FIFOBasisStrategy:
         )
         key = (transaction.portfolio_id, transaction.instrument_id)
         self._open_lots[key].append(new_lot)
-        self._remaining_quantity_by_transaction_id[transaction.transaction_id] = quantity
+        self._lots_by_transaction_id[transaction.transaction_id] = new_lot
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
-    ) -> Tuple[Decimal, Decimal, Decimal, Optional[str]]:
+    ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         key = (portfolio_id, instrument_id)
         required_quantity = sell_quantity
         total_matched_cost_base = Decimal(0)
@@ -171,7 +167,6 @@ class FIFOBasisStrategy:
                 _consume_next_fifo_lot(
                     lots_for_instrument,
                     required_quantity,
-                    self._remaining_quantity_by_transaction_id,
                 )
             )
             total_matched_cost_base += matched_cost_base
@@ -188,8 +183,11 @@ class FIFOBasisStrategy:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
-    def get_open_lot_quantities(self) -> dict[str, Decimal]:
-        return dict(self._remaining_quantity_by_transaction_id)
+    def get_open_lot_states(self) -> dict[str, OpenLotState]:
+        return {
+            transaction_id: lot.open_state()
+            for transaction_id, lot in self._lots_by_transaction_id.items()
+        }
 
 
 class AverageCostBasisStrategy(CostBasisStrategy):
@@ -199,7 +197,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
     """
 
     def __init__(self):
-        self._holdings: Dict[Tuple[str, str], Dict[str, Decimal]] = defaultdict(
+        self._holdings: dict[tuple[str, str], dict[str, Decimal]] = defaultdict(
             lambda: {
                 "total_qty": Decimal(0),
                 "total_cost_local": Decimal(0),
@@ -207,7 +205,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             }
         )
         self._source_transaction_ids: dict[tuple[str, str], list[str]] = defaultdict(list)
-        self._remaining_quantity_by_transaction_id: dict[str, Decimal] = {}
+        self._open_source_lot_states: dict[str, OpenLotState] = {}
         logger.debug("AverageCostBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction):
@@ -221,11 +219,15 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         self._holdings[key]["total_cost_local"] += net_cost_local
         self._holdings[key]["total_cost_base"] += net_cost
         self._source_transaction_ids[key].append(transaction.transaction_id)
-        self._remaining_quantity_by_transaction_id[transaction.transaction_id] = quantity
+        self._open_source_lot_states[transaction.transaction_id] = OpenLotState(
+            quantity=quantity,
+            cost_local=net_cost_local,
+            cost_base=net_cost,
+        )
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
-    ) -> Tuple[Decimal, Decimal, Decimal, Optional[str]]:
+    ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         key = (portfolio_id, instrument_id)
         holding = self._holdings[key]
         total_qty = holding["total_qty"]
@@ -260,41 +262,62 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         holding["total_qty"] -= required_quantity
         holding["total_cost_local"] -= cogs_local
         holding["total_cost_base"] -= cogs_base
-        self._reduce_source_quantities(
+        self._reconcile_open_source_lot_states(
             key=key,
             quantity_before_disposal=total_qty,
             quantity_after_disposal=holding["total_qty"],
+            cost_local_after_disposal=holding["total_cost_local"],
+            cost_base_after_disposal=holding["total_cost_base"],
         )
 
         return cogs_base, cogs_local, required_quantity, None
 
-    def _reduce_source_quantities(
+    def _reconcile_open_source_lot_states(
         self,
         *,
         key: tuple[str, str],
         quantity_before_disposal: Decimal,
         quantity_after_disposal: Decimal,
+        cost_local_after_disposal: Decimal,
+        cost_base_after_disposal: Decimal,
     ) -> None:
         transaction_ids = self._source_transaction_ids[key]
         if not transaction_ids:
             return
         if quantity_after_disposal.is_zero():
             for transaction_id in transaction_ids:
-                self._remaining_quantity_by_transaction_id[transaction_id] = Decimal(0)
+                self._open_source_lot_states[transaction_id] = OpenLotState(
+                    quantity=Decimal(0),
+                    cost_local=Decimal(0),
+                    cost_base=Decimal(0),
+                )
             return
 
         remaining_ratio = quantity_after_disposal / quantity_before_disposal
         allocated_quantity = Decimal(0)
+        allocated_cost_local = Decimal(0)
+        allocated_cost_base = Decimal(0)
         for transaction_id in transaction_ids[:-1]:
-            current_quantity = self._remaining_quantity_by_transaction_id[transaction_id]
-            updated_quantity = (current_quantity * remaining_ratio).quantize(
+            current_state = self._open_source_lot_states[transaction_id]
+            updated_quantity = (current_state.quantity * remaining_ratio).quantize(
                 LOT_QUANTITY_QUANTUM,
                 rounding=ROUND_DOWN,
             )
-            self._remaining_quantity_by_transaction_id[transaction_id] = updated_quantity
+            updated_cost_local = current_state.cost_local * remaining_ratio
+            updated_cost_base = current_state.cost_base * remaining_ratio
+            self._open_source_lot_states[transaction_id] = OpenLotState(
+                quantity=updated_quantity,
+                cost_local=updated_cost_local,
+                cost_base=updated_cost_base,
+            )
             allocated_quantity += updated_quantity
-        self._remaining_quantity_by_transaction_id[transaction_ids[-1]] = (
-            quantity_after_disposal - allocated_quantity
+            allocated_cost_local += updated_cost_local
+            allocated_cost_base += updated_cost_base
+        final_transaction_id = transaction_ids[-1]
+        self._open_source_lot_states[final_transaction_id] = OpenLotState(
+            quantity=quantity_after_disposal - allocated_quantity,
+            cost_local=cost_local_after_disposal - allocated_cost_local,
+            cost_base=cost_base_after_disposal - allocated_cost_base,
         )
 
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
@@ -306,5 +329,5 @@ class AverageCostBasisStrategy(CostBasisStrategy):
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
-    def get_open_lot_quantities(self) -> dict[str, Decimal]:
-        return dict(self._remaining_quantity_by_transaction_id)
+    def get_open_lot_states(self) -> dict[str, OpenLotState]:
+        return dict(self._open_source_lot_states)

@@ -8,6 +8,7 @@ from cost_engine.domain.models.transaction import (
 from cost_engine.domain.models.transaction import (
     Transaction as EngineTransaction,
 )
+from cost_engine.processing.cost_objects import OpenLotState
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Portfolio,
@@ -116,7 +117,7 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     assert offset.linked_transaction_group_id == "LTG-2026-777"
 
 
-async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
+async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine_state(
     clean_db, async_db_session: AsyncSession
 ) -> None:
     async_db_session.add(
@@ -166,10 +167,16 @@ async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
     await async_db_session.commit()
 
     repo = CostCalculatorRepository(async_db_session)
-    await repo.update_lot_open_quantities(
+    await repo.update_open_lot_states(
         portfolio_id="PORT_SLICE4_02",
         security_id="BOND_USD_02",
-        open_quantities_by_source_transaction_id={"TXN_SLICE4_02": Decimal("40")},
+        states_by_source_transaction_id={
+            "TXN_SLICE4_02": OpenLotState(
+                quantity=Decimal("40"),
+                cost_local=Decimal("3920"),
+                cost_base=Decimal("4000"),
+            )
+        },
     )
     await async_db_session.commit()
 
@@ -178,6 +185,8 @@ async def test_cost_repository_updates_lot_open_quantity_from_engine_state(
     )
     lot = (await async_db_session.execute(lot_stmt)).scalar_one()
     assert lot.open_quantity == Decimal("40")
+    assert lot.lot_cost_local == Decimal("3920")
+    assert lot.lot_cost_base == Decimal("4000")
 
 
 async def test_cost_repository_upserts_buy_lot_state_idempotently(

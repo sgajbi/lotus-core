@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
+from .cost_engine.processing.cost_objects import OpenLotState
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -376,14 +377,14 @@ class CostCalculatorRepository:
             stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
         )
 
-    async def update_lot_open_quantities(
+    async def update_open_lot_states(
         self,
         *,
         portfolio_id: str,
         security_id: str,
-        open_quantities_by_source_transaction_id: dict[str, Decimal],
+        states_by_source_transaction_id: dict[str, OpenLotState],
     ) -> None:
-        """Reconciles persisted lot state with the latest engine-derived remaining quantities."""
+        """Reconciles persisted quantity and cost with the latest engine-derived lot state."""
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = select(PositionLotState).where(
@@ -392,10 +393,15 @@ class CostCalculatorRepository:
         )
         lot_rows = (await self.db.execute(stmt)).scalars().all()
         for lot_row in lot_rows:
-            lot_row.open_quantity = open_quantities_by_source_transaction_id.get(
-                lot_row.source_transaction_id,
-                Decimal(0),
-            )
+            state = states_by_source_transaction_id.get(lot_row.source_transaction_id)
+            if state is None:
+                lot_row.open_quantity = Decimal(0)
+                lot_row.lot_cost_local = Decimal(0)
+                lot_row.lot_cost_base = Decimal(0)
+                continue
+            lot_row.open_quantity = state.quantity
+            lot_row.lot_cost_local = state.cost_local
+            lot_row.lot_cost_base = state.cost_base
 
     async def upsert_accrued_income_offset_state(
         self, transaction_result: EngineTransaction
