@@ -329,6 +329,8 @@ class CostCalculatorRepository:
     async def get_open_lot_checkpoint_records(
         self, *, portfolio_id: str, security_id: str
     ) -> list[OpenLotCheckpointRecord]:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
             select(PositionLotState, DBTransaction)
             .join(
@@ -336,9 +338,16 @@ class CostCalculatorRepository:
                 DBTransaction.transaction_id == PositionLotState.source_transaction_id,
             )
             .where(
-                PositionLotState.portfolio_id == normalize_lookup_identifier(portfolio_id),
-                PositionLotState.security_id == normalize_lookup_identifier(security_id),
+                func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionLotState.security_id) == normalized_security_id,
+                func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
+                func.trim(DBTransaction.security_id) == normalized_security_id,
                 PositionLotState.open_quantity > Decimal(0),
+            )
+            .order_by(
+                DBTransaction.transaction_date.asc(),
+                DBTransaction.quantity.desc(),
+                DBTransaction.transaction_id.asc(),
             )
         )
         rows = (await self.db.execute(stmt)).all()

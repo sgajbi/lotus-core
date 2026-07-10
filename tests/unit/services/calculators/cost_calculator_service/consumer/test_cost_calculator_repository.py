@@ -224,6 +224,10 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "position_lot_state.open_quantity > 0" in compiled_query
+    assert (
+        "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
+        "transactions.transaction_id ASC"
+    ) in compiled_query
 
 
 async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:

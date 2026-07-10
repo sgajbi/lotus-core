@@ -541,6 +541,7 @@ class CostCalculationWorkflow:
             transaction_raw = self._transform_event_for_engine(
                 TransactionEvent.model_validate(record.transaction)
             )
+            transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
             transaction_raw["quantity"] = record.quantity
             transaction_raw["net_cost_local"] = record.cost_local
             transaction_raw["net_cost"] = record.cost_base
