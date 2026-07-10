@@ -1,0 +1,1 @@
+"""Combined transaction processing application."""
