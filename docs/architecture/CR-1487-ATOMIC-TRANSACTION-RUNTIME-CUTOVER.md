@@ -24,6 +24,9 @@ weakening domain, replay, observability, and provenance contracts.
 4. The performance fixture used a historical fixed date, creating unrelated valuation backfill when
    downstream services joined the stack. Bank-day log evidence also depended on generated container
    names instead of stable Compose service identities.
+5. The failure-recovery gate paused persistence, observed ingestion-job backlog, submitted invalid
+   historical trades, and accepted a drain timeout as bounded recovery. It did not interrupt or
+   certify the unified transaction consumer.
 
 ## Change
 
@@ -38,6 +41,10 @@ weakening domain, replay, observability, and provenance contracts.
   combined-idempotency completion before reporting end-to-end throughput.
 - Bound performance fixtures to the run business date and made the bank-day log collector use
   configurable Compose project/service identities.
+- Replaced the failure proxy with a fail-closed unified-consumer test. It pauses the target Compose
+  service, proves committed live-group lag grows by the submitted valid record count, verifies source
+  persistence during interruption, resumes the worker, and requires exact cost, cashflow, position,
+  idempotency-claim, live-lag, replay-lag, and incremental DLQ outcomes.
 
 ## Compatibility And Rollback
 
@@ -63,8 +70,12 @@ the additive target runtime, but compatibility events and schema state must rema
 - clean bank-day run `20260710T160914Z`: complete in `20.357s`, downstream drain `10.041s`, exact
   8 transaction / 8 snapshot / 8 position-timeseries / 2 portfolio-timeseries tie-out, zero open
   jobs/findings/log errors, and all API/support probes passed;
+- unified failure-recovery run `20260710T163435Z`: target paused for `10.107s`; source persisted
+  `100` records in `2.020s`; committed live lag grew `0 -> 100` and returned to `0`; replay lag
+  remained `0`; exact `100` cost / cashflow / position / processing-claim outcomes completed in
+  `9.149s`; no DLQ event was added;
 - focused MyPy, Ruff, format, architecture, image, Compose, docs, and wiki gates pass.
 
 The throughput values are characterization evidence, not an approved production SLO. A reviewed
-three-service comparison, failure injection, shutdown-under-load, CI registry evidence,
+three-service comparison, shutdown-under-load, pool-pressure evidence, CI registry evidence,
 Kubernetes/KEDA cutover, canonical QA, and legacy package/shell removal remain open under #468.

@@ -1815,8 +1815,12 @@ Most relevant current governance:
      must seed valid portfolio/instrument source facts, use the run business date, and measure through
      persisted cost, cashflow, position, and combined-idempotency completion; HTTP submission rate is
      not transaction throughput. Resolve support logs by Compose project and service identity, not
-     generated container name. Registry/Kubernetes cutover, failure recovery, canonical QA, and
-     physical legacy package removal remain required before claiming full consolidation.
+     generated container name. Failure recovery must interrupt the unified service and prove source
+     persistence, committed live-group lag growth, exact domain/claim completion, live/replay lag
+     return to baseline, and no incremental DLQ event; ingestion-job backlog is not a transaction
+     recovery proxy and a timeout is never a passing result. Registry/Kubernetes cutover,
+     shutdown-under-load and pool-pressure evidence, canonical QA, and physical legacy package
+     removal remain required before claiming full consolidation.
 
 ## Context Maintenance Rule
 

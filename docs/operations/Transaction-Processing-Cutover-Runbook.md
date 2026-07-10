@@ -46,7 +46,10 @@ only their runtime shell and normal-path transaction boundary are consolidated.
 4. Cost, cashflow, position, idempotency, and outbox effects complete atomically.
 5. Run `make test-performance-load-gate`; use completed transaction throughput, not request
    submission rate.
-6. Run the bank-day scenario with the active Compose project and require exact DB/API/log tie-out.
+6. Run `make test-failure-recovery-gate`. The gate must interrupt
+   `portfolio_transaction_processing_service`, prove committed live-group lag growth, and return
+   live/replay lag to baseline with exact cost/cashflow/position/claim counts and no added DLQ event.
+7. Run the bank-day scenario with the active Compose project and require exact DB/API/log tie-out.
 
 ## Stop And Roll Back
 
