@@ -1,4 +1,5 @@
 # services/calculators/cost_calculator_service/app/repository.py
+from dataclasses import dataclass, fields
 from datetime import date
 from decimal import Decimal
 from typing import Any, List, Optional, cast
@@ -6,6 +7,7 @@ from typing import Any, List, Optional, cast
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
+    CostBasisProcessingState,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     FxRate,
@@ -27,6 +29,7 @@ from sqlalchemy.orm import aliased
 from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
+from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -127,6 +130,14 @@ FEE_COMPONENT_FIELDS = (
     "gst",
     "other_fees",
 )
+
+
+@dataclass(frozen=True, slots=True)
+class OpenLotCheckpointRecord:
+    transaction: DBTransaction
+    quantity: Decimal
+    cost_local: Decimal
+    cost_base: Decimal
 
 
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
@@ -272,6 +283,72 @@ class CostCalculatorRepository:
 
         result = await self.db.execute(stmt)
         return cast(List[DBTransaction], result.scalars().all())
+
+    async def get_cost_basis_processing_checkpoint(
+        self, *, portfolio_id: str, security_id: str
+    ) -> CostBasisProcessingCheckpoint | None:
+        stmt = select(CostBasisProcessingState).where(
+            CostBasisProcessingState.portfolio_id == normalize_lookup_identifier(portfolio_id),
+            CostBasisProcessingState.security_id == normalize_lookup_identifier(security_id),
+        )
+        row = (await self.db.execute(stmt)).scalars().first()
+        if row is None:
+            return None
+        return CostBasisProcessingCheckpoint(
+            portfolio_id=row.portfolio_id,
+            security_id=row.security_id,
+            cost_basis_method=row.cost_basis_method,
+            latest_transaction_date=row.latest_transaction_date,
+            latest_dependency_rank=row.latest_dependency_rank,
+            latest_cash_dependency_rank=row.latest_cash_dependency_rank,
+            latest_child_sequence=row.latest_child_sequence,
+            latest_target_instrument_id=row.latest_target_instrument_id,
+            latest_quantity=row.latest_quantity,
+            latest_transaction_id=row.latest_transaction_id,
+            engine_state_version=row.engine_state_version,
+        )
+
+    async def upsert_cost_basis_processing_checkpoint(
+        self, checkpoint: CostBasisProcessingCheckpoint
+    ) -> None:
+        payload = {field.name: getattr(checkpoint, field.name) for field in fields(checkpoint)}
+        stmt = pg_insert(CostBasisProcessingState).values(**payload)
+        await self.db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["portfolio_id", "security_id"],
+                set_={
+                    field_name: getattr(stmt.excluded, field_name)
+                    for field_name in payload
+                    if field_name not in {"portfolio_id", "security_id"}
+                },
+            )
+        )
+
+    async def get_open_lot_checkpoint_records(
+        self, *, portfolio_id: str, security_id: str
+    ) -> list[OpenLotCheckpointRecord]:
+        stmt = (
+            select(PositionLotState, DBTransaction)
+            .join(
+                DBTransaction,
+                DBTransaction.transaction_id == PositionLotState.source_transaction_id,
+            )
+            .where(
+                PositionLotState.portfolio_id == normalize_lookup_identifier(portfolio_id),
+                PositionLotState.security_id == normalize_lookup_identifier(security_id),
+                PositionLotState.open_quantity > Decimal(0),
+            )
+        )
+        rows = (await self.db.execute(stmt)).all()
+        return [
+            OpenLotCheckpointRecord(
+                transaction=transaction,
+                quantity=lot.open_quantity,
+                cost_local=lot.lot_cost_local,
+                cost_base=lot.lot_cost_base,
+            )
+            for lot, transaction in rows
+        ]
 
     async def update_transaction_costs(
         self, transaction_result: EngineTransaction

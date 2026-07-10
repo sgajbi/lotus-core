@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import FxRate, PositionLotState
+from portfolio_common.database_models import CostBasisProcessingState, FxRate, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
@@ -15,6 +15,9 @@ from src.services.calculators.cost_calculator_service.app.cost_engine.domain.mod
 )
 from src.services.calculators.cost_calculator_service.app.cost_engine.processing.cost_objects import (  # noqa: E501
     OpenLotState,
+)
+from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
+    CostBasisProcessingCheckpoint,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
@@ -135,6 +138,92 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     assert "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC" in (
         compiled_query
     )
+
+
+async def test_get_cost_basis_processing_checkpoint_maps_durable_ordering_state() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    persisted = CostBasisProcessingState(
+        portfolio_id="PORT_COST_01",
+        security_id="SEC01",
+        cost_basis_method="FIFO",
+        latest_transaction_date=datetime(2026, 1, 2, 10, 0, 0),
+        latest_dependency_rank=4,
+        latest_cash_dependency_rank=1,
+        latest_child_sequence=2_147_483_647,
+        latest_target_instrument_id="",
+        latest_quantity=Decimal("10"),
+        latest_transaction_id="BUY02",
+        engine_state_version="open-lot-v1",
+    )
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.first.return_value = persisted
+    db_session.execute.return_value = execute_result
+
+    checkpoint = await repository.get_cost_basis_processing_checkpoint(
+        portfolio_id=" PORT_COST_01 ", security_id=" SEC01 "
+    )
+
+    assert checkpoint == CostBasisProcessingCheckpoint(
+        portfolio_id="PORT_COST_01",
+        security_id="SEC01",
+        cost_basis_method="FIFO",
+        latest_transaction_date=datetime(2026, 1, 2, 10, 0, 0),
+        latest_dependency_rank=4,
+        latest_cash_dependency_rank=1,
+        latest_child_sequence=2_147_483_647,
+        latest_target_instrument_id="",
+        latest_quantity=Decimal("10"),
+        latest_transaction_id="BUY02",
+        engine_state_version="open-lot-v1",
+    )
+
+
+async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    transaction = DBTransaction(
+        transaction_id="BUY01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="SEC01",
+        security_id="SEC01",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    lot = PositionLotState(
+        lot_id="LOT-BUY01",
+        source_transaction_id="BUY01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="SEC01",
+        security_id="SEC01",
+        acquisition_date=date(2026, 1, 1),
+        original_quantity=Decimal("10"),
+        open_quantity=Decimal("4"),
+        lot_cost_local=Decimal("400"),
+        lot_cost_base=Decimal("420"),
+    )
+    execute_result = MagicMock()
+    execute_result.all.return_value = [(lot, transaction)]
+    db_session.execute.return_value = execute_result
+
+    records = await repository.get_open_lot_checkpoint_records(
+        portfolio_id="PORT_COST_01", security_id="SEC01"
+    )
+
+    assert len(records) == 1
+    assert records[0].transaction is transaction
+    assert records[0].quantity == Decimal("4")
+    assert records[0].cost_local == Decimal("400")
+    assert records[0].cost_base == Decimal("420")
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "position_lot_state.open_quantity > 0" in compiled_query
 
 
 async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost():
