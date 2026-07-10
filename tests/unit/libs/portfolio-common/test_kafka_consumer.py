@@ -180,6 +180,49 @@ async def test_run_loop_uses_configured_poll_timeout(
     mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
 
 
+async def test_shutdown_drains_active_message_before_closing_consumer(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    mock_msg = create_mock_message("key-shutdown-drain", {"data": "value"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    processing_started = asyncio.Event()
+    release_processing = asyncio.Event()
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+    )
+
+    async def process_message(_msg):
+        processing_started.set()
+        await release_processing.wait()
+
+    consumer.process_message_mock.side_effect = process_message
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer",
+            return_value=mock_kafka_producer,
+        ),
+    ):
+        run_task = asyncio.create_task(consumer.run())
+        await asyncio.wait_for(processing_started.wait(), timeout=1)
+
+        consumer.shutdown()
+
+        mock_confluent_consumer.close.assert_not_called()
+        mock_confluent_consumer.commit.assert_not_called()
+
+        release_processing.set()
+        await asyncio.wait_for(run_task, timeout=1)
+
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+    mock_confluent_consumer.close.assert_called_once_with()
+
+
 async def test_concurrent_profile_does_not_commit_before_processing_completion(
     mock_confluent_consumer: MagicMock,
     mock_kafka_producer: MagicMock,

@@ -235,6 +235,9 @@ class BaseConsumer(ABC):
                 extra={"group_id": group_id, "override_keys": sorted(runtime_overrides.keys())},
             )
         self._running = True
+        self._run_active = False
+        self._shutdown_started = False
+        self._shutdown_finalized = False
         self._dlq_failure_attempts: dict[str, int] = {}
         self._dlq_failure_max_attempts = KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS
         self._retryable_failure_attempts: dict[str, tuple[int, float]] = {}
@@ -598,6 +601,7 @@ class BaseConsumer(ABC):
         The main consumer loop. Polls for messages, processes them, handles errors,
         and commits offsets.
         """
+        self._run_active = True
         try:
             self._initialize_consumer()
             loop = asyncio.get_running_loop()
@@ -616,6 +620,7 @@ class BaseConsumer(ABC):
             self._record_consumer_event("critical_loop_exit", "unhandled_exception")
             raise
         finally:
+            self._run_active = False
             self.shutdown()
 
     async def _run_serial_consumer_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -657,11 +662,19 @@ class BaseConsumer(ABC):
 
     async def _poll_next_message(self, loop: asyncio.AbstractEventLoop) -> Message | None:
         started_at = time.monotonic()
-        msg = await loop.run_in_executor(
-            None,
-            self._consumer.poll,
-            self.execution_profile.poll_timeout_seconds,
-        )
+        consumer = self._consumer
+        if consumer is None:
+            raise RuntimeError("Kafka consumer must be initialized before polling.")
+        try:
+            msg = await loop.run_in_executor(
+                None,
+                consumer.poll,
+                self.execution_profile.poll_timeout_seconds,
+            )
+        except Exception:
+            if not self._running:
+                return None
+            raise
         if msg is None:
             observe_kafka_consumer_poll_idle_duration(
                 service=self._metric_service_label(),
@@ -1154,7 +1167,18 @@ class BaseConsumer(ABC):
         )
 
     def shutdown(self):
-        """Gracefully shuts down the consumer."""
+        """Stop polling, drain active work, and then release Kafka resources."""
+        if self._shutdown_finalized:
+            return
+        self._start_shutdown()
+        if self._run_active:
+            return
+        self._finalize_shutdown()
+
+    def _start_shutdown(self) -> None:
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
         self._log_consumer_event(
             logging.INFO,
             "Kafka consumer shutdown started.",
@@ -1165,6 +1189,12 @@ class BaseConsumer(ABC):
         self._running = False
         if self._consumer:
             self._wakeup_consumer_for_shutdown()
+
+    def _finalize_shutdown(self) -> None:
+        if self._shutdown_finalized:
+            return
+        self._shutdown_finalized = True
+        if self._consumer:
             self._close_consumer_for_shutdown()
         if self._producer:
             self._flush_dlq_producer_for_shutdown()
