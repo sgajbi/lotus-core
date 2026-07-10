@@ -33,6 +33,15 @@ For a processed transaction event, the service:
 When a transaction is back-dated, the runtime can trigger a broader reprocessing path instead of
 pretending the new state can be patched in safely with a single forward update.
 
+## Consolidation transition
+
+The deployed compatibility worker advances the epoch and queues ordered replay events on
+`transactions.cost.processed`. The locally implemented combined transaction-processing target uses
+the same detection, ordering, lock, epoch fence, and watermark rules, but rebuilds current-epoch
+position history inside the shared transaction. This avoids depending on a legacy replay topic that
+the final two-consumer deployable will not consume. The target remains inactive until its remaining
+load, backlog, observability, deployment, and rollback gates pass.
+
 ## Data it owns
 
 Primary durable outputs include:

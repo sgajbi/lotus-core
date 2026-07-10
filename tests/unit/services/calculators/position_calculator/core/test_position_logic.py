@@ -12,7 +12,10 @@ from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
+from src.services.calculators.position_calculator.app.core.position_logic import (
+    BackdatedPositionHandling,
+    PositionCalculator,
+)
 from src.services.calculators.position_calculator.app.core.position_models import (
     PositionState as PositionStateDTO,
 )
@@ -303,6 +306,68 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     assert second_call_args["payload"]["epoch"] == 1
     assert result.position_record_count == 0
     assert result.replay_queued is True
+
+
+@pytest.mark.asyncio
+@patch(
+    "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
+)
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox(
+    mock_fencer_class: MagicMock,
+    mock_metric: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+) -> None:
+    mock_fencer_class.return_value.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2025, 8, 25),
+        epoch=0,
+    )
+    mock_state_repo.increment_epoch_and_reset_watermark.return_value = PositionState(epoch=1)
+    mock_state_repo.update_watermarks_if_older.return_value = 1
+    mock_repo.get_all_transactions_for_security.return_value = [
+        DBTransaction(
+            transaction_id="TXN_HIST_1",
+            portfolio_id="P1",
+            security_id="S1",
+            instrument_id="I1",
+            transaction_date=datetime(2025, 1, 5),
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("100"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=Decimal("0"),
+            net_cost=Decimal("100"),
+        )
+    ]
+
+    result = await PositionCalculator.calculate(
+        sample_event,
+        AsyncMock(),
+        mock_repo,
+        mock_state_repo,
+        mock_outbox_repo,
+        backdated_handling=BackdatedPositionHandling.REBUILD_INLINE,
+    )
+
+    mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
+        "P1", "S1", 0, date(2025, 8, 19)
+    )
+    mock_metric.labels.assert_called_once_with(trigger="backdated_transaction")
+    mock_repo.acquire_position_history_replay_lock.assert_awaited_once_with("P1", "S1", 1)
+    mock_repo.delete_positions_from.assert_awaited_once_with("P1", "S1", date(2025, 1, 5), 1)
+    saved_positions = mock_repo.save_positions.await_args.args[0]
+    assert [position.transaction_id for position in saved_positions] == ["TXN_HIST_1", "T1"]
+    assert [position.epoch for position in saved_positions] == [1, 1]
+    mock_outbox_repo.create_outbox_event.assert_not_awaited()
+    assert result.position_record_count == 2
+    assert result.replay_queued is False
 
 
 @pytest.mark.asyncio

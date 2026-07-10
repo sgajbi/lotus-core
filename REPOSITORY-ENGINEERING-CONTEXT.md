@@ -1648,6 +1648,11 @@ Most relevant current governance:
      attempt and preserve one compatibility processed event per replay, while semantic fences and
      deterministic rebuilds must keep cashflow and final position state singular. Do not collapse
      required downstream replay publication into financial-state deduplication.
+     Backdated position handling is topology-specific: deployed compatibility consumers retain
+     `QUEUE_REPLAY`, while `CombinedPositionCalculationWorkflow` must use `REBUILD_INLINE` to
+     advance the compare-and-set epoch and rebuild ordered current-epoch history in the combined
+     unit of work. Do not emit `ReprocessTransactionReplay` from the final two-consumer path because
+     it intentionally has no `transactions.cost.processed` replay consumer.
 
 ## Context Maintenance Rule
 

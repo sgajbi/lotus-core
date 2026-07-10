@@ -26,6 +26,27 @@ class PositionStagingWorkflow(Protocol):
     ) -> position_logic.PositionCalculationResult: ...
 
 
+class CombinedPositionCalculationWorkflow:
+    """Rebuild backdated position state inside the caller-owned transaction."""
+
+    @staticmethod
+    async def calculate(
+        event: TransactionEvent,
+        db_session: AsyncSession,
+        repo: position_repository.PositionRepository,
+        position_state_repo: PositionStateRepository,
+        outbox_repo: OutboxRepository,
+    ) -> position_logic.PositionCalculationResult:
+        return await position_logic.PositionCalculator.calculate(
+            event=event,
+            db_session=db_session,
+            repo=repo,
+            position_state_repo=position_state_repo,
+            outbox_repo=outbox_repo,
+            backdated_handling=position_logic.BackdatedPositionHandling.REBUILD_INLINE,
+        )
+
+
 class PositionProcessingCompatibilityAdapter:
     """Run current position and replay policy inside the combined unit of work."""
 
@@ -36,7 +57,7 @@ class PositionProcessingCompatibilityAdapter:
         repository: position_repository.PositionRepository,
         position_state_repository: PositionStateRepository,
         outbox_repository: OutboxRepository,
-        workflow: PositionStagingWorkflow = position_logic.PositionCalculator,
+        workflow: PositionStagingWorkflow = CombinedPositionCalculationWorkflow,
     ) -> None:
         self._db_session = db_session
         self._repository = repository
