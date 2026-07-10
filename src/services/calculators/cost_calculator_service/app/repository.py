@@ -374,6 +374,8 @@ class CostCalculatorRepository:
             .where(
                 func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
                 func.trim(PositionLotState.security_id) == normalized_security_id,
+                func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
+                func.trim(DBTransaction.security_id) == normalized_security_id,
                 PositionLotState.open_quantity > Decimal(0),
             )
             .order_by(

@@ -543,6 +543,13 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "transactions.transaction_date",
                 "transactions.transaction_id",
             ],
+            "ix_txn_norm_port_sec_date_qty_id": [
+                "trim(transactions.portfolio_id)",
+                "trim(transactions.security_id)",
+                "transactions.transaction_date",
+                "transactions.quantity DESC",
+                "transactions.transaction_id",
+            ],
         },
         Cashflow: {
             "ix_cashflows_norm_port_sec_date_epoch": [
