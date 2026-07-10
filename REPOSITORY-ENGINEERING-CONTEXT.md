@@ -1870,6 +1870,17 @@ Most relevant current governance:
      Existing physical-only consumers and pre-migration null semantic fences remain compatible.
      Any identity-version change requires migration, replay/downstream impact analysis, deterministic
      hash tests, PostgreSQL conflict/concurrency proof, and explicit documentation.
+143. Every destructive `position_history` delete/reinsert window acquires the transaction-scoped
+     PostgreSQL advisory lock for normalized portfolio/security/epoch before deleting or reading
+     its replay window. Keep the lock inside the caller-owned combined SQLAlchemy transaction and
+     recompute from canonical transactions after acquisition; never calculate a stale replacement
+     set before waiting. Backdated epoch advancement remains compare-and-set: only a successful
+     winner increments the epoch-bump metric, while a stale loser records bounded
+     `coalesced/stale_epoch` coordination and performs no replay/rebuild work. Preserve concurrency
+     across different securities and epochs. Any lock-key, ordering, or replay-window change needs
+     same-key PostgreSQL overlap proof, different-key non-blocking proof, exact final row/value
+     reconciliation, bounded lock-wait metrics, structured support logs, and deployed pool/latency
+     evidence before cutover.
 
 ## Context Maintenance Rule
 

@@ -51,6 +51,18 @@ transaction so compatibility consumers cannot double-apply the rebuilt suffix. C
 remain for downstream stage orchestration while registry/Kubernetes cutover and legacy package
 removal are completed.
 
+## Recalculation concurrency
+
+Each destructive position-history delete/reinsert window holds a PostgreSQL advisory transaction
+lock scoped to normalized portfolio, security, and epoch. A waiting calculation recomputes from
+canonical transactions only after acquiring the lock, preventing a stale pre-lock result from
+overwriting newer history. Different securities and epochs retain independent concurrency.
+
+Backdated requests also use compare-and-set epoch advancement. One request advances the epoch; a
+losing concurrent request is recorded as `coalesced/stale_epoch` and performs no replay or rebuild
+work. Operators use the transaction-processing dashboard's position lock-wait p95 and coordination
+rate panels with database pool and consumer-lag signals. Thresholds require a deployed baseline.
+
 ## Data it owns
 
 Primary durable outputs include:
