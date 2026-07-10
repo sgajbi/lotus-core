@@ -51,6 +51,12 @@ Dependency status values are:
 Readiness returns HTTP 200 only when every configured dependency is `ok`; otherwise it returns HTTP
 503 with the dependency status map in `detail.dependencies`.
 
+Web-backed workers register bounded runtime task identities. Kafka task names include the consumer
+group and topic; the shared outbox dispatcher and health server use stable component names. A task
+exit therefore identifies the failed runtime component in supervision logs and internal readiness
+snapshots without exposing raw exception text in the readiness response. Treat a completed consumer
+task as a worker failure even when database and Kafka probes remain reachable.
+
 Shared readiness checks also emit Prometheus dependency telemetry:
 
 | Metric | Labels | Purpose |

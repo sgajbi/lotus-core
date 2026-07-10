@@ -108,9 +108,15 @@ async def run_kafka_worker_runtime(
         extra={"consumer_count": len(consumers), "web_port": web_port},
     )
     tasks.clear()
-    tasks.extend(asyncio.create_task(consumer.run()) for consumer in consumers)
-    tasks.append(asyncio.create_task(dispatcher.run()))
-    tasks.append(asyncio.create_task(server.serve()))
+    tasks.extend(
+        asyncio.create_task(
+            consumer.run(),
+            name=_consumer_task_name(consumer, index=index),
+        )
+        for index, consumer in enumerate(consumers)
+    )
+    tasks.append(asyncio.create_task(dispatcher.run(), name="outbox-dispatcher"))
+    tasks.append(asyncio.create_task(server.serve(), name="health-server"))
 
     runtime_error = await wait_for_shutdown_or_task_failure(
         tasks=tasks,
@@ -128,3 +134,23 @@ async def run_kafka_worker_runtime(
     )
     if runtime_error is not None:
         raise runtime_error
+
+
+def _consumer_task_name(consumer: Any, *, index: int) -> str:
+    group_id = _task_name_component(getattr(consumer, "group_id", None))
+    topic = _task_name_component(getattr(consumer, "topic", None))
+    if group_id and topic:
+        return f"kafka-consumer:{group_id}:{topic}"[:128]
+    return f"kafka-consumer:{index}"
+
+
+def _task_name_component(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    return "".join(
+        character if character.isalnum() or character in {"-", "_", "."} else "_"
+        for character in normalized
+    )[:64]
