@@ -1,5 +1,8 @@
 """Concrete transaction processing infrastructure adapters."""
 
+from .average_cost_pool_reconciliation_adapter import (
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
+)
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
 from .composition import (
     CanonicalBookedTransactionReplayerFactory,
@@ -33,6 +36,7 @@ __all__ = [
     "PipelineStageProcessingCompatibilityAdapter",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
+    "SqlAlchemyAverageCostPoolReconciliationAdapter",
     "SqlAlchemyBookedTransactionReplayAdapter",
     "SqlAlchemyTransactionIdempotencyAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWork",
