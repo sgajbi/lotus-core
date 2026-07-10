@@ -303,45 +303,22 @@ services:
     networks:
       - app_network
 
-  cost_calculator_service:
+  portfolio_transaction_processing_service:
     build:
       context: .
-      dockerfile: ./src/services/calculators/cost_calculator_service/Dockerfile
-    image: lotus-core/cost-calculator-service:local
-    hostname: cost_calculator_service
+      dockerfile: ./src/services/portfolio_transaction_processing_service/Dockerfile
+      args:
+        LOTUS_GIT_COMMIT_SHA: ${LOTUS_GIT_COMMIT_SHA:-unknown}
+        LOTUS_GIT_BRANCH: ${LOTUS_GIT_BRANCH:-unknown}
+        LOTUS_BUILD_TIMESTAMP: ${LOTUS_BUILD_TIMESTAMP:-unknown}
+        LOTUS_REPO_URL: ${LOTUS_REPO_URL:-unknown}
+        LOTUS_IMAGE_VERSION: ${LOTUS_IMAGE_VERSION:-unknown}
+        LOTUS_IMAGE_DIGEST: ${LOTUS_IMAGE_DIGEST:-unknown}
+        LOTUS_CI_RUN_ID: ${LOTUS_CI_RUN_ID:-unknown}
+    image: ${LOTUS_PORTFOLIO_TRANSACTION_PROCESSING_IMAGE:-lotus-core/portfolio-transaction-processing-service:local}
+    hostname: portfolio_transaction_processing_service
     ports:
-      - "${LOTUS_COST_CALCULATOR_HOST_PORT:-8083}:8083"
-    environment:
-      <<: *shared_python_env
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
-    depends_on:
-      kafka-topic-creator:
-       condition: service_completed_successfully
-      migration-runner:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    volumes:
-      - ./src/services/calculators/cost_calculator_service/app:/app/app
-      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
-    command: ["python", "-m", "app.main"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8083/health/ready || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - app_network
-
-  cashflow_calculator_service:
-    build:
-      context: .
-      dockerfile: ./src/services/calculators/cashflow_calculator_service/Dockerfile
-    image: lotus-core/cashflow-calculator-service:local
-    hostname: cashflow_calculator_service
-    ports:
-     - "${LOTUS_CASHFLOW_CALCULATOR_HOST_PORT:-8082}:8082"
+      - "${LOTUS_TRANSACTION_PROCESSING_HOST_PORT:-8090}:8085"
     environment:
       <<: *shared_python_env
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
@@ -352,43 +329,9 @@ services:
       migration-runner:
         condition: service_completed_successfully
     restart: unless-stopped
-    volumes:
-      - ./src/services/calculators/cashflow_calculator_service/app:/app/app
-      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
     command: ["python", "-m", "app.main"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8082/health/ready || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - app_network
-
-  position_calculator_service:
-    build:
-      context: .
-      dockerfile: ./src/services/calculators/position_calculator/Dockerfile
-    image: lotus-core/position-calculator-service:local
-    hostname: position_calculator_service
-    ports:
-      - "${LOTUS_POSITION_CALCULATOR_HOST_PORT:-8081}:8081"
-    environment:
-      <<: *shared_python_env
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
-    depends_on:
-      kafka-topic-creator:
-        condition: service_completed_successfully
-      migration-runner:
-       condition: service_completed_successfully
-    restart: unless-stopped
-    volumes:
-      - ./src/services/calculators/position_calculator/app:/app/app
-      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
-    command: ["python", "-m", "app.main"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/health/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8085/health/ready || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -583,7 +526,7 @@ services:
         condition: service_healthy
       persistence_service:
         condition: service_healthy
-      position_calculator_service:
+      portfolio_transaction_processing_service:
         condition: service_healthy
       valuation_orchestrator_service:
         condition: service_healthy
@@ -640,9 +583,7 @@ services:
       - query_control_plane_service
       - event_replay_service
       - persistence_service
-      - cost_calculator_service
-      - cashflow_calculator_service
-      - position_calculator_service
+      - portfolio_transaction_processing_service
       - pipeline_orchestrator_service
       - valuation_orchestrator_service
       - position_valuation_calculator

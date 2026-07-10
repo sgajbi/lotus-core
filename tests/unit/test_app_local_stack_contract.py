@@ -92,7 +92,7 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
         "ingestion_service",
         "persistence_service",
         "portfolio_aggregation_service",
-        "position_calculator_service",
+        "portfolio_transaction_processing_service",
         "position_valuation_calculator",
         "query_control_plane_service",
         "query_service",
@@ -123,3 +123,26 @@ def test_app_local_stack_parallelizes_portfolio_aggregation_drain() -> None:
     assert aggregation_env["AGGREGATION_SCHEDULER_BATCH_SIZE"] == (
         "${AGGREGATION_SCHEDULER_BATCH_SIZE:-500}"
     )
+
+
+def test_app_local_stack_uses_one_atomic_transaction_processing_runtime() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    services = compose["services"]
+
+    target = services["portfolio_transaction_processing_service"]
+    assert not {
+        "cost_calculator_service",
+        "cashflow_calculator_service",
+        "position_calculator_service",
+    }.intersection(services)
+    assert target["build"]["dockerfile"] == (
+        "./src/services/portfolio_transaction_processing_service/Dockerfile"
+    )
+    assert target["healthcheck"]["test"] == [
+        "CMD-SHELL",
+        "curl -f http://localhost:8085/health/ready || exit 1",
+    ]
+    assert target["depends_on"] == {
+        "kafka-topic-creator": {"condition": "service_completed_successfully"},
+        "migration-runner": {"condition": "service_completed_successfully"},
+    }

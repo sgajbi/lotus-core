@@ -23,21 +23,15 @@ scrape_configs:
   - job_name: 'persistence_service'
     static_configs:
       - targets: ['persistence_service:8080']
-  - job_name: 'position_calculator_service'
+  - job_name: 'portfolio_transaction_processing_service'
     static_configs:
-      - targets: ['position_calculator_service:8081']
+      - targets: ['portfolio_transaction_processing_service:8085']
   - job_name: 'pipeline_orchestrator_service'
     static_configs:
       - targets: ['pipeline_orchestrator_service:8086']
   - job_name: 'valuation_orchestrator_service'
     static_configs:
       - targets: ['valuation_orchestrator_service:8087']
-  - job_name: 'cashflow_calculator_service'
-    static_configs:
-      - targets: ['cashflow_calculator_service:8082']
-  - job_name: 'cost_calculator_service'
-    static_configs:
-      - targets: ['cost_calculator_service:8083']
   - job_name: 'position_valuation_calculator'
     static_configs:
       - targets: ['position_valuation_calculator:8084']
