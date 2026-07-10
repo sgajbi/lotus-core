@@ -1701,6 +1701,42 @@ class PositionLotState(Base):
     )
 
 
+class CostBasisProcessingState(Base):
+    """Durable ordering watermark for incremental cost-basis processing."""
+
+    __tablename__ = "cost_basis_processing_state"
+
+    portfolio_id = Column(
+        String,
+        ForeignKey("portfolios.portfolio_id"),
+        primary_key=True,
+        nullable=False,
+    )
+    security_id = Column(String, primary_key=True, nullable=False)
+    cost_basis_method = Column(String, nullable=False)
+    latest_transaction_date = Column(DateTime(timezone=True), nullable=False)
+    latest_dependency_rank = Column(Integer, nullable=False)
+    latest_cash_dependency_rank = Column(Integer, nullable=False)
+    latest_child_sequence = Column(Integer, nullable=False)
+    latest_target_instrument_id = Column(String, nullable=False, server_default="")
+    latest_quantity = Column(Numeric(18, 10), nullable=False)
+    latest_transaction_id = Column(String, nullable=False)
+    engine_state_version = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_cost_basis_processing_state_updated_key",
+            updated_at.desc(),
+            portfolio_id,
+            security_id,
+        ),
+    )
+
+
 class AccruedIncomeOffsetState(Base):
     __tablename__ = "accrued_income_offset_state"
 
