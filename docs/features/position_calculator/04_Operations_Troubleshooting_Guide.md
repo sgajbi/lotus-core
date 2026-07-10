@@ -19,7 +19,7 @@ The health of this service is crucial for both data accuracy and the proper func
 
 All logs are structured JSON and are tagged with the `correlation_id`. The most important log message from this service is:
 
-* **`"Back-dated transaction detected. Triggering reprocessing flow."`**: This confirms that the service has correctly identified an out-of-order transaction and has initiated the epoch increment and event replay process.
+* **`"Back-dated transaction detected. Advancing position recovery epoch."`**: This confirms that the service identified an out-of-order transaction and initiated an epoch transition. Inspect structured field `backdated_handling`: deployed compatibility consumers use `queue_replay`; the combined atomic path uses `rebuild_inline` and must not depend on the legacy replay topic.
 
 ## 3. Common Failure Scenarios & Resolutions
 
