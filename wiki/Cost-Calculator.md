@@ -50,6 +50,17 @@ transaction receives the latest rate on or before its booking date. Same-currenc
 access. A missing effective seed fails the attempt for retry; Core never substitutes a future or
 default rate.
 
+Developers can reproduce long-history engine scaling with:
+
+```bash
+make profile-cost-history-capacity
+```
+
+The command writes `output/cost-history-capacity-profile.json`. It characterizes parser, sorter,
+FIFO, and AVCO engine cost; it does not certify deployed throughput. FIFO availability checks are
+constant-time. AVCO source-allocation scaling remains an explicit cutover blocker until the
+separate parity-proven optimization is complete.
+
 ## Data it owns
 
 Primary durable outputs include:

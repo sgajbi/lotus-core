@@ -1694,6 +1694,14 @@ Most relevant current governance:
      default, or inferred rate when the seed is missing. Same-currency rows require no FX read.
      Preserve the deterministic full-history methodology until long-history capacity evidence or a
      parity-proven incremental-state decision supports changing it.
+131. FIFO available quantity is maintained as exact aggregate state inside
+     `FIFOBasisStrategy`; BUY acceptance increases it and successful disposal decreases it by the
+     matched quantity. Do not reintroduce an open-lot scan into availability checks. Preserve the
+     iteration-forbidden invariant test and use `make profile-cost-history-capacity` for the
+     machine-readable parser/sorter/engine profile. This profile is engine characterization, not a
+     production throughput SLO. The current AVCO implementation remains a measured scaling
+     hotspot because each disposal reconciles every historical source contribution; optimize it
+     only with sequential quantity/local/base parity and exact aggregate reconciliation.
 
 ## Context Maintenance Rule
 
