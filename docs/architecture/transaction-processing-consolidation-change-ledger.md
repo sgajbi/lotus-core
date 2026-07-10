@@ -35,12 +35,13 @@ tests move with their owning module; they are not deleted merely because a servi
 | Shared combined integration support and domain-variant test layout | implemented-local | CR-1445; canonical persistence/event ordering has one helper and scenario modules are 134-179 lines. |
 | AVCO source-quantity reconciliation | implemented-local | CR-1446; pro-rata source quantities reconcile exactly to pooled holdings instead of falsely closing every lot. |
 | Typed remaining lot-state reconciliation | implemented-local | CR-1447; quantity and local/base remaining cost move together from strategy through persistence. |
+| Concrete combined AVCO source/pool database parity | implemented-local | CR-1448; two acquisitions and one disposal reconcile policy, COGS, gain, source lots, cashflows, positions, and duplicate behavior. |
 
 ## Required Before Runtime Cutover
 
 | Surface | Status | Required change | Removal/cutover prerequisite |
 |---|---|---|---|
-| Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO partial disposal is implemented in CR-1442; fee-aware full disposal in CR-1443; effective-dated cross-currency valuation in CR-1444. Add AVCO, multi-lot selection, explicit cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
+| Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO partial disposal is implemented in CR-1442; fee-aware full disposal in CR-1443; effective-dated cross-currency valuation in CR-1444; AVCO source/pool reconciliation in CR-1448. Add FIFO multi-lot selection, explicit cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
 | Replay request path | required | Use one replay-request consumer that republishes canonical transactions to `transactions.persisted`; combined normal consumer processes replayed transactions under epoch/semantic fences. | Replay ordering, duplicate, partial-publish, epoch, throttle, and backlog tests pass. |
 | Historical AVCO lot evidence | required | Reconcile/backfill existing AVCO `position_lot_state` open quantities and current cost bases before treating tax-lot source products as current after cutover. | Idempotent migration, row-count/value reconciliation, rollback, and source-product supportability evidence pass. |
 | Cost-history runtime complexity | required | Characterize `CostCalculatorRepository.get_transaction_history` full portfolio/security scans under long histories. Introduce incremental state only if FIFO, AVCO, backdated, fee/FX, multi-lot, and corporate-action parity proves identical results. | Query-count/explain/load evidence meets target without weakening deterministic replay; otherwise retain full-history correctness with explicit capacity limits and diagnostics. |
