@@ -284,6 +284,8 @@ async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots
     )
     assert "trim(position_lot_state.portfolio_id) = 'PORT_COST_01'" in compiled_query
     assert "trim(position_lot_state.security_id) = 'SEC01'" in compiled_query
+    assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
     assert (
         "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
         "transactions.transaction_id ASC"
