@@ -63,3 +63,9 @@ def test_kafka_consumer_metrics_use_bounded_labels():
         "topic",
         "group_id",
     )
+    assert monitoring.KAFKA_CONSUMER_PARTITION_LAG_MESSAGES._labelnames == (
+        "service",
+        "topic",
+        "group_id",
+        "partition",
+    )

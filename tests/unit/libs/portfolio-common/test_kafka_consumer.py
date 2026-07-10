@@ -409,6 +409,62 @@ async def test_run_loop_success_emits_standard_consumer_metrics(
     }
 
 
+async def test_successful_commit_observes_cached_partition_lag(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message(
+        "key-lag",
+        {"data": "value"},
+        partition=3,
+        offset=4,
+    )
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.get_watermark_offsets.return_value = (0, 10)
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with patch("portfolio_common.kafka_consumer.set_kafka_consumer_partition_lag") as lag_metric:
+        await test_consumer.run()
+
+    topic_partition = mock_confluent_consumer.get_watermark_offsets.call_args.args[0]
+    assert topic_partition.topic == "test-topic"
+    assert topic_partition.partition == 3
+    assert mock_confluent_consumer.get_watermark_offsets.call_args.kwargs == {"cached": True}
+    lag_metric.assert_called_once_with(
+        service="SVC",
+        topic="test-topic",
+        group_id="test-group",
+        partition="3",
+        lag_messages=5,
+    )
+
+
+async def test_partition_lag_observation_failure_does_not_change_commit_outcome(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+):
+    mock_msg = create_mock_message("key-lag-failure", {"data": "value"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+    mock_confluent_consumer.get_watermark_offsets.return_value = (0, 10)
+
+    async def stop_loop_after_processing(*args, **kwargs):
+        test_consumer.shutdown()
+
+    test_consumer.process_message_mock.side_effect = stop_loop_after_processing
+
+    with patch(
+        "portfolio_common.kafka_consumer.set_kafka_consumer_partition_lag",
+        side_effect=RuntimeError("metrics unavailable"),
+    ):
+        await test_consumer.run()
+
+    mock_confluent_consumer.commit.assert_called_once_with(message=mock_msg, asynchronous=False)
+
+
 async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):

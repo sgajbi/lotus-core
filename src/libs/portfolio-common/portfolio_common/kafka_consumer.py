@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
-from confluent_kafka import Consumer, Message
+from confluent_kafka import Consumer, Message, TopicPartition
 from pydantic import ValidationError
 
 from .config import (
@@ -47,6 +47,7 @@ from .monitoring import (
     observe_kafka_consumer_poll_idle_duration,
     observe_kafka_consumer_processing_duration,
     set_kafka_consumer_in_flight,
+    set_kafka_consumer_partition_lag,
 )
 
 logger = logging.getLogger(__name__)
@@ -1062,6 +1063,7 @@ class BaseConsumer(ABC):
     def _commit_after_dlq_publication(self, msg: Message) -> None:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
+            self._observe_committed_message_lag(msg)
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "dlq_publication")
             self._log_consumer_event(
@@ -1077,6 +1079,7 @@ class BaseConsumer(ABC):
     def _commit_after_successful_processing(self, msg: Message) -> bool:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
+            self._observe_committed_message_lag(msg)
             return True
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "successful_processing")
@@ -1090,6 +1093,38 @@ class BaseConsumer(ABC):
                 error_type=type(commit_error).__name__,
             )
             return False
+
+    def _observe_committed_message_lag(self, msg: Message) -> None:
+        consumer = self._consumer
+        if consumer is None:
+            return
+        try:
+            topic = msg.topic()
+            partition = msg.partition()
+            offset = msg.offset()
+            if (
+                not isinstance(topic, str)
+                or isinstance(partition, bool)
+                or not isinstance(partition, int)
+                or isinstance(offset, bool)
+                or not isinstance(offset, int)
+            ):
+                return
+            _, high_watermark = consumer.get_watermark_offsets(
+                TopicPartition(topic, partition),
+                cached=True,
+            )
+            if isinstance(high_watermark, bool) or not isinstance(high_watermark, int):
+                return
+            set_kafka_consumer_partition_lag(
+                service=self._metric_service_label(),
+                topic=topic,
+                group_id=self._consumer_config["group.id"],
+                partition=str(partition),
+                lag_messages=max(0, high_watermark - offset - 1),
+            )
+        except Exception:
+            return
 
     def _log_dlq_publication_failed(self, msg: Message) -> None:
         self._log_consumer_event(

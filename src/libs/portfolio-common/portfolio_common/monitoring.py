@@ -107,6 +107,12 @@ KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL = Counter(
     labelnames=("service", "topic", "group_id", "reason"),
 )
 
+KAFKA_CONSUMER_PARTITION_LAG_MESSAGES = Gauge(
+    "kafka_consumer_partition_lag_messages",
+    "Messages between the last committed consumer offset and cached partition high watermark.",
+    labelnames=("service", "topic", "group_id", "partition"),
+)
+
 HEALTH_DEPENDENCY_CHECKS_TOTAL = Counter(
     "health_dependency_check_total",
     "Health dependency check outcomes by service, dependency, and bounded status.",
@@ -224,6 +230,22 @@ def observe_kafka_consumer_backlog_pressure(
     reason: str,
 ) -> None:
     KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL.labels(service, topic, group_id, reason).inc()
+
+
+def set_kafka_consumer_partition_lag(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    partition: str,
+    lag_messages: int,
+) -> None:
+    KAFKA_CONSUMER_PARTITION_LAG_MESSAGES.labels(
+        service,
+        topic,
+        group_id,
+        partition,
+    ).set(max(0, lag_messages))
 
 
 def observe_health_dependency_check(
