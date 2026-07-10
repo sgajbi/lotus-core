@@ -1663,6 +1663,11 @@ Most relevant current governance:
      `ConsumerManager` now defaults to `build_transaction_processing_consumers()`; the legacy
      six-consumer registry is compatibility evidence, not target startup behavior. Deployment must
      replace the three calculator workers atomically and must never run both topologies together.
+     The target image must not install the three standalone calculator wheels: they expose
+     overlapping top-level package names (`core`, `consumers`, and `repositories`) and can overwrite
+     one another. Build one target wheel, install `portfolio-common`, and copy only the bounded
+     calculator source closure under `src.services.calculators...`; never copy all Core services to
+     make imports pass. Keep `test_image_package_contract.py` and image provenance gates blocking.
 
 ## Context Maintenance Rule
 
