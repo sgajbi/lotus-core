@@ -88,6 +88,10 @@ def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy
     assert total_matched_cost_base == Decimal("550")
     assert consumed_quantity == sell_quantity
     assert error is None
+    assert avco_strategy.get_open_lot_quantities() == {
+        "BUY001": Decimal("75"),
+        "BUY002": Decimal("75"),
+    }
 
     # Assert the final state
     assert avco_strategy.get_available_quantity("P1", "AVCO_STOCK") == Decimal("150")
@@ -152,6 +156,96 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
     # Assert final state
     final_qty = avco_strategy.get_available_quantity("P_USD", "EUR_STOCK")
     assert final_qty == Decimal("150")
+    assert avco_strategy.get_open_lot_quantities() == {
+        "AVCO_BUY_1": Decimal("75"),
+        "AVCO_BUY_2": Decimal("75"),
+    }
+
+
+def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
+    avco_strategy: AverageCostBasisStrategy,
+):
+    for transaction_id, quantity, cost in (
+        ("AVCO_SEQUENCE_BUY_1", "100", "1000"),
+        ("AVCO_SEQUENCE_BUY_2", "100", "1200"),
+    ):
+        avco_strategy.add_buy_lot(
+            Transaction(
+                transaction_id=transaction_id,
+                portfolio_id="P1",
+                instrument_id="AVCO_SEQUENCE_STOCK",
+                security_id="S1",
+                transaction_type="BUY",
+                transaction_date=datetime(2023, 1, 1),
+                quantity=Decimal(quantity),
+                gross_transaction_amount=Decimal(cost),
+                net_cost=Decimal(cost),
+                net_cost_local=Decimal(cost),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+
+    avco_strategy.consume_sell_quantity("P1", "AVCO_SEQUENCE_STOCK", Decimal("50"))
+    avco_strategy.add_buy_lot(
+        Transaction(
+            transaction_id="AVCO_SEQUENCE_BUY_3",
+            portfolio_id="P1",
+            instrument_id="AVCO_SEQUENCE_STOCK",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2023, 1, 2),
+            quantity=Decimal("50"),
+            gross_transaction_amount=Decimal("700"),
+            net_cost=Decimal("700"),
+            net_cost_local=Decimal("700"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+    avco_strategy.consume_sell_quantity("P1", "AVCO_SEQUENCE_STOCK", Decimal("40"))
+
+    remaining_quantities = avco_strategy.get_open_lot_quantities()
+    assert remaining_quantities == {
+        "AVCO_SEQUENCE_BUY_1": Decimal("60"),
+        "AVCO_SEQUENCE_BUY_2": Decimal("60"),
+        "AVCO_SEQUENCE_BUY_3": Decimal("40"),
+    }
+    assert sum(remaining_quantities.values()) == avco_strategy.get_available_quantity(
+        "P1", "AVCO_SEQUENCE_STOCK"
+    )
+
+
+def test_average_cost_source_quantities_reconcile_at_database_scale(
+    avco_strategy: AverageCostBasisStrategy,
+):
+    for index in range(3):
+        avco_strategy.add_buy_lot(
+            Transaction(
+                transaction_id=f"AVCO_FRACTIONAL_BUY_{index}",
+                portfolio_id="P1",
+                instrument_id="AVCO_FRACTIONAL_STOCK",
+                security_id="S1",
+                transaction_type="BUY",
+                transaction_date=datetime(2023, 1, 1),
+                quantity=Decimal("1"),
+                gross_transaction_amount=Decimal("10"),
+                net_cost=Decimal("10"),
+                net_cost_local=Decimal("10"),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+
+    avco_strategy.consume_sell_quantity("P1", "AVCO_FRACTIONAL_STOCK", Decimal("1"))
+
+    remaining_quantities = avco_strategy.get_open_lot_quantities()
+    assert remaining_quantities == {
+        "AVCO_FRACTIONAL_BUY_0": Decimal("0.6666666666"),
+        "AVCO_FRACTIONAL_BUY_1": Decimal("0.6666666666"),
+        "AVCO_FRACTIONAL_BUY_2": Decimal("0.6666666668"),
+    }
+    assert sum(remaining_quantities.values()) == Decimal("2")
 
 
 def test_average_cost_initial_lots_normalize_buy_transaction_type(

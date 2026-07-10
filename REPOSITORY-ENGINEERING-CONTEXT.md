@@ -1622,6 +1622,14 @@ Most relevant current governance:
      `transactions.persisted` requires the canonical transaction row to exist first; ingestion owns
      that persistence, while combined processing atomically owns derived cost/lot, cashflow,
      position, idempotency, and compatibility outbox effects.
+128. Cost-basis strategies must reconcile aggregate holdings with source-level lot evidence. FIFO
+     returns actual remaining source-lot quantities. AVCO returns deterministic pro-rata source
+     quantities whose sum exactly equals pooled holdings after every disposal and subsequent buy.
+     Do not use an empty source-quantity map to mean every lot is closed: `position_lot_state`
+     drives OPEN/CLOSED status and portfolio-tax-lot source products. Any strategy that cannot
+     produce truthful source allocation must expose an explicit unsupported/degraded state rather
+     than silently zeroing persisted rows. Preserve exact Decimal reconciliation and add sequential
+     buy/disposal tests when changing cost-basis strategy state.
 
 ## Context Maintenance Rule
 
