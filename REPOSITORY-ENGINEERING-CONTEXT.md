@@ -1652,9 +1652,9 @@ Most relevant current governance:
      operator replay. `BaseConsumer.shutdown()` is a two-phase contract: request polling stop first,
      let the active run loop drain and commit already-polled work, then close Kafka and flush DLQ
      resources. Shared supervision must allow at least the configured consumer drain window; do not
-     close the consumer from delivery code or add a second local drain loop. Until cutover gates
-     pass, the manager must select either
-     the six-consumer legacy registry or this two-consumer composition, never both.
+     close the consumer from delivery code or add a second local drain loop. The manager has one
+     composition path: the live transaction consumer plus replay-request consumer. The removed
+     six-consumer registry must not be restored.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.
@@ -1689,8 +1689,7 @@ Most relevant current governance:
      Keep this surface registered as `health_only_worker_api` in
      `contracts/security/security-control-coverage.v1.json`. Adding any business route requires an
      intentional app reclassification, enterprise middleware, payload controls, and new tests.
-     `ConsumerManager` now defaults to `build_transaction_processing_consumers()`; the legacy
-     six-consumer registry is compatibility evidence, not target startup behavior. Deployment must
+     `ConsumerManager` uses `build_transaction_processing_consumers()` exclusively. Deployment must
      replace the three calculator workers atomically and must never run both topologies together.
      The target image must not install the three standalone calculator wheels: they expose
      overlapping top-level package names (`core`, `consumers`, and `repositories`) and can overwrite

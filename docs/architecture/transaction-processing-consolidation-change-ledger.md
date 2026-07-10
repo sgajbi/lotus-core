@@ -91,7 +91,7 @@ tests move with their owning module; they are not deleted merely because a servi
 
 | Surface | Status | Intended action | Removal prerequisite |
 |---|---|---|---|
-| `app/infrastructure/legacy_consumer_registry.py` and six-consumer tests | compatibility | Delete when target manager is switched to one live plus one replay-request consumer. | Combined live/replay and rollback proof. |
+| Target six-consumer compatibility registry and tests | removed-local | Deleted after two-consumer composition, atomic rollback, replay, load, recovery, Compose, CI, and Kubernetes manifest proof. Import confinement remains enforced for transitional infrastructure adapters. | Do not restore; retain historical CR evidence only. |
 | Cost/cashflow/position `main.py`, `consumer_manager.py`, and `web.py` shells | compatibility | Delete service shells; retain/move business modules and tests under target ownership. | Target health/runtime parity and manifest switch. |
 | Three calculator Dockerfiles and cashflow `requirements.txt` | compatibility | Delete after one target image is released and deployable by digest. | Image provenance/security and rollback proof. |
 | Normal cost, cashflow, gated-position, and cost-processed replay consumer classes | compatibility | Delete after target live/replay consumers own delivery. | Topic/group/downstream parity and replay proof. |
