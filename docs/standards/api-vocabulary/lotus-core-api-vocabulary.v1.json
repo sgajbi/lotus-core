@@ -13,7 +13,7 @@
       "openApiVersion": "3.1.0"
     }
   ],
-  "generatedAt": "2026-07-01T02:19:22.566168+00:00",
+  "generatedAt": "2026-07-10T11:16:29.729672+00:00",
   "attributeCatalog": [
     {
       "semanticId": "lotus.accepted_count",
@@ -114,6 +114,51 @@
       ]
     },
     {
+      "semanticId": "lotus.affected_fields",
+      "canonicalTerm": "affected_fields",
+      "preferredName": "affected_fields",
+      "description": "Response fields affected by fallback, stale, partial, or unavailable data.",
+      "example": [
+        "valuation.market_price",
+        "valuation.market_value"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
+      ]
+    },
+    {
+      "semanticId": "lotus.allocated_cost_basis_base",
+      "canonicalTerm": "allocated_cost_basis_base",
+      "preferredName": "allocated_cost_basis_base",
+      "description": "Cost basis allocated to a corporate-action cash product leg in base currency.",
+      "example": 50.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.allocated_cost_basis_local",
+      "canonicalTerm": "allocated_cost_basis_local",
+      "preferredName": "allocated_cost_basis_local",
+      "description": "Cost basis allocated to a corporate-action cash product leg in local currency.",
+      "example": 50.0,
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.amount",
       "canonicalTerm": "amount",
       "preferredName": "amount",
@@ -125,6 +170,20 @@
       ],
       "observedTypes": [
         "object",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.app_version",
+      "canonicalTerm": "app_version",
+      "preferredName": "app_version",
+      "description": "FastAPI application version configured for the service.",
+      "example": "example_app_version",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -795,6 +854,44 @@
       ]
     },
     {
+      "semanticId": "lotus.build",
+      "canonicalTerm": "build",
+      "preferredName": "build",
+      "description": "Safe image and build metadata also exposed by the /version endpoint.",
+      "example": {
+        "service_name": "example_service_name",
+        "git_commit_sha": "example_git_commit_sha",
+        "git_branch": "example_git_branch",
+        "build_timestamp": "2026-02-27T10:30:00Z",
+        "repo_url": "example_repo_url",
+        "image_version": "example_image_version",
+        "image_digest": "example_image_digest",
+        "ci_pipeline_run_id": "CI_PIPELINE_RUN_001",
+        "oci_labels": {}
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "BuildMetadataResponse"
+      ]
+    },
+    {
+      "semanticId": "lotus.build_timestamp",
+      "canonicalTerm": "build_timestamp",
+      "preferredName": "build_timestamp",
+      "description": "UTC image build timestamp.",
+      "example": "2026-02-27T10:30:00Z",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.business_date",
       "canonicalTerm": "business_date",
       "preferredName": "business_date",
@@ -1173,6 +1270,20 @@
       ]
     },
     {
+      "semanticId": "lotus.ci_pipeline_run_id",
+      "canonicalTerm": "ci_pipeline_run_id",
+      "preferredName": "ci_pipeline_run_id",
+      "description": "CI pipeline or GitHub Actions run identifier embedded in the image.",
+      "example": "CI_PIPELINE_RUN_001",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.classification",
       "canonicalTerm": "classification",
       "preferredName": "classification",
@@ -1282,6 +1393,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.code",
+      "canonicalTerm": "code",
+      "preferredName": "code",
+      "description": "Stable machine-readable ingestion validation code.",
+      "example": "example_code",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1395,6 +1520,20 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.content_hash",
+      "canonicalTerm": "content_hash",
+      "preferredName": "content_hash",
+      "description": "Deterministic SHA-256 hash of the source-owned response content and proof basis, excluding volatile response-generation timestamps.",
+      "example": "example_content_hash",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -1626,6 +1765,42 @@
       ]
     },
     {
+      "semanticId": "lotus.degradation",
+      "canonicalTerm": "degradation",
+      "preferredName": "degradation",
+      "description": "Per-section or per-field degradation metadata. Empty details mean Core did not apply fallback, stale, partial, or unavailable source handling for this response.",
+      "example": {
+        "status": "PARTIAL",
+        "reason_codes": [
+          "HOLDINGS_VALUATION_FALLBACK"
+        ],
+        "details": [
+          {
+            "section": "positions",
+            "record_key": "security_id:EQ_US_AAPL",
+            "affected_fields": [
+              "valuation.market_price",
+              "valuation.market_value"
+            ],
+            "source_kind": "FALLBACK",
+            "source_product_name": "HoldingsAsOf",
+            "source_product_version": "v1",
+            "source_as_of_date": "2026-04-10",
+            "latest_evidence_timestamp": "2026-04-10T01:30:00Z",
+            "freshness_status": "PARTIAL",
+            "reason_code": "HOLDINGS_VALUATION_FALLBACK"
+          }
+        ]
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "SourceDataDegradationSummary"
+      ]
+    },
+    {
       "semanticId": "lotus.dependencies",
       "canonicalTerm": "dependencies",
       "preferredName": "dependencies",
@@ -1656,6 +1831,36 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.details",
+      "canonicalTerm": "details",
+      "preferredName": "details",
+      "description": "Row, section, or field-level degradation details.",
+      "example": [
+        {
+          "section": "example_section",
+          "record_key": "security_id:EQ_US_AAPL",
+          "affected_fields": [
+            "valuation.market_price",
+            "valuation.market_value"
+          ],
+          "source_kind": "AUTHORITATIVE",
+          "source_product_name": "example_source_product_name",
+          "source_product_version": "example_source_product_version",
+          "source_as_of_date": "2026-04-10",
+          "latest_evidence_timestamp": "2026-04-10T01:30:00Z",
+          "freshness_status": "CURRENT",
+          "reason_code": "example_reason_code"
+        }
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -1947,14 +2152,32 @@
       ]
     },
     {
+      "semanticId": "lotus.environment",
+      "canonicalTerm": "environment",
+      "preferredName": "environment",
+      "description": "Bounded runtime environment name.",
+      "example": "example_environment",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.errors",
       "canonicalTerm": "errors",
       "preferredName": "errors",
-      "description": "Validation errors by row for correction before commit.",
+      "description": "Validation errors by row for correction before commit. Each error includes the legacy message plus a stable validation code, severity, field path, record key, remediation hint, and safe source lineage when available.",
       "example": [
         {
-          "message": "baseCurrency is required",
-          "row_number": 7
+          "code": "INVALID_EFFECTIVE_WINDOW",
+          "field_path": "effective_to",
+          "message": "effective_to: effective_to must be on or after effective_from",
+          "record_key": "source_record_id:tax-rule-2026-001",
+          "row_number": 7,
+          "severity": "error"
         }
       ],
       "type": "array",
@@ -2039,6 +2262,20 @@
       ]
     },
     {
+      "semanticId": "lotus.field_path",
+      "canonicalTerm": "field_path",
+      "preferredName": "field_path",
+      "description": "Canonical field path when the validation failure maps to a specific field.",
+      "example": "effective_to",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.file_format",
       "canonicalTerm": "file_format",
       "preferredName": "file_format",
@@ -2070,7 +2307,7 @@
       "semanticId": "lotus.freshness_status",
       "canonicalTerm": "freshness_status",
       "preferredName": "freshness_status",
-      "description": "Freshness posture inherited from the underlying HoldingsAsOf evidence.",
+      "description": "Freshness posture for the affected fields.",
       "example": "CURRENT",
       "type": "string",
       "locations": [
@@ -2232,6 +2469,34 @@
       ]
     },
     {
+      "semanticId": "lotus.git_branch",
+      "canonicalTerm": "git_branch",
+      "preferredName": "git_branch",
+      "description": "Git branch embedded in the container image.",
+      "example": "example_git_branch",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.git_commit_sha",
+      "canonicalTerm": "git_commit_sha",
+      "preferredName": "git_commit_sha",
+      "description": "Git commit SHA embedded in the container image.",
+      "example": "example_git_commit_sha",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.gross_cost",
       "canonicalTerm": "gross_cost",
       "preferredName": "gross_cost",
@@ -2371,6 +2636,34 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.image_digest",
+      "canonicalTerm": "image_digest",
+      "preferredName": "image_digest",
+      "description": "OCI image digest supplied by the build or release lane.",
+      "example": "example_image_digest",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.image_version",
+      "canonicalTerm": "image_version",
+      "preferredName": "image_version",
+      "description": "Image version embedded in OCI metadata.",
+      "example": "example_image_version",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
       ]
     },
     {
@@ -3524,6 +3817,20 @@
       ]
     },
     {
+      "semanticId": "lotus.maturity_summary",
+      "canonicalTerm": "maturity_summary",
+      "preferredName": "maturity_summary",
+      "description": "Source-owned maturity fact summary derived from returned holdings. This lightweight inline payload is included for source-proof consumers that read the positions product directly; the richer maturity summary endpoint remains the canonical operator-facing view.",
+      "example": {},
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.max_weight",
       "canonicalTerm": "max_weight",
       "preferredName": "max_weight",
@@ -4033,6 +4340,20 @@
       "preferredName": "observed_at",
       "description": "Timestamp when the upstream source observed or published the model definition.",
       "example": "2026-03-20T09:00:00Z",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.oci_labels",
+      "canonicalTerm": "oci_labels",
+      "preferredName": "oci_labels",
+      "description": "OCI label names plus release-resolved metadata values used for manifest and runtime parity checks.",
+      "example": {},
       "type": "object",
       "locations": [
         "body"
@@ -4557,6 +4878,8 @@
             "market_price": 185.42,
             "market_value": 23177.5,
             "unrealized_gain_loss": 3177.5,
+            "unrealized_price_gain_loss": 2940.0,
+            "unrealized_fx_gain_loss": 237.5,
             "market_value_local": 23177.5,
             "unrealized_gain_loss_local": 3177.5
           },
@@ -5265,12 +5588,26 @@
       ]
     },
     {
+      "semanticId": "lotus.reason_code",
+      "canonicalTerm": "reason_code",
+      "preferredName": "reason_code",
+      "description": "Bounded machine-readable reason for the degradation detail.",
+      "example": "example_reason_code",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.reason_codes",
       "canonicalTerm": "reason_codes",
       "preferredName": "reason_codes",
-      "description": "Bounded supportability reason codes for this transaction ledger page.",
+      "description": "Deduplicated bounded reason codes present in the degradation details.",
       "example": [
-        "TRANSACTION_LEDGER_READY"
+        "HOLDINGS_VALUATION_FALLBACK"
       ],
       "type": "array",
       "locations": [
@@ -5355,6 +5692,20 @@
       ]
     },
     {
+      "semanticId": "lotus.record_key",
+      "canonicalTerm": "record_key",
+      "preferredName": "record_key",
+      "description": "Stable record key inside the section when degradation is row-scoped.",
+      "example": "security_id:EQ_US_AAPL",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.recurrence_frequency",
       "canonicalTerm": "recurrence_frequency",
       "preferredName": "recurrence_frequency",
@@ -5374,6 +5725,34 @@
       "preferredName": "remaining_offset_local",
       "description": "Remaining accrued-income offset available for net-income calculations.",
       "example": "example_remaining_offset_local",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.remediation",
+      "canonicalTerm": "remediation",
+      "preferredName": "remediation",
+      "description": "Safe remediation hint for correcting the validation failure.",
+      "example": "Use an effective_to date that is not earlier than effective_from.",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.repo_url",
+      "canonicalTerm": "repo_url",
+      "preferredName": "repo_url",
+      "description": "Repository URL embedded in the container image.",
+      "example": "example_repo_url",
       "type": "string",
       "locations": [
         "body"
@@ -5918,14 +6297,60 @@
       ]
     },
     {
+      "semanticId": "lotus.runtime",
+      "canonicalTerm": "runtime",
+      "preferredName": "runtime",
+      "description": "Safe runtime and build metadata.",
+      "example": {
+        "service_name": "example_service_name",
+        "app_version": "example_app_version",
+        "environment": "example_environment",
+        "runtime_profile": "2026-02-27T10:30:00Z",
+        "started_at_utc": "example_started_at_utc",
+        "uptime_seconds": 10.5,
+        "build": {
+          "service_name": "example_service_name",
+          "git_commit_sha": "example_git_commit_sha",
+          "git_branch": "example_git_branch",
+          "build_timestamp": "2026-02-27T10:30:00Z",
+          "repo_url": "example_repo_url",
+          "image_version": "example_image_version",
+          "image_digest": "example_image_digest",
+          "ci_pipeline_run_id": "CI_PIPELINE_RUN_001",
+          "oci_labels": {}
+        }
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "HealthRuntimeMetadata"
+      ]
+    },
+    {
+      "semanticId": "lotus.runtime_profile",
+      "canonicalTerm": "runtime_profile",
+      "preferredName": "runtime_profile",
+      "description": "Bounded runtime profile name used for operations.",
+      "example": "2026-02-27T10:30:00Z",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.sample_rows",
       "canonicalTerm": "sample_rows",
       "preferredName": "sample_rows",
-      "description": "Normalized and validated sample rows for UI preview.",
+      "description": "Redacted valid sample rows returned only when include_sample_rows=true and the caller has the signed preview-sample capability. Defaults to an empty list.",
       "example": [
         {
           "baseCurrency": "USD",
-          "portfolioId": "PORT_001",
+          "portfolioId": "***REDACTED***",
           "status": "Active"
         }
       ],
@@ -5992,6 +6417,20 @@
       "preferredName": "scope_type",
       "description": "Resolved reporting scope type.",
       "example": "portfolio",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.section",
+      "canonicalTerm": "section",
+      "preferredName": "section",
+      "description": "Response section where source degradation applies.",
+      "example": "example_section",
       "type": "string",
       "locations": [
         "body"
@@ -6149,6 +6588,20 @@
       ]
     },
     {
+      "semanticId": "lotus.service_name",
+      "canonicalTerm": "service_name",
+      "preferredName": "service_name",
+      "description": "Lotus Core service reporting this runtime metadata.",
+      "example": "example_service_name",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.settlement_awareness_required",
       "canonicalTerm": "settlement_awareness_required",
       "preferredName": "settlement_awareness_required",
@@ -6261,6 +6714,20 @@
       ]
     },
     {
+      "semanticId": "lotus.severity",
+      "canonicalTerm": "severity",
+      "preferredName": "severity",
+      "description": "Validation severity used by operators and upstream systems.",
+      "example": "error",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
       "semanticId": "lotus.skip",
       "canonicalTerm": "skip",
       "preferredName": "skip",
@@ -6341,8 +6808,8 @@
       "semanticId": "lotus.sort_by",
       "canonicalTerm": "sort_by",
       "preferredName": "sort_by",
-      "description": "Field to sort by (e.g., 'transaction_date').",
-      "example": "sort_by_example",
+      "description": "Transaction ledger sort field. Defaults to transaction_date. Results always use transaction id as a deterministic tie-breaker.",
+      "example": "transaction_date",
       "type": "object",
       "locations": [
         "query"
@@ -6355,8 +6822,8 @@
       "semanticId": "lotus.sort_order",
       "canonicalTerm": "sort_order",
       "preferredName": "sort_order",
-      "description": "Sort order: 'asc' or 'desc'.",
-      "example": "sort_order_example",
+      "description": "Transaction ledger sort direction.",
+      "example": "desc",
       "type": "object",
       "locations": [
         "query"
@@ -6380,11 +6847,25 @@
       ]
     },
     {
+      "semanticId": "lotus.source_as_of_date",
+      "canonicalTerm": "source_as_of_date",
+      "preferredName": "source_as_of_date",
+      "description": "Business as-of date of the source evidence used for the affected fields.",
+      "example": "2026-04-10",
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.source_batch_fingerprint",
       "canonicalTerm": "source_batch_fingerprint",
       "preferredName": "source_batch_fingerprint",
-      "description": "Upstream source-batch fingerprint when the product can be traced to source-batch evidence. Request-scope and snapshot identities must use request/snapshot fields, not this lineage field.",
-      "example": "sbf_9c3f13c0a5d14f3e",
+      "description": "Source-owned deterministic SHA-256 fingerprint for this response evidence. When a caller supplies a legacy source-batch label, Core still emits the canonical content hash here so downstream proof tooling can validate the response without deriving source authority itself.",
+      "example": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "type": "object",
       "locations": [
         "body"
@@ -6408,6 +6889,34 @@
       ]
     },
     {
+      "semanticId": "lotus.source_digest",
+      "canonicalTerm": "source_digest",
+      "preferredName": "source_digest",
+      "description": "Alias of content_hash for downstream proof tooling that uses source digest terminology.",
+      "example": "example_source_digest",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_evidence_current",
+      "canonicalTerm": "source_evidence_current",
+      "preferredName": "source_evidence_current",
+      "description": "Whether Core considers the returned source evidence current for the requested as-of scope.",
+      "example": true,
+      "type": "boolean",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "boolean"
+      ]
+    },
+    {
       "semanticId": "lotus.source_instrument_id",
       "canonicalTerm": "source_instrument_id",
       "preferredName": "source_instrument_id",
@@ -6422,10 +6931,41 @@
       ]
     },
     {
+      "semanticId": "lotus.source_kind",
+      "canonicalTerm": "source_kind",
+      "preferredName": "source_kind",
+      "description": "Kind of source used for the affected field values.",
+      "example": "AUTHORITATIVE",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_lineage",
+      "canonicalTerm": "source_lineage",
+      "preferredName": "source_lineage",
+      "description": "Bounded source lineage identifiers for support and proof validation.",
+      "example": {
+        "source_owner": "lotus-core",
+        "source_product": "PortfolioStateSnapshot"
+      },
+      "type": "object",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "object"
+      ]
+    },
+    {
       "semanticId": "lotus.source_product_name",
       "canonicalTerm": "source_product_name",
       "preferredName": "source_product_name",
-      "description": "Core source-data product used to derive this maturity summary.",
+      "description": "Source-data product that owns the affected evidence.",
       "example": "example_source_product_name",
       "type": "string",
       "locations": [
@@ -6439,7 +6979,7 @@
       "semanticId": "lotus.source_product_version",
       "canonicalTerm": "source_product_version",
       "preferredName": "source_product_version",
-      "description": "Version of the source-data product used to derive this maturity summary.",
+      "description": "Version of the source-data product that owns the affected evidence.",
       "example": "example_source_product_version",
       "type": "string",
       "locations": [
@@ -6461,6 +7001,22 @@
       ],
       "observedTypes": [
         "object"
+      ]
+    },
+    {
+      "semanticId": "lotus.source_refs",
+      "canonicalTerm": "source_refs",
+      "preferredName": "source_refs",
+      "description": "Deterministic source references used to assemble this product response.",
+      "example": [
+        "lotus-core://source/PortfolioStateSnapshot/PF-001/2026-04-10"
+      ],
+      "type": "array",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "array"
       ]
     },
     {
@@ -6602,6 +7158,20 @@
       ],
       "observedTypes": [
         "object",
+        "string"
+      ]
+    },
+    {
+      "semanticId": "lotus.started_at_utc",
+      "canonicalTerm": "started_at_utc",
+      "preferredName": "started_at_utc",
+      "description": "UTC timestamp captured when the health router started.",
+      "example": "example_started_at_utc",
+      "type": "string",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
         "string"
       ]
     },
@@ -7594,6 +8164,8 @@
           "far_leg_group_id": "FXSWAP-2026-0001-FAR",
           "spot_exposure_model": "NONE",
           "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+          "allocated_cost_basis_local": 50.0,
+          "allocated_cost_basis_base": 50.0,
           "realized_capital_pnl_local": 0.0,
           "realized_fx_pnl_local": 1250.0,
           "realized_total_pnl_local": 1250.0,
@@ -7725,6 +8297,20 @@
       ]
     },
     {
+      "semanticId": "lotus.uptime_seconds",
+      "canonicalTerm": "uptime_seconds",
+      "preferredName": "uptime_seconds",
+      "description": "Process uptime in seconds for this health router.",
+      "example": 10.5,
+      "type": "number",
+      "locations": [
+        "body"
+      ],
+      "observedTypes": [
+        "number"
+      ]
+    },
+    {
       "semanticId": "lotus.valid_rows",
       "canonicalTerm": "valid_rows",
       "preferredName": "valid_rows",
@@ -7747,6 +8333,8 @@
         "market_price": 185.42,
         "market_value": 23177.5,
         "unrealized_gain_loss": 3177.5,
+        "unrealized_price_gain_loss": 2940.0,
+        "unrealized_fx_gain_loss": 237.5,
         "market_value_local": 23177.5,
         "unrealized_gain_loss_local": 3177.5
       },
@@ -8792,9 +9380,15 @@
       "type": "object",
       "required": false,
       "default": "",
-      "allowedValues": [],
-      "description": "Field to sort by (e.g., 'transaction_date').",
-      "example": "sort_by_example",
+      "allowedValues": [
+        "transaction_date",
+        "settlement_date",
+        "quantity",
+        "price",
+        "gross_transaction_amount"
+      ],
+      "description": "Transaction ledger sort field. Defaults to transaction_date. Results always use transaction id as a deterministic tie-breaker.",
+      "example": "transaction_date",
       "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "sort_by",
@@ -8807,9 +9401,12 @@
       "type": "object",
       "required": false,
       "default": "desc",
-      "allowedValues": [],
-      "description": "Sort order: 'asc' or 'desc'.",
-      "example": "sort_order_example",
+      "allowedValues": [
+        "asc",
+        "desc"
+      ],
+      "description": "Transaction ledger sort direction.",
+      "example": "desc",
       "behaviorImpact": "Affects get_transactions_portfolios__portfolio_id__transactions_get request behavior.",
       "exposure": "consumer_visible",
       "canonicalTerm": "sort_order",
@@ -9033,7 +9630,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "The start date for the date range filter (inclusive).",
+      "description": "Required start date for the bounded price-series window (inclusive).",
       "example": "2026-01-01",
       "behaviorImpact": "Affects get_prices_prices__get request behavior.",
       "exposure": "consumer_visible",
@@ -9048,7 +9645,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "The end date for the date range filter (inclusive).",
+      "description": "Required end date for the bounded price-series window (inclusive).",
       "example": "2026-03-31",
       "behaviorImpact": "Affects get_prices_prices__get request behavior.",
       "exposure": "consumer_visible",
@@ -9093,7 +9690,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "The start date for the date range filter (inclusive).",
+      "description": "Required start date for the bounded FX-rate-series window (inclusive).",
       "example": "2026-01-01",
       "behaviorImpact": "Affects get_fx_rates_fx_rates__get request behavior.",
       "exposure": "consumer_visible",
@@ -9108,7 +9705,7 @@
       "required": false,
       "default": "",
       "allowedValues": [],
-      "description": "The end date for the date range filter (inclusive).",
+      "description": "Required end date for the bounded FX-rate-series window (inclusive).",
       "example": "2026-03-31",
       "behaviorImpact": "Affects get_fx_rates_fx_rates__get request behavior.",
       "exposure": "consumer_visible",
@@ -9370,6 +9967,113 @@
   ],
   "endpoints": [
     {
+      "operationId": "version_metadata_version_get",
+      "method": "GET",
+      "path": "/version",
+      "domain": "operations",
+      "serviceGroup": "query",
+      "tags": [
+        "Operations"
+      ],
+      "summary": "Runtime image version metadata",
+      "description": "Return the immutable image provenance metadata embedded as OCI labels and runtime environment variables during the build.",
+      "naming": {
+        "boundedContext": "operations",
+        "canonicalTerms": [
+          "build_timestamp",
+          "ci_pipeline_run_id",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "service_name"
+        ]
+      },
+      "request": {
+        "fields": []
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "BuildMetadataResponse",
+        "fields": [
+          {
+            "name": "service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
+          }
+        ]
+      }
+    },
+    {
       "operationId": "metrics_metrics_get",
       "method": "GET",
       "path": "/metrics",
@@ -9407,7 +10111,23 @@
       "naming": {
         "boundedContext": "health",
         "canonicalTerms": [
-          "status"
+          "app_version",
+          "build",
+          "build_timestamp",
+          "ci_pipeline_run_id",
+          "environment",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "runtime",
+          "runtime_profile",
+          "service_name",
+          "started_at_utc",
+          "status",
+          "uptime_seconds"
         ]
       },
       "request": {
@@ -9424,6 +10144,142 @@
             "type": "string",
             "semanticId": "lotus.status",
             "attributeRef": "lotus.status"
+          },
+          {
+            "name": "runtime",
+            "location": "body",
+            "required": true,
+            "type": "HealthRuntimeMetadata",
+            "semanticId": "lotus.runtime",
+            "attributeRef": "lotus.runtime"
+          },
+          {
+            "name": "runtime.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.app_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.app_version",
+            "attributeRef": "lotus.app_version"
+          },
+          {
+            "name": "runtime.environment",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.environment",
+            "attributeRef": "lotus.environment"
+          },
+          {
+            "name": "runtime.runtime_profile",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.runtime_profile",
+            "attributeRef": "lotus.runtime_profile"
+          },
+          {
+            "name": "runtime.started_at_utc",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.started_at_utc",
+            "attributeRef": "lotus.started_at_utc"
+          },
+          {
+            "name": "runtime.uptime_seconds",
+            "location": "body",
+            "required": true,
+            "type": "number",
+            "semanticId": "lotus.uptime_seconds",
+            "attributeRef": "lotus.uptime_seconds"
+          },
+          {
+            "name": "runtime.build",
+            "location": "body",
+            "required": true,
+            "type": "BuildMetadataResponse",
+            "semanticId": "lotus.build",
+            "attributeRef": "lotus.build"
+          },
+          {
+            "name": "runtime.build.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.build.git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "runtime.build.git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "runtime.build.build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "runtime.build.repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "runtime.build.image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "runtime.build.image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "runtime.build.ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "runtime.build.oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
           }
         ]
       }
@@ -9442,8 +10298,24 @@
       "naming": {
         "boundedContext": "health",
         "canonicalTerms": [
+          "app_version",
+          "build",
+          "build_timestamp",
+          "ci_pipeline_run_id",
           "dependencies",
-          "status"
+          "environment",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "runtime",
+          "runtime_profile",
+          "service_name",
+          "started_at_utc",
+          "status",
+          "uptime_seconds"
         ]
       },
       "request": {
@@ -9468,6 +10340,142 @@
             "type": "object",
             "semanticId": "lotus.dependencies",
             "attributeRef": "lotus.dependencies"
+          },
+          {
+            "name": "runtime",
+            "location": "body",
+            "required": true,
+            "type": "HealthRuntimeMetadata",
+            "semanticId": "lotus.runtime",
+            "attributeRef": "lotus.runtime"
+          },
+          {
+            "name": "runtime.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.app_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.app_version",
+            "attributeRef": "lotus.app_version"
+          },
+          {
+            "name": "runtime.environment",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.environment",
+            "attributeRef": "lotus.environment"
+          },
+          {
+            "name": "runtime.runtime_profile",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.runtime_profile",
+            "attributeRef": "lotus.runtime_profile"
+          },
+          {
+            "name": "runtime.started_at_utc",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.started_at_utc",
+            "attributeRef": "lotus.started_at_utc"
+          },
+          {
+            "name": "runtime.uptime_seconds",
+            "location": "body",
+            "required": true,
+            "type": "number",
+            "semanticId": "lotus.uptime_seconds",
+            "attributeRef": "lotus.uptime_seconds"
+          },
+          {
+            "name": "runtime.build",
+            "location": "body",
+            "required": true,
+            "type": "BuildMetadataResponse",
+            "semanticId": "lotus.build",
+            "attributeRef": "lotus.build"
+          },
+          {
+            "name": "runtime.build.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.build.git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "runtime.build.git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "runtime.build.build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "runtime.build.repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "runtime.build.image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "runtime.build.image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "runtime.build.ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "runtime.build.oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
           }
         ]
       }
@@ -9838,7 +10846,7 @@
         "Positions"
       ],
       "summary": "Get Position History for a Security",
-      "description": "Returns epoch-aware position history for a portfolio-security key across an optional date range. Use this route for holdings drill-down, lineage-aware troubleshooting, and historical security-level state inspection when a downstream consumer needs dated position-history rows; do not use it as a substitute for the strategic latest-holdings read, transaction-ledger rows, or reporting summaries.",
+      "description": "Returns epoch-aware position history for a portfolio-security key across an optional date range. Use this route for holdings drill-down, lineage-aware troubleshooting, and historical security-level state inspection when a downstream consumer needs dated position-history rows. Callers must provide both `start_date` and `end_date`; the window is capped at ten years. Do not use it as a substitute for the strategic latest-holdings read, transaction-ledger rows, or reporting summaries.",
       "naming": {
         "boundedContext": "positions",
         "canonicalTerms": [
@@ -9989,18 +10997,23 @@
         "Positions"
       ],
       "summary": "Get Latest Positions for a Portfolio",
-      "description": "What: Return the strategic HoldingsAsOf operational read for one portfolio.\nHow: Resolves current-epoch holdings from daily position snapshots, supplements gaps from position history when snapshot materialization has not caught up yet, and publishes source-data runtime metadata with holdings-level data-quality posture.\nWhen: Use this route for holdings screens, gateway portfolio position books, and other downstream consumers that need the governed source-of-truth holdings surface. Use `as_of_date` for booked historical state on or before a specific business date. Use `include_projected=true` only when the consumer intentionally wants future-dated projected state beyond the latest booked business date. Do not treat this route as a substitute for performance, risk, or reporting-specific aggregation contracts, and do not prefer deprecated reporting convenience shapes when this operational read meets the consumer need.",
+      "description": "What: Return the strategic HoldingsAsOf operational read for one portfolio.\nHow: Resolves current-epoch holdings from daily position snapshots, supplements gaps from position history when snapshot materialization has not caught up yet, and publishes source-data runtime metadata with holdings-level data-quality posture.\nWhen: Use this route for holdings screens, gateway portfolio position books, and other downstream consumers that need the governed source-of-truth holdings surface. This is a current HoldingsAsOf book, not an unbounded history series: it returns at most one current holding row per security for the resolved as-of scope. Use `as_of_date` for booked historical state on or before a specific business date. Use `include_projected=true` only when the consumer intentionally wants future-dated projected state beyond the latest booked business date. Do not treat this route as a substitute for performance, risk, or reporting-specific aggregation contracts, and do not prefer deprecated reporting convenience shapes when this operational read meets the consumer need.",
       "naming": {
         "boundedContext": "positions",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
           "asset_class",
+          "content_hash",
           "correlation_id",
           "cost_basis",
           "cost_basis_local",
           "country_of_risk",
           "currency",
           "data_quality_status",
+          "degradation",
+          "details",
+          "freshness_status",
           "generated_at",
           "held_since_date",
           "include_projected",
@@ -10009,6 +11022,7 @@
           "latest_evidence_timestamp",
           "liquidity_tier",
           "maturity_date",
+          "maturity_summary",
           "policy_version",
           "portfolio_id",
           "position_date",
@@ -10018,13 +11032,26 @@
           "product_version",
           "quantity",
           "rating",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "reprocessing_status",
           "restatement_version",
+          "section",
           "sector",
           "security_id",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
+          "status",
           "tenant_id",
           "valuation",
           "weight"
@@ -10133,6 +11160,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -10333,6 +11520,14 @@
             "type": "object",
             "semanticId": "lotus.weight",
             "attributeRef": "lotus.weight"
+          },
+          {
+            "name": "maturity_summary",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.maturity_summary",
+            "attributeRef": "lotus.maturity_summary"
           }
         ]
       }
@@ -10351,9 +11546,13 @@
       "naming": {
         "boundedContext": "positions",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
+          "content_hash",
           "correlation_id",
           "data_quality_status",
+          "degradation",
+          "details",
           "freshness_status",
           "generated_at",
           "horizon_days",
@@ -10368,13 +11567,24 @@
           "portfolio_id",
           "product_name",
           "product_version",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "request_fingerprint",
           "restatement_version",
+          "section",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
           "source_product_name",
           "source_product_version",
+          "source_refs",
+          "status",
           "supportability_reasons",
           "supportability_status",
           "tenant_id",
@@ -10496,6 +11706,166 @@
             "attributeRef": "lotus.snapshot_id"
           },
           {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
             "name": "policy_version",
             "location": "body",
             "required": false,
@@ -10592,14 +11962,6 @@
             "attributeRef": "lotus.maturity_basis"
           },
           {
-            "name": "freshness_status",
-            "location": "body",
-            "required": true,
-            "type": "string",
-            "semanticId": "lotus.freshness_status",
-            "attributeRef": "lotus.freshness_status"
-          },
-          {
             "name": "next_maturity_date",
             "location": "body",
             "required": false,
@@ -10681,6 +12043,7 @@
         "boundedContext": "cash_balances",
         "canonicalTerms": [
           "account_currency",
+          "affected_fields",
           "as_of_date",
           "balance_account_currency",
           "balance_portfolio_currency",
@@ -10689,8 +12052,12 @@
           "cash_account_id",
           "cash_account_id_source",
           "cash_accounts",
+          "content_hash",
           "correlation_id",
           "data_quality_status",
+          "degradation",
+          "details",
+          "freshness_status",
           "generated_at",
           "instrument_id",
           "instrument_name",
@@ -10700,16 +12067,29 @@
           "portfolio_id",
           "product_name",
           "product_version",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "reporting_currency",
           "resolved_as_of_date",
           "restatement_version",
+          "section",
           "security_id",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
           "source_reported_cash_weight",
           "source_reported_cash_weight_denominator_portfolio_currency",
           "source_reported_cash_weight_supportability",
+          "status",
           "tenant_id",
           "total_balance_portfolio_currency",
           "total_balance_reporting_currency",
@@ -10819,6 +12199,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -11197,16 +12737,21 @@
       "naming": {
         "boundedContext": "liquidity_ladder",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
           "asset_liquidity_tiers",
           "booked_net_cashflow_portfolio_currency",
           "bucket_code",
           "buckets",
           "cash_shortfall_portfolio_currency",
+          "content_hash",
           "correlation_id",
           "cumulative_cash_available_portfolio_currency",
           "data_quality_status",
+          "degradation",
+          "details",
           "end_date",
+          "freshness_status",
           "generated_at",
           "horizon_days",
           "include_projected",
@@ -11227,12 +12772,25 @@
           "product_version",
           "projected_cash_available_end_portfolio_currency",
           "projected_settlement_cashflow_portfolio_currency",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "resolved_as_of_date",
           "restatement_version",
+          "section",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
           "start_date",
+          "status",
           "tenant_id",
           "totals"
         ]
@@ -11348,6 +12906,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -11606,14 +13324,19 @@
       "naming": {
         "boundedContext": "cash_movements",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
           "buckets",
           "cashflow_count",
           "classification",
+          "content_hash",
           "correlation_id",
           "currency",
           "data_quality_status",
+          "degradation",
+          "details",
           "end_date",
+          "freshness_status",
           "generated_at",
           "is_portfolio_flow",
           "is_position_flow",
@@ -11624,11 +13347,24 @@
           "portfolio_id",
           "product_name",
           "product_version",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "restatement_version",
+          "section",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
           "start_date",
+          "status",
           "tenant_id",
           "timing",
           "total_amount"
@@ -11737,6 +13473,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -12785,6 +14681,9 @@
         "boundedContext": "transactions",
         "canonicalTerms": [
           "adjustment_reason",
+          "affected_fields",
+          "allocated_cost_basis_base",
+          "allocated_cost_basis_local",
           "amount",
           "as_of_date",
           "buy_amount",
@@ -12797,17 +14696,21 @@
           "child_sequence_hint",
           "component_id",
           "component_type",
+          "content_hash",
           "contract_rate",
           "correlation_id",
           "costs",
           "currency",
           "data_quality_status",
+          "degradation",
           "dependency_reference_ids",
+          "details",
           "economic_event_id",
           "end_date",
           "external_cash_transaction_id",
           "far_leg_group_id",
           "fee_type",
+          "freshness_status",
           "fx_cash_leg_role",
           "fx_contract_close_transaction_id",
           "fx_contract_id",
@@ -12866,11 +14769,14 @@
           "realized_total_pnl_base",
           "realized_total_pnl_local",
           "realized_total_pnl_local_reporting_currency",
+          "reason_code",
           "reason_codes",
           "reconciliation_key",
           "reconciliation_status",
+          "record_key",
           "reporting_currency",
           "restatement_version",
+          "section",
           "security_id",
           "sell_amount",
           "sell_currency",
@@ -12883,12 +14789,21 @@
           "snapshot_id",
           "sort_by",
           "sort_order",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
           "source_instrument_id",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
           "source_system",
           "source_transaction_reference",
           "spot_exposure_model",
           "start_date",
+          "status",
           "swap_event_id",
           "synthetic_flow_amount_base",
           "synthetic_flow_amount_local",
@@ -13149,6 +15064,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -13799,6 +15874,22 @@
             "attributeRef": "lotus.fx_realized_pnl_mode"
           },
           {
+            "name": "transactions[].allocated_cost_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_local",
+            "attributeRef": "lotus.allocated_cost_basis_local"
+          },
+          {
+            "name": "transactions[].allocated_cost_basis_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_base",
+            "attributeRef": "lotus.allocated_cost_basis_base"
+          },
+          {
             "name": "transactions[].realized_capital_pnl_local",
             "location": "body",
             "required": false,
@@ -14119,13 +16210,18 @@
       "naming": {
         "boundedContext": "transactions",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
           "base_currency",
+          "content_hash",
           "correlation_id",
           "currency",
           "currency_totals",
           "data_quality_status",
+          "degradation",
+          "details",
           "end_date",
+          "freshness_status",
           "generated_at",
           "latest_evidence_timestamp",
           "other_tax_deductions_amount",
@@ -14133,15 +16229,27 @@
           "portfolio_id",
           "product_name",
           "product_version",
+          "reason_code",
           "reason_codes",
           "reconciliation_status",
+          "record_key",
           "reporting_currency",
           "reporting_currency_total_tax_amount",
           "restatement_version",
+          "section",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
           "source_transaction_count",
           "start_date",
+          "status",
           "tax_evidence_transaction_count",
           "tenant_id",
           "total_tax_amount",
@@ -14268,6 +16376,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -14438,11 +16706,16 @@
       "naming": {
         "boundedContext": "cashflow_projection",
         "canonicalTerms": [
+          "affected_fields",
           "as_of_date",
           "booked_net_cashflow",
           "booked_total_net_cashflow",
+          "content_hash",
           "correlation_id",
           "data_quality_status",
+          "degradation",
+          "details",
+          "freshness_status",
           "generated_at",
           "horizon_days",
           "include_projected",
@@ -14462,10 +16735,23 @@
           "projection_days",
           "range_end_date",
           "range_start_date",
+          "reason_code",
+          "reason_codes",
           "reconciliation_status",
+          "record_key",
           "restatement_version",
+          "section",
           "snapshot_id",
+          "source_as_of_date",
           "source_batch_fingerprint",
+          "source_digest",
+          "source_evidence_current",
+          "source_kind",
+          "source_lineage",
+          "source_product_name",
+          "source_product_version",
+          "source_refs",
+          "status",
           "tenant_id",
           "total_net_cashflow"
         ]
@@ -14581,6 +16867,166 @@
             "type": "object",
             "semanticId": "lotus.snapshot_id",
             "attributeRef": "lotus.snapshot_id"
+          },
+          {
+            "name": "content_hash",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.content_hash",
+            "attributeRef": "lotus.content_hash"
+          },
+          {
+            "name": "source_digest",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_digest",
+            "attributeRef": "lotus.source_digest"
+          },
+          {
+            "name": "source_refs",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.source_refs",
+            "attributeRef": "lotus.source_refs"
+          },
+          {
+            "name": "source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
+          },
+          {
+            "name": "degradation",
+            "location": "body",
+            "required": false,
+            "type": "SourceDataDegradationSummary",
+            "semanticId": "lotus.degradation",
+            "attributeRef": "lotus.degradation"
+          },
+          {
+            "name": "degradation.status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.status",
+            "attributeRef": "lotus.status"
+          },
+          {
+            "name": "degradation.reason_codes",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.reason_codes",
+            "attributeRef": "lotus.reason_codes"
+          },
+          {
+            "name": "degradation.details",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.details",
+            "attributeRef": "lotus.details"
+          },
+          {
+            "name": "degradation.details[].section",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.section",
+            "attributeRef": "lotus.section"
+          },
+          {
+            "name": "degradation.details[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "degradation.details[].affected_fields",
+            "location": "body",
+            "required": false,
+            "type": "array",
+            "semanticId": "lotus.affected_fields",
+            "attributeRef": "lotus.affected_fields"
+          },
+          {
+            "name": "degradation.details[].source_kind",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_kind",
+            "attributeRef": "lotus.source_kind"
+          },
+          {
+            "name": "degradation.details[].source_product_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.source_product_name",
+            "attributeRef": "lotus.source_product_name"
+          },
+          {
+            "name": "degradation.details[].source_product_version",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.source_product_version",
+            "attributeRef": "lotus.source_product_version"
+          },
+          {
+            "name": "degradation.details[].source_as_of_date",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_as_of_date",
+            "attributeRef": "lotus.source_as_of_date"
+          },
+          {
+            "name": "degradation.details[].latest_evidence_timestamp",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.latest_evidence_timestamp",
+            "attributeRef": "lotus.latest_evidence_timestamp"
+          },
+          {
+            "name": "degradation.details[].freshness_status",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
+          },
+          {
+            "name": "degradation.details[].reason_code",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.reason_code",
+            "attributeRef": "lotus.reason_code"
+          },
+          {
+            "name": "source_evidence_current",
+            "location": "body",
+            "required": false,
+            "type": "boolean",
+            "semanticId": "lotus.source_evidence_current",
+            "attributeRef": "lotus.source_evidence_current"
+          },
+          {
+            "name": "freshness_status",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.freshness_status",
+            "attributeRef": "lotus.freshness_status"
           },
           {
             "name": "policy_version",
@@ -15021,7 +17467,7 @@
         "Market Prices"
       ],
       "summary": "Get market-price series for a security",
-      "description": "Returns market price series for a security with optional date-range filtering. Use this route for source-owned pricing history, valuation checks, and market-data diagnostics; do not use it as a substitute for performance analytics, portfolio valuation outputs, or holdings reads.",
+      "description": "Returns market price series for a security with optional date-range filtering. Use this route for source-owned pricing history, valuation checks, and market-data diagnostics. Callers must provide both `start_date` and `end_date`; the window is capped at ten years. Do not use it as a substitute for performance analytics, portfolio valuation outputs, or holdings reads.",
       "naming": {
         "boundedContext": "market_prices",
         "canonicalTerms": [
@@ -15119,7 +17565,7 @@
         "FX Rates"
       ],
       "summary": "Get FX-rate series for a currency pair",
-      "description": "Returns FX rates for a currency pair over an optional date range. Use this route for source-owned FX conversion history, valuation conversion checks, and reconciliation diagnostics; do not use it as a substitute for portfolio performance, risk analytics, or derived reporting outputs.",
+      "description": "Returns FX rates for a currency pair over an optional date range. Use this route for source-owned FX conversion history, valuation conversion checks, and reconciliation diagnostics. Callers must provide both `start_date` and `end_date`; the window is capped at ten years. Do not use it as a substitute for portfolio performance, risk analytics, or derived reporting outputs.",
       "naming": {
         "boundedContext": "fx_rates",
         "canonicalTerms": [
@@ -16270,6 +18716,113 @@
       }
     },
     {
+      "operationId": "version_metadata_version_get",
+      "method": "GET",
+      "path": "/version",
+      "domain": "operations",
+      "serviceGroup": "ingestion",
+      "tags": [
+        "Operations"
+      ],
+      "summary": "Runtime image version metadata",
+      "description": "Return the immutable image provenance metadata embedded as OCI labels and runtime environment variables during the build.",
+      "naming": {
+        "boundedContext": "operations",
+        "canonicalTerms": [
+          "build_timestamp",
+          "ci_pipeline_run_id",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "service_name"
+        ]
+      },
+      "request": {
+        "fields": []
+      },
+      "response": {
+        "httpStatus": 200,
+        "model": "BuildMetadataResponse",
+        "fields": [
+          {
+            "name": "service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
+          }
+        ]
+      }
+    },
+    {
       "operationId": "metrics_metrics_get",
       "method": "GET",
       "path": "/metrics",
@@ -16307,7 +18860,23 @@
       "naming": {
         "boundedContext": "health",
         "canonicalTerms": [
-          "status"
+          "app_version",
+          "build",
+          "build_timestamp",
+          "ci_pipeline_run_id",
+          "environment",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "runtime",
+          "runtime_profile",
+          "service_name",
+          "started_at_utc",
+          "status",
+          "uptime_seconds"
         ]
       },
       "request": {
@@ -16324,6 +18893,142 @@
             "type": "string",
             "semanticId": "lotus.status",
             "attributeRef": "lotus.status"
+          },
+          {
+            "name": "runtime",
+            "location": "body",
+            "required": true,
+            "type": "HealthRuntimeMetadata",
+            "semanticId": "lotus.runtime",
+            "attributeRef": "lotus.runtime"
+          },
+          {
+            "name": "runtime.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.app_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.app_version",
+            "attributeRef": "lotus.app_version"
+          },
+          {
+            "name": "runtime.environment",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.environment",
+            "attributeRef": "lotus.environment"
+          },
+          {
+            "name": "runtime.runtime_profile",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.runtime_profile",
+            "attributeRef": "lotus.runtime_profile"
+          },
+          {
+            "name": "runtime.started_at_utc",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.started_at_utc",
+            "attributeRef": "lotus.started_at_utc"
+          },
+          {
+            "name": "runtime.uptime_seconds",
+            "location": "body",
+            "required": true,
+            "type": "number",
+            "semanticId": "lotus.uptime_seconds",
+            "attributeRef": "lotus.uptime_seconds"
+          },
+          {
+            "name": "runtime.build",
+            "location": "body",
+            "required": true,
+            "type": "BuildMetadataResponse",
+            "semanticId": "lotus.build",
+            "attributeRef": "lotus.build"
+          },
+          {
+            "name": "runtime.build.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.build.git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "runtime.build.git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "runtime.build.build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "runtime.build.repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "runtime.build.image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "runtime.build.image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "runtime.build.ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "runtime.build.oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
           }
         ]
       }
@@ -16342,8 +19047,24 @@
       "naming": {
         "boundedContext": "health",
         "canonicalTerms": [
+          "app_version",
+          "build",
+          "build_timestamp",
+          "ci_pipeline_run_id",
           "dependencies",
-          "status"
+          "environment",
+          "git_branch",
+          "git_commit_sha",
+          "image_digest",
+          "image_version",
+          "oci_labels",
+          "repo_url",
+          "runtime",
+          "runtime_profile",
+          "service_name",
+          "started_at_utc",
+          "status",
+          "uptime_seconds"
         ]
       },
       "request": {
@@ -16368,6 +19089,142 @@
             "type": "object",
             "semanticId": "lotus.dependencies",
             "attributeRef": "lotus.dependencies"
+          },
+          {
+            "name": "runtime",
+            "location": "body",
+            "required": true,
+            "type": "HealthRuntimeMetadata",
+            "semanticId": "lotus.runtime",
+            "attributeRef": "lotus.runtime"
+          },
+          {
+            "name": "runtime.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.app_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.app_version",
+            "attributeRef": "lotus.app_version"
+          },
+          {
+            "name": "runtime.environment",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.environment",
+            "attributeRef": "lotus.environment"
+          },
+          {
+            "name": "runtime.runtime_profile",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.runtime_profile",
+            "attributeRef": "lotus.runtime_profile"
+          },
+          {
+            "name": "runtime.started_at_utc",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.started_at_utc",
+            "attributeRef": "lotus.started_at_utc"
+          },
+          {
+            "name": "runtime.uptime_seconds",
+            "location": "body",
+            "required": true,
+            "type": "number",
+            "semanticId": "lotus.uptime_seconds",
+            "attributeRef": "lotus.uptime_seconds"
+          },
+          {
+            "name": "runtime.build",
+            "location": "body",
+            "required": true,
+            "type": "BuildMetadataResponse",
+            "semanticId": "lotus.build",
+            "attributeRef": "lotus.build"
+          },
+          {
+            "name": "runtime.build.service_name",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.service_name",
+            "attributeRef": "lotus.service_name"
+          },
+          {
+            "name": "runtime.build.git_commit_sha",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_commit_sha",
+            "attributeRef": "lotus.git_commit_sha"
+          },
+          {
+            "name": "runtime.build.git_branch",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.git_branch",
+            "attributeRef": "lotus.git_branch"
+          },
+          {
+            "name": "runtime.build.build_timestamp",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.build_timestamp",
+            "attributeRef": "lotus.build_timestamp"
+          },
+          {
+            "name": "runtime.build.repo_url",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.repo_url",
+            "attributeRef": "lotus.repo_url"
+          },
+          {
+            "name": "runtime.build.image_version",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_version",
+            "attributeRef": "lotus.image_version"
+          },
+          {
+            "name": "runtime.build.image_digest",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.image_digest",
+            "attributeRef": "lotus.image_digest"
+          },
+          {
+            "name": "runtime.build.ci_pipeline_run_id",
+            "location": "body",
+            "required": true,
+            "type": "string",
+            "semanticId": "lotus.ci_pipeline_run_id",
+            "attributeRef": "lotus.ci_pipeline_run_id"
+          },
+          {
+            "name": "runtime.build.oci_labels",
+            "location": "body",
+            "required": true,
+            "type": "object",
+            "semanticId": "lotus.oci_labels",
+            "attributeRef": "lotus.oci_labels"
           }
         ]
       }
@@ -16622,6 +19479,8 @@
         "canonicalTerms": [
           "accepted_count",
           "adjustment_reason",
+          "allocated_cost_basis_base",
+          "allocated_cost_basis_local",
           "brokerage",
           "buy_amount",
           "buy_currency",
@@ -17212,6 +20071,22 @@
             "attributeRef": "lotus.fx_realized_pnl_mode"
           },
           {
+            "name": "allocated_cost_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_local",
+            "attributeRef": "lotus.allocated_cost_basis_local"
+          },
+          {
+            "name": "allocated_cost_basis_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_base",
+            "attributeRef": "lotus.allocated_cost_basis_base"
+          },
+          {
             "name": "realized_capital_pnl_local",
             "location": "body",
             "required": false,
@@ -17540,6 +20415,8 @@
         "canonicalTerms": [
           "accepted_count",
           "adjustment_reason",
+          "allocated_cost_basis_base",
+          "allocated_cost_basis_local",
           "brokerage",
           "buy_amount",
           "buy_currency",
@@ -18138,6 +21015,22 @@
             "type": "object",
             "semanticId": "lotus.fx_realized_pnl_mode",
             "attributeRef": "lotus.fx_realized_pnl_mode"
+          },
+          {
+            "name": "transactions[].allocated_cost_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_local",
+            "attributeRef": "lotus.allocated_cost_basis_local"
+          },
+          {
+            "name": "transactions[].allocated_cost_basis_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_base",
+            "attributeRef": "lotus.allocated_cost_basis_base"
           },
           {
             "name": "transactions[].realized_capital_pnl_local",
@@ -19350,6 +22243,8 @@
           "accepted_count",
           "adjustment_reason",
           "advisor_id",
+          "allocated_cost_basis_base",
+          "allocated_cost_basis_local",
           "asset_class",
           "base_currency",
           "booking_center_code",
@@ -20375,6 +23270,22 @@
             "attributeRef": "lotus.fx_realized_pnl_mode"
           },
           {
+            "name": "transactions[].allocated_cost_basis_local",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_local",
+            "attributeRef": "lotus.allocated_cost_basis_local"
+          },
+          {
+            "name": "transactions[].allocated_cost_basis_base",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.allocated_cost_basis_base",
+            "attributeRef": "lotus.allocated_cost_basis_base"
+          },
+          {
             "name": "transactions[].realized_capital_pnl_local",
             "location": "body",
             "required": false,
@@ -20789,13 +23700,19 @@
       "naming": {
         "boundedContext": "bulk_uploads",
         "canonicalTerms": [
+          "code",
           "entity_type",
           "errors",
+          "field_path",
           "file_format",
           "invalid_rows",
           "message",
+          "record_key",
+          "remediation",
           "row_number",
           "sample_rows",
+          "severity",
+          "source_lineage",
           "total_rows",
           "valid_rows"
         ]
@@ -20878,6 +23795,54 @@
             "type": "string",
             "semanticId": "lotus.message",
             "attributeRef": "lotus.message"
+          },
+          {
+            "name": "errors[].code",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.code",
+            "attributeRef": "lotus.code"
+          },
+          {
+            "name": "errors[].severity",
+            "location": "body",
+            "required": false,
+            "type": "string",
+            "semanticId": "lotus.severity",
+            "attributeRef": "lotus.severity"
+          },
+          {
+            "name": "errors[].field_path",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.field_path",
+            "attributeRef": "lotus.field_path"
+          },
+          {
+            "name": "errors[].record_key",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.record_key",
+            "attributeRef": "lotus.record_key"
+          },
+          {
+            "name": "errors[].remediation",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.remediation",
+            "attributeRef": "lotus.remediation"
+          },
+          {
+            "name": "errors[].source_lineage",
+            "location": "body",
+            "required": false,
+            "type": "object",
+            "semanticId": "lotus.source_lineage",
+            "attributeRef": "lotus.source_lineage"
           }
         ]
       }
