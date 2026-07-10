@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
 )
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.consumer import CostCalculationWorkflow
@@ -21,6 +22,7 @@ from src.services.calculators.cost_calculator_service.app.cost_engine.domain.mod
 from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
     CostBasisProcessingCheckpoint,
 )
+from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
 )
@@ -122,6 +124,60 @@ async def test_ordered_avco_database_work_is_source_count_independent_and_indexe
         },
     )
     assert "ix_position_lot_norm_port_sec" in _index_names(plan)
+
+
+async def test_average_cost_pool_lock_is_scoped_to_portfolio_security_key(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    first_portfolio_id = "PORT-AVCO-LOCK-FIRST"
+    first_security_id = "FO_EQ_AVCO_LOCK_FIRST"
+    second_portfolio_id = "PORT-AVCO-LOCK-SECOND"
+    second_security_id = "FO_EQ_AVCO_LOCK_SECOND"
+    await _seed_ordered_avco_key(
+        async_db_session,
+        portfolio_id=first_portfolio_id,
+        security_id=first_security_id,
+        source_count=1,
+        identity_offset=4000,
+    )
+    await _seed_ordered_avco_key(
+        async_db_session,
+        portfolio_id=second_portfolio_id,
+        security_id=second_security_id,
+        source_count=1,
+        identity_offset=5000,
+    )
+    session_factory = transaction_processing_test_context(async_db_session).session_factory
+
+    async with session_factory() as first_session, session_factory() as second_session:
+        first_transaction = first_session.begin()
+        second_transaction = second_session.begin()
+        await first_transaction.start()
+        await second_transaction.start()
+        first_repository = CostCalculatorRepository(first_session)
+        second_repository = CostCalculatorRepository(second_session)
+        try:
+            first_record = await first_repository.get_average_cost_pool_checkpoint_record(
+                portfolio_id=first_portfolio_id,
+                security_id=first_security_id,
+            )
+            await second_session.execute(text("SET LOCAL lock_timeout = '200ms'"))
+            unrelated_record = await second_repository.get_average_cost_pool_checkpoint_record(
+                portfolio_id=second_portfolio_id,
+                security_id=second_security_id,
+            )
+
+            assert first_record is not None
+            assert unrelated_record is not None
+            with pytest.raises(DBAPIError):
+                await second_repository.get_average_cost_pool_checkpoint_record(
+                    portfolio_id=first_portfolio_id,
+                    security_id=first_security_id,
+                )
+        finally:
+            await second_session.rollback()
+            await first_session.rollback()
 
 
 async def _seed_ordered_avco_key(
