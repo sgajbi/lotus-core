@@ -12,10 +12,12 @@ PR_TEMPLATE_PATH = Path(".github/pull_request_template.md")
 CURRENT_STATE_STATUS = "current-state-revalidation-required"
 APPROVED_STATUS = "runtime-split-approved"
 CONSOLIDATION_STATUS = "runtime-consolidation-planned"
+CONSOLIDATION_TARGET_STATUS = "runtime-consolidation-target"
 VALID_STATUSES = {
     CURRENT_STATE_STATUS,
     APPROVED_STATUS,
     CONSOLIDATION_STATUS,
+    CONSOLIDATION_TARGET_STATUS,
     "runtime-split-rejected",
 }
 
@@ -42,6 +44,11 @@ def find_runtime_boundary_decision_findings(
     baseline_paths = set(catalog["baselineCurrentStateServicePaths"])
     records = catalog["decisionRecords"]
     records_by_path = {record["servicePath"]: record for record in records}
+    planned_consolidation_target_ids = {
+        record.get("consolidationTargetServiceId")
+        for record in records
+        if record.get("status") == CONSOLIDATION_STATUS
+    }
     discovered_paths = _discover_deployable_service_paths(root)
 
     for service_path in sorted(discovered_paths):
@@ -58,7 +65,14 @@ def find_runtime_boundary_decision_findings(
                 )
             )
             continue
-        findings.extend(_validate_record(root=root, record=record, baseline_paths=baseline_paths))
+        findings.extend(
+            _validate_record(
+                root=root,
+                record=record,
+                baseline_paths=baseline_paths,
+                planned_consolidation_target_ids=planned_consolidation_target_ids,
+            )
+        )
 
     for service_path in sorted(records_by_path):
         if service_path not in discovered_paths:
@@ -139,6 +153,7 @@ def _validate_record(
     root: Path,
     record: dict[str, Any],
     baseline_paths: set[str],
+    planned_consolidation_target_ids: set[object],
 ) -> list[RuntimeBoundaryDecisionFinding]:
     findings: list[RuntimeBoundaryDecisionFinding] = []
     service_path = _string_field(record, "servicePath")
@@ -202,6 +217,27 @@ def _validate_record(
                     path=service_path,
                     rule="invalid-consolidation-target",
                     detail="consolidation target must differ from the current service id",
+                )
+            )
+    if status == CONSOLIDATION_TARGET_STATUS:
+        service_id = _string_field(record, "serviceId")
+        if service_path in baseline_paths:
+            findings.append(
+                RuntimeBoundaryDecisionFinding(
+                    path=service_path,
+                    rule="baseline-service-cannot-use-consolidation-target-status",
+                    detail="runtime-consolidation-target is reserved for a new target deployable",
+                )
+            )
+        if service_id not in planned_consolidation_target_ids:
+            findings.append(
+                RuntimeBoundaryDecisionFinding(
+                    path=service_path,
+                    rule="unreferenced-consolidation-target",
+                    detail=(
+                        "runtime-consolidation-target must be referenced by a baseline "
+                        "runtime-consolidation-planned record"
+                    ),
                 )
             )
     for field_name in (

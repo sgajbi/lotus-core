@@ -44,6 +44,11 @@ Use `runtime-consolidation-planned` only for an existing baseline deployable wit
 does not authorize deleting the current runtime until compatibility, failure, replay, throughput,
 operability, image provenance, and rollback evidence passes.
 
+Use `runtime-consolidation-target` only for a new target deployable whose `serviceId` is referenced
+by at least one baseline `runtime-consolidation-planned` record. This status records target
+implementation and validation without claiming cutover; it must not be used for an unrelated new
+runtime split or an existing baseline service.
+
 ## Enforcement
 
 `make architecture-guard` runs `scripts/runtime_boundary_decision_guard.py`.

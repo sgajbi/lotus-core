@@ -19,6 +19,25 @@
   ],
   "decisionRecords": [
     {
+      "serviceId": "portfolio_transaction_processing_service",
+      "servicePath": "src/services/portfolio_transaction_processing_service",
+      "status": "runtime-consolidation-target",
+      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
+      "rationaleSummary": "Replace three serial transaction calculator workers with one atomic transaction-processing runtime while retaining separate cost, cashflow, and position application/domain modules.",
+      "inProcessBoundaryEvidence": [
+        "ProcessTransactionUseCase coordinates typed cost, cashflow, and position ports through one financial unit of work.",
+        "Cost, cashflow, and position policies remain independently testable modules with explicit module observability.",
+        "The target removes duplicate runtime shells and partial normal-path completion states rather than merging unrelated domain logic."
+      ],
+      "runtimeBoundaryDrivers": [
+        "atomic-financial-unit-of-work",
+        "shared-transaction-ordering",
+        "reduced-partial-failure-states",
+        "shared-worker-runtime"
+      ],
+      "revalidationOwner": "lotus-core engineering"
+    },
+    {
       "serviceId": "cashflow_calculator_service",
       "servicePath": "src/services/calculators/cashflow_calculator_service",
       "status": "runtime-consolidation-planned",

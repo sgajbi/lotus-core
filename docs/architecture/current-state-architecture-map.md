@@ -1,6 +1,6 @@
 # Lotus Core Current-State Architecture Map
 
-Last updated: 2026-07-05
+Last updated: 2026-07-10
 
 Issue: https://github.com/sgajbi/lotus-core/issues/616
 
@@ -125,9 +125,15 @@ Rules:
 | `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Stage-gate orchestration, readiness events, control-stage status, quiescence | Business calculations, source write ingestion, direct API serving |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
 | `query_control_plane_service` | `src/services/query_control_plane_service` | Analytics input contracts, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation |
+| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Implemented consolidation target with one atomic transaction use case, separate cost/cashflow/position modules, replay request handling, and aggregate health/version/observability contracts | Runtime activation or coexistence with the three legacy calculator workers before cutover, unrelated valuation ownership, or collapsed domain policies |
 
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.
+
+The combined transaction-processing row is code and image current state, not deployed topology.
+Compose and deployment manifests still run the three legacy calculator workers. The target may
+replace them only atomically after the consolidation ledger's compatibility, load, operability,
+provenance, rollback, and canonical-QA gates pass.
 
 ## Database Ownership
 

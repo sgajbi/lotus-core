@@ -177,3 +177,55 @@ def test_runtime_boundary_decision_guard_rejects_missing_consolidation_target(
     findings = find_runtime_boundary_decision_findings(tmp_path)
 
     assert any(finding.rule == "missing-consolidation-target" for finding in findings)
+
+
+def test_runtime_boundary_decision_guard_accepts_referenced_consolidation_target(
+    tmp_path: Path,
+) -> None:
+    _write_required_governance(tmp_path)
+    legacy_path = "src/services/legacy_service"
+    target_path = "src/services/combined_service"
+    _write(tmp_path / legacy_path / "Dockerfile", "FROM python:3.13\n")
+    _write(tmp_path / target_path / "Dockerfile", "FROM python:3.13\n")
+    _write_catalog(
+        tmp_path,
+        baseline_paths=[legacy_path],
+        records=[
+            _record(
+                service_id="legacy_service",
+                service_path=legacy_path,
+                status="runtime-consolidation-planned",
+                consolidation_target_service_id="combined_service",
+            ),
+            _record(
+                service_id="combined_service",
+                service_path=target_path,
+                status="runtime-consolidation-target",
+            ),
+        ],
+    )
+
+    assert find_runtime_boundary_decision_findings(tmp_path) == []
+
+
+def test_runtime_boundary_decision_guard_rejects_unreferenced_consolidation_target(
+    tmp_path: Path,
+) -> None:
+    _write_required_governance(tmp_path)
+    target_path = "src/services/combined_service"
+    _write(tmp_path / target_path / "Dockerfile", "FROM python:3.13\n")
+    _write_catalog(
+        tmp_path,
+        baseline_paths=[],
+        records=[
+            _record(
+                service_id="combined_service",
+                service_path=target_path,
+                status="runtime-consolidation-target",
+            )
+        ],
+    )
+
+    findings = find_runtime_boundary_decision_findings(tmp_path)
+
+    assert any(finding.rule == "unreferenced-consolidation-target" for finding in findings)
