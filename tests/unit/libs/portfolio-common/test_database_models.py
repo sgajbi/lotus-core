@@ -1,6 +1,7 @@
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AnalyticsExportJob,
+    AverageCostPoolState,
     Base,
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
@@ -61,6 +62,28 @@ def test_database_identifier_names_fit_postgresql_limit():
     too_long = sorted(name for name in names if len(name) > 63)
 
     assert too_long == []
+
+
+def test_average_cost_pool_state_declares_integrity_constraints_and_support_index() -> None:
+    table = AverageCostPoolState.__table__
+    constraint_names = {constraint.name for constraint in table.constraints}
+    indexes = {index.name: index for index in table.indexes}
+
+    assert set(table.primary_key.columns.keys()) == {"portfolio_id", "security_id"}
+    assert {
+        "ck_average_cost_pool_state_quantity_nonnegative",
+        "ck_average_cost_pool_state_local_cost_nonnegative",
+        "ck_average_cost_pool_state_base_cost_nonnegative",
+        "ck_average_cost_pool_state_positive_source",
+    } <= constraint_names
+    assert [
+        str(expression)
+        for expression in indexes["ix_average_cost_pool_state_updated_key"].expressions
+    ] == [
+        "average_cost_pool_state.updated_at DESC",
+        "average_cost_pool_state.portfolio_id",
+        "average_cost_pool_state.security_id",
+    ]
 
 
 def test_reprocessing_job_declares_pending_reset_watermarks_uniqueness_index():
