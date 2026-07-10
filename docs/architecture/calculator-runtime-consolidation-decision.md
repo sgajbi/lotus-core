@@ -5,6 +5,9 @@ Date: 2026-07-10
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
 
+Cutover and removal tracking:
+[transaction-processing consolidation change ledger](./transaction-processing-consolidation-change-ledger.md).
+
 ## Decision
 
 Consolidate `cost_calculator_service`, `cashflow_calculator_service`, and
