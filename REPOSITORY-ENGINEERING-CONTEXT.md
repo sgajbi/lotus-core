@@ -1714,6 +1714,18 @@ Most relevant current governance:
      `make profile-cost-processing-modes` to keep ordered opening, state-dependent disposal, and
      backdated rebuild evidence separate. Large open-lot restore depth remains a measured hotspot;
      optimize it only with durable state ownership and exact quantity/local/base parity.
+133. True corporate-action cash consideration is not income. `CASH_CONSIDERATION` is a zero
+     quantity/zero price product marker classified as `CORPORATE_ACTION_PROCEEDS`; the actual cash
+     account movement is a linked `ADJUSTMENT`. Require source-owned
+     `allocated_cost_basis_local` and `allocated_cost_basis_base`. Same-currency processing derives
+     capital P&L and zero FX P&L; cross-currency processing requires explicit capital and FX
+     components and validates their totals. Bundle A must reconcile source basis to target basis
+     plus cash-allocated basis and emit `insufficient_cash_basis` when evidence is absent. Keep the
+     pure policy in `cost_engine.domain.corporate_action_cash_economics`, persist calculated
+     extension fields through `Transaction.set_calculated_field(...)`, and prove changes through
+     the mixed-demerger PostgreSQL contract. Do not map cash consideration back to generic income,
+     infer missing basis, or reuse these semantics for `CASH_IN_LIEU`; its fractional overlay is a
+     separate contract.
 
 ## Context Maintenance Rule
 

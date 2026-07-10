@@ -845,6 +845,14 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `transaction_fx_rate` (Numeric): Numeric financial measure used in valuation, cost, or analytics calculations.
   - `net_cost_local` (Numeric): Numeric financial measure used in valuation, cost, or analytics calculations.
   - `realized_gain_loss_local` (Numeric): Domain attribute used by the owning module.
+  - `allocated_cost_basis_local` (Numeric): Cost basis allocated to non-security corporate-action consideration in local currency.
+  - `allocated_cost_basis_base` (Numeric): Cost basis allocated to non-security corporate-action consideration in portfolio base currency.
+  - `realized_capital_pnl_local` (Numeric): Realized capital P&L component in local currency.
+  - `realized_fx_pnl_local` (Numeric): Realized FX P&L component in local currency.
+  - `realized_total_pnl_local` (Numeric): Realized total P&L in local currency.
+  - `realized_capital_pnl_base` (Numeric): Realized capital P&L component in portfolio base currency.
+  - `realized_fx_pnl_base` (Numeric): Realized FX P&L component in portfolio base currency.
+  - `realized_total_pnl_base` (Numeric): Realized total P&L in portfolio base currency.
   - `economic_event_id` (String): Identifier for economic event.
   - `linked_transaction_group_id` (String): Identifier for linked transaction group.
   - `calculation_policy_id` (String): Identifier for calculation policy.
