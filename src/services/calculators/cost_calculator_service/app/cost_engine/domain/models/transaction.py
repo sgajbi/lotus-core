@@ -93,7 +93,8 @@ def _model_dump(
         if hasattr(value, "model_dump"):
             value = value.model_dump(exclude_none=exclude_none)
         payload[field.name] = value
-    for field_name, value in getattr(instance, "_extra_fields", {}).items():
+    for field_name, original_value in getattr(instance, "_extra_fields", {}).items():
+        value = getattr(instance, field_name, original_value)
         if field_name in excluded_fields or (exclude_none and value is None):
             continue
         payload[field_name] = value
