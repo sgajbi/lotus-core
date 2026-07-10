@@ -13,7 +13,7 @@ from src.services.calculators.cashflow_calculator_service.app.repositories impor
     cashflow_repository,
 )
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
-    CostCalculationWorkflow,
+    CostCalculationWorkflowPort,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
@@ -63,7 +63,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self,
         *,
         session_factory: Callable[[], AsyncSession],
-        cost_workflow: CostCalculationWorkflow,
+        cost_workflow: CostCalculationWorkflowPort,
         cashflow_workflow: CashflowStagingWorkflow,
     ) -> None:
         self._session_factory = session_factory

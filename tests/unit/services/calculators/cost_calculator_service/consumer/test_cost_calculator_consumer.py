@@ -30,6 +30,7 @@ from portfolio_common.transaction_domain import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.consumer import (
+    CostCalculationWorkflow,
     CostCalculatorConsumer,
     PortfolioNotFoundError,
     _normalize_fee_amount,
@@ -52,6 +53,14 @@ class _StringCountedAmount:
     def __str__(self) -> str:
         self.string_call_count += 1
         return self.value
+
+
+async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None:
+    workflow = CostCalculationWorkflow()
+
+    assert callable(workflow._prepare_transaction_event)
+    assert callable(workflow._build_events_to_publish)
+    assert not hasattr(workflow, "_consumer_config")
 
 
 def _bundle_a_transaction_event(

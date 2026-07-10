@@ -4,7 +4,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationEventProcessor,
-    CostCalculationWorkflow,
+    CostCalculationWorkflowPort,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
@@ -21,7 +21,7 @@ class CostProcessingCompatibilityAdapter:
     def __init__(
         self,
         *,
-        workflow: CostCalculationWorkflow,
+        workflow: CostCalculationWorkflowPort,
         repository: CostCalculatorRepository,
         outbox_repository: OutboxRepository,
     ) -> None:
