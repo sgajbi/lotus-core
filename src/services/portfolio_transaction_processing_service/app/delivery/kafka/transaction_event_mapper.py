@@ -39,6 +39,7 @@ def map_transaction_event(
     *,
     event_id: str,
     correlation_id: str | None = None,
+    traceparent: str | None = None,
 ) -> ProcessTransactionCommand:
     payload = event.model_dump(mode="python")
     domain_values = {name: payload[name] for name in _DOMAIN_FIELD_NAMES}
@@ -52,7 +53,7 @@ def map_transaction_event(
             event_type=event.event_type,
             schema_version=event.schema_version,
             correlation_id=correlation_id or event.correlation_id,
-            traceparent=event.traceparent,
+            traceparent=traceparent or event.traceparent,
         ),
     )
 
