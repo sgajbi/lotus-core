@@ -260,6 +260,8 @@ Important runtime note:
   integration-lite suite
 - `make test-transaction-processing-contract`
   complete DB-direct combined cost, cashflow, position, replay, and rollback contract
+- `make profile-cost-history-capacity`
+  reproducible FIFO/AVCO long-history engine profile with machine-readable output
 - `make test-e2e-smoke`
   E2E smoke
 - `make test-docker-smoke`
