@@ -57,10 +57,11 @@ contracts are unchanged. The app-local worker health surface moves from ports `8
 `8083` to one target on host port `8090` (container port `8085`).
 
 Before switching environments, quiesce producers, drain and stop legacy workers, run the offset
-handoff, and then start the target. Never run both topologies. Rollback requires stopping the target,
-draining it, transferring reviewed offsets back to the legacy source groups or using a reviewed
-checkpoint, and starting all three legacy workers together. Database rollback is not required for
-the additive target runtime, but compatibility events and schema state must remain available.
+handoff, and then start the target. Never run both topologies. The legacy worker images and shells
+are now retired. Post-cutover rollback means quiescing producers, draining the target, reviewing its
+committed offsets, and deploying the previous certified target digest; it does not mean restarting
+the three-worker topology. Database rollback is not required for the additive target runtime, but
+compatibility events and schema state must remain available.
 
 ## Validation
 

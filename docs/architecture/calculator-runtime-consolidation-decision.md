@@ -63,7 +63,8 @@ combined completion contract.
    compatibility outbox events.
 5. Prove duplicate delivery, replay, DLQ, rollback-on-module-failure, shutdown, and backlog behavior.
 6. Switch local/CI deployment manifests to the combined image and run local load/tie-out proof.
-7. Remove the three legacy Dockerfiles/services and the obsolete normal-path stage wait only after
+7. The three legacy service shells, images, and package manifests are removed. Move the surviving
+   workflow/domain/repository modules and remove the obsolete normal-path stage wait only after
    downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
 Steps 1 through 6 are implemented locally. The branch must not claim full runtime consolidation

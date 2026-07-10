@@ -135,15 +135,15 @@ before full production cutover is claimed.
 
 ## Transitional Internal Package Roots
 
-These cataloged roots remain source dependencies of the combined image but are not app-local/CI
-deployables. Do not use their `main.py`, `consumer_manager.py`, `web.py`, or Dockerfiles for new
-runtime composition:
+These cataloged roots remain source dependencies of the combined image but are not deployables or
+standalone packages. Their `main.py`, `consumer_manager.py`, `web.py`, Dockerfiles, and package
+manifests are deleted; do not recreate them:
 
 | Compatibility package | Path | Current use | Removal condition |
 | --- | --- | --- | --- |
-| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Cost domain/workflow/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after registry/Kubernetes/canonical-QA parity. |
-| `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow domain/workflow/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after registry/Kubernetes/canonical-QA parity. |
-| `position_calculator_service` | `src/services/calculators/position_calculator` | Position domain/reducer/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after registry/Kubernetes/canonical-QA parity. |
+| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Cost workflow/domain/repository compatibility implementation behind target ports; old replay delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
+| `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow workflow/domain/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after canonical QA. |
+| `position_calculator_service` | `src/services/calculators/position_calculator` | Position domain/reducer/repository compatibility implementation behind target ports; old delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
 
 ## Database Ownership
 

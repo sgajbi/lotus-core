@@ -56,6 +56,7 @@ only their runtime shell and normal-path transaction boundary are consolidated.
 Stop the rollout if source groups are active, source lag is non-zero, legacy live offsets differ,
 the target group cannot be verified, readiness fails, DLQ grows, or domain completion times out.
 
-For rollback, quiesce producers, drain and stop the target, review current target offsets, transfer
-an approved checkpoint to all required legacy groups, then start the three legacy workers together.
-Do not reset to earliest/latest and do not infer offsets from timestamps.
+For rollback, quiesce producers, drain and stop the target, review current target offsets, and deploy
+the previous certified target digest with the same target group identities. The three legacy worker
+images/shells are retired and must not be recreated as an incident shortcut. Do not reset to
+earliest/latest and do not infer offsets from timestamps.

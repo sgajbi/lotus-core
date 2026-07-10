@@ -92,15 +92,15 @@ tests move with their owning module; they are not deleted merely because a servi
 | Surface | Status | Intended action | Removal prerequisite |
 |---|---|---|---|
 | Target six-consumer compatibility registry and tests | removed-local | Deleted after two-consumer composition, atomic rollback, replay, load, recovery, Compose, CI, and Kubernetes manifest proof. Import confinement remains enforced for transitional infrastructure adapters. | Do not restore; retain historical CR evidence only. |
-| Cost/cashflow/position `main.py`, `consumer_manager.py`, and `web.py` shells | compatibility | Delete service shells; retain/move business modules and tests under target ownership. | Target health/runtime parity and manifest switch. |
-| Three calculator Dockerfiles and cashflow `requirements.txt` | compatibility | Delete after one target image is released and deployable by digest. | Image provenance/security and rollback proof. |
-| Normal cost, cashflow, gated-position, and cost-processed replay consumer classes | compatibility | Delete after target live/replay consumers own delivery. | Topic/group/downstream parity and replay proof. |
+| Cost/cashflow/position `main.py`, `consumer_manager.py`, and `web.py` shells | removed-local | Deleted after target health/runtime, Compose, CI, OpenAPI, security, image, and Kubernetes ownership switched. | Do not restore; target is the only worker HTTP/runtime identity. |
+| Three calculator Dockerfiles, standalone package manifests, and cashflow `requirements.txt` | removed-local | Deleted; prebuild, image release, and Dependabot now track only the target transaction worker. | Do not restore overlapping standalone packages or images. |
+| Legacy normal/replay delivery classes | partial | Position normal delivery and cost replay-request delivery are deleted. Cost and cashflow classes still contain active workflow code and must be split before their delivery subclasses can be removed safely. | Move active workflow code under clear application ownership; retain target delivery and replay proof. |
 | Legacy cost/cashflow/position package roots | compatibility | Move surviving domain policies, ports, repositories, and tests into clear target module packages; then delete empty roots. | Import graph, ownership catalog, tests, and docs updated. |
 | Old consumer groups and processed-event service identities | compatibility | Stop producing new rows/lag; retain historical data until governed retention expires. | Deployment cutover, lag zero, support sign-off. |
 | `transaction_processing.ready` normal stage gate | compatibility | Remove target-path production/consumption and transaction-stage wait from pipeline orchestrator. | Every downstream consumer uses combined completion/compatible domain events. |
 | `transactions.cost.processed` as normal fan-out carrier | compatibility | Retain compatibility emission initially; retire normal-path use after downstream migration. | Pipeline/query/idea/workbench and replay consumers no longer depend on it. |
 | Pipeline orchestrator transaction-stage subscriptions/state | compatibility | Remove only transaction cost/cashflow readiness coordination; retain unrelated portfolio aggregation/reconciliation orchestration. | Stage ownership/downstream audit and migration plan. |
-| Legacy worker ports, service names, alerts, dashboards, and runbooks | compatibility | Replace with target aggregate identity and module dimensions. | Operations/support validation and post-cutover observation window. |
+| Legacy worker ports, service names, alerts, dashboards, and runbooks | partial | Compose, CI, OpenAPI, security, image, Kubernetes, KEDA, dashboard, and primary runbook identities use the target. Search and retire remaining feature-doc/history references without rewriting historical CR evidence. | Operations/support validation and post-cutover observation window. |
 
 ## Database Decisions
 
