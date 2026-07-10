@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
@@ -5,6 +6,64 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from portfolio_common import worker_runtime
+
+
+@pytest.mark.asyncio
+async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health(
+    monkeypatch,
+) -> None:
+    consumer = MagicMock(topic="transactions.persisted")
+    consumer.run = AsyncMock()
+    dispatcher = MagicMock()
+    dispatcher.run = AsyncMock()
+    dispatcher.stop = MagicMock()
+    server = MagicMock()
+    server.serve = AsyncMock()
+    server_config_factory = MagicMock(return_value="server-config")
+    server_factory = MagicMock(return_value=server)
+    ensure_topics = MagicMock()
+    signal_module = MagicMock(SIGINT=2, SIGTERM=15)
+    logger = MagicMock(spec=logging.Logger)
+    tasks: list[asyncio.Task] = []
+
+    async def _wait_for_tasks(**kwargs):
+        await asyncio.gather(*kwargs["tasks"])
+        return None
+
+    shutdown = AsyncMock()
+    monkeypatch.setattr(worker_runtime, "wait_for_shutdown_or_task_failure", _wait_for_tasks)
+    monkeypatch.setattr(worker_runtime, "shutdown_runtime_components", shutdown)
+
+    await worker_runtime.run_kafka_worker_runtime(
+        consumers=[consumer],
+        dispatcher=dispatcher,
+        web_app="worker-app",
+        web_port=8083,
+        readiness_service_name="transaction_worker",
+        shutdown_event=asyncio.Event(),
+        signal_handler=MagicMock(),
+        tasks=tasks,
+        logger=logger,
+        ensure_topics=ensure_topics,
+        signal_module=signal_module,
+        server_config_factory=server_config_factory,
+        server_factory=server_factory,
+    )
+
+    ensure_topics.assert_called_once_with(["transactions.persisted"])
+    assert signal_module.signal.call_count == 2
+    server_config_factory.assert_called_once_with(
+        "worker-app",
+        host="0.0.0.0",
+        port=8083,
+        log_config=None,
+    )
+    server_factory.assert_called_once_with("server-config")
+    assert len(tasks) == 3
+    consumer.run.assert_awaited_once()
+    dispatcher.run.assert_awaited_once()
+    server.serve.assert_awaited_once()
+    shutdown.assert_awaited_once()
 
 
 @pytest.mark.asyncio
