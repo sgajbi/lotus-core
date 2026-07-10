@@ -302,6 +302,105 @@ def _cash_consideration(**overrides: object) -> Transaction:
     return Transaction(**values)
 
 
+def _cash_in_lieu(**overrides: object) -> Transaction:
+    values = {
+        "transaction_id": "CA-CASH-IN-LIEU-001",
+        "portfolio_id": "P1",
+        "instrument_id": "TARGET-SECURITY",
+        "security_id": "TARGET-SECURITY",
+        "transaction_type": TransactionType.CASH_IN_LIEU,
+        "transaction_date": datetime(2026, 5, 3),
+        "quantity": Decimal("0.5"),
+        "price": Decimal("120"),
+        "gross_transaction_amount": Decimal("60"),
+        "trade_currency": "USD",
+        "portfolio_base_currency": "SGD",
+        "transaction_fx_rate": Decimal("1.35"),
+        "allocated_cost_basis_local": Decimal("50"),
+        "allocated_cost_basis_base": Decimal("67.5"),
+        "realized_capital_pnl_local": Decimal("10"),
+        "realized_fx_pnl_local": Decimal("0"),
+        "realized_capital_pnl_base": Decimal("10"),
+        "realized_fx_pnl_base": Decimal("3.5"),
+    }
+    values.update(overrides)
+    return Transaction(**values)
+
+
+def test_cash_in_lieu_reconciles_fractional_basis_and_cross_currency_pnl_components(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+) -> None:
+    transaction = _cash_in_lieu()
+    mock_disposition_engine.consume_sell_quantity.return_value = (
+        Decimal("67.5"),
+        Decimal("50"),
+        Decimal("0.5"),
+        None,
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert not error_reporter.has_errors_for(transaction.transaction_id)
+    assert transaction.net_cost_local == Decimal("-50")
+    assert transaction.net_cost == Decimal("-67.5")
+    assert transaction.realized_gain_loss_local == Decimal("10")
+    assert transaction.realized_gain_loss == Decimal("13.50")
+    assert transaction.realized_capital_pnl_local == Decimal("10")
+    assert transaction.realized_fx_pnl_local == Decimal("0")
+    assert transaction.realized_total_pnl_local == Decimal("10")
+    assert transaction.realized_capital_pnl_base == Decimal("10")
+    assert transaction.realized_fx_pnl_base == Decimal("3.5")
+    assert transaction.realized_total_pnl_base == Decimal("13.50")
+    mock_disposition_engine.consume_sell_quantity.assert_called_once_with(transaction)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"allocated_cost_basis_local": None}, "allocated_cost_basis_local is required"),
+        ({"allocated_cost_basis_base": None}, "allocated_cost_basis_base is required"),
+        ({"quantity": Decimal("0")}, "quantity_delta must be greater than 0"),
+    ],
+)
+def test_cash_in_lieu_rejects_incomplete_fractional_disposal_before_consumption(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    transaction = _cash_in_lieu(**overrides)
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert error_reporter.has_errors_for(transaction.transaction_id)
+    assert message in error_reporter.get_errors()[0].error_reason
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
+def test_cash_in_lieu_rejects_consumed_basis_that_disagrees_with_allocated_basis(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+) -> None:
+    transaction = _cash_in_lieu()
+    mock_disposition_engine.consume_sell_quantity.return_value = (
+        Decimal("70"),
+        Decimal("51"),
+        Decimal("0.5"),
+        None,
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert error_reporter.has_errors_for(transaction.transaction_id)
+    assert "consumed local/base basis must equal allocated fractional basis" in (
+        error_reporter.get_errors()[0].error_reason
+    )
+
+
 def test_cash_consideration_strategy_records_disposed_basis_and_realized_pnl(
     cost_calculator, mock_disposition_engine, error_reporter
 ) -> None:
