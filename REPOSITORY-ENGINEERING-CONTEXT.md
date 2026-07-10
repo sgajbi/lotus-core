@@ -1839,6 +1839,15 @@ Most relevant current governance:
      target DLQ wiring cannot disappear from certification. Full-stack tests must allocate the
      target's `LOTUS_TRANSACTION_PROCESSING_HOST_PORT`; never reintroduce deleted calculator ports
      or rely on the app-local default when parallel stacks may run.
+140. Active target cost composition imports
+     `cost_calculator_service.app.cost_calculation_workflow`, never the compatibility
+     `app.consumer` module. Keep cost policy, financial staging, AVCO/FIFO state, corporate-action
+     reconciliation, and workflow metrics independent of Kafka, DB-session construction, retries,
+     and DLQ handling. `CostCalculatorConsumer` is a quarantined compatibility shell for remaining
+     characterization tests, not a runtime extension point. New tests for domain behavior must
+     instantiate `CostCalculationWorkflow` directly. Delete the shell after its delivery-specific
+     evidence is migrated; do not move it into the target package or restore it to runtime
+     composition.
 
 ## Context Maintenance Rule
 

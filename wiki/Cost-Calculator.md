@@ -29,6 +29,10 @@ into governed cost-aware state inside the same unit of work as cashflow and posi
 
 ## Runtime role
 
+The active application workflow is `app/cost_calculation_workflow.py`, imported directly by target
+infrastructure. `app/consumer.py` is a quarantined compatibility shell for legacy delivery tests and
+must not be imported by the combined runtime.
+
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness
