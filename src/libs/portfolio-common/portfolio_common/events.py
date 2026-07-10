@@ -464,6 +464,10 @@ class CashflowCalculatedEvent(CoreEventModel):
     is_position_flow: bool
     is_portfolio_flow: bool
     calculation_type: str = Field(...)
+    economic_event_id: Optional[str] = None
+    linked_transaction_group_id: Optional[str] = None
+    parent_event_reference: Optional[str] = None
+    linked_cash_transaction_id: Optional[str] = None
 
 
 class PositionTimeseriesGeneratedEvent(CoreEventModel):
