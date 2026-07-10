@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Issue: #468
-Status: FIFO hardened locally; AVCO and runtime capacity pending
+Status: FIFO hardened locally; AVCO remediated in CR-1468; runtime capacity pending
 
 ## Objective
 
@@ -68,8 +68,8 @@ durable evidence.
 
 ## Remaining Work
 
-AVCO still reconciles every historical source contribution on every disposal and is visibly
-quadratic in the same workload. Optimize it in a separate correctness-first slice with exact
-quantity/local/base aggregate reconciliation and direct sequential parity. Database query plans,
+CR-1468 replaces eager AVCO source reconciliation with lazy, generation-aware allocation and exact
+aggregate residual materialization. CR-1471 adds ordered append versus backdated mode capacity.
+Database query plans,
 worker throughput, pool utilization, Kafka lag, backlog drain, failure recovery, and shutdown
 drain remain required before runtime cutover.
