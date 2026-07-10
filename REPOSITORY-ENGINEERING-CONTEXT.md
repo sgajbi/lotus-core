@@ -1655,6 +1655,9 @@ Most relevant current governance:
      close the consumer from delivery code or add a second local drain loop. Until cutover gates
      pass, the manager must select either
      the six-consumer legacy registry or this two-consumer composition, never both.
+     Consumer lag must be observed only after a successful offset commit using cached Kafka high
+     watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
+     message, and isolate missing watermark or metric failures from transaction outcomes.
      Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
      attempt and preserve one compatibility processed event per replay, while semantic fences and
      deterministic rebuilds must keep cashflow and final position state singular. Do not collapse

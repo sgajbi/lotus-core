@@ -194,6 +194,7 @@ telemetry:
 | `kafka_consumer_in_flight_messages` | `service`, `topic`, `group_id` | Track messages currently in application processing. |
 | `kafka_consumer_poll_idle_seconds` | `service`, `topic`, `group_id` | Track poll calls that returned no message. |
 | `kafka_consumer_backlog_pressure_total` | `service`, `topic`, `group_id`, `reason` | Count times polling paused or messages queued because in-flight or partition-order capacity was full. |
+| `kafka_consumer_partition_lag_messages` | `service`, `topic`, `group_id`, `partition` | Track committed-message lag against the cached partition high watermark. |
 
 Use these for worker fleet dashboards and incident triage. Keep message keys, offsets, payload
 fields, raw exception text, portfolio/security IDs, request/correlation IDs, and trace IDs out of
@@ -223,6 +224,11 @@ wakes the loop but keeps Kafka open until already-polled work has completed and 
 worker supervisor derives its default teardown timeout from the largest configured consumer drain
 window plus one second. An explicit supervisor timeout overrides that default and must therefore be
 reviewed against every consumer profile before deployment.
+
+Consumer lag is updated only after a successful offset commit and uses cached high watermarks, so
+scraping it does not add broker traffic to the processing path. Alert and aggregate by consumer
+group while retaining partition drill-down. Missing samples indicate that no valid cached watermark
+has yet been observed; they must not be converted to zero by dashboards.
 
 ## Kafka Producer Metrics
 

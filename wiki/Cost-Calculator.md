@@ -84,7 +84,9 @@ The undeployed combined transaction-processing target keeps operator replay as a
 the same deployable. Normal booking and replay load separate group-scoped execution profiles, so
 replay throughput can be bounded without reducing live booking capacity. The shared loop preserves
 Kafka partition order, permits only one active message per partition, reports ordered backlog
-pressure, and commits only after replay publication succeeds.
+pressure, and commits only after replay publication succeeds. After commit,
+`kafka_consumer_partition_lag_messages` reports cached high-watermark lag separately for live and
+replay groups without adding a broker query to the transaction path.
 
 Shutdown is drain-first: polling stops, already-polled replay work completes and commits, and only
 then are Kafka resources closed. Retry exhaustion, DLQ publication, and offset handling remain owned

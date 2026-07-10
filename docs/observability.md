@@ -47,7 +47,10 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `portfolio_common.monitoring` must be registered in `SERVICE_LOCAL_METRIC_OWNERS`.
 12. Kafka consumers that inherit `BaseConsumer` emit standard lifecycle and processing telemetry:
     `kafka_consumer_events_total{service,topic,group_id,outcome,reason}` and
-    `kafka_consumer_processing_duration_seconds{service,topic,group_id}`. The shared class owns
+    `kafka_consumer_processing_duration_seconds{service,topic,group_id}`. Successful offset commits
+    also set
+    `kafka_consumer_partition_lag_messages{service,topic,group_id,partition}` from cached high
+    watermarks; metric failure cannot alter processing. The shared class owns
     processing attempts, success, retryable failure, terminal failure, DLQ success/failure, commit
     failure, poll error, critical loop exit, and shutdown-failure outcomes.
     Shared worker supervision names Kafka tasks with bounded consumer-group/topic identity and uses
@@ -79,5 +82,6 @@ Kafka, outbox, ingestion, query, replay, and scheduler paths. Future slices shou
 coverage as additional services standardize their logging surfaces, add automated checks for
 correlation ID propagation, health/readiness completeness, and inventory enforcement that prevents
 new runtime web apps from bypassing the shared metrics policy. The combined transaction-processing
-target now has bounded stage outcome/latency metrics, but still requires lag, dependency/outbox,
-trace-export, dashboard, alert, and support-runbook closure before cutover.
+target now has bounded stage outcome/latency and committed-lag metrics. Shared outbox metrics already
+expose pending and failed publication state. DB pool diagnostics, trace export, target
+dashboards/alerts, support-runbook closure, and deployed evidence remain before cutover.
