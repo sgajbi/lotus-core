@@ -1,11 +1,11 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: position-calculator-scaledobject
+  name: portfolio-transaction-processing
   namespace: lotus-core
 spec:
   scaleTargetRef:
-    name: position-calculator
+    name: portfolio-transaction-processing
   minReplicaCount: 2
   maxReplicaCount: 12
   pollingInterval: 15
@@ -14,31 +14,17 @@ spec:
     - type: kafka
       metadata:
         bootstrapServers: kafka:9092
-        consumerGroup: position_calculator_group
-        topic: processed_transactions_completed
+        consumerGroup: portfolio_transaction_processing_group
+        topic: transactions.persisted
         lagThreshold: "200"
-        offsetResetPolicy: latest
----
-apiVersion: keda.sh/v1alpha1
-kind: ScaledObject
-metadata:
-  name: cost-calculator-scaledobject
-  namespace: lotus-core
-spec:
-  scaleTargetRef:
-    name: cost-calculator
-  minReplicaCount: 2
-  maxReplicaCount: 10
-  pollingInterval: 15
-  cooldownPeriod: 120
-  triggers:
+        offsetResetPolicy: earliest
     - type: kafka
       metadata:
         bootstrapServers: kafka:9092
-        consumerGroup: cost_calculator_group
-        topic: raw_transactions_completed
+        consumerGroup: portfolio_transaction_replay_request_group
+        topic: transactions.reprocessing.requested
         lagThreshold: "200"
-        offsetResetPolicy: latest
+        offsetResetPolicy: earliest
 ---
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -59,27 +45,6 @@ spec:
         consumerGroup: position_valuation_group_jobs
         topic: valuation_required
         lagThreshold: "150"
-        offsetResetPolicy: latest
----
-apiVersion: keda.sh/v1alpha1
-kind: ScaledObject
-metadata:
-  name: cashflow-calculator-scaledobject
-  namespace: lotus-core
-spec:
-  scaleTargetRef:
-    name: cashflow-calculator
-  minReplicaCount: 1
-  maxReplicaCount: 8
-  pollingInterval: 20
-  cooldownPeriod: 180
-  triggers:
-    - type: kafka
-      metadata:
-        bootstrapServers: kafka:9092
-        consumerGroup: cashflow_calculator_group
-        topic: processed_transactions_completed
-        lagThreshold: "300"
         offsetResetPolicy: latest
 ---
 apiVersion: keda.sh/v1alpha1
