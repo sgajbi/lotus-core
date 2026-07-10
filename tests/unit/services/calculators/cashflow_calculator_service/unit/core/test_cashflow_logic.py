@@ -238,6 +238,9 @@ def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
             "settlement_date": datetime(2026, 5, 5, 9, 30, 0),
             "synthetic_flow_effective_date": date(2026, 5, 3),
             "has_synthetic_flow": True,
+            "synthetic_flow_amount_local": Decimal("-1000"),
+            "synthetic_flow_currency": "USD",
+            "synthetic_flow_classification": "POSITION_CASH_IN_LIEU_OUT",
         }
     )
     rule = CashflowRule(
@@ -251,6 +254,219 @@ def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
 
     assert cashflow.cashflow_date == date(2026, 5, 3)
     mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "synthetic_amount", "expected_amount"),
+    [
+        ("EXCHANGE_OUT", Decimal("-1500"), Decimal("-1500")),
+        ("EXCHANGE_IN", Decimal("1500"), Decimal("1500")),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_transfer_uses_explicit_synthetic_market_value_economics(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    transaction_type: str,
+    synthetic_amount: Decimal,
+    expected_amount: Decimal,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": transaction_type,
+            "gross_transaction_amount": Decimal("900"),
+            "trade_fee": Decimal("0"),
+            "has_synthetic_flow": True,
+            "synthetic_flow_effective_date": date(2026, 5, 3),
+            "synthetic_flow_amount_local": synthetic_amount,
+            "synthetic_flow_currency": "EUR",
+            "synthetic_flow_classification": (
+                "POSITION_TRANSFER_OUT"
+                if transaction_type.endswith("_OUT")
+                else "POSITION_TRANSFER_IN"
+            ),
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == expected_amount
+    assert cashflow.amount != event.gross_transaction_amount
+    assert cashflow.currency == "EUR"
+    assert cashflow.cashflow_date == date(2026, 5, 3)
+    assert cashflow.calculation_type == "MVT"
+    assert cashflow.is_position_flow is True
+    assert cashflow.is_portfolio_flow is False
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_cash_consideration_remains_real_net_cashflow(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "CASH_CONSIDERATION",
+            "gross_transaction_amount": Decimal("275"),
+            "trade_fee": Decimal("0"),
+            "has_synthetic_flow": False,
+            "economic_event_id": "EVT-MIXED-01",
+            "linked_transaction_group_id": "GROUP-MIXED-01",
+            "linked_cash_transaction_id": "CASH-SETTLEMENT-01",
+        }
+    )
+    rule = CashflowRule(
+        classification=CashflowClassification.INCOME,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(event, rule)
+
+    assert cashflow.amount == Decimal("275")
+    assert cashflow.currency == "USD"
+    assert cashflow.calculation_type == "NET"
+    assert cashflow.economic_event_id == "EVT-MIXED-01"
+    assert cashflow.linked_transaction_group_id == "GROUP-MIXED-01"
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("event_update", "rule_update", "message"),
+    [
+        (
+            {"synthetic_flow_amount_local": None},
+            {},
+            "amount is required",
+        ),
+        (
+            {"synthetic_flow_currency": None},
+            {},
+            "currency is required",
+        ),
+        (
+            {"synthetic_flow_amount_local": Decimal("1500")},
+            {},
+            "sign does not match",
+        ),
+        (
+            {},
+            {"is_portfolio_flow": True},
+            "position-level and non-portfolio",
+        ),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_calculate_rejects_invalid_synthetic_position_flow_contract(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    event_update: dict[str, object],
+    rule_update: dict[str, object],
+    message: str,
+) -> None:
+    event = base_transaction_event.model_copy(
+        update={
+            "transaction_type": "EXCHANGE_OUT",
+            "trade_fee": Decimal("0"),
+            "has_synthetic_flow": True,
+            "synthetic_flow_effective_date": date(2026, 5, 3),
+            "synthetic_flow_amount_local": Decimal("-1500"),
+            "synthetic_flow_currency": "USD",
+            "synthetic_flow_classification": "POSITION_TRANSFER_OUT",
+            **event_update,
+        }
+    )
+    rule_values = {
+        "classification": CashflowClassification.TRANSFER,
+        "timing": CashflowTiming.EOD,
+        "is_position_flow": True,
+        "is_portfolio_flow": False,
+        **rule_update,
+    }
+    rule = CashflowRule(**rule_values)
+
+    with pytest.raises(ValueError, match=message):
+        CashflowLogic.calculate(event, rule)
+
+    mock_metric.labels.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "target_amounts",
+    [
+        [Decimal("1500")],
+        [Decimal("900"), Decimal("600")],
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_linked_internal_position_transfer_market_values_sum_to_zero(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    target_amounts: list[Decimal],
+) -> None:
+    common = {
+        "gross_transaction_amount": Decimal("900"),
+        "trade_fee": Decimal("0"),
+        "has_synthetic_flow": True,
+        "synthetic_flow_effective_date": date(2026, 5, 3),
+        "synthetic_flow_currency": "USD",
+        "economic_event_id": "EVT-TRANSFER-01",
+        "linked_transaction_group_id": "GROUP-TRANSFER-01",
+    }
+    events = [
+        base_transaction_event.model_copy(
+            update={
+                **common,
+                "transaction_id": "TRANSFER-SOURCE-OUT",
+                "transaction_type": "DEMERGER_OUT",
+                "synthetic_flow_amount_local": Decimal("-1500"),
+                "synthetic_flow_classification": "POSITION_TRANSFER_OUT",
+            }
+        ),
+        *[
+            base_transaction_event.model_copy(
+                update={
+                    **common,
+                    "transaction_id": f"TRANSFER-TARGET-IN-{index}",
+                    "transaction_type": "DEMERGER_IN",
+                    "synthetic_flow_amount_local": amount,
+                    "synthetic_flow_classification": "POSITION_TRANSFER_IN",
+                }
+            )
+            for index, amount in enumerate(target_amounts, start=1)
+        ],
+    ]
+    rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    transfer_flows = [CashflowLogic.calculate(event, rule) for event in events]
+
+    assert sum(flow.amount for flow in transfer_flows) == Decimal("0")
+    assert all(flow.calculation_type == "MVT" for flow in transfer_flows)
+    assert all(flow.is_position_flow for flow in transfer_flows)
+    assert not any(flow.is_portfolio_flow for flow in transfer_flows)
+    assert {flow.linked_transaction_group_id for flow in transfer_flows} == {"GROUP-TRANSFER-01"}
+    assert mock_metric.labels.return_value.inc.call_count == len(events)
 
 
 @patch(
