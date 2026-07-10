@@ -12,6 +12,7 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
     SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
@@ -51,6 +52,7 @@ def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
     unit_of_work = use_case._unit_of_work_factory()
     assert isinstance(unit_of_work, SqlAlchemyTransactionProcessingUnitOfWork)
     assert unit_of_work._session_factory is session_factory
+    assert use_case._observer is PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 
 
 def test_replay_use_case_builder_composes_canonical_repository_dependencies() -> None:
@@ -65,6 +67,7 @@ def test_replay_use_case_builder_composes_canonical_repository_dependencies() ->
     replay_adapter = use_case._replay
     assert isinstance(replay_adapter, SqlAlchemyBookedTransactionReplayAdapter)
     assert replay_adapter.session_factory is session_factory
+    assert use_case._observer is PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
     assert isinstance(
         replay_adapter.replayer_factory,
         CanonicalBookedTransactionReplayerFactory,

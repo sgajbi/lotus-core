@@ -16,6 +16,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     TRANSACTION_PROCESSING_SERVICE_NAME,
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
@@ -150,7 +151,10 @@ async def test_combined_use_case_commits_every_module_and_idempotency_atomically
 ) -> None:
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     command = _command("SUCCESS")
-    use_case = ProcessTransactionUseCase(_unit_of_work_factory(session_factory, fail_at=None))
+    use_case = ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    )
 
     result = await use_case.execute(command)
     duplicate_result = await use_case.execute(command)
@@ -168,7 +172,10 @@ async def test_combined_use_case_rolls_back_every_module_and_idempotency_on_fail
 ) -> None:
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
     command = _command(fail_at.upper())
-    use_case = ProcessTransactionUseCase(_unit_of_work_factory(session_factory, fail_at=fail_at))
+    use_case = ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=fail_at),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    )
 
     with pytest.raises(RuntimeError, match=f"{fail_at} failed"):
         await use_case.execute(command)

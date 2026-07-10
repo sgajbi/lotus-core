@@ -1,5 +1,11 @@
 """Framework-neutral transaction processing capability ports."""
 
+from .processing_observability import (
+    TransactionProcessingObservation,
+    TransactionProcessingObserver,
+    TransactionProcessingOperation,
+    TransactionProcessingOutcome,
+)
 from .transaction_processing import (
     CashflowProcessingPort,
     CashflowProcessingResult,
@@ -22,6 +28,10 @@ __all__ = [
     "PositionProcessingPort",
     "PositionProcessingResult",
     "TransactionIdempotencyPort",
+    "TransactionProcessingObservation",
+    "TransactionProcessingObserver",
+    "TransactionProcessingOperation",
+    "TransactionProcessingOutcome",
     "TransactionProcessingUnitOfWork",
     "TransactionProcessingUnitOfWorkFactory",
 ]

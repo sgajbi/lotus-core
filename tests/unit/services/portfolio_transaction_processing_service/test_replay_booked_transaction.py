@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -8,6 +8,10 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     BookedTransactionReplayStatus,
     ReplayBookedTransactionCommand,
     ReplayBookedTransactionUseCase,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    TransactionProcessingOperation,
+    TransactionProcessingOutcome,
 )
 
 
@@ -25,7 +29,10 @@ async def test_replay_booked_transaction_returns_explicit_status(
 ) -> None:
     replay_port = AsyncMock()
     replay_port.replay_booked_transaction.return_value = replayed
-    use_case = ReplayBookedTransactionUseCase(replay_port)
+    observation = MagicMock()
+    observer = MagicMock()
+    observer.observe.return_value.__enter__.return_value = observation
+    use_case = ReplayBookedTransactionUseCase(replay_port, observer=observer)
 
     result = await use_case.execute(
         ReplayBookedTransactionCommand(
@@ -39,6 +46,10 @@ async def test_replay_booked_transaction_returns_explicit_status(
     replay_port.replay_booked_transaction.assert_awaited_once_with(
         transaction_id="TXN-REPLAY-01",
         correlation_id="corr-replay-01",
+    )
+    observer.observe.assert_called_once_with(TransactionProcessingOperation.REPLAY)
+    observation.set_outcome.assert_called_once_with(
+        TransactionProcessingOutcome(expected_status.value)
     )
 
 
