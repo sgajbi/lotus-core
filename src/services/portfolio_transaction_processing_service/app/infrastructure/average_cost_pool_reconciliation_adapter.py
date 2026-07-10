@@ -205,7 +205,7 @@ def _summary_matches_plan(
     expected_cost_local: Decimal,
     expected_cost_base: Decimal,
 ) -> bool:
-    return (
+    return bool(
         summary.source_count == expected_source_count
         and summary.source_quantity == expected_quantity
         and summary.source_cost_local == expected_cost_local
