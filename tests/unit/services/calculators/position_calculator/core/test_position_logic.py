@@ -238,12 +238,17 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
 
 @pytest.mark.asyncio
 @patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_COORDINATION_TOTAL"
+)
+@patch(
     "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     mock_fencer_class: MagicMock,
     mock_metric: MagicMock,
+    mock_coordination_metric: MagicMock,
     mock_repo: AsyncMock,
     mock_state_repo: AsyncMock,
     mock_outbox_repo: AsyncMock,
@@ -295,6 +300,11 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     # Assert that the metric was instrumented correctly
     mock_metric.labels.assert_called_once_with(trigger="backdated_transaction")
     mock_metric.labels.return_value.inc.assert_called_once()
+    mock_coordination_metric.labels.assert_called_once_with(
+        outcome="epoch_advanced",
+        reason="backdated_transaction",
+    )
+    mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
 
     # Assert that it tried to publish TWO events: one historical + the triggering one
     assert mock_outbox_repo.create_outbox_event.call_count == 2
@@ -410,9 +420,19 @@ async def test_calculate_treats_existing_position_history_as_backdated_boundary(
 
 
 @pytest.mark.asyncio
+@patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "REPROCESSING_EPOCH_BUMPED_TOTAL"
+)
+@patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_COORDINATION_TOTAL"
+)
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     mock_fencer_class: MagicMock,
+    mock_coordination_metric: MagicMock,
+    mock_epoch_metric: MagicMock,
     mock_repo: AsyncMock,
     mock_state_repo: AsyncMock,
     mock_outbox_repo: AsyncMock,
@@ -443,6 +463,12 @@ async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     )
     mock_repo.get_all_transactions_for_security.assert_not_awaited()
     mock_outbox_repo.create_outbox_event.assert_not_awaited()
+    mock_epoch_metric.labels.assert_not_called()
+    mock_coordination_metric.labels.assert_called_once_with(
+        outcome="coalesced",
+        reason="stale_epoch",
+    )
+    mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,10 @@ from portfolio_common.config import KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
 from portfolio_common.database_models import PositionHistory, PositionState
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
-from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
+from portfolio_common.monitoring import (
+    POSITION_RECALCULATION_COORDINATION_TOTAL,
+    REPROCESSING_EPOCH_BUMPED_TOTAL,
+)
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing import EpochFencer
@@ -246,7 +249,6 @@ class PositionCalculator:
             latest_position_history_date=latest_position_history_date,
             backdated_handling=backdated_handling,
         )
-        REPROCESSING_EPOCH_BUMPED_TOTAL.labels(trigger="backdated_transaction").inc()
         new_state = await position_state_repo.increment_epoch_and_reset_watermark(
             event.portfolio_id,
             event.security_id,
@@ -254,7 +256,17 @@ class PositionCalculator:
             replay_watermark_date,
         )
         if new_state is None:
+            POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                outcome="coalesced",
+                reason="stale_epoch",
+            ).inc()
             cls._log_stale_backdated_replay(event, current_state.epoch)
+        else:
+            REPROCESSING_EPOCH_BUMPED_TOTAL.labels(trigger="backdated_transaction").inc()
+            POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                outcome="epoch_advanced",
+                reason="backdated_transaction",
+            ).inc()
         return new_state
 
     @staticmethod

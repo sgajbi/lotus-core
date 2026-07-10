@@ -462,6 +462,12 @@ REPROCESSING_EPOCH_BUMPED_TOTAL = Counter(
     labelnames=("trigger",),
 )
 
+POSITION_RECALCULATION_COORDINATION_TOTAL = Counter(
+    "position_recalculation_coordination_total",
+    "Position recalculation coordination decisions by bounded outcome and reason.",
+    labelnames=("outcome", "reason"),
+)
+
 REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL = Counter(
     "reprocessing_worker_jobs_claimed_total",
     "Total number of reprocessing jobs claimed by the worker.",
