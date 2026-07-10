@@ -1131,7 +1131,7 @@ class CostCalculationWorkflow:
     def _bundle_a_reconciliation_key(processed_event: TransactionEvent) -> tuple[str, str] | None:
         if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
             return None
-        return CostCalculatorConsumer._complete_bundle_a_reconciliation_key(
+        return CostCalculationWorkflow._complete_bundle_a_reconciliation_key(
             linked_group=(processed_event.linked_transaction_group_id or "").strip(),
             parent_ref=(processed_event.parent_event_reference or "").strip(),
         )
@@ -1183,7 +1183,7 @@ class CostCalculationWorkflow:
         missing_dependencies: list[str],
         correlation_id: str | None,
     ) -> tuple[dict[str, object], list[dict[str, object]]]:
-        summary = CostCalculatorConsumer._bundle_a_reconciliation_summary(
+        summary = CostCalculationWorkflow._bundle_a_reconciliation_summary(
             reconciliation=reconciliation,
             missing_dependencies=missing_dependencies,
         )
@@ -1218,7 +1218,7 @@ class CostCalculationWorkflow:
             "failure_reason": None,
             "completed_at": datetime.now().astimezone(),
         }
-        findings = CostCalculatorConsumer._bundle_a_reconciliation_findings(
+        findings = CostCalculationWorkflow._bundle_a_reconciliation_findings(
             run_id=run_id,
             evidence_signature=evidence_signature,
             processed_event=processed_event,
@@ -1272,7 +1272,7 @@ class CostCalculationWorkflow:
         findings: list[dict[str, object]] = []
         if reconciliation.status == "basis_mismatch":
             findings.append(
-                CostCalculatorConsumer._bundle_a_basis_mismatch_finding(
+                CostCalculationWorkflow._bundle_a_basis_mismatch_finding(
                     run_id=run_id,
                     evidence_signature=evidence_signature,
                     processed_event=processed_event,
@@ -1283,7 +1283,7 @@ class CostCalculationWorkflow:
             )
         if reconciliation.status == "insufficient_legs":
             findings.append(
-                CostCalculatorConsumer._bundle_a_insufficient_legs_finding(
+                CostCalculationWorkflow._bundle_a_insufficient_legs_finding(
                     run_id=run_id,
                     evidence_signature=evidence_signature,
                     processed_event=processed_event,
@@ -1294,7 +1294,7 @@ class CostCalculationWorkflow:
             )
         if reconciliation.status == "insufficient_cash_basis":
             findings.append(
-                CostCalculatorConsumer._bundle_a_insufficient_cash_basis_finding(
+                CostCalculationWorkflow._bundle_a_insufficient_cash_basis_finding(
                     run_id=run_id,
                     evidence_signature=evidence_signature,
                     processed_event=processed_event,
@@ -1305,7 +1305,7 @@ class CostCalculationWorkflow:
             )
         if missing_dependencies:
             findings.append(
-                CostCalculatorConsumer._bundle_a_missing_dependencies_finding(
+                CostCalculationWorkflow._bundle_a_missing_dependencies_finding(
                     run_id=run_id,
                     evidence_signature=evidence_signature,
                     processed_event=processed_event,
@@ -1327,7 +1327,7 @@ class CostCalculationWorkflow:
         parent_ref: str,
         reconciliation: Any,
     ) -> dict[str, object]:
-        return CostCalculatorConsumer._bundle_a_finding(
+        return CostCalculationWorkflow._bundle_a_finding(
             run_id=run_id,
             finding_type="ca_bundle_a_basis_mismatch",
             evidence_signature=evidence_signature,
@@ -1339,7 +1339,7 @@ class CostCalculationWorkflow:
                 "cash_basis_local": str(reconciliation.cash_basis_local),
                 "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
             },
-            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+            detail=CostCalculationWorkflow._bundle_a_finding_detail(
                 linked_group=linked_group,
                 parent_ref=parent_ref,
                 reconciliation=reconciliation,
@@ -1357,7 +1357,7 @@ class CostCalculationWorkflow:
         parent_ref: str,
         reconciliation: Any,
     ) -> dict[str, object]:
-        return CostCalculatorConsumer._bundle_a_finding(
+        return CostCalculationWorkflow._bundle_a_finding(
             run_id=run_id,
             finding_type="ca_bundle_a_insufficient_cash_basis",
             evidence_signature=evidence_signature,
@@ -1368,7 +1368,7 @@ class CostCalculationWorkflow:
                 "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                 "cash_basis_local": str(reconciliation.cash_basis_local),
             },
-            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+            detail=CostCalculationWorkflow._bundle_a_finding_detail(
                 linked_group=linked_group,
                 parent_ref=parent_ref,
                 reconciliation=reconciliation,
@@ -1386,7 +1386,7 @@ class CostCalculationWorkflow:
         parent_ref: str,
         reconciliation: Any,
     ) -> dict[str, object]:
-        return CostCalculatorConsumer._bundle_a_finding(
+        return CostCalculationWorkflow._bundle_a_finding(
             run_id=run_id,
             finding_type="ca_bundle_a_insufficient_legs",
             evidence_signature=evidence_signature,
@@ -1396,7 +1396,7 @@ class CostCalculationWorkflow:
                 "source_leg_count": reconciliation.source_leg_count,
                 "target_leg_count": reconciliation.target_leg_count,
             },
-            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+            detail=CostCalculationWorkflow._bundle_a_finding_detail(
                 linked_group=linked_group,
                 parent_ref=parent_ref,
                 reconciliation=reconciliation,
@@ -1415,7 +1415,7 @@ class CostCalculationWorkflow:
         reconciliation: Any,
         missing_dependencies: list[str],
     ) -> dict[str, object]:
-        return CostCalculatorConsumer._bundle_a_finding(
+        return CostCalculationWorkflow._bundle_a_finding(
             run_id=run_id,
             finding_type="ca_bundle_a_missing_dependency",
             evidence_signature=evidence_signature,
@@ -1423,7 +1423,7 @@ class CostCalculationWorkflow:
             expected_value={"dependency_reference_ids": "present in linked Bundle A group"},
             observed_value={"missing_dependency_reference_ids": missing_dependencies},
             detail={
-                **CostCalculatorConsumer._bundle_a_finding_detail(
+                **CostCalculationWorkflow._bundle_a_finding_detail(
                     linked_group=linked_group,
                     parent_ref=parent_ref,
                     reconciliation=reconciliation,

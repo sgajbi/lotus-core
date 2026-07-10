@@ -1,4 +1,5 @@
 # tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py
+import inspect
 import json
 from datetime import date, datetime
 from decimal import Decimal
@@ -55,6 +56,12 @@ from src.services.calculators.cost_calculator_service.app.repository import Cost
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_cost_workflow_does_not_depend_on_retired_delivery_subclass() -> None:
+    workflow_source = inspect.getsource(CostCalculationWorkflow)
+
+    assert "CostCalculatorConsumer" not in workflow_source
 
 
 class _StringCountedAmount:
