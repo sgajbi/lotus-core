@@ -921,6 +921,32 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `cost_basis_processing_state`
+
+- **Purpose**: Versioned ordering checkpoint for incremental cost-basis processing.
+- **Description**: Stores the latest canonical transaction-order boundary per portfolio/security so
+  strictly later events can calculate from durable open-lot state while backdated, same-order,
+  incompatible, or unsupported events fail over to deterministic full replay.
+- **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
+- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`,
+  `src/services/calculators/cost_calculator_service/app/consumer.py`
+- **Typical access patterns**: Primary-key lookup and atomic upsert inside the combined transaction
+  processing unit of work; updated-time scans are operator/supportability only.
+- **Column definitions**:
+  - `portfolio_id` (String) (PK, FK `portfolios.portfolio_id`): Canonical portfolio identifier.
+  - `security_id` (String) (PK): Canonical security identifier.
+  - `cost_basis_method` (String): Governed FIFO or AVCO method used to build the state.
+  - `latest_transaction_date` (DateTime): Timestamp component of the canonical ordering boundary.
+  - `latest_dependency_rank` (Integer): Corporate-action dependency rank.
+  - `latest_cash_dependency_rank` (Integer): Same-timestamp cash dependency rank.
+  - `latest_child_sequence` (Integer): Corporate-action target child sequence.
+  - `latest_target_instrument_id` (String): Stable target-instrument ordering fallback.
+  - `latest_quantity` (Numeric): Positive quantity used by the descending quantity sort component.
+  - `latest_transaction_id` (String): Stable final ordering tiebreak and support identifier.
+  - `engine_state_version` (String): Checkpoint compatibility version; mismatches force full replay.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `accrued_income_offset_state`
 
 - **Purpose**: Accrued-income offset state for fixed income flows.

@@ -1676,8 +1676,10 @@ Most relevant current governance:
      governed `stage` and `outcome` labels; never label by portfolio, transaction, event,
      correlation, trace, exception, or error text. Preserve target attribution for live/replay,
      idempotency, cost, cashflow, each position leg, and commit after service consolidation.
-     Full-history cost recalculation remains the correctness baseline and is supported by the
-     normalized portfolio/security/date/transaction index. For a backdated input, persist the
+     Deterministic full-history cost recalculation remains the fallback correctness baseline and is
+     supported by the normalized portfolio/security/date/transaction index. Strictly ordered,
+     version-compatible events may restore durable open-lot state and calculate only the incoming
+     row. For a backdated input, persist the
      incoming row and deterministic later suffix in engine order inside the combined unit of work,
      but publish only the incoming processed event so inline position rebuild is not double-applied.
      Any engine error in the recalculated timeline must fail closed before suffix persistence.
@@ -1699,9 +1701,19 @@ Most relevant current governance:
      matched quantity. Do not reintroduce an open-lot scan into availability checks. Preserve the
      iteration-forbidden invariant test and use `make profile-cost-history-capacity` for the
      machine-readable parser/sorter/engine profile. This profile is engine characterization, not a
-     production throughput SLO. The current AVCO implementation remains a measured scaling
-     hotspot because each disposal reconciles every historical source contribution; optimize it
-     only with sequential quantity/local/base parity and exact aggregate reconciliation.
+     production throughput SLO. AVCO uses lazy quantity and independent local/base basis scales;
+     do not reintroduce per-disposal source scans. Materialization must preserve the exact pooled
+     residual and source-state sums after sequential disposal, full close/reopen, and basis transfer.
+132. Incremental cost processing is governed by `CostBasisProcessingCheckpoint` and the same
+     `transaction_order_key(...)` used by engine sorting. Use it only when checkpoint version,
+     portfolio/security identity, cost-basis method, registry lot behavior, and strict ordering all
+     match. Missing, incompatible, same-order, backdated, or unsupported state must use deterministic
+     full replay. Existing portfolios establish state through a full rebuild; never infer a current
+     checkpoint or hide a missing table. Persist checkpoint, affected cost suffix, lot state,
+     cashflow, position, idempotency, and outbox effects in the combined unit of work. Use
+     `make profile-cost-processing-modes` to keep ordered opening, state-dependent disposal, and
+     backdated rebuild evidence separate. Large open-lot restore depth remains a measured hotspot;
+     optimize it only with durable state ownership and exact quantity/local/base parity.
 
 ## Context Maintenance Rule
 
