@@ -1,30 +1,30 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from datetime import datetime, timezone
 
 import pytest
 from portfolio_common.database_models import (
     Cashflow,
     OutboxEvent,
-    Portfolio,
     PositionHistory,
     ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.events import TransactionEvent
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
-    map_transaction_event,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
-    build_process_transaction_use_case,
+)
+from tests.test_support.transaction_processing import (
+    booked_transaction_event,
+    persist_and_process_booked_transaction,
+    portfolio_record,
+    process_booked_transaction,
+    transaction_processing_test_context,
 )
 
 pytestmark = [
@@ -42,58 +42,32 @@ async def test_combined_adjustment_processing_persists_all_module_outputs_once(
     portfolio_id = "PORT-COMBINED-ADJUSTMENT-01"
     transaction_id = "ADJ-COMBINED-01"
     event_id = "transactions.persisted-0-9001"
-    async_db_session.add(
-        Portfolio(
-            portfolio_id=portfolio_id,
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-COMBINED-01",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id="CASH",
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="ADJUSTMENT",
+        quantity="0",
+        price="0",
+        gross_amount="125.50",
     )
-    async_db_session.add(
-        DBTransaction(
-            transaction_id=transaction_id,
-            portfolio_id=portfolio_id,
-            instrument_id="CASH",
-            security_id="CASH",
-            transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
-            transaction_type="ADJUSTMENT",
-            quantity=Decimal("0"),
-            price=Decimal("0"),
-            gross_transaction_amount=Decimal("125.50"),
-            trade_currency="USD",
-            currency="USD",
-        )
-    )
-    await async_db_session.commit()
-    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
-    use_case = build_process_transaction_use_case(session_factory=session_factory)
-    command = map_transaction_event(
-        TransactionEvent(
-            transaction_id=transaction_id,
-            portfolio_id=portfolio_id,
-            instrument_id="CASH",
-            security_id="CASH",
-            transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
-            transaction_type="ADJUSTMENT",
-            quantity=Decimal("0"),
-            price=Decimal("0"),
-            gross_transaction_amount=Decimal("125.50"),
-            trade_currency="USD",
-            currency="USD",
-        ),
+    async_db_session.add(portfolio_record(portfolio_id))
+    context = transaction_processing_test_context(async_db_session)
+
+    result = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=event,
         event_id=event_id,
         correlation_id="corr-combined-adjustment-01",
     )
-
-    result = await use_case.execute(command)
-    duplicate_result = await use_case.execute(command)
+    duplicate_result = await process_booked_transaction(
+        context=context,
+        event=event,
+        event_id=event_id,
+        correlation_id="corr-combined-adjustment-01",
+    )
 
     assert result.status is TransactionProcessingStatus.PROCESSED
     assert result.processed_transaction_ids == (transaction_id,)
@@ -101,7 +75,7 @@ async def test_combined_adjustment_processing_persists_all_module_outputs_once(
     assert result.position_record_count == 1
     assert duplicate_result.status is TransactionProcessingStatus.DUPLICATE
 
-    async with session_factory() as verification_session:
+    async with context.session_factory() as verification_session:
         assert (
             await _row_count(
                 verification_session,
