@@ -74,6 +74,7 @@ DB_ONLY_SCOPES = {
     "transaction-interest-contract",
     "transaction-fx-contract",
     "transaction-portfolio-flow-bundle-contract",
+    "transaction-processing-contract",
 }
 
 DB_PLUS_KAFKA_SCOPES = {

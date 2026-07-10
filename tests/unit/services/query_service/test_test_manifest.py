@@ -40,6 +40,12 @@ def test_integration_all_suite_tracks_full_integration_tree() -> None:
     assert get_suite("integration-all") == ["tests/integration"]
 
 
+def test_transaction_processing_contract_tracks_complete_combined_integration_pack() -> None:
+    assert get_suite("transaction-processing-contract") == [
+        "tests/integration/services/portfolio_transaction_processing_service"
+    ]
+
+
 def test_sell_contract_suite_includes_sell_query_contract_tests() -> None:
     sell_suite = get_suite("transaction-sell-contract")
     assert "tests/integration/services/query_service/test_sell_state_router.py" in sell_suite
@@ -61,6 +67,7 @@ def test_e2e_all_suite_tracks_full_end_to_end_tree() -> None:
 
 def test_manifest_runtime_modes_keep_db_direct_and_live_worker_explicit() -> None:
     assert SUITE_RUNTIME_MODE["integration-all"] == "db_direct"
+    assert SUITE_RUNTIME_MODE["transaction-processing-contract"] == "db_direct"
     assert SUITE_RUNTIME_MODE["e2e-all"] == "live_worker"
 
 

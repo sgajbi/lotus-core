@@ -126,6 +126,9 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/query_service/services/test_core_snapshot_service.py",
         "tests/unit/services/query_service/services/test_simulation_service.py",
     ],
+    "transaction-processing-contract": [
+        "tests/integration/services/portfolio_transaction_processing_service",
+    ],
 }
 
 SOURCE = "src/services/query_service/app"
@@ -146,6 +149,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
     "transaction-interest-contract": "integration",
     "transaction-fx-contract": "integration",
     "transaction-portfolio-flow-bundle-contract": "integration",
+    "transaction-processing-contract": "integration",
     "e2e-smoke": "e2e",
     "e2e-all": "e2e",
 }
@@ -163,6 +167,7 @@ SUITE_RUNTIME_MODE: dict[str, str] = {
     "transaction-interest-contract": "db_direct",
     "transaction-fx-contract": "db_direct",
     "transaction-portfolio-flow-bundle-contract": "db_direct",
+    "transaction-processing-contract": "db_direct",
     "e2e-smoke": "live_worker",
     "e2e-all": "live_worker",
 }

@@ -48,6 +48,7 @@ def test_transaction_contract_scope_uses_db_only_services() -> None:
     assert (
         _test_services_for_scope("transaction-portfolio-flow-bundle-contract") == DB_ONLY_SERVICES
     )
+    assert _test_services_for_scope("transaction-processing-contract") == DB_ONLY_SERVICES
 
 
 def test_unspecified_scopes_keep_full_stack_services() -> None:
