@@ -8,8 +8,11 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers import (
-    transaction_consumer as cashflow,
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+    CashflowProcessingOutcome,
+    CashflowStageResult,
+    LinkedCashLegError,
+    NoCashflowRuleError,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories import (
     cashflow_repository,
@@ -33,7 +36,7 @@ class CashflowStagingWorkflow(Protocol):
         event_id: str,
         correlation_id: str,
         topic: str,
-    ) -> cashflow.CashflowStageResult: ...
+    ) -> CashflowStageResult: ...
 
 
 class CashflowProcessingCompatibilityAdapter:
@@ -79,7 +82,7 @@ class CashflowProcessingCompatibilityAdapter:
                 correlation_id=correlation_id or "",
                 topic=self._source_topic,
             )
-        except cashflow.NoCashflowRuleError as exc:
+        except NoCashflowRuleError as exc:
             raise TransactionProcessingError(
                 reason_code="cashflow_rule_missing",
                 detail={
@@ -89,7 +92,7 @@ class CashflowProcessingCompatibilityAdapter:
                 },
                 retryable=False,
             ) from exc
-        except cashflow.LinkedCashLegError as exc:
+        except LinkedCashLegError as exc:
             raise TransactionProcessingError(
                 reason_code="cashflow_contract_invalid",
                 detail={
@@ -98,7 +101,7 @@ class CashflowProcessingCompatibilityAdapter:
                 },
                 retryable=False,
             ) from exc
-        if stage_result.outcome is cashflow.CashflowProcessingOutcome.EPOCH_REJECTED:
+        if stage_result.outcome is CashflowProcessingOutcome.EPOCH_REJECTED:
             raise TransactionProcessingRejected(
                 reason_code="cashflow_epoch_rejected",
                 detail={

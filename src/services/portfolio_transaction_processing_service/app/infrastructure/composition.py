@@ -9,8 +9,8 @@ from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers import (
-    transaction_consumer as cashflow,
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+    CashflowCalculationWorkflow,
 )
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationWorkflowPort,
@@ -74,7 +74,7 @@ def build_process_transaction_use_case(
     unit_of_work_factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=resolved_session_factory,
         cost_workflow=CostCalculationWorkflow(),
-        cashflow_workflow=cashflow.CashflowCalculationWorkflow(),
+        cashflow_workflow=CashflowCalculationWorkflow(),
     )
     return ProcessTransactionUseCase(
         unit_of_work_factory,

@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers import (
-    transaction_consumer as cashflow,
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+    CashflowCalculationWorkflow,
 )
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
@@ -28,7 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message() -> None:
     session_factory = MagicMock(spec=lambda: AsyncSession())
     cost_workflow = CostCalculationWorkflow()
-    cashflow_workflow = cashflow.CashflowCalculationWorkflow()
+    cashflow_workflow = CashflowCalculationWorkflow()
     factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=session_factory,
         cost_workflow=cost_workflow,
@@ -55,6 +55,16 @@ def test_target_infrastructure_does_not_import_legacy_cost_delivery() -> None:
     for source_path in infrastructure_root.rglob("*.py"):
         source = source_path.read_text(encoding="utf-8")
         assert "cost_calculator_service.app.consumer" not in source
+
+
+def test_target_infrastructure_does_not_import_legacy_cashflow_delivery() -> None:
+    infrastructure_root = Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure"
+    )
+
+    for source_path in infrastructure_root.rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        assert "cashflow_calculator_service.app.consumers" not in source
 
 
 def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
