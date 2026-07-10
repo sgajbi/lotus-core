@@ -50,14 +50,11 @@ def build_transaction_processing_consumers(
         if replay_booked_transaction is not None
         else build_replay_booked_transaction_use_case()
     )
-    shared = {
-        "bootstrap_servers": KAFKA_BOOTSTRAP_SERVERS,
-        "dlq_topic": KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-    }
     live_execution_profile = execution_profile_loader(TRANSACTION_PROCESSING_CONSUMER_GROUP)
     replay_execution_profile = execution_profile_loader(TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP)
     live_consumer = transaction_consumer_factory(
-        **shared,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
         topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
         group_id=TRANSACTION_PROCESSING_CONSUMER_GROUP,
         service_prefix="TXNPROC",
@@ -65,7 +62,8 @@ def build_transaction_processing_consumers(
         execution_profile=live_execution_profile,
     )
     replay_consumer = replay_request_consumer_factory(
-        **shared,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
         topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
         group_id=TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP,
         service_prefix="TXNREPLAY",

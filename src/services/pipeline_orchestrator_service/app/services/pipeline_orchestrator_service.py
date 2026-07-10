@@ -1,11 +1,9 @@
 from portfolio_common.events import (
-    CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
 )
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.transaction_domain import requires_cashflow_processing
 
 from ..adapters.pipeline_event_factory import (
     PipelineOutboxMessage,
@@ -36,7 +34,6 @@ class PipelineOrchestratorService:
         event: TransactionEvent,
         correlation_id: str | None,
     ) -> None:
-        cashflow_required = requires_cashflow_processing(event)
         stage = await self.repo.upsert_stage_flags(
             stage_name=TRANSACTION_PROCESSING_STAGE,
             transaction_id=event.transaction_id,
@@ -46,31 +43,13 @@ class PipelineOrchestratorService:
             epoch=event.epoch or 0,
             source_event_type="processed_transaction",
             cost_event_seen=True,
-            cashflow_event_seen=not cashflow_required,
+            cashflow_event_seen=True,
         )
         await self._emit_if_ready(
             stage,
             correlation_id,
-            readiness_reason="cost_completed_non_cashflow"
-            if not cashflow_required
-            else "cost_and_cashflow_completed",
+            readiness_reason="atomic_transaction_processing_completed",
         )
-
-    async def register_cashflow_calculated(
-        self, event: CashflowCalculatedEvent, correlation_id: str | None
-    ) -> None:
-        stage = await self.repo.upsert_stage_flags(
-            stage_name=TRANSACTION_PROCESSING_STAGE,
-            transaction_id=event.transaction_id,
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-            business_date=event.cashflow_date,
-            epoch=event.epoch or 0,
-            source_event_type="cashflows.calculated",
-            cost_event_seen=False,
-            cashflow_event_seen=True,
-        )
-        await self._emit_if_ready(stage, correlation_id)
 
     async def register_portfolio_aggregation_completed(
         self,
@@ -128,7 +107,7 @@ class PipelineOrchestratorService:
         stage,
         correlation_id: str | None,
         *,
-        readiness_reason: str = "cost_and_cashflow_completed",
+        readiness_reason: str = "atomic_transaction_processing_completed",
     ) -> None:
         readiness_decision = decide_transaction_stage_readiness(stage)
         if not readiness_decision.should_complete:

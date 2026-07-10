@@ -48,7 +48,7 @@ async def test_upsert_stage_flags_merges_prerequisite_signals(
     assert second.last_source_event_type == "cashflows.calculated"
 
 
-async def test_mark_stage_completed_if_pending_is_idempotent(
+async def test_authoritative_processing_signal_completes_stage_idempotently(
     async_db_session: AsyncSession, clean_db
 ):
     repo = PipelineStageRepository(async_db_session)
@@ -61,7 +61,7 @@ async def test_mark_stage_completed_if_pending_is_idempotent(
         epoch=0,
         source_event_type="cashflows.calculated",
         cost_event_seen=True,
-        cashflow_event_seen=True,
+        cashflow_event_seen=False,
     )
 
     first_claim = await repo.mark_stage_completed_if_pending(stage)

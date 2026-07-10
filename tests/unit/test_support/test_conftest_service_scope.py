@@ -53,3 +53,12 @@ def test_transaction_contract_scope_uses_db_only_services() -> None:
 
 def test_unspecified_scopes_keep_full_stack_services() -> None:
     assert _test_services_for_scope("pytest") == FULL_STACK_SERVICES
+
+
+def test_full_stack_scope_uses_unified_transaction_processing_runtime() -> None:
+    assert "portfolio_transaction_processing_service" in FULL_STACK_SERVICES
+    assert not {
+        "cost_calculator_service",
+        "cashflow_calculator_service",
+        "position_calculator_service",
+    }.intersection(FULL_STACK_SERVICES)

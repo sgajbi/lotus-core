@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, cast
 
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
-    CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
@@ -33,11 +32,14 @@ class SqlAlchemyPipelineStageUnitOfWork:
         service_name: str,
         correlation_id: str | None,
     ) -> bool:
-        return await self._idempotency_repo.claim_event_processing(
-            event_id,
-            portfolio_id,
-            service_name,
-            correlation_id,
+        return cast(
+            bool,
+            await self._idempotency_repo.claim_event_processing(
+                event_id,
+                portfolio_id,
+                service_name,
+                correlation_id,
+            ),
         )
 
     async def register_processed_transaction(
@@ -46,13 +48,6 @@ class SqlAlchemyPipelineStageUnitOfWork:
         correlation_id: str | None,
     ) -> None:
         await self._service.register_processed_transaction(event, correlation_id)
-
-    async def register_cashflow_calculated(
-        self,
-        event: CashflowCalculatedEvent,
-        correlation_id: str | None,
-    ) -> None:
-        await self._service.register_cashflow_calculated(event, correlation_id)
 
     async def register_portfolio_aggregation_completed(
         self,

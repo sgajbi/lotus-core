@@ -8,7 +8,6 @@ from typing import Self
 
 import pytest
 from portfolio_common.events import (
-    CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
@@ -57,13 +56,6 @@ class FakePipelineStageUnitOfWork:
     ) -> None:
         self.registrations.append(("processed_transaction", event, correlation_id))
 
-    async def register_cashflow_calculated(
-        self,
-        event: CashflowCalculatedEvent,
-        correlation_id: str | None,
-    ) -> None:
-        self.registrations.append(("cashflow_calculated", event, correlation_id))
-
     async def register_portfolio_aggregation_completed(
         self,
         event: PortfolioAggregationDayCompletedEvent,
@@ -92,24 +84,6 @@ def _transaction_event() -> TransactionEvent:
         gross_transaction_amount=Decimal("1000"),
         trade_currency="USD",
         currency="USD",
-        epoch=0,
-    )
-
-
-def _cashflow_event() -> CashflowCalculatedEvent:
-    return CashflowCalculatedEvent(
-        cashflow_id=1001,
-        portfolio_id="PORT-PIPE-1",
-        transaction_id="TXN-PIPE-HANDLER-1",
-        security_id="SEC-PIPE-1",
-        cashflow_date=date(2026, 3, 8),
-        amount=Decimal("12.34"),
-        currency="USD",
-        classification="INCOME",
-        timing="SETTLED",
-        is_position_flow=True,
-        is_portfolio_flow=True,
-        calculation_type="DIVIDEND",
         epoch=0,
     )
 
@@ -167,9 +141,9 @@ async def test_handler_skips_registration_for_duplicate_event_claim() -> None:
     unit_of_work = FakePipelineStageUnitOfWork(claim_result=False)
     handler = handler_module.PipelineStageMessageHandler(unit_of_work_factory=lambda: unit_of_work)
 
-    result = await handler.handle_cashflow_calculated(
-        event_id="cashflows.calculated-0-7",
-        event=_cashflow_event(),
+    result = await handler.handle_processed_transaction(
+        event_id="transactions.cost.processed-0-7",
+        event=_transaction_event(),
         correlation_id="corr-stage",
     )
 
@@ -177,9 +151,9 @@ async def test_handler_skips_registration_for_duplicate_event_claim() -> None:
     assert result.duplicate is True
     assert unit_of_work.claims == [
         (
-            "cashflows.calculated-0-7",
+            "transactions.cost.processed-0-7",
             "PORT-PIPE-1",
-            "pipeline-orchestrator-cashflow",
+            "pipeline-orchestrator-processed-txn",
             "corr-stage",
         )
     ]
@@ -239,7 +213,6 @@ async def test_handler_propagates_db_errors_for_consumer_retry_policy() -> None:
 
 def test_pipeline_stage_consumers_do_not_assemble_repositories_or_services() -> None:
     consumer_paths = [
-        Path("src/services/pipeline_orchestrator_service/app/consumers/cashflow_stage_consumer.py"),
         Path(
             "src/services/pipeline_orchestrator_service/app/consumers/"
             "financial_reconciliation_completion_consumer.py"

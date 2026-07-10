@@ -5,7 +5,6 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_CASHFLOWS_CALCULATED_TOPIC,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
@@ -24,7 +23,6 @@ from portfolio_common.runtime_supervision import (
     wait_for_shutdown_or_task_failure,
 )
 
-from .consumers.cashflow_stage_consumer import CashflowStageConsumer
 from .consumers.financial_reconciliation_completion_consumer import (
     FinancialReconciliationCompletionConsumer,
 )
@@ -47,15 +45,6 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
                 group_id="pipeline_orchestrator_processed_txn_group",
-                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-                service_prefix="PIPE",
-            )
-        )
-        self.consumers.append(
-            CashflowStageConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_CASHFLOWS_CALCULATED_TOPIC,
-                group_id="pipeline_orchestrator_cashflow_group",
                 dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                 service_prefix="PIPE",
             )

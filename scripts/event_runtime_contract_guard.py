@@ -165,6 +165,7 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
         self.direct_publishes: list[DirectKafkaPublish] = []
         self.consumer_dlq_wirings: list[ConsumerDlqTopicWiring] = []
         self._topic_bindings_stack: list[dict[str, str]] = [{}]
+        self._consumer_factory_bindings_stack: list[dict[str, str]] = [{}]
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> Any:
         self._visit_function(node)
@@ -192,7 +193,8 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
                         topic=topic,
                     )
                 )
-        consumer_name = _call_name(node)
+        call_name = _call_name(node)
+        consumer_name = self._consumer_factory_bindings.get(call_name or "", call_name)
         dlq_topic_node = _call_keyword_value(node, "dlq_topic")
         if consumer_name in self.consumer_class_names and dlq_topic_node is not None:
             self.consumer_dlq_wirings.append(
@@ -236,13 +238,45 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
         previous_function_name = self.function_name
         self.function_name = node.name
         self._topic_bindings_stack.append(self._topic_bindings.copy())
+        self._consumer_factory_bindings_stack.append(
+            {
+                **self._consumer_factory_bindings,
+                **_consumer_factory_default_bindings(node, self.consumer_class_names),
+            }
+        )
         self.generic_visit(node)
+        self._consumer_factory_bindings_stack.pop()
         self._topic_bindings_stack.pop()
         self.function_name = previous_function_name
 
     @property
     def _topic_bindings(self) -> dict[str, str]:
         return self._topic_bindings_stack[-1]
+
+    @property
+    def _consumer_factory_bindings(self) -> dict[str, str]:
+        return self._consumer_factory_bindings_stack[-1]
+
+
+def _consumer_factory_default_bindings(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    consumer_class_names: set[str],
+) -> dict[str, str]:
+    positional_arguments = [*node.args.posonlyargs, *node.args.args]
+    default_count = len(node.args.defaults)
+    default_arguments = positional_arguments[-default_count:] if default_count else []
+    bindings: dict[str, str] = {}
+    for argument, default in zip(default_arguments, node.args.defaults, strict=True):
+        default_name = _base_name(default)
+        if default_name in consumer_class_names:
+            bindings[argument.arg] = default_name
+    for argument, keyword_default in zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True):
+        if keyword_default is None:
+            continue
+        default_name = _base_name(keyword_default)
+        if default_name in consumer_class_names:
+            bindings[argument.arg] = default_name
+    return bindings
 
 
 def _is_outbox_details_dict(node: ast.Dict) -> bool:

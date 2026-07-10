@@ -1,4 +1,5 @@
 from datetime import date
+from typing import cast
 
 from portfolio_common.database_models import PipelineStageState
 from sqlalchemy import and_, func, select, update
@@ -74,13 +75,12 @@ class PipelineStageRepository:
                     PipelineStageState.id == stage_state.id,
                     PipelineStageState.status == "PENDING",
                     PipelineStageState.cost_event_seen.is_(True),
-                    PipelineStageState.cashflow_event_seen.is_(True),
                 )
             )
             .values(status="COMPLETED", ready_emitted_at=func.now())
         )
         result = await self.db.execute(stmt)
-        claimed = result.rowcount == 1
+        claimed = cast(int, result.rowcount) == 1
         if claimed:
             stage_state.status = "COMPLETED"
         return claimed
@@ -158,7 +158,7 @@ class PipelineStageRepository:
             PipelineStageState.portfolio_id == portfolio_id,
             PipelineStageState.business_date == business_date,
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(int | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     @staticmethod
     def build_portfolio_stage_key(

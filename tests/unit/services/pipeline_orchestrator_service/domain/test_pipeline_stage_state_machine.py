@@ -20,19 +20,19 @@ def test_transaction_stage_waits_for_missing_cost_signal_without_outbox_dependen
     )
 
     assert decision.should_complete is False
-    assert decision.reason_code == "missing_cost_event"
+    assert decision.reason_code == "missing_transaction_processing_event"
 
 
-def test_transaction_stage_waits_for_missing_cashflow_signal_without_outbox_dependency() -> None:
+def test_transaction_stage_uses_authoritative_processing_signal_without_cashflow_fan_in() -> None:
     decision = decide_transaction_stage_readiness(
         _Stage(status="PENDING", cost_event_seen=True, cashflow_event_seen=False)
     )
 
-    assert decision.should_complete is False
-    assert decision.reason_code == "missing_cashflow_event"
+    assert decision.should_complete is True
+    assert decision.reason_code == "ready"
 
 
-def test_transaction_stage_is_ready_when_cost_and_cashflow_are_seen() -> None:
+def test_transaction_stage_is_ready_when_compatibility_flags_are_seen() -> None:
     decision = decide_transaction_stage_readiness(
         _Stage(status="PENDING", cost_event_seen=True, cashflow_event_seen=True)
     )

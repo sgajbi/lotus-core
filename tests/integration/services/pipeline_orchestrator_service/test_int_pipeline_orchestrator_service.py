@@ -52,9 +52,9 @@ async def test_emit_if_ready_skips_outbox_after_losing_stage_ownership(
         security_id=txn.security_id,
         business_date=txn.transaction_date.date(),
         epoch=txn.epoch or 0,
-        source_event_type="cashflows.calculated",
+        source_event_type="processed_transaction",
         cost_event_seen=True,
-        cashflow_event_seen=True,
+        cashflow_event_seen=False,
     )
     await async_db_session.commit()
     await async_db_session.refresh(stage)

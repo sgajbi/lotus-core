@@ -11,7 +11,6 @@ CONTROL_BLOCKING_STATUSES = frozenset({"FAILED", "REQUIRES_REPLAY"})
 class TransactionStageState(Protocol):
     status: str
     cost_event_seen: bool
-    cashflow_event_seen: bool
 
 
 @dataclass(frozen=True)
@@ -31,12 +30,7 @@ def decide_transaction_stage_readiness(
     if not stage.cost_event_seen:
         return TransactionStageReadinessDecision(
             should_complete=False,
-            reason_code="missing_cost_event",
-        )
-    if not stage.cashflow_event_seen:
-        return TransactionStageReadinessDecision(
-            should_complete=False,
-            reason_code="missing_cashflow_event",
+            reason_code="missing_transaction_processing_event",
         )
     return TransactionStageReadinessDecision(
         should_complete=True,
