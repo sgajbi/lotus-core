@@ -38,8 +38,8 @@ The governed profile remains a pure parser/sorter/engine measurement, not a prod
 | AVCO restored source lots | 6,000 | 6,000 |
 | AVCO ordered disposal average | 119.745ms | 112.493ms |
 
-AVCO is intentionally unchanged. Its pooled source allocation needs a separate durable aggregate
-and source-evidence design; applying FIFO subset persistence would corrupt pooled reconciliation.
+This review did not alter AVCO. CR-1479 subsequently introduced a separate durable aggregate and
+set-based source-evidence design; AVCO does not reuse FIFO subset persistence.
 
 ## Validation And Compatibility
 

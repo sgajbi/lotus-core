@@ -42,8 +42,10 @@ leaving the checkpoint on the latest canonical event.
 CR-1473 narrows ordered FIFO `consume_lot` processing further. It streams open source lots in the
 same date, original-quantity, and transaction-ID order used by the engine and stops after the
 requested disposal quantity is covered. Persistence updates only that selected set and fails if a
-selected source row is missing; omitted later lots remain unchanged. AVCO, basis transfers, and
-full rebuilds continue to use complete snapshots because their economics are not FIFO subsets.
+selected source row is missing; omitted later lots remain unchanged. CR-1479 adds a distinct AVCO
+aggregate checkpoint: ordered acquisitions and disposals restore one pooled source while set-based
+database reconciliation keeps every externally visible source row current. Basis transfers,
+unsupported corporate actions, and full rebuilds continue to use complete snapshots.
 
 ## Capacity Evidence
 
@@ -59,16 +61,16 @@ Local 8,000-history results, five ordered samples per method:
 | FIFO | ordered opening append | 0.078ms | 0 |
 | FIFO | ordered disposal append, 1 restored lot | 0.065ms | 0 |
 | FIFO | backdated rebuild, 8,001 rows | 260.212ms | 0 |
-| AVCO | ordered opening append | 0.657ms | 0 |
-| AVCO | ordered disposal append, 6,000 restored lots | 112.493ms | 0 |
-| AVCO | backdated rebuild, 8,001 rows | 279.240ms | 0 |
+| AVCO | ordered opening append | 0.090ms | 0 |
+| AVCO | ordered disposal append, 1 restored source | 0.086ms | 0 |
+| AVCO | backdated rebuild, 8,001 rows | 373.613ms | 0 |
 
 The results prove that ordinary lot opening no longer scales with history and that ordered
 FIFO disposal no longer scales with unrelated later open lots: the same 8,000-row scenario
-previously restored 6,000 lots and averaged 57.770ms. AVCO remains the measured hotspot because
-pooled source evidence must reconcile all source quantities and local/base basis. Optimizing AVCO
-requires a durable aggregate/lazy-source representation; a cache without ownership, freshness, and
-invalidation is not an acceptable substitute.
+previously restored 6,000 lots and averaged 57.770ms. CR-1479 similarly reduces ordered AVCO
+application restoration from 6,000 source rows at 112.493ms to one pooled source at 0.086ms. The
+durable pool is versioned transactional state, not an unowned cache, and source-lot reconciliation
+remains explicit database work because source lineage is externally visible.
 
 ## Validation And Compatibility
 
@@ -76,7 +78,7 @@ invalidation is not an acceptable substitute.
 - ordered append and backdated workflow tests passed for bounded FIFO, complete AVCO, and fallback;
 - branch-built PostgreSQL BUY/SELL, FIFO/AVCO backdated correction, epoch, suffix, checkpoint, and
   rollback proof passed, including selected-lot persistence;
-- migration contract has one Alembic head at `c105b2c3d4ea`;
+- migration contract has one Alembic head at `c106b2c3d4eb`;
 - scoped Ruff, format, MyPy, and diff checks passed.
 
 No API, event payload, Kafka topic/group, cashflow, position, P&L methodology, or downstream

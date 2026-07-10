@@ -1754,6 +1754,17 @@ Most relevant current governance:
      later lots. Keep AVCO, basis transfer, and full rebuild persistence as complete snapshots until
      a separate pooled-state design proves exact quantity plus local/base basis reconciliation.
      Preserve the matching database index and the profile restored-lot-count evidence.
+135. Ordered AVCO `open_lot` and `consume_lot` processing restores the versioned
+     `average_cost_pool_state` aggregate under a row lock scoped to that table. Treat this row as
+     durable transactional cost-basis state, not a cache. Missing, incompatible, source-less,
+     basis-transfer, or unsupported state must use deterministic full replay and establish a new
+     checkpoint. `position_lot_state` remains externally visible source-lineage truth: reconcile
+     existing rows with set-based quantity/local/base scaling, assign the exact Decimal residual to
+     the representative source, and update explicit new sources separately. Pool checkpoint,
+     source rows, transaction cost, cashflow, position, idempotency, and outbox writes share the
+     combined unit of work and fail closed together. Do not replace AVCO with FIFO subset semantics,
+     infer historical checkpoint currency, or claim current historical source evidence before the
+     governed backfill passes.
 
 ## Context Maintenance Rule
 

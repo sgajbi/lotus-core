@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Issue: #468
-Status: Hardened locally; persisted restore depth pending
+Status: Hardened locally; historical backfill pending
 
 ## Objective
 
@@ -29,12 +29,12 @@ Focused coverage includes sequential acquisitions/disposals, equivalent sell bat
 close/reopen, zero-basis transfer followed by acquisition, corporate-action scenarios, and exact
 quantity/local/base residuals. Sixty-two focused AVCO tests and 129 cost tests passed.
 
-No FIFO behavior, cost/P&L formula, API, event, schema, or downstream contract changed. Individual
-AVCO source rows remain supportability allocation, not FIFO-style disposal selection.
+This slice changed no FIFO behavior, cost/P&L formula, API, event, schema, or downstream contract.
+Individual AVCO source rows remain supportability allocation, not FIFO-style disposal selection.
 
 ## Remaining Work
 
-CR-1471 addresses workflow-level full-history replay for ordered events. State-dependent AVCO
-disposal still restores and materializes every current persisted source row. A future durable lazy
-source representation must include migration, rollback, query/read materialization, supportability,
-and exact aggregate parity before replacing those rows or changing their semantics.
+CR-1471 addresses workflow-level full-history replay for ordered events. CR-1479 subsequently adds
+durable aggregate restoration and set-based persisted-source reconciliation with migration,
+rollback, supportability, and exact aggregate parity proof. Historical pool/source backfill and
+deployed database/Kafka capacity evidence remain before cutover.
