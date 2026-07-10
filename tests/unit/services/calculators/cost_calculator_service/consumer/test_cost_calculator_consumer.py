@@ -74,6 +74,7 @@ def _bundle_a_transaction_event(
     transaction_id: str,
     transaction_type: str,
     net_cost_local: str,
+    allocated_cost_basis_local: str | None = None,
     dependency_reference_ids: list[str] | None = None,
 ) -> TransactionEvent:
     return TransactionEvent(
@@ -91,6 +92,9 @@ def _bundle_a_transaction_event(
         linked_transaction_group_id="LTG-CA-DEM-01",
         parent_event_reference="CA-PARENT-DEM-01",
         net_cost_local=Decimal(net_cost_local),
+        allocated_cost_basis_local=(
+            Decimal(allocated_cost_basis_local) if allocated_cost_basis_local is not None else None
+        ),
         dependency_reference_ids=dependency_reference_ids,
     )
 
@@ -1795,6 +1799,45 @@ async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
     assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_insufficient_legs"]
     assert findings[0]["expected_value"] == {"source_leg_count": ">=1", "target_leg_count": ">=1"}
     assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_INSUFFICIENT_LEGS"
+
+
+async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
+    cost_calculator_consumer: CostCalculatorConsumer,
+):
+    processed_event = _bundle_a_transaction_event(
+        transaction_id="CA-DEM-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    group_events = [
+        processed_event,
+        _bundle_a_transaction_event(
+            transaction_id="CA-DEM-IN-01",
+            transaction_type="DEMERGER_IN",
+            net_cost_local="100",
+        ),
+        _bundle_a_transaction_event(
+            transaction_id="CA-CASH-01",
+            transaction_type="CASH_CONSIDERATION",
+            net_cost_local="0",
+        ),
+    ]
+
+    run, findings = cost_calculator_consumer._bundle_a_reconciliation_evidence(
+        processed_event=processed_event,
+        linked_group="LTG-CA-DEM-01",
+        parent_ref="CA-PARENT-DEM-01",
+        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        missing_dependencies=[],
+        correlation_id="corr-cash-basis",
+    )
+
+    assert run["summary"]["reconciliation_status"] == "insufficient_cash_basis"
+    assert run["summary"]["missing_cash_basis_count"] == 1
+    assert [finding["finding_type"] for finding in findings] == [
+        "ca_bundle_a_insufficient_cash_basis"
+    ]
+    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS"
 
 
 async def test_bundle_a_dependency_gap_creates_reconciliation_finding(

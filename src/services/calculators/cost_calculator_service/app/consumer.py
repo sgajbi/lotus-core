@@ -935,6 +935,8 @@ class CostCalculationWorkflow:
                 "status": reconciliation.status,
                 "source_basis_out_local": str(reconciliation.source_basis_out_local),
                 "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                "cash_basis_local": str(reconciliation.cash_basis_local),
+                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                 "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
                 "basis_tolerance": str(reconciliation.basis_tolerance),
                 "missing_dependency_reference_ids": missing_dependencies,
@@ -988,6 +990,7 @@ class CostCalculationWorkflow:
             "source_leg_count": reconciliation.source_leg_count,
             "target_leg_count": reconciliation.target_leg_count,
             "cash_consideration_count": reconciliation.cash_consideration_count,
+            "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
             "missing_dependency_count": len(missing_dependencies),
         }
 
@@ -1017,6 +1020,17 @@ class CostCalculationWorkflow:
         if reconciliation.status == "insufficient_legs":
             findings.append(
                 CostCalculatorConsumer._bundle_a_insufficient_legs_finding(
+                    run_id=run_id,
+                    evidence_signature=evidence_signature,
+                    processed_event=processed_event,
+                    linked_group=linked_group,
+                    parent_ref=parent_ref,
+                    reconciliation=reconciliation,
+                )
+            )
+        if reconciliation.status == "insufficient_cash_basis":
+            findings.append(
+                CostCalculatorConsumer._bundle_a_insufficient_cash_basis_finding(
                     run_id=run_id,
                     evidence_signature=evidence_signature,
                     processed_event=processed_event,
@@ -1058,6 +1072,7 @@ class CostCalculationWorkflow:
             observed_value={
                 "source_basis_out_local": str(reconciliation.source_basis_out_local),
                 "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                "cash_basis_local": str(reconciliation.cash_basis_local),
                 "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
             },
             detail=CostCalculatorConsumer._bundle_a_finding_detail(
@@ -1065,6 +1080,35 @@ class CostCalculationWorkflow:
                 parent_ref=parent_ref,
                 reconciliation=reconciliation,
                 reason_code="CA_BUNDLE_A_BASIS_MISMATCH",
+            ),
+        )
+
+    @staticmethod
+    def _bundle_a_insufficient_cash_basis_finding(
+        *,
+        run_id: str,
+        evidence_signature: str,
+        processed_event: TransactionEvent,
+        linked_group: str,
+        parent_ref: str,
+        reconciliation: Any,
+    ) -> dict[str, object]:
+        return CostCalculatorConsumer._bundle_a_finding(
+            run_id=run_id,
+            finding_type="ca_bundle_a_insufficient_cash_basis",
+            evidence_signature=evidence_signature,
+            processed_event=processed_event,
+            expected_value={"missing_cash_basis_count": 0},
+            observed_value={
+                "cash_consideration_count": reconciliation.cash_consideration_count,
+                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
+                "cash_basis_local": str(reconciliation.cash_basis_local),
+            },
+            detail=CostCalculatorConsumer._bundle_a_finding_detail(
+                linked_group=linked_group,
+                parent_ref=parent_ref,
+                reconciliation=reconciliation,
+                reason_code="CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS",
             ),
         )
 
@@ -1168,6 +1212,8 @@ class CostCalculationWorkflow:
             "source_leg_count": reconciliation.source_leg_count,
             "target_leg_count": reconciliation.target_leg_count,
             "cash_consideration_count": reconciliation.cash_consideration_count,
+            "cash_basis_local": str(reconciliation.cash_basis_local),
+            "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
             "basis_tolerance": str(reconciliation.basis_tolerance),
         }
 
@@ -1202,6 +1248,8 @@ class CostCalculationWorkflow:
                 "cash_consideration_count": reconciliation.cash_consideration_count,
                 "source_basis_out_local": str(reconciliation.source_basis_out_local),
                 "target_basis_in_local": str(reconciliation.target_basis_in_local),
+                "cash_basis_local": str(reconciliation.cash_basis_local),
+                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                 "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
                 "basis_tolerance": str(reconciliation.basis_tolerance),
                 "missing_dependency_reference_ids": missing_dependencies,
@@ -1216,6 +1264,17 @@ class CostCalculationWorkflow:
                     "parent_event_reference": parent_ref,
                     "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
                     "basis_tolerance": str(reconciliation.basis_tolerance),
+                },
+            )
+        if reconciliation.status == "insufficient_cash_basis":
+            logger.warning(
+                "bundle_a_cash_basis_evidence_missing",
+                extra={
+                    "portfolio_id": processed_event.portfolio_id,
+                    "linked_transaction_group_id": linked_group,
+                    "parent_event_reference": parent_ref,
+                    "cash_consideration_count": reconciliation.cash_consideration_count,
+                    "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
                 },
             )
         if missing_dependencies:
