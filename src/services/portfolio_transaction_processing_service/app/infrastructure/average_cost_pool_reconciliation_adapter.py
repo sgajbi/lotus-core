@@ -10,7 +10,7 @@ from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.consumer import (
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
 )

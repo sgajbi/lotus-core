@@ -12,11 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cashflow_calculator_service.app.consumers import (
     transaction_consumer as cashflow,
 )
-from src.services.calculators.cost_calculator_service.app.consumer import (
-    CostCalculationWorkflow,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationWorkflowPort,
+)
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+    CostCalculationWorkflow,
 )
 
 from ..application import (

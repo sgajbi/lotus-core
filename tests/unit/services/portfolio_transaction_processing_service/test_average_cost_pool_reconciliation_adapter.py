@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from src.services.calculators.cost_calculator_service.app.consumer import CostCalculationWorkflow
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+    CostCalculationWorkflow,
+)
 from src.services.calculators.cost_calculator_service.app.repository import (
     AverageCostPoolPersistedSummary,
     CostCalculatorRepository,

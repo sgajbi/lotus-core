@@ -1324,11 +1324,13 @@ async def test_consumer_emits_sell_lifecycle_metrics(
 
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.SELL_LIFECYCLE_STAGE_TOTAL",
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
+            "SELL_LIFECYCLE_STAGE_TOTAL",
             sell_counter,
         ),
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.BUY_LIFECYCLE_STAGE_TOTAL",
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
+            "BUY_LIFECYCLE_STAGE_TOTAL",
             buy_counter,
         ),
     ):

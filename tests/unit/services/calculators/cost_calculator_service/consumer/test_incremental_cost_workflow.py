@@ -118,11 +118,11 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
 
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer."
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
             "COST_PROCESSING_EXECUTION_TOTAL"
         ) as execution_metric,
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer."
+            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
             "COST_PROCESSING_OPEN_LOTS_RESTORED"
         ) as restore_metric,
     ):
@@ -423,7 +423,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     repo.get_transaction_history.return_value = [_persisted_buy("BUY-LATER", later_date)]
 
     with patch(
-        "src.services.calculators.cost_calculator_service.app.consumer."
+        "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
         "COST_PROCESSING_EXECUTION_TOTAL"
     ) as execution_metric:
         calculation = await workflow._calculate_cost_engine(

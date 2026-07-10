@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from portfolio_common.reprocessing_repository import ReprocessingRepository
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cashflow_calculator_service.app.consumers import (
     transaction_consumer as cashflow,
 )
-from src.services.calculators.cost_calculator_service.app.consumer import (
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
@@ -44,6 +45,16 @@ def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message
     assert first._cashflow_workflow is second._cashflow_workflow is cashflow_workflow
     assert not hasattr(cost_workflow, "_consumer_config")
     assert not hasattr(cashflow_workflow, "_consumer_config")
+
+
+def test_target_infrastructure_does_not_import_legacy_cost_delivery() -> None:
+    infrastructure_root = Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure"
+    )
+
+    for source_path in infrastructure_root.rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        assert "cost_calculator_service.app.consumer" not in source
 
 
 def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
