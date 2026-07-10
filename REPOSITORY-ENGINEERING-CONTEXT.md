@@ -1775,6 +1775,15 @@ Most relevant current governance:
      in both source and pool representations. A failed post-write check must roll back and report
      pre-write persisted evidence with a bounded reason code. Do not publish business events or
      silently delete unmatched lineage from this maintenance path.
+137. Ordered AVCO disposal database round trips must remain independent of source-lot count. The
+     governed local contract is five cost-state statements: locked pool read, set-based
+     non-residual update, aggregate source read, representative residual update, and pool upsert.
+     Do not reintroduce source-lot materialization into the application or per-source update loops.
+     Keep normalized portfolio/security predicates compatible with
+     `ix_position_lot_norm_port_sec`. Scope `FOR UPDATE` to `average_cost_pool_state` so unrelated
+     keys remain available; same-key serialization is intentional and must be measured with
+     connection-pool wait and partition-ordering evidence before cutover. Treat local query-count,
+     index-plan, and lock-timeout tests as structural proof, not deployed p95/p99 certification.
 
 ## Context Maintenance Rule
 

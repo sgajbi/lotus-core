@@ -64,5 +64,6 @@ P&L methodology, or downstream source-lot response contract changed.
 CR-1480 supplies an idempotent bounded audit/apply command that reconstructs pool checkpoints and
 verifies every source count plus quantity/local/base sum. It still must run against the reviewed
 production-like estate before source products are declared current after cutover.
-Deployed query plans/counts, database p50/p95/p99, lock contention, pool use, Kafka lag, recovery,
-and shutdown drain remain part of #468 capacity certification.
+CR-1481 proves local query-count independence, normalized index selection, and key-scoped lock
+behavior. Deployed database p50/p95/p99, connection-pool use/wait, Kafka lag, recovery, and shutdown
+drain remain part of #468 capacity certification.
