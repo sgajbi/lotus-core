@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any, List, cast
 
 from confluent_kafka import Message
 from portfolio_common.config import (
@@ -86,7 +86,7 @@ def _normalize_event_code(value: object) -> str:
 def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
     if value is None or (isinstance(value, str) and not value.strip()):
         return Decimal(0)
-    amount = decimal_or_none(value)
+    amount = cast(Decimal | None, decimal_or_none(value))
     if amount is None:
         raise ValueError(f"{field_name} must be numeric.")
     return amount
@@ -133,7 +133,7 @@ def _apply_engine_fee_fields(
 
 
 def _message_value(msg: Message) -> str:
-    return msg.value().decode("utf-8")
+    return cast(bytes, msg.value()).decode("utf-8")
 
 
 def _message_event_id(msg: Message) -> str:
@@ -215,7 +215,7 @@ class CostCalculationWorkflow:
         Transforms a TransactionEvent into a raw dictionary suitable for the
         cost-calculator-service engine package, converting fee fields to a Fees object structure.
         """
-        event_dict = event.model_dump(mode="json")
+        event_dict = cast(dict[str, Any], event.model_dump(mode="json"))
         trade_fee = _normalize_fee_amount(
             event_dict.pop("trade_fee", "0"),
             field_name="trade_fee",
@@ -365,11 +365,8 @@ class CostCalculationWorkflow:
         )
 
         new_transaction_ids = {event.transaction_id}
-        self._raise_for_new_transaction_engine_errors(
-            errored=errored,
-            new_transaction_ids=new_transaction_ids,
-        )
-        events_to_publish = await self._persist_new_processed_transactions(
+        self._raise_for_transaction_engine_errors(errored=errored)
+        events_to_publish = await self._persist_affected_processed_transactions(
             processed=processed,
             new_transaction_ids=new_transaction_ids,
             repo=repo,
@@ -412,23 +409,32 @@ class CostCalculationWorkflow:
             repo=repo,
         )
 
-    async def _persist_new_processed_transactions(
+    async def _persist_affected_processed_transactions(
         self,
         *,
         processed: list[Any],
         new_transaction_ids: set[str],
         repo: CostCalculatorRepository,
     ) -> list[TransactionEvent]:
-        events_to_publish = []
-        for processed_transaction in processed:
-            if processed_transaction.transaction_id not in new_transaction_ids:
-                continue
-            events_to_publish.append(
-                await self._persist_processed_transaction(
-                    processed_transaction=processed_transaction,
-                    repo=repo,
-                )
+        first_affected_index = next(
+            (
+                index
+                for index, transaction in enumerate(processed)
+                if transaction.transaction_id in new_transaction_ids
+            ),
+            None,
+        )
+        if first_affected_index is None:
+            raise ValueError("Processed transaction timeline omitted the incoming transaction")
+
+        events_to_publish: list[TransactionEvent] = []
+        for processed_transaction in processed[first_affected_index:]:
+            persisted_event = await self._persist_processed_transaction(
+                processed_transaction=processed_transaction,
+                repo=repo,
             )
+            if processed_transaction.transaction_id in new_transaction_ids:
+                events_to_publish.append(persisted_event)
         return events_to_publish
 
     @staticmethod
@@ -458,14 +464,15 @@ class CostCalculationWorkflow:
             txn_raw["asset_class"] = instrument.asset_class
 
     @staticmethod
-    def _raise_for_new_transaction_engine_errors(
+    def _raise_for_transaction_engine_errors(
         *,
         errored: list[Any],
-        new_transaction_ids: set[str],
     ) -> None:
-        new_errors = [e for e in errored if e.transaction_id in new_transaction_ids]
-        if new_errors:
-            raise ValueError(f"Transaction engine failed: {new_errors[0].error_reason}")
+        if errored:
+            raise ValueError(
+                f"Transaction engine failed for {errored[0].transaction_id}: "
+                f"{errored[0].error_reason}"
+            )
 
     async def _persist_processed_transaction(
         self,
@@ -715,7 +722,10 @@ class CostCalculationWorkflow:
         group_events: list[TransactionEvent],
     ) -> list[str]:
         available_ids = {event.transaction_id for event in group_events}
-        return find_missing_ca_bundle_a_dependencies(processed_event, available_ids)
+        return cast(
+            list[str],
+            find_missing_ca_bundle_a_dependencies(processed_event, available_ids),
+        )
 
     @staticmethod
     def _bundle_a_reconciliation_evidence(

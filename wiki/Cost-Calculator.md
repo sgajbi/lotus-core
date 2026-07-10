@@ -35,11 +35,14 @@ For an eligible persisted transaction event, the service:
 3. normalizes the event into the cost engine's processing shape
 4. enriches the timeline with portfolio policy and FX context where required
 5. recalculates the applicable transaction sequence under the active cost-basis method
-6. persists updated transaction cost fields, lot state, and related support records
-7. publishes the enriched processed transaction event for downstream consumers
+6. persists the incoming row and any recalculated later suffix, plus lot and support state, in one
+   transaction
+7. publishes only the incoming enriched event so downstream position handling is not duplicated
 
 Because the service recalculates the governed transaction timeline rather than only patching the
-latest row, it remains authoritative when late or out-of-order history is introduced.
+latest row, it remains authoritative when late or out-of-order history is introduced. A timeline
+engine error fails closed before suffix updates; operators should remediate the invalid historical
+row rather than accepting a partially corrected cost history.
 
 ## Data it owns
 

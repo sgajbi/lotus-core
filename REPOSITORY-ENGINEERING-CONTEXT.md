@@ -1676,6 +1676,11 @@ Most relevant current governance:
      governed `stage` and `outcome` labels; never label by portfolio, transaction, event,
      correlation, trace, exception, or error text. Preserve target attribution for live/replay,
      idempotency, cost, cashflow, each position leg, and commit after service consolidation.
+     Full-history cost recalculation remains the correctness baseline and is supported by the
+     normalized portfolio/security/date/transaction index. For a backdated input, persist the
+     incoming row and deterministic later suffix in engine order inside the combined unit of work,
+     but publish only the incoming processed event so inline position rebuild is not double-applied.
+     Any engine error in the recalculated timeline must fail closed before suffix persistence.
 
 ## Context Maintenance Rule
 

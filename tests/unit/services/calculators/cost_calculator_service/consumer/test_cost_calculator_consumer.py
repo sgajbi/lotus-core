@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from cost_engine.domain.models.error import ErroredTransaction
 from cost_engine.domain.models.transaction import (
     Transaction as EngineTransaction,
 )
@@ -528,6 +529,47 @@ async def test_cost_consumer_direct_path_uses_header_correlation(
         "cost-corr-id"
     )
     assert mock_idempotency_repo.claim_event_processing.call_args.args[3] == "cost-corr-id"
+
+
+async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_incoming(
+    cost_calculator_consumer: CostCalculatorConsumer,
+) -> None:
+    prior = MagicMock(transaction_id="BUY-PRIOR")
+    incoming = MagicMock(transaction_id="BUY-BACKDATED")
+    later = MagicMock(transaction_id="SELL-LATER")
+    incoming_event = MagicMock(spec=TransactionEvent)
+    later_event = MagicMock(spec=TransactionEvent)
+    repository = MagicMock()
+    cost_calculator_consumer._persist_processed_transaction = AsyncMock(
+        side_effect=(incoming_event, later_event)
+    )
+
+    events = await cost_calculator_consumer._persist_affected_processed_transactions(
+        processed=[prior, incoming, later],
+        new_transaction_ids={incoming.transaction_id},
+        repo=repository,
+    )
+
+    assert events == [incoming_event]
+    assert [
+        call.kwargs["processed_transaction"].transaction_id
+        for call in cost_calculator_consumer._persist_processed_transaction.await_args_list
+    ] == ["BUY-BACKDATED", "SELL-LATER"]
+
+
+async def test_recalculation_rejects_historical_engine_error_before_suffix_write() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Transaction engine failed for SELL-LATER: insufficient open quantity",
+    ):
+        CostCalculationWorkflow._raise_for_transaction_engine_errors(
+            errored=[
+                ErroredTransaction(
+                    transaction_id="SELL-LATER",
+                    error_reason="insufficient open quantity",
+                )
+            ]
+        )
 
 
 async def test_consumer_processes_fx_contract_event_without_generic_engine(
