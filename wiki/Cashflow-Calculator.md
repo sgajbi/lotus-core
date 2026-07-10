@@ -22,6 +22,10 @@ This makes the module a governed semantic transformation stage, not a simple amo
 
 ## Runtime role
 
+The active application workflow is `app/cashflow_calculation_workflow.py`, imported directly by
+target infrastructure. `app/consumers/transaction_consumer.py` is a quarantined compatibility shell
+for legacy delivery tests and must not be imported by the combined runtime.
+
 For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture
