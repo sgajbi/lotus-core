@@ -48,18 +48,6 @@ SERVICE_BUILDS: dict[str, tuple[str, str]] = {
         "lotus-core/persistence-service:local",
         "src/services/persistence_service/Dockerfile",
     ),
-    "cost_calculator_service": (
-        "lotus-core/cost-calculator-service:local",
-        "src/services/calculators/cost_calculator_service/Dockerfile",
-    ),
-    "cashflow_calculator_service": (
-        "lotus-core/cashflow-calculator-service:local",
-        "src/services/calculators/cashflow_calculator_service/Dockerfile",
-    ),
-    "position_calculator_service": (
-        "lotus-core/position-calculator-service:local",
-        "src/services/calculators/position_calculator/Dockerfile",
-    ),
     "portfolio_transaction_processing_service": (
         "lotus-core/portfolio-transaction-processing-service:local",
         "src/services/portfolio_transaction_processing_service/Dockerfile",

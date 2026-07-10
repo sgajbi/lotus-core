@@ -57,15 +57,6 @@ jobs:
           - service: persistence_service
             image_name: persistence-service
             dockerfile: src/services/persistence_service/Dockerfile
-          - service: cost_calculator_service
-            image_name: cost-calculator-service
-            dockerfile: src/services/calculators/cost_calculator_service/Dockerfile
-          - service: cashflow_calculator_service
-            image_name: cashflow-calculator-service
-            dockerfile: src/services/calculators/cashflow_calculator_service/Dockerfile
-          - service: position_calculator_service
-            image_name: position-calculator-service
-            dockerfile: src/services/calculators/position_calculator/Dockerfile
           - service: portfolio_transaction_processing_service
             image_name: portfolio-transaction-processing-service
             dockerfile: src/services/portfolio_transaction_processing_service/Dockerfile
