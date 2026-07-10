@@ -146,6 +146,10 @@ async def test_claim_event_processing_returns_false_when_fence_exists(
     ("existing_row", "expected"),
     [
         (
+            ("topic-0-42", None, None),
+            SemanticEventClaimOutcome.PHYSICAL_DUPLICATE,
+        ),
+        (
             ("topic-0-42", "transaction:v1:P1:T1:0", "sha256:same"),
             SemanticEventClaimOutcome.PHYSICAL_DUPLICATE,
         ),
@@ -162,7 +166,7 @@ async def test_claim_event_processing_returns_false_when_fence_exists(
 async def test_semantic_claim_classifies_existing_fence(
     repository: IdempotencyRepository,
     mock_db_session: AsyncMock,
-    existing_row: tuple[str, str, str],
+    existing_row: tuple[str, str | None, str | None],
     expected: SemanticEventClaimOutcome,
 ) -> None:
     insert_result = MagicMock()

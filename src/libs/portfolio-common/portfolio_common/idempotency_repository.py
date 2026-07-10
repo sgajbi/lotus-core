@@ -180,6 +180,12 @@ class IdempotencyRepository:
             )
         ).all()
         for existing_event_id, existing_semantic_key, existing_fingerprint in existing_rows:
+            if (
+                existing_event_id == event_id
+                and existing_semantic_key is None
+                and existing_fingerprint is None
+            ):
+                return SemanticEventClaimOutcome.PHYSICAL_DUPLICATE
             if existing_fingerprint != payload_fingerprint:
                 return SemanticEventClaimOutcome.SEMANTIC_CONFLICT
             if existing_event_id == event_id:
