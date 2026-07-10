@@ -241,17 +241,24 @@ def test_avco_quantity_restatements_preserve_source_basis(transaction_type: str)
 def test_avco_non_lot_corporate_action_and_rights_events_preserve_sources(
     transaction_type: str,
 ) -> None:
+    event = _raw_transaction(
+        transaction_id=f"{transaction_type}-EVENT",
+        transaction_type=transaction_type,
+        transaction_date="2026-01-02T00:00:00Z",
+        quantity="0",
+        gross_amount="100"
+        if transaction_type in {"CASH_CONSIDERATION", "RIGHTS_REFUND"}
+        else "0",
+    )
+    if transaction_type == "CASH_CONSIDERATION":
+        event.update(
+            allocated_cost_basis_local="40",
+            allocated_cost_basis_base="40",
+        )
+
     processed, errors, states = _process(
         _seed_buy(),
-        _raw_transaction(
-            transaction_id=f"{transaction_type}-EVENT",
-            transaction_type=transaction_type,
-            transaction_date="2026-01-02T00:00:00Z",
-            quantity="0",
-            gross_amount="100"
-            if transaction_type in {"CASH_CONSIDERATION", "RIGHTS_REFUND"}
-            else "0",
-        ),
+        event,
     )
 
     assert not errors
@@ -261,6 +268,10 @@ def test_avco_non_lot_corporate_action_and_rights_events_preserve_sources(
         Decimal("1000"),
         Decimal("1000"),
     )
+    if transaction_type == "CASH_CONSIDERATION":
+        assert processed[-1].realized_capital_pnl_base == Decimal("60")
+        assert processed[-1].realized_fx_pnl_base == Decimal(0)
+        assert processed[-1].realized_total_pnl_base == Decimal("60")
 
 
 def test_avco_fee_inclusive_cross_currency_sources_reconcile_local_and_base_cost() -> None:
