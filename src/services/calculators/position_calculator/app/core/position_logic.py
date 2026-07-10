@@ -1,5 +1,6 @@
 # src/services/calculators/position_calculator/app/core/position_logic.py
 import logging
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import List
@@ -25,6 +26,12 @@ from ..repositories.position_repository import PositionRepository
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class PositionCalculationResult:
+    position_record_count: int = 0
+    replay_queued: bool = False
+
+
 class PositionCalculator:
     """
     Handles position recalculation. Detects back-dated transactions and triggers
@@ -40,7 +47,7 @@ class PositionCalculator:
         repo: PositionRepository,
         position_state_repo: PositionStateRepository,
         outbox_repo: OutboxRepository,
-    ) -> None:
+    ) -> PositionCalculationResult:
         """
         Orchestrates recalculation and reprocessing triggers for a single transaction event.
         """
@@ -49,7 +56,7 @@ class PositionCalculator:
         transaction_date = event.transaction_date.date()
 
         if not await cls._event_epoch_is_current(event, db_session):
-            return
+            return PositionCalculationResult()
 
         current_state = await position_state_repo.get_or_create_state(portfolio_id, security_id)
         latest_position_history_date = await repo.get_latest_position_history_date(
@@ -69,7 +76,7 @@ class PositionCalculator:
         if replay_decision.should_queue_replay:
             if replay_decision.replay_watermark_date is None:
                 raise RuntimeError("Backdated replay decision did not include a replay watermark.")
-            await cls._queue_backdated_replay(
+            replay_queued = await cls._queue_backdated_replay(
                 event=event,
                 repo=repo,
                 position_state_repo=position_state_repo,
@@ -79,20 +86,21 @@ class PositionCalculator:
                 replay_watermark_date=replay_decision.replay_watermark_date,
                 latest_position_history_date=latest_position_history_date,
             )
-            return
+            return PositionCalculationResult(replay_queued=replay_queued)
 
-        await cls._recalculate_position_history(
+        position_record_count = await cls._recalculate_position_history(
             event=event,
             repo=repo,
             position_state_repo=position_state_repo,
             current_state=current_state,
             transaction_date=transaction_date,
         )
+        return PositionCalculationResult(position_record_count=position_record_count)
 
     @staticmethod
     async def _event_epoch_is_current(event: TransactionEvent, db_session: AsyncSession) -> bool:
         fencer = EpochFencer(db_session, service_name="position-calculator")
-        return await fencer.check(event)
+        return bool(await fencer.check(event))
 
     @classmethod
     async def _queue_backdated_replay(
@@ -106,7 +114,7 @@ class PositionCalculator:
         effective_completed_date: date,
         replay_watermark_date: date,
         latest_position_history_date: date | None,
-    ) -> None:
+    ) -> bool:
         portfolio_id = event.portfolio_id
         security_id = event.security_id
         cls._log_backdated_replay_detected(
@@ -122,7 +130,7 @@ class PositionCalculator:
         )
         if new_state is None:
             cls._log_stale_backdated_replay(event, current_state.epoch)
-            return
+            return False
 
         events_to_replay = await cls._backdated_replay_events(event, repo)
         logger.info(
@@ -135,6 +143,7 @@ class PositionCalculator:
             outbox_repo=outbox_repo,
             replay_epoch=new_state.epoch,
         )
+        return True
 
     @staticmethod
     def _log_backdated_replay_detected(
@@ -215,7 +224,7 @@ class PositionCalculator:
         position_state_repo: PositionStateRepository,
         current_state,
         transaction_date: date,
-    ) -> None:
+    ) -> int:
         portfolio_id = event.portfolio_id
         security_id = event.security_id
         message_epoch = event.epoch if event.epoch is not None else current_state.epoch
@@ -245,6 +254,7 @@ class PositionCalculator:
         logger.info(
             f"[Calculate] Staged {len(new_positions)} position records for Epoch {message_epoch}"
         )
+        return len(new_positions)
 
     @staticmethod
     async def _save_positions_and_rearm_generation(
