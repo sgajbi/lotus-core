@@ -338,6 +338,25 @@ Mode must be selected via policy:
 
 * `cash_consideration_realization_mode = UPSTREAM | DERIVE | NONE`
 
+### 12.4 Current lotus-core implementation posture (2026-07-10)
+
+The implemented correctness baseline is intentionally narrower than the complete policy target:
+
+* `REQUIRE_UPSTREAM_CASH_BASIS` is the active fail-closed behavior
+* `allocated_cost_basis_local` and `allocated_cost_basis_base` are mandatory on
+  `CASH_CONSIDERATION`
+* same-currency total P&L is derived as net proceeds less allocated basis, assigned to capital P&L,
+  with zero FX P&L
+* cross-currency capital and FX components must be supplied explicitly and reconcile to total P&L
+* `NONE` and `ALLOCATE_PRO_RATA_BY_VALUE` are not implemented and must not be inferred
+* product-leg cashflow classification is `CORPORATE_ACTION_PROCEEDS`, not `INCOME`
+* the linked `ADJUSTMENT` remains the actual cash-account settlement
+* Bundle A reconciliation uses target basis plus cash-allocated basis and fails supportability when
+  cash basis is absent
+
+Cash-in-lieu remains a separate fractional-overlay contract and is not covered by this implemented
+cash-consideration policy.
+
 ---
 
 ## 13. Position-Level Synthetic Flows (Security Legs)
@@ -555,6 +574,6 @@ It standardizes:
 * processing of security legs using existing CA transfer RFCs
 * explicit modeling of **true cash consideration** using `CASH_CONSIDERATION` marker + `ADJUSTMENT` settlement leg
 * basis allocation and reconciliation across securities and cash components
-* optional realized P&L representation/derivation for cash consideration (capital + FX)
+* policy-governed realized P&L representation/derivation for cash consideration (capital + FX)
 * strict separation of cash consideration from cash-in-lieu
 * deterministic ordering, idempotency, replay safety, and operationally safe event states

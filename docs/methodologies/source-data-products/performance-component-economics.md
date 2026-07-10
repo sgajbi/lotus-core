@@ -60,6 +60,10 @@ The contract source-authors these component families when evidence exists:
 | `fx_context` | `transactions.transaction_fx_rate`, `fx_contract_id` |
 
 Zero or absent fields remain zero or null. The product does not fabricate missing economics.
+Rows also expose `allocated_cost_basis_local` and `allocated_cost_basis_base` as transaction-level
+audit evidence for non-security consideration. These fields explain realized P&L but are not
+reported as a separate additive component family, because allocated basis is an input to the P&L
+equation rather than a gain, loss, fee, tax, income, or cashflow amount.
 
 `transaction_costs` component identity is normalized as `(transaction_id, lower(trim(fee_type)),
 upper(trim(currency)))`. The database enforces one row per normalized component. The response
