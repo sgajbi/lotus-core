@@ -191,7 +191,9 @@ async def test_cashflow_repository_income_cashflows_query_joins_epoch_matched_po
     assert "trim(position_state.security_id) = trim(cashflows.security_id)" in compiled_query
     assert "position_state.epoch = cashflows.epoch" in compiled_query.lower()
     assert "trim(cashflows.security_id) = 'SEC-IBM'" in compiled_query
-    assert "cashflows.classification = 'INCOME'" in compiled_query
+    assert "transactions.transaction_id = cashflows.transaction_id" in compiled_query
+    assert "transactions.transaction_type IN ('DIVIDEND', 'INTEREST')" in compiled_query
+    assert "cashflows.classification = 'INCOME'" not in compiled_query
     assert "cashflows.cashflow_date BETWEEN '2026-04-01' AND '2026-04-17'" in compiled_query
 
 
