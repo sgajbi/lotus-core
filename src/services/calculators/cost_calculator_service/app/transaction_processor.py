@@ -1,9 +1,18 @@
+from __future__ import annotations
+
 import logging
 import time
 from typing import Any
 
+from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+
 from .cost_engine.domain.models.error import ErroredTransaction
 from .cost_engine.domain.models.transaction import Transaction
+from .cost_engine.processing.cost_basis_strategies import (
+    AverageCostBasisStrategy,
+    CostBasisStrategy,
+    FIFOBasisStrategy,
+)
 from .cost_engine.processing.cost_calculator import CostCalculator
 from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_engine.processing.disposition_engine import DispositionEngine
@@ -13,6 +22,33 @@ from .cost_engine.processing.sorter import TransactionSorter
 from .monitoring import RECALCULATION_DEPTH, RECALCULATION_DURATION_SECONDS
 
 logger = logging.getLogger(__name__)
+
+
+def build_transaction_processor(
+    cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO,
+) -> TransactionProcessor:
+    """Build the production cost engine for the governed cost-basis method."""
+    error_reporter = ErrorReporter()
+    resolved_method = normalize_cost_basis_method(cost_basis_method)
+    strategy: CostBasisStrategy
+    if resolved_method is CostBasisMethod.AVCO:
+        strategy = AverageCostBasisStrategy()
+        logger.debug("Using AVCO strategy for cost basis calculation.")
+    else:
+        strategy = FIFOBasisStrategy()
+        logger.debug("Using FIFO strategy for cost basis calculation.")
+
+    disposition_engine = DispositionEngine(cost_basis_strategy=strategy)
+    return TransactionProcessor(
+        parser=TransactionParser(error_reporter=error_reporter),
+        sorter=TransactionSorter(),
+        disposition_engine=disposition_engine,
+        cost_calculator=CostCalculator(
+            disposition_engine=disposition_engine,
+            error_reporter=error_reporter,
+        ),
+        error_reporter=error_reporter,
+    )
 
 
 class TransactionProcessor:
