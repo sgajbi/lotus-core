@@ -514,6 +514,8 @@ class ValuationRepositoryBase:
                 "market_value_local": snapshot.market_value_local,
                 "unrealized_gain_loss": snapshot.unrealized_gain_loss,
                 "unrealized_gain_loss_local": snapshot.unrealized_gain_loss_local,
+                "unrealized_price_gain_loss": snapshot.unrealized_price_gain_loss,
+                "unrealized_fx_gain_loss": snapshot.unrealized_fx_gain_loss,
                 "valuation_status": snapshot.valuation_status,
             }
 
@@ -528,6 +530,8 @@ class ValuationRepositoryBase:
                 "market_value_local": stmt.excluded.market_value_local,
                 "unrealized_gain_loss": stmt.excluded.unrealized_gain_loss,
                 "unrealized_gain_loss_local": stmt.excluded.unrealized_gain_loss_local,
+                "unrealized_price_gain_loss": stmt.excluded.unrealized_price_gain_loss,
+                "unrealized_fx_gain_loss": stmt.excluded.unrealized_fx_gain_loss,
                 "valuation_status": stmt.excluded.valuation_status,
                 "updated_at": func.now(),
             }

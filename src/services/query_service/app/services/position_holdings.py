@@ -200,6 +200,8 @@ def position_valuation_data(
                 market_value=position_row.market_value,
                 cost_basis=position_row.cost_basis,
             ),
+            unrealized_price_gain_loss=getattr(position_row, "unrealized_price_gain_loss", None),
+            unrealized_fx_gain_loss=getattr(position_row, "unrealized_fx_gain_loss", None),
             market_value_local=position_row.market_value_local,
             unrealized_gain_loss_local=_unrealized_amount(
                 unrealized_amount=position_row.unrealized_gain_loss_local,
@@ -217,6 +219,8 @@ def position_valuation_data(
                 market_value_field="market_value",
                 cost_basis=position_row.cost_basis,
             ),
+            unrealized_price_gain_loss=fallback_valuation.get("unrealized_price_gain_loss"),
+            unrealized_fx_gain_loss=fallback_valuation.get("unrealized_fx_gain_loss"),
             market_value_local=fallback_valuation.get("market_value_local"),
             unrealized_gain_loss_local=_fallback_unrealized_amount(
                 fallback_valuation=fallback_valuation,
@@ -230,6 +234,8 @@ def position_valuation_data(
         market_price=None,
         market_value=position_row.cost_basis,
         unrealized_gain_loss=0,
+        unrealized_price_gain_loss=None,
+        unrealized_fx_gain_loss=None,
         market_value_local=position_row.cost_basis_local,
         unrealized_gain_loss_local=0,
     )

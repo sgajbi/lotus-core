@@ -585,6 +585,10 @@ class PositionRepository:
                 DailyPositionSnapshot.market_price.label("market_price"),
                 DailyPositionSnapshot.market_value.label("market_value"),
                 DailyPositionSnapshot.unrealized_gain_loss.label("unrealized_gain_loss"),
+                DailyPositionSnapshot.unrealized_price_gain_loss.label(
+                    "unrealized_price_gain_loss"
+                ),
+                DailyPositionSnapshot.unrealized_fx_gain_loss.label("unrealized_fx_gain_loss"),
                 DailyPositionSnapshot.market_value_local.label("market_value_local"),
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
@@ -612,6 +616,8 @@ class PositionRepository:
                 "market_price": row.get("market_price"),
                 "market_value": row.get("market_value"),
                 "unrealized_gain_loss": row.get("unrealized_gain_loss"),
+                "unrealized_price_gain_loss": row.get("unrealized_price_gain_loss"),
+                "unrealized_fx_gain_loss": row.get("unrealized_fx_gain_loss"),
                 "market_value_local": row.get("market_value_local"),
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
             }
@@ -645,6 +651,10 @@ class PositionRepository:
                 DailyPositionSnapshot.market_price.label("market_price"),
                 DailyPositionSnapshot.market_value.label("market_value"),
                 DailyPositionSnapshot.unrealized_gain_loss.label("unrealized_gain_loss"),
+                DailyPositionSnapshot.unrealized_price_gain_loss.label(
+                    "unrealized_price_gain_loss"
+                ),
+                DailyPositionSnapshot.unrealized_fx_gain_loss.label("unrealized_fx_gain_loss"),
                 DailyPositionSnapshot.market_value_local.label("market_value_local"),
                 DailyPositionSnapshot.unrealized_gain_loss_local.label(
                     "unrealized_gain_loss_local"
@@ -672,6 +682,8 @@ class PositionRepository:
                 "market_price": row.get("market_price"),
                 "market_value": row.get("market_value"),
                 "unrealized_gain_loss": row.get("unrealized_gain_loss"),
+                "unrealized_price_gain_loss": row.get("unrealized_price_gain_loss"),
+                "unrealized_fx_gain_loss": row.get("unrealized_fx_gain_loss"),
                 "market_value_local": row.get("market_value_local"),
                 "unrealized_gain_loss_local": row.get("unrealized_gain_loss_local"),
             }

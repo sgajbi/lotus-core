@@ -1,6 +1,5 @@
 import logging
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, cast
 
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
@@ -20,7 +19,7 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 
-from .logic.valuation_logic import ValuationLogic
+from .logic.valuation_logic import ValuationComponents, ValuationLogic
 from .repositories.valuation_repository import ValuationRepository
 
 logger = logging.getLogger(__name__)
@@ -285,7 +284,7 @@ class ValuationJobProcessor:
                 portfolio_currency=portfolio_currency,
             )
 
-        valuation_result = ValuationLogic.calculate_valuation(
+        valuation_result = ValuationLogic.calculate_valuation_components(
             quantity=snapshot.quantity,
             market_price=price.price,
             cost_basis_base=snapshot.cost_basis,
@@ -357,15 +356,15 @@ class ValuationJobProcessor:
         snapshot: DailyPositionSnapshot,
         price: MarketPrice,
         event: PortfolioValuationRequiredEvent,
-        valuation_result: tuple[Decimal, Decimal, Decimal, Decimal],
+        valuation_result: ValuationComponents,
     ) -> None:
         snapshot.market_price = price.price
-        (
-            snapshot.market_value,
-            snapshot.market_value_local,
-            snapshot.unrealized_gain_loss,
-            snapshot.unrealized_gain_loss_local,
-        ) = valuation_result
+        snapshot.market_value = valuation_result.market_value_base
+        snapshot.market_value_local = valuation_result.market_value_local
+        snapshot.unrealized_gain_loss = valuation_result.unrealized_total_base
+        snapshot.unrealized_gain_loss_local = valuation_result.unrealized_total_local
+        snapshot.unrealized_price_gain_loss = valuation_result.unrealized_price_base
+        snapshot.unrealized_fx_gain_loss = valuation_result.unrealized_fx_base
         snapshot.valuation_status = (
             VALUATION_VALUED_CURRENT
             if price.price_date == event.valuation_date
