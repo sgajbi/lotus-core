@@ -24,6 +24,13 @@ DATABASE_POOL_CONNECTIONS = Gauge(
     labelnames=("pool", "state"),
 )
 
+POSITION_HISTORY_REPLAY_LOCK_WAIT_SECONDS = Histogram(
+    "position_history_replay_lock_wait_seconds",
+    "Wait time for the transaction-scoped position history replay lock.",
+    labelnames=("outcome",),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
 
 def db_timer(operation: str):
     """
@@ -37,6 +44,10 @@ def db_timer(operation: str):
 
 def set_database_pool_connections(*, pool: str, state: str, count: int) -> None:
     DATABASE_POOL_CONNECTIONS.labels(pool, state).set(max(0, count))
+
+
+def observe_position_history_replay_lock_wait(*, outcome: str, seconds: float) -> None:
+    POSITION_HISTORY_REPLAY_LOCK_WAIT_SECONDS.labels(outcome=outcome).observe(max(0.0, seconds))
 
 
 # --------------------------------------------------------------------------------------

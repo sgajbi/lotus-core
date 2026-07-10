@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -34,9 +34,14 @@ async def test_get_latest_completed_snapshot_date_trims_portfolio_and_security_i
 
 async def test_acquire_position_history_replay_lock_uses_stable_normalized_key():
     db_session = AsyncMock()
-    repository = PositionRepository(db_session)
+    clock = MagicMock(side_effect=[10.0, 10.125])
+    repository = PositionRepository(db_session, clock=clock)
 
-    await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
+    with patch(
+        "src.services.calculators.position_calculator.app.repositories.position_repository."
+        "observe_position_history_replay_lock_wait"
+    ) as observe_wait:
+        await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
 
     statement = db_session.execute.call_args.args[0]
     assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
@@ -46,6 +51,27 @@ async def test_acquire_position_history_replay_lock_uses_stable_normalized_key()
     assert _position_history_replay_lock_key(" PORT_COST_01 ", " SEC01 ", 42) == (
         _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
     )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+
+
+async def test_acquire_position_history_replay_lock_records_failure_without_swallowing():
+    db_session = AsyncMock()
+    db_session.execute.side_effect = RuntimeError("lock unavailable")
+    repository = PositionRepository(
+        db_session,
+        clock=MagicMock(side_effect=[20.0, 20.25]),
+    )
+
+    with (
+        patch(
+            "src.services.calculators.position_calculator.app.repositories.position_repository."
+            "observe_position_history_replay_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="lock unavailable"),
+    ):
+        await repository.acquire_position_history_replay_lock("P1", "S1", 7)
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
 
 
 async def test_find_open_security_ids_as_of_trims_portfolio_and_security_id_partition():
