@@ -87,5 +87,6 @@ correlation ID propagation, health/readiness completeness, and inventory enforce
 new runtime web apps from bypassing the shared metrics policy. The combined transaction-processing
 target now has bounded stage outcome/latency and committed-lag metrics. Shared outbox metrics already
 expose pending and failed publication state, and shared readiness exports async DB pool state. Trace
-export, target dashboards/alerts, support-runbook closure, and deployed evidence remain before
-cutover.
+export, evidence-based alerts, canonical platform dashboard publication, support-runbook closure,
+and deployed evidence remain before cutover. The app-local focused transaction-processing dashboard
+is implemented as pre-cutover diagnostic evidence.

@@ -92,6 +92,10 @@ The same target health surface samples `database_pool_connections` after success
 readiness. Operators can correlate checked-out capacity and overflow with transaction latency,
 consumer lag, and outbox age without adding persistence access to calculation code.
 
+Use the app-local `Lotus Core Transaction Processing` dashboard to view those signals together.
+Alert thresholds remain deliberately unset until deployed baseline and recovery measurements are
+available; local engine timings are not production SLO evidence.
+
 Shutdown is drain-first: polling stops, already-polled replay work completes and commits, and only
 then are Kafka resources closed. Retry exhaustion, DLQ publication, and offset handling remain owned
 by the shared consumer; the replay delivery mapper and application use case do not implement a

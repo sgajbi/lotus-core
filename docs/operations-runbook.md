@@ -76,6 +76,12 @@ sustained positive `overflow` together with processing latency or lag. Missing s
 database readiness probe has not completed successfully and should be interpreted with
 `health_dependency_check_total`, not as zero utilization.
 
+The app-local `Lotus Core Transaction Processing` Grafana dashboard correlates separate live and
+replay partition lag with stage p95 duration, failed/rejected outcomes, async pool state, and outbox
+backlog. It is a pre-cutover diagnostic view. Do not treat its absence of thresholds as an SLO; add
+alerts only after deployed baseline and failure-recovery evidence is reviewed and the equivalent
+dashboard is published through canonical `lotus-platform` monitoring.
+
 ## Runtime Version Metadata
 
 Runtime-facing API services and worker health web apps expose:

@@ -1661,6 +1661,9 @@ Most relevant current governance:
      Sample async database pool state only from shared infrastructure/readiness after a successful
      dependency check. Use bounded pool/state gauges, normalize negative prefill overflow, and never
      let telemetry failure alter readiness or financial transaction behavior.
+     Keep combined-runtime operating signals together in the focused transaction-processing
+     dashboard. Do not invent lag, latency, pool, or outbox alert thresholds from unit/engine-only
+     evidence; derive and review them from deployed baseline and failure-recovery measurements.
      Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
      attempt and preserve one compatibility processed event per replay, while semantic fences and
      deterministic rebuilds must keep cashflow and final position state singular. Do not collapse
