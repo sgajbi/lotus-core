@@ -9,6 +9,66 @@ from src.services.calculators.position_valuation_calculator.app.logic.valuation_
 )
 
 
+def test_unrealized_pnl_decomposes_into_price_fx_and_total_components() -> None:
+    components = ValuationLogic.calculate_valuation_components(
+        quantity=Decimal("100"),
+        market_price=Decimal("12"),
+        cost_basis_base=Decimal("1500"),
+        cost_basis_local=Decimal("1000"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="SGD",
+        instrument_to_portfolio_fx_rate=Decimal("1.6"),
+    )
+
+    assert components is not None
+    assert components.market_value_local == Decimal("1200")
+    assert components.market_value_base == Decimal("1920.0")
+    assert components.unrealized_price_local == Decimal("200")
+    assert components.unrealized_price_base == Decimal("320.0")
+    assert components.unrealized_fx_base == Decimal("100.0")
+    assert components.unrealized_total_local == Decimal("200")
+    assert components.unrealized_total_base == Decimal("420.0")
+    assert components.unrealized_total_base == (
+        components.unrealized_price_base + components.unrealized_fx_base
+    )
+
+
+def test_same_currency_unrealized_pnl_has_no_fx_component() -> None:
+    components = ValuationLogic.calculate_valuation_components(
+        quantity=Decimal("100"),
+        market_price=Decimal("12"),
+        cost_basis_base=Decimal("1000"),
+        cost_basis_local=Decimal("1000"),
+        price_currency="SGD",
+        instrument_currency="SGD",
+        portfolio_currency="SGD",
+    )
+
+    assert components is not None
+    assert components.unrealized_price_base == Decimal("200")
+    assert components.unrealized_fx_base == Decimal("0")
+    assert components.unrealized_total_base == Decimal("200")
+
+
+def test_zero_position_has_zero_unrealized_pnl_components() -> None:
+    components = ValuationLogic.calculate_valuation_components(
+        quantity=Decimal("0"),
+        market_price=Decimal("12"),
+        cost_basis_base=Decimal("0"),
+        cost_basis_local=Decimal("0"),
+        price_currency="EUR",
+        instrument_currency="EUR",
+        portfolio_currency="SGD",
+        instrument_to_portfolio_fx_rate=Decimal("1.6"),
+    )
+
+    assert components is not None
+    assert components.unrealized_price_base == Decimal("0")
+    assert components.unrealized_fx_base == Decimal("0")
+    assert components.unrealized_total_base == Decimal("0")
+
+
 def test_calculate_valuation_with_gain_same_currency():
     """
     Tests a standard valuation scenario resulting in an unrealized gain
