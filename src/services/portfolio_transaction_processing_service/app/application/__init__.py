@@ -3,6 +3,11 @@
 from .commands import ProcessTransactionCommand, TransactionEventMetadata
 from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .process_transaction import ProcessTransactionUseCase
+from .reconcile_average_cost_pools import (
+    ReconcileAverageCostPoolsCommand,
+    ReconcileAverageCostPoolsResult,
+    ReconcileAverageCostPoolsUseCase,
+)
 from .replay_booked_transaction import (
     BookedTransactionReplayDependencyUnavailable,
     BookedTransactionReplayInvariantViolation,
@@ -20,6 +25,9 @@ __all__ = [
     "ProcessTransactionCommand",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
+    "ReconcileAverageCostPoolsCommand",
+    "ReconcileAverageCostPoolsResult",
+    "ReconcileAverageCostPoolsUseCase",
     "ReplayBookedTransactionCommand",
     "ReplayBookedTransactionResult",
     "ReplayBookedTransactionUseCase",
