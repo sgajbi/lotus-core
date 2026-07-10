@@ -7,6 +7,7 @@ from cost_engine.domain.models.transaction import (
 )
 from cost_engine.processing.sorter import (
     TransactionSorter,
+    transaction_order_key,
 )
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
@@ -143,6 +144,33 @@ def test_sort_by_quantity_on_same_day(sorter):
     # Assert
     # The final order should be large then small
     assert [t.transaction_id for t in sorted_list] == ["t_large", "t_small"]
+
+
+def test_transaction_order_key_is_the_sorter_total_order(sorter):
+    same_day = datetime(2026, 1, 10)
+    transactions = [
+        _transaction(
+            transaction_id="target-2",
+            transaction_date=same_day,
+            transaction_type="DEMERGER_IN",
+            quantity=Decimal("2"),
+        ),
+        _transaction(
+            transaction_id="source",
+            transaction_date=same_day,
+            transaction_type="DEMERGER_OUT",
+        ),
+        _transaction(
+            transaction_id="target-1",
+            transaction_date=same_day,
+            transaction_type="DEMERGER_IN",
+            quantity=Decimal("3"),
+        ),
+    ]
+
+    assert sorter.sort_transactions([], transactions.copy()) == sorted(
+        transactions, key=transaction_order_key
+    )
 
 
 def test_sort_bundle_a_dependency_and_target_ordering(sorter):
