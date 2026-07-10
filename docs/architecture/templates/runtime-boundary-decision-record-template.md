@@ -7,6 +7,8 @@ Choose one:
 1. `runtime-split-approved`
 2. `runtime-split-rejected`
 3. `current-state-revalidation-required`
+4. `runtime-consolidation-planned`
+5. `runtime-consolidation-target`
 
 ## Proposed Boundary
 
