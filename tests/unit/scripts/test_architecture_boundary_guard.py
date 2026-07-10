@@ -108,6 +108,35 @@ def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monk
     ]
 
 
+def test_transaction_processing_application_rejects_event_dto_import(tmp_path, monkeypatch) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "portfolio_transaction_processing_service"
+        / "app"
+        / "application"
+        / "process_transaction.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from portfolio_common.events import TransactionEvent\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports(
+        [source],
+        rules=DIRECT_IMPORT_BOUNDARY_RULES,
+    )
+
+    assert findings == [
+        "src/services/portfolio_transaction_processing_service/app/application/"
+        "process_transaction.py:1: transaction processing domain and application must not "
+        "import event DTOs: disallowed direct import 'portfolio_common.events'"
+    ]
+
+
 def test_direct_import_boundary_ignores_allowed_dto_import(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path
     router = (

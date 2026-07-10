@@ -34,6 +34,12 @@ The first representative command/result migrations are:
    `src/services/query_service/app/application/core_snapshot.py` defines the canonical snapshot
    identity command used for request fingerprinting. `CoreSnapshotService` must build snapshot
    request fingerprints from that command payload instead of API DTO serialization.
+4. Portfolio transaction processing workflow:
+   `portfolio_transaction_processing_service.app.domain.BookedTransaction` is the framework-neutral
+   transaction model and `app.application.ProcessTransactionCommand` carries governed event and
+   idempotency metadata. Kafka delivery must map `TransactionEvent` through
+   `app.delivery.kafka.transaction_event_mapper`; target domain/application code must not import
+   the Pydantic event contract.
 
 ## Enforcement
 
