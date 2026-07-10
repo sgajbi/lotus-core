@@ -10,9 +10,10 @@ To guarantee correctness in the face of back-dated or corrected transactions, th
 2.  **Create Timeline**: It combines the new transaction with the fetched historical ones.
 3.  **Sort**: It sorts the complete list of transactions chronologically.
 4.  **Recalculate**: It processes the entire sorted timeline from the very beginning, recalculating the cost basis and realized P&L for every single transaction in the sequence using the portfolio's configured cost basis method.
-5.  **Persist**: It updates the database record for the new transaction with the final, correct calculated values.
+5.  **Persist Affected Suffix**: It updates the incoming transaction and every later transaction whose calculated cost or realized P&L can be affected, in deterministic timeline order and one database transaction.
+6.  **Publish Once**: It publishes only the incoming processed transaction event. The combined position path rebuilds from the corrected canonical rows, so publishing the corrected suffix would apply later positions twice.
 
-This method, while computationally intensive, is deterministic and robust, ensuring that the final state is always correct regardless of the order in which data arrives.
+Any engine error in the recalculated timeline fails the operation before suffix persistence. This method, while computationally intensive, is deterministic and robust, ensuring that later canonical cost rows do not remain stale when data arrives out of order.
 
 ## 2. Cost Basis Strategy: First-In, First-Out (FIFO)
 
