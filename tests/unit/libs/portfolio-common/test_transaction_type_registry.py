@@ -11,6 +11,7 @@ from portfolio_common.transaction_domain.portfolio_flow_guardrails import (
     PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES,
 )
 from portfolio_common.transaction_type_registry import (
+    INCOME_RECOGNITION_TRANSACTION_TYPES,
     MIGRATION_ONLY,
     TARGET_NOT_IMPLEMENTED,
     TARGET_NOT_IMPLEMENTED_TRANSACTION_TYPES,
@@ -233,12 +234,30 @@ def test_registry_definitions_are_normalized_and_complete() -> None:
         assert definition.cash_effect
         assert definition.lot_behavior
         assert definition.settlement_behavior
+        assert definition.income_behavior
         assert definition.calculation_support_status
 
 
 def test_registry_mapping_is_read_only() -> None:
     with pytest.raises(TypeError):
         TRANSACTION_TYPE_REGISTRY["NEW_TYPE"] = require_registered_transaction_type("BUY")
+
+
+def test_income_recognition_types_are_explicit_and_exclude_cash_consideration() -> None:
+    assert INCOME_RECOGNITION_TRANSACTION_TYPES == {"DIVIDEND", "INTEREST"}
+    assert require_registered_transaction_type("DIVIDEND").income_behavior == (
+        "distribution_income"
+    )
+    assert require_registered_transaction_type("INTEREST").income_behavior == "interest_income"
+    assert require_registered_transaction_type("CASH_CONSIDERATION").income_behavior == "none"
+
+
+def test_every_production_income_family_type_has_income_behavior() -> None:
+    assert {
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed and definition.lifecycle_family == "income"
+    } == INCOME_RECOGNITION_TRANSACTION_TYPES
 
 
 def test_registry_lookup_normalizes_codes_and_rejects_unknowns() -> None:

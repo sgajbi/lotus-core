@@ -13,6 +13,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.transaction_type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -223,6 +224,7 @@ class CashflowRepository:
         state_security_id = func.trim(PositionState.security_id)
         stmt = (
             select(Cashflow)
+            .join(Transaction, Transaction.transaction_id == Cashflow.transaction_id)
             .join(
                 PositionState,
                 and_(
@@ -235,7 +237,7 @@ class CashflowRepository:
                 Cashflow.portfolio_id == portfolio_id,
                 cashflow_security_id == security_id,
                 Cashflow.cashflow_date.between(start_date, end_date),
-                Cashflow.classification == "INCOME",
+                Transaction.transaction_type.in_(INCOME_RECOGNITION_TRANSACTION_TYPES),
             )
         )
         result = await self.db.execute(stmt)

@@ -28,6 +28,7 @@ class TransactionTypeDefinition:
     cash_effect: str
     lot_behavior: str
     settlement_behavior: str
+    income_behavior: str
     calculation_support_status: str
     production_booking_allowed: bool
 
@@ -41,6 +42,7 @@ def _definition(
     cash_effect: str,
     lot_behavior: str,
     settlement_behavior: str,
+    income_behavior: str = "none",
     calculation_support_status: str = SUPPORTED,
     production_booking_allowed: bool = True,
 ) -> TransactionTypeDefinition:
@@ -52,6 +54,7 @@ def _definition(
         cash_effect=cash_effect,
         lot_behavior=lot_behavior,
         settlement_behavior=settlement_behavior,
+        income_behavior=income_behavior,
         calculation_support_status=calculation_support_status,
         production_booking_allowed=production_booking_allowed,
     )
@@ -111,6 +114,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         cash_effect="inflow",
         lot_behavior="none",
         settlement_behavior="requires_cash_leg",
+        income_behavior="interest_income",
     ),
     "DIVIDEND": _definition(
         "DIVIDEND",
@@ -120,6 +124,7 @@ _REGISTRY: dict[str, TransactionTypeDefinition] = {
         cash_effect="inflow",
         lot_behavior="none",
         settlement_behavior="requires_cash_leg",
+        income_behavior="distribution_income",
     ),
     "DEPOSIT": _definition(
         "DEPOSIT",
@@ -493,6 +498,11 @@ PRODUCTION_BOOKING_TRANSACTION_TYPES = frozenset(
     code
     for code, definition in TRANSACTION_TYPE_REGISTRY.items()
     if definition.production_booking_allowed
+)
+INCOME_RECOGNITION_TRANSACTION_TYPES = frozenset(
+    code
+    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+    if definition.production_booking_allowed and definition.income_behavior != "none"
 )
 TARGET_NOT_IMPLEMENTED_TRANSACTION_TYPES = frozenset(_TARGET_NOT_IMPLEMENTED_TYPES)
 
