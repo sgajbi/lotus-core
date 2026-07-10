@@ -63,8 +63,9 @@ The commands write `output/cost-history-capacity-profile.json` and
 `output/cost-processing-mode-capacity-profile.json`. They characterize parser, sorter, FIFO/AVCO,
 ordered lot opening, ordered disposal, and backdated rebuild engine cost; they do not certify
 deployed throughput. FIFO availability checks are constant-time and AVCO source allocation uses
-lazy aggregate scales. Large open-source-lot restoration on state-dependent disposal remains a
-measured hotspot and a cutover capacity item.
+lazy aggregate scales. Ordered FIFO disposal streams only the oldest source lots needed to cover
+the requested quantity and updates only that selected set. Full rebuilds, basis transfers, and
+AVCO retain complete snapshots; large AVCO source restoration remains a measured cutover hotspot.
 
 ## Mixed corporate-action cash consideration
 
