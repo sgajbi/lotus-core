@@ -6,6 +6,7 @@ from cost_engine.processing.cost_objects import OpenLotState
 from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
     AVERAGE_COST_POOL_STATE_VERSION,
     AverageCostPoolCheckpoint,
+    AverageCostPoolTransition,
 )
 
 
@@ -117,3 +118,87 @@ def test_checkpoint_compatibility_requires_version_and_book_identity() -> None:
         cost_base=Decimal("11"),
         state_version="stale",
     ).is_compatible(portfolio_id="P1", instrument_id="I1", security_id="S1")
+
+
+def _open_state(quantity: str, cost_local: str, cost_base: str) -> OpenLotState:
+    return OpenLotState(
+        quantity=Decimal(quantity),
+        cost_local=Decimal(cost_local),
+        cost_base=Decimal(cost_base),
+    )
+
+
+def _open_checkpoint() -> AverageCostPoolCheckpoint:
+    return AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        quantity=Decimal("15"),
+        cost_local=Decimal("180"),
+        cost_base=Decimal("195"),
+    )
+
+
+def test_disposal_transition_preserves_existing_representative_and_reduces_pool() -> None:
+    transition = AverageCostPoolTransition(
+        before=_open_checkpoint(),
+        existing_sources_after=_open_state("9", "108", "117"),
+        explicit_sources_after={},
+    )
+
+    assert transition.after == AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        quantity=Decimal("9"),
+        cost_local=Decimal("108"),
+        cost_base=Decimal("117"),
+    )
+
+
+def test_opening_transition_adds_explicit_source_and_promotes_its_lineage() -> None:
+    transition = AverageCostPoolTransition(
+        before=_open_checkpoint(),
+        existing_sources_after=_open_state("15", "180", "195"),
+        explicit_sources_after={"BUY-3": _open_state("5", "70", "75")},
+    )
+
+    assert transition.after.representative_source_transaction_id == "BUY-3"
+    assert transition.after.quantity == Decimal("20")
+    assert transition.after.cost_local == Decimal("250")
+    assert transition.after.cost_base == Decimal("270")
+
+
+def test_full_close_transition_removes_representative_lineage() -> None:
+    transition = AverageCostPoolTransition(
+        before=_open_checkpoint(),
+        existing_sources_after=_open_state("0", "0", "0"),
+        explicit_sources_after={},
+    )
+
+    assert transition.after.representative_source_transaction_id is None
+    assert transition.after.quantity == Decimal(0)
+
+
+@pytest.mark.parametrize(
+    ("existing_after", "explicit_after"),
+    [
+        (_open_state("16", "180", "195"), {}),
+        (_open_state("15", "181", "195"), {}),
+        (_open_state("15", "180", "196"), {}),
+        (_open_state("0", "1", "0"), {}),
+        (_open_state("15", "180", "195"), {" ": _open_state("1", "1", "1")}),
+    ],
+)
+def test_transition_rejects_invalid_source_allocation(
+    existing_after: OpenLotState,
+    explicit_after: dict[str, OpenLotState],
+) -> None:
+    with pytest.raises(ValueError):
+        AverageCostPoolTransition(
+            before=_open_checkpoint(),
+            existing_sources_after=existing_after,
+            explicit_sources_after=explicit_after,
+        )

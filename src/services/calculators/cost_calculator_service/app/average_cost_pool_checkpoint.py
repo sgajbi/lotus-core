@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from types import MappingProxyType
 from typing import Mapping
 
 from .cost_engine.processing.cost_objects import OpenLotState
@@ -90,3 +91,74 @@ class AverageCostPoolCheckpoint:
             cost_local=self.cost_local,
             cost_base=self.cost_base,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class AverageCostPoolTransition:
+    before: AverageCostPoolCheckpoint
+    existing_sources_after: OpenLotState
+    explicit_sources_after: Mapping[str, OpenLotState]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "explicit_sources_after",
+            MappingProxyType(dict(self.explicit_sources_after)),
+        )
+        _validate_open_lot_state(self.existing_sources_after, field_name="existing_sources_after")
+        for source_transaction_id, state in self.explicit_sources_after.items():
+            if not source_transaction_id.strip():
+                raise ValueError("Explicit average cost source transaction ID must not be blank")
+            _validate_open_lot_state(state, field_name=f"explicit source {source_transaction_id}")
+        if (
+            self.existing_sources_after.quantity > self.before.quantity
+            or self.existing_sources_after.cost_local > self.before.cost_local
+            or self.existing_sources_after.cost_base > self.before.cost_base
+        ):
+            raise ValueError("Existing average cost sources cannot increase during a transition")
+
+    @property
+    def after(self) -> AverageCostPoolCheckpoint:
+        explicit_quantity = sum(
+            (state.quantity for state in self.explicit_sources_after.values()), Decimal(0)
+        )
+        explicit_cost_local = sum(
+            (state.cost_local for state in self.explicit_sources_after.values()), Decimal(0)
+        )
+        explicit_cost_base = sum(
+            (state.cost_base for state in self.explicit_sources_after.values()), Decimal(0)
+        )
+        representative_source_transaction_id = next(
+            (
+                source_transaction_id
+                for source_transaction_id, state in reversed(
+                    tuple(self.explicit_sources_after.items())
+                )
+                if state.quantity > Decimal(0)
+            ),
+            (
+                self.before.representative_source_transaction_id
+                if self.existing_sources_after.quantity > Decimal(0)
+                else None
+            ),
+        )
+        return AverageCostPoolCheckpoint(
+            portfolio_id=self.before.portfolio_id,
+            instrument_id=self.before.instrument_id,
+            security_id=self.before.security_id,
+            representative_source_transaction_id=representative_source_transaction_id,
+            quantity=self.existing_sources_after.quantity + explicit_quantity,
+            cost_local=self.existing_sources_after.cost_local + explicit_cost_local,
+            cost_base=self.existing_sources_after.cost_base + explicit_cost_base,
+        )
+
+
+def _validate_open_lot_state(state: OpenLotState, *, field_name: str) -> None:
+    if state.quantity < Decimal(0):
+        raise ValueError(f"{field_name} quantity must be nonnegative")
+    if state.cost_local < Decimal(0) or state.cost_base < Decimal(0):
+        raise ValueError(f"{field_name} basis must be nonnegative")
+    if state.quantity == Decimal(0) and (
+        state.cost_local != Decimal(0) or state.cost_base != Decimal(0)
+    ):
+        raise ValueError(f"{field_name} closed quantity must have zero basis")
