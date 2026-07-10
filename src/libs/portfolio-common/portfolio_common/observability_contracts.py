@@ -5,6 +5,7 @@ TELEMETRY_METRIC_ALLOWED_LABELS: tuple[str, ...] = (
     "classification",
     "compression",
     "consumer_group",
+    "cost_basis_method",
     "dataset_type",
     "dependency",
     "endpoint",
@@ -16,6 +17,7 @@ TELEMETRY_METRIC_ALLOWED_LABELS: tuple[str, ...] = (
     "group_id",
     "job_type",
     "method",
+    "mode",
     "outcome",
     "profile",
     "queue",
@@ -68,6 +70,8 @@ PORTFOLIO_SUPPORTABILITY_METRIC_LABELS: tuple[str, ...] = (
 )
 
 SERVICE_LOCAL_METRIC_OWNERS: dict[str, str] = {
+    "cost_processing_execution_total": "cost_calculator_service",
+    "cost_processing_open_lots_restored": "cost_calculator_service",
     "event_processing_latency_seconds": "persistence_service",
     "events_dlqd_total": "persistence_service",
     "events_processed_total": "persistence_service",
