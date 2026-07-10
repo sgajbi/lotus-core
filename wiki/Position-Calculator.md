@@ -33,6 +33,12 @@ For a processed transaction event, the service:
 When a transaction is back-dated, the runtime can trigger a broader reprocessing path instead of
 pretending the new state can be patched in safely with a single forward update.
 
+For mixed corporate actions, source-out and target-in security legs own security quantity and basis
+movement. `CASH_CONSIDERATION` does not change security quantity or apply its disposed basis to the
+remaining security position a second time. The linked `ADJUSTMENT` updates the cash instrument
+position. Current security basis plus child security basis plus cash-disposed basis therefore
+reconciles to original basis.
+
 ## Consolidation transition
 
 The deployed compatibility worker advances the epoch and queues ordered replay events on

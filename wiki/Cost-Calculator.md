@@ -66,6 +66,22 @@ deployed throughput. FIFO availability checks are constant-time and AVCO source 
 lazy aggregate scales. Large open-source-lot restoration on state-dependent disposal remains a
 measured hotspot and a cutover capacity item.
 
+## Mixed corporate-action cash consideration
+
+True cash consideration is processed as a basis disposal, not income. The product marker requires
+source-owned allocated local and base basis. Same-currency processing derives realized capital P&L
+as net proceeds less allocated basis and records zero FX P&L. Cross-currency processing requires an
+explicit capital/FX split that reconciles to total P&L.
+
+Bundle A reconciliation uses:
+
+```text
+source basis out = target basis in + cash-allocated basis
+```
+
+Missing cash basis fails closed and creates `insufficient_cash_basis` reconciliation evidence.
+Cash-in-lieu remains a distinct fractional-overlay contract.
+
 ## Data it owns
 
 Primary durable outputs include:
