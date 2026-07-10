@@ -91,7 +91,8 @@
       "evidence": [
         "tests/integration/services/calculators/cost_calculator_service/test_int_cost_consumer_persistence.py",
         "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py",
-        "tests/unit/services/calculators/position_calculator/consumers/test_position_calculator_consumer.py"
+        "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py"
       ],
       "deterministic_primitives": [
         "explicit transaction ids",

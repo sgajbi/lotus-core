@@ -20,8 +20,9 @@
 - Replay-safe writes use idempotency repository and natural business keys.
 - Evidence:
   - `src/libs/portfolio-common/portfolio_common/idempotency_repository.py`
-  - `src/services/calculators/position_calculator/app/consumers/transaction_event_consumer.py`
-  - `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`
+  - `src/services/portfolio_transaction_processing_service/app/application/process_transaction.py`
+  - `src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_unit_of_work.py`
+  - `src/services/portfolio_transaction_processing_service/app/delivery/kafka/transaction_processing_consumer.py`
   - `src/services/calculators/position_valuation_calculator/app/consumers/*`
 
 ## Atomicity and Transaction Boundaries
