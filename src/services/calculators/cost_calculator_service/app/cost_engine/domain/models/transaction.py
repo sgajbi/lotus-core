@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, cast
 
 
 def _iso_datetime_text(value: str) -> str:
@@ -84,7 +84,7 @@ def _model_dump(
 ) -> dict[str, Any]:
     excluded_fields = exclude or set()
     payload: dict[str, Any] = {}
-    for field in fields(instance):
+    for field in fields(cast(Any, instance)):
         if field.name == "_extra_fields" or field.name in excluded_fields:
             continue
         value = getattr(instance, field.name)
@@ -268,6 +268,11 @@ class Transaction:
                 if field_name not in {field.name for field in fields(Transaction)}:
                     copied._extra_fields[field_name] = value
         return copied
+
+    def set_calculated_field(self, field_name: str, value: Any) -> None:
+        """Record a calculated extension field for attribute access and serialization."""
+        setattr(self, field_name, value)
+        self._extra_fields[field_name] = value
 
     def model_dump(
         self,
