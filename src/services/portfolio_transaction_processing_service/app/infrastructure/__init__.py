@@ -2,8 +2,10 @@
 
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
 from .composition import (
+    CanonicalBookedTransactionReplayerFactory,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_replay_booked_transaction_use_case,
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
@@ -19,15 +21,17 @@ from .transaction_replay_adapter import (
 )
 
 __all__ = [
+    "BookedTransactionReplayCardinalityError",
+    "CanonicalBookedTransactionReplayerFactory",
+    "CanonicalTransactionReplayer",
     "CashflowProcessingCompatibilityAdapter",
     "CostProcessingCompatibilityAdapter",
     "PositionProcessingCompatibilityAdapter",
-    "SqlAlchemyTransactionIdempotencyAdapter",
-    "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
-    "SqlAlchemyTransactionProcessingUnitOfWork",
-    "BookedTransactionReplayCardinalityError",
-    "CanonicalTransactionReplayer",
     "SqlAlchemyBookedTransactionReplayAdapter",
+    "SqlAlchemyTransactionIdempotencyAdapter",
+    "SqlAlchemyTransactionProcessingUnitOfWork",
+    "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
     "build_process_transaction_use_case",
+    "build_replay_booked_transaction_use_case",
 ]
