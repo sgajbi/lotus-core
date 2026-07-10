@@ -535,6 +535,12 @@ def test_normalized_calculation_lookup_indexes_are_declared():
                 "position_history.position_date DESC",
                 "position_history.id DESC",
             ],
+            "ix_pos_hist_norm_port_sec_epoch_txn": [
+                "trim(position_history.portfolio_id)",
+                "trim(position_history.security_id)",
+                "position_history.epoch",
+                "trim(position_history.transaction_id)",
+            ],
         },
         DailyPositionSnapshot: {
             "ix_daily_snap_norm_port_sec_date_epoch": [

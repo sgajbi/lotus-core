@@ -162,6 +162,13 @@ class PositionHistory(Base):
             id.desc(),
         ),
         Index(
+            "ix_pos_hist_norm_port_sec_epoch_txn",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            "epoch",
+            func.trim(transaction_id),
+        ),
+        Index(
             "ix_pos_hist_port_norm_sec_date_id",
             "portfolio_id",
             func.trim(security_id),
