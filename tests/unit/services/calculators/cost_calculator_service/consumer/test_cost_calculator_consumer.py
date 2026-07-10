@@ -1000,10 +1000,10 @@ async def test_consumer_selects_avco_strategy_for_portfolio(
     # We patch the strategy classes to act as spies, checking if they were instantiated.
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.FIFOBasisStrategy"
+            "src.services.calculators.cost_calculator_service.app.transaction_processor.FIFOBasisStrategy"
         ) as mock_fifo,
         patch(
-            "src.services.calculators.cost_calculator_service.app.consumer.AverageCostBasisStrategy"
+            "src.services.calculators.cost_calculator_service.app.transaction_processor.AverageCostBasisStrategy"
         ) as mock_avco,
     ):
         # ACT

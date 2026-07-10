@@ -55,18 +55,9 @@ from .cost_calculation_processor import (
     CostCalculationProcessorDependencyFactory,
     PortfolioNotFoundError,
 )
-from .cost_engine.processing.cost_basis_strategies import (
-    AverageCostBasisStrategy,
-    FIFOBasisStrategy,
-)
-from .cost_engine.processing.cost_calculator import CostCalculator
 from .cost_engine.processing.cost_objects import OpenLotState
-from .cost_engine.processing.disposition_engine import DispositionEngine
-from .cost_engine.processing.error_reporter import ErrorReporter
-from .cost_engine.processing.parser import TransactionParser
-from .cost_engine.processing.sorter import TransactionSorter
 from .repository import CostCalculatorRepository
-from .transaction_processor import TransactionProcessor
+from .transaction_processor import TransactionProcessor, build_transaction_processor
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -175,33 +166,7 @@ class CostCalculationWorkflow:
     def _get_transaction_processor(
         self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
     ) -> TransactionProcessor:
-        """
-        Builds and returns an instance of the TransactionProcessor, injecting
-        the specified cost basis strategy.
-        """
-        error_reporter = ErrorReporter()
-        parser = TransactionParser(error_reporter=error_reporter)
-        sorter = TransactionSorter()
-
-        resolved_method = normalize_cost_basis_method(cost_basis_method)
-        if resolved_method is CostBasisMethod.AVCO:
-            strategy = AverageCostBasisStrategy()
-            logger.debug("Using AVCO strategy for cost basis calculation.")
-        else:
-            strategy = FIFOBasisStrategy()
-            logger.debug("Using FIFO strategy for cost basis calculation.")
-
-        disposition_engine = DispositionEngine(cost_basis_strategy=strategy)
-        cost_calculator = CostCalculator(
-            disposition_engine=disposition_engine, error_reporter=error_reporter
-        )
-        return TransactionProcessor(
-            parser=parser,
-            sorter=sorter,
-            disposition_engine=disposition_engine,
-            cost_calculator=cost_calculator,
-            error_reporter=error_reporter,
-        )
+        return build_transaction_processor(cost_basis_method)
 
     @staticmethod
     def _record_lifecycle_stage(transaction_type: str, stage: str, status: str) -> None:
