@@ -9,7 +9,8 @@ from ...application import ProcessTransactionCommand, TransactionEventMetadata
 from ...domain import BookedTransaction
 
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
-_DOMAIN_FIELD_NAMES = frozenset(field.name for field in fields(BookedTransaction))
+_DOMAIN_FIELD_NAMES = tuple(field.name for field in fields(BookedTransaction))
+_DOMAIN_FIELD_SET = frozenset(_DOMAIN_FIELD_NAMES)
 
 
 class TransactionEventMappingError(ValueError):
@@ -23,8 +24,8 @@ def validate_transaction_event_mapping_contract(
         TransactionEvent.model_fields if external_field_names is None else external_field_names
     )
     business_fields = external_fields - GOVERNED_EVENT_ENVELOPE_FIELDS
-    missing_domain_fields = sorted(business_fields - _DOMAIN_FIELD_NAMES)
-    extra_domain_fields = sorted(_DOMAIN_FIELD_NAMES - business_fields)
+    missing_domain_fields = sorted(business_fields - _DOMAIN_FIELD_SET)
+    extra_domain_fields = sorted(_DOMAIN_FIELD_SET - business_fields)
     if missing_domain_fields or extra_domain_fields:
         raise TransactionEventMappingError(
             "Transaction event/domain field drift: "
@@ -39,7 +40,6 @@ def map_transaction_event(
     event_id: str,
     correlation_id: str | None = None,
 ) -> ProcessTransactionCommand:
-    validate_transaction_event_mapping_contract()
     payload = event.model_dump(mode="python")
     domain_values = {name: payload[name] for name in _DOMAIN_FIELD_NAMES}
     for field_name in _TUPLE_FIELDS:
@@ -68,3 +68,6 @@ def to_transaction_event(command: ProcessTransactionCommand) -> TransactionEvent
         traceparent=command.metadata.traceparent,
     )
     return TransactionEvent.model_validate(payload)
+
+
+validate_transaction_event_mapping_contract()
