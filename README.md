@@ -204,7 +204,8 @@ Primary architecture references:
 | `src/services/ingestion_service/` | Source-data and adapter write ingress. Keep routers as HTTP binding/response adapters; put write-mode, rate-limit, idempotent job lifecycle, publish/persist, failure marking, and bookkeeping orchestration behind ingestion command handlers. |
 | `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
 | `src/services/persistence_service/` | Persistence orchestration. |
-| `src/services/calculators/` | Core financial calculators. |
+| `src/services/portfolio_transaction_processing_service/` | Target combined cost, cashflow, and position runtime; currently hosts the compatibility consumer registry while application/domain migration proceeds. |
+| `src/services/calculators/` | Transitional cost, cashflow, position, and independent valuation implementations. Remove the first three only after combined-runtime parity; valuation remains independently deployable. |
 | `src/services/timeseries_generator_service/` | Position and portfolio time-series generation. |
 | `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
 | `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
