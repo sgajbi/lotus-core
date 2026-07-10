@@ -67,6 +67,8 @@ class AverageCostPoolReconciliationAssessment:
                 raise ValueError("Current average cost state must reconcile exactly")
             if reason_code is not None:
                 raise ValueError("Current average cost state must not carry a failure reason")
+        elif self.status is AverageCostPoolReconciliationStatus.DRIFTED and is_exact:
+            raise ValueError("Drifted average cost state must differ from replay truth")
         elif reason_code is None:
             raise ValueError("Drifted or failed average cost state requires a reason code")
 

@@ -14,10 +14,12 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
 
@@ -77,3 +79,18 @@ def test_replay_use_case_builder_composes_canonical_repository_dependencies() ->
     assert isinstance(replayer, ReprocessingRepository)
     assert replayer.db is session
     assert replayer.kafka_producer is kafka_producer
+
+
+def test_average_cost_reconciliation_builder_uses_target_application_boundary() -> None:
+    session_factory = MagicMock(spec=lambda: AsyncSession())
+
+    use_case = build_reconcile_average_cost_pools_use_case(
+        session_factory=session_factory,
+    )
+
+    assert isinstance(
+        use_case._reconciliation,
+        SqlAlchemyAverageCostPoolReconciliationAdapter,
+    )
+    assert use_case._reconciliation._session_factory is session_factory
+    assert isinstance(use_case._reconciliation._workflow, CostCalculationWorkflow)

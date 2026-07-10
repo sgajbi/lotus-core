@@ -71,9 +71,7 @@ class ReconcileAverageCostPoolsUseCase:
 
         assessments: list[AverageCostPoolReconciliationAssessment] = []
         for key in keys:
-            assessments.append(
-                await self._reconciliation.reconcile(key=key, apply=command.apply)
-            )
+            assessments.append(await self._reconciliation.reconcile(key=key, apply=command.apply))
         return ReconcileAverageCostPoolsResult(
             apply=command.apply,
             assessments=tuple(assessments),

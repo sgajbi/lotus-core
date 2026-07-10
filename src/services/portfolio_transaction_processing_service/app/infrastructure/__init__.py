@@ -8,6 +8,7 @@ from .composition import (
     CanonicalBookedTransactionReplayerFactory,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
@@ -43,5 +44,6 @@ __all__ = [
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
     "build_process_transaction_use_case",
+    "build_reconcile_average_cost_pools_use_case",
     "build_replay_booked_transaction_use_case",
 ]
