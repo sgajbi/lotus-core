@@ -12,6 +12,7 @@ from portfolio_common.events import TransactionEvent, transaction_event_ordering
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.monitoring import (
     POSITION_RECALCULATION_COORDINATION_TOTAL,
+    POSITION_RECALCULATION_WORK_ITEMS,
     REPROCESSING_EPOCH_BUMPED_TOTAL,
 )
 from portfolio_common.outbox_repository import OutboxRepository
@@ -98,6 +99,7 @@ class PositionCalculator:
                     outcome="coalesced",
                     reason="already_materialized",
                 ).inc()
+                POSITION_RECALCULATION_WORK_ITEMS.labels(mode="coalesced").observe(0)
                 logger.info(
                     "Coalesced backdated position trigger already materialized in current epoch.",
                     extra={
@@ -170,6 +172,9 @@ class PositionCalculator:
             return False
 
         events_to_replay = await cls._ordered_backdated_transaction_events(event, repo)
+        POSITION_RECALCULATION_WORK_ITEMS.labels(mode="legacy_replay").observe(
+            len(events_to_replay)
+        )
         logger.info(
             "Atomically queuing "
             f"{len(events_to_replay)} events for reprocessing replay "
@@ -212,6 +217,9 @@ class PositionCalculator:
             new_state.epoch,
         )
         events_to_rebuild = await cls._ordered_backdated_transaction_events(event, repo)
+        POSITION_RECALCULATION_WORK_ITEMS.labels(mode="inline_rebuild").observe(
+            len(events_to_rebuild)
+        )
         if not events_to_rebuild:
             return PositionCalculationResult()
         for event_to_rebuild in events_to_rebuild:

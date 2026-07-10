@@ -243,12 +243,17 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
     "POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
 @patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_WORK_ITEMS"
+)
+@patch(
     "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     mock_fencer_class: MagicMock,
     mock_metric: MagicMock,
+    mock_work_metric: MagicMock,
     mock_coordination_metric: MagicMock,
     mock_repo: AsyncMock,
     mock_state_repo: AsyncMock,
@@ -309,6 +314,8 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
 
     # Assert that it tried to publish TWO events: one historical + the triggering one
     assert mock_outbox_repo.create_outbox_event.call_count == 2
+    mock_work_metric.labels.assert_called_once_with(mode="legacy_replay")
+    mock_work_metric.labels.return_value.observe.assert_called_once_with(2)
 
     # Check that both events were tagged with the new epoch
     first_call_args = mock_outbox_repo.create_outbox_event.call_args_list[0].kwargs
@@ -321,12 +328,17 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
 
 @pytest.mark.asyncio
 @patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_WORK_ITEMS"
+)
+@patch(
     "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox(
     mock_fencer_class: MagicMock,
     mock_metric: MagicMock,
+    mock_work_metric: MagicMock,
     mock_repo: AsyncMock,
     mock_state_repo: AsyncMock,
     mock_outbox_repo: AsyncMock,
@@ -377,6 +389,8 @@ async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox
     assert [position.transaction_id for position in saved_positions] == ["TXN_HIST_1", "T1"]
     assert [position.epoch for position in saved_positions] == [1, 1]
     mock_outbox_repo.create_outbox_event.assert_not_awaited()
+    mock_work_metric.labels.assert_called_once_with(mode="inline_rebuild")
+    mock_work_metric.labels.return_value.observe.assert_called_once_with(2)
     assert result.position_record_count == 2
     assert result.replay_queued is False
 
@@ -477,9 +491,14 @@ async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     "src.services.calculators.position_calculator.app.core.position_logic."
     "POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
+@patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_WORK_ITEMS"
+)
 @patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
 async def test_calculate_coalesces_backdated_event_already_materialized_in_current_epoch(
     mock_fencer_class: MagicMock,
+    mock_work_metric: MagicMock,
     mock_coordination_metric: MagicMock,
     mock_repo: AsyncMock,
     mock_state_repo: AsyncMock,
@@ -514,6 +533,8 @@ async def test_calculate_coalesces_backdated_event_already_materialized_in_curre
         reason="already_materialized",
     )
     mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
+    mock_work_metric.labels.assert_called_once_with(mode="coalesced")
+    mock_work_metric.labels.return_value.observe.assert_called_once_with(0)
 
 
 @pytest.mark.asyncio
