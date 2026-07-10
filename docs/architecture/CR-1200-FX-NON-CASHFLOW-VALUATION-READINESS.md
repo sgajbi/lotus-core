@@ -2,6 +2,10 @@
 
 Date: 2026-06-30
 
+Superseded runtime note (2026-07-10): CR-1488 replaced transaction-type-specific readiness reasons
+and the cost/cashflow fan-in with `atomic_transaction_processing_completed`. This record remains
+historical evidence for why FX contract lifecycle events must not wait for a cashflow.
+
 ## Scope
 
 FX contract lifecycle transaction processing across:

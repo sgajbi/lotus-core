@@ -165,14 +165,14 @@ The table below captures the current runtime topology as implemented in service 
 | --- | --- | --- | --- | --- |
 | `portfolios.raw.received` | `ingestion_service` | `persistence_service` / `persistence_group_portfolios` | inbound raw fact | Active ingress path |
 | `transactions.raw.received` | `ingestion_service` | `persistence_service` / `persistence_group_transactions` | inbound raw fact | Active ingress path |
-| `instruments` | `ingestion_service`; `cost_calculator_service` side-effect publication | `persistence_service` / `persistence_group_instruments` | mixed-source instrument fact stream | Naming is especially unclear because a non-ingestion calculator also publishes here |
+| `instruments.received` | `ingestion_service`; `portfolio_transaction_processing_service` compatibility publication | `persistence_service` / `persistence_group_instruments` | mixed-source instrument fact stream | Compatibility publication remains; the unified transaction runtime is the only calculator-side producer. |
 | `market_prices` | `ingestion_service` | `persistence_service` / `persistence_group_market_prices` | inbound raw fact | Active ingress path |
 | `fx_rates` | `ingestion_service` | `persistence_service` / `persistence_group_fx_rates` | inbound raw fact | Active ingress path |
 | `raw_business_dates` | `ingestion_service` | `persistence_service` / `persistence_group_business_dates` | inbound raw fact | Active ingress path |
-| `transactions.persisted` | `persistence_service`; shared replay tooling in `reprocessing_repository` | `cost_calculator_service` / `cost_calculator_group`; `cashflow_calculator_service` / `cashflow_calculator_group` | transactions persisted and replay-fed downstream | This is the first member of the confusing transaction-stage trio |
-| `transactions.cost.processed` | `cost_calculator_service`; `position_calculator_service` back-dated replay outbox | `cashflow_calculator_service` / `cashflow_calculator_group_replay`; `position_calculator_service` / `position_calculator_group_replay`; `pipeline_orchestrator_service` / `pipeline_orchestrator_processed_txn_group` | cost-processed transaction fact plus replay carrier | This topic currently carries both normal calculator output and replay traffic |
-| `transaction_processing.ready` | `pipeline_orchestrator_service` | `position_calculator_service` / `position_calculator_group_gated` | transaction-scoped readiness fact | Semantically very different from the two similarly named transaction topics above |
-| `cashflows.calculated` | `cashflow_calculator_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_cashflow_group` | calculator output fact | Active stage-completion input to orchestrator |
+| `transactions.persisted` | `persistence_service`; controlled replay tooling | `portfolio_transaction_processing_service` / `portfolio_transaction_processing_group` | persisted booked-transaction fact | One live consumer invokes the atomic cost, cashflow, and position use case. |
+| `transactions.cost.processed` | `portfolio_transaction_processing_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_processed_txn_group` | authoritative atomic transaction-completion fact plus compatibility payload | Visible only after cost, cashflow, position, idempotency, and outbox effects commit together. |
+| `transaction_processing.ready` | `pipeline_orchestrator_service` | no active in-repo consumer | retained transaction-scoped readiness compatibility fact | Target position processing occurs before this event; downstream retirement evidence is still required. |
+| `cashflows.calculated` | `portfolio_transaction_processing_service` | no active in-repo consumer | retained cashflow compatibility fact | No longer a pipeline prerequisite; cashflow rows remain part of the atomic commit. |
 | `portfolio_security_day.valuation.ready` | `pipeline_orchestrator_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_readiness` | readiness fact that causes durable valuation-job upsert | Name reads like state and the payload is actually portfolio-security-day scoped |
 | `market_prices.persisted` | `persistence_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_price_events` | persistence fact | Clearer grammar than many peers |
 | `valuation.job.requested` | `valuation_orchestrator_service` scheduler | `position_valuation_calculator` / `position_valuation_worker_group` | worker dispatch request | This is the real valuation job command topic |
@@ -408,18 +408,15 @@ Canonical policy should be explicit:
  - instrument traffic should remain truthfully named until ingress and derived instrument publication are split or intentionally formalized
 
 ### 12.2 Transaction Calculator Chain
-1. `cost_calculator_service`
+1. `portfolio_transaction_processing_service`
  - consumes `transactions.persisted`
- - publishes `transactions.cost.processed`
-2. `cashflow_calculator_service`
- - consumes transaction outputs
- - publishes `cashflows.calculated`
-3. `pipeline_orchestrator_service`
- - consumes `transactions.cost.processed` and `cashflows.calculated`
- - publishes `transaction_processing.ready`
-4. `position_calculator_service`
- - consumes `transaction_processing.ready`
- - may republish replay traffic onto `transactions.cost.processed` under epoch fencing
+ - commits cost, cashflow, position, idempotency, and outbox effects atomically
+ - publishes authoritative `transactions.cost.processed` and retained `cashflows.calculated`
+2. `pipeline_orchestrator_service`
+ - consumes only the authoritative `transactions.cost.processed` completion fact
+ - publishes `transaction_processing.ready` and `portfolio_security_day.valuation.ready`
+3. No active in-repo consumer waits on `cashflows.calculated` or
+   `transaction_processing.ready`; both remain compatibility facts pending downstream evidence.
 
 ### 12.3 Valuation and Day-Level Chain
 1. `pipeline_orchestrator_service`

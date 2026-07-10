@@ -49,6 +49,11 @@ make test-performance-load-gate
 Treat load-gate throughput as completed cost/cashflow/position processing. Request submission rate
 alone is not capacity evidence. Keep the target and legacy topologies mutually exclusive.
 
+`pipeline_orchestrator_service` consumes `transactions.cost.processed` as the authoritative atomic
+completion fact. It does not consume `cashflows.calculated`. Investigate target outbox dispatch,
+`pipeline_orchestrator_processed_txn_group` lag, and pipeline stage claims when valuation readiness
+is delayed; do not restore the retired cashflow consumer group as a recovery action.
+
 ## Preferred diagnostics
 
 Use APIs before going directly to the database where possible:

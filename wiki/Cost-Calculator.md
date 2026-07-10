@@ -6,8 +6,8 @@ The cost module is the transaction-enrichment and cost-basis authority inside th
 `portfolio_transaction_processing_service` runtime.
 
 It takes persisted transaction events, applies the portfolio's governed cost-basis policy, and
-emits enriched processed transactions that downstream stages can trust for position, cashflow, and
-supportability workflows.
+stages enriched processed transactions after cost, cashflow, and position effects have completed in
+one atomic use case.
 
 ## What it handles
 
@@ -17,7 +17,7 @@ The current app-local/CI runtime centers on:
 - selecting FIFO or AVCO according to portfolio policy
 - recalculating transaction cost and realized P&L state
 - maintaining lot and related cost-basis support state
-- publishing `transactions.cost.processed` for downstream fan-out
+- publishing `transactions.cost.processed` as the authoritative atomic completion fact
 
 Lot-state persistence carries one remaining-state value per source BUY: open quantity, local cost
 basis, and portfolio-base cost basis. FIFO reflects actual lot consumption. AVCO allocates the
@@ -145,9 +145,8 @@ Primary durable outputs include:
 
 These outputs feed:
 
-- position calculation
-- cashflow calculation
-- replay and supportability flows
+- pipeline readiness after the combined transaction commits
+- replay and supportability flows through the combined runtime
 - realized P&L and disposal traceability
 
 ## Why it matters

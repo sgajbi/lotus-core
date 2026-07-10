@@ -16,7 +16,7 @@ The current app-local/CI runtime centers on:
 - resolving cashflow rules by transaction type
 - normalizing amount sign and classification semantics
 - persisting durable cashflow rows
-- emitting cashflow completion events for downstream orchestration
+- retaining `cashflows.calculated` as a compatibility fact after atomic processing
 
 This makes the module a governed semantic transformation stage, not a simple amount copy.
 
@@ -57,10 +57,13 @@ Primary durable outputs include:
 
 These outputs feed:
 
-- pipeline orchestration and downstream readiness
 - position and portfolio timeseries materialization
 - transaction-to-cashflow reconciliation controls
 - support and replay investigations
+
+No active in-repo consumer waits for `cashflows.calculated`. Pipeline readiness is driven by the
+atomic `transactions.cost.processed` completion fact, so restoring a cashflow readiness consumer
+would reintroduce redundant ordering and lag failure modes.
 
 ## Why it matters
 

@@ -1827,6 +1827,18 @@ Most relevant current governance:
      provenance, digest, and same-image dev/UAT/prod checks pass. Treat the checked-in all-zero
      digest as a fail-closed template placeholder, never as a deployable image. Registry publication,
      server-side validation, controlled cluster rollout, and rollback evidence remain mandatory.
+139. `ProcessedTransactionPersisted` from `portfolio_transaction_processing_service` is the
+     authoritative in-repo transaction-completion fact because it is committed in the same unit of
+     work as cost, cashflow, position, idempotency, and outbox effects. Pipeline transaction
+     readiness consumes only that fact; do not restore a `cashflows.calculated` prerequisite,
+     consumer group, second idempotency claim, or transaction-type-specific readiness branch.
+     Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
+     until downstream usage and retention evidence permit governed retirement. Event supportability
+     actor names and full-stack test service/port inventories must use current runtime-boundary
+     identities. Static event guards must resolve dependency-injected consumer factory defaults so
+     target DLQ wiring cannot disappear from certification. Full-stack tests must allocate the
+     target's `LOTUS_TRANSACTION_PROCESSING_HOST_PORT`; never reintroduce deleted calculator ports
+     or rely on the app-local default when parallel stacks may run.
 
 ## Context Maintenance Rule
 

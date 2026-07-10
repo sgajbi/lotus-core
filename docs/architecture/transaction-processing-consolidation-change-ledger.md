@@ -97,9 +97,9 @@ tests move with their owning module; they are not deleted merely because a servi
 | Legacy normal/replay delivery classes | partial | Position normal delivery and cost replay-request delivery are deleted. Cost and cashflow classes still contain active workflow code and must be split before their delivery subclasses can be removed safely. | Move active workflow code under clear application ownership; retain target delivery and replay proof. |
 | Legacy cost/cashflow/position package roots | compatibility | Move surviving domain policies, ports, repositories, and tests into clear target module packages; then delete empty roots. | Import graph, ownership catalog, tests, and docs updated. |
 | Old consumer groups and processed-event service identities | compatibility | Stop producing new rows/lag; retain historical data until governed retention expires. | Deployment cutover, lag zero, support sign-off. |
-| `transaction_processing.ready` normal stage gate | compatibility | Remove target-path production/consumption and transaction-stage wait from pipeline orchestrator. | Every downstream consumer uses combined completion/compatible domain events. |
+| `transaction_processing.ready` normal stage gate | partial | CR-1488 removed the target-path consumer and two-event wait; retain compatibility publication until downstream usage is certified. | Every downstream consumer uses combined completion/compatible domain events. |
 | `transactions.cost.processed` as normal fan-out carrier | compatibility | Retain compatibility emission initially; retire normal-path use after downstream migration. | Pipeline/query/idea/workbench and replay consumers no longer depend on it. |
-| Pipeline orchestrator transaction-stage subscriptions/state | compatibility | Remove only transaction cost/cashflow readiness coordination; retain unrelated portfolio aggregation/reconciliation orchestration. | Stage ownership/downstream audit and migration plan. |
+| Pipeline orchestrator transaction-stage subscriptions/state | partial | CR-1488 removed cashflow subscription/readiness coordination; retain one atomic completion subscription and unrelated portfolio aggregation/reconciliation orchestration. | Downstream audit permits readiness-topic and historical stage-state retirement. |
 | Legacy worker ports, service names, alerts, dashboards, and runbooks | partial | Compose, CI, OpenAPI, security, image, Kubernetes, KEDA, dashboard, and primary runbook identities use the target. Search and retire remaining feature-doc/history references without rewriting historical CR evidence. | Operations/support validation and post-cutover observation window. |
 
 ## Database Decisions
@@ -122,8 +122,8 @@ tests move with their owning module; they are not deleted merely because a servi
 |---|---|---|
 | README and supported architecture docs | partial | App-local/CI/Kubernetes two-consumer runtime, module ownership, port, offset handoff, digest rendering, and current pending registry/cluster work are published in CR-1487. Final production truth follows controlled rollout and legacy removal. |
 | Repo-local wiki | required | Replace Cost/Cashflow/Position service pages with target module/runtime truth; retain methodology and troubleshooting depth. |
-| Current-state architecture and trigger matrix | required | Update runtime owners, topics, stage gate, replay, tables, and scaling decisions. |
-| RFC-0081/RFC-0083 and event contracts | required | Record superseded normal stage topology while preserving truthful compatibility windows and replay semantics. |
+| Current-state architecture and trigger matrix | implemented-local | CR-1488 records one atomic completion input and dormant compatibility facts. |
+| RFC-0081/RFC-0083 and event contracts | implemented-local | CR-1488 records the superseded two-event stage topology while preserving compatibility windows and replay semantics. |
 | Event supportability/test pack | required | Remove obsolete producer/consumer ownership only after topic retirement; preserve valid domain-event contracts. |
 | Repository context and modularity catalog | required | Mark legacy roots removed and target architecture fully adopted. |
 | GitHub issue #468 | required | Move to fixed-local only after every required prerequisite is locally proven; close only after merged/mainline validation. |
