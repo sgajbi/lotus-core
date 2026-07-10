@@ -106,6 +106,13 @@ then are Kafka resources closed. Retry exhaustion, DLQ publication, and offset h
 by the shared consumer; the replay delivery mapper and application use case do not implement a
 second transport loop.
 
+The combined processing authority uses a versioned portfolio/transaction/epoch semantic key plus a
+canonical SHA-256 booked-transaction fingerprint. Republishing identical content at another Kafka
+offset returns `DUPLICATE` before cost, cashflow, position, or outbox work. Changed material content
+under the same semantic key fails as `transaction_semantic_conflict`; correction and restatement
+must use their governed lifecycle rather than masquerading as replay. Replay audit evidence remains
+owned by the replay control boundary, not duplicate financial facts.
+
 ## Mixed corporate-action cash consideration
 
 True cash consideration is processed as a basis disposal, not income. The product marker requires

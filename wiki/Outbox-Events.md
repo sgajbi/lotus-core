@@ -72,7 +72,9 @@ Outbox reliability and consumer idempotency work together.
 - `outbox_events`
   makes publication durable and retryable
 - `processed_events`
-  lets consumers skip duplicate or replayed events safely
+  lets consumers skip duplicate or replayed events safely; the combined transaction runtime stores
+  both physical delivery identity and versioned semantic key/content fingerprint so identical
+  cross-offset delivery is skipped and changed content is rejected as a conflict
 
 Without both, retry-friendly publishing would create correctness risk downstream.
 

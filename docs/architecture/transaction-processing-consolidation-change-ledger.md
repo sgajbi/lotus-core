@@ -27,7 +27,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Framework-neutral booked transaction and one DTO mapping boundary | implemented-local | CR-1431; 98-field drift and round-trip tests. |
 | One `ProcessTransactionUseCase` | implemented-local | CR-1432; ordered cost/cashflow/position execution. |
 | Cost, cashflow, and position caller-owned adapters | implemented-local | CR-1433 through CR-1435. |
-| One SQLAlchemy session/commit and combined idempotency fence | implemented-local | CR-1436; unit and PostgreSQL rollback proof. |
+| One SQLAlchemy session/commit and combined idempotency fence | implemented-local | CR-1436 provides atomic rollback; CR-1491 adds versioned domain identity, content fingerprint, physical/semantic duplicate classification, and material-conflict rejection. |
 | Plain cost and cashflow workflows independent of Kafka delivery | implemented-local | CR-1437 and CR-1438. |
 | One final normal-path consumer and governed dependency builder | implemented-local | CR-1439 and CR-1440; not registered yet. |
 | Concrete combined `ADJUSTMENT` database parity and duplicate proof | implemented-local | CR-1441. |
@@ -43,7 +43,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Booked-transaction replay production composition | implemented-local | CR-1452; named canonical repository factory, shared producer, fresh request session, and explicit dependency injection. |
 | Booked-transaction replay request delivery boundary | implemented-local | CR-1453; delivery DTO/mapper, one use-case-only consumer, correlation precedence, explicit outcomes, and shared bounded retry/DLQ policy. |
 | Final two-consumer runtime composition | implemented-local | CR-1454; one live and one replay-request consumer, one composed use case each, canonical topics/groups, and no activation beside legacy consumers. |
-| Duplicate replay semantic parity | implemented-local | CR-1455; distinct replay offsets preserve one cashflow/final position state, two delivery audits, and one required compatibility processed event per replay. |
+| Duplicate replay semantic parity | implemented-local | CR-1491 supersedes CR-1455's offset-oriented processed-event expectation: distinct replay offsets preserve one semantic claim, one cashflow/final position state, and one compatibility processed fact; governed replay audit remains separate. |
 | Inline backdated position epoch rebuild | implemented-local | CR-1456; target path advances the fenced epoch and rebuilds ordered current history atomically without a stranded legacy replay topic; deployed queue mode is preserved. |
 | Worker runtime component task identity | implemented-local | CR-1457; bounded group/topic consumer task names plus stable dispatcher/server names make combined runtime failures attributable. |
 | Combined health and image-metadata runtime contract | implemented-local | CR-1458; actual target app proves DB/Kafka/runtime fail-closed readiness and `/version` parity for commit, branch, timestamp, repo, version, digest, CI run, and OCI labels. |

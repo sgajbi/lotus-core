@@ -188,8 +188,9 @@ Primary runtime surfaces:
 - `financial_reconciliation_service`
   reconciliation and control execution contracts
 - `portfolio_transaction_processing_service`
-  one app-local/CI deployable and one transaction for cost, cashflow, position, idempotency, and
-  compatibility outbox effects; `transactions.cost.processed` is the authoritative atomic
+  one app-local/CI deployable and one transaction for cost, cashflow, position,
+  semantic idempotency, and compatibility outbox effects; `transactions.cost.processed` is the
+  authoritative atomic
   completion input to pipeline readiness, while `cashflows.calculated` remains a compatibility fact;
   valuation remains independently scalable
 - valuation and generators

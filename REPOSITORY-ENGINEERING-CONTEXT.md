@@ -1664,10 +1664,11 @@ Most relevant current governance:
      Keep combined-runtime operating signals together in the focused transaction-processing
      dashboard. Do not invent lag, latency, pool, or outbox alert thresholds from unit/engine-only
      evidence; derive and review them from deployed baseline and failure-recovery measurements.
-     Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
-     attempt and preserve one compatibility processed event per replay, while semantic fences and
-     deterministic rebuilds must keep cashflow and final position state singular. Do not collapse
-     required downstream replay publication into financial-state deduplication.
+     Duplicate replay requests may carry distinct Kafka event IDs, but the combined processing
+     authority applies one versioned semantic transaction exactly once. Preserve one semantic
+     claim, one cashflow/final position state, and one compatibility processed fact. Keep governed
+     replay request/audit evidence at the replay control boundary; do not use duplicate financial
+     facts as delivery audit evidence.
      Backdated position handling is topology-specific: deployed compatibility consumers retain
      `QUEUE_REPLAY`, while `CombinedPositionCalculationWorkflow` must use `REBUILD_INLINE` to
      advance the compare-and-set epoch and rebuild ordered current-epoch history in the combined
@@ -1859,6 +1860,16 @@ Most relevant current governance:
      extension point; delete it after delivery-specific evidence is migrated. After any workflow
      package move used by the target's transitional source closure, rebuild the target image and
      prove the installed entrypoint and workflow imports rather than relying only on repo-root tests.
+142. Combined transaction idempotency is semantic as well as physical. Derive the versioned key and
+     SHA-256 payload fingerprint from the framework-neutral `BookedTransaction`, never raw Kafka
+     JSON. Claim it inside the same SQLAlchemy unit of work before cost, cashflow, position, or
+     outbox staging. Distinguish `physical_duplicate`, `semantic_duplicate`, and
+     `semantic_conflict` in bounded metrics. Identical cross-topic/offset replays return the existing
+     duplicate result without another compatibility processed fact; materially changed content for
+     the same portfolio/transaction/epoch fails terminally as `transaction_semantic_conflict`.
+     Existing physical-only consumers and pre-migration null semantic fences remain compatible.
+     Any identity-version change requires migration, replay/downstream impact analysis, deterministic
+     hash tests, PostgreSQL conflict/concurrency proof, and explicit documentation.
 
 ## Context Maintenance Rule
 
