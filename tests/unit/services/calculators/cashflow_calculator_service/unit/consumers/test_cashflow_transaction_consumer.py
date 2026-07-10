@@ -70,7 +70,7 @@ async def test_cashflow_calculated_event_preserves_corporate_action_linkage() ->
         epoch=0,
         amount=Decimal("275"),
         currency="USD",
-        classification="INCOME",
+        classification="CORPORATE_ACTION_PROCEEDS",
         timing="EOD",
         calculation_type="NET",
         is_position_flow=True,

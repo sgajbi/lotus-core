@@ -53,6 +53,7 @@ CLASSIFICATION_SIGN_FACTORS = {
     CashflowClassification.FX_BUY: 1,
     CashflowClassification.FX_SELL: -1,
     CashflowClassification.INVESTMENT_INFLOW: 1,
+    CashflowClassification.CORPORATE_ACTION_PROCEEDS: 1,
     CashflowClassification.INCOME: 1,
     CashflowClassification.CASHFLOW_IN: 1,
 }
