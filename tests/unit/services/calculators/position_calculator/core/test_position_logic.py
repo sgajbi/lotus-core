@@ -99,7 +99,7 @@ async def test_calculate_discards_stale_epoch_event(
     mock_fencer_instance.check = AsyncMock(return_value=False)
 
     # ACT
-    await PositionCalculator.calculate(
+    result = await PositionCalculator.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
     )
 
@@ -108,6 +108,8 @@ async def test_calculate_discards_stale_epoch_event(
     mock_state_repo.increment_epoch_and_reset_watermark.assert_not_called()
     mock_repo.save_positions.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
+    assert result.position_record_count == 0
+    assert result.replay_queued is False
 
 
 @pytest.mark.asyncio
@@ -136,7 +138,7 @@ async def test_calculate_normal_flow(
     mock_repo.get_transactions_on_or_after.return_value = [sample_event]
 
     # ACT
-    await PositionCalculator.calculate(
+    result = await PositionCalculator.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
     )
 
@@ -146,6 +148,8 @@ async def test_calculate_normal_flow(
     mock_repo.acquire_position_history_replay_lock.assert_awaited_once_with("P1", "S1", 1)
     mock_repo.save_positions.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_not_called()
+    assert result.position_record_count == 1
+    assert result.replay_queued is False
 
 
 @pytest.mark.asyncio
@@ -276,7 +280,7 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     ]
 
     # ACT
-    await PositionCalculator.calculate(
+    result = await PositionCalculator.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo, mock_outbox_repo
     )
 
@@ -297,6 +301,8 @@ async def test_calculate_re_emits_and_increments_metric_for_backdated_event(
     assert first_call_args["payload"]["epoch"] == 1
     second_call_args = mock_outbox_repo.create_outbox_event.call_args_list[1].kwargs
     assert second_call_args["payload"]["epoch"] == 1
+    assert result.position_record_count == 0
+    assert result.replay_queued is True
 
 
 @pytest.mark.asyncio

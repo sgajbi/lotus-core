@@ -78,4 +78,5 @@ def test_legacy_calculator_imports_are_confined_to_infrastructure_adapters() -> 
         "app/infrastructure/cashflow_processing_adapter.py",
         "app/infrastructure/cost_processing_adapter.py",
         "app/infrastructure/legacy_consumer_registry.py",
+        "app/infrastructure/position_processing_adapter.py",
     ]
