@@ -65,7 +65,7 @@ def test_registry_preserves_current_consumer_topics_groups_and_prefixes() -> Non
     assert all(values["dlq_topic"] == "dlq.persistence_service" for _, values in calls)
 
 
-def test_legacy_calculator_imports_are_confined_to_infrastructure_adapter() -> None:
+def test_legacy_calculator_imports_are_confined_to_infrastructure_adapters() -> None:
     repo_root = Path(__file__).resolve().parents[4]
     service_root = repo_root / "src/services/portfolio_transaction_processing_service"
     legacy_import_files = [
@@ -74,4 +74,7 @@ def test_legacy_calculator_imports_are_confined_to_infrastructure_adapter() -> N
         if "src.services.calculators" in source.read_text(encoding="utf-8")
     ]
 
-    assert legacy_import_files == ["app/infrastructure/legacy_consumer_registry.py"]
+    assert legacy_import_files == [
+        "app/infrastructure/cost_processing_adapter.py",
+        "app/infrastructure/legacy_consumer_registry.py",
+    ]

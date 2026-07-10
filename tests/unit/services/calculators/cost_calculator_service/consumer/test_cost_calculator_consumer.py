@@ -216,7 +216,7 @@ async def test_cost_calculation_processor_executes_workflow_without_kafka_consum
     workflow._publish_transaction_events = AsyncMock()
     workflow._publish_instrument_events = AsyncMock()
 
-    await CostCalculationEventProcessor(workflow).process_valid_event(
+    result = await CostCalculationEventProcessor(workflow).process_valid_event(
         event=event,
         event_id="transactions.persisted-0-42",
         correlation_id="cost-corr-id",
@@ -249,6 +249,47 @@ async def test_cost_calculation_processor_executes_workflow_without_kafka_consum
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
     )
+    assert result is not None
+    assert result.emitted_events == (event,)
+    assert result.instrument_event_count == 1
+
+
+async def test_cost_calculation_stage_uses_caller_owned_idempotency_and_transaction():
+    event = TransactionEvent(
+        transaction_id="BUY-STAGE-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150.0"),
+        gross_transaction_amount=Decimal("1500.0"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    instrument_event = MagicMock()
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    outbox_repo = AsyncMock(spec=OutboxRepository)
+    repo.get_portfolio.return_value = Portfolio(base_currency="USD", portfolio_id="PORT_COST_01")
+    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    workflow = MagicMock()
+    workflow._prepare_transaction_event = AsyncMock(return_value=(event, "BUY", "FIFO"))
+    workflow._assert_required_instrument_reference_available = MagicMock()
+    workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
+    workflow._build_emitted_transaction_events = AsyncMock(return_value=[event])
+    workflow._publish_transaction_events = AsyncMock()
+    workflow._publish_instrument_events = AsyncMock()
+
+    result = await CostCalculationEventProcessor(workflow).stage_valid_event(
+        event=event,
+        correlation_id="cost-corr-id",
+        repo=repo,
+        outbox_repo=outbox_repo,
+    )
+
+    assert result.emitted_events == (event,)
+    assert result.instrument_event_count == 1
 
 
 async def test_cost_calculation_processor_skips_duplicate_claim_without_domain_work():
