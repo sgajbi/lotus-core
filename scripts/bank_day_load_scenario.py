@@ -22,7 +22,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable
 
-import requests
+import requests  # type: ignore[import-untyped]
 from portfolio_common.db import get_sync_database_url
 from sqlalchemy import create_engine, text
 
@@ -45,17 +45,17 @@ USD_PER_CURRENCY: dict[str, Decimal] = {
     "SGD": Decimal("0.740000"),
     "GBP": Decimal("1.270000"),
 }
-LOG_SERVICE_CONTAINERS = (
-    "lotus-core-app-local-persistence_service-1",
-    "lotus-core-app-local-portfolio_transaction_processing_service-1",
-    "lotus-core-app-local-position_valuation_calculator-1",
-    "lotus-core-app-local-portfolio_aggregation_service-1",
-    "lotus-core-app-local-timeseries_generator_service-1",
-    "lotus-core-app-local-pipeline_orchestrator_service-1",
-    "lotus-core-app-local-query_service-1",
-    "lotus-core-app-local-query_control_plane_service-1",
-    "lotus-core-app-local-event_replay_service-1",
-    "lotus-core-app-local-financial_reconciliation_service-1",
+LOG_SERVICE_NAMES = (
+    "persistence_service",
+    "portfolio_transaction_processing_service",
+    "position_valuation_calculator",
+    "portfolio_aggregation_service",
+    "timeseries_generator_service",
+    "pipeline_orchestrator_service",
+    "query_service",
+    "query_control_plane_service",
+    "event_replay_service",
+    "financial_reconciliation_service",
 )
 
 
@@ -695,7 +695,7 @@ def _resolve_trade_date(*, engine: Any, explicit_trade_date: str | None) -> str:
             "No business_dates rows exist. Provide --trade-date explicitly "
             "or seed business dates first."
         )
-    return latest_business_date.isoformat()
+    return str(latest_business_date.isoformat())
 
 
 def _build_database_tie_out(
@@ -1172,11 +1172,28 @@ def _collect_sample_portfolios(
     return samples, probes
 
 
-def _collect_log_evidence(*, started_at: str) -> list[LogEvidence]:
+def _collect_log_evidence(
+    *,
+    started_at: str,
+    compose_file: str,
+    compose_project_name: str,
+) -> list[LogEvidence]:
     evidence: list[LogEvidence] = []
-    for container_name in LOG_SERVICE_CONTAINERS:
+    for service_name in LOG_SERVICE_NAMES:
         completed = subprocess.run(
-            ["docker", "logs", "--since", started_at, container_name],
+            [
+                "docker",
+                "compose",
+                "-p",
+                compose_project_name,
+                "-f",
+                compose_file,
+                "logs",
+                "--no-color",
+                "--since",
+                started_at,
+                service_name,
+            ],
             check=False,
             capture_output=True,
             text=True,
@@ -1196,7 +1213,7 @@ def _collect_log_evidence(*, started_at: str) -> list[LogEvidence]:
                 error_lines.append(line)
         evidence.append(
             LogEvidence(
-                container_name=container_name,
+                container_name=service_name,
                 error_line_count=len(error_lines),
                 sample_error_lines=error_lines[:5],
             )
@@ -1516,9 +1533,21 @@ def _safe_collect_sample_portfolios(
         return [], [], [f"failed to collect sample portfolio evidence for partial report: {exc}"]
 
 
-def _safe_collect_log_evidence(*, started_at: str) -> tuple[list[LogEvidence], list[str]]:
+def _safe_collect_log_evidence(
+    *,
+    started_at: str,
+    compose_file: str,
+    compose_project_name: str,
+) -> tuple[list[LogEvidence], list[str]]:
     try:
-        return _collect_log_evidence(started_at=started_at), []
+        return (
+            _collect_log_evidence(
+                started_at=started_at,
+                compose_file=compose_file,
+                compose_project_name=compose_project_name,
+            ),
+            [],
+        )
     except Exception as exc:
         return [], [f"failed to collect log evidence for partial report: {exc}"]
 
@@ -1616,6 +1645,11 @@ def _finalize_report(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--compose-file", default="docker-compose.yml")
+    parser.add_argument(
+        "--compose-project-name",
+        default=os.getenv("COMPOSE_PROJECT_NAME", "lotus-core-app-local"),
+    )
     parser.add_argument("--scenario-name", default="bank-day-average-load")
     parser.add_argument("--portfolio-count", type=int, default=1000)
     parser.add_argument("--transactions-per-portfolio", type=int, default=100)
@@ -1853,7 +1887,11 @@ def main() -> int:
         portfolio_count=args.portfolio_count,
         specs=specs,
     )
-    log_evidence, log_failures = _safe_collect_log_evidence(started_at=started_at)
+    log_evidence, log_failures = _safe_collect_log_evidence(
+        started_at=started_at,
+        compose_file=args.compose_file,
+        compose_project_name=args.compose_project_name,
+    )
     report = _finalize_report(
         args=args,
         run_id=run_id,
