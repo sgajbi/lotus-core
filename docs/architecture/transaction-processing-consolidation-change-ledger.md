@@ -35,7 +35,7 @@ tests move with their owning module; they are not deleted merely because a servi
 
 | Surface | Status | Required change | Removal/cutover prerequisite |
 |---|---|---|---|
-| Concrete BUY/SELL and multi-leg behavior | required | Add real combined DB/output parity for lot opening, partial/full disposal, realized gain/loss, fees, FX, cashflow, and position history. | Existing transaction contract packs and new combined parity pass. |
+| Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO BUY/partial SELL, realized gain/loss, cashflow, and position parity is implemented locally in CR-1442. Add fees, FX, full disposal, AVCO, multi-lot selection, cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
 | Replay request path | required | Use one replay-request consumer that republishes canonical transactions to `transactions.persisted`; combined normal consumer processes replayed transactions under epoch/semantic fences. | Replay ordering, duplicate, partial-publish, epoch, throttle, and backlog tests pass. |
 | Throughput and capacity | required | Measure events/second, p50/p95/p99, DB pool utilization, query count, Kafka lag, failure recovery, and shutdown drain against three-service baseline. | No material regression; bounded in-flight and per-portfolio ordering proven. |
 | Aggregate observability | required | Add module outcome/error/latency metrics, one service health/readiness surface, consumer lag, DB/Kafka/outbox diagnostics, traces, and support runbook. | Observability contract and failure-injection tests pass. |

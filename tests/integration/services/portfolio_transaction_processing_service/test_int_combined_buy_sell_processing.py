@@ -1,0 +1,226 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
+from decimal import Decimal
+
+import pytest
+from portfolio_common.database_models import (
+    Cashflow,
+    Instrument,
+    OutboxEvent,
+    Portfolio,
+    PositionHistory,
+    PositionLotState,
+)
+from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.events import TransactionEvent
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
+    map_transaction_event,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    build_process_transaction_use_case,
+)
+
+pytestmark = [
+    pytest.mark.asyncio,
+    pytest.mark.integration_db,
+    pytest.mark.db_direct,
+    pytest.mark.regression,
+]
+
+
+async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-LOT-01"
+    security_id = "FO_EQ_COMBINED_01"
+    buy_event = _transaction_event(
+        transaction_id="BUY-COMBINED-LOT-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 10, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="420",
+        price="100",
+        gross_amount="42000",
+    )
+    sell_event = _transaction_event(
+        transaction_id="SELL-COMBINED-LOT-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 2, 28, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="110",
+        price="110",
+        gross_amount="12100",
+    )
+    async_db_session.add(_portfolio(portfolio_id))
+    async_db_session.add(
+        Instrument(
+            security_id=security_id,
+            name="Combined Processing Equity",
+            isin="SG0000000001",
+            currency="USD",
+            product_type="EQUITY",
+            asset_class="Equity",
+        )
+    )
+    async_db_session.add(_db_transaction(buy_event))
+    await async_db_session.commit()
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    use_case = build_process_transaction_use_case(session_factory=session_factory)
+
+    buy_result = await use_case.execute(
+        map_transaction_event(
+            buy_event,
+            event_id="transactions.persisted-0-9101",
+            correlation_id="corr-combined-buy-01",
+        )
+    )
+    async_db_session.add(_db_transaction(sell_event))
+    await async_db_session.commit()
+    sell_result = await use_case.execute(
+        map_transaction_event(
+            sell_event,
+            event_id="transactions.persisted-0-9102",
+            correlation_id="corr-combined-sell-01",
+        )
+    )
+
+    assert buy_result.status is TransactionProcessingStatus.PROCESSED
+    assert sell_result.status is TransactionProcessingStatus.PROCESSED
+    assert buy_result.cashflow_record_count == sell_result.cashflow_record_count == 1
+    assert buy_result.position_record_count == sell_result.position_record_count == 1
+
+    async with session_factory() as verification_session:
+        lot = (
+            await verification_session.execute(
+                select(PositionLotState).where(
+                    PositionLotState.source_transaction_id == buy_event.transaction_id
+                )
+            )
+        ).scalar_one()
+        persisted_sell = (
+            await verification_session.execute(
+                select(DBTransaction).where(
+                    DBTransaction.transaction_id == sell_event.transaction_id
+                )
+            )
+        ).scalar_one()
+        cashflows = (
+            (
+                await verification_session.execute(
+                    select(Cashflow)
+                    .where(Cashflow.portfolio_id == portfolio_id)
+                    .order_by(Cashflow.cashflow_date)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        positions = (
+            (
+                await verification_session.execute(
+                    select(PositionHistory)
+                    .where(
+                        PositionHistory.portfolio_id == portfolio_id,
+                        PositionHistory.security_id == security_id,
+                    )
+                    .order_by(PositionHistory.position_date)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        outbox_rows = (
+            (
+                await verification_session.execute(
+                    select(OutboxEvent).where(OutboxEvent.aggregate_id == portfolio_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert lot.original_quantity == Decimal("420")
+    assert lot.open_quantity == Decimal("310")
+    assert persisted_sell.net_cost == Decimal("-11000")
+    assert persisted_sell.realized_gain_loss == Decimal("1100")
+    assert [(row.classification, row.amount) for row in cashflows] == [
+        ("INVESTMENT_OUTFLOW", Decimal("-42000")),
+        ("INVESTMENT_INFLOW", Decimal("12100")),
+    ]
+    assert [(row.quantity, row.cost_basis) for row in positions] == [
+        (Decimal("420"), Decimal("42000")),
+        (Decimal("310"), Decimal("31000")),
+    ]
+    assert sorted(row.event_type for row in outbox_rows) == [
+        "CashflowCalculated",
+        "CashflowCalculated",
+        "ProcessedTransactionPersisted",
+        "ProcessedTransactionPersisted",
+    ]
+
+
+def _portfolio(portfolio_id: str) -> Portfolio:
+    return Portfolio(
+        portfolio_id=portfolio_id,
+        base_currency="USD",
+        open_date=date(2025, 1, 1),
+        risk_exposure="MODERATE",
+        investment_time_horizon="MEDIUM_TERM",
+        portfolio_type="DISCRETIONARY",
+        booking_center_code="SG",
+        client_id="CLIENT-COMBINED-LOT-01",
+        is_leverage_allowed=False,
+        status="ACTIVE",
+    )
+
+
+def _transaction_event(
+    *,
+    transaction_id: str,
+    portfolio_id: str,
+    security_id: str,
+    transaction_date: datetime,
+    transaction_type: str,
+    quantity: str,
+    price: str,
+    gross_amount: str,
+) -> TransactionEvent:
+    return TransactionEvent(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        instrument_id=security_id,
+        security_id=security_id,
+        transaction_date=transaction_date,
+        transaction_type=transaction_type,
+        quantity=Decimal(quantity),
+        price=Decimal(price),
+        gross_transaction_amount=Decimal(gross_amount),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+
+def _db_transaction(event: TransactionEvent) -> DBTransaction:
+    return DBTransaction(
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        instrument_id=event.instrument_id,
+        security_id=event.security_id,
+        transaction_date=event.transaction_date,
+        transaction_type=event.transaction_type,
+        quantity=event.quantity,
+        price=event.price,
+        gross_transaction_amount=event.gross_transaction_amount,
+        trade_currency=event.trade_currency,
+        currency=event.currency,
+    )
