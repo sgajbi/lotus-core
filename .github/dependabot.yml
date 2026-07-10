@@ -21,9 +21,6 @@ updates:
     directories:
       - "/"
       - "/src/libs/portfolio-common"
-      - "/src/services/calculators/cashflow_calculator_service"
-      - "/src/services/calculators/cost_calculator_service"
-      - "/src/services/calculators/position_calculator"
       - "/src/services/calculators/position_valuation_calculator"
       - "/src/services/event_replay_service"
       - "/src/services/financial_reconciliation_service"
@@ -53,9 +50,6 @@ updates:
 
   - package-ecosystem: "docker"
     directories:
-      - "/src/services/calculators/cashflow_calculator_service"
-      - "/src/services/calculators/cost_calculator_service"
-      - "/src/services/calculators/position_calculator"
       - "/src/services/calculators/position_valuation_calculator"
       - "/src/services/event_replay_service"
       - "/src/services/financial_reconciliation_service"

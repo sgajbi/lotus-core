@@ -18,6 +18,45 @@ def test_ci_prebuild_inventory_contains_only_the_unified_transaction_worker() ->
     assert not LEGACY_TRANSACTION_WORKERS.intersection(SERVICE_BUILDS)
 
 
+def test_legacy_transaction_source_roots_are_not_standalone_packages_or_images() -> None:
+    source_roots = (
+        REPO_ROOT / "src/services/calculators/cost_calculator_service",
+        REPO_ROOT / "src/services/calculators/cashflow_calculator_service",
+        REPO_ROOT / "src/services/calculators/position_calculator",
+    )
+
+    for source_root in source_roots:
+        assert not (source_root / "Dockerfile").exists()
+        assert not (source_root / "pyproject.toml").exists()
+        assert not (source_root / "requirements.txt").exists()
+
+
+def test_dependabot_tracks_only_the_unified_transaction_package_and_image() -> None:
+    config = yaml.safe_load((REPO_ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    transaction_directories = {
+        "/src/services/calculators/cashflow_calculator_service",
+        "/src/services/calculators/cost_calculator_service",
+        "/src/services/calculators/position_calculator",
+    }
+    for update in config["updates"]:
+        directories = set(update.get("directories", []))
+        assert not transaction_directories.intersection(directories)
+
+    target = "/src/services/portfolio_transaction_processing_service"
+    pip_directories = next(
+        update["directories"]
+        for update in config["updates"]
+        if update["package-ecosystem"] == "pip"
+    )
+    docker_directories = next(
+        update["directories"]
+        for update in config["updates"]
+        if update["package-ecosystem"] == "docker"
+    )
+    assert target in pip_directories
+    assert target in docker_directories
+
+
 def test_image_release_contains_only_the_unified_transaction_worker() -> None:
     workflow_path = REPO_ROOT / ".github" / "workflows" / "image-release.yml"
     workflow_text = workflow_path.read_text(encoding="utf-8")
