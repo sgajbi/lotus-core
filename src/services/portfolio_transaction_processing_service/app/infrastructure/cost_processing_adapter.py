@@ -2,14 +2,21 @@ from __future__ import annotations
 
 from portfolio_common.outbox_repository import OutboxRepository
 
+from src.services.calculators.cost_calculator_service.app.consumer import (
+    FxRateNotFoundError,
+    InstrumentReferenceUnavailableError,
+    UpstreamCashLegUnavailableError,
+)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationEventProcessor,
     CostCalculationWorkflowPort,
+    PortfolioNotFoundError,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
 
+from ..application import TransactionProcessingError
 from ..domain import BookedTransaction
 from ..ports import CostProcessingResult
 from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
@@ -41,12 +48,28 @@ class CostProcessingCompatibilityAdapter:
             correlation_id=correlation_id,
             traceparent=traceparent,
         )
-        stage_result = await self._processor.stage_valid_event(
-            event=event,
-            correlation_id=correlation_id or "",
-            repo=self._repository,
-            outbox_repo=self._outbox_repository,
-        )
+        try:
+            stage_result = await self._processor.stage_valid_event(
+                event=event,
+                correlation_id=correlation_id or "",
+                repo=self._repository,
+                outbox_repo=self._outbox_repository,
+            )
+        except (
+            FxRateNotFoundError,
+            InstrumentReferenceUnavailableError,
+            PortfolioNotFoundError,
+            UpstreamCashLegUnavailableError,
+        ) as exc:
+            raise TransactionProcessingError(
+                reason_code="cost_dependency_unavailable",
+                detail={
+                    "portfolio_id": transaction.portfolio_id,
+                    "transaction_id": transaction.transaction_id,
+                    "dependency_error": type(exc).__name__,
+                },
+                retryable=True,
+            ) from exc
         return CostProcessingResult(
             processed_transactions=tuple(
                 to_booked_transaction(item) for item in stage_result.emitted_events
