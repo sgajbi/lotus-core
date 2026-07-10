@@ -4,7 +4,10 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import TypeVar
 
-from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.idempotency_repository import (
+    IdempotencyRepository,
+    SemanticEventClaimOutcome,
+)
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
@@ -31,6 +34,7 @@ from ..ports import (
     CostProcessingPort,
     PipelineStageProcessingPort,
     PositionProcessingPort,
+    TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
 )
 from .cashflow_processing_adapter import (
@@ -54,16 +58,19 @@ class SqlAlchemyTransactionIdempotencyAdapter:
         *,
         event_id: str,
         portfolio_id: str,
+        semantic_key: str,
+        payload_fingerprint: str,
         correlation_id: str | None,
-    ) -> bool:
-        return bool(
-            await self._repository.claim_event_processing(
-                event_id,
-                portfolio_id,
-                TRANSACTION_PROCESSING_SERVICE_NAME,
-                correlation_id,
-            )
+    ) -> TransactionIdempotencyOutcome:
+        outcome = await self._repository.claim_semantic_event_processing(
+            event_id=event_id,
+            portfolio_id=portfolio_id,
+            service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+            semantic_key=semantic_key,
+            payload_fingerprint=payload_fingerprint,
+            correlation_id=correlation_id,
         )
+        return _map_semantic_claim_outcome(outcome)
 
 
 class SqlAlchemyTransactionProcessingUnitOfWork:
@@ -178,3 +185,9 @@ def _required_adapter(adapter: _AdapterT | None, name: str) -> _AdapterT:
     if adapter is None:
         raise RuntimeError(f"Transaction processing {name} adapter is not initialized")
     return adapter
+
+
+def _map_semantic_claim_outcome(
+    outcome: SemanticEventClaimOutcome,
+) -> TransactionIdempotencyOutcome:
+    return TransactionIdempotencyOutcome(outcome.value)

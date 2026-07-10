@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
@@ -26,14 +27,23 @@ class PositionProcessingResult:
     cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
 
 
+class TransactionIdempotencyOutcome(StrEnum):
+    CLAIMED = "claimed"
+    PHYSICAL_DUPLICATE = "physical_duplicate"
+    SEMANTIC_DUPLICATE = "semantic_duplicate"
+    SEMANTIC_CONFLICT = "semantic_conflict"
+
+
 class TransactionIdempotencyPort(Protocol):
     async def claim(
         self,
         *,
         event_id: str,
         portfolio_id: str,
+        semantic_key: str,
+        payload_fingerprint: str,
         correlation_id: str | None,
-    ) -> bool: ...
+    ) -> TransactionIdempotencyOutcome: ...
 
 
 class CostProcessingPort(Protocol):

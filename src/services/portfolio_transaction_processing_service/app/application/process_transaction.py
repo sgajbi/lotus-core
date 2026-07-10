@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from ..domain import BookedTransaction
+from ..domain import BookedTransaction, build_transaction_semantic_identity
 from ..ports import (
     PositionProcessingResult,
+    TransactionIdempotencyOutcome,
     TransactionProcessingObservation,
     TransactionProcessingObserver,
     TransactionProcessingOperation,
@@ -85,17 +86,41 @@ class ProcessTransactionUseCase:
         transaction = command.transaction
         metadata = command.metadata
         async with self._unit_of_work_factory() as unit_of_work:
-            with self._observer.observe(TransactionProcessingOperation.IDEMPOTENCY):
-                claimed = await unit_of_work.idempotency.claim(
+            identity = build_transaction_semantic_identity(transaction)
+            with self._observer.observe(
+                TransactionProcessingOperation.IDEMPOTENCY
+            ) as idempotency_observation:
+                idempotency_outcome = await unit_of_work.idempotency.claim(
                     event_id=metadata.event_id,
                     portfolio_id=transaction.portfolio_id,
+                    semantic_key=identity.semantic_key,
+                    payload_fingerprint=identity.payload_fingerprint,
                     correlation_id=metadata.correlation_id,
                 )
-            if not claimed:
+                if idempotency_outcome is not TransactionIdempotencyOutcome.CLAIMED:
+                    idempotency_observation.set_outcome(
+                        TransactionProcessingOutcome(idempotency_outcome.value)
+                    )
+            if idempotency_outcome in {
+                TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
+                TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+            }:
                 transaction_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
                 return ProcessTransactionResult(
                     status=TransactionProcessingStatus.DUPLICATE,
                     input_transaction_id=transaction.transaction_id,
+                )
+            if idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_CONFLICT:
+                raise TransactionProcessingRejected(
+                    reason_code="transaction_semantic_conflict",
+                    detail={
+                        "portfolio_id": transaction.portfolio_id,
+                        "transaction_id": transaction.transaction_id,
+                        "epoch": transaction.epoch or 0,
+                        "semantic_key": identity.semantic_key,
+                        "payload_fingerprint": identity.payload_fingerprint,
+                    },
+                    retryable=False,
                 )
 
             with self._observer.observe(TransactionProcessingOperation.COST):
