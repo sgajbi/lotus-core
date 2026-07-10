@@ -12,9 +12,9 @@ from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
 from portfolio_common.worker_runtime import run_kafka_worker_runtime
 
-from ..infrastructure.legacy_consumer_registry import build_legacy_transaction_consumers
 from ..web import WORKER_READINESS_SERVICE_NAME
 from ..web import app as web_app
+from .consumer_composition import build_transaction_processing_consumers
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,14 @@ class ConsumerManager:
         consumers: Sequence[Any] | None = None,
         dispatcher: Any | None = None,
     ) -> None:
-        self.consumers = list(consumers or build_legacy_transaction_consumers())
-        self.dispatcher = dispatcher or OutboxDispatcher(kafka_producer=get_kafka_producer())
+        self.consumers = list(
+            consumers if consumers is not None else build_transaction_processing_consumers()
+        )
+        self.dispatcher = (
+            dispatcher
+            if dispatcher is not None
+            else OutboxDispatcher(kafka_producer=get_kafka_producer())
+        )
         self.tasks: list[asyncio.Task[Any]] = []
         self._shutdown_event = asyncio.Event()
 

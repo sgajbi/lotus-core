@@ -1660,6 +1660,9 @@ Most relevant current governance:
      `test_web_health_contract.py`: readiness requires database, Kafka, and worker runtime; a failed
      runtime task returns 503; and `/version` must equal readiness build metadata for commit, branch,
      timestamp, repo, image version/digest, CI run ID, and OCI labels.
+     `ConsumerManager` now defaults to `build_transaction_processing_consumers()`; the legacy
+     six-consumer registry is compatibility evidence, not target startup behavior. Deployment must
+     replace the three calculator workers atomically and must never run both topologies together.
 
 ## Context Maintenance Rule
 
