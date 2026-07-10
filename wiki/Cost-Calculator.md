@@ -88,6 +88,10 @@ pressure, and commits only after replay publication succeeds. After commit,
 `kafka_consumer_partition_lag_messages` reports cached high-watermark lag separately for live and
 replay groups without adding a broker query to the transaction path.
 
+The same target health surface samples `database_pool_connections` after successful database
+readiness. Operators can correlate checked-out capacity and overflow with transaction latency,
+consumer lag, and outbox age without adding persistence access to calculation code.
+
 Shutdown is drain-first: polling stops, already-polled replay work completes and commits, and only
 then are Kafka resources closed. Retry exhaustion, DLQ publication, and offset handling remain owned
 by the shared consumer; the replay delivery mapper and application use case do not implement a

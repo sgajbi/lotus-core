@@ -40,6 +40,9 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     or `not_ready`.
     Raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, and correlation IDs
     must not be metric labels.
+    Successful database probes also sample
+    `database_pool_connections{pool,state}` for configured capacity, checked-in, checked-out, and
+    overflow state without an additional query. Metric failure does not alter readiness.
 11. Metric vocabulary is governed by `portfolio_common.observability_contracts` and enforced by
     `make metric-vocabulary-guard`. New metric labels must be added to
     `TELEMETRY_METRIC_ALLOWED_LABELS`, must not appear in
@@ -83,5 +86,6 @@ coverage as additional services standardize their logging surfaces, add automate
 correlation ID propagation, health/readiness completeness, and inventory enforcement that prevents
 new runtime web apps from bypassing the shared metrics policy. The combined transaction-processing
 target now has bounded stage outcome/latency and committed-lag metrics. Shared outbox metrics already
-expose pending and failed publication state. DB pool diagnostics, trace export, target
-dashboards/alerts, support-runbook closure, and deployed evidence remain before cutover.
+expose pending and failed publication state, and shared readiness exports async DB pool state. Trace
+export, target dashboards/alerts, support-runbook closure, and deployed evidence remain before
+cutover.

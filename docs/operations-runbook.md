@@ -64,10 +64,17 @@ Shared readiness checks also emit Prometheus dependency telemetry:
 | `health_dependency_check_total` | `service`, `dependency`, `status` | Count fresh dependency-check outcomes. |
 | `health_dependency_check_duration_seconds` | `service`, `dependency` | Track dependency-check latency. |
 | `health_readiness_state` | `service`, `state` | Expose the current service readiness posture. |
+| `database_pool_connections` | `pool`, `state` | Sample configured capacity, checked-in, checked-out, and overflow connection state after successful DB readiness. |
 
 The dependency status label uses only `ok`, `unavailable`, `timeout`, `misconfigured`, or `error`.
 Do not add raw exception text, portfolio IDs, security IDs, request IDs, trace IDs, or correlation
 IDs as health metric labels.
+
+Database pool samples come from in-process SQLAlchemy counters after the readiness transaction
+closes; they do not add a query. Compare `checked_out` with `configured_capacity`, and alert on
+sustained positive `overflow` together with processing latency or lag. Missing samples mean the
+database readiness probe has not completed successfully and should be interpreted with
+`health_dependency_check_total`, not as zero utilization.
 
 ## Runtime Version Metadata
 

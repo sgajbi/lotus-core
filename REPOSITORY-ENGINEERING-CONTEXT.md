@@ -1658,6 +1658,9 @@ Most relevant current governance:
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.
+     Sample async database pool state only from shared infrastructure/readiness after a successful
+     dependency check. Use bounded pool/state gauges, normalize negative prefill overflow, and never
+     let telemetry failure alter readiness or financial transaction behavior.
      Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
      attempt and preserve one compatibility processed event per replay, while semantic fences and
      deterministic rebuilds must keep cashflow and final position state singular. Do not collapse
