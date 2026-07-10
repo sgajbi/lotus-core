@@ -38,6 +38,37 @@ def test_evaluate_outbox_event_contracts_accepts_current_runtime_emissions() -> 
     assert guard.evaluate_outbox_event_contracts() == []
 
 
+def test_current_event_actors_match_runtime_boundary_catalog() -> None:
+    assert guard.evaluate_event_service_ownership() == []
+
+
+def test_event_service_ownership_rejects_retired_service_alias() -> None:
+    event_definition = EventFamilyDefinition(
+        event_type="ValuationRequested",
+        schema_model="CashflowCalculatedEvent",
+        family="pipeline_stage_event",
+        direction="internal",
+        aggregate_type="portfolio_day",
+        topic="valuation.requested",
+        producer_service="pipeline_orchestrator_service",
+        consumer_services=("valuation_service",),
+        idempotency_required=True,
+        correlation_required=True,
+        schema_version_required=True,
+    )
+
+    errors = guard.evaluate_event_service_ownership(
+        event_definitions=(event_definition,),
+        direct_topic_definitions=(),
+        runtime_service_ids=frozenset({"pipeline_orchestrator_service"}),
+    )
+
+    assert errors == [
+        "ValuationRequested references event actor(s) missing from the runtime boundary catalog: "
+        "valuation_service"
+    ]
+
+
 def test_evaluate_outbox_event_contracts_rejects_missing_catalog_event() -> None:
     errors = guard.evaluate_outbox_event_contracts(
         (
