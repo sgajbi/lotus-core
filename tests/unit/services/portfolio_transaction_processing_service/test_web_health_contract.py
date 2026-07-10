@@ -1,12 +1,43 @@
 from __future__ import annotations
 
 import importlib
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 from portfolio_common import health
 
 from src.services.portfolio_transaction_processing_service.app import web
+
+SECURITY_COVERAGE_CONTRACT = Path("contracts/security/security-control-coverage.v1.json")
+
+
+def test_combined_health_app_has_explicit_health_only_security_coverage() -> None:
+    contract = json.loads(SECURITY_COVERAGE_CONTRACT.read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for item in contract["apps"]
+        if item["service_name"] == "portfolio_transaction_processing_service_web"
+    )
+
+    assert entry == {
+        "service_name": "portfolio_transaction_processing_service_web",
+        "app_path": "src/services/portfolio_transaction_processing_service/app/web.py",
+        "app_kind": "health_only_worker_api",
+        "auth_audit_control": "health_only_no_business_routes",
+        "payload_limit_control": "not_applicable_health_only",
+        "upload_limit_control": "not_applicable",
+        "unauthenticated_allowlist": [
+            "/docs",
+            "/health/live",
+            "/health/ready",
+            "/metrics",
+            "/openapi.json",
+            "/redoc",
+            "/version",
+        ],
+    }
 
 
 def _build_metadata_environment(monkeypatch) -> dict[str, str]:
