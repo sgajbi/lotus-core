@@ -42,6 +42,7 @@ def portfolio_record(
     *,
     base_currency: str = "USD",
     client_id: str = "CLIENT-COMBINED-01",
+    cost_basis_method: str = "FIFO",
 ) -> Portfolio:
     return Portfolio(
         portfolio_id=portfolio_id,
@@ -54,6 +55,7 @@ def portfolio_record(
         client_id=client_id,
         is_leverage_allowed=False,
         status="ACTIVE",
+        cost_basis_method=cost_basis_method,
     )
 
 
