@@ -10,7 +10,7 @@ from portfolio_common.events import TransactionEvent
 from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
 )
-from src.services.calculators.cost_calculator_service.app.consumer import (
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
 )
