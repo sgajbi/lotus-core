@@ -27,6 +27,8 @@ class CaBundleAReconciliationResult:
     cash_consideration_count: int
     source_basis_out_local: Decimal
     target_basis_in_local: Decimal
+    cash_basis_local: Decimal
+    missing_cash_basis_count: int
     net_basis_delta_local: Decimal
     basis_tolerance: Decimal
 
@@ -38,6 +40,8 @@ class _CaBundleAReconciliationAccumulator:
     cash_consideration_count: int = 0
     source_basis_out_local: Decimal = Decimal(0)
     target_basis_in_local: Decimal = Decimal(0)
+    cash_basis_local: Decimal = Decimal(0)
+    missing_cash_basis_count: int = 0
 
 
 def _source_basis_out_local(event: TransactionEvent) -> Decimal:
@@ -61,7 +65,11 @@ def evaluate_ca_bundle_a_reconciliation(
     for event in events:
         _accumulate_reconciliation_event(accumulator, event)
 
-    net_basis_delta_local = accumulator.target_basis_in_local - accumulator.source_basis_out_local
+    net_basis_delta_local = (
+        accumulator.target_basis_in_local
+        + accumulator.cash_basis_local
+        - accumulator.source_basis_out_local
+    )
     return CaBundleAReconciliationResult(
         status=_resolve_reconciliation_status(
             accumulator=accumulator,
@@ -73,6 +81,8 @@ def evaluate_ca_bundle_a_reconciliation(
         cash_consideration_count=accumulator.cash_consideration_count,
         source_basis_out_local=accumulator.source_basis_out_local,
         target_basis_in_local=accumulator.target_basis_in_local,
+        cash_basis_local=accumulator.cash_basis_local,
+        missing_cash_basis_count=accumulator.missing_cash_basis_count,
         net_basis_delta_local=net_basis_delta_local,
         basis_tolerance=basis_tolerance,
     )
@@ -88,7 +98,7 @@ def _accumulate_reconciliation_event(
     elif transaction_type in CA_BUNDLE_A_IN_TYPES:
         _accumulate_target_leg(accumulator, event)
     elif transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
-        accumulator.cash_consideration_count += 1
+        _accumulate_cash_consideration(accumulator, event)
 
 
 def _accumulate_source_leg(
@@ -107,6 +117,17 @@ def _accumulate_target_leg(
     accumulator.target_basis_in_local += _target_basis_in_local(event)
 
 
+def _accumulate_cash_consideration(
+    accumulator: _CaBundleAReconciliationAccumulator,
+    event: TransactionEvent,
+) -> None:
+    accumulator.cash_consideration_count += 1
+    if event.allocated_cost_basis_local is None or event.allocated_cost_basis_local < 0:
+        accumulator.missing_cash_basis_count += 1
+        return
+    accumulator.cash_basis_local += event.allocated_cost_basis_local
+
+
 def _resolve_reconciliation_status(
     *,
     accumulator: _CaBundleAReconciliationAccumulator,
@@ -115,6 +136,8 @@ def _resolve_reconciliation_status(
 ) -> str:
     if accumulator.source_leg_count == 0 or accumulator.target_leg_count == 0:
         return "insufficient_legs"
+    if accumulator.missing_cash_basis_count > 0:
+        return "insufficient_cash_basis"
     if abs(net_basis_delta_local) <= basis_tolerance:
         return "balanced"
     return "basis_mismatch"
