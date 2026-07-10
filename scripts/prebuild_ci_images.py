@@ -60,6 +60,10 @@ SERVICE_BUILDS: dict[str, tuple[str, str]] = {
         "lotus-core/position-calculator-service:local",
         "src/services/calculators/position_calculator/Dockerfile",
     ),
+    "portfolio_transaction_processing_service": (
+        "lotus-core/portfolio-transaction-processing-service:local",
+        "src/services/portfolio_transaction_processing_service/Dockerfile",
+    ),
     "pipeline_orchestrator_service": (
         "lotus-core/pipeline-orchestrator-service:local",
         "src/services/pipeline_orchestrator_service/Dockerfile",
