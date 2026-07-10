@@ -92,6 +92,15 @@
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
+      "service_name": "portfolio_transaction_processing_service_web",
+      "app_path": "src/services/portfolio_transaction_processing_service/app/web.py",
+      "app_kind": "health_only_worker_api",
+      "auth_audit_control": "health_only_no_business_routes",
+      "payload_limit_control": "not_applicable_health_only",
+      "upload_limit_control": "not_applicable",
+      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
+    },
+    {
       "service_name": "position_calculator_web",
       "app_path": "src/services/calculators/position_calculator/app/web.py",
       "app_kind": "health_only_worker_api",

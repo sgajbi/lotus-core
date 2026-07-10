@@ -49,6 +49,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Target manager final topology default | implemented-local | CR-1459; starting the undeployed target selects one live and one replay-request consumer with explicit dependency injection; legacy six-consumer registry is no longer its default. |
 | Target image package and CI release enrollment | implemented-local | CR-1460; bounded source closure avoids legacy wheel collisions, runs non-root, carries OCI/version metadata, and enters CI prebuild/release/Dependabot inventories. Release evidence is pending. |
 | Bounded module outcome and latency metrics | implemented-local | CR-1461; observer port plus Prometheus adapter attributes live/replay, idempotency, cost, cashflow, position, and commit outcomes without business-identifier labels. |
+| Target health-only security coverage | implemented-local | CR-1462; explicit shared-bootstrap, no-business-route, payload/upload, and unauthenticated operational allowlist contract with focused proof. |
 
 ## Required Before Runtime Cutover
 
