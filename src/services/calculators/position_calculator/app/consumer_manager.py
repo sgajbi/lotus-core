@@ -10,14 +10,10 @@ from portfolio_common.config import (
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
-from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
-from portfolio_common.runtime_supervision import (
-    shutdown_runtime_components,
-    wait_for_shutdown_or_task_failure,
-)
+from portfolio_common.worker_runtime import run_kafka_worker_runtime
 
 from .consumers.transaction_event_consumer import TransactionEventConsumer
 from .web import WORKER_READINESS_SERVICE_NAME
@@ -71,38 +67,18 @@ class ConsumerManager:
         self._shutdown_event.set()
 
     async def run(self):
-        required_topics = [consumer.topic for consumer in self.consumers]
-        ensure_topics_exist(required_topics)
-
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-
-        # NEW: Setup and run the Uvicorn server for health probes
-        uvicorn_config = uvicorn.Config(
-            web_app, host=health_probe_bind_host(), port=8081, log_config=None
-        )
-        server = uvicorn.Server(uvicorn_config)
-
-        logger.info("Starting all consumer tasks, the outbox dispatcher, and the web server...")
-        self.tasks = [asyncio.create_task(c.run()) for c in self.consumers]
-        self.tasks.append(asyncio.create_task(self.dispatcher.run()))
-        self.tasks.append(asyncio.create_task(server.serve()))
-
-        logger.info("ConsumerManager is running. Press Ctrl+C to exit.")
-        runtime_error = await wait_for_shutdown_or_task_failure(
-            tasks=self.tasks,
-            shutdown_event=self._shutdown_event,
-            logger=logger,
-            readiness_service_name=WORKER_READINESS_SERVICE_NAME,
-        )
-
-        logger.info("Shutdown event received. Stopping all tasks...")
-        await shutdown_runtime_components(
-            tasks=self.tasks,
+        await run_kafka_worker_runtime(
             consumers=self.consumers,
-            stop_callbacks=[self.dispatcher.stop],
-            server=server,
+            dispatcher=self.dispatcher,
+            web_app=web_app,
+            web_port=8081,
+            readiness_service_name=WORKER_READINESS_SERVICE_NAME,
+            shutdown_event=self._shutdown_event,
+            signal_handler=self._signal_handler,
+            tasks=self.tasks,
+            logger=logger,
+            ensure_topics=ensure_topics_exist,
+            signal_module=signal,
+            server_config_factory=uvicorn.Config,
+            server_factory=uvicorn.Server,
         )
-        logger.info("All tasks have been successfully shut down.")
-        if runtime_error is not None:
-            raise runtime_error
