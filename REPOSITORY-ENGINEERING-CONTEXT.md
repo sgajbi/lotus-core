@@ -1590,6 +1590,18 @@ Most relevant current governance:
      queue-bookkeeping into these routers. Extend the command-handler/use-case pattern and update
      `tests/unit/services/ingestion_service/routers/test_ingestion_router_command_boundaries.py`
      when adding or changing ingestion route families.
+127. Cost, cashflow, and position processing are planned to converge into one
+     `portfolio_transaction_processing_service` deployable under issue #468. Preserve three
+     internal domain/application modules coordinated by one `ProcessTransactionUseCase`, one
+     atomic normal-path unit of work, current compatibility Kafka topics during migration,
+     explicit replay/DLQ semantics, module diagnostics/metrics, and state ownership. Do not merge
+     calculation policies into one large service class or let the use case depend on concrete
+     repositories/consumers. `position_valuation_calculator` remains
+     independently deployable because its job-driven compute, market-data dependency, scaling,
+     backfill, and failure-isolation profile differs from transaction processing. The authoritative
+     migration and rollback gates are in
+     `docs/architecture/calculator-runtime-consolidation-decision.md`; the current three-worker
+     topology remains runtime truth until its parity gates pass.
 
 ## Context Maintenance Rule
 

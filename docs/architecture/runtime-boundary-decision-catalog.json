@@ -21,40 +21,43 @@
     {
       "serviceId": "cashflow_calculator_service",
       "servicePath": "src/services/calculators/cashflow_calculator_service",
-      "status": "current-state-revalidation-required",
-      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "status": "runtime-consolidation-planned",
+      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
+      "rationaleSummary": "Consolidate the cashflow module into one transaction-processing deployable while preserving its domain, consumer-group, transaction, idempotency, replay, DLQ, metric, and supportability boundaries.",
+      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
       "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
-        "No new runtime split is approved by this catalog entry."
+        "Cashflow classification remains a bounded application/domain module.",
+        "The current worker shell duplicates cost and position startup, health, dispatcher, and packaging behavior."
       ],
-      "runtimeBoundaryDrivers": ["current-state"],
+      "runtimeBoundaryDrivers": ["shared-transaction-input", "shared-worker-runtime"],
       "revalidationOwner": "lotus-core engineering"
     },
     {
       "serviceId": "cost_calculator_service",
       "servicePath": "src/services/calculators/cost_calculator_service",
-      "status": "current-state-revalidation-required",
-      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "status": "runtime-consolidation-planned",
+      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
+      "rationaleSummary": "Consolidate the cost module into one transaction-processing deployable while preserving its domain, consumer-group, transaction, idempotency, replay, DLQ, metric, and supportability boundaries.",
+      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
       "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
-        "No new runtime split is approved by this catalog entry."
+        "Cost basis and lot-state calculation remain a bounded application/domain module.",
+        "The current worker shell duplicates cashflow and position startup, health, dispatcher, and packaging behavior."
       ],
-      "runtimeBoundaryDrivers": ["current-state"],
+      "runtimeBoundaryDrivers": ["shared-transaction-input", "shared-worker-runtime"],
       "revalidationOwner": "lotus-core engineering"
     },
     {
       "serviceId": "position_calculator_service",
       "servicePath": "src/services/calculators/position_calculator",
-      "status": "current-state-revalidation-required",
-      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "status": "runtime-consolidation-planned",
+      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
+      "rationaleSummary": "Consolidate the position module into one transaction-processing deployable while preserving ordered mutation, epoch fencing, replay, consumer-group, transaction, idempotency, DLQ, metric, and supportability boundaries.",
+      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
       "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
-        "No new runtime split is approved by this catalog entry."
+        "Position reduction and replay remain a bounded application/domain module.",
+        "The current worker shell duplicates cost and cashflow startup, health, dispatcher, and packaging behavior."
       ],
-      "runtimeBoundaryDrivers": ["current-state"],
+      "runtimeBoundaryDrivers": ["shared-transaction-pipeline", "shared-worker-runtime"],
       "revalidationOwner": "lotus-core engineering"
     },
     {

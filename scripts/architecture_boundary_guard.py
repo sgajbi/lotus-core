@@ -122,6 +122,28 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         forbidden_module_prefixes=("portfolio_common.kafka_utils",),
     ),
     DirectImportBoundaryRule(
+        name="calculator modules must not import orchestrator or query internals",
+        source_path_prefixes=("src/services/calculators/",),
+        forbidden_module_prefixes=(
+            "services.pipeline_orchestrator_service",
+            "services.query_control_plane_service",
+            "services.query_service",
+            "services.valuation_orchestrator_service",
+        ),
+    ),
+    DirectImportBoundaryRule(
+        name="orchestrators must not import calculator or query internals",
+        source_path_prefixes=(
+            "src/services/pipeline_orchestrator_service/app/",
+            "src/services/valuation_orchestrator_service/app/",
+        ),
+        forbidden_module_prefixes=(
+            "services.calculators",
+            "services.query_control_plane_service",
+            "services.query_service",
+        ),
+    ),
+    DirectImportBoundaryRule(
         name="financial reconciliation service must use runtime provider ports",
         source_path_prefixes=(
             "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",

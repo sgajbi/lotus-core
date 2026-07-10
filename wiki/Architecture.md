@@ -75,9 +75,8 @@ Control execution and reconciliation run contracts.
 
 ### calculators and generators
 
-- position calculator
-- valuation calculator
-- cashflow calculator
+- current cost, cashflow, and position workers, planned as one transaction-processing deployable
+- independently scalable position valuation worker
 - timeseries generator
 
 ## Architecture references
@@ -87,6 +86,7 @@ Control execution and reconciliation run contracts.
 - [Architecture Documentation Catalog](../docs/architecture/architecture-documentation-catalog.v1.json)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
 - [Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
+- [Calculator Runtime Consolidation Decision](../docs/architecture/calculator-runtime-consolidation-decision.md)
 - [RFC-0082 Contract Family Inventory](../docs/architecture/RFC-0082-contract-family-inventory.md)
 - [Query Service And Control Plane Boundary](../docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [RFC-0083 Target-State Gap Analysis](../docs/architecture/RFC-0083-target-state-gap-analysis.md)

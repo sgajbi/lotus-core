@@ -21,6 +21,7 @@ Read these first:
 4. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
 5. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 6. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
+7. [Calculator Runtime Consolidation Decision](./calculator-runtime-consolidation-decision.md)
 
 These documents establish the current bounded-context map, deployable ownership model, downstream
 contract posture, runtime boundary posture, and the main RFC-0083 implementation program.

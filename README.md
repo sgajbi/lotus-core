@@ -183,7 +183,9 @@ Primary runtime surfaces:
 - `financial_reconciliation_service`
   reconciliation and control execution contracts
 - calculators and generators
-  position, valuation, cashflow, and time-series materialization
+  current position, valuation, cashflow, and time-series materialization; cost, cashflow, and
+  position are moving toward one transaction-processing deployable while valuation remains
+  independently scalable
 
 Primary architecture references:
 
@@ -191,6 +193,7 @@ Primary architecture references:
 - [RFC-0083 Target-State Gap Analysis](docs/architecture/RFC-0083-target-state-gap-analysis.md)
 - [Query Service And Control Plane Boundary](docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
 - [Microservice Boundaries and Trigger Matrix](docs/architecture/microservice-boundaries-and-trigger-matrix.md)
+- [Calculator Runtime Consolidation Decision](docs/architecture/calculator-runtime-consolidation-decision.md)
 
 ## Repository Layout
 
