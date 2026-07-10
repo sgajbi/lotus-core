@@ -37,6 +37,20 @@ class DispositionEngine:
             transaction.portfolio_id, transaction.instrument_id, sell_quantity
         )
 
+    def transfer_basis_out(
+        self,
+        transaction: Transaction,
+        *,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> str | None:
+        return self._cost_basis_strategy.transfer_basis_out(
+            transaction.portfolio_id,
+            transaction.instrument_id,
+            cost_base,
+            cost_local,
+        )
+
     def set_initial_lots(self, transactions: list[Transaction]):
         filtered_buys = [
             txn for txn in transactions if _is_buy_transaction(txn) and txn.quantity > Decimal(0)

@@ -352,6 +352,121 @@ def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -
     }
 
 
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_basis_only_transfer_reduces_source_lot_cost_without_changing_quantity(
+    strategy_type,
+) -> None:
+    strategy = strategy_type()
+    for transaction_id, quantity, cost in (
+        ("BASIS-SOURCE-1", "60", "600"),
+        ("BASIS-SOURCE-2", "40", "800"),
+    ):
+        strategy.add_buy_lot(
+            Transaction(
+                transaction_id=transaction_id,
+                portfolio_id="P-BASIS",
+                instrument_id="PARENT-SECURITY",
+                security_id="PARENT-SECURITY",
+                transaction_type="BUY",
+                transaction_date=datetime(2026, 1, 1),
+                quantity=Decimal(quantity),
+                gross_transaction_amount=Decimal(cost),
+                net_cost_local=Decimal(cost),
+                net_cost=Decimal(cost),
+                trade_currency="USD",
+                portfolio_base_currency="USD",
+            )
+        )
+
+    error = strategy.transfer_basis_out(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("350"),
+        Decimal("350"),
+    )
+
+    assert error is None
+    states = strategy.get_open_lot_states()
+    assert sum(state.quantity for state in states.values()) == Decimal("100")
+    assert sum(state.cost_local for state in states.values()) == Decimal("1050")
+    assert sum(state.cost_base for state in states.values()) == Decimal("1050")
+
+
+def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zero() -> None:
+    strategy = AverageCostBasisStrategy()
+    original = Transaction(
+        transaction_id="ZERO-BASIS-SOURCE",
+        portfolio_id="P-BASIS",
+        instrument_id="PARENT-SECURITY",
+        security_id="PARENT-SECURITY",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        net_cost_local=Decimal("1000"),
+        net_cost=Decimal("1000"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    new_buy = original.model_copy(
+        update={
+            "transaction_id": "POST-TRANSFER-SOURCE",
+            "quantity": Decimal("20"),
+            "gross_transaction_amount": Decimal("300"),
+            "net_cost_local": Decimal("300"),
+            "net_cost": Decimal("300"),
+        }
+    )
+
+    strategy.add_buy_lot(original)
+    assert (
+        strategy.transfer_basis_out("P-BASIS", "PARENT-SECURITY", Decimal("1000"), Decimal("1000"))
+        is None
+    )
+    strategy.add_buy_lot(new_buy)
+
+    states = strategy.get_open_lot_states()
+    assert states["ZERO-BASIS-SOURCE"] == OpenLotState(
+        quantity=Decimal("100"),
+        cost_local=Decimal("0"),
+        cost_base=Decimal("0"),
+    )
+    assert states["POST-TRANSFER-SOURCE"] == OpenLotState(
+        quantity=Decimal("20"),
+        cost_local=Decimal("300"),
+        cost_base=Decimal("300"),
+    )
+
+
+@pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
+def test_basis_transfer_rejects_amount_above_available_basis(strategy_type) -> None:
+    strategy = strategy_type()
+    strategy.add_buy_lot(
+        Transaction(
+            transaction_id="BASIS-LIMIT-SOURCE",
+            portfolio_id="P-BASIS",
+            instrument_id="PARENT-SECURITY",
+            security_id="PARENT-SECURITY",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, 1),
+            quantity=Decimal("10"),
+            gross_transaction_amount=Decimal("100"),
+            net_cost_local=Decimal("100"),
+            net_cost=Decimal("100"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+
+    error = strategy.transfer_basis_out(
+        "P-BASIS", "PARENT-SECURITY", Decimal("101"), Decimal("101")
+    )
+
+    assert error is not None
+    assert "exceeds available cost basis" in error
+    assert strategy.get_open_lot_states()["BASIS-LIMIT-SOURCE"].cost_base == Decimal("100")
+
+
 def test_average_cost_initial_lots_normalize_buy_transaction_type(
     avco_strategy: AverageCostBasisStrategy,
 ):

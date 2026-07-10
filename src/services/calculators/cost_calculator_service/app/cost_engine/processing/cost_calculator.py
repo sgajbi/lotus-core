@@ -606,6 +606,14 @@ class PartialTransferOutStrategy:
         fx_rate = _transaction_fx_rate_or_one(transaction)
         basis_out_local = transaction.gross_transaction_amount
         basis_out_base = basis_out_local * fx_rate
+        error_reason = disposition_engine.transfer_basis_out(
+            transaction,
+            cost_base=basis_out_base,
+            cost_local=basis_out_local,
+        )
+        if error_reason is not None:
+            error_reporter.add_error(transaction.transaction_id, error_reason)
+            return
         transaction.net_cost_local = -basis_out_local
         transaction.net_cost = -basis_out_base
         transaction.gross_cost = -basis_out_base

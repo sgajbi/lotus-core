@@ -210,8 +210,8 @@ def test_avco_basis_only_transfers_preserve_source_quantity(transaction_type: st
     assert processed[-1].net_cost == Decimal("-100")
     assert _source_values(states)["AVCO-MATRIX-SEED-BUY"] == (
         Decimal("100"),
-        Decimal("1000"),
-        Decimal("1000"),
+        Decimal("900"),
+        Decimal("900"),
     )
 
 
