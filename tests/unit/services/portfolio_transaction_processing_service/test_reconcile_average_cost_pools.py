@@ -26,6 +26,10 @@ def assessment(
     return AverageCostPoolReconciliationAssessment(
         key=key,
         status=status,
+        expected_source_count=2,
+        expected_quantity=Decimal("10"),
+        expected_cost_local=Decimal("100"),
+        expected_cost_base=Decimal("120"),
         source_count=2,
         pool_quantity=pool_quantity,
         pool_cost_local=Decimal("100") if pool_quantity is not None else None,
@@ -111,13 +115,17 @@ def test_command_rejects_unbounded_page_size(limit: int) -> None:
         ReconcileAverageCostPoolsCommand(limit=limit)
 
 
-def test_assessment_requires_exact_current_aggregate() -> None:
+def test_assessment_rejects_equally_stale_pool_and_source_aggregate() -> None:
     with pytest.raises(ValueError, match="reconcile exactly"):
         AverageCostPoolReconciliationAssessment(
             key=AverageCostPoolKey("P1", "S1"),
             status=AverageCostPoolReconciliationStatus.CURRENT,
+            expected_source_count=1,
+            expected_quantity=Decimal("10"),
+            expected_cost_local=Decimal("100"),
+            expected_cost_base=Decimal("120"),
             source_count=1,
-            pool_quantity=Decimal("10"),
+            pool_quantity=Decimal("9"),
             pool_cost_local=Decimal("100"),
             pool_cost_base=Decimal("120"),
             source_quantity=Decimal("9"),

@@ -26,6 +26,10 @@ class AverageCostPoolReconciliationStatus(StrEnum):
 class AverageCostPoolReconciliationAssessment:
     key: AverageCostPoolKey
     status: AverageCostPoolReconciliationStatus
+    expected_source_count: int
+    expected_quantity: Decimal
+    expected_cost_local: Decimal
+    expected_cost_base: Decimal
     source_count: int
     pool_quantity: Decimal | None
     pool_cost_local: Decimal | None
@@ -36,9 +40,12 @@ class AverageCostPoolReconciliationAssessment:
     reason_code: str | None = None
 
     def __post_init__(self) -> None:
-        if self.source_count < 0:
+        if self.expected_source_count < 0 or self.source_count < 0:
             raise ValueError("Average cost source count must be nonnegative")
         amounts = (
+            self.expected_quantity,
+            self.expected_cost_local,
+            self.expected_cost_base,
             self.pool_quantity,
             self.pool_cost_local,
             self.pool_cost_base,
@@ -65,10 +72,11 @@ class AverageCostPoolReconciliationAssessment:
 
     def _pool_matches_sources(self) -> bool:
         return (
-            self.pool_quantity is not None
+            self.source_count == self.expected_source_count
+            and self.pool_quantity is not None
             and self.pool_cost_local is not None
             and self.pool_cost_base is not None
-            and self.pool_quantity == self.source_quantity
-            and self.pool_cost_local == self.source_cost_local
-            and self.pool_cost_base == self.source_cost_base
+            and self.pool_quantity == self.expected_quantity == self.source_quantity
+            and self.pool_cost_local == self.expected_cost_local == self.source_cost_local
+            and self.pool_cost_base == self.expected_cost_base == self.source_cost_base
         )
