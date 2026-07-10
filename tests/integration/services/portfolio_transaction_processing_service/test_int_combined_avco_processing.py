@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.database_models import Cashflow, PositionHistory, PositionLotState
+from portfolio_common.database_models import (
+    AverageCostPoolState,
+    Cashflow,
+    PositionHistory,
+    PositionLotState,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.transaction_domain import SELL_AVCO_POLICY_ID
 from sqlalchemy import select
@@ -152,6 +157,14 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
             .scalars()
             .all()
         )
+        pool_state = (
+            await verification_session.execute(
+                select(AverageCostPoolState).where(
+                    AverageCostPoolState.portfolio_id == portfolio_id,
+                    AverageCostPoolState.security_id == security_id,
+                )
+            )
+        ).scalar_one()
 
     assert persisted_disposal.calculation_policy_id == SELL_AVCO_POLICY_ID
     assert persisted_disposal.net_cost == Decimal("-550")
@@ -170,6 +183,11 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
     ]
     assert sum(lot.open_quantity for lot in source_lots) == Decimal("150")
     assert sum(lot.lot_cost_base for lot in source_lots) == Decimal("1650")
+    assert pool_state.pool_quantity == Decimal("150")
+    assert pool_state.pool_cost_local == Decimal("1650")
+    assert pool_state.pool_cost_base == Decimal("1650")
+    assert pool_state.representative_source_transaction_id == second_buy.transaction_id
+    assert pool_state.state_version == "avco-pool-v1"
     assert [(cashflow.classification, cashflow.amount) for cashflow in cashflows] == [
         ("INVESTMENT_OUTFLOW", Decimal("-1000")),
         ("INVESTMENT_OUTFLOW", Decimal("-1200")),
