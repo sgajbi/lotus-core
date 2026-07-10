@@ -1393,6 +1393,7 @@ def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
 def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
     cost_calculator, mock_disposition_engine
 ):
+    mock_disposition_engine.transfer_basis_out.return_value = None
     spin_off_transaction = Transaction(
         transaction_id="SPIN_OFF_01",
         portfolio_id="P1",
@@ -1411,6 +1412,11 @@ def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
     cost_calculator.calculate_transaction_costs(spin_off_transaction)
 
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
+    mock_disposition_engine.transfer_basis_out.assert_called_once_with(
+        spin_off_transaction,
+        cost_base=Decimal("2500.0"),
+        cost_local=Decimal("2500"),
+    )
     assert spin_off_transaction.net_cost == Decimal("-2500")
     assert spin_off_transaction.net_cost_local == Decimal("-2500")
     assert spin_off_transaction.realized_gain_loss is None

@@ -107,6 +107,13 @@ class CostBasisStrategy(Protocol):
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]: ...
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal: ...
+    def transfer_basis_out(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> str | None: ...
     def set_initial_lots(self, transactions: list[Transaction]) -> None: ...
     def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
 
@@ -182,6 +189,20 @@ class FIFOBasisStrategy:
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)
         return self._available_quantities[key]
+
+    def transfer_basis_out(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> str | None:
+        lots = self._open_lots[(portfolio_id, instrument_id)]
+        error = _basis_transfer_error(lots, cost_base=cost_base, cost_local=cost_local)
+        if error is not None:
+            return error
+        _allocate_fifo_basis_transfer(lots, cost_base=cost_base, cost_local=cost_local)
+        return None
 
     def set_initial_lots(self, transactions: list[Transaction]) -> None:
         for txn in transactions:
@@ -268,6 +289,34 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         key = (portfolio_id, instrument_id)
         return self._pools[key].quantity
 
+    def transfer_basis_out(
+        self,
+        portfolio_id: str,
+        instrument_id: str,
+        cost_base: Decimal,
+        cost_local: Decimal,
+    ) -> str | None:
+        key = (portfolio_id, instrument_id)
+        pool = self._pools[key]
+        error = _pool_basis_transfer_error(
+            pool,
+            cost_base=cost_base,
+            cost_local=cost_local,
+        )
+        if error is not None:
+            return error
+        cost_local_before = pool.cost_local
+        cost_base_before = pool.cost_base
+        pool.transfer_basis_out(cost_local=cost_local, cost_base=cost_base)
+        self._source_allocation.apply_basis_transfer(
+            book_key=key,
+            cost_local_before=cost_local_before,
+            cost_local_after=pool.cost_local,
+            cost_base_before=cost_base_before,
+            cost_base_after=pool.cost_base,
+        )
+        return None
+
     def set_initial_lots(self, transactions: list[Transaction]) -> None:
         for txn in transactions:
             if _is_buy_transaction(txn):
@@ -275,3 +324,81 @@ class AverageCostBasisStrategy(CostBasisStrategy):
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
         return self._source_allocation.materialize(self._pools)
+
+
+def _basis_transfer_error(
+    lots: deque[CostLot],
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+) -> str | None:
+    total_base = sum((lot.open_state().cost_base for lot in lots), Decimal(0))
+    total_local = sum((lot.open_state().cost_local for lot in lots), Decimal(0))
+    return _basis_transfer_amount_error(
+        cost_base=cost_base,
+        cost_local=cost_local,
+        available_base=total_base,
+        available_local=total_local,
+    )
+
+
+def _pool_basis_transfer_error(
+    pool: AverageCostPool,
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+) -> str | None:
+    return _basis_transfer_amount_error(
+        cost_base=cost_base,
+        cost_local=cost_local,
+        available_base=pool.cost_base,
+        available_local=pool.cost_local,
+    )
+
+
+def _basis_transfer_amount_error(
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+    available_base: Decimal,
+    available_local: Decimal,
+) -> str | None:
+    if cost_base < Decimal(0) or cost_local < Decimal(0):
+        return "Basis transfer amounts must not be negative."
+    if cost_base > available_base or cost_local > available_local:
+        return (
+            "Basis transfer exceeds available cost basis "
+            f"(requested_base={cost_base}, available_base={available_base}, "
+            f"requested_local={cost_local}, available_local={available_local})."
+        )
+    if available_base <= Decimal(0) or available_local <= Decimal(0):
+        return "No positive cost basis is available to transfer."
+    return None
+
+
+def _allocate_fifo_basis_transfer(
+    lots: deque[CostLot],
+    *,
+    cost_base: Decimal,
+    cost_local: Decimal,
+) -> None:
+    open_lots = [lot for lot in lots if lot.remaining_quantity > Decimal(0)]
+    total_base = sum((lot.open_state().cost_base for lot in open_lots), Decimal(0))
+    total_local = sum((lot.open_state().cost_local for lot in open_lots), Decimal(0))
+    remaining_base = total_base - cost_base
+    remaining_local = total_local - cost_local
+    allocated_base = Decimal(0)
+    allocated_local = Decimal(0)
+    for lot in open_lots[:-1]:
+        state = lot.open_state()
+        next_base = state.cost_base * remaining_base / total_base
+        next_local = state.cost_local * remaining_local / total_local
+        lot.cost_per_share_base = next_base / lot.remaining_quantity
+        lot.cost_per_share_local = next_local / lot.remaining_quantity
+        allocated_base += next_base
+        allocated_local += next_local
+    final_lot = open_lots[-1]
+    final_lot.cost_per_share_base = (remaining_base - allocated_base) / final_lot.remaining_quantity
+    final_lot.cost_per_share_local = (
+        remaining_local - allocated_local
+    ) / final_lot.remaining_quantity
