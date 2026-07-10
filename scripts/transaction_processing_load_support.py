@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
 import requests  # type: ignore[import-untyped]
 from sqlalchemy import Engine, text
+
+
+@dataclass(frozen=True, slots=True)
+class TransactionProcessingCounts:
+    transaction_count: int
+    cost_count: int
+    cashflow_count: int
+    position_count: int
+    processing_claim_count: int
 
 
 def build_transaction_batch(
@@ -187,6 +197,38 @@ def wait_for_transaction_processing(
     expected_processing_claim_minimum: int,
     timeout_seconds: int,
 ) -> float | None:
+    started = time.time()
+    deadline = started + timeout_seconds
+    while time.time() < deadline:
+        counts = transaction_processing_counts(
+            engine=engine,
+            portfolio_id=portfolio_id,
+            transaction_id_prefix=transaction_id_prefix,
+        )
+        domain_counts_match = all(
+            count == expected
+            for count in (
+                counts.transaction_count,
+                counts.cost_count,
+                counts.cashflow_count,
+                counts.position_count,
+            )
+        )
+        if (
+            domain_counts_match
+            and counts.processing_claim_count >= expected_processing_claim_minimum
+        ):
+            return round(time.time() - started, 3)
+        time.sleep(1)
+    return None
+
+
+def transaction_processing_counts(
+    *,
+    engine: Engine,
+    portfolio_id: str,
+    transaction_id_prefix: str,
+) -> TransactionProcessingCounts:
     query = text(
         """
         SELECT
@@ -206,32 +248,25 @@ def wait_for_transaction_processing(
         WHERE transaction_id LIKE :pattern
         """
     )
-    started = time.time()
-    deadline = started + timeout_seconds
-    while time.time() < deadline:
-        with engine.connect() as connection:
-            row = (
-                connection.execute(
-                    query,
-                    {
-                        "pattern": f"{transaction_id_prefix}%",
-                        "portfolio_id": portfolio_id,
-                    },
-                )
-                .mappings()
-                .one()
+    with engine.connect() as connection:
+        row = (
+            connection.execute(
+                query,
+                {
+                    "pattern": f"{transaction_id_prefix}%",
+                    "portfolio_id": portfolio_id,
+                },
             )
-        domain_counts_match = all(
-            int(row[name]) == expected
-            for name in ("transaction_count", "cost_count", "cashflow_count", "position_count")
+            .mappings()
+            .one()
         )
-        if (
-            domain_counts_match
-            and int(row["processing_claim_count"]) >= expected_processing_claim_minimum
-        ):
-            return round(time.time() - started, 3)
-        time.sleep(1)
-    return None
+    return TransactionProcessingCounts(
+        transaction_count=int(row["transaction_count"]),
+        cost_count=int(row["cost_count"]),
+        cashflow_count=int(row["cashflow_count"]),
+        position_count=int(row["position_count"]),
+        processing_claim_count=int(row["processing_claim_count"]),
+    )
 
 
 def processed_event_count(*, engine: Engine, portfolio_id: str) -> int:

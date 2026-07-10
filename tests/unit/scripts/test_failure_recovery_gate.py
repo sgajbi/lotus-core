@@ -1,17 +1,48 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scripts.failure_recovery_gate import (
     RecoveryMode,
+    _compose_command,
+    _consumer_lag,
     _evaluate_recovery_result,
-    _pause_container,
     _resolve_interruption_container,
-    _unpause_container,
+    _set_container_pause,
 )
+from scripts.transaction_processing_load_support import TransactionProcessingCounts
 
 
-def test_resolve_interruption_container_prefers_compose_resolved_container_id(
+def _complete_counts(records: int) -> TransactionProcessingCounts:
+    return TransactionProcessingCounts(
+        transaction_count=records,
+        cost_count=records,
+        cashflow_count=records,
+        position_count=records,
+        processing_claim_count=records,
+    )
+
+
+def test_compose_command_scopes_service_lookup_to_project() -> None:
+    assert _compose_command(
+        compose_file="docker-compose.yml",
+        compose_project_name="core-evidence",
+        arguments=["ps", "-q", "portfolio_transaction_processing_service"],
+    ) == [
+        "docker",
+        "compose",
+        "-p",
+        "core-evidence",
+        "-f",
+        "docker-compose.yml",
+        "ps",
+        "-q",
+        "portfolio_transaction_processing_service",
+    ]
+
+
+def test_resolve_interruption_container_requires_running_compose_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -22,13 +53,14 @@ def test_resolve_interruption_container_prefers_compose_resolved_container_id(
     resolved = _resolve_interruption_container(
         repo_root=Path("."),
         compose_file="docker-compose.yml",
-        interruption_container="persistence_service",
+        compose_project_name="core-evidence",
+        interruption_service="portfolio_transaction_processing_service",
     )
 
     assert resolved == "abc123containerid"
 
 
-def test_resolve_interruption_container_falls_back_to_raw_input_when_service_not_found(
+def test_resolve_interruption_container_fails_closed_when_service_is_not_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -36,35 +68,27 @@ def test_resolve_interruption_container_falls_back_to_raw_input_when_service_not
         lambda cmd, cwd: "",
     )
 
-    resolved = _resolve_interruption_container(
-        repo_root=Path("."),
-        compose_file="docker-compose.yml",
-        interruption_container="persistence_service",
-    )
-
-    assert resolved == "persistence_service"
-
-
-def test_resolve_interruption_container_rejects_empty_value() -> None:
-    with pytest.raises(ValueError, match="cannot be empty"):
+    with pytest.raises(RuntimeError, match="Compose service is not running"):
         _resolve_interruption_container(
             repo_root=Path("."),
             compose_file="docker-compose.yml",
-            interruption_container=" ",
+            compose_project_name=None,
+            interruption_service="portfolio_transaction_processing_service",
         )
 
 
-def test_pause_and_unpause_use_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_set_container_pause_uses_resolved_container_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[tuple[list[str], Path]] = []
-
-    def _fake_run(cmd: list[str], cwd: Path) -> None:
-        calls.append((cmd, cwd))
-
-    monkeypatch.setattr("scripts.failure_recovery_gate._run", _fake_run)
-
+    monkeypatch.setattr(
+        "scripts.failure_recovery_gate._run_capture",
+        lambda cmd, cwd: calls.append((cmd, cwd)) or "",
+    )
     repo_root = Path("/tmp/repo")
-    _pause_container("container-id", repo_root=repo_root)
-    _unpause_container("container-id", repo_root=repo_root)
+
+    _set_container_pause(container_id="container-id", paused=True, repo_root=repo_root)
+    _set_container_pause(container_id="container-id", paused=False, repo_root=repo_root)
 
     assert calls == [
         (["docker", "pause", "container-id"], repo_root),
@@ -72,102 +96,81 @@ def test_pause_and_unpause_use_repo_root(monkeypatch: pytest.MonkeyPatch) -> Non
     ]
 
 
-def test_evaluate_recovery_result_marks_fully_drained_when_all_checks_clear() -> None:
+def test_consumer_lag_treats_uncommitted_partition_as_offset_zero() -> None:
+    store = SimpleNamespace(
+        snapshot=lambda **kwargs: SimpleNamespace(
+            partitions=(
+                SimpleNamespace(high_watermark=10, committed_offset=-1001),
+                SimpleNamespace(high_watermark=20, committed_offset=15),
+            )
+        )
+    )
+
+    lag = _consumer_lag(
+        store=store,
+        consumer_group="portfolio_transaction_processing_group",
+        transaction_topic="transactions.persisted.v1",
+    )
+
+    assert lag == 15
+
+
+def test_evaluate_recovery_result_requires_exact_domain_and_lag_recovery() -> None:
     mode, failed_checks = _evaluate_recovery_result(
-        backlog_growth_jobs=20,
-        drain_seconds_to_baseline=180.0,
-        backlog_age_seconds_after_recovery=45.0,
-        dlq_pressure_ratio_after_recovery=0.2,
-        replay_pressure_ratio_after_recovery=0.01,
+        records_submitted=100,
+        baseline_consumer_lag=0,
+        consumer_lag_growth=100,
+        consumer_lag_after_recovery=0,
+        baseline_replay_consumer_lag=0,
+        replay_consumer_lag_after_recovery=0,
+        transaction_processing_recovery_seconds=12.5,
+        max_recovery_seconds=420,
+        counts=_complete_counts(100),
+        dlq_events_added_during_recovery=0,
     )
 
     assert mode is RecoveryMode.FULLY_DRAINED
     assert failed_checks == []
 
 
-def test_evaluate_recovery_result_marks_bounded_recovery_when_timeout_is_bounded() -> None:
+def test_evaluate_recovery_result_fails_closed_on_timeout() -> None:
     mode, failed_checks = _evaluate_recovery_result(
-        backlog_growth_jobs=20,
-        drain_seconds_to_baseline=None,
-        backlog_age_seconds_after_recovery=500.0,
-        dlq_pressure_ratio_after_recovery=4.8,
-        replay_pressure_ratio_after_recovery=0.0052,
+        records_submitted=100,
+        baseline_consumer_lag=0,
+        consumer_lag_growth=100,
+        consumer_lag_after_recovery=100,
+        baseline_replay_consumer_lag=0,
+        replay_consumer_lag_after_recovery=1,
+        transaction_processing_recovery_seconds=None,
+        max_recovery_seconds=420,
+        counts=TransactionProcessingCounts(100, 80, 70, 60, 50),
+        dlq_events_added_during_recovery=2,
     )
 
-    assert mode is RecoveryMode.BOUNDED_RECOVERY
-    assert failed_checks == []
+    assert mode is RecoveryMode.FAILED_RECOVERY
+    assert "transaction processing did not fully recover before timeout" in failed_checks
+    assert any("consumer lag after recovery" in check for check in failed_checks)
+    assert any("replay consumer lag after recovery" in check for check in failed_checks)
+    assert any("cost completion count 80" in check for check in failed_checks)
+    assert any("cashflow completion count 70" in check for check in failed_checks)
+    assert any("position completion count 60" in check for check in failed_checks)
+    assert any("claim count 50" in check for check in failed_checks)
+    assert any("added 2 DLQ events" in check for check in failed_checks)
 
 
-@pytest.mark.parametrize(
-    ("kwargs", "expected_fragment"),
-    [
-        (
-            {
-                "backlog_growth_jobs": 1,
-                "drain_seconds_to_baseline": 120.0,
-                "backlog_age_seconds_after_recovery": 10.0,
-                "dlq_pressure_ratio_after_recovery": 0.0,
-                "replay_pressure_ratio_after_recovery": 0.0,
-            },
-            "backlog growth during interruption was too small",
-        ),
-        (
-            {
-                "backlog_growth_jobs": 10,
-                "drain_seconds_to_baseline": 421.0,
-                "backlog_age_seconds_after_recovery": 10.0,
-                "dlq_pressure_ratio_after_recovery": 0.0,
-                "replay_pressure_ratio_after_recovery": 0.0,
-            },
-            "recovery drain 421.00s exceeded max 420.00s",
-        ),
-        (
-            {
-                "backlog_growth_jobs": 10,
-                "drain_seconds_to_baseline": None,
-                "backlog_age_seconds_after_recovery": 1201.0,
-                "dlq_pressure_ratio_after_recovery": 0.0,
-                "replay_pressure_ratio_after_recovery": 0.0,
-            },
-            "recovery drain timeout with elevated backlog age",
-        ),
-        (
-            {
-                "backlog_growth_jobs": 10,
-                "drain_seconds_to_baseline": 120.0,
-                "backlog_age_seconds_after_recovery": 1801.0,
-                "dlq_pressure_ratio_after_recovery": 0.0,
-                "replay_pressure_ratio_after_recovery": 0.0,
-            },
-            "backlog age after recovery 1801.00s exceeded 1800s",
-        ),
-        (
-            {
-                "backlog_growth_jobs": 10,
-                "drain_seconds_to_baseline": 120.0,
-                "backlog_age_seconds_after_recovery": 10.0,
-                "dlq_pressure_ratio_after_recovery": 5.1,
-                "replay_pressure_ratio_after_recovery": 0.0,
-            },
-            "DLQ pressure after recovery 5.1000 exceeded 5.0000",
-        ),
-        (
-            {
-                "backlog_growth_jobs": 10,
-                "drain_seconds_to_baseline": 120.0,
-                "backlog_age_seconds_after_recovery": 10.0,
-                "dlq_pressure_ratio_after_recovery": 0.0,
-                "replay_pressure_ratio_after_recovery": 5.1,
-            },
-            "Replay pressure after recovery 5.1000 exceeded 5.0000",
-        ),
-    ],
-)
-def test_evaluate_recovery_result_marks_failed_recovery_for_threshold_breaches(
-    kwargs: dict[str, float | None],
-    expected_fragment: str,
-) -> None:
-    mode, failed_checks = _evaluate_recovery_result(**kwargs)
+def test_evaluate_recovery_result_rejects_unproven_backlog_growth() -> None:
+    mode, failed_checks = _evaluate_recovery_result(
+        records_submitted=100,
+        baseline_consumer_lag=3,
+        consumer_lag_growth=99,
+        consumer_lag_after_recovery=3,
+        baseline_replay_consumer_lag=0,
+        replay_consumer_lag_after_recovery=0,
+        transaction_processing_recovery_seconds=10,
+        max_recovery_seconds=420,
+        counts=_complete_counts(100),
+        dlq_events_added_during_recovery=0,
+    )
 
     assert mode is RecoveryMode.FAILED_RECOVERY
-    assert any(expected_fragment in check for check in failed_checks)
+    assert any("lag growth 99" in check for check in failed_checks)
