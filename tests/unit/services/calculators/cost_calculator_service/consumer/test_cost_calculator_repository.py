@@ -10,6 +10,9 @@ from portfolio_common.events import TransactionEvent
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
     Transaction as EngineTransaction,
 )
+from src.services.calculators.cost_calculator_service.app.cost_engine.processing.cost_objects import (  # noqa: E501
+    OpenLotState,
+)
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
@@ -101,7 +104,7 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     )
 
 
-async def test_update_lot_open_quantities_trims_portfolio_and_security_ids_before_query():
+async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost():
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
 
@@ -117,17 +120,40 @@ async def test_update_lot_open_quantities_trims_portfolio_and_security_ids_befor
         lot_cost_local=Decimal("1000"),
         lot_cost_base=Decimal("1000"),
     )
+    closed_lot_row = PositionLotState(
+        lot_id="LOT-BUY02",
+        source_transaction_id="BUY02",
+        portfolio_id=" PORT_COST_01 ",
+        instrument_id="SEC01",
+        security_id=" SEC01 ",
+        acquisition_date=date(2026, 1, 2),
+        original_quantity=Decimal("5"),
+        open_quantity=Decimal("5"),
+        lot_cost_local=Decimal("500"),
+        lot_cost_base=Decimal("500"),
+    )
     execute_result = MagicMock()
-    execute_result.scalars.return_value.all.return_value = [lot_row]
+    execute_result.scalars.return_value.all.return_value = [lot_row, closed_lot_row]
     db_session.execute.return_value = execute_result
 
-    await repository.update_lot_open_quantities(
+    await repository.update_open_lot_states(
         portfolio_id=" PORT_COST_01 ",
         security_id=" SEC01 ",
-        open_quantities_by_source_transaction_id={"BUY01": Decimal("4")},
+        states_by_source_transaction_id={
+            "BUY01": OpenLotState(
+                quantity=Decimal("4"),
+                cost_local=Decimal("400"),
+                cost_base=Decimal("420"),
+            )
+        },
     )
 
     assert lot_row.open_quantity == Decimal("4")
+    assert lot_row.lot_cost_local == Decimal("400")
+    assert lot_row.lot_cost_base == Decimal("420")
+    assert closed_lot_row.open_quantity == Decimal("0")
+    assert closed_lot_row.lot_cost_local == Decimal("0")
+    assert closed_lot_row.lot_cost_base == Decimal("0")
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )

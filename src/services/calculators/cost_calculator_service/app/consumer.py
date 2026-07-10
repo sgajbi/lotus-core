@@ -59,6 +59,7 @@ from .cost_engine.processing.cost_basis_strategies import (
     FIFOBasisStrategy,
 )
 from .cost_engine.processing.cost_calculator import CostCalculator
+from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_engine.processing.disposition_engine import DispositionEngine
 from .cost_engine.processing.error_reporter import ErrorReporter
 from .cost_engine.processing.parser import TransactionParser
@@ -356,7 +357,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
         )
-        processed, errored, open_lot_quantities = self._get_transaction_processor(
+        processed, errored, open_lot_states = self._get_transaction_processor(
             cost_basis_method
         ).process_transactions(
             existing_transactions_raw=[],
@@ -373,10 +374,10 @@ class CostCalculationWorkflow:
             new_transaction_ids=new_transaction_ids,
             repo=repo,
         )
-        await self._update_open_lot_quantities_if_required(
+        await self._update_open_lot_states_if_required(
             event=event,
             event_transaction_type=event_transaction_type,
-            open_lot_quantities=open_lot_quantities,
+            open_lot_states=open_lot_states,
             repo=repo,
         )
 
@@ -431,19 +432,19 @@ class CostCalculationWorkflow:
         return events_to_publish
 
     @staticmethod
-    async def _update_open_lot_quantities_if_required(
+    async def _update_open_lot_states_if_required(
         *,
         event: TransactionEvent,
         event_transaction_type: str,
-        open_lot_quantities: dict[str, Decimal],
+        open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
     ) -> None:
         if event_transaction_type not in {"BUY", "SELL"}:
             return
-        await repo.update_lot_open_quantities(
+        await repo.update_open_lot_states(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
-            open_quantities_by_source_transaction_id=open_lot_quantities,
+            states_by_source_transaction_id=open_lot_states,
         )
 
     @staticmethod

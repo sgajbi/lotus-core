@@ -29,6 +29,13 @@ def avco_strategy():
     return AverageCostBasisStrategy()
 
 
+def _open_quantities(strategy) -> dict[str, Decimal]:
+    return {
+        transaction_id: state.quantity
+        for transaction_id, state in strategy.get_open_lot_states().items()
+    }
+
+
 def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy):
     """
     Tests a standard scenario for the Average Cost method.
@@ -88,10 +95,14 @@ def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy
     assert total_matched_cost_base == Decimal("550")
     assert consumed_quantity == sell_quantity
     assert error is None
-    assert avco_strategy.get_open_lot_quantities() == {
+    assert _open_quantities(avco_strategy) == {
         "BUY001": Decimal("75"),
         "BUY002": Decimal("75"),
     }
+    open_states = avco_strategy.get_open_lot_states()
+    assert open_states["BUY001"].cost_base == Decimal("750")
+    assert open_states["BUY002"].cost_base == Decimal("900")
+    assert sum(state.cost_base for state in open_states.values()) == Decimal("1650")
 
     # Assert the final state
     assert avco_strategy.get_available_quantity("P1", "AVCO_STOCK") == Decimal("150")
@@ -156,7 +167,7 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
     # Assert final state
     final_qty = avco_strategy.get_available_quantity("P_USD", "EUR_STOCK")
     assert final_qty == Decimal("150")
-    assert avco_strategy.get_open_lot_quantities() == {
+    assert _open_quantities(avco_strategy) == {
         "AVCO_BUY_1": Decimal("75"),
         "AVCO_BUY_2": Decimal("75"),
     }
@@ -205,7 +216,7 @@ def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
     )
     avco_strategy.consume_sell_quantity("P1", "AVCO_SEQUENCE_STOCK", Decimal("40"))
 
-    remaining_quantities = avco_strategy.get_open_lot_quantities()
+    remaining_quantities = _open_quantities(avco_strategy)
     assert remaining_quantities == {
         "AVCO_SEQUENCE_BUY_1": Decimal("60"),
         "AVCO_SEQUENCE_BUY_2": Decimal("60"),
@@ -214,6 +225,15 @@ def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
     assert sum(remaining_quantities.values()) == avco_strategy.get_available_quantity(
         "P1", "AVCO_SEQUENCE_STOCK"
     )
+    remaining_states = avco_strategy.get_open_lot_states()
+    assert {
+        transaction_id: state.cost_base for transaction_id, state in remaining_states.items()
+    } == {
+        "AVCO_SEQUENCE_BUY_1": Decimal("600"),
+        "AVCO_SEQUENCE_BUY_2": Decimal("720"),
+        "AVCO_SEQUENCE_BUY_3": Decimal("560"),
+    }
+    assert sum(state.cost_base for state in remaining_states.values()) == Decimal("1880")
 
 
 def test_average_cost_source_quantities_reconcile_at_database_scale(
@@ -239,13 +259,16 @@ def test_average_cost_source_quantities_reconcile_at_database_scale(
 
     avco_strategy.consume_sell_quantity("P1", "AVCO_FRACTIONAL_STOCK", Decimal("1"))
 
-    remaining_quantities = avco_strategy.get_open_lot_quantities()
+    remaining_quantities = _open_quantities(avco_strategy)
     assert remaining_quantities == {
         "AVCO_FRACTIONAL_BUY_0": Decimal("0.6666666666"),
         "AVCO_FRACTIONAL_BUY_1": Decimal("0.6666666666"),
         "AVCO_FRACTIONAL_BUY_2": Decimal("0.6666666668"),
     }
     assert sum(remaining_quantities.values()) == Decimal("2")
+    assert sum(
+        state.cost_base for state in avco_strategy.get_open_lot_states().values()
+    ) == Decimal("20")
 
 
 def test_average_cost_initial_lots_normalize_buy_transaction_type(

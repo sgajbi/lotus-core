@@ -13,6 +13,7 @@ from cost_engine.processing.cost_basis_strategies import (
 from cost_engine.processing.cost_calculator import (
     CostCalculator,
 )
+from cost_engine.processing.cost_objects import OpenLotState
 from cost_engine.processing.disposition_engine import (
     DispositionEngine,
 )
@@ -132,7 +133,7 @@ def test_transaction_processor_handles_backdated_insert(
 
     # ACT
     # The engine processes the full list and is responsible for sorting and calculating
-    processed_txns, errored_txns, open_lot_quantities = transaction_processor.process_transactions(
+    processed_txns, errored_txns, open_lot_states = transaction_processor.process_transactions(
         existing_transactions_raw=[],  # Simulating a full recalculation call
         new_transactions_raw=all_transactions_raw,
     )
@@ -154,9 +155,17 @@ def test_transaction_processor_handles_backdated_insert(
     assert results["BUY_2_BACKDATED"].net_cost == Decimal("800")
     assert results["BUY_1"].realized_gain_loss == Decimal("0")
     assert results["BUY_2_BACKDATED"].realized_gain_loss == Decimal("0")
-    assert open_lot_quantities == {
-        "BUY_1": Decimal("50"),
-        "BUY_2_BACKDATED": Decimal("100"),
+    assert open_lot_states == {
+        "BUY_1": OpenLotState(
+            quantity=Decimal("50"),
+            cost_local=Decimal("500"),
+            cost_base=Decimal("500"),
+        ),
+        "BUY_2_BACKDATED": OpenLotState(
+            quantity=Decimal("100"),
+            cost_local=Decimal("800"),
+            cost_base=Decimal("800"),
+        ),
     }
 
 
@@ -243,8 +252,14 @@ def test_transaction_processor_reports_unexpected_calculator_errors():
                 raise RuntimeError("calculation failed")
 
     class _DispositionEngine:
-        def get_open_lot_quantities(self):
-            return {"NEW_OK": Decimal("1")}
+        def get_open_lot_states(self):
+            return {
+                "NEW_OK": OpenLotState(
+                    quantity=Decimal("1"),
+                    cost_local=Decimal("10"),
+                    cost_base=Decimal("10"),
+                )
+            }
 
     error_reporter = ErrorReporter()
     processor = TransactionProcessor(
@@ -255,7 +270,7 @@ def test_transaction_processor_reports_unexpected_calculator_errors():
         error_reporter=error_reporter,
     )
 
-    processed_txns, errored_txns, open_lot_quantities = processor.process_transactions(
+    processed_txns, errored_txns, open_lot_states = processor.process_transactions(
         existing_transactions_raw=[{"transaction_id": "EXISTING_OK"}],
         new_transactions_raw=[
             {"transaction_id": "NEW_OK"},
@@ -267,4 +282,10 @@ def test_transaction_processor_reports_unexpected_calculator_errors():
     assert [(txn.transaction_id, txn.error_reason) for txn in errored_txns] == [
         ("NEW_FAIL", "Unexpected error: calculation failed")
     ]
-    assert open_lot_quantities == {"NEW_OK": Decimal("1")}
+    assert open_lot_states == {
+        "NEW_OK": OpenLotState(
+            quantity=Decimal("1"),
+            cost_local=Decimal("10"),
+            cost_base=Decimal("10"),
+        )
+    }

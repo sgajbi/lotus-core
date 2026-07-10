@@ -34,6 +34,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Concrete effective-dated cross-currency database parity | implemented-local | CR-1444; latest-on-or-before FX selection and local/base values across transaction, lot, position, fee, and cashflow. |
 | Shared combined integration support and domain-variant test layout | implemented-local | CR-1445; canonical persistence/event ordering has one helper and scenario modules are 134-179 lines. |
 | AVCO source-quantity reconciliation | implemented-local | CR-1446; pro-rata source quantities reconcile exactly to pooled holdings instead of falsely closing every lot. |
+| Typed remaining lot-state reconciliation | implemented-local | CR-1447; quantity and local/base remaining cost move together from strategy through persistence. |
 
 ## Required Before Runtime Cutover
 

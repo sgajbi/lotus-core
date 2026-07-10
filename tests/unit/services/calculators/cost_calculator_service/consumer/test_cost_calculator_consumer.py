@@ -8,6 +8,7 @@ import pytest
 from cost_engine.domain.models.transaction import (
     Transaction as EngineTransaction,
 )
+from cost_engine.processing.cost_objects import OpenLotState
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
@@ -1286,7 +1287,7 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
     repo.get_transaction_by_id.assert_not_awaited()
 
 
-async def test_update_open_lot_quantities_only_for_buy_sell(
+async def test_update_open_lot_states_only_for_buy_sell(
     cost_calculator_consumer: CostCalculatorConsumer,
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
@@ -1304,24 +1305,32 @@ async def test_update_open_lot_quantities_only_for_buy_sell(
         currency="USD",
     )
 
-    await cost_calculator_consumer._update_open_lot_quantities_if_required(
+    open_lot_states = {
+        "BUY-1": OpenLotState(
+            quantity=Decimal("3"),
+            cost_local=Decimal("30"),
+            cost_base=Decimal("30"),
+        )
+    }
+
+    await cost_calculator_consumer._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="DIVIDEND",
-        open_lot_quantities={"BUY-1": Decimal("5")},
+        open_lot_states=open_lot_states,
         repo=repo,
     )
-    repo.update_lot_open_quantities.assert_not_awaited()
+    repo.update_open_lot_states.assert_not_awaited()
 
-    await cost_calculator_consumer._update_open_lot_quantities_if_required(
+    await cost_calculator_consumer._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="SELL",
-        open_lot_quantities={"BUY-1": Decimal("3")},
+        open_lot_states=open_lot_states,
         repo=repo,
     )
-    repo.update_lot_open_quantities.assert_awaited_once_with(
+    repo.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
-        open_quantities_by_source_transaction_id={"BUY-1": Decimal("3")},
+        states_by_source_transaction_id=open_lot_states,
     )
 
 

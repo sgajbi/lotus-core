@@ -1,4 +1,12 @@
+from dataclasses import dataclass
 from decimal import Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class OpenLotState:
+    quantity: Decimal
+    cost_local: Decimal
+    cost_base: Decimal
 
 
 class CostLot:
@@ -29,6 +37,13 @@ class CostLot:
     def total_cost_base(self) -> Decimal:
         """Calculates the total cost of the original lot in the portfolio's base currency."""
         return self.original_quantity * self.cost_per_share_base
+
+    def open_state(self) -> OpenLotState:
+        return OpenLotState(
+            quantity=self.remaining_quantity,
+            cost_local=self.remaining_quantity * self.cost_per_share_local,
+            cost_base=self.remaining_quantity * self.cost_per_share_base,
+        )
 
     def __repr__(self) -> str:
         return (

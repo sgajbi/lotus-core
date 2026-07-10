@@ -1,11 +1,11 @@
 import logging
 from decimal import Decimal
-from typing import Optional, Tuple
 
 from portfolio_common.decimal_amounts import required_decimal
 
 from ..domain.models.transaction import Transaction
 from .cost_basis_strategies import CostBasisStrategy
+from .cost_objects import OpenLotState
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class DispositionEngine:
 
     def consume_sell_quantity(
         self, transaction: Transaction
-    ) -> Tuple[Decimal, Decimal, Optional[str]]:
+    ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
         return self._cost_basis_strategy.consume_sell_quantity(
             transaction.portfolio_id, transaction.instrument_id, sell_quantity
@@ -43,5 +43,5 @@ class DispositionEngine:
         ]
         self._cost_basis_strategy.set_initial_lots(filtered_buys)
 
-    def get_open_lot_quantities(self) -> dict[str, Decimal]:
-        return self._cost_basis_strategy.get_open_lot_quantities()
+    def get_open_lot_states(self) -> dict[str, OpenLotState]:
+        return self._cost_basis_strategy.get_open_lot_states()

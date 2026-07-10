@@ -51,6 +51,12 @@ jurisdiction-specific advice modes.
 The product preserves lot state already calculated and stored in `position_lot_state`. Cost-basis
 fields are preserved, not recalculated, reallocated, or tax-optimized by the endpoint.
 
+The write-side cost-basis policy determines the meaning of remaining source state. FIFO rows follow
+actual source-lot consumption order. AVCO rows are deterministic source contributions to one pooled
+average-cost holding: each disposal reduces source quantity and local/base cost pro rata, with the
+final source receiving any Decimal residual so source totals exactly reconcile to the pool. AVCO
+source rows are not a claim that those sources can be selected as disposal-order tax lots.
+
 ## Unit Conventions
 
 `open_quantity` and `original_quantity` use the instrument quantity unit carried by the source lot
@@ -89,6 +95,25 @@ For every source lot row:
 
 `cost_basis_local = lot_cost_local`
 
+For FIFO processing, source state after a disposal is the actual remaining quantity and basis of
+each consumed or unconsumed lot.
+
+For AVCO processing with pooled quantity before disposal `Q_before`, pooled quantity after disposal
+`Q_after`, and source state `(Q_i, CB_i_base, CB_i_local)`:
+
+`R = Q_after / Q_before`
+
+`Q_i' = Q_i * R`
+
+`CB_i_base' = CB_i_base * R`
+
+`CB_i_local' = CB_i_local * R`
+
+Source quantities use the database's 10-decimal scale. The final source row receives the quantity
+and cost residual so `sum(Q_i') = Q_after`, `sum(CB_i_base') = pooled base cost after disposal`, and
+`sum(CB_i_local') = pooled local cost after disposal`. Full disposal sets every remaining source
+quantity and cost basis to zero.
+
 `local_currency = transactions.trade_currency when the source transaction is available else null`
 
 Returned-row instrument reference support is:
@@ -119,6 +144,9 @@ adjustment, or optimal disposal sequence.
 12. Map each returned lot into `PortfolioTaxLotRecord`, preserving source transaction and
     calculation-policy lineage.
 13. Emit supportability, pagination metadata, lineage, and source-data product runtime metadata.
+
+The endpoint does not perform FIFO/AVCO allocation. It reads the already reconciled source state
+written by transaction cost processing.
 
 ## Validation and Failure Behavior
 

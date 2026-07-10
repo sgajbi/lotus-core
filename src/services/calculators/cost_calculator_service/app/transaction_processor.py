@@ -1,11 +1,11 @@
 import logging
 import time
-from decimal import Decimal
 from typing import Any
 
 from .cost_engine.domain.models.error import ErroredTransaction
 from .cost_engine.domain.models.transaction import Transaction
 from .cost_engine.processing.cost_calculator import CostCalculator
+from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_engine.processing.disposition_engine import DispositionEngine
 from .cost_engine.processing.error_reporter import ErrorReporter
 from .cost_engine.processing.parser import TransactionParser
@@ -40,7 +40,7 @@ class TransactionProcessor:
         self,
         existing_transactions_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, Decimal]]:
+    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, OpenLotState]]:
         start_time = time.monotonic()
         try:
             self._error_reporter.clear()
@@ -61,7 +61,7 @@ class TransactionProcessor:
             return (
                 final_processed_new,
                 self._error_reporter.get_errors(),
-                self._disposition_engine.get_open_lot_quantities(),
+                self._disposition_engine.get_open_lot_states(),
             )
         finally:
             duration = time.monotonic() - start_time

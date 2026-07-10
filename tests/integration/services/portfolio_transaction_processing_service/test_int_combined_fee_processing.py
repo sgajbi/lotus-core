@@ -164,7 +164,8 @@ async def test_combined_full_disposal_applies_fees_to_cash_and_cost_basis(
     assert persisted_sell.realized_gain_loss == Decimal("137.50")
     assert lot.original_quantity == Decimal("15")
     assert lot.open_quantity == Decimal("0")
-    assert lot.lot_cost_base == Decimal("1507.50")
+    assert lot.lot_cost_local == Decimal("0")
+    assert lot.lot_cost_base == Decimal("0")
     assert [(row.transaction_id, row.fee_type, row.amount) for row in transaction_costs] == [
         (buy_event.transaction_id, "brokerage", Decimal("7.50")),
         (sell_event.transaction_id, "brokerage", Decimal("5")),
