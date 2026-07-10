@@ -50,6 +50,7 @@ class CashflowProcessingPort(Protocol):
         self,
         transaction: BookedTransaction,
         *,
+        event_id: str,
         correlation_id: str | None,
         traceparent: str | None,
     ) -> CashflowProcessingResult: ...

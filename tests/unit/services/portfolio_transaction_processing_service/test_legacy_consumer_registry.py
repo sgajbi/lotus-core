@@ -75,6 +75,7 @@ def test_legacy_calculator_imports_are_confined_to_infrastructure_adapters() -> 
     ]
 
     assert legacy_import_files == [
+        "app/infrastructure/cashflow_processing_adapter.py",
         "app/infrastructure/cost_processing_adapter.py",
         "app/infrastructure/legacy_consumer_registry.py",
     ]

@@ -153,6 +153,12 @@ class CashflowProcessingOutcome(str, Enum):
     NON_CASHFLOW_LIFECYCLE_EVENT = "non_cashflow_lifecycle_event"
 
 
+@dataclass(frozen=True)
+class CashflowStageResult:
+    outcome: CashflowProcessingOutcome
+    cashflow_record_count: int = 0
+
+
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 CASHFLOW_COMMIT_OUTCOMES = {
     CashflowProcessingOutcome.PROCESSED,
@@ -264,7 +270,7 @@ async def _stage_cashflow_calculation(
     event: TransactionEvent,
     rule: CachedCashflowRule,
     correlation_id: str,
-) -> None:
+) -> int:
     cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
     saved = await cashflow_repo.create_cashflow(cashflow_to_save)
     completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved)
@@ -276,6 +282,7 @@ async def _stage_cashflow_calculation(
         payload=completion_evt.model_dump(mode="json"),
         correlation_id=correlation_id,
     )
+    return 1
 
 
 def _cashflow_calculated_event_from_saved_cashflow(saved) -> CashflowCalculatedEvent:
@@ -552,6 +559,39 @@ class CashflowCalculatorConsumer(BaseConsumer):
         if fence_outcome is not None:
             return fence_outcome
 
+        stage_result = await self._stage_cashflow_processing(
+            db=db,
+            cashflow_repo=cashflow_repo,
+            outbox_repo=outbox_repo,
+            event=event,
+            correlation_id=correlation_id,
+        )
+        return stage_result.outcome
+
+    async def stage_valid_event(
+        self,
+        *,
+        db,
+        cashflow_repo: CashflowRepository,
+        idempotency_repo: IdempotencyRepository,
+        outbox_repo: OutboxRepository,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> CashflowStageResult:
+        """Stage cashflow work inside the combined caller-owned transaction."""
+        fence_outcome = await self._fence_or_semantic_duplicate_outcome(
+            db=db,
+            idempotency_repo=idempotency_repo,
+            event=event,
+            event_id=event_id,
+            semantic_event_id=_semantic_cashflow_event_id(event),
+            correlation_id=correlation_id,
+            topic=topic,
+        )
+        if fence_outcome is not None:
+            return CashflowStageResult(outcome=fence_outcome)
         return await self._stage_cashflow_processing(
             db=db,
             cashflow_repo=cashflow_repo,
@@ -614,19 +654,24 @@ class CashflowCalculatorConsumer(BaseConsumer):
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
         correlation_id: str,
-    ) -> CashflowProcessingOutcome:
+    ) -> CashflowStageResult:
         event_transaction_type = _validated_cashflow_transaction_type(event)
         if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
-            return CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
+            return CashflowStageResult(
+                outcome=CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
+            )
         rule = await self._required_rule_for_transaction(db, event_transaction_type)
-        await _stage_cashflow_calculation(
+        cashflow_record_count = await _stage_cashflow_calculation(
             cashflow_repo,
             outbox_repo,
             event,
             rule,
             correlation_id,
         )
-        return CashflowProcessingOutcome.PROCESSED
+        return CashflowStageResult(
+            outcome=CashflowProcessingOutcome.PROCESSED,
+            cashflow_record_count=cashflow_record_count,
+        )
 
     @staticmethod
     async def _finalize_cashflow_unit_of_work(

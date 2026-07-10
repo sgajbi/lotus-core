@@ -1,6 +1,7 @@
 """Transaction processing application use cases and contracts."""
 
 from .commands import ProcessTransactionCommand, TransactionEventMetadata
+from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .process_transaction import ProcessTransactionUseCase
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 
@@ -9,5 +10,7 @@ __all__ = [
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
     "TransactionEventMetadata",
+    "TransactionProcessingError",
+    "TransactionProcessingRejected",
     "TransactionProcessingStatus",
 ]
