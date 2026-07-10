@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from portfolio_common.db import get_async_session_factory
+from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
+from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cashflow_calculator_service.app.consumers import (
@@ -16,9 +18,13 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
     CostCalculationWorkflowPort,
 )
 
-from ..application import ProcessTransactionUseCase
+from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
 from .cashflow_processing_adapter import CashflowStagingWorkflow
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
+from .transaction_replay_adapter import (
+    CanonicalTransactionReplayer,
+    SqlAlchemyBookedTransactionReplayAdapter,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +41,17 @@ class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class CanonicalBookedTransactionReplayerFactory:
+    kafka_producer: KafkaProducer
+
+    def __call__(self, session: AsyncSession) -> CanonicalTransactionReplayer:
+        return ReprocessingRepository(
+            db=session,
+            kafka_producer=self.kafka_producer,
+        )
+
+
 def build_process_transaction_use_case(
     *,
     session_factory: Callable[[], AsyncSession] | None = None,
@@ -46,3 +63,19 @@ def build_process_transaction_use_case(
         cashflow_workflow=cashflow.CashflowCalculationWorkflow(),
     )
     return ProcessTransactionUseCase(unit_of_work_factory)
+
+
+def build_replay_booked_transaction_use_case(
+    *,
+    session_factory: Callable[[], AsyncSession] | None = None,
+    kafka_producer: KafkaProducer | None = None,
+) -> ReplayBookedTransactionUseCase:
+    resolved_session_factory = session_factory or get_async_session_factory()
+    resolved_kafka_producer = kafka_producer if kafka_producer is not None else get_kafka_producer()
+    replay_adapter = SqlAlchemyBookedTransactionReplayAdapter(
+        session_factory=resolved_session_factory,
+        replayer_factory=CanonicalBookedTransactionReplayerFactory(
+            kafka_producer=resolved_kafka_producer
+        ),
+    )
+    return ReplayBookedTransactionUseCase(replay_adapter)

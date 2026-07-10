@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cashflow_calculator_service.app.consumers import (
@@ -11,9 +12,12 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CanonicalBookedTransactionReplayerFactory,
+    SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_replay_booked_transaction_use_case,
 )
 
 
@@ -47,3 +51,26 @@ def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
     unit_of_work = use_case._unit_of_work_factory()
     assert isinstance(unit_of_work, SqlAlchemyTransactionProcessingUnitOfWork)
     assert unit_of_work._session_factory is session_factory
+
+
+def test_replay_use_case_builder_composes_canonical_repository_dependencies() -> None:
+    session_factory = MagicMock(spec=lambda: AsyncSession())
+    kafka_producer = MagicMock()
+
+    use_case = build_replay_booked_transaction_use_case(
+        session_factory=session_factory,
+        kafka_producer=kafka_producer,
+    )
+
+    replay_adapter = use_case._replay
+    assert isinstance(replay_adapter, SqlAlchemyBookedTransactionReplayAdapter)
+    assert replay_adapter.session_factory is session_factory
+    assert isinstance(
+        replay_adapter.replayer_factory,
+        CanonicalBookedTransactionReplayerFactory,
+    )
+    session = MagicMock(spec=AsyncSession)
+    replayer = replay_adapter.replayer_factory(session)
+    assert isinstance(replayer, ReprocessingRepository)
+    assert replayer.db is session
+    assert replayer.kafka_producer is kafka_producer
