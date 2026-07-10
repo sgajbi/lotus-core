@@ -61,6 +61,7 @@ from .cost_engine.domain.models.transaction import Transaction as EngineTransact
 from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_engine.processing.sorter import transaction_order_key
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .repository import CostCalculatorRepository
 from .transaction_processor import TransactionProcessor, build_transaction_processor
 
@@ -433,12 +434,19 @@ class CostCalculationWorkflow:
                         instrument=instrument,
                         repo=repo,
                     )
+                    COST_PROCESSING_OPEN_LOTS_RESTORED.labels(
+                        cost_basis_method=cost_basis_method.value
+                    ).observe(len(initial_open_lots_raw))
                 processed, errored, open_lot_states = self._get_transaction_processor(
                     cost_basis_method
                 ).process_increment(
                     initial_open_lots_raw=initial_open_lots_raw,
                     new_transactions_raw=[incoming_raw],
                 )
+                COST_PROCESSING_EXECUTION_TOTAL.labels(
+                    mode="ordered_append",
+                    cost_basis_method=cost_basis_method.value,
+                ).inc()
                 return CostEngineCalculation(
                     processed=processed,
                     errored=errored,
@@ -458,6 +466,10 @@ class CostCalculationWorkflow:
             existing_transactions_raw=[],
             new_transactions_raw=all_transactions_raw,
         )
+        COST_PROCESSING_EXECUTION_TOTAL.labels(
+            mode="full_rebuild",
+            cost_basis_method=cost_basis_method.value,
+        ).inc()
         return CostEngineCalculation(
             processed=processed,
             errored=errored,

@@ -1,4 +1,17 @@
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
+
+COST_PROCESSING_EXECUTION_TOTAL = Counter(
+    "cost_processing_execution_total",
+    "Cost-basis calculations by bounded execution mode and method.",
+    labelnames=("mode", "cost_basis_method"),
+)
+
+COST_PROCESSING_OPEN_LOTS_RESTORED = Histogram(
+    "cost_processing_open_lots_restored",
+    "Open source lots restored for an ordered state-dependent cost calculation.",
+    labelnames=("cost_basis_method",),
+    buckets=(0, 1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000, 10000),
+)
 
 RECALCULATION_DEPTH = Histogram(
     "recalculation_depth",
