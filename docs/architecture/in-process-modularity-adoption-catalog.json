@@ -51,6 +51,47 @@
         "docs/architecture/CR-1320-BULK-UPLOAD-COMPONENT-BOUNDARY.md"
       ],
       "noRuntimeSplitRationale": "This representative adoption improves package-level design modularity inside the existing ingestion deployable. It does not introduce a new deployable service, database, queue, or operational ownership boundary."
+    },
+    {
+      "serviceId": "portfolio_transaction_processing_service",
+      "servicePath": "src/services/portfolio_transaction_processing_service",
+      "status": "representative-adopted-with-legacy-folders",
+      "requiredPackagePaths": [
+        "src/services/portfolio_transaction_processing_service/app/application",
+        "src/services/portfolio_transaction_processing_service/app/domain",
+        "src/services/portfolio_transaction_processing_service/app/ports",
+        "src/services/portfolio_transaction_processing_service/app/delivery",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure",
+        "src/services/portfolio_transaction_processing_service/app/runtime"
+      ],
+      "runtimeCompositionFiles": [
+        "src/services/portfolio_transaction_processing_service/app/main.py",
+        "src/services/portfolio_transaction_processing_service/app/runtime/manager.py"
+      ],
+      "deliveryPackagePaths": [
+        "src/services/portfolio_transaction_processing_service/app/delivery"
+      ],
+      "legacyFolders": [
+        {
+          "path": "src/services/calculators/cost_calculator_service",
+          "migrationGuidance": "Move cost policy behind the target CostProcessingPort, then delete this root after combined runtime parity."
+        },
+        {
+          "path": "src/services/calculators/cashflow_calculator_service",
+          "migrationGuidance": "Move cashflow policy behind the target CashflowProcessingPort, then delete this root after combined runtime parity."
+        },
+        {
+          "path": "src/services/calculators/position_calculator",
+          "migrationGuidance": "Move position reduction and replay behind the target PositionProcessingPort, then delete this root after combined runtime parity."
+        }
+      ],
+      "evidence": [
+        "docs/standards/application-command-result-standard.md",
+        "docs/standards/in-process-boundary-contract-standard.md",
+        "docs/architecture/calculator-runtime-consolidation-decision.md",
+        "docs/architecture/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md"
+      ],
+      "noRuntimeSplitRationale": "This slice defines and enforces the in-process package/use-case/port structure without adding a Dockerfile, queue, database, or deployed runtime. The separately governed consolidation decision controls the later three-to-one deployment change."
     }
   ]
 }
