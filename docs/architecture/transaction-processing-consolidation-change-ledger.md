@@ -30,12 +30,13 @@ tests move with their owning module; they are not deleted merely because a servi
 | Plain cost and cashflow workflows independent of Kafka delivery | implemented-local | CR-1437 and CR-1438. |
 | One final normal-path consumer and governed dependency builder | implemented-local | CR-1439 and CR-1440; not registered yet. |
 | Concrete combined `ADJUSTMENT` database parity and duplicate proof | implemented-local | CR-1441. |
+| Concrete ordered BUY/SELL, fee, and full-disposal database parity | implemented-local | CR-1442 and CR-1443; FIFO partial/full disposal, fee rows, cashflows, positions, and duplicate proof. |
 
 ## Required Before Runtime Cutover
 
 | Surface | Status | Required change | Removal/cutover prerequisite |
 |---|---|---|---|
-| Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO BUY/partial SELL, realized gain/loss, cashflow, and position parity is implemented locally in CR-1442. Add fees, FX, full disposal, AVCO, multi-lot selection, cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
+| Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO partial disposal is implemented in CR-1442; fee-aware full disposal is implemented in CR-1443. Add FX, AVCO, multi-lot selection, cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
 | Replay request path | required | Use one replay-request consumer that republishes canonical transactions to `transactions.persisted`; combined normal consumer processes replayed transactions under epoch/semantic fences. | Replay ordering, duplicate, partial-publish, epoch, throttle, and backlog tests pass. |
 | Cost-history runtime complexity | required | Characterize `CostCalculatorRepository.get_transaction_history` full portfolio/security scans under long histories. Introduce incremental state only if FIFO, AVCO, backdated, fee/FX, multi-lot, and corporate-action parity proves identical results. | Query-count/explain/load evidence meets target without weakening deterministic replay; otherwise retain full-history correctness with explicit capacity limits and diagnostics. |
 | Throughput and capacity | required | Measure events/second, p50/p95/p99, DB pool utilization, query count, Kafka lag, failure recovery, and shutdown drain against three-service baseline. | No material regression; bounded in-flight and per-portfolio ordering proven. |
