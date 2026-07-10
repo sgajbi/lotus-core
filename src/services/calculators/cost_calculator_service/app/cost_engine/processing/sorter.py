@@ -22,13 +22,16 @@ TransactionOrderKey = tuple[datetime, int, int, int, str, Decimal, str]
 def transaction_order_key(transaction: Transaction) -> TransactionOrderKey:
     """Return the canonical total ordering used by cost calculation and replay."""
     target_sequence, target_instrument_id = ca_bundle_a_target_order_key(transaction)
+    order_quantity = getattr(transaction, "source_lot_order_quantity", transaction.quantity)
+    if not isinstance(order_quantity, Decimal):
+        order_quantity = Decimal(str(order_quantity))
     return (
         transaction.transaction_date,
         ca_bundle_a_dependency_rank(transaction),
         _cash_dependency_rank(transaction),
         target_sequence,
         target_instrument_id,
-        -transaction.quantity,
+        -order_quantity,
         transaction.transaction_id,
     )
 

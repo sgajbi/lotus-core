@@ -256,6 +256,33 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
     assert len(prefix_processed) == 3
 
 
+def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_lots() -> None:
+    transaction_date = "2026-01-01T10:00:00+00:00"
+    larger_original_lot = {
+        **_raw_transaction("BUY-LARGE", transaction_date, "BUY", "1", "10"),
+        "net_cost_local": Decimal("10"),
+        "net_cost": Decimal("10"),
+        "source_lot_order_quantity": Decimal("10"),
+    }
+    smaller_original_lot = {
+        **_raw_transaction("BUY-SMALL", transaction_date, "BUY", "5", "100"),
+        "net_cost_local": Decimal("100"),
+        "net_cost": Decimal("100"),
+        "source_lot_order_quantity": Decimal("5"),
+    }
+    sell = _raw_transaction("SELL-1", "2026-01-02T10:00:00+00:00", "SELL", "1", "30")
+
+    processed, errors, states = build_transaction_processor("FIFO").process_increment(
+        initial_open_lots_raw=[smaller_original_lot, larger_original_lot],
+        new_transactions_raw=[sell],
+    )
+
+    assert errors == []
+    assert processed[0].realized_gain_loss == Decimal("20")
+    assert states["BUY-LARGE"].quantity == Decimal(0)
+    assert states["BUY-SMALL"].quantity == Decimal("5")
+
+
 @patch(
     "src.services.calculators.cost_calculator_service.app.transaction_processor.RECALCULATION_DURATION_SECONDS"
 )
