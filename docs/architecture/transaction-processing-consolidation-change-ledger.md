@@ -32,13 +32,13 @@ tests move with their owning module; they are not deleted merely because a servi
 | Concrete combined `ADJUSTMENT` database parity and duplicate proof | implemented-local | CR-1441. |
 | Concrete ordered BUY/SELL, fee, and full-disposal database parity | implemented-local | CR-1442 and CR-1443; FIFO partial/full disposal, fee rows, cashflows, positions, and duplicate proof. |
 | Concrete effective-dated cross-currency database parity | implemented-local | CR-1444; latest-on-or-before FX selection and local/base values across transaction, lot, position, fee, and cashflow. |
+| Shared combined integration support and domain-variant test layout | implemented-local | CR-1445; canonical persistence/event ordering has one helper and scenario modules are 134-179 lines. |
 
 ## Required Before Runtime Cutover
 
 | Surface | Status | Required change | Removal/cutover prerequisite |
 |---|---|---|---|
 | Concrete BUY/SELL and multi-leg behavior | required | Baseline FIFO partial disposal is implemented in CR-1442; fee-aware full disposal in CR-1443; effective-dated cross-currency valuation in CR-1444. Add AVCO, multi-lot selection, explicit cross-currency cash legs, and multi-leg behavior. | Existing transaction contract packs and all remaining combined parity paths pass. |
-| Combined integration test fixtures | required | Extract shared portfolio, instrument, booked-transaction, event, and process helpers before adding further transaction variants; the current BUY/SELL/fee/FX module is 496 lines. | Variant tests remain concise, independently readable, and free of duplicated setup ownership. |
 | Replay request path | required | Use one replay-request consumer that republishes canonical transactions to `transactions.persisted`; combined normal consumer processes replayed transactions under epoch/semantic fences. | Replay ordering, duplicate, partial-publish, epoch, throttle, and backlog tests pass. |
 | Cost-history runtime complexity | required | Characterize `CostCalculatorRepository.get_transaction_history` full portfolio/security scans under long histories. Introduce incremental state only if FIFO, AVCO, backdated, fee/FX, multi-lot, and corporate-action parity proves identical results. | Query-count/explain/load evidence meets target without weakening deterministic replay; otherwise retain full-history correctness with explicit capacity limits and diagnostics. |
 | Throughput and capacity | required | Measure events/second, p50/p95/p99, DB pool utilization, query count, Kafka lag, failure recovery, and shutdown drain against three-service baseline. | No material regression; bounded in-flight and per-portfolio ordering proven. |
