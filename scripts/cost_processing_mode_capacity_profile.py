@@ -28,7 +28,7 @@ from src.services.calculators.cost_calculator_service.app.transaction_processor 
     build_transaction_processor,
 )
 
-SCHEMA_VERSION = "lotus-core.cost-processing-mode-capacity-profile.v2"
+SCHEMA_VERSION = "lotus-core.cost-processing-mode-capacity-profile.v3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,8 +90,20 @@ def _disposal_checkpoint(
     cost_basis_method: str,
     required_quantity: Decimal,
 ) -> list[dict[str, object]]:
-    if cost_basis_method != "FIFO":
-        return checkpoint
+    if cost_basis_method == "AVCO":
+        if not checkpoint:
+            return []
+        aggregate = dict(checkpoint[-1])
+        aggregate["quantity"] = sum(
+            (Decimal(str(lot["quantity"])) for lot in checkpoint), Decimal(0)
+        )
+        aggregate["net_cost_local"] = sum(
+            (Decimal(str(lot["net_cost_local"])) for lot in checkpoint), Decimal(0)
+        )
+        aggregate["net_cost"] = sum(
+            (Decimal(str(lot["net_cost"])) for lot in checkpoint), Decimal(0)
+        )
+        return [aggregate]
 
     selected_lots: list[dict[str, object]] = []
     covered_quantity = Decimal(0)
@@ -250,7 +262,7 @@ def run_processing_mode_profile(
             "includes_kafka_io": False,
             "ordered_opening_append_requires_prior_lot_restore": False,
             "ordered_fifo_disposal_restores_only_quantity_covering_lots": True,
-            "ordered_avco_disposal_restores_complete_open_lot_shape": True,
+            "ordered_avco_disposal_restores_one_aggregate_pool_source": True,
             "backdated_rebuild_recalculates_complete_timeline": True,
         },
         "measurements": [asdict(measurement) for measurement in measurements],

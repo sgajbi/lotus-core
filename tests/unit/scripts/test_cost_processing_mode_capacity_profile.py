@@ -27,7 +27,7 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
         "includes_kafka_io": False,
         "ordered_opening_append_requires_prior_lot_restore": False,
         "ordered_fifo_disposal_restores_only_quantity_covering_lots": True,
-        "ordered_avco_disposal_restores_complete_open_lot_shape": True,
+        "ordered_avco_disposal_restores_one_aggregate_pool_source": True,
         "backdated_rebuild_recalculates_complete_timeline": True,
     }
     opening, disposal, backdated = report["measurements"]
@@ -49,6 +49,24 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
     assert backdated["restored_open_lot_count"] == 0
     assert backdated["error_count"] == 0
     json.dumps(report, allow_nan=False)
+
+
+def test_processing_mode_profile_restores_one_average_cost_pool_source() -> None:
+    clock_values = iter((5.0, 5.25, 10.0, 10.5, 20.0, 21.0))
+
+    report = run_processing_mode_profile(
+        history_counts=[8],
+        cost_basis_methods=["AVCO"],
+        append_iterations=2,
+        clock=lambda: next(clock_values),
+    )
+
+    opening, disposal, backdated = report["measurements"]
+    assert disposal["restored_open_lot_count"] == 1
+    assert disposal["error_count"] == 0
+    assert disposal["ending_open_quantity"] == "3.0000000000"
+    assert opening["ending_open_quantity"] == "1"
+    assert backdated["ending_open_quantity"] == "5.0000000000"
 
 
 @pytest.mark.parametrize(
