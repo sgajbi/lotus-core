@@ -127,8 +127,9 @@ Current repo truth:
     evidence across `dev`, `uat`, and `prod`.
 12. App-local Compose and every Compose-backed CI runtime lane use one
     `portfolio_transaction_processing_service` for atomic cost, cashflow, and position processing.
-    The internal modules remain separate, valuation remains independently deployable, and
-    Kubernetes/release cutover plus legacy package removal are still governed follow-up work.
+    The internal modules remain separate, valuation remains independently deployable, and the
+    Kubernetes source plus CI release renderer use the target digest. Registry/cluster proof and
+    legacy package removal are still governed follow-up work.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use

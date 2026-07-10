@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Issue: #468
-Status: App-local and CI runtime cut over; release/Kubernetes/legacy-package removal pending
+Status: App-local/CI and Kubernetes manifests cut over; registry/cluster/legacy removal pending
 
 ## Objective
 
@@ -45,6 +45,10 @@ weakening domain, replay, observability, and provenance contracts.
   service, proves committed live-group lag grows by the submitted valid record count, verifies source
   persistence during interruption, resumes the worker, and requires exact cost, cashflow, position,
   idempotency-claim, live-lag, replay-lag, and incremental DLQ outcomes.
+- Removed legacy transaction images from CI prebuild/release inventories. Added a hardened target
+  Kubernetes Deployment, Service, ServiceAccount, disruption budget, and one KEDA scaler with live
+  and replay triggers. CI renders the deployment only from the target's signed, scanned,
+  provenance-backed release manifest and preserves one digest across dev, UAT, and prod.
 
 ## Compatibility And Rollback
 
@@ -74,8 +78,10 @@ the additive target runtime, but compatibility events and schema state must rema
   `100` records in `2.020s`; committed live lag grew `0 -> 100` and returned to `0`; replay lag
   remained `0`; exact `100` cost / cashflow / position / processing-claim outcomes completed in
   `9.149s`; no DLQ event was added;
-- focused MyPy, Ruff, format, architecture, image, Compose, docs, and wiki gates pass.
+- focused MyPy, Ruff, format, architecture, image, Compose, docs, and wiki gates pass;
+- Kubernetes/release contracts: `37 passed`; base and KEDA Kustomize rendering and image provenance
+  guard passed.
 
 The throughput values are characterization evidence, not an approved production SLO. A reviewed
-three-service comparison, shutdown-under-load, pool-pressure evidence, CI registry evidence,
-Kubernetes/KEDA cutover, canonical QA, and legacy package/shell removal remain open under #468.
+three-service comparison, shutdown-under-load, pool-pressure evidence, CI registry publication and
+cluster rollout evidence, canonical QA, and legacy package/shell removal remain open under #468.

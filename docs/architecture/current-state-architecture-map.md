@@ -127,10 +127,11 @@ Rules:
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.
 
-App-local Compose and every Compose-backed CI runtime set use the combined transaction processor;
-the three legacy worker shells are no longer deployed there. Registry release, Kubernetes/KEDA,
-platform observability publication, canonical QA, downstream stage retirement, and physical legacy
-package removal remain governed prerequisites before full production cutover is claimed.
+App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
+transaction processor; the three legacy worker shells are absent from those inventories. Registry
+publication, controlled cluster rollout, platform observability publication, canonical QA,
+downstream stage retirement, and physical legacy package removal remain governed prerequisites
+before full production cutover is claimed.
 
 ## Transitional Internal Package Roots
 

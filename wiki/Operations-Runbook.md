@@ -189,6 +189,13 @@ manifests, SBOM artifact/provenance/signing/scan workflow controls, digest-based
 references, same-image promotion evidence across `dev`, `uat`, and `prod`, no secret-like build
 ARG/ENV additions, and the shared `/version` route.
 
+For the unified transaction runtime, render
+`deployment/kubernetes/base/portfolio-transaction-processing.yaml` with
+`scripts/render_transaction_processing_deployment.py` and the target CI image-release manifest.
+Never apply the checked-in all-zero digest placeholder or deploy the legacy cost, cashflow, and
+position worker images/scalers. Apply `deployment/kubernetes/keda/processing-scaledobjects.yaml`
+only after the governed Kafka offset handoff.
+
 HTTP security-control coverage is guarded by `make security-control-coverage-guard`. Production-like
 profiles must set non-wildcard `LOTUS_HTTP_TRUSTED_HOSTS`; local/dev/test profiles default to `*`
 for app-local compatibility. Browser CORS remains deny-by-default unless

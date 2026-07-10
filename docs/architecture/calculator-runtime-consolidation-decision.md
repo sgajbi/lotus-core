@@ -1,6 +1,6 @@
 # Calculator Runtime Consolidation Decision
 
-Status: App-local and CI runtime cut over; release/Kubernetes/legacy removal pending
+Status: App-local/CI and Kubernetes manifests cut over; registry/cluster/legacy removal pending
 Date: 2026-07-10  
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
@@ -64,7 +64,7 @@ combined completion contract.
 5. Prove duplicate delivery, replay, DLQ, rollback-on-module-failure, shutdown, and backlog behavior.
 6. Switch local/CI deployment manifests to the combined image and run local load/tie-out proof.
 7. Remove the three legacy Dockerfiles/services and the obsolete normal-path stage wait only after
-   downstream compatibility, release/Kubernetes cutover, and canonical platform QA pass.
+   downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
 Steps 1 through 6 are implemented locally. The branch must not claim full runtime consolidation
 complete before step 7 and the remaining release/deployment gates are validated.

@@ -1818,9 +1818,16 @@ Most relevant current governance:
      generated container name. Failure recovery must interrupt the unified service and prove source
      persistence, committed live-group lag growth, exact domain/claim completion, live/replay lag
      return to baseline, and no incremental DLQ event; ingestion-job backlog is not a transaction
-     recovery proxy and a timeout is never a passing result. Registry/Kubernetes cutover,
-     shutdown-under-load and pool-pressure evidence, canonical QA, and physical legacy package
-     removal remain required before claiming full consolidation.
+     recovery proxy and a timeout is never a passing result. Registry publication, controlled
+     cluster rollout, shutdown-under-load and pool-pressure evidence, canonical QA, and physical
+     legacy package removal remain required before claiming full consolidation. Kubernetes source
+     must contain one
+     digest-only `portfolio-transaction-processing` Deployment and one KEDA object with canonical
+     live/replay groups; never restore the three legacy worker/scaler/image inventories. Render the
+     deployable manifest only from the target CI release manifest after SBOM, scan, signature,
+     provenance, digest, and same-image dev/UAT/prod checks pass. Treat the checked-in all-zero
+     digest as a fail-closed template placeholder, never as a deployable image. Registry publication,
+     server-side validation, controlled cluster rollout, and rollback evidence remain mandatory.
 
 ## Context Maintenance Rule
 
