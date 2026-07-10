@@ -226,6 +226,84 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
     assert "position_lot_state.open_quantity > 0" in compiled_query
 
 
+async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    lots_and_transactions = []
+    for sequence, (quantity, transaction_date) in enumerate(
+        (
+            ("4", datetime(2026, 1, 1, 10, 0, 0)),
+            ("5", datetime(2026, 1, 2, 10, 0, 0)),
+            ("7", datetime(2026, 1, 3, 10, 0, 0)),
+        ),
+        start=1,
+    ):
+        transaction_id = f"BUY0{sequence}"
+        transaction = DBTransaction(
+            transaction_id=transaction_id,
+            portfolio_id="PORT_COST_01",
+            instrument_id="SEC01",
+            security_id="SEC01",
+            transaction_type="BUY",
+            transaction_date=transaction_date,
+            quantity=Decimal(quantity),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal(quantity) * Decimal("100"),
+            trade_currency="USD",
+            currency="USD",
+        )
+        lot = PositionLotState(
+            lot_id=f"LOT-{transaction_id}",
+            source_transaction_id=transaction_id,
+            portfolio_id="PORT_COST_01",
+            instrument_id="SEC01",
+            security_id="SEC01",
+            acquisition_date=transaction_date.date(),
+            original_quantity=Decimal(quantity),
+            open_quantity=Decimal(quantity),
+            lot_cost_local=Decimal(quantity) * Decimal("100"),
+            lot_cost_base=Decimal(quantity) * Decimal("100"),
+        )
+        lots_and_transactions.append((lot, transaction))
+
+    stream_result = AsyncMock()
+    stream_result.__aiter__.return_value = iter(lots_and_transactions)
+    db_session.stream.return_value = stream_result
+
+    records = await repository.get_fifo_disposal_lot_checkpoint_records(
+        portfolio_id=" PORT_COST_01 ",
+        security_id=" SEC01 ",
+        required_quantity=Decimal("6"),
+    )
+
+    assert [record.transaction.transaction_id for record in records] == ["BUY01", "BUY02"]
+    assert sum((record.quantity for record in records), start=Decimal(0)) == Decimal("9")
+    stream_result.close.assert_awaited_once_with()
+    compiled_query = str(
+        db_session.stream.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_lot_state.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(position_lot_state.security_id) = 'SEC01'" in compiled_query
+    assert (
+        "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
+        "transactions.transaction_id ASC"
+    ) in compiled_query
+
+
+async def test_get_fifo_disposal_lots_rejects_non_positive_quantity_without_query() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    with pytest.raises(ValueError, match="quantity must be positive"):
+        await repository.get_fifo_disposal_lot_checkpoint_records(
+            portfolio_id="PORT_COST_01",
+            security_id="SEC01",
+            required_quantity=Decimal(0),
+        )
+
+    db_session.stream.assert_not_awaited()
+
+
 async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost():
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
