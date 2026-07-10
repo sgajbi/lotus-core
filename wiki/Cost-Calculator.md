@@ -115,7 +115,19 @@ source basis out = target basis in + cash-allocated basis
 ```
 
 Missing cash basis fails closed and creates `insufficient_cash_basis` reconciliation evidence.
-Cash-in-lieu remains a distinct fractional-overlay contract.
+
+## Cash-in-lieu fractional disposal
+
+`CASH_IN_LIEU` is a separate fractional product disposal, not income and not generic cash
+consideration. It requires positive fractional quantity and proceeds plus source-owned allocated
+local/base basis. The lot engine must consume exactly that quantity and basis. Same-currency P&L is
+capital with zero FX; cross-currency capital and FX components are explicit and must reconcile to
+total proceeds less basis.
+
+The product leg carries the fractional basis and P&L. Its linked `ADJUSTMENT` carries the real cash
+account movement and receives effective-dated FX plus signed local/base cash basis. Product and cash
+flows are equal and opposite in settlement currency, so the linked flow sum is zero without
+double-counting the economic disposal.
 
 ## Data it owns
 

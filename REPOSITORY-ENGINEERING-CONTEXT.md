@@ -1759,8 +1759,13 @@ Most relevant current governance:
      pure policy in `cost_engine.domain.corporate_action_cash_economics`, persist calculated
      extension fields through `Transaction.set_calculated_field(...)`, and prove changes through
      the mixed-demerger PostgreSQL contract. Do not map cash consideration back to generic income,
-     infer missing basis, or reuse these semantics for `CASH_IN_LIEU`; its fractional overlay is a
-     separate contract.
+     infer missing basis. `CASH_IN_LIEU` is the separate fractional overlay: require positive
+     fractional quantity/proceeds and explicit allocated local/base basis; consumed lot quantity and
+     both basis values must match exactly. Classify its synthetic product flow as position-level
+     `TRANSFER`, never income, and keep the linked `ADJUSTMENT` as the actual cash-account movement.
+     Cross-currency adjustment legs must use latest-on-or-before FX, direction-aware signed
+     local/base cash basis, and no realized P&L. Product and linked cash flows must sum to zero in
+     settlement currency without double counting; preserve capital/FX/total P&L on the product leg.
 134. Ordered FIFO `consume_lot` processing restores only the oldest positive source lots needed to
      cover the requested quantity. Repository ordering must match canonical transaction date,
      original quantity descending, and source transaction ID; insufficient holdings still flow to

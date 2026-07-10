@@ -1323,6 +1323,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Relationships**: No explicit foreign-key relationships declared.
 - **Usage (modules/features)**: `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`, `src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_rules_repository.py`, `src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Governed cash-in-lieu rule**: `CASH_IN_LIEU` is a position-level, non-portfolio `TRANSFER` rule. It represents fractional product disposal and must not be classified as income; the linked `ADJUSTMENT` owns the real cash-account settlement.
 - **Column definitions**:
   - `transaction_type` (String): Domain type discriminator used to branch processing behavior.
   - `classification` (String): Domain attribute used by the owning module.

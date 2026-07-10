@@ -41,6 +41,12 @@ movement is the linked `ADJUSTMENT`. A linked settlement flow is persisted for c
 accounting but has both position-flow and portfolio-flow flags disabled, preventing the settlement
 record from double counting the product economics.
 
+`CASH_IN_LIEU` follows the same product-versus-cash separation but is not income. Its fractional
+product leg is a position-level `TRANSFER`, normally carrying a negative synthetic flow. The linked
+`ADJUSTMENT` is the positive cash settlement and is excluded from position/portfolio product-flow
+analytics. Equal-and-opposite linked amounts must sum to zero in settlement currency. Income-since-
+inception calculations must exclude cash-in-lieu because its economics are capital disposal.
+
 ## Data it owns
 
 Primary durable outputs include:
