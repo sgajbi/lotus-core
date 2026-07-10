@@ -67,10 +67,17 @@ class PositionProcessingPort(Protocol):
 
 
 class TransactionProcessingUnitOfWork(Protocol):
-    idempotency: TransactionIdempotencyPort
-    cost: CostProcessingPort
-    cashflow: CashflowProcessingPort
-    position: PositionProcessingPort
+    @property
+    def idempotency(self) -> TransactionIdempotencyPort: ...
+
+    @property
+    def cost(self) -> CostProcessingPort: ...
+
+    @property
+    def cashflow(self) -> CashflowProcessingPort: ...
+
+    @property
+    def position(self) -> PositionProcessingPort: ...
 
     async def __aenter__(self) -> Self: ...
 

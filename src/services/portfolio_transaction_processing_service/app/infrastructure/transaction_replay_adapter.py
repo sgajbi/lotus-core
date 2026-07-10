@@ -4,7 +4,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from portfolio_common.reprocessing_replay import ReprocessingReplayError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..application import (
+    BookedTransactionReplayDependencyUnavailable,
+    BookedTransactionReplayInvariantViolation,
+)
 
 
 class CanonicalTransactionReplayer(Protocol):
@@ -14,10 +21,6 @@ class CanonicalTransactionReplayer(Protocol):
         *,
         correlation_id: str | None = None,
     ) -> int: ...
-
-
-class BookedTransactionReplayCardinalityError(RuntimeError):
-    """Raised when a unique booked transaction replay publishes more than one record."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,13 +34,18 @@ class SqlAlchemyBookedTransactionReplayAdapter:
         transaction_id: str,
         correlation_id: str | None,
     ) -> bool:
-        async with self.session_factory() as session:
-            replayed_count = await self.replayer_factory(session).reprocess_transactions_by_ids(
-                [transaction_id],
-                correlation_id=correlation_id,
-            )
+        try:
+            async with self.session_factory() as session:
+                replayed_count = await self.replayer_factory(session).reprocess_transactions_by_ids(
+                    [transaction_id],
+                    correlation_id=correlation_id,
+                )
+        except (DBAPIError, ReprocessingReplayError) as exc:
+            raise BookedTransactionReplayDependencyUnavailable(
+                "Canonical booked transaction replay dependency unavailable"
+            ) from exc
         if replayed_count not in {0, 1}:
-            raise BookedTransactionReplayCardinalityError(
+            raise BookedTransactionReplayInvariantViolation(
                 "Canonical booked transaction replay must publish zero or one record; "
                 f"transaction_id={transaction_id}, replayed_count={replayed_count}"
             )

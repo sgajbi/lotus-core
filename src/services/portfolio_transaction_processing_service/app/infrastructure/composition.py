@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import cast
 
 from portfolio_common.db import get_async_session_factory
 from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
@@ -19,6 +20,7 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
 )
 
 from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
+from ..ports import TransactionProcessingUnitOfWork
 from .cashflow_processing_adapter import CashflowStagingWorkflow
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
 from .transaction_replay_adapter import (
@@ -33,7 +35,7 @@ class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
     cost_workflow: CostCalculationWorkflowPort
     cashflow_workflow: CashflowStagingWorkflow
 
-    def __call__(self) -> SqlAlchemyTransactionProcessingUnitOfWork:
+    def __call__(self) -> TransactionProcessingUnitOfWork:
         return SqlAlchemyTransactionProcessingUnitOfWork(
             session_factory=self.session_factory,
             cost_workflow=self.cost_workflow,
@@ -46,9 +48,12 @@ class CanonicalBookedTransactionReplayerFactory:
     kafka_producer: KafkaProducer
 
     def __call__(self, session: AsyncSession) -> CanonicalTransactionReplayer:
-        return ReprocessingRepository(
-            db=session,
-            kafka_producer=self.kafka_producer,
+        return cast(
+            CanonicalTransactionReplayer,
+            ReprocessingRepository(
+                db=session,
+                kafka_producer=self.kafka_producer,
+            ),
         )
 
 

@@ -1631,6 +1631,15 @@ Most relevant current governance:
      produce truthful source allocation must expose an explicit unsupported/degraded state rather
      than silently zeroing persisted rows. Preserve exact Decimal reconciliation and add sequential
      buy/disposal tests when changing cost-basis strategy state.
+129. The target booked-transaction replay request path uses
+     `BookedTransactionReplayRequestConsumer` -> request mapper ->
+     `ReplayBookedTransactionUseCase` -> replay port -> SQLAlchemy/canonical replay adapter. Delivery
+     must not create sessions, repositories, or producers, and must not implement a second retry or
+     DLQ loop. Map database and canonical publication failures to the application-owned dependency
+     error, then let `BaseConsumer` own bounded retry, exhaustion, DLQ, and offset handling. Preserve
+     header-first correlation, payload fallback, and acknowledged missing/not-found requests unless
+     a future contract change is intentional and versioned. Keep replay as the second consumer in
+     the combined deployable because its backlog and operator controls differ from normal booking.
 
 ## Context Maintenance Rule
 

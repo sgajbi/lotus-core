@@ -4,6 +4,8 @@ from .commands import ProcessTransactionCommand, TransactionEventMetadata
 from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .process_transaction import ProcessTransactionUseCase
 from .replay_booked_transaction import (
+    BookedTransactionReplayDependencyUnavailable,
+    BookedTransactionReplayInvariantViolation,
     BookedTransactionReplayStatus,
     ReplayBookedTransactionCommand,
     ReplayBookedTransactionResult,
@@ -12,10 +14,12 @@ from .replay_booked_transaction import (
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 
 __all__ = [
+    "BookedTransactionReplayDependencyUnavailable",
+    "BookedTransactionReplayInvariantViolation",
+    "BookedTransactionReplayStatus",
     "ProcessTransactionCommand",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
-    "BookedTransactionReplayStatus",
     "ReplayBookedTransactionCommand",
     "ReplayBookedTransactionResult",
     "ReplayBookedTransactionUseCase",
