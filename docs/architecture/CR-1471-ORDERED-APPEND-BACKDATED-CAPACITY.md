@@ -35,6 +35,12 @@ and basis-transfer events restore current positive open-lot state, calculate the
 reconcile changed lot state. Backdated events recalculate and persist the affected suffix while
 leaving the checkpoint on the latest canonical event.
 
+CR-1473 narrows ordered FIFO `consume_lot` processing further. It streams open source lots in the
+same date, original-quantity, and transaction-ID order used by the engine and stops after the
+requested disposal quantity is covered. Persistence updates only that selected set and fails if a
+selected source row is missing; omitted later lots remain unchanged. AVCO, basis transfers, and
+full rebuilds continue to use complete snapshots because their economics are not FIFO subsets.
+
 ## Capacity Evidence
 
 `make profile-cost-processing-modes` writes
@@ -46,27 +52,27 @@ Local 8,000-history results, five ordered samples per method:
 
 | Method | Workload | Average request latency | Errors |
 |---|---|---:|---:|
-| FIFO | ordered opening append | 0.081ms | 0 |
-| FIFO | ordered disposal append | 57.770ms | 0 |
-| FIFO | backdated rebuild, 8,001 rows | 318.124ms | 0 |
-| AVCO | ordered opening append | 0.684ms | 0 |
-| AVCO | ordered disposal append | 119.745ms | 0 |
-| AVCO | backdated rebuild, 8,001 rows | 316.457ms | 0 |
+| FIFO | ordered opening append | 0.078ms | 0 |
+| FIFO | ordered disposal append, 1 restored lot | 0.065ms | 0 |
+| FIFO | backdated rebuild, 8,001 rows | 260.212ms | 0 |
+| AVCO | ordered opening append | 0.657ms | 0 |
+| AVCO | ordered disposal append, 6,000 restored lots | 112.493ms | 0 |
+| AVCO | backdated rebuild, 8,001 rows | 279.240ms | 0 |
 
 The results prove that ordinary lot opening no longer scales with history and that ordered
-disposal is cheaper than full replay. They also identify the next hotspot: restoring and
-materializing thousands of current source lots for disposal, especially AVCO. Optimizing that
-requires a durable aggregate/lazy-source representation or bounded FIFO retrieval with exact
-quantity and local/base cost parity; a cache without ownership, freshness, and invalidation is not
-an acceptable substitute.
+FIFO disposal no longer scales with unrelated later open lots: the same 8,000-row scenario
+previously restored 6,000 lots and averaged 57.770ms. AVCO remains the measured hotspot because
+pooled source evidence must reconcile all source quantities and local/base basis. Optimizing AVCO
+requires a durable aggregate/lazy-source representation; a cache without ownership, freshness, and
+invalidation is not an acceptable substitute.
 
 ## Validation And Compatibility
 
-- focused cost/repository/adapter unit pack: 228 passed;
-- ordered append and backdated workflow tests: passed for FIFO and fallback behavior;
+- focused cost/repository/adapter unit packs passed;
+- ordered append and backdated workflow tests passed for bounded FIFO, complete AVCO, and fallback;
 - branch-built PostgreSQL BUY/SELL, FIFO/AVCO backdated correction, epoch, suffix, checkpoint, and
-  rollback proof: 5 passed;
-- migration contract has one Alembic head at `c102b2c3d4e7`;
+  rollback proof passed, including selected-lot persistence;
+- migration contract has one Alembic head at `c105b2c3d4ea`;
 - scoped Ruff, format, MyPy, and diff checks passed.
 
 No API, event payload, Kafka topic/group, cashflow, position, P&L methodology, or downstream

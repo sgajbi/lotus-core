@@ -1726,6 +1726,14 @@ Most relevant current governance:
      the mixed-demerger PostgreSQL contract. Do not map cash consideration back to generic income,
      infer missing basis, or reuse these semantics for `CASH_IN_LIEU`; its fractional overlay is a
      separate contract.
+134. Ordered FIFO `consume_lot` processing restores only the oldest positive source lots needed to
+     cover the requested quantity. Repository ordering must match canonical transaction date,
+     original quantity descending, and source transaction ID; insufficient holdings still flow to
+     the domain engine for rejection. Carry selected-lot versus complete-snapshot update scope
+     explicitly. Selected updates must fail on a missing source row and must never close omitted
+     later lots. Keep AVCO, basis transfer, and full rebuild persistence as complete snapshots until
+     a separate pooled-state design proves exact quantity plus local/base basis reconciliation.
+     Preserve the matching database index and the profile restored-lot-count evidence.
 
 ## Context Maintenance Rule
 
