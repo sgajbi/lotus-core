@@ -10,6 +10,7 @@ from cost_engine.processing.cost_basis_strategies import (
     AverageCostBasisStrategy,
     FIFOBasisStrategy,
 )
+from cost_engine.processing.cost_objects import OpenLotState
 
 # --- Tests for AverageCostBasisStrategy ---
 
@@ -270,6 +271,85 @@ def test_average_cost_source_quantities_reconcile_at_database_scale(
     assert sum(
         state.cost_base for state in avco_strategy.get_open_lot_states().values()
     ) == Decimal("20")
+
+
+def test_average_cost_source_allocation_is_independent_of_sell_batching() -> None:
+    sequential = AverageCostBasisStrategy()
+    combined = AverageCostBasisStrategy()
+    for index in range(3):
+        transaction = Transaction(
+            transaction_id=f"AVCO_BATCHING_BUY_{index}",
+            portfolio_id="P1",
+            instrument_id="AVCO_BATCHING_STOCK",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=datetime(2023, 1, 1),
+            quantity=Decimal("1"),
+            gross_transaction_amount=Decimal("10"),
+            net_cost=Decimal("10"),
+            net_cost_local=Decimal("10"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+        sequential.add_buy_lot(transaction)
+        combined.add_buy_lot(transaction)
+
+    for _ in range(10):
+        sequential.consume_sell_quantity("P1", "AVCO_BATCHING_STOCK", Decimal("0.1"))
+    combined.consume_sell_quantity("P1", "AVCO_BATCHING_STOCK", Decimal("1"))
+
+    assert sequential.get_open_lot_states() == combined.get_open_lot_states()
+    assert sum(state.quantity for state in sequential.get_open_lot_states().values()) == Decimal(
+        "2"
+    )
+    assert sum(state.cost_base for state in sequential.get_open_lot_states().values()) == Decimal(
+        "20"
+    )
+
+
+def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -> None:
+    strategy = AverageCostBasisStrategy()
+    closed_source = Transaction(
+        transaction_id="AVCO_CLOSED_SOURCE",
+        portfolio_id="P1",
+        instrument_id="AVCO_REOPEN_STOCK",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2023, 1, 1),
+        quantity=Decimal("2"),
+        gross_transaction_amount=Decimal("20"),
+        net_cost=Decimal("20"),
+        net_cost_local=Decimal("20"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+    reopened_source = closed_source.model_copy(
+        update={
+            "transaction_id": "AVCO_REOPENED_SOURCE",
+            "quantity": Decimal("3"),
+            "gross_transaction_amount": Decimal("45"),
+            "net_cost": Decimal("45"),
+            "net_cost_local": Decimal("45"),
+        }
+    )
+
+    strategy.add_buy_lot(closed_source)
+    strategy.consume_sell_quantity("P1", "AVCO_REOPEN_STOCK", Decimal("2"))
+    strategy.add_buy_lot(reopened_source)
+    strategy.consume_sell_quantity("P1", "AVCO_REOPEN_STOCK", Decimal("1"))
+
+    assert strategy.get_open_lot_states() == {
+        "AVCO_CLOSED_SOURCE": OpenLotState(
+            quantity=Decimal("0"),
+            cost_local=Decimal("0"),
+            cost_base=Decimal("0"),
+        ),
+        "AVCO_REOPENED_SOURCE": OpenLotState(
+            quantity=Decimal("2"),
+            cost_local=Decimal("30"),
+            cost_base=Decimal("30"),
+        ),
+    }
 
 
 def test_average_cost_initial_lots_normalize_buy_transaction_type(
