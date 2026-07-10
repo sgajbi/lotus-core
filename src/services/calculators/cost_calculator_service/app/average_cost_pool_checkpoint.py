@@ -5,7 +5,11 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Mapping
 
+from portfolio_common.cost_basis import CostBasisMethod
+
+from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
+from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 
 AVERAGE_COST_POOL_STATE_VERSION = "avco-pool-v1"
 
@@ -153,6 +157,46 @@ class AverageCostPoolTransition:
             cost_local=self.existing_sources_after.cost_local + explicit_cost_local,
             cost_base=self.existing_sources_after.cost_base + explicit_cost_base,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class AverageCostPoolRebuildPlan:
+    checkpoint: AverageCostPoolCheckpoint
+    processing_checkpoint: CostBasisProcessingCheckpoint
+    source_transactions: tuple[EngineTransaction, ...]
+    source_states: Mapping[str, OpenLotState]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "source_states", MappingProxyType(dict(self.source_states)))
+        if (
+            self.processing_checkpoint.portfolio_id != self.checkpoint.portfolio_id
+            or self.processing_checkpoint.security_id != self.checkpoint.security_id
+            or self.processing_checkpoint.cost_basis_method != CostBasisMethod.AVCO.value
+        ):
+            raise ValueError("Average cost rebuild processing checkpoint is incompatible")
+        source_transaction_ids = {
+            transaction.transaction_id for transaction in self.source_transactions
+        }
+        if len(source_transaction_ids) != len(self.source_transactions):
+            raise ValueError("Average cost rebuild source transactions must be unique")
+        missing_source_ids = set(self.source_states) - source_transaction_ids
+        if missing_source_ids:
+            raise ValueError("Average cost rebuild state has no source transaction")
+        if any(
+            transaction.portfolio_id != self.checkpoint.portfolio_id
+            or transaction.security_id != self.checkpoint.security_id
+            for transaction in self.source_transactions
+        ):
+            raise ValueError("Average cost rebuild source transaction is outside the pool key")
+
+        expected_checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
+            portfolio_id=self.checkpoint.portfolio_id,
+            instrument_id=self.checkpoint.instrument_id,
+            security_id=self.checkpoint.security_id,
+            states_by_source_transaction_id=self.source_states,
+        )
+        if expected_checkpoint != self.checkpoint:
+            raise ValueError("Average cost rebuild checkpoint does not match source state")
 
 
 def _validate_open_lot_state(state: OpenLotState, *, field_name: str) -> None:

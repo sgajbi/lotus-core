@@ -55,6 +55,7 @@ from tenacity import before_log, retry, retry_if_exception_type, stop_after_atte
 
 from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
+    AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
 )
 from .cost_calculation_processor import (
@@ -216,6 +217,66 @@ class CostCalculationWorkflow:
         self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
     ) -> TransactionProcessor:
         return build_transaction_processor(cost_basis_method)
+
+    async def build_average_cost_pool_rebuild_plan(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+        repo: CostCalculatorRepository,
+    ) -> AverageCostPoolRebuildPlan:
+        portfolio = await repo.get_portfolio(portfolio_id)
+        if portfolio is None:
+            raise ValueError(f"Portfolio {portfolio_id} was not found")
+        cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
+        if cost_basis_method is not CostBasisMethod.AVCO:
+            raise ValueError("Average cost pool rebuild requires an AVCO portfolio")
+
+        instrument = await repo.get_instrument(security_id)
+        if instrument is None:
+            raise ValueError(f"Instrument {security_id} was not found")
+        history = await repo.get_transaction_history(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+        )
+        if not history:
+            raise ValueError("Average cost pool rebuild requires transaction history")
+
+        history_raw = [
+            self._transform_event_for_engine(TransactionEvent.model_validate(transaction))
+            for transaction in history
+        ]
+        self._attach_instrument_metadata(transactions=history_raw, instrument=instrument)
+        enriched_history = await self._enrich_transactions_with_fx(
+            transactions=history_raw,
+            portfolio_base_currency=portfolio.base_currency,
+            repo=repo,
+        )
+        processed, errored, source_states = self._get_transaction_processor(
+            CostBasisMethod.AVCO
+        ).process_transactions(existing_transactions_raw=[], new_transactions_raw=enriched_history)
+        self._raise_for_transaction_engine_errors(errored=errored)
+        latest_transaction = max(processed, key=transaction_order_key)
+        source_transactions = tuple(
+            transaction
+            for transaction in processed
+            if _transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS
+        )
+        checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
+            portfolio_id=portfolio_id,
+            instrument_id=latest_transaction.instrument_id,
+            security_id=security_id,
+            states_by_source_transaction_id=source_states,
+        )
+        return AverageCostPoolRebuildPlan(
+            checkpoint=checkpoint,
+            processing_checkpoint=CostBasisProcessingCheckpoint.from_transaction(
+                latest_transaction,
+                cost_basis_method=CostBasisMethod.AVCO,
+            ),
+            source_transactions=source_transactions,
+            source_states=source_states,
+        )
 
     @staticmethod
     def _record_lifecycle_stage(transaction_type: str, stage: str, status: str) -> None:

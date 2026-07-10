@@ -306,6 +306,109 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     repo.get_open_lot_checkpoint_records.assert_not_awaited()
 
 
+async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history() -> None:
+    workflow = CostCalculationWorkflow()
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    sell_date = datetime(2026, 1, 3, 10, 0, tzinfo=timezone.utc)
+    repo.get_portfolio.return_value = MagicMock(cost_basis_method="AVCO", base_currency="USD")
+    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    repo.get_transaction_history.return_value = [
+        _persisted_buy("BUY-AVCO-1", first_buy_date),
+        DBTransaction(
+            transaction_id="BUY-AVCO-2",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_type="BUY",
+            transaction_date=second_buy_date,
+            quantity=Decimal("5"),
+            price=Decimal("10"),
+            gross_transaction_amount=Decimal("50"),
+            trade_currency="USD",
+            currency="USD",
+        ),
+        DBTransaction(
+            transaction_id="SELL-AVCO-1",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_type="SELL",
+            transaction_date=sell_date,
+            quantity=Decimal("4"),
+            price=Decimal("12"),
+            gross_transaction_amount=Decimal("48"),
+            trade_currency="USD",
+            currency="USD",
+        ),
+    ]
+
+    plan = await workflow.build_average_cost_pool_rebuild_plan(
+        portfolio_id="P1",
+        security_id="S1",
+        repo=repo,
+    )
+
+    assert [transaction.transaction_id for transaction in plan.source_transactions] == [
+        "BUY-AVCO-1",
+        "BUY-AVCO-2",
+    ]
+    assert plan.checkpoint.quantity == Decimal("11")
+    assert plan.checkpoint.cost_local == Decimal("110")
+    assert plan.checkpoint.cost_base == Decimal("110")
+    assert plan.checkpoint.representative_source_transaction_id == "BUY-AVCO-2"
+    assert sum(state.quantity for state in plan.source_states.values()) == Decimal("11")
+    assert sum(state.cost_base for state in plan.source_states.values()) == Decimal("110")
+    assert plan.processing_checkpoint.latest_transaction_id == "SELL-AVCO-1"
+    repo.get_transaction_history.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+    )
+
+
+async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_portfolio.return_value = MagicMock(cost_basis_method="FIFO", base_currency="USD")
+
+    with pytest.raises(ValueError, match="requires an AVCO portfolio"):
+        await CostCalculationWorkflow().build_average_cost_pool_rebuild_plan(
+            portfolio_id="P1",
+            security_id="S1",
+            repo=repo,
+        )
+
+    repo.get_transaction_history.assert_not_awaited()
+
+
+async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_portfolio.return_value = MagicMock(cost_basis_method="AVCO", base_currency="USD")
+    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    repo.get_transaction_history.return_value = [
+        DBTransaction(
+            transaction_id="SELL-AVCO-INVALID",
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            transaction_type="SELL",
+            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+            quantity=Decimal("1"),
+            price=Decimal("12"),
+            gross_transaction_amount=Decimal("12"),
+            trade_currency="USD",
+            currency="USD",
+        )
+    ]
+
+    with pytest.raises(ValueError, match="Transaction engine failed"):
+        await CostCalculationWorkflow().build_average_cost_pool_rebuild_plan(
+            portfolio_id="P1",
+            security_id="S1",
+            repo=repo,
+        )
+
+
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
