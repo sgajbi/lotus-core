@@ -54,6 +54,8 @@ def _performance_economics_transaction(
         quantity=Decimal("10.0000000000"),
         price=Decimal("100.0000000000"),
         gross_transaction_amount=Decimal("1000.0000000000"),
+        allocated_cost_basis_local=Decimal("50.0000000000"),
+        allocated_cost_basis_base=Decimal("60.0000000000"),
         trade_currency="usd",
         currency="usd",
         transaction_date=datetime(2026, 4, 10, 14, 0, tzinfo=UTC),
@@ -578,6 +580,8 @@ async def test_list_performance_component_economics_evidence_selects_latest_cash
     assert len(rows) == 1
     assert rows[0].transaction_id == "TXN-PERF-001"
     assert rows[0].security_id == " EQ_US_AAPL "
+    assert rows[0].allocated_cost_basis_local == Decimal("50.0000000000")
+    assert rows[0].allocated_cost_basis_base == Decimal("60.0000000000")
     assert rows[0].cashflow is not None
     assert rows[0].cashflow.amount == Decimal("100.0000000000")
     assert rows[0].cashflow.updated_at == datetime(2026, 4, 10, 17, 0, tzinfo=UTC)

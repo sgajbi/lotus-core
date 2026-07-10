@@ -285,6 +285,8 @@ class TransactionEvent(CoreEventModel):
     far_leg_group_id: Optional[str] = None
     spot_exposure_model: Optional[str] = None
     fx_realized_pnl_mode: Optional[str] = None
+    allocated_cost_basis_local: Optional[Decimal] = None
+    allocated_cost_basis_base: Optional[Decimal] = None
     realized_capital_pnl_local: Optional[Decimal] = None
     realized_fx_pnl_local: Optional[Decimal] = None
     realized_total_pnl_local: Optional[Decimal] = None

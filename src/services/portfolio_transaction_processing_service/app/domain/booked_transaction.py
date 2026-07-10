@@ -75,6 +75,8 @@ class BookedTransaction:
     far_leg_group_id: str | None = None
     spot_exposure_model: str | None = None
     fx_realized_pnl_mode: str | None = None
+    allocated_cost_basis_local: Decimal | None = None
+    allocated_cost_basis_base: Decimal | None = None
     realized_capital_pnl_local: Decimal | None = None
     realized_fx_pnl_local: Decimal | None = None
     realized_total_pnl_local: Decimal | None = None
