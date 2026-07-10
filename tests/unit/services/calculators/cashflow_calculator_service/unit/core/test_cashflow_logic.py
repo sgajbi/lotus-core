@@ -472,6 +472,48 @@ def test_linked_internal_position_transfer_market_values_sum_to_zero(
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
+def test_linked_cash_settlement_is_excluded_from_position_and_portfolio_flow_levels(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+) -> None:
+    settlement = base_transaction_event.model_copy(
+        update={
+            "transaction_id": "CASH-SETTLEMENT-01",
+            "instrument_id": "CASH-USD",
+            "security_id": "CASH-USD",
+            "transaction_type": "ADJUSTMENT",
+            "quantity": Decimal("0"),
+            "price": Decimal("0"),
+            "gross_transaction_amount": Decimal("275"),
+            "trade_fee": Decimal("0"),
+            "movement_direction": "INFLOW",
+            "originating_transaction_id": "CASH-CONSIDERATION-01",
+            "originating_transaction_type": "CASH_CONSIDERATION",
+            "link_type": "CASH_CONSIDERATION_TO_CASH",
+            "economic_event_id": "EVT-MIXED-01",
+            "linked_transaction_group_id": "GROUP-MIXED-01",
+        }
+    )
+    legacy_adjustment_rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(settlement, legacy_adjustment_rule)
+
+    assert cashflow.amount == Decimal("275")
+    assert cashflow.is_position_flow is False
+    assert cashflow.is_portfolio_flow is False
+    assert cashflow.economic_event_id == "EVT-MIXED-01"
+    assert cashflow.linked_transaction_group_id == "GROUP-MIXED-01"
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
 def test_calculate_falls_back_to_transaction_date_when_policy_source_date_missing(
     mock_metric, base_transaction_event: TransactionEvent
 ):
