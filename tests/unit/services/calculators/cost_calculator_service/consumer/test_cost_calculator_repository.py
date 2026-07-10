@@ -3,10 +3,18 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import CostBasisProcessingState, FxRate, PositionLotState
+from portfolio_common.database_models import (
+    AverageCostPoolState,
+    CostBasisProcessingState,
+    FxRate,
+    PositionLotState,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
+from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+)
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.effective_fx_rate import (  # noqa: E501
     EffectiveFxRate,
 )
@@ -228,6 +236,85 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
         "transactions.transaction_id ASC"
     ) in compiled_query
+
+
+async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineage() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    persisted = AverageCostPoolState(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        pool_quantity=Decimal("15"),
+        pool_cost_local=Decimal("180"),
+        pool_cost_base=Decimal("195"),
+        state_version="avco-pool-v1",
+    )
+    transaction = DBTransaction(
+        transaction_id="BUY-2",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 2),
+        quantity=Decimal("10"),
+        price=Decimal("12"),
+        gross_transaction_amount=Decimal("120"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    execute_result = MagicMock()
+    execute_result.first.return_value = (persisted, transaction)
+    db_session.execute.return_value = execute_result
+
+    record = await repository.get_average_cost_pool_checkpoint_record(
+        portfolio_id=" P1 ",
+        security_id=" S1 ",
+    )
+
+    assert record is not None
+    assert record.representative_transaction is transaction
+    assert record.checkpoint == AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        quantity=Decimal("15"),
+        cost_local=Decimal("180"),
+        cost_base=Decimal("195"),
+    )
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "average_cost_pool_state.portfolio_id = 'P1'" in compiled_query
+    assert "average_cost_pool_state.security_id = 'S1'" in compiled_query
+
+
+async def test_upsert_average_cost_pool_checkpoint_is_idempotent_and_normalized() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    await repository.upsert_average_cost_pool_checkpoint(
+        AverageCostPoolCheckpoint(
+            portfolio_id=" P1 ",
+            instrument_id=" I1 ",
+            security_id=" S1 ",
+            representative_source_transaction_id=" BUY-2 ",
+            quantity=Decimal("15"),
+            cost_local=Decimal("180"),
+            cost_base=Decimal("195"),
+        )
+    )
+
+    stmt = db_session.execute.call_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "ON CONFLICT (portfolio_id, security_id) DO UPDATE" in compiled_query
+    assert "updated_at = now()" in compiled_query
+    assert stmt.compile().params["portfolio_id"] == "P1"
+    assert stmt.compile().params["security_id"] == "S1"
+    assert stmt.compile().params["instrument_id"] == "I1"
+    assert stmt.compile().params["representative_source_transaction_id"] == "BUY-2"
 
 
 async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:

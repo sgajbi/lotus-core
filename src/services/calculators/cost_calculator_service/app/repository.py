@@ -7,6 +7,7 @@ from typing import Any, List, Optional, cast
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
+    AverageCostPoolState,
     CostBasisProcessingState,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
@@ -26,6 +27,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from .average_cost_pool_checkpoint import AverageCostPoolCheckpoint
 from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
@@ -140,6 +142,12 @@ class OpenLotCheckpointRecord:
     quantity: Decimal
     cost_local: Decimal
     cost_base: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class AverageCostPoolCheckpointRecord:
+    checkpoint: AverageCostPoolCheckpoint
+    representative_transaction: DBTransaction | None
 
 
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
@@ -323,6 +331,73 @@ class CostCalculatorRepository:
                     for field_name in payload
                     if field_name not in {"portfolio_id", "security_id"}
                 },
+            )
+        )
+
+    async def get_average_cost_pool_checkpoint_record(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+    ) -> AverageCostPoolCheckpointRecord | None:
+        stmt = (
+            select(AverageCostPoolState, DBTransaction)
+            .outerjoin(
+                DBTransaction,
+                DBTransaction.transaction_id
+                == AverageCostPoolState.representative_source_transaction_id,
+            )
+            .where(
+                AverageCostPoolState.portfolio_id == normalize_lookup_identifier(portfolio_id),
+                AverageCostPoolState.security_id == normalize_lookup_identifier(security_id),
+            )
+        )
+        row = (await self.db.execute(stmt)).first()
+        if row is None:
+            return None
+        state, representative_transaction = row
+        return AverageCostPoolCheckpointRecord(
+            checkpoint=AverageCostPoolCheckpoint(
+                portfolio_id=state.portfolio_id,
+                instrument_id=state.instrument_id,
+                security_id=state.security_id,
+                representative_source_transaction_id=(state.representative_source_transaction_id),
+                quantity=state.pool_quantity,
+                cost_local=state.pool_cost_local,
+                cost_base=state.pool_cost_base,
+                state_version=state.state_version,
+            ),
+            representative_transaction=representative_transaction,
+        )
+
+    async def upsert_average_cost_pool_checkpoint(
+        self,
+        checkpoint: AverageCostPoolCheckpoint,
+    ) -> None:
+        payload = {
+            "portfolio_id": normalize_lookup_identifier(checkpoint.portfolio_id),
+            "security_id": normalize_lookup_identifier(checkpoint.security_id),
+            "instrument_id": normalize_lookup_identifier(checkpoint.instrument_id),
+            "representative_source_transaction_id": (
+                normalize_lookup_identifier(checkpoint.representative_source_transaction_id)
+                if checkpoint.representative_source_transaction_id
+                else None
+            ),
+            "pool_quantity": checkpoint.quantity,
+            "pool_cost_local": checkpoint.cost_local,
+            "pool_cost_base": checkpoint.cost_base,
+            "state_version": checkpoint.state_version,
+        }
+        stmt = pg_insert(AverageCostPoolState).values(**payload)
+        await self.db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["portfolio_id", "security_id"],
+                set_={
+                    field_name: getattr(stmt.excluded, field_name)
+                    for field_name in payload
+                    if field_name not in {"portfolio_id", "security_id"}
+                }
+                | {"updated_at": func.now()},
             )
         )
 
