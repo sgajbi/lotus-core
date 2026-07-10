@@ -120,7 +120,7 @@ class TransactionProcessor:
 
             RECALCULATION_DEPTH.observe(len(valid_new))
             sorted_initial_lots = self._sorter.sort_transactions([], valid_initial_lots)
-            self._disposition_engine.set_initial_lots(sorted_initial_lots)
+            self._disposition_engine.restore_open_lots(sorted_initial_lots)
             sorted_new = self._sorter.sort_transactions([], valid_new)
             processed_new = self._process_sorted_timeline(sorted_new)
             return (

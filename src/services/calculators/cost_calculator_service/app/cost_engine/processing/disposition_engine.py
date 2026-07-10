@@ -57,5 +57,8 @@ class DispositionEngine:
         ]
         self._cost_basis_strategy.set_initial_lots(filtered_buys)
 
+    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+        self._cost_basis_strategy.restore_open_lots(transactions)
+
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
         return self._cost_basis_strategy.get_open_lot_states()
