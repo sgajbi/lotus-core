@@ -20,6 +20,7 @@ from src.services.calculators.cashflow_calculator_service.app.consumers.transact
     CashflowStageResult,
     LinkedCashLegError,
     NoCashflowRuleError,
+    _cashflow_calculated_event_from_saved_cashflow,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_repository import (  # noqa: E501
     CashflowRepository,
@@ -40,6 +41,50 @@ async def test_cashflow_workflow_constructs_without_kafka_delivery_runtime() -> 
     assert callable(workflow.stage_valid_event)
     assert callable(workflow._get_rule_for_transaction)
     assert not hasattr(workflow, "_consumer_config")
+
+
+async def test_cashflow_calculated_event_preserves_corporate_action_linkage() -> None:
+    source_event = TransactionEvent(
+        transaction_id="CA-CASH-01",
+        portfolio_id="PORT-CFC-01",
+        instrument_id="CA-CASH-INSTRUMENT",
+        security_id="CA-CASH-INSTRUMENT",
+        transaction_date=datetime(2026, 5, 3, 10, 0, 0),
+        transaction_type="CASH_CONSIDERATION",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("275"),
+        trade_currency="USD",
+        currency="USD",
+        economic_event_id="EVT-MIXED-01",
+        linked_transaction_group_id="GROUP-MIXED-01",
+        parent_event_reference="PARENT-MIXED-01",
+        linked_cash_transaction_id="CASH-SETTLEMENT-01",
+    )
+    saved = Cashflow(
+        id=91,
+        transaction_id=source_event.transaction_id,
+        portfolio_id=source_event.portfolio_id,
+        security_id=source_event.security_id,
+        cashflow_date=date(2026, 5, 3),
+        epoch=0,
+        amount=Decimal("275"),
+        currency="USD",
+        classification="INCOME",
+        timing="EOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        economic_event_id=source_event.economic_event_id,
+        linked_transaction_group_id=source_event.linked_transaction_group_id,
+    )
+
+    emitted = _cashflow_calculated_event_from_saved_cashflow(saved, source_event)
+
+    assert emitted.economic_event_id == "EVT-MIXED-01"
+    assert emitted.linked_transaction_group_id == "GROUP-MIXED-01"
+    assert emitted.parent_event_reference == "PARENT-MIXED-01"
+    assert emitted.linked_cash_transaction_id == "CASH-SETTLEMENT-01"
 
 
 @pytest.fixture(autouse=True)

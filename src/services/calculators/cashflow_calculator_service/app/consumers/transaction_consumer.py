@@ -273,7 +273,7 @@ async def _stage_cashflow_calculation(
 ) -> int:
     cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
     saved = await cashflow_repo.create_cashflow(cashflow_to_save)
-    completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved)
+    completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved, event)
     await outbox_repo.create_outbox_event(
         aggregate_type="Cashflow",
         aggregate_id=str(saved.portfolio_id),
@@ -285,7 +285,10 @@ async def _stage_cashflow_calculation(
     return 1
 
 
-def _cashflow_calculated_event_from_saved_cashflow(saved) -> CashflowCalculatedEvent:
+def _cashflow_calculated_event_from_saved_cashflow(
+    saved,
+    source_event: TransactionEvent,
+) -> CashflowCalculatedEvent:
     return CashflowCalculatedEvent(
         cashflow_id=saved.id,
         transaction_id=saved.transaction_id,
@@ -300,6 +303,10 @@ def _cashflow_calculated_event_from_saved_cashflow(saved) -> CashflowCalculatedE
         is_portfolio_flow=saved.is_portfolio_flow,
         calculation_type=saved.calculation_type,
         epoch=saved.epoch,
+        economic_event_id=saved.economic_event_id,
+        linked_transaction_group_id=saved.linked_transaction_group_id,
+        parent_event_reference=source_event.parent_event_reference,
+        linked_cash_transaction_id=source_event.linked_cash_transaction_id,
     )
 
 
