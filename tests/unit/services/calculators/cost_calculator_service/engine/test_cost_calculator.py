@@ -401,6 +401,46 @@ def test_cash_in_lieu_rejects_consumed_basis_that_disagrees_with_allocated_basis
     )
 
 
+@pytest.mark.parametrize(
+    ("movement_direction", "expected_local", "expected_base"),
+    [
+        ("INFLOW", Decimal("60"), Decimal("81.00")),
+        ("OUTFLOW", Decimal("-60"), Decimal("-81.00")),
+    ],
+)
+def test_cross_currency_adjustment_uses_direction_aware_cash_basis(
+    cost_calculator,
+    error_reporter,
+    movement_direction: str,
+    expected_local: Decimal,
+    expected_base: Decimal,
+) -> None:
+    transaction = Transaction(
+        transaction_id=f"ADJUSTMENT-{movement_direction}-01",
+        portfolio_id="P1",
+        instrument_id="CASH_EUR",
+        security_id="CASH_EUR",
+        transaction_type=TransactionType.ADJUSTMENT,
+        transaction_date=datetime(2026, 5, 10),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("60"),
+        trade_currency="EUR",
+        portfolio_base_currency="SGD",
+        transaction_fx_rate=Decimal("1.35"),
+        movement_direction=movement_direction,
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    assert not error_reporter.has_errors_for(transaction.transaction_id)
+    assert transaction.net_cost_local == expected_local
+    assert transaction.net_cost == expected_base
+    assert transaction.gross_cost == expected_base
+    assert transaction.realized_gain_loss_local is None
+    assert transaction.realized_gain_loss is None
+
+
 def test_cash_consideration_strategy_records_disposed_basis_and_realized_pnl(
     cost_calculator, mock_disposition_engine, error_reporter
 ) -> None:

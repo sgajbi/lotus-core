@@ -389,8 +389,6 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
-        if event_transaction_type == ADJUSTMENT_TRANSACTION_TYPE:
-            return [event], []
         if event_transaction_type in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
             return await self._build_fx_events_to_publish(event=event, repo=repo)
         return await self._build_cost_engine_events_to_publish(

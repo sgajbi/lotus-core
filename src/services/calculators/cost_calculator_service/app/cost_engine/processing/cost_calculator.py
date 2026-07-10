@@ -96,6 +96,15 @@ def _add_cash_in_lieu_invariant_error(
     )
 
 
+def _add_adjustment_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id,
+        f"ADJUSTMENT invariant violation: {message}",
+    )
+
+
 def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
     resolved_value = decimal_or_none(value)
     if resolved_value is None:
@@ -639,6 +648,31 @@ class CashOutflowStrategy:
         _apply_no_realized_pnl(transaction)
 
 
+class AdjustmentStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        del disposition_engine
+        direction = _normalize_code(getattr(transaction, "movement_direction", None) or "INFLOW")
+        if direction not in {"INFLOW", "OUTFLOW"}:
+            _add_adjustment_invariant_error(
+                error_reporter,
+                transaction,
+                "movement_direction must be INFLOW or OUTFLOW.",
+            )
+            return
+        signed_amount_local = _cash_movement_amount(transaction)
+        if direction == "OUTFLOW":
+            signed_amount_local = -signed_amount_local
+        transaction.net_cost_local = signed_amount_local
+        transaction.net_cost = signed_amount_local * _transaction_fx_rate_or_one(transaction)
+        transaction.gross_cost = transaction.net_cost
+        _apply_no_realized_pnl(transaction)
+
+
 class SecurityInflowStrategy:
     def calculate_costs(
         self,
@@ -1043,7 +1077,7 @@ class CostCalculator:
             TransactionType.RIGHTS_REFUND: IncomeStrategy(),
             TransactionType.RIGHTS_SHARE_DELIVERY: SecurityInflowStrategy(),
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
-            TransactionType.ADJUSTMENT: DefaultStrategy(),
+            TransactionType.ADJUSTMENT: AdjustmentStrategy(),
             TransactionType.FEE: DefaultStrategy(),
             TransactionType.TAX: UnsupportedTaxStrategy(),
         }

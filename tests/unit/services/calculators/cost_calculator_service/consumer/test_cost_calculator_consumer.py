@@ -1701,16 +1701,25 @@ async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
         base_currency="USD", portfolio_id="PORT_COST_01"
     )
     mock_repo.get_instrument.return_value = None
+    mock_repo.get_transaction_history.return_value = []
+    mock_repo.update_transaction_costs.side_effect = lambda transaction: transaction
 
     await cost_calculator_consumer.process_message(mock_buy_kafka_message)
 
-    mock_repo.get_transaction_history.assert_not_called()
-    mock_repo.update_transaction_costs.assert_not_called()
+    mock_repo.get_transaction_history.assert_awaited_once_with(
+        portfolio_id="PORT_COST_01",
+        security_id="SEC_COST_01",
+        exclude_id="ADJ-UP-01",
+    )
+    mock_repo.update_transaction_costs.assert_awaited_once()
     mock_outbox_repo.create_outbox_event.assert_called_once()
     payload = mock_outbox_repo.create_outbox_event.call_args.kwargs["payload"]
     assert payload["transaction_type"] == "ADJUSTMENT"
     assert payload["cash_entry_mode"] == "UPSTREAM_PROVIDED"
     assert payload["external_cash_transaction_id"] is None
+    assert payload["transaction_fx_rate"] == "1"
+    assert payload["net_cost_local"] == "25"
+    assert payload["net_cost"] == "25"
     cost_calculator_consumer._send_to_dlq_async.assert_not_awaited()
 
 
