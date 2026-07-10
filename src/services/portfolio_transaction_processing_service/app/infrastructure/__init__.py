@@ -15,13 +15,11 @@ from .sqlalchemy_unit_of_work import (
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
 from .transaction_replay_adapter import (
-    BookedTransactionReplayCardinalityError,
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,
 )
 
 __all__ = [
-    "BookedTransactionReplayCardinalityError",
     "CanonicalBookedTransactionReplayerFactory",
     "CanonicalTransactionReplayer",
     "CashflowProcessingCompatibilityAdapter",

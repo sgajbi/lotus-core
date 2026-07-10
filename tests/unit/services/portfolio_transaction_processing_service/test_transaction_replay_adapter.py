@@ -3,9 +3,14 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.reprocessing_replay import ReprocessingReplayError
+from sqlalchemy.exc import DBAPIError
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    BookedTransactionReplayDependencyUnavailable,
+    BookedTransactionReplayInvariantViolation,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    BookedTransactionReplayCardinalityError,
     SqlAlchemyBookedTransactionReplayAdapter,
 )
 
@@ -53,8 +58,40 @@ async def test_replay_adapter_rejects_impossible_unique_transaction_cardinality(
         replayer_factory=MagicMock(return_value=replayer),
     )
 
-    with pytest.raises(BookedTransactionReplayCardinalityError, match="zero or one record"):
+    with pytest.raises(BookedTransactionReplayInvariantViolation, match="zero or one record"):
         await adapter.replay_booked_transaction(
             transaction_id="TXN-REPLAY-DUPLICATE",
             correlation_id=None,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "dependency_error",
+    [
+        DBAPIError("SELECT", {}, RuntimeError("database unavailable")),
+        ReprocessingReplayError(
+            "publisher unavailable",
+            failed_transaction_ids=["TXN-REPLAY-01"],
+        ),
+    ],
+)
+async def test_replay_adapter_maps_infrastructure_dependency_failures(
+    dependency_error: Exception,
+) -> None:
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    replayer = AsyncMock()
+    replayer.reprocess_transactions_by_ids.side_effect = dependency_error
+    adapter = SqlAlchemyBookedTransactionReplayAdapter(
+        session_factory=MagicMock(return_value=session),
+        replayer_factory=MagicMock(return_value=replayer),
+    )
+
+    with pytest.raises(BookedTransactionReplayDependencyUnavailable) as exc_info:
+        await adapter.replay_booked_transaction(
+            transaction_id="TXN-REPLAY-01",
+            correlation_id="corr-replay-01",
+        )
+
+    assert exc_info.value.__cause__ is dependency_error

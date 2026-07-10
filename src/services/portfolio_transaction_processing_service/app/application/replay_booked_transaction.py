@@ -6,6 +6,14 @@ from enum import StrEnum
 from ..ports import BookedTransactionReplayPort
 
 
+class BookedTransactionReplayDependencyUnavailable(RuntimeError):
+    """Raised when canonical booked-transaction replay cannot reach a dependency."""
+
+
+class BookedTransactionReplayInvariantViolation(RuntimeError):
+    """Raised when replay violates a canonical booked-transaction invariant."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ReplayBookedTransactionCommand:
     transaction_id: str

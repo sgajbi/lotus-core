@@ -18,11 +18,14 @@ Added `SqlAlchemyBookedTransactionReplayAdapter`, which:
 - requests replay for exactly one normalized transaction id;
 - propagates correlation id explicitly;
 - maps canonical replay counts `0` and `1` to application booleans;
-- raises `BookedTransactionReplayCardinalityError` for an impossible count above one;
+- raises an explicit invariant violation for an impossible count above one;
 - closes the session on success and failure through the async context boundary.
 
 The adapter depends on a narrow `CanonicalTransactionReplayer` protocol rather than making the
 application layer import `ReprocessingRepository`.
+
+CR-1453 subsequently promoted replay dependency and invariant errors to application-owned error
+types so delivery does not depend on infrastructure exceptions.
 
 ## Compatibility
 
