@@ -65,9 +65,16 @@ def test_transaction_dump_serializes_current_calculated_extra_field_value() -> N
     transaction.realized_total_pnl_base = Decimal("125.50")
 
     assert transaction.model_dump()["realized_total_pnl_base"] == Decimal("125.50")
-    assert transaction.model_dump(exclude_none=True)["realized_total_pnl_base"] == Decimal(
-        "125.50"
-    )
+    assert transaction.model_dump(exclude_none=True)["realized_total_pnl_base"] == Decimal("125.50")
+
+
+def test_transaction_dump_serializes_new_calculated_extension_field() -> None:
+    transaction = _transaction()
+
+    transaction.set_calculated_field("realized_total_pnl_base", Decimal("125.50"))
+
+    assert transaction.realized_total_pnl_base == Decimal("125.50")
+    assert transaction.model_dump()["realized_total_pnl_base"] == Decimal("125.50")
 
 
 def test_cost_engine_domain_models_do_not_import_pydantic() -> None:
