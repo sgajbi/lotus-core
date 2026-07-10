@@ -28,7 +28,7 @@ from src.services.calculators.cost_calculator_service.app.transaction_processor 
     build_transaction_processor,
 )
 
-SCHEMA_VERSION = "lotus-core.cost-processing-mode-capacity-profile.v1"
+SCHEMA_VERSION = "lotus-core.cost-processing-mode-capacity-profile.v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,7 @@ class ProcessingModeMeasurement:
     history_transaction_count: int
     request_count: int
     recalculated_row_count: int
+    restored_open_lot_count: int
     duration_seconds: float
     average_request_latency_ms: float
     requests_per_second: float
@@ -81,6 +82,25 @@ def _appended_sell(timeline: list[dict[str, str]]) -> dict[str, str]:
         "price": "13",
         "gross_transaction_amount": "13",
     }
+
+
+def _disposal_checkpoint(
+    checkpoint: list[dict[str, object]],
+    *,
+    cost_basis_method: str,
+    required_quantity: Decimal,
+) -> list[dict[str, object]]:
+    if cost_basis_method != "FIFO":
+        return checkpoint
+
+    selected_lots: list[dict[str, object]] = []
+    covered_quantity = Decimal(0)
+    for lot in checkpoint:
+        selected_lots.append(lot)
+        covered_quantity += Decimal(str(lot["quantity"]))
+        if covered_quantity >= required_quantity:
+            break
+    return selected_lots
 
 
 def _appended_buy(timeline: list[dict[str, str]]) -> dict[str, str]:
@@ -138,6 +158,11 @@ def run_processing_mode_profile(
             )
             opening_event = _appended_buy(timeline)
             append_event = _appended_sell(timeline)
+            disposal_checkpoint = _disposal_checkpoint(
+                checkpoint,
+                cost_basis_method=method,
+                required_quantity=Decimal(append_event["quantity"]),
+            )
 
             opening_started = clock()
             opening_error_count = prefix_error_count
@@ -160,6 +185,7 @@ def run_processing_mode_profile(
                     history_transaction_count=history_count,
                     request_count=append_iterations,
                     recalculated_row_count=append_iterations,
+                    restored_open_lot_count=0,
                     duration_seconds=opening_duration,
                     error_count=opening_error_count,
                     ending_open_quantity=_total_open_quantity(opening_states),
@@ -173,7 +199,7 @@ def run_processing_mode_profile(
                 processed, errors, append_states = build_transaction_processor(
                     method
                 ).process_increment(
-                    initial_open_lots_raw=checkpoint,
+                    initial_open_lots_raw=disposal_checkpoint,
                     new_transactions_raw=[append_event],
                 )
                 append_error_count += len(errors)
@@ -187,6 +213,7 @@ def run_processing_mode_profile(
                     history_transaction_count=history_count,
                     request_count=append_iterations,
                     recalculated_row_count=append_iterations,
+                    restored_open_lot_count=len(disposal_checkpoint),
                     duration_seconds=append_duration,
                     error_count=append_error_count,
                     ending_open_quantity=_total_open_quantity(append_states),
@@ -207,6 +234,7 @@ def run_processing_mode_profile(
                     history_transaction_count=history_count,
                     request_count=1,
                     recalculated_row_count=history_count + 1,
+                    restored_open_lot_count=0,
                     duration_seconds=backdated_duration,
                     error_count=len(errors),
                     ending_open_quantity=_total_open_quantity(backdated_states),
@@ -221,7 +249,8 @@ def run_processing_mode_profile(
             "includes_database_io": False,
             "includes_kafka_io": False,
             "ordered_opening_append_requires_prior_lot_restore": False,
-            "ordered_disposal_append_restores_persisted_open_lot_shape": True,
+            "ordered_fifo_disposal_restores_only_quantity_covering_lots": True,
+            "ordered_avco_disposal_restores_complete_open_lot_shape": True,
             "backdated_rebuild_recalculates_complete_timeline": True,
         },
         "measurements": [asdict(measurement) for measurement in measurements],
@@ -235,6 +264,7 @@ def _measurement(
     history_transaction_count: int,
     request_count: int,
     recalculated_row_count: int,
+    restored_open_lot_count: int,
     duration_seconds: float,
     error_count: int,
     ending_open_quantity: Decimal,
@@ -248,6 +278,7 @@ def _measurement(
         history_transaction_count=history_transaction_count,
         request_count=request_count,
         recalculated_row_count=recalculated_row_count,
+        restored_open_lot_count=restored_open_lot_count,
         duration_seconds=round(duration_seconds, 6),
         average_request_latency_ms=round(latency_ms, 3),
         requests_per_second=round(request_rate, 3),

@@ -26,7 +26,8 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
         "includes_database_io": False,
         "includes_kafka_io": False,
         "ordered_opening_append_requires_prior_lot_restore": False,
-        "ordered_disposal_append_restores_persisted_open_lot_shape": True,
+        "ordered_fifo_disposal_restores_only_quantity_covering_lots": True,
+        "ordered_avco_disposal_restores_complete_open_lot_shape": True,
         "backdated_rebuild_recalculates_complete_timeline": True,
     }
     opening, disposal, backdated = report["measurements"]
@@ -37,6 +38,7 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
     assert disposal["workload_mode"] == "ordered_disposal_append"
     assert disposal["request_count"] == 2
     assert disposal["recalculated_row_count"] == 2
+    assert disposal["restored_open_lot_count"] == 1
     assert disposal["average_request_latency_ms"] == 250.0
     assert disposal["requests_per_second"] == 4.0
     assert disposal["error_count"] == 0
@@ -44,6 +46,7 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
     assert backdated["request_count"] == 1
     assert backdated["recalculated_row_count"] == 9
     assert backdated["recalculated_rows_per_second"] == 9.0
+    assert backdated["restored_open_lot_count"] == 0
     assert backdated["error_count"] == 0
     json.dumps(report, allow_nan=False)
 
