@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,7 @@ def _json_value(value: Any) -> Any:
 def build_report(result: ReconcileAverageCostPoolsResult) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
+        "generated_at_utc": datetime.now(UTC).isoformat(),
         "mode": "apply" if result.apply else "dry_run",
         "summary": {
             "candidate_count": len(result.assessments),

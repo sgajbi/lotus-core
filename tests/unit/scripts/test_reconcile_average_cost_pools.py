@@ -48,6 +48,7 @@ def test_report_is_decimal_safe_and_exposes_resume_cursor() -> None:
     report = build_report(result)
 
     assert report["schema_version"] == SCHEMA_VERSION
+    assert report["generated_at_utc"].endswith("+00:00")
     assert report["mode"] == "apply"
     assert report["summary"] == {
         "candidate_count": 1,
