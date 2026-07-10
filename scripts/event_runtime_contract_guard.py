@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,10 @@ from portfolio_common.event_supportability import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPO_ROOT / "src"
+RUNTIME_BOUNDARY_CATALOG_PATH = (
+    REPO_ROOT / "docs" / "architecture" / "runtime-boundary-decision-catalog.json"
+)
+TECHNICAL_EVENT_ACTORS = frozenset({"BaseConsumer"})
 
 
 @dataclass(frozen=True)
@@ -321,6 +326,51 @@ def _source_label(source_file: Path, source_root: Path) -> str:
         return source_file.relative_to(source_root).as_posix()
 
 
+def load_runtime_service_ids(
+    catalog_path: Path = RUNTIME_BOUNDARY_CATALOG_PATH,
+) -> frozenset[str]:
+    payload = json.loads(catalog_path.read_text(encoding="utf-8"))
+    return frozenset(record["serviceId"] for record in payload["decisionRecords"])
+
+
+def _event_actor_names(producer_service: str, consumer_services: tuple[str, ...]) -> set[str]:
+    return {
+        actor.strip()
+        for value in (producer_service, *consumer_services)
+        for actor in value.split(",")
+        if actor.strip()
+    }
+
+
+def evaluate_event_service_ownership(
+    *,
+    event_definitions: tuple[EventFamilyDefinition, ...] = EVENT_FAMILY_DEFINITIONS,
+    direct_topic_definitions: tuple[
+        DirectKafkaTopicDefinition, ...
+    ] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
+    runtime_service_ids: frozenset[str] | None = None,
+) -> list[str]:
+    if runtime_service_ids is None:
+        runtime_service_ids = load_runtime_service_ids()
+    allowed_actors = runtime_service_ids | TECHNICAL_EVENT_ACTORS
+    errors: list[str] = []
+    for definition in (*event_definitions, *direct_topic_definitions):
+        unknown_actors = sorted(
+            _event_actor_names(
+                definition.producer_service,
+                definition.consumer_services,
+            )
+            - allowed_actors
+        )
+        if unknown_actors:
+            contract_name = getattr(definition, "event_type", None) or definition.name
+            errors.append(
+                f"{contract_name} references event actor(s) missing from the runtime boundary "
+                f"catalog: {', '.join(unknown_actors)}"
+            )
+    return errors
+
+
 def evaluate_outbox_event_contracts(
     emissions: tuple[OutboxEventEmission, ...] | None = None,
     event_definitions: tuple[EventFamilyDefinition, ...] = EVENT_FAMILY_DEFINITIONS,
@@ -329,6 +379,7 @@ def evaluate_outbox_event_contracts(
         DirectKafkaTopicDefinition, ...
     ] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
     consumer_dlq_wirings: tuple[ConsumerDlqTopicWiring, ...] | None = None,
+    runtime_service_ids: frozenset[str] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     available_models = {
@@ -342,6 +393,14 @@ def evaluate_outbox_event_contracts(
         )
     except ValueError as exc:
         errors.append(f"event supportability catalog is invalid: {exc}")
+
+    errors.extend(
+        evaluate_event_service_ownership(
+            event_definitions=event_definitions,
+            direct_topic_definitions=direct_topic_definitions,
+            runtime_service_ids=runtime_service_ids,
+        )
+    )
 
     emissions = discover_outbox_event_emissions() if emissions is None else emissions
     direct_publishes = (
