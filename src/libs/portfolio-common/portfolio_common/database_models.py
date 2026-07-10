@@ -1920,11 +1920,20 @@ class ProcessedEvent(Base):
     correlation_id = Column(String, nullable=True)
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
+    semantic_key = Column(String, nullable=True)
+    payload_fingerprint = Column(String, nullable=True)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("event_id", "service_name", name="_event_service_uc"),
         Index("ix_processed_events_alternate_lookup_key", "alternate_lookup_key"),
+        Index(
+            "uq_processed_events_service_semantic_key",
+            "service_name",
+            "semantic_key",
+            unique=True,
+            postgresql_where=semantic_key.isnot(None),
+        ),
     )
 
 
