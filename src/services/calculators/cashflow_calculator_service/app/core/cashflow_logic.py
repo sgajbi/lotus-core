@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from typing import Optional, Protocol, cast
@@ -12,7 +13,7 @@ from portfolio_common.transaction_fee_components import (
 )
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
-from .enums import CashflowClassification
+from .enums import CashflowCalculationType, CashflowClassification
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,18 @@ CLASSIFICATION_SIGN_FACTORS = {
     CashflowClassification.INCOME: 1,
     CashflowClassification.CASHFLOW_IN: 1,
 }
+_SYNTHETIC_TRANSFER_CLASSIFICATION_SIGN = {
+    "POSITION_TRANSFER_IN": 1,
+    "POSITION_TRANSFER_OUT": -1,
+    "POSITION_CASH_IN_LIEU_OUT": -1,
+}
+
+
+@dataclass(frozen=True, slots=True)
+class CashflowEconomics:
+    amount: Decimal
+    currency: str
+    calculation_type: str
 
 
 def _normalize_code(value: object, default: str = "") -> str:
@@ -134,6 +147,53 @@ def _signed_cashflow_amount(
     return _signed_by_classification(rule.classification, amount)
 
 
+def _resolve_cashflow_economics(
+    transaction: TransactionEvent,
+    rule: "CashflowRuleView",
+    transaction_type: str,
+) -> CashflowEconomics:
+    if transaction.has_synthetic_flow:
+        return _synthetic_transfer_economics(transaction, rule)
+    amount = _signed_cashflow_amount(
+        transaction,
+        rule,
+        transaction_type,
+        _base_cashflow_amount(transaction, transaction_type),
+    )
+    return CashflowEconomics(
+        amount=amount,
+        currency=transaction.currency,
+        calculation_type=CashflowCalculationType.NET.value,
+    )
+
+
+def _synthetic_transfer_economics(
+    transaction: TransactionEvent,
+    rule: "CashflowRuleView",
+) -> CashflowEconomics:
+    classification = _normalize_code(transaction.synthetic_flow_classification)
+    sign = _SYNTHETIC_TRANSFER_CLASSIFICATION_SIGN.get(classification)
+    if _normalize_classification(rule.classification) != CashflowClassification.TRANSFER.value:
+        raise ValueError("Synthetic position flow requires TRANSFER cashflow classification")
+    if not rule.is_position_flow or rule.is_portfolio_flow:
+        raise ValueError("Synthetic position flow must be position-level and non-portfolio")
+    if sign is None:
+        raise ValueError("Synthetic position flow classification is missing or unsupported")
+    if transaction.synthetic_flow_amount_local is None:
+        raise ValueError("Synthetic position flow amount is required")
+    if not transaction.synthetic_flow_currency:
+        raise ValueError("Synthetic position flow currency is required")
+
+    amount = transaction.synthetic_flow_amount_local
+    if amount.is_zero() or (amount > 0) != (sign > 0):
+        raise ValueError("Synthetic position flow amount sign does not match its classification")
+    return CashflowEconomics(
+        amount=amount,
+        currency=transaction.synthetic_flow_currency,
+        calculation_type=CashflowCalculationType.MVT.value,
+    )
+
+
 def _signed_by_classification(classification: str, amount: Decimal) -> Decimal:
     sign_factor = CLASSIFICATION_SIGN_FACTORS.get(classification, -1)
     return abs(amount) if sign_factor > 0 else -abs(amount)
@@ -181,12 +241,7 @@ class CashflowLogic:
         Applies the calculation rule to a transaction to generate a cashflow.
         """
         transaction_type = _normalize_code(transaction.transaction_type)
-        amount = _signed_cashflow_amount(
-            transaction,
-            rule,
-            transaction_type,
-            _base_cashflow_amount(transaction, transaction_type),
-        )
+        economics = _resolve_cashflow_economics(transaction, rule, transaction_type)
 
         # Create the Cashflow database object
         cashflow = Cashflow(
@@ -194,11 +249,11 @@ class CashflowLogic:
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
             cashflow_date=_resolve_cashflow_date(transaction, rule, transaction_type),
-            amount=amount,
-            currency=transaction.currency,
+            amount=economics.amount,
+            currency=economics.currency,
             classification=rule.classification,
             timing=rule.timing,
-            calculation_type="NET",  # Currently all are NET
+            calculation_type=economics.calculation_type,
             is_position_flow=rule.is_position_flow,
             is_portfolio_flow=rule.is_portfolio_flow,
             economic_event_id=transaction.economic_event_id,
@@ -211,7 +266,7 @@ class CashflowLogic:
 
         logger.info(
             "Calculated cashflow for txn "
-            f"{transaction.transaction_id}: Amount={amount}, "
+            f"{transaction.transaction_id}: Amount={economics.amount}, "
             f"Class='{rule.classification}'"
         )
         return cashflow
