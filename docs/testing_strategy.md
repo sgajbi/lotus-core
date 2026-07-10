@@ -78,6 +78,10 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
     `make test-transaction-processing-contract`. This DB-direct manifest suite is blocking in PR
     Merge Gate and Main Releasability and must retain atomic success/rollback, replay, adjustment,
     FIFO, AVCO, fee, FX, multi-lot, backdated correction, epoch, and event-count proof.
+15. Cost-processing capacity changes must run both `make profile-cost-history-capacity` and
+    `make profile-cost-processing-modes`. Keep ordered lot opening, state-dependent disposal, and
+    backdated rebuild measurements separate. These engine profiles are characterization evidence,
+    not deployed throughput SLOs; database/Kafka load proof remains required for cutover.
 
 ## Proof-Family Markers
 

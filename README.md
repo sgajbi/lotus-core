@@ -262,6 +262,8 @@ Important runtime note:
   complete DB-direct combined cost, cashflow, position, replay, and rollback contract
 - `make profile-cost-history-capacity`
   reproducible FIFO/AVCO long-history engine profile with machine-readable output
+- `make profile-cost-processing-modes`
+  ordered opening, ordered disposal, and backdated rebuild engine capacity profile
 - `make test-e2e-smoke`
   E2E smoke
 - `make test-docker-smoke`

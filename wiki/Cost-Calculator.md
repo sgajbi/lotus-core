@@ -31,13 +31,15 @@ transaction facts into governed cost-aware transaction state.
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness
-2. loads the relevant transaction history for the portfolio-security key
+2. reads the versioned canonical cost-processing checkpoint for the portfolio-security key
 3. normalizes the event into the cost engine's processing shape
-4. enriches the timeline with portfolio policy and FX context where required
-5. recalculates the applicable transaction sequence under the active cost-basis method
-6. persists the incoming row and any recalculated later suffix, plus lot and support state, in one
+4. uses durable open-lot state for a strictly ordered, compatible append, or loads full history for
+   a backdated, same-order, unsupported, missing-checkpoint, or incompatible event
+5. enriches the applicable rows with portfolio policy and FX context where required
+6. calculates the ordered append or deterministic affected history under the active cost-basis method
+7. persists the incoming row and any recalculated later suffix, plus lot, checkpoint, and support state, in one
    transaction
-7. publishes only the incoming enriched event so downstream position handling is not duplicated
+8. publishes only the incoming enriched event so downstream position handling is not duplicated
 
 Because the service recalculates the governed transaction timeline rather than only patching the
 latest row, it remains authoritative when late or out-of-order history is introduced. A timeline
@@ -54,12 +56,15 @@ Developers can reproduce long-history engine scaling with:
 
 ```bash
 make profile-cost-history-capacity
+make profile-cost-processing-modes
 ```
 
-The command writes `output/cost-history-capacity-profile.json`. It characterizes parser, sorter,
-FIFO, and AVCO engine cost; it does not certify deployed throughput. FIFO availability checks are
-constant-time. AVCO source-allocation scaling remains an explicit cutover blocker until the
-separate parity-proven optimization is complete.
+The commands write `output/cost-history-capacity-profile.json` and
+`output/cost-processing-mode-capacity-profile.json`. They characterize parser, sorter, FIFO/AVCO,
+ordered lot opening, ordered disposal, and backdated rebuild engine cost; they do not certify
+deployed throughput. FIFO availability checks are constant-time and AVCO source allocation uses
+lazy aggregate scales. Large open-source-lot restoration on state-dependent disposal remains a
+measured hotspot and a cutover capacity item.
 
 ## Data it owns
 
@@ -68,6 +73,7 @@ Primary durable outputs include:
 - enriched transaction cost fields
 - `transaction_costs`
 - `position_lot_state`
+- `cost_basis_processing_state`
 - `accrued_income_offset_state`
 - `position_state`
 - `transactions.cost.processed` completion events
@@ -108,6 +114,8 @@ Check this service when:
 - FIFO versus AVCO behavior does not match portfolio policy
 - late transaction insertion causes downstream drift
 - cross-currency processing shows unexpected FX query growth or missing-rate retries
+- `cost_processing_execution_total` shows unexpected full-rebuild volume
+- `cost_processing_open_lots_restored` shows growing disposal restore depth
 - `transactions.cost.processed` lag or replay anomalies appear
 
 Check beyond this service when:
