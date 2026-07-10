@@ -955,6 +955,31 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 
+## `average_cost_pool_state`
+
+- **Purpose**: Versioned aggregate state for bounded average-cost processing.
+- **Description**: Stores current AVCO quantity plus local/base basis per portfolio/security so a
+  strictly ordered acquisition or disposal can restore one aggregate source. It complements rather
+  than replaces `position_lot_state`, whose source rows remain externally visible lineage truth.
+- **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`;
+  `representative_source_transaction_id` -> `transactions.transaction_id`
+- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`,
+  `src/services/calculators/cost_calculator_service/app/consumer.py`
+- **Typical access patterns**: Composite-primary-key lookup with a table-scoped row lock, atomic
+  upsert in the combined transaction-processing unit of work, and support scans by updated key.
+- **Column definitions**:
+  - `portfolio_id` (String) (PK, FK `portfolios.portfolio_id`): Canonical portfolio identifier.
+  - `security_id` (String) (PK): Canonical security identifier.
+  - `instrument_id` (String): Canonical instrument identifier used for compatibility validation.
+  - `representative_source_transaction_id` (String) (FK `transactions.transaction_id`): Source row
+    that receives exact allocation residual and carries engine lineage for aggregate restoration.
+  - `pool_quantity` (Numeric): Nonnegative current AVCO quantity.
+  - `pool_cost_local` (Numeric): Nonnegative current cost basis in transaction/instrument currency.
+  - `pool_cost_base` (Numeric): Nonnegative current cost basis in portfolio base currency.
+  - `state_version` (String): Compatibility version; mismatches force full replay.
+  - `created_at` (DateTime): Server timestamp when row was created.
+  - `updated_at` (DateTime): Server timestamp when row was last updated.
+
 ## `accrued_income_offset_state`
 
 - **Purpose**: Accrued-income offset state for fixed income flows.
@@ -1310,7 +1335,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 ## Schema Review Findings
 
 ### Actively Used and Architecturally Required
-- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
+- Core ledger/state: `transactions`, `position_history`, `daily_position_snapshots`, `position_state`, `position_lot_state`, `average_cost_pool_state`, `cashflows`, `portfolio_timeseries`, `position_timeseries`.
 - Processing reliability: `processed_events`, `outbox_events`, `portfolio_valuation_jobs`, `portfolio_aggregation_jobs`, `reprocessing_jobs`, `instrument_reprocessing_state`.
 - Ingestion/ops governance: `ingestion_jobs`, `ingestion_job_failures`, `ingestion_ops_control`, `consumer_dlq_events`, `consumer_dlq_replay_audit`.
 - Reference data: `business_dates`, `portfolios`, `instruments`, `market_prices`, `fx_rates`, benchmark/index/risk-free tables.

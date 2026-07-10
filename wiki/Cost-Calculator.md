@@ -64,8 +64,11 @@ The commands write `output/cost-history-capacity-profile.json` and
 ordered lot opening, ordered disposal, and backdated rebuild engine cost; they do not certify
 deployed throughput. FIFO availability checks are constant-time and AVCO source allocation uses
 lazy aggregate scales. Ordered FIFO disposal streams only the oldest source lots needed to cover
-the requested quantity and updates only that selected set. Full rebuilds, basis transfers, and
-AVCO retain complete snapshots; large AVCO source restoration remains a measured cutover hotspot.
+the requested quantity and updates only that selected set. Ordered AVCO acquisition/disposal locks
+and restores one versioned `average_cost_pool_state` source, then reconciles externally visible lot
+lineage with set-based exact-residual SQL. Full rebuilds, basis transfers, and unsupported corporate
+actions retain complete snapshots. Existing AVCO portfolios require governed historical backfill
+before source evidence can be declared current after cutover.
 
 ## Mixed corporate-action cash consideration
 
@@ -91,6 +94,7 @@ Primary durable outputs include:
 - `transaction_costs`
 - `position_lot_state`
 - `cost_basis_processing_state`
+- `average_cost_pool_state`
 - `accrued_income_offset_state`
 - `position_state`
 - `transactions.cost.processed` completion events
