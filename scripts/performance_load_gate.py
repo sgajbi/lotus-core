@@ -18,10 +18,11 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 from uuid import uuid4
 
-import requests
+import requests  # type: ignore[import-untyped]
+from sqlalchemy import Engine, create_engine, text
 
 try:
     from scripts.ci_service_sets import PERFORMANCE_GATE_SERVICES
@@ -51,9 +52,17 @@ class ProfileResult:
     baseline_replay_pressure_ratio: float
     replay_pressure_ratio_after_profile: float
     replay_pressure_ratio_increase: float
-    drain_seconds_to_zero_backlog: float | None
+    transaction_processing_drain_seconds: float | None
     checks_passed: bool
     failed_checks: list[str]
+
+
+class LoadProfile(TypedDict):
+    name: str
+    batches: int
+    batch_size: int
+    sleep_seconds: float
+    thresholds: dict[str, Any]
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
@@ -104,7 +113,11 @@ def _wait_ready(
 
 
 def _build_transaction_batch(
-    *, portfolio_id: str, batch_size: int, seed: str
+    *,
+    portfolio_id: str,
+    batch_size: int,
+    seed: str,
+    security_prefix: str = "SEC",
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     base_ts = "2026-03-01T09:00:00Z"
@@ -114,8 +127,8 @@ def _build_transaction_batch(
             {
                 "transaction_id": f"TX_{txn_suffix}",
                 "portfolio_id": portfolio_id,
-                "instrument_id": f"INSTR_{index % 20:03d}",
-                "security_id": f"SEC_{index % 20:03d}",
+                "instrument_id": f"{security_prefix}_{index % 20:03d}",
+                "security_id": f"{security_prefix}_{index % 20:03d}",
                 "transaction_date": base_ts,
                 "transaction_type": "BUY",
                 "quantity": "10",
@@ -135,18 +148,20 @@ def _ingest_transactions(
     batches: int,
     batch_size: int,
     sleep_seconds_between_batches: float,
-) -> tuple[int, int]:
-    total_records = 0
+    seed_prefix: str,
+    security_prefix: str,
+) -> tuple[list[str], int]:
+    transaction_ids: list[str] = []
     total_batches = 0
     for batch_number in range(batches):
-        seed = f"{uuid4().hex[:8]}-{batch_number:03d}"
-        payload = {
-            "transactions": _build_transaction_batch(
-                portfolio_id=portfolio_id,
-                batch_size=batch_size,
-                seed=seed,
-            )
-        }
+        seed = f"{seed_prefix}-{uuid4().hex[:8]}-{batch_number:03d}"
+        transactions = _build_transaction_batch(
+            portfolio_id=portfolio_id,
+            batch_size=batch_size,
+            seed=seed,
+            security_prefix=security_prefix,
+        )
+        payload = {"transactions": transactions}
         response = requests.post(
             f"{ingestion_base_url}/ingest/transactions",
             json=payload,
@@ -157,11 +172,11 @@ def _ingest_transactions(
                 "Transaction ingestion failed with "
                 f"status={response.status_code}: {response.text[:300]}"
             )
-        total_records += batch_size
+        transaction_ids.extend(str(item["transaction_id"]) for item in transactions)
         total_batches += 1
         if sleep_seconds_between_batches > 0:
             time.sleep(sleep_seconds_between_batches)
-    return total_records, total_batches
+    return transaction_ids, total_batches
 
 
 def _trigger_replay_storm(
@@ -170,9 +185,10 @@ def _trigger_replay_storm(
     transaction_ids: list[str],
     bursts: int,
     burst_size: int,
-) -> None:
+) -> int:
     if not transaction_ids:
-        return
+        return 0
+    submitted = 0
     for burst in range(bursts):
         start = (burst * burst_size) % len(transaction_ids)
         selected = transaction_ids[start : start + burst_size]
@@ -187,6 +203,201 @@ def _trigger_replay_storm(
             raise RuntimeError(
                 f"Replay request failed with status={response.status_code}: {response.text[:300]}"
             )
+        submitted += len(selected)
+    return submitted
+
+
+def _post_ingestion_records(
+    *,
+    ingestion_base_url: str,
+    endpoint: str,
+    root_key: str,
+    rows: list[dict[str, Any]],
+) -> None:
+    response = requests.post(
+        f"{ingestion_base_url}{endpoint}",
+        json={root_key: rows},
+        timeout=30,
+    )
+    if response.status_code != 202:
+        raise RuntimeError(
+            f"Reference seed failed endpoint={endpoint} status={response.status_code}: "
+            f"{response.text[:300]}"
+        )
+
+
+def _seed_load_context(
+    *,
+    engine: Engine,
+    ingestion_base_url: str,
+    run_id: str,
+    portfolio_id: str,
+    security_prefix: str,
+    timeout_seconds: int,
+) -> None:
+    _post_ingestion_records(
+        ingestion_base_url=ingestion_base_url,
+        endpoint="/ingest/portfolios",
+        root_key="portfolios",
+        rows=[
+            {
+                "portfolio_id": portfolio_id,
+                "portfolio_name": f"Performance Load {run_id}",
+                "base_currency": "USD",
+                "open_date": "2026-03-01",
+                "risk_exposure": "BALANCED",
+                "investment_time_horizon": "MEDIUM_TERM",
+                "portfolio_type": "DISCRETIONARY",
+                "booking_center_code": "PB_SG",
+                "client_id": f"PERF_CLIENT_{run_id}",
+                "status": "ACTIVE",
+            }
+        ],
+    )
+    _wait_for_database_count(
+        engine=engine,
+        sql="SELECT count(*) FROM portfolios WHERE portfolio_id = :value",
+        params={"value": portfolio_id},
+        expected=1,
+        label="performance portfolio seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+    instruments = [
+        {
+            "security_id": f"{security_prefix}_{index:03d}",
+            "name": f"Performance Load Security {index:03d}",
+            "isin": f"USPF{run_id[-4:]}{index:04d}"[:12],
+            "currency": "USD",
+            "product_type": "STOCK",
+            "asset_class": "EQUITY",
+            "sector": "DIVERSIFIED",
+            "country_of_risk": "US",
+        }
+        for index in range(20)
+    ]
+    _post_ingestion_records(
+        ingestion_base_url=ingestion_base_url,
+        endpoint="/ingest/instruments",
+        root_key="instruments",
+        rows=instruments,
+    )
+    _wait_for_database_count(
+        engine=engine,
+        sql="SELECT count(*) FROM instruments WHERE security_id LIKE :value",
+        params={"value": f"{security_prefix}_%"},
+        expected=20,
+        label="performance instrument seed",
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _wait_for_database_count(
+    *,
+    engine: Engine,
+    sql: str,
+    params: dict[str, object],
+    expected: int,
+    label: str,
+    timeout_seconds: int,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        with engine.connect() as connection:
+            actual = int(connection.execute(text(sql), params).scalar_one())
+        if actual == expected:
+            return
+        time.sleep(1)
+    raise TimeoutError(f"{label} did not reach expected count {expected}")
+
+
+def _wait_for_transaction_processing(
+    *,
+    engine: Engine,
+    portfolio_id: str,
+    transaction_id_prefix: str,
+    expected: int,
+    expected_processing_claim_minimum: int,
+    timeout_seconds: int,
+) -> float | None:
+    sql = text(
+        """
+        SELECT
+          count(*) AS transaction_count,
+          count(*) FILTER (
+            WHERE gross_cost IS NOT NULL
+              AND net_cost IS NOT NULL
+              AND transaction_fx_rate IS NOT NULL
+          ) AS cost_count,
+          (SELECT count(*) FROM cashflows WHERE transaction_id LIKE :pattern) AS cashflow_count,
+          (SELECT count(*) FROM position_history WHERE transaction_id LIKE :pattern)
+            AS position_count,
+          (SELECT count(*) FROM processed_events
+             WHERE portfolio_id = :portfolio_id
+               AND service_name = 'portfolio-transaction-processing') AS processing_claim_count
+        FROM transactions
+        WHERE transaction_id LIKE :pattern
+        """
+    )
+    started = time.time()
+    deadline = started + timeout_seconds
+    while time.time() < deadline:
+        with engine.connect() as connection:
+            row = (
+                connection.execute(
+                    sql,
+                    {
+                        "pattern": f"{transaction_id_prefix}%",
+                        "portfolio_id": portfolio_id,
+                    },
+                )
+                .mappings()
+                .one()
+            )
+        domain_counts_match = all(
+            int(row[name]) == expected
+            for name in ("transaction_count", "cost_count", "cashflow_count", "position_count")
+        )
+        if (
+            domain_counts_match
+            and int(row["processing_claim_count"]) >= expected_processing_claim_minimum
+        ):
+            return round(time.time() - started, 3)
+        time.sleep(1)
+    return None
+
+
+def _processed_event_count(*, engine: Engine, portfolio_id: str) -> int:
+    with engine.connect() as connection:
+        return int(
+            connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM processed_events
+                    WHERE portfolio_id = :portfolio_id
+                      AND service_name = 'portfolio-transaction-processing'
+                    """
+                ),
+                {"portfolio_id": portfolio_id},
+            ).scalar_one()
+        )
+
+
+def _wait_for_processed_event_count(
+    *,
+    engine: Engine,
+    portfolio_id: str,
+    expected_minimum: int,
+    timeout_seconds: int,
+) -> float | None:
+    started = time.time()
+    deadline = started + timeout_seconds
+    while time.time() < deadline:
+        if _processed_event_count(engine=engine, portfolio_id=portfolio_id) >= expected_minimum:
+            return round(time.time() - started, 3)
+        time.sleep(1)
+    return None
 
 
 def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
@@ -218,38 +429,6 @@ def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[
     }
 
 
-def _wait_drain_to_target_backlog(
-    *,
-    event_replay_base_url: str,
-    ops_token: str,
-    target_backlog_jobs: int,
-    timeout_seconds: int,
-) -> float | None:
-    headers = {"X-Lotus-Ops-Token": ops_token}
-    started = time.time()
-    deadline = started + timeout_seconds
-    while time.time() < deadline:
-        response = requests.get(
-            f"{event_replay_base_url}/ingestion/health/summary",
-            headers=headers,
-            timeout=20,
-        )
-        if response.status_code == 200:
-            backlog_jobs = int(response.json().get("backlog_jobs", 0))
-            if backlog_jobs <= target_backlog_jobs:
-                return round(time.time() - started, 3)
-        time.sleep(2)
-    return None
-
-
-def _resolve_drain_timeout_seconds(
-    *, configured_timeout: int, max_drain_seconds: float | None
-) -> int:
-    if max_drain_seconds is None:
-        return configured_timeout
-    return max(configured_timeout, int(max_drain_seconds) + 60)
-
-
 def _evaluate_profile(
     *,
     profile_name: str,
@@ -260,7 +439,7 @@ def _evaluate_profile(
     baseline_health: dict[str, Any],
     health: dict[str, Any],
     drain_seconds: float | None,
-    thresholds: dict[str, float],
+    thresholds: dict[str, Any],
 ) -> ProfileResult:
     duration = max(ended_at - started_at, 0.001)
     throughput = records_submitted / duration
@@ -288,10 +467,9 @@ def _evaluate_profile(
     replay_pressure_increase = _non_negative_delta(replay_pressure, baseline_replay_pressure)
 
     failed_checks: list[str] = []
-    if throughput < thresholds["min_throughput_rps"]:
-        failed_checks.append(
-            f"throughput {throughput:.2f} < min {thresholds['min_throughput_rps']:.2f}"
-        )
+    min_throughput = thresholds.get("min_throughput_rps")
+    if min_throughput is not None and throughput < min_throughput:
+        failed_checks.append(f"throughput {throughput:.2f} < min {min_throughput:.2f}")
     if backlog_age_increase > thresholds["max_backlog_age_increase_seconds"]:
         failed_checks.append(
             "backlog_age_increase "
@@ -309,6 +487,8 @@ def _evaluate_profile(
             f"{thresholds['max_replay_pressure_ratio_increase']:.4f}"
         )
     max_drain = thresholds.get("max_drain_seconds")
+    if thresholds.get("require_drain") and drain_seconds is None:
+        failed_checks.append("transaction_processing_drain timeout")
     if max_drain is not None and (drain_seconds is None or drain_seconds > max_drain):
         failed_checks.append(
             "drain_seconds "
@@ -337,7 +517,7 @@ def _evaluate_profile(
         baseline_replay_pressure_ratio=round(baseline_replay_pressure, 6),
         replay_pressure_ratio_after_profile=round(replay_pressure, 6),
         replay_pressure_ratio_increase=round(replay_pressure_increase, 6),
-        drain_seconds_to_zero_backlog=drain_seconds,
+        transaction_processing_drain_seconds=drain_seconds,
         checks_passed=not failed_checks,
         failed_checks=failed_checks,
     )
@@ -371,10 +551,14 @@ def _write_report(
         f"- Overall passed: {overall_passed}",
         f"- Profile tier: {profile_tier}",
         f"- Enforce mode: {enforce}",
+        "- Throughput boundary: ingestion start through combined cost, cashflow, position, and "
+        "idempotency completion",
+        "- Throughput threshold: characterization only until a reviewed runtime baseline is "
+        "approved; completion and pressure checks are enforced",
         "",
         (
             "| Profile | Passed | Throughput rps | Backlog age increase sec | "
-            "DLQ added ratio | Replay pressure increase | Drain sec |"
+            "DLQ added ratio | Replay pressure increase | Transaction drain sec |"
         ),
         "|---|---|---:|---:|---:|---:|---:|",
     ]
@@ -391,8 +575,8 @@ def _write_report(
                 dlq=item.dlq_pressure_ratio_added,
                 replay=item.replay_pressure_ratio_increase,
                 drain=(
-                    f"{item.drain_seconds_to_zero_backlog:.3f}"
-                    if item.drain_seconds_to_zero_backlog is not None
+                    f"{item.transaction_processing_drain_seconds:.3f}"
+                    if item.transaction_processing_drain_seconds is not None
                     else "timeout"
                 ),
             )
@@ -421,6 +605,13 @@ def main() -> int:
         "--event-replay-base-url",
         default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
     )
+    parser.add_argument(
+        "--host-database-url",
+        default=os.getenv(
+            "HOST_DATABASE_URL",
+            "postgresql://user:password@localhost:55432/portfolio_db",
+        ),
+    )
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
@@ -448,21 +639,31 @@ def main() -> int:
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     portfolio_id = f"PERF_LOAD_{run_id}"
+    security_prefix = f"PERF_{run_id}_SEC"
+    engine = create_engine(args.host_database_url, pool_pre_ping=True)
+    _seed_load_context(
+        engine=engine,
+        ingestion_base_url=args.ingestion_base_url,
+        run_id=run_id,
+        portfolio_id=portfolio_id,
+        security_prefix=security_prefix,
+        timeout_seconds=args.ready_timeout_seconds,
+    )
     all_results: list[ProfileResult] = []
     if args.profile_tier == "fast":
-        profiles = [
+        profiles: list[LoadProfile] = [
             {
                 "name": "steady_state",
                 "batches": 2,
                 "batch_size": 20,
                 "sleep_seconds": 0.2,
-                "wait_for_drain": False,
                 "thresholds": {
-                    "min_throughput_rps": 5.0,
+                    "min_throughput_rps": None,
                     "max_backlog_age_increase_seconds": 1800.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
+                    "require_drain": True,
                 },
             },
             {
@@ -470,13 +671,13 @@ def main() -> int:
                 "batches": 3,
                 "batch_size": 40,
                 "sleep_seconds": 0.0,
-                "wait_for_drain": False,
                 "thresholds": {
-                    "min_throughput_rps": 10.0,
+                    "min_throughput_rps": None,
                     "max_backlog_age_increase_seconds": 2400.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
+                    "require_drain": True,
                 },
             },
         ]
@@ -487,13 +688,13 @@ def main() -> int:
                 "batches": 5,
                 "batch_size": 40,
                 "sleep_seconds": 0.5,
-                "wait_for_drain": False,
                 "thresholds": {
-                    "min_throughput_rps": 10.0,
+                    "min_throughput_rps": None,
                     "max_backlog_age_increase_seconds": 1200.0,
                     "max_dlq_pressure_ratio_added": 5.0,
                     "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
+                    "require_drain": True,
                 },
             },
             {
@@ -501,13 +702,13 @@ def main() -> int:
                 "batches": 8,
                 "batch_size": 80,
                 "sleep_seconds": 0.0,
-                "wait_for_drain": False,
                 "thresholds": {
-                    "min_throughput_rps": 20.0,
+                    "min_throughput_rps": None,
                     "max_backlog_age_increase_seconds": 1800.0,
                     "max_dlq_pressure_ratio_added": 10.0,
                     "max_replay_pressure_ratio_increase": 5.0,
                     "max_drain_seconds": None,
+                    "require_drain": True,
                 },
             },
         ]
@@ -517,38 +718,38 @@ def main() -> int:
             event_replay_base_url=args.event_replay_base_url,
             ops_token=args.ops_token,
         )
-        baseline_backlog = 0
-        if profile["wait_for_drain"]:
-            baseline_backlog = int(baseline_health["summary"].get("backlog_jobs", 0))
+        processing_claim_baseline = _processed_event_count(
+            engine=engine,
+            portfolio_id=portfolio_id,
+        )
+        transaction_seed = f"PERF-{run_id}-{profile['name']}"
         started = time.time()
-        records_submitted, batches_submitted = _ingest_transactions(
+        transaction_ids, batches_submitted = _ingest_transactions(
             ingestion_base_url=args.ingestion_base_url,
             portfolio_id=portfolio_id,
             batches=profile["batches"],
             batch_size=profile["batch_size"],
             sleep_seconds_between_batches=profile["sleep_seconds"],
+            seed_prefix=transaction_seed,
+            security_prefix=security_prefix,
+        )
+        drain_seconds = _wait_for_transaction_processing(
+            engine=engine,
+            portfolio_id=portfolio_id,
+            transaction_id_prefix=f"TX_{transaction_seed}",
+            expected=len(transaction_ids),
+            expected_processing_claim_minimum=(processing_claim_baseline + len(transaction_ids)),
+            timeout_seconds=args.drain_timeout_seconds,
         )
         ended = time.time()
         health = _get_health_snapshot(
             event_replay_base_url=args.event_replay_base_url,
             ops_token=args.ops_token,
         )
-        drain_seconds: float | None = None
-        if profile["wait_for_drain"]:
-            drain_timeout_seconds = _resolve_drain_timeout_seconds(
-                configured_timeout=args.drain_timeout_seconds,
-                max_drain_seconds=profile["thresholds"].get("max_drain_seconds"),
-            )
-            drain_seconds = _wait_drain_to_target_backlog(
-                event_replay_base_url=args.event_replay_base_url,
-                ops_token=args.ops_token,
-                target_backlog_jobs=max(baseline_backlog + 1, 0),
-                timeout_seconds=drain_timeout_seconds,
-            )
         all_results.append(
             _evaluate_profile(
                 profile_name=profile["name"],
-                records_submitted=records_submitted,
+                records_submitted=len(transaction_ids),
                 batches_submitted=batches_submitted,
                 started_at=started,
                 ended_at=ended,
@@ -563,15 +764,17 @@ def main() -> int:
         event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
     )
-    replay_baseline_backlog = 0
-    replay_wait_for_drain = False
-    if replay_wait_for_drain:
-        replay_baseline_backlog = int(replay_baseline_health["summary"].get("backlog_jobs", 0))
     replay_started = time.time()
+    replay_source_seed = f"PERF-{run_id}-replay-source"
+    replay_source_claim_baseline = _processed_event_count(
+        engine=engine,
+        portfolio_id=portfolio_id,
+    )
     replay_source_transactions = _build_transaction_batch(
         portfolio_id=portfolio_id,
         batch_size=120,
-        seed=f"REPLAY-{uuid4().hex[:8]}",
+        seed=replay_source_seed,
+        security_prefix=security_prefix,
     )
     replay_ids = [row["transaction_id"] for row in replay_source_transactions]
     response = requests.post(
@@ -583,36 +786,40 @@ def main() -> int:
         raise RuntimeError(
             f"Replay source ingestion failed status={response.status_code}: {response.text[:300]}"
         )
+    replay_source_drain = _wait_for_transaction_processing(
+        engine=engine,
+        portfolio_id=portfolio_id,
+        transaction_id_prefix=f"TX_{replay_source_seed}",
+        expected=len(replay_ids),
+        expected_processing_claim_minimum=(replay_source_claim_baseline + len(replay_ids)),
+        timeout_seconds=args.drain_timeout_seconds,
+    )
+    if replay_source_drain is None:
+        raise TimeoutError("Replay source transactions did not complete before replay")
     replay_bursts = 4 if args.profile_tier == "fast" else 12
     replay_burst_size = 15 if args.profile_tier == "fast" else 30
-    _trigger_replay_storm(
+    replay_claim_baseline = _processed_event_count(engine=engine, portfolio_id=portfolio_id)
+    replay_request_count = _trigger_replay_storm(
         ingestion_base_url=args.ingestion_base_url,
         transaction_ids=replay_ids,
         bursts=replay_bursts,
         burst_size=replay_burst_size,
+    )
+    replay_drain_seconds = _wait_for_processed_event_count(
+        engine=engine,
+        portfolio_id=portfolio_id,
+        expected_minimum=replay_claim_baseline + replay_request_count,
+        timeout_seconds=args.drain_timeout_seconds,
     )
     replay_ended = time.time()
     replay_health = _get_health_snapshot(
         event_replay_base_url=args.event_replay_base_url,
         ops_token=args.ops_token,
     )
-    replay_drain_seconds: float | None = None
-    if replay_wait_for_drain:
-        replay_max_drain_seconds = 1200.0 if args.profile_tier == "full" else None
-        replay_drain_timeout_seconds = _resolve_drain_timeout_seconds(
-            configured_timeout=args.drain_timeout_seconds,
-            max_drain_seconds=replay_max_drain_seconds,
-        )
-        replay_drain_seconds = _wait_drain_to_target_backlog(
-            event_replay_base_url=args.event_replay_base_url,
-            ops_token=args.ops_token,
-            target_backlog_jobs=max(replay_baseline_backlog + 1, 0),
-            timeout_seconds=replay_drain_timeout_seconds,
-        )
     all_results.append(
         _evaluate_profile(
             profile_name="replay_storm",
-            records_submitted=120,
+            records_submitted=len(replay_ids) + replay_request_count,
             batches_submitted=1 + replay_bursts,
             started_at=replay_started,
             ended_at=replay_ended,
@@ -620,13 +827,14 @@ def main() -> int:
             health=replay_health,
             drain_seconds=replay_drain_seconds,
             thresholds={
-                "min_throughput_rps": 8.0 if args.profile_tier == "full" else 4.0,
+                "min_throughput_rps": None,
                 "max_backlog_age_increase_seconds": (
                     2400.0 if args.profile_tier == "full" else 3600.0
                 ),
                 "max_dlq_pressure_ratio_added": 25.0 if args.profile_tier == "full" else 5.0,
                 "max_replay_pressure_ratio_increase": 5.0,
                 "max_drain_seconds": None,
+                "require_drain": True,
             },
         )
     )

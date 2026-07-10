@@ -1,6 +1,69 @@
 import json
 
-from scripts.performance_load_gate import _evaluate_profile, _write_report
+from scripts.performance_load_gate import (
+    _build_transaction_batch,
+    _evaluate_profile,
+    _write_report,
+)
+
+
+def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:
+    rows = _build_transaction_batch(
+        portfolio_id="PERF_LOAD_RUN1",
+        batch_size=2,
+        seed="PERF-RUN1-steady",
+        security_prefix="PERF_RUN1_SEC",
+    )
+
+    assert {row["portfolio_id"] for row in rows} == {"PERF_LOAD_RUN1"}
+    assert [row["security_id"] for row in rows] == [
+        "PERF_RUN1_SEC_000",
+        "PERF_RUN1_SEC_001",
+    ]
+    assert [row["instrument_id"] for row in rows] == [
+        "PERF_RUN1_SEC_000",
+        "PERF_RUN1_SEC_001",
+    ]
+
+
+def test_evaluate_profile_requires_transaction_processing_drain_when_governed() -> None:
+    result = _evaluate_profile(
+        profile_name="steady_state",
+        records_submitted=10,
+        batches_submitted=1,
+        started_at=10.0,
+        ended_at=20.0,
+        baseline_health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0",
+            },
+        },
+        health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0",
+            },
+        },
+        drain_seconds=None,
+        thresholds={
+            "min_throughput_rps": 0.5,
+            "max_backlog_age_increase_seconds": 1.0,
+            "max_dlq_pressure_ratio_added": 0.0,
+            "max_replay_pressure_ratio_increase": 0.0,
+            "max_drain_seconds": None,
+            "require_drain": True,
+        },
+    )
+
+    assert result.checks_passed is False
+    assert "transaction_processing_drain timeout" in result.failed_checks
 
 
 def test_evaluate_profile_uses_incremental_health_pressure_against_baseline() -> None:
@@ -135,3 +198,5 @@ def test_write_report_persists_profile_tier(tmp_path) -> None:
 
     assert payload["profile_tier"] == "full"
     assert "- Profile tier: full" in markdown
+    assert "Throughput boundary: ingestion start through combined cost" in markdown
+    assert "Transaction drain sec" in markdown
