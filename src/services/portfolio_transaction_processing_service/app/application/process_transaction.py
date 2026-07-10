@@ -31,6 +31,7 @@ class ProcessTransactionUseCase:
             )
             cashflow_result = await unit_of_work.cashflow.process(
                 transaction,
+                event_id=metadata.event_id,
                 correlation_id=metadata.correlation_id,
                 traceparent=metadata.traceparent,
             )

@@ -16,6 +16,7 @@ from src.services.calculators.cashflow_calculator_service.app.consumers.transact
     CachedCashflowRule,
     CashflowCalculatorConsumer,
     CashflowProcessingOutcome,
+    CashflowStageResult,
     LinkedCashLegError,
     NoCashflowRuleError,
 )
@@ -511,6 +512,62 @@ async def test_cashflow_unit_of_work_finalizer_rolls_back_rejected_outcomes(
 
     db.commit.assert_not_awaited()
     assert tx.rollback.await_count == 2
+
+
+async def test_combined_cashflow_stage_keeps_semantic_and_epoch_fence(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message,
+    mock_dependencies,
+):
+    event = TransactionEvent.model_validate_json(mock_kafka_message.value())
+    expected = CashflowStageResult(
+        outcome=CashflowProcessingOutcome.PROCESSED,
+        cashflow_record_count=1,
+    )
+    cashflow_consumer._fence_or_semantic_duplicate_outcome = AsyncMock(return_value=None)
+    cashflow_consumer._stage_cashflow_processing = AsyncMock(return_value=expected)
+
+    result = await cashflow_consumer.stage_valid_event(
+        db=mock_dependencies["db_session"],
+        cashflow_repo=mock_dependencies["cashflow_repo"],
+        idempotency_repo=mock_dependencies["idempotency_repo"],
+        outbox_repo=mock_dependencies["outbox_repo"],
+        event=event,
+        event_id="transactions.persisted-0-123",
+        correlation_id="corr-001",
+        topic="transactions.persisted",
+    )
+
+    assert result == expected
+    fence_call = cashflow_consumer._fence_or_semantic_duplicate_outcome.await_args.kwargs
+    assert fence_call["semantic_event_id"] == ("cashflow:PORT_CFC_01:TXN_CASHFLOW_CONSUMER:1")
+    cashflow_consumer._stage_cashflow_processing.assert_awaited_once()
+
+
+async def test_combined_cashflow_stage_stops_on_epoch_rejection(
+    cashflow_consumer: CashflowCalculatorConsumer,
+    mock_kafka_message,
+    mock_dependencies,
+):
+    event = TransactionEvent.model_validate_json(mock_kafka_message.value())
+    cashflow_consumer._fence_or_semantic_duplicate_outcome = AsyncMock(
+        return_value=CashflowProcessingOutcome.EPOCH_REJECTED
+    )
+    cashflow_consumer._stage_cashflow_processing = AsyncMock()
+
+    result = await cashflow_consumer.stage_valid_event(
+        db=mock_dependencies["db_session"],
+        cashflow_repo=mock_dependencies["cashflow_repo"],
+        idempotency_repo=mock_dependencies["idempotency_repo"],
+        outbox_repo=mock_dependencies["outbox_repo"],
+        event=event,
+        event_id="transactions.persisted-0-123",
+        correlation_id="corr-001",
+        topic="transactions.persisted",
+    )
+
+    assert result == CashflowStageResult(outcome=CashflowProcessingOutcome.EPOCH_REJECTED)
+    cashflow_consumer._stage_cashflow_processing.assert_not_awaited()
 
 
 async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
