@@ -25,6 +25,22 @@ class ValuationData(BaseModel):
         description="Unrealized gain or loss in portfolio base currency.",
         examples=[3177.5],
     )
+    unrealized_price_gain_loss: Decimal | None = Field(
+        None,
+        description=(
+            "Unrealized price component in portfolio base currency, translated using the "
+            "valuation-date FX rate."
+        ),
+        examples=[2940.0],
+    )
+    unrealized_fx_gain_loss: Decimal | None = Field(
+        None,
+        description=(
+            "Unrealized FX component in portfolio base currency from retranslation of local "
+            "cost basis. Total unrealized gain/loss equals price plus FX components."
+        ),
+        examples=[237.5],
+    )
 
     # In instrument's local currency
     market_value_local: Decimal | None = Field(

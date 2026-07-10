@@ -269,6 +269,12 @@ async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes
     persisted_snapshot = mock_valuation_repo.upsert_daily_snapshot.call_args.args[0]
     assert persisted_snapshot.valuation_status == "VALUED_STALE"
     assert persisted_snapshot.market_value == Decimal("9000")
+    assert persisted_snapshot.unrealized_gain_loss == Decimal("-1000")
+    assert persisted_snapshot.unrealized_price_gain_loss == Decimal("-1000")
+    assert persisted_snapshot.unrealized_fx_gain_loss == Decimal("0")
+    assert persisted_snapshot.unrealized_gain_loss == (
+        persisted_snapshot.unrealized_price_gain_loss + persisted_snapshot.unrealized_fx_gain_loss
+    )
     mock_valuation_repo.update_job_status.assert_awaited_once()
 
 
@@ -490,7 +496,7 @@ async def test_process_message_handles_unexpected_error(
     # ACT
     # Patch the logic layer to raise an unexpected error
     with patch(
-        "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation",
+        "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation_components",
         side_effect=ValueError("Unexpected logic error"),
     ) as mock_logic:
         await consumer.process_message(mock_kafka_message)

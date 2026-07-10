@@ -194,6 +194,8 @@ class DailyPositionSnapshot(Base):
     market_value_local = Column(Numeric(18, 10), nullable=True)
     unrealized_gain_loss = Column(Numeric(18, 10), nullable=True)
     unrealized_gain_loss_local = Column(Numeric(18, 10), nullable=True)
+    unrealized_price_gain_loss = Column(Numeric(18, 10), nullable=True)
+    unrealized_fx_gain_loss = Column(Numeric(18, 10), nullable=True)
     valuation_status = Column(String, nullable=False, server_default="UNVALUED", index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
