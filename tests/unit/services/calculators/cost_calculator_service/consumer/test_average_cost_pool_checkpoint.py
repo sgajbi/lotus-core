@@ -190,6 +190,7 @@ def test_full_close_transition_removes_representative_lineage() -> None:
         (_open_state("15", "180", "196"), {}),
         (_open_state("0", "1", "0"), {}),
         (_open_state("15", "180", "195"), {" ": _open_state("1", "1", "1")}),
+        (_open_state("15", "180", "195"), {"BUY-2": _open_state("1", "1", "1")}),
     ],
 )
 def test_transition_rejects_invalid_source_allocation(

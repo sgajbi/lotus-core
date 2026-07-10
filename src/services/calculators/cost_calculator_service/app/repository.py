@@ -22,12 +22,15 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from .average_cost_pool_checkpoint import AverageCostPoolCheckpoint
+from .average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+    AverageCostPoolTransition,
+)
 from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
@@ -207,6 +210,23 @@ def _excluded_update_fields(insert_stmt: Any, immutable_fields: set[str]) -> dic
     return {c.name: c for c in insert_stmt.excluded if c.name not in immutable_fields}
 
 
+def _scaled_persisted_value(
+    column: Any,
+    *,
+    before: Decimal,
+    after: Decimal,
+    round_down: bool,
+) -> Any:
+    if after == before:
+        return column
+    if after == Decimal(0):
+        return Decimal(0)
+    if before <= Decimal(0):
+        raise ValueError("Average cost source scaling requires a positive prior aggregate")
+    scaled = column * after / before
+    return func.trunc(scaled, 10) if round_down else func.round(scaled, 10)
+
+
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -351,6 +371,7 @@ class CostCalculatorRepository:
                 AverageCostPoolState.portfolio_id == normalize_lookup_identifier(portfolio_id),
                 AverageCostPoolState.security_id == normalize_lookup_identifier(security_id),
             )
+            .with_for_update()
         )
         row = (await self.db.execute(stmt)).first()
         if row is None:
@@ -400,6 +421,121 @@ class CostCalculatorRepository:
                 | {"updated_at": func.now()},
             )
         )
+
+    async def apply_average_cost_pool_transition(
+        self,
+        transition: AverageCostPoolTransition,
+    ) -> None:
+        await self._scale_existing_average_cost_sources(transition)
+        if transition.explicit_sources_after:
+            await self.update_selected_open_lot_states(
+                portfolio_id=transition.before.portfolio_id,
+                security_id=transition.before.security_id,
+                states_by_source_transaction_id=dict(transition.explicit_sources_after),
+            )
+        await self.upsert_average_cost_pool_checkpoint(transition.after)
+
+    async def _scale_existing_average_cost_sources(
+        self,
+        transition: AverageCostPoolTransition,
+    ) -> None:
+        before = transition.before
+        after = transition.existing_sources_after
+        if before.quantity == Decimal(0) or after == before.as_open_lot_state():
+            return
+
+        predicates = [
+            func.trim(PositionLotState.portfolio_id)
+            == normalize_lookup_identifier(before.portfolio_id),
+            func.trim(PositionLotState.security_id)
+            == normalize_lookup_identifier(before.security_id),
+        ]
+        explicit_source_ids = set(transition.explicit_sources_after)
+        if explicit_source_ids:
+            predicates.append(PositionLotState.source_transaction_id.not_in(explicit_source_ids))
+
+        if after.quantity == Decimal(0):
+            result = await self.db.execute(
+                update(PositionLotState)
+                .where(*predicates)
+                .values(
+                    open_quantity=Decimal(0),
+                    lot_cost_local=Decimal(0),
+                    lot_cost_base=Decimal(0),
+                    updated_at=func.now(),
+                )
+            )
+            if result.rowcount < 1:
+                raise ValueError("Average cost pool close found no persisted source lots")
+            return
+
+        representative_source_id = before.representative_source_transaction_id
+        if representative_source_id is None:
+            raise ValueError("Open average cost pool has no representative source")
+        non_residual_predicates = [
+            *predicates,
+            PositionLotState.source_transaction_id != representative_source_id,
+        ]
+        await self.db.execute(
+            update(PositionLotState)
+            .where(*non_residual_predicates)
+            .values(
+                open_quantity=_scaled_persisted_value(
+                    PositionLotState.open_quantity,
+                    before=before.quantity,
+                    after=after.quantity,
+                    round_down=True,
+                ),
+                lot_cost_local=_scaled_persisted_value(
+                    PositionLotState.lot_cost_local,
+                    before=before.cost_local,
+                    after=after.cost_local,
+                    round_down=False,
+                ),
+                lot_cost_base=_scaled_persisted_value(
+                    PositionLotState.lot_cost_base,
+                    before=before.cost_base,
+                    after=after.cost_base,
+                    round_down=False,
+                ),
+                updated_at=func.now(),
+            )
+        )
+        allocated_quantity, allocated_cost_local, allocated_cost_base = (
+            await self.db.execute(
+                select(
+                    func.coalesce(func.sum(PositionLotState.open_quantity), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_local), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_base), Decimal(0)),
+                ).where(*non_residual_predicates)
+            )
+        ).one()
+        residual_state = OpenLotState(
+            quantity=after.quantity - allocated_quantity,
+            cost_local=after.cost_local - allocated_cost_local,
+            cost_base=after.cost_base - allocated_cost_base,
+        )
+        if (
+            residual_state.quantity < Decimal(0)
+            or residual_state.cost_local < Decimal(0)
+            or residual_state.cost_base < Decimal(0)
+        ):
+            raise ValueError("Average cost source allocation exceeds the target pool aggregate")
+        residual_result = await self.db.execute(
+            update(PositionLotState)
+            .where(
+                *predicates,
+                PositionLotState.source_transaction_id == representative_source_id,
+            )
+            .values(
+                open_quantity=residual_state.quantity,
+                lot_cost_local=residual_state.cost_local,
+                lot_cost_base=residual_state.cost_base,
+                updated_at=func.now(),
+            )
+        )
+        if residual_result.rowcount != 1:
+            raise ValueError("Average cost pool representative source was not updated exactly once")
 
     async def get_open_lot_checkpoint_records(
         self, *, portfolio_id: str, security_id: str

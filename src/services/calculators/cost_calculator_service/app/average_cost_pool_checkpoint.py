@@ -110,6 +110,8 @@ class AverageCostPoolTransition:
             if not source_transaction_id.strip():
                 raise ValueError("Explicit average cost source transaction ID must not be blank")
             _validate_open_lot_state(state, field_name=f"explicit source {source_transaction_id}")
+        if self.before.representative_source_transaction_id in self.explicit_sources_after:
+            raise ValueError("Existing representative source cannot also be an explicit new source")
         if (
             self.existing_sources_after.quantity > self.before.quantity
             or self.existing_sources_after.cost_local > self.before.cost_local
