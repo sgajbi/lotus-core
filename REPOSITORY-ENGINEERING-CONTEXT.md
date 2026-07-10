@@ -1606,7 +1606,13 @@ Most relevant current governance:
      `portfolio_transaction_processing_service.app.delivery.kafka.transaction_event_mapper`:
      it maps every governed `TransactionEvent` business field into immutable, framework-neutral
      `BookedTransaction` plus `ProcessTransactionCommand` metadata and fails on field drift. Keep
-     `portfolio_common.events` out of the target domain/application packages.
+     `portfolio_common.events` out of the target domain/application packages. The canonical worker
+     package direction is `app/delivery` -> `app/application` -> `app/domain` and `app/ports` ->
+     `app/infrastructure` -> `app/runtime`. The old cost, cashflow, and position roots are explicit
+     migration sources in `in-process-modularity-adoption-catalog.json`, not templates for new
+     agent-generated code. `ProcessTransactionUseCase` owns normal-path ordering and atomicity;
+     concrete repositories, Kafka, SQLAlchemy sessions, and compatibility event models remain
+     behind ports/adapters.
 
 ## Context Maintenance Rule
 

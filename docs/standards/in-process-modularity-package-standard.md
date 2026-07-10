@@ -97,6 +97,13 @@ has domain, application, ports, adapters, infrastructure, routers, repositories,
 composition files while retaining legacy `DTOs`, `services`, `transformers`, and `producers`
 folders as explicit migration scope.
 
+`portfolio_transaction_processing_service` is the representative worker adoption. Its canonical
+direction is Kafka delivery mapper -> application command/use case -> domain model/policies and
+ports -> infrastructure adapters -> runtime composition. The old cost, cashflow, and position
+service roots are classified migration sources, not templates for new code. New transaction
+processing behavior belongs in the target package unless an explicit compatibility adapter is
+required and tested.
+
 ## Enforcement
 
 `make architecture-guard` runs `scripts/in_process_modularity_guard.py`.
