@@ -137,11 +137,11 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
     )
 
     assert first_processing.status is TransactionProcessingStatus.PROCESSED
-    assert second_processing.status is TransactionProcessingStatus.PROCESSED
+    assert second_processing.status is TransactionProcessingStatus.DUPLICATE
     assert first_processing.cashflow_record_count == 1
     assert second_processing.cashflow_record_count == 0
     assert first_processing.position_record_count == 1
-    assert second_processing.position_record_count == 1
+    assert second_processing.position_record_count == 0
 
     async with context.session_factory() as verification_session:
         assert (
@@ -167,9 +167,17 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
                 verification_session,
                 select(func.count())
                 .select_from(ProcessedEvent)
-                .where(ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME),
+                .where(
+                    ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME,
+                    ProcessedEvent.semantic_key
+                    == (
+                        "transaction-processing:v1:PORT-COMBINED-REPLAY-01:"
+                        "ADJ-COMBINED-REPLAY-01:0"
+                    ),
+                    ProcessedEvent.payload_fingerprint.isnot(None),
+                ),
             )
-            == 2
+            == 1
         )
         compatibility_event_types = (
             (
@@ -185,7 +193,6 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
 
     assert compatibility_event_types == [
         "CashflowCalculated",
-        "ProcessedTransactionPersisted",
         "ProcessedTransactionPersisted",
     ]
 
