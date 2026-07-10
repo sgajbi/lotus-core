@@ -1644,6 +1644,10 @@ Most relevant current governance:
      `app.runtime.consumer_composition.build_transaction_processing_consumers`; construct each
      application use case once per process. Until cutover gates pass, the manager must select either
      the six-consumer legacy registry or this two-consumer composition, never both.
+     Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
+     attempt and preserve one compatibility processed event per replay, while semantic fences and
+     deterministic rebuilds must keep cashflow and final position state singular. Do not collapse
+     required downstream replay publication into financial-state deduplication.
 
 ## Context Maintenance Rule
 
