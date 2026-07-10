@@ -258,6 +258,8 @@ Important runtime note:
   database-backed unit gate
 - `make test-integration-lite`
   integration-lite suite
+- `make test-transaction-processing-contract`
+  complete DB-direct combined cost, cashflow, position, replay, and rollback contract
 - `make test-e2e-smoke`
   E2E smoke
 - `make test-docker-smoke`

@@ -31,6 +31,8 @@ smallest evidence command for a change, then cite generated artifacts from the r
   main push releasability parity
 - `make test-institutional-release-gates`
   scheduled/manual institutional completion and sign-off parity
+- `make test-transaction-processing-contract`
+  DB-direct combined transaction-processing contract; blocking in PR and main lanes
 
 ## Important gates
 
@@ -50,6 +52,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make architecture-guard`
 - `make image-provenance-guard`
 - `make security-control-coverage-guard`
+- `make test-transaction-processing-contract`
 
 ## Guard-to-contract mapping
 
@@ -110,6 +113,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make security-control-coverage-guard`
   protects the FastAPI app security-control matrix for standard bootstrap, secure headers, CORS,
   metrics access, auth/audit, payload limits, upload limits, allowlists, and safe errors
+- `make test-transaction-processing-contract`
+  protects atomic combined cost, cashflow, position, replay, rollback, fee, FX, multi-lot,
+  backdated correction, epoch rebuild, and one-event-per-input behavior
 
 ## What the gates protect
 

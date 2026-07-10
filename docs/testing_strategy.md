@@ -74,6 +74,10 @@ Use a focused consume-process-persist test pattern to bridge unit and full E2E:
    remediation hints, and source-safe upload row evidence. Update focused DTO, upload-validation,
    and OpenAPI contract tests after changing effective-window, duplicate-key, lineage,
    quality-status, identifier, threshold, or lifecycle-link validation.
+14. The combined transaction-processing deployable is governed by
+    `make test-transaction-processing-contract`. This DB-direct manifest suite is blocking in PR
+    Merge Gate and Main Releasability and must retain atomic success/rollback, replay, adjustment,
+    FIFO, AVCO, fee, FX, multi-lot, backdated correction, epoch, and event-count proof.
 
 ## Proof-Family Markers
 

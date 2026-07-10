@@ -1681,6 +1681,10 @@ Most relevant current governance:
      incoming row and deterministic later suffix in engine order inside the combined unit of work,
      but publish only the incoming processed event so inline position rebuild is not double-applied.
      Any engine error in the recalculated timeline must fail closed before suffix persistence.
+     Run `make test-transaction-processing-contract` for the complete DB-direct combined contract.
+     PR Merge Gate and Main Releasability run this manifest-owned suite as blocking evidence.
+     Do not add the target to Compose-backed CI service sets until the atomic deployment slice also
+     removes cost, cashflow, and position legacy workers from those sets.
 
 ## Context Maintenance Rule
 

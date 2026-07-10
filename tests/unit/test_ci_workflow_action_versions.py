@@ -219,6 +219,17 @@ def test_pr_merge_gate_lotus_core_validation_is_blocking_with_platform_contracts
     assert "report-only rollout preserves evidence" not in workflow_path.read_text(encoding="utf-8")
 
 
+def test_transaction_processing_contract_is_blocking_in_pr_and_main_matrices() -> None:
+    expected = {
+        "suite": "transaction-processing-contract",
+        "target": "test-transaction-processing-contract",
+    }
+    for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        matrix = workflow["jobs"]["test-suites"]["strategy"]["matrix"]["include"]
+        assert expected in matrix
+
+
 def test_quality_baseline_runs_workflow_governance_gate() -> None:
     workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
     makefile_text = Path("Makefile").read_text(encoding="utf-8")
