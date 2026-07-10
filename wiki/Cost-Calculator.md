@@ -78,6 +78,19 @@ commits independently only after exact source-count, quantity, local-basis, and 
 certification. Retain output reports as release evidence; tool availability does not prove that a
 historical estate has already been reconciled.
 
+## Combined target replay controls
+
+The undeployed combined transaction-processing target keeps operator replay as a second consumer in
+the same deployable. Normal booking and replay load separate group-scoped execution profiles, so
+replay throughput can be bounded without reducing live booking capacity. The shared loop preserves
+Kafka partition order, permits only one active message per partition, reports ordered backlog
+pressure, and commits only after replay publication succeeds.
+
+Shutdown is drain-first: polling stops, already-polled replay work completes and commits, and only
+then are Kafka resources closed. Retry exhaustion, DLQ publication, and offset handling remain owned
+by the shared consumer; the replay delivery mapper and application use case do not implement a
+second transport loop.
+
 ## Mixed corporate-action cash consideration
 
 True cash consideration is processed as a basis disposal, not income. The product marker requires

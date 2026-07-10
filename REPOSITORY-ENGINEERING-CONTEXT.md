@@ -1647,7 +1647,13 @@ Most relevant current governance:
      the combined deployable because its backlog and operator controls differ from normal booking.
      Compose the final pair only through
      `app.runtime.consumer_composition.build_transaction_processing_consumers`; construct each
-     application use case once per process. Until cutover gates pass, the manager must select either
+     application use case once per process. Load and inject the live and replay execution profiles
+     independently by consumer group so throughput tuning cannot silently couple normal booking to
+     operator replay. `BaseConsumer.shutdown()` is a two-phase contract: request polling stop first,
+     let the active run loop drain and commit already-polled work, then close Kafka and flush DLQ
+     resources. Shared supervision must allow at least the configured consumer drain window; do not
+     close the consumer from delivery code or add a second local drain loop. Until cutover gates
+     pass, the manager must select either
      the six-consumer legacy registry or this two-consumer composition, never both.
      Duplicate replay requests may carry distinct Kafka event IDs: record each combined delivery
      attempt and preserve one compatibility processed event per replay, while semantic fences and

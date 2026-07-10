@@ -215,6 +215,15 @@ polling when ordered same-partition work is queued, and commits offsets only aft
 publication completes. `per_key_concurrency` must remain `1` until a separate ordered commit manager
 is designed and tested.
 
+The combined transaction-processing target loads separate profiles for
+`portfolio_transaction_processing_group` and
+`portfolio_transaction_replay_request_group`. Tune replay independently; do not raise its in-flight
+limit merely because normal booking capacity changes. On shutdown, `BaseConsumer` stops polling and
+wakes the loop but keeps Kafka open until already-polled work has completed and committed. The
+worker supervisor derives its default teardown timeout from the largest configured consumer drain
+window plus one second. An explicit supervisor timeout overrides that default and must therefore be
+reviewed against every consumer profile before deployment.
+
 ## Kafka Producer Metrics
 
 Shared producers and publisher adapters emit bounded producer telemetry:
