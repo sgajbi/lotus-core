@@ -9,6 +9,9 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.persistence_service.app.adapters.event_record_mapper import (
+    transaction_event_to_record_values,
+)
 from src.services.portfolio_transaction_processing_service.app.application import (
     ProcessTransactionResult,
     ProcessTransactionUseCase,
@@ -88,6 +91,7 @@ def booked_transaction_event(
     gross_amount: str,
     trade_fee: str = "0",
     trade_currency: str = "USD",
+    **domain_fields: object,
 ) -> TransactionEvent:
     return TransactionEvent(
         transaction_id=transaction_id,
@@ -102,24 +106,12 @@ def booked_transaction_event(
         trade_fee=Decimal(trade_fee),
         trade_currency=trade_currency,
         currency=trade_currency,
+        **domain_fields,
     )
 
 
 def canonical_transaction_record(event: TransactionEvent) -> DBTransaction:
-    return DBTransaction(
-        transaction_id=event.transaction_id,
-        portfolio_id=event.portfolio_id,
-        instrument_id=event.instrument_id,
-        security_id=event.security_id,
-        transaction_date=event.transaction_date,
-        transaction_type=event.transaction_type,
-        quantity=event.quantity,
-        price=event.price,
-        gross_transaction_amount=event.gross_transaction_amount,
-        trade_fee=event.trade_fee,
-        trade_currency=event.trade_currency,
-        currency=event.currency,
-    )
+    return DBTransaction(**transaction_event_to_record_values(event))
 
 
 async def persist_and_process_booked_transaction(
