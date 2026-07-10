@@ -6,6 +6,7 @@ from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from enum import Enum
 from types import SimpleNamespace
 from typing import Any, List, cast
 
@@ -93,12 +94,18 @@ STATE_DEPENDENT_LOT_BEHAVIORS = LOT_STATE_MUTATING_BEHAVIORS - LOT_OPENING_BEHAV
 INCREMENTAL_SAFE_LOT_BEHAVIORS = LOT_OPENING_BEHAVIORS | STATE_DEPENDENT_LOT_BEHAVIORS | {"none"}
 
 
+class OpenLotStateUpdateScope(str, Enum):
+    COMPLETE_SNAPSHOT = "complete_snapshot"
+    SELECTED_LOTS = "selected_lots"
+
+
 @dataclass(frozen=True, slots=True)
 class CostEngineCalculation:
     processed: list[EngineTransaction]
     errored: list[Any]
     open_lot_states: dict[str, OpenLotState]
     incremental: bool
+    open_lot_state_update_scope: OpenLotStateUpdateScope
 
 
 def _normalize_event_code(value: object) -> str:
@@ -390,6 +397,7 @@ class CostCalculationWorkflow:
             open_lot_states=calculation.open_lot_states,
             repo=repo,
             incremental=calculation.incremental,
+            update_scope=calculation.open_lot_state_update_scope,
         )
         await self._persist_cost_basis_processing_checkpoint(
             processed=calculation.processed,
@@ -427,13 +435,24 @@ class CostCalculationWorkflow:
                 cost_basis_method=cost_basis_method,
             ):
                 initial_open_lots_raw = []
+                open_lot_state_update_scope = OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
                 if lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS:
+                    required_fifo_quantity = (
+                        incoming_transaction.quantity
+                        if cost_basis_method is CostBasisMethod.FIFO
+                        and lot_behavior == "consume_lot"
+                        and incoming_transaction.quantity > Decimal(0)
+                        else None
+                    )
                     initial_open_lots_raw = await self._load_open_lot_checkpoint_transactions(
                         event=event,
                         portfolio_base_currency=portfolio_base_currency,
                         instrument=instrument,
                         repo=repo,
+                        required_fifo_quantity=required_fifo_quantity,
                     )
+                    if required_fifo_quantity is not None:
+                        open_lot_state_update_scope = OpenLotStateUpdateScope.SELECTED_LOTS
                     COST_PROCESSING_OPEN_LOTS_RESTORED.labels(
                         cost_basis_method=cost_basis_method.value
                     ).observe(len(initial_open_lots_raw))
@@ -452,6 +471,7 @@ class CostCalculationWorkflow:
                     errored=errored,
                     open_lot_states=open_lot_states,
                     incremental=True,
+                    open_lot_state_update_scope=open_lot_state_update_scope,
                 )
 
         all_transactions_raw = await self._load_cost_engine_transactions(
@@ -475,6 +495,7 @@ class CostCalculationWorkflow:
             errored=errored,
             open_lot_states=open_lot_states,
             incremental=False,
+            open_lot_state_update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         )
 
     async def _load_incoming_cost_engine_transaction(
@@ -502,11 +523,19 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: Any,
         repo: CostCalculatorRepository,
+        required_fifo_quantity: Decimal | None = None,
     ) -> list[dict[str, Any]]:
-        records = await repo.get_open_lot_checkpoint_records(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-        )
+        if required_fifo_quantity is None:
+            records = await repo.get_open_lot_checkpoint_records(
+                portfolio_id=event.portfolio_id,
+                security_id=event.security_id,
+            )
+        else:
+            records = await repo.get_fifo_disposal_lot_checkpoint_records(
+                portfolio_id=event.portfolio_id,
+                security_id=event.security_id,
+                required_quantity=required_fifo_quantity,
+            )
         checkpoint_transactions: list[dict[str, Any]] = []
         for record in records:
             transaction_raw = self._transform_event_for_engine(
@@ -589,13 +618,19 @@ class CostCalculationWorkflow:
         open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
         incremental: bool,
+        update_scope: OpenLotStateUpdateScope,
     ) -> None:
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
         if lot_behavior not in LOT_STATE_MUTATING_BEHAVIORS:
             return
         if incremental and lot_behavior in LOT_OPENING_BEHAVIORS:
             return
-        await repo.update_open_lot_states(
+        update_lot_states = (
+            repo.update_selected_open_lot_states
+            if update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
+            else repo.update_open_lot_states
+        )
+        await update_lot_states(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
             states_by_source_transaction_id=open_lot_states,

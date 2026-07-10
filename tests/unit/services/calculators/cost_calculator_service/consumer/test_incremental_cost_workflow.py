@@ -7,7 +7,10 @@ from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
-from src.services.calculators.cost_calculator_service.app.consumer import CostCalculationWorkflow
+from src.services.calculators.cost_calculator_service.app.consumer import (
+    CostCalculationWorkflow,
+    OpenLotStateUpdateScope,
+)
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
     Transaction as EngineTransaction,
 )
@@ -91,7 +94,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             prior_buy, cost_basis_method=CostBasisMethod.FIFO
         )
     )
-    repo.get_open_lot_checkpoint_records.return_value = [
+    repo.get_fifo_disposal_lot_checkpoint_records.return_value = [
         OpenLotCheckpointRecord(
             transaction=_persisted_buy("BUY-1", buy_date),
             quantity=Decimal("10"),
@@ -129,15 +132,70 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         )
 
     assert calculation.incremental is True
+    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
     assert calculation.errored == []
     assert calculation.processed[0].realized_gain_loss == Decimal("8")
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("6")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("60")
     repo.get_transaction_history.assert_not_awaited()
+    repo.get_fifo_disposal_lot_checkpoint_records.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+        required_quantity=Decimal("4"),
+    )
+    repo.get_open_lot_checkpoint_records.assert_not_awaited()
     execution_metric.labels.assert_called_once_with(mode="ordered_append", cost_basis_method="FIFO")
     execution_metric.labels.return_value.inc.assert_called_once_with()
     restore_metric.labels.assert_called_once_with(cost_basis_method="FIFO")
     restore_metric.labels.return_value.observe.assert_called_once_with(1)
+
+
+async def test_ordered_avco_sell_restores_complete_open_lot_snapshot() -> None:
+    workflow = CostCalculationWorkflow()
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
+    repo.get_cost_basis_processing_checkpoint.return_value = (
+        CostBasisProcessingCheckpoint.from_transaction(
+            prior_buy, cost_basis_method=CostBasisMethod.AVCO
+        )
+    )
+    repo.get_open_lot_checkpoint_records.return_value = [
+        OpenLotCheckpointRecord(
+            transaction=_persisted_buy("BUY-AVCO-1", buy_date),
+            quantity=Decimal("10"),
+            cost_local=Decimal("100"),
+            cost_base=Decimal("100"),
+        )
+    ]
+    sell_event, sell_type, method = await workflow._prepare_transaction_event(
+        _event(
+            transaction_id="SELL-AVCO-1",
+            transaction_date=sell_date,
+            transaction_type="SELL",
+            quantity="4",
+        ),
+        MagicMock(cost_basis_method="AVCO"),
+    )
+
+    calculation = await workflow._calculate_cost_engine(
+        event=sell_event,
+        event_transaction_type=sell_type,
+        portfolio_base_currency="USD",
+        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        repo=repo,
+        cost_basis_method=method,
+    )
+
+    assert calculation.incremental is True
+    assert calculation.errored == []
+    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
+    repo.get_open_lot_checkpoint_records.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+    )
+    repo.get_fifo_disposal_lot_checkpoint_records.assert_not_awaited()
 
 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
@@ -172,6 +230,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         )
 
     assert calculation.incremental is False
+    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
     assert calculation.errored == []
     assert [transaction.transaction_id for transaction in calculation.processed] == [
         "BUY-EARLIER",

@@ -35,6 +35,7 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
     CostCalculatorConsumer,
     FxRateNotFoundError,
+    OpenLotStateUpdateScope,
     PortfolioNotFoundError,
     _normalize_fee_amount,
 )
@@ -1516,6 +1517,7 @@ async def test_update_open_lot_states_only_for_buy_sell(
         open_lot_states=open_lot_states,
         repo=repo,
         incremental=False,
+        update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
     )
     repo.update_open_lot_states.assert_not_awaited()
 
@@ -1525,12 +1527,29 @@ async def test_update_open_lot_states_only_for_buy_sell(
         open_lot_states=open_lot_states,
         repo=repo,
         incremental=False,
+        update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
     )
     repo.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
         states_by_source_transaction_id=open_lot_states,
     )
+
+    repo.reset_mock()
+    await cost_calculator_consumer._update_open_lot_states_if_required(
+        event=event,
+        event_transaction_type="SELL",
+        open_lot_states=open_lot_states,
+        repo=repo,
+        incremental=True,
+        update_scope=OpenLotStateUpdateScope.SELECTED_LOTS,
+    )
+    repo.update_selected_open_lot_states.assert_awaited_once_with(
+        portfolio_id="PORT_COST_01",
+        security_id="DIV-SEC",
+        states_by_source_transaction_id=open_lot_states,
+    )
+    repo.update_open_lot_states.assert_not_awaited()
 
 
 async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(
