@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
     CachedCashflowRule,
+    CashflowCalculationWorkflow,
     CashflowCalculatorConsumer,
     CashflowProcessingOutcome,
     CashflowStageResult,
@@ -31,6 +32,14 @@ from tests.unit.test_support.async_session_iter import make_single_session_gette
 
 # Mark all tests in this file as asyncio
 pytestmark = pytest.mark.asyncio
+
+
+async def test_cashflow_workflow_constructs_without_kafka_delivery_runtime() -> None:
+    workflow = CashflowCalculationWorkflow()
+
+    assert callable(workflow.stage_valid_event)
+    assert callable(workflow._get_rule_for_transaction)
+    assert not hasattr(workflow, "_consumer_config")
 
 
 @pytest.fixture(autouse=True)

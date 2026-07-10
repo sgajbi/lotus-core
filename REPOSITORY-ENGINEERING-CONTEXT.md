@@ -1615,7 +1615,10 @@ Most relevant current governance:
      behind ports/adapters. The concrete normal-path transaction owner is
      `app/infrastructure/sqlalchemy_unit_of_work.py`: all module repositories and compatibility
      outbox writes use one session and one commit; new module-local commits or sessions are a
-     boundary regression.
+     boundary regression. The final live normal path has one target consumer of booked
+     transactions using plain `CostCalculationWorkflow` and `CashflowCalculationWorkflow`
+     collaborators; separate calculator consumers are migration-only. Replay remains a separate
+     use case/consumer in the same deployable because it has distinct epoch and backlog controls.
 
 ## Context Maintenance Rule
 

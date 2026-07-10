@@ -96,7 +96,7 @@ def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
     if CASHFLOW_RULE_CACHE_TTL_SECONDS <= 0:
         return False
     age_seconds = time.monotonic() - cache_state.loaded_at_monotonic_seconds
-    return age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS
+    return bool(age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS)
 
 
 def _rule_from_cache(
@@ -173,11 +173,11 @@ def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
 
 
 def _message_key(msg: Message) -> str:
-    return msg.key().decode("utf-8") if msg.key() else "NoKey"
+    return str(msg.key().decode("utf-8")) if msg.key() else "NoKey"
 
 
 def _message_value(msg: Message) -> str:
-    return msg.value().decode("utf-8")
+    return str(msg.value().decode("utf-8"))
 
 
 def _message_event_id(msg: Message) -> str:
@@ -190,7 +190,7 @@ def _validated_cashflow_transaction_type(event: TransactionEvent) -> str:
         assert_ca_bundle_a_transaction_valid(event)
     assert_portfolio_flow_cash_entry_mode_allowed(event)
     _assert_linked_cash_leg_contract(event)
-    return event_transaction_type
+    return str(event_transaction_type)
 
 
 def _assert_linked_cash_leg_contract(event: TransactionEvent) -> None:
@@ -303,11 +303,12 @@ def _cashflow_calculated_event_from_saved_cashflow(saved) -> CashflowCalculatedE
     )
 
 
-class CashflowCalculatorConsumer(BaseConsumer):
+class CashflowCalculationWorkflow:
     """
-    Consumes raw transaction completion events, calculates the corresponding
-    cashflow based on rules from the database, persists it, and writes a
-    completion event to the outbox.
+    Resolve governed cashflow rules and stage cashflow plus compatibility outbox effects.
+
+    Database transaction, physical message idempotency, retry, and delivery lifecycle ownership
+    remain outside this workflow.
     """
 
     async def _load_cashflow_rules_cache(self, db_session) -> CashflowRuleCacheState:
@@ -393,7 +394,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
     ) -> bool:
         repo = CashflowRulesRepository(db_session)
         source_version = await repo.get_rule_set_version()
-        return source_version.fingerprint == cache_state.rule_set_version
+        return bool(source_version.fingerprint == cache_state.rule_set_version)
 
     async def _fresh_or_reloaded_rule_cache(self, db_session) -> CashflowRuleCacheState:
         cache_state = _cashflow_rule_cache_state
@@ -419,6 +420,126 @@ class CashflowCalculatorConsumer(BaseConsumer):
         )
         observe_cashflow_rule_cache_event("missing_rule", "reload")
         return await self._load_cashflow_rules_cache(db_session)
+
+    async def stage_valid_event(
+        self,
+        *,
+        db,
+        cashflow_repo: CashflowRepository,
+        idempotency_repo: IdempotencyRepository,
+        outbox_repo: OutboxRepository,
+        event: TransactionEvent,
+        event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> CashflowStageResult:
+        """Stage cashflow work inside the caller-owned transaction."""
+        fence_outcome = await self._fence_or_semantic_duplicate_outcome(
+            db=db,
+            idempotency_repo=idempotency_repo,
+            event=event,
+            event_id=event_id,
+            semantic_event_id=_semantic_cashflow_event_id(event),
+            correlation_id=correlation_id,
+            topic=topic,
+        )
+        if fence_outcome is not None:
+            return CashflowStageResult(outcome=fence_outcome)
+        return await self._stage_cashflow_processing(
+            db=db,
+            cashflow_repo=cashflow_repo,
+            outbox_repo=outbox_repo,
+            event=event,
+            correlation_id=correlation_id,
+        )
+
+    async def _fence_or_semantic_duplicate_outcome(
+        self,
+        *,
+        db,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> CashflowProcessingOutcome | None:
+        fencer = EpochFencer(db, service_name=SERVICE_NAME)
+        if not await fencer.check(event):
+            return CashflowProcessingOutcome.EPOCH_REJECTED
+        if not await self._claim_semantic_event(
+            idempotency_repo,
+            event,
+            event_id,
+            semantic_event_id,
+            correlation_id,
+            topic,
+        ):
+            return CashflowProcessingOutcome.SEMANTIC_DUPLICATE
+        return None
+
+    async def _stage_cashflow_processing(
+        self,
+        *,
+        db,
+        cashflow_repo: CashflowRepository,
+        outbox_repo: OutboxRepository,
+        event: TransactionEvent,
+        correlation_id: str,
+    ) -> CashflowStageResult:
+        event_transaction_type = _validated_cashflow_transaction_type(event)
+        if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
+            return CashflowStageResult(
+                outcome=CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
+            )
+        rule = await self._required_rule_for_transaction(db, event_transaction_type)
+        cashflow_record_count = await _stage_cashflow_calculation(
+            cashflow_repo,
+            outbox_repo,
+            event,
+            rule,
+            correlation_id,
+        )
+        return CashflowStageResult(
+            outcome=CashflowProcessingOutcome.PROCESSED,
+            cashflow_record_count=cashflow_record_count,
+        )
+
+    async def _claim_semantic_event(
+        self,
+        idempotency_repo: IdempotencyRepository,
+        event: TransactionEvent,
+        event_id: str,
+        semantic_event_id: str,
+        correlation_id: str,
+        topic: str,
+    ) -> bool:
+        claimed = await idempotency_repo.claim_event_processing(
+            semantic_event_id,
+            event.portfolio_id,
+            SERVICE_NAME,
+            correlation_id,
+        )
+        if not claimed:
+            _log_semantic_cashflow_duplicate(event, event_id, semantic_event_id, topic)
+        return bool(claimed)
+
+    async def _required_rule_for_transaction(
+        self,
+        db,
+        event_transaction_type: str,
+    ) -> CachedCashflowRule:
+        rule = await self._get_rule_for_transaction(db, event_transaction_type)
+        if rule:
+            return rule
+        raise NoCashflowRuleError(
+            "No cashflow rule found for transaction type "
+            f"'{event_transaction_type}'. Message will be sent to DLQ."
+        )
+
+
+class CashflowCalculatorConsumer(CashflowCalculationWorkflow, BaseConsumer):
+    """Consume booked transactions and run cashflow policy with delivery controls."""
 
     async def process_message(self, msg: Message):
         await self._process_message_with_retry(msg)
@@ -568,38 +689,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
         )
         return stage_result.outcome
 
-    async def stage_valid_event(
-        self,
-        *,
-        db,
-        cashflow_repo: CashflowRepository,
-        idempotency_repo: IdempotencyRepository,
-        outbox_repo: OutboxRepository,
-        event: TransactionEvent,
-        event_id: str,
-        correlation_id: str,
-        topic: str,
-    ) -> CashflowStageResult:
-        """Stage cashflow work inside the combined caller-owned transaction."""
-        fence_outcome = await self._fence_or_semantic_duplicate_outcome(
-            db=db,
-            idempotency_repo=idempotency_repo,
-            event=event,
-            event_id=event_id,
-            semantic_event_id=_semantic_cashflow_event_id(event),
-            correlation_id=correlation_id,
-            topic=topic,
-        )
-        if fence_outcome is not None:
-            return CashflowStageResult(outcome=fence_outcome)
-        return await self._stage_cashflow_processing(
-            db=db,
-            cashflow_repo=cashflow_repo,
-            outbox_repo=outbox_repo,
-            event=event,
-            correlation_id=correlation_id,
-        )
-
     async def _physical_or_stale_replay_outcome(
         self,
         *,
@@ -620,58 +709,6 @@ class CashflowCalculatorConsumer(BaseConsumer):
         if await self._should_skip_stale_replay_event(cashflow_repo, event, topic):
             return CashflowProcessingOutcome.STALE_REPLAY_SKIPPED
         return None
-
-    async def _fence_or_semantic_duplicate_outcome(
-        self,
-        *,
-        db,
-        idempotency_repo: IdempotencyRepository,
-        event: TransactionEvent,
-        event_id: str,
-        semantic_event_id: str,
-        correlation_id: str,
-        topic: str,
-    ) -> CashflowProcessingOutcome | None:
-        fencer = EpochFencer(db, service_name=SERVICE_NAME)
-        if not await fencer.check(event):
-            return CashflowProcessingOutcome.EPOCH_REJECTED
-        if not await self._claim_semantic_event(
-            idempotency_repo,
-            event,
-            event_id,
-            semantic_event_id,
-            correlation_id,
-            topic,
-        ):
-            return CashflowProcessingOutcome.SEMANTIC_DUPLICATE
-        return None
-
-    async def _stage_cashflow_processing(
-        self,
-        *,
-        db,
-        cashflow_repo: CashflowRepository,
-        outbox_repo: OutboxRepository,
-        event: TransactionEvent,
-        correlation_id: str,
-    ) -> CashflowStageResult:
-        event_transaction_type = _validated_cashflow_transaction_type(event)
-        if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
-            return CashflowStageResult(
-                outcome=CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
-            )
-        rule = await self._required_rule_for_transaction(db, event_transaction_type)
-        cashflow_record_count = await _stage_cashflow_calculation(
-            cashflow_repo,
-            outbox_repo,
-            event,
-            rule,
-            correlation_id,
-        )
-        return CashflowStageResult(
-            outcome=CashflowProcessingOutcome.PROCESSED,
-            cashflow_record_count=cashflow_record_count,
-        )
 
     @staticmethod
     async def _finalize_cashflow_unit_of_work(
@@ -697,7 +734,7 @@ class CashflowCalculatorConsumer(BaseConsumer):
         )
         if not claimed:
             logger.warning(f"Event {event_id} already processed. Skipping.")
-        return claimed
+        return bool(claimed)
 
     async def _should_skip_stale_replay_event(
         self,
@@ -716,35 +753,3 @@ class CashflowCalculatorConsumer(BaseConsumer):
             return False
         _log_stale_replay_cashflow_skip(event, topic, portfolio_exists, transaction_exists)
         return True
-
-    async def _claim_semantic_event(
-        self,
-        idempotency_repo: IdempotencyRepository,
-        event: TransactionEvent,
-        event_id: str,
-        semantic_event_id: str,
-        correlation_id: str,
-        topic: str,
-    ) -> bool:
-        claimed = await idempotency_repo.claim_event_processing(
-            semantic_event_id,
-            event.portfolio_id,
-            SERVICE_NAME,
-            correlation_id,
-        )
-        if not claimed:
-            _log_semantic_cashflow_duplicate(event, event_id, semantic_event_id, topic)
-        return claimed
-
-    async def _required_rule_for_transaction(
-        self,
-        db,
-        event_transaction_type: str,
-    ) -> CachedCashflowRule:
-        rule = await self._get_rule_for_transaction(db, event_transaction_type)
-        if rule:
-            return rule
-        raise NoCashflowRuleError(
-            "No cashflow rule found for transaction type "
-            f"'{event_transaction_type}'. Message will be sent to DLQ."
-        )
