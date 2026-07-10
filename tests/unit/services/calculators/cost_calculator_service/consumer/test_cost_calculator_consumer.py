@@ -142,6 +142,7 @@ def mock_dependencies():
             product_type="EQUITY",
             asset_class="EQUITY",
         )
+        mock_repo.get_cost_basis_processing_checkpoint.return_value = None
         yield {
             "repo": mock_repo,
             "idempotency_repo": mock_idempotency_repo,
@@ -1510,6 +1511,7 @@ async def test_update_open_lot_states_only_for_buy_sell(
         event_transaction_type="DIVIDEND",
         open_lot_states=open_lot_states,
         repo=repo,
+        incremental=False,
     )
     repo.update_open_lot_states.assert_not_awaited()
 
@@ -1518,6 +1520,7 @@ async def test_update_open_lot_states_only_for_buy_sell(
         event_transaction_type="SELL",
         open_lot_states=open_lot_states,
         repo=repo,
+        incremental=False,
     )
     repo.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",

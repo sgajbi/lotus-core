@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 from bisect import bisect_right
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
@@ -56,7 +57,10 @@ from .cost_calculation_processor import (
     CostCalculationProcessorDependencyFactory,
     PortfolioNotFoundError,
 )
+from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
+from .cost_engine.processing.sorter import transaction_order_key
+from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 from .repository import CostCalculatorRepository
 from .transaction_processor import TransactionProcessor, build_transaction_processor
 
@@ -84,6 +88,16 @@ LOT_STATE_MUTATING_BEHAVIORS = LOT_OPENING_BEHAVIORS | {
     "preserve_or_consume_lot",
     "transfer_basis_out",
 }
+STATE_DEPENDENT_LOT_BEHAVIORS = LOT_STATE_MUTATING_BEHAVIORS - LOT_OPENING_BEHAVIORS
+INCREMENTAL_SAFE_LOT_BEHAVIORS = LOT_OPENING_BEHAVIORS | STATE_DEPENDENT_LOT_BEHAVIORS | {"none"}
+
+
+@dataclass(frozen=True, slots=True)
+class CostEngineCalculation:
+    processed: list[EngineTransaction]
+    errored: list[Any]
+    open_lot_states: dict[str, OpenLotState]
+    incremental: bool
 
 
 def _normalize_event_code(value: object) -> str:
@@ -353,9 +367,88 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
+        calculation = await self._calculate_cost_engine(
+            event=event,
+            event_transaction_type=event_transaction_type,
+            portfolio_base_currency=portfolio.base_currency,
+            instrument=instrument,
+            repo=repo,
+            cost_basis_method=cost_basis_method,
+        )
+
+        new_transaction_ids = {event.transaction_id}
+        self._raise_for_transaction_engine_errors(errored=calculation.errored)
+        events_to_publish = await self._persist_affected_processed_transactions(
+            processed=calculation.processed,
+            new_transaction_ids=new_transaction_ids,
+            repo=repo,
+        )
+        await self._update_open_lot_states_if_required(
+            event=event,
+            event_transaction_type=event_transaction_type,
+            open_lot_states=calculation.open_lot_states,
+            repo=repo,
+            incremental=calculation.incremental,
+        )
+        await self._persist_cost_basis_processing_checkpoint(
+            processed=calculation.processed,
+            cost_basis_method=cost_basis_method,
+            repo=repo,
+        )
+
+        return events_to_publish, []
+
+    async def _calculate_cost_engine(
+        self,
+        *,
+        event: TransactionEvent,
+        event_transaction_type: str,
+        portfolio_base_currency: str,
+        instrument: Any,
+        repo: CostCalculatorRepository,
+        cost_basis_method: CostBasisMethod,
+    ) -> CostEngineCalculation:
+        checkpoint = await repo.get_cost_basis_processing_checkpoint(
+            portfolio_id=event.portfolio_id,
+            security_id=event.security_id,
+        )
+        lot_behavior = _transaction_lot_behavior(event_transaction_type)
+        if checkpoint is not None and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS:
+            incoming_raw = await self._load_incoming_cost_engine_transaction(
+                event=event,
+                portfolio_base_currency=portfolio_base_currency,
+                instrument=instrument,
+                repo=repo,
+            )
+            incoming_transaction = EngineTransaction(**incoming_raw)
+            if checkpoint.permits_append(
+                incoming_transaction,
+                cost_basis_method=cost_basis_method,
+            ):
+                initial_open_lots_raw = []
+                if lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS:
+                    initial_open_lots_raw = await self._load_open_lot_checkpoint_transactions(
+                        event=event,
+                        portfolio_base_currency=portfolio_base_currency,
+                        instrument=instrument,
+                        repo=repo,
+                    )
+                processed, errored, open_lot_states = self._get_transaction_processor(
+                    cost_basis_method
+                ).process_increment(
+                    initial_open_lots_raw=initial_open_lots_raw,
+                    new_transactions_raw=[incoming_raw],
+                )
+                return CostEngineCalculation(
+                    processed=processed,
+                    errored=errored,
+                    open_lot_states=open_lot_states,
+                    incremental=True,
+                )
+
         all_transactions_raw = await self._load_cost_engine_transactions(
             event=event,
-            portfolio_base_currency=portfolio.base_currency,
+            portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
             repo=repo,
         )
@@ -365,22 +458,59 @@ class CostCalculationWorkflow:
             existing_transactions_raw=[],
             new_transactions_raw=all_transactions_raw,
         )
-
-        new_transaction_ids = {event.transaction_id}
-        self._raise_for_transaction_engine_errors(errored=errored)
-        events_to_publish = await self._persist_affected_processed_transactions(
+        return CostEngineCalculation(
             processed=processed,
-            new_transaction_ids=new_transaction_ids,
-            repo=repo,
-        )
-        await self._update_open_lot_states_if_required(
-            event=event,
-            event_transaction_type=event_transaction_type,
+            errored=errored,
             open_lot_states=open_lot_states,
-            repo=repo,
+            incremental=False,
         )
 
-        return events_to_publish, []
+    async def _load_incoming_cost_engine_transaction(
+        self,
+        *,
+        event: TransactionEvent,
+        portfolio_base_currency: str,
+        instrument: Any,
+        repo: CostCalculatorRepository,
+    ) -> dict[str, Any]:
+        event_raw = self._transform_event_for_engine(event)
+        if instrument is not None:
+            self._attach_instrument_metadata(transactions=[event_raw], instrument=instrument)
+        enriched = await self._enrich_transactions_with_fx(
+            transactions=[event_raw],
+            portfolio_base_currency=portfolio_base_currency,
+            repo=repo,
+        )
+        return enriched[0]
+
+    async def _load_open_lot_checkpoint_transactions(
+        self,
+        *,
+        event: TransactionEvent,
+        portfolio_base_currency: str,
+        instrument: Any,
+        repo: CostCalculatorRepository,
+    ) -> list[dict[str, Any]]:
+        records = await repo.get_open_lot_checkpoint_records(
+            portfolio_id=event.portfolio_id,
+            security_id=event.security_id,
+        )
+        checkpoint_transactions: list[dict[str, Any]] = []
+        for record in records:
+            transaction_raw = self._transform_event_for_engine(
+                TransactionEvent.model_validate(record.transaction)
+            )
+            transaction_raw["quantity"] = record.quantity
+            transaction_raw["net_cost_local"] = record.cost_local
+            transaction_raw["net_cost"] = record.cost_base
+            transaction_raw["portfolio_base_currency"] = portfolio_base_currency
+            checkpoint_transactions.append(transaction_raw)
+        if instrument is not None:
+            self._attach_instrument_metadata(
+                transactions=checkpoint_transactions,
+                instrument=instrument,
+            )
+        return checkpoint_transactions
 
     async def _load_cost_engine_transactions(
         self,
@@ -446,13 +576,32 @@ class CostCalculationWorkflow:
         event_transaction_type: str,
         open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
+        incremental: bool,
     ) -> None:
-        if _transaction_lot_behavior(event_transaction_type) not in LOT_STATE_MUTATING_BEHAVIORS:
+        lot_behavior = _transaction_lot_behavior(event_transaction_type)
+        if lot_behavior not in LOT_STATE_MUTATING_BEHAVIORS:
+            return
+        if incremental and lot_behavior in LOT_OPENING_BEHAVIORS:
             return
         await repo.update_open_lot_states(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
             states_by_source_transaction_id=open_lot_states,
+        )
+
+    @staticmethod
+    async def _persist_cost_basis_processing_checkpoint(
+        *,
+        processed: list[EngineTransaction],
+        cost_basis_method: CostBasisMethod,
+        repo: CostCalculatorRepository,
+    ) -> None:
+        latest_transaction = max(processed, key=transaction_order_key)
+        await repo.upsert_cost_basis_processing_checkpoint(
+            CostBasisProcessingCheckpoint.from_transaction(
+                latest_transaction,
+                cost_basis_method=cost_basis_method,
+            )
         )
 
     @staticmethod
