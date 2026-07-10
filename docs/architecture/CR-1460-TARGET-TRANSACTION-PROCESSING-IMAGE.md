@@ -58,12 +58,15 @@ that resolved digest to `/version`. No secret-like build ARG or ENV is present.
 
 ## Local Evidence
 
+- exact committed image built as
+  `lotus-core/portfolio-transaction-processing-service:7b44b10d9d96b972d5c701bd582c8c7aa0c94bcf`;
 - image built successfully from a bounded 404 KB build context;
 - final image runs as UID/GID `1000` (`appuser`);
 - target manager imports and composes exactly the live and replay-request consumer groups/topics;
 - unrelated `query_service` source is absent;
 - OCI labels and runtime `build_metadata_payload()` match for commit, branch, timestamp, repo,
-  version, digest slot, and run ID;
+  version, digest slot, and run ID, including exact commit
+  `7b44b10d9d96b972d5c701bd582c8c7aa0c94bcf`;
 - target image/package, CI workflow, Dependabot, and provenance tests: 28 passed;
 - image provenance guard and Ruff passed.
 
