@@ -12,6 +12,11 @@ from .sqlalchemy_unit_of_work import (
     SqlAlchemyTransactionIdempotencyAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
+from .transaction_replay_adapter import (
+    BookedTransactionReplayCardinalityError,
+    CanonicalTransactionReplayer,
+    SqlAlchemyBookedTransactionReplayAdapter,
+)
 
 __all__ = [
     "CashflowProcessingCompatibilityAdapter",
@@ -20,6 +25,9 @@ __all__ = [
     "SqlAlchemyTransactionIdempotencyAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "SqlAlchemyTransactionProcessingUnitOfWork",
+    "BookedTransactionReplayCardinalityError",
+    "CanonicalTransactionReplayer",
+    "SqlAlchemyBookedTransactionReplayAdapter",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
     "build_process_transaction_use_case",
 ]
