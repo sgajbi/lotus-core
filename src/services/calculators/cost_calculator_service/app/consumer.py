@@ -990,6 +990,10 @@ class CostCalculationWorkflow:
             "source_leg_count": reconciliation.source_leg_count,
             "target_leg_count": reconciliation.target_leg_count,
             "cash_consideration_count": reconciliation.cash_consideration_count,
+            "source_basis_out_local": str(reconciliation.source_basis_out_local),
+            "target_basis_in_local": str(reconciliation.target_basis_in_local),
+            "cash_basis_local": str(reconciliation.cash_basis_local),
+            "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
             "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
             "missing_dependency_count": len(missing_dependencies),
         }
