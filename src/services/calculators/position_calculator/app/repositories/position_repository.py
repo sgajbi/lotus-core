@@ -129,6 +129,29 @@ class PositionRepository:
         result = await self.db.execute(stmt)
         return cast(Optional[date], result.scalar_one_or_none())
 
+    @async_timed(repository="PositionRepository", method="is_transaction_materialized")
+    async def is_transaction_materialized(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        transaction_id: str,
+        epoch: int,
+    ) -> bool:
+        """Return whether the current epoch already contains this transaction lineage."""
+        stmt = (
+            select(PositionHistory.id)
+            .where(
+                func.trim(PositionHistory.portfolio_id)
+                == normalize_lookup_identifier(portfolio_id),
+                func.trim(PositionHistory.security_id) == normalize_lookup_identifier(security_id),
+                func.trim(PositionHistory.transaction_id)
+                == normalize_lookup_identifier(transaction_id),
+                PositionHistory.epoch == epoch,
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
+
     # --- EXISTING METHOD ---
     @async_timed(repository="PositionRepository", method="find_open_security_ids_as_of")
     async def find_open_security_ids_as_of(self, portfolio_id: str, as_of_date: date) -> List[str]:

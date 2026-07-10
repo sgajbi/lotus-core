@@ -47,6 +47,7 @@ def mock_repo() -> AsyncMock:
     repo.get_last_position_before.return_value = None
     repo.get_latest_completed_snapshot_date.return_value = None
     repo.get_latest_position_history_date.return_value = None
+    repo.is_transaction_materialized.return_value = False
     return repo
 
 
@@ -467,6 +468,50 @@ async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     mock_coordination_metric.labels.assert_called_once_with(
         outcome="coalesced",
         reason="stale_epoch",
+    )
+    mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+@patch(
+    "src.services.calculators.position_calculator.app.core.position_logic."
+    "POSITION_RECALCULATION_COORDINATION_TOTAL"
+)
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_coalesces_backdated_event_already_materialized_in_current_epoch(
+    mock_fencer_class: MagicMock,
+    mock_coordination_metric: MagicMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_outbox_repo: AsyncMock,
+    sample_event: TransactionEvent,
+) -> None:
+    mock_fencer_class.return_value.check = AsyncMock(return_value=True)
+    sample_event.epoch = None
+    mock_state_repo.get_or_create_state.return_value = PositionState(
+        watermark_date=date(2025, 8, 25), epoch=3
+    )
+    mock_repo.get_latest_position_history_date.return_value = date(2025, 8, 25)
+    mock_repo.is_transaction_materialized.return_value = True
+
+    result = await PositionCalculator.calculate(
+        sample_event,
+        AsyncMock(),
+        mock_repo,
+        mock_state_repo,
+        mock_outbox_repo,
+        backdated_handling=BackdatedPositionHandling.REBUILD_INLINE,
+    )
+
+    assert result.position_record_count == 0
+    assert result.replay_queued is False
+    mock_repo.is_transaction_materialized.assert_awaited_once_with("P1", "S1", "T1", 3)
+    mock_state_repo.increment_epoch_and_reset_watermark.assert_not_awaited()
+    mock_repo.get_all_transactions_for_security.assert_not_awaited()
+    mock_outbox_repo.create_outbox_event.assert_not_awaited()
+    mock_coordination_metric.labels.assert_called_once_with(
+        outcome="coalesced",
+        reason="already_materialized",
     )
     mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
 

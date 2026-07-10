@@ -88,6 +88,26 @@ class PositionCalculator:
         if replay_decision.should_queue_replay:
             if replay_decision.replay_watermark_date is None:
                 raise RuntimeError("Backdated replay decision did not include a replay watermark.")
+            if await repo.is_transaction_materialized(
+                portfolio_id,
+                security_id,
+                event.transaction_id,
+                current_state.epoch,
+            ):
+                POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                    outcome="coalesced",
+                    reason="already_materialized",
+                ).inc()
+                logger.info(
+                    "Coalesced backdated position trigger already materialized in current epoch.",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "transaction_id": event.transaction_id,
+                        "epoch": current_state.epoch,
+                    },
+                )
+                return PositionCalculationResult()
             if backdated_handling is BackdatedPositionHandling.REBUILD_INLINE:
                 return await cls._rebuild_backdated_position_history(
                     event=event,
