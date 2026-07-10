@@ -1,16 +1,18 @@
 import logging
 from collections import defaultdict, deque
-from decimal import ROUND_DOWN, Decimal
+from decimal import Decimal
 from typing import Protocol
 
 from portfolio_common.decimal_amounts import required_decimal
 
 from ..domain.models.transaction import Transaction
+from .average_cost_source_allocation import (
+    AverageCostPool,
+    AverageCostSourceAllocation,
+)
 from .cost_objects import CostLot, OpenLotState
 
 logger = logging.getLogger(__name__)
-
-LOT_QUANTITY_QUANTUM = Decimal("0.0000000001")
 
 
 def _is_buy_transaction(transaction: Transaction) -> bool:
@@ -200,15 +202,8 @@ class AverageCostBasisStrategy(CostBasisStrategy):
     """
 
     def __init__(self) -> None:
-        self._holdings: dict[tuple[str, str], dict[str, Decimal]] = defaultdict(
-            lambda: {
-                "total_qty": Decimal(0),
-                "total_cost_local": Decimal(0),
-                "total_cost_base": Decimal(0),
-            }
-        )
-        self._source_transaction_ids: dict[tuple[str, str], list[str]] = defaultdict(list)
-        self._open_source_lot_states: dict[str, OpenLotState] = {}
+        self._pools: dict[tuple[str, str], AverageCostPool] = defaultdict(AverageCostPool)
+        self._source_allocation = AverageCostSourceAllocation()
         logger.debug("AverageCostBasisStrategy initialized.")
 
     def add_buy_lot(self, transaction: Transaction) -> None:
@@ -218,22 +213,26 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         quantity, net_cost, net_cost_local = validated_inputs
 
         key = (transaction.portfolio_id, transaction.instrument_id)
-        self._holdings[key]["total_qty"] += quantity
-        self._holdings[key]["total_cost_local"] += net_cost_local
-        self._holdings[key]["total_cost_base"] += net_cost
-        self._source_transaction_ids[key].append(transaction.transaction_id)
-        self._open_source_lot_states[transaction.transaction_id] = OpenLotState(
+        self._pools[key].add(
             quantity=quantity,
             cost_local=net_cost_local,
             cost_base=net_cost,
+        )
+        self._source_allocation.add_source(
+            book_key=key,
+            source_transaction_id=transaction.transaction_id,
+            quantity=quantity,
+            cost_local=net_cost_local,
+            cost_base=net_cost,
+            pool_quantity_after=self._pools[key].quantity,
         )
 
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         key = (portfolio_id, instrument_id)
-        holding = self._holdings[key]
-        total_qty = holding["total_qty"]
+        pool = self._pools[key]
+        total_qty = pool.quantity
         required_quantity = sell_quantity
         invalid_quantity_error = _non_positive_sell_quantity_error(required_quantity)
         if invalid_quantity_error is not None:
@@ -256,76 +255,18 @@ class AverageCostBasisStrategy(CostBasisStrategy):
                 "No holdings to sell against (Average Cost method).",
             )
 
-        avg_cost_per_share_local = holding["total_cost_local"] / total_qty
-        avg_cost_per_share_base = holding["total_cost_base"] / total_qty
-
-        cogs_local = required_quantity * avg_cost_per_share_local
-        cogs_base = required_quantity * avg_cost_per_share_base
-
-        holding["total_qty"] -= required_quantity
-        holding["total_cost_local"] -= cogs_local
-        holding["total_cost_base"] -= cogs_base
-        self._reconcile_open_source_lot_states(
-            key=key,
-            quantity_before_disposal=total_qty,
-            quantity_after_disposal=holding["total_qty"],
-            cost_local_after_disposal=holding["total_cost_local"],
-            cost_base_after_disposal=holding["total_cost_base"],
+        cogs_base, cogs_local = pool.dispose(required_quantity)
+        self._source_allocation.apply_disposal(
+            book_key=key,
+            quantity_before=total_qty,
+            quantity_after=pool.quantity,
         )
 
         return cogs_base, cogs_local, required_quantity, None
 
-    def _reconcile_open_source_lot_states(
-        self,
-        *,
-        key: tuple[str, str],
-        quantity_before_disposal: Decimal,
-        quantity_after_disposal: Decimal,
-        cost_local_after_disposal: Decimal,
-        cost_base_after_disposal: Decimal,
-    ) -> None:
-        transaction_ids = self._source_transaction_ids[key]
-        if not transaction_ids:
-            return
-        if quantity_after_disposal.is_zero():
-            for transaction_id in transaction_ids:
-                self._open_source_lot_states[transaction_id] = OpenLotState(
-                    quantity=Decimal(0),
-                    cost_local=Decimal(0),
-                    cost_base=Decimal(0),
-                )
-            return
-
-        remaining_ratio = quantity_after_disposal / quantity_before_disposal
-        allocated_quantity = Decimal(0)
-        allocated_cost_local = Decimal(0)
-        allocated_cost_base = Decimal(0)
-        for transaction_id in transaction_ids[:-1]:
-            current_state = self._open_source_lot_states[transaction_id]
-            updated_quantity = (current_state.quantity * remaining_ratio).quantize(
-                LOT_QUANTITY_QUANTUM,
-                rounding=ROUND_DOWN,
-            )
-            updated_cost_local = current_state.cost_local * remaining_ratio
-            updated_cost_base = current_state.cost_base * remaining_ratio
-            self._open_source_lot_states[transaction_id] = OpenLotState(
-                quantity=updated_quantity,
-                cost_local=updated_cost_local,
-                cost_base=updated_cost_base,
-            )
-            allocated_quantity += updated_quantity
-            allocated_cost_local += updated_cost_local
-            allocated_cost_base += updated_cost_base
-        final_transaction_id = transaction_ids[-1]
-        self._open_source_lot_states[final_transaction_id] = OpenLotState(
-            quantity=quantity_after_disposal - allocated_quantity,
-            cost_local=cost_local_after_disposal - allocated_cost_local,
-            cost_base=cost_base_after_disposal - allocated_cost_base,
-        )
-
     def get_available_quantity(self, portfolio_id: str, instrument_id: str) -> Decimal:
         key = (portfolio_id, instrument_id)
-        return self._holdings[key]["total_qty"]
+        return self._pools[key].quantity
 
     def set_initial_lots(self, transactions: list[Transaction]) -> None:
         for txn in transactions:
@@ -333,4 +274,4 @@ class AverageCostBasisStrategy(CostBasisStrategy):
                 self.add_buy_lot(txn)
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
-        return dict(self._open_source_lot_states)
+        return self._source_allocation.materialize(self._pools)

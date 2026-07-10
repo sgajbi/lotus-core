@@ -128,3 +128,4 @@ def test_avco_sequential_vs_combined_sell_cost_invariant(
     assert sequential.get_available_quantity("P_PROP", "I_PROP") == combined.get_available_quantity(
         "P_PROP", "I_PROP"
     )
+    assert sequential.get_open_lot_states() == combined.get_open_lot_states()
