@@ -16,6 +16,7 @@ from src.services.calculators.cashflow_calculator_service.app.repositories impor
     cashflow_repository,
 )
 from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingError,
     TransactionProcessingRejected,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
@@ -91,4 +92,33 @@ async def test_cashflow_adapter_rejects_stale_epoch_to_roll_back_combined_work()
         )
 
     assert exc_info.value.reason_code == "cashflow_epoch_rejected"
+    assert exc_info.value.retryable is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "reason_code"),
+    [
+        (cashflow.NoCashflowRuleError("BUY rule missing"), "cashflow_rule_missing"),
+        (cashflow.LinkedCashLegError("linked cash leg missing"), "cashflow_contract_invalid"),
+    ],
+)
+async def test_cashflow_adapter_maps_terminal_policy_errors(
+    error: Exception,
+    reason_code: str,
+) -> None:
+    adapter, workflow = _adapter(
+        cashflow.CashflowStageResult(outcome=cashflow.CashflowProcessingOutcome.PROCESSED)
+    )
+    workflow.stage_valid_event.side_effect = error
+
+    with pytest.raises(TransactionProcessingError) as exc_info:
+        await adapter.process(
+            _transaction(),
+            event_id="transactions.persisted-0-42",
+            correlation_id="corr-001",
+            traceparent=None,
+        )
+
+    assert exc_info.value.reason_code == reason_code
     assert exc_info.value.retryable is False

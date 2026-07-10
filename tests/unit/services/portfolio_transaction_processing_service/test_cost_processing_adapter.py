@@ -13,6 +13,9 @@ from portfolio_common.outbox_repository import OutboxRepository
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingError,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostProcessingCompatibilityAdapter,
@@ -77,3 +80,33 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert input_event.transaction_id == "TX-001"
     assert input_event.correlation_id == "corr-001"
     assert input_event.traceparent == "trace-001"
+
+
+@pytest.mark.asyncio
+async def test_cost_adapter_maps_missing_reference_data_to_retryable_application_error() -> None:
+    transaction = BookedTransaction(
+        transaction_id="TX-MISSING-PORTFOLIO",
+        portfolio_id="PB-MISSING",
+        instrument_id="INST-001",
+        security_id="SEC-001",
+        transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("25.50"),
+        gross_transaction_amount=Decimal("255.00"),
+        trade_currency="SGD",
+        currency="SGD",
+    )
+    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository.get_portfolio.return_value = None
+    adapter = CostProcessingCompatibilityAdapter(
+        workflow=MagicMock(),
+        repository=repository,
+        outbox_repository=AsyncMock(spec=OutboxRepository),
+    )
+
+    with pytest.raises(TransactionProcessingError) as exc_info:
+        await adapter.process(transaction, correlation_id="corr-001", traceparent=None)
+
+    assert exc_info.value.reason_code == "cost_dependency_unavailable"
+    assert exc_info.value.retryable is True

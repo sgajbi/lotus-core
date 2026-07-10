@@ -15,7 +15,7 @@ from src.services.calculators.cashflow_calculator_service.app.repositories impor
     cashflow_repository,
 )
 
-from ..application import TransactionProcessingRejected
+from ..application import TransactionProcessingError, TransactionProcessingRejected
 from ..domain import BookedTransaction
 from ..ports import CashflowProcessingResult
 from .legacy_transaction_event_mapper import to_transaction_event
@@ -64,20 +64,40 @@ class CashflowProcessingCompatibilityAdapter:
         correlation_id: str | None,
         traceparent: str | None,
     ) -> CashflowProcessingResult:
-        stage_result = await self._workflow.stage_valid_event(
-            db=self._db_session,
-            cashflow_repo=self._repository,
-            idempotency_repo=self._idempotency_repository,
-            outbox_repo=self._outbox_repository,
-            event=to_transaction_event(
-                transaction,
-                correlation_id=correlation_id,
-                traceparent=traceparent,
-            ),
-            event_id=event_id,
-            correlation_id=correlation_id or "",
-            topic=self._source_topic,
-        )
+        try:
+            stage_result = await self._workflow.stage_valid_event(
+                db=self._db_session,
+                cashflow_repo=self._repository,
+                idempotency_repo=self._idempotency_repository,
+                outbox_repo=self._outbox_repository,
+                event=to_transaction_event(
+                    transaction,
+                    correlation_id=correlation_id,
+                    traceparent=traceparent,
+                ),
+                event_id=event_id,
+                correlation_id=correlation_id or "",
+                topic=self._source_topic,
+            )
+        except cashflow.NoCashflowRuleError as exc:
+            raise TransactionProcessingError(
+                reason_code="cashflow_rule_missing",
+                detail={
+                    "portfolio_id": transaction.portfolio_id,
+                    "transaction_id": transaction.transaction_id,
+                    "transaction_type": transaction.transaction_type,
+                },
+                retryable=False,
+            ) from exc
+        except cashflow.LinkedCashLegError as exc:
+            raise TransactionProcessingError(
+                reason_code="cashflow_contract_invalid",
+                detail={
+                    "portfolio_id": transaction.portfolio_id,
+                    "transaction_id": transaction.transaction_id,
+                },
+                retryable=False,
+            ) from exc
         if stage_result.outcome is cashflow.CashflowProcessingOutcome.EPOCH_REJECTED:
             raise TransactionProcessingRejected(
                 reason_code="cashflow_epoch_rejected",
