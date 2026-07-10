@@ -412,6 +412,22 @@ class Transaction(BaseModel):
             "NONE or UPSTREAM_PROVIDED."
         ),
     )
+    allocated_cost_basis_local: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        json_schema_extra={"example": "50.00"},
+        description=(
+            "Source-provided cost basis allocated to a cash consideration or cash-in-lieu "
+            "product leg in local currency. This is not cash proceeds."
+        ),
+    )
+    allocated_cost_basis_base: Optional[NonNegativeDecimal] = Field(
+        default=None,
+        json_schema_extra={"example": "50.00"},
+        description=(
+            "Source-provided cost basis allocated to a cash consideration or cash-in-lieu "
+            "product leg in portfolio base currency."
+        ),
+    )
     realized_capital_pnl_local: Optional[Decimal] = Field(
         default=None,
         json_schema_extra={"example": "0.00"},

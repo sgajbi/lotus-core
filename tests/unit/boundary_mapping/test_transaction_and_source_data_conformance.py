@@ -111,6 +111,8 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
         calculation_policy_id="BUY_DEFAULT_POLICY",
         calculation_policy_version="1.0.0",
         source_system="OMS_PRIMARY",
+        allocated_cost_basis_local=Decimal("50.0000000000"),
+        allocated_cost_basis_base=Decimal("55.0000000000"),
     )
 
     try:
@@ -159,6 +161,8 @@ async def test_transaction_mapping_chain_preserves_event_and_record_invariants()
     assert record_values["source_system"] == "OMS_PRIMARY"
     assert record_values["calculation_policy_id"] == "BUY_DEFAULT_POLICY"
     assert record_values["calculation_policy_version"] == "1.0.0"
+    assert record_values["allocated_cost_basis_local"] == Decimal("50.0000000000")
+    assert record_values["allocated_cost_basis_base"] == Decimal("55.0000000000")
     assert "event_type" not in record_values
     assert "schema_version" not in record_values
     assert "correlation_id" not in record_values
@@ -314,6 +318,8 @@ def test_performance_economics_mapping_uses_typed_read_records_for_optional_join
                 trade_currency=" usd ",
                 transaction_date=datetime(2026, 3, 25, 9, 30, tzinfo=UTC),
                 gross_transaction_amount=Decimal("1000.0000000000"),
+                allocated_cost_basis_local=Decimal("50.0000000000"),
+                allocated_cost_basis_base=Decimal("55.0000000000"),
                 trade_fee=Decimal("1.0000000000"),
                 withholding_tax_amount=Decimal("15.0000000000"),
                 other_interest_deductions_amount=Decimal("5.0000000000"),
@@ -350,6 +356,8 @@ def test_performance_economics_mapping_uses_typed_read_records_for_optional_join
     assert rows[0].transaction_type == "DIVIDEND"
     assert rows[0].currency == "EUR"
     assert rows[0].trade_currency == "USD"
+    assert rows[0].allocated_cost_basis_local == Decimal("50.0000000000")
+    assert rows[0].allocated_cost_basis_base == Decimal("55.0000000000")
     assert rows[0].cashflow_amount is None
     assert rows[0].trade_fee_currency == "MIXED"
     assert [(fee.currency, fee.amount) for fee in rows[0].trade_fee_components] == [

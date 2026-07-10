@@ -1428,6 +1428,8 @@ class Transaction(Base):
     far_leg_group_id = Column(String, nullable=True, index=True)
     spot_exposure_model = Column(String, nullable=True)
     fx_realized_pnl_mode = Column(String, nullable=True)
+    allocated_cost_basis_local = Column(Numeric(18, 10), nullable=True)
+    allocated_cost_basis_base = Column(Numeric(18, 10), nullable=True)
     realized_capital_pnl_local = Column(Numeric(18, 10), nullable=True)
     realized_fx_pnl_local = Column(Numeric(18, 10), nullable=True)
     realized_total_pnl_local = Column(Numeric(18, 10), nullable=True)

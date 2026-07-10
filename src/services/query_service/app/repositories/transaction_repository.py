@@ -137,6 +137,8 @@ def _performance_economics_transaction_record(
         trade_currency=transaction.trade_currency,
         transaction_date=transaction.transaction_date,
         gross_transaction_amount=transaction.gross_transaction_amount,
+        allocated_cost_basis_local=transaction.allocated_cost_basis_local,
+        allocated_cost_basis_base=transaction.allocated_cost_basis_base,
         trade_fee=transaction.trade_fee,
         withholding_tax_amount=transaction.withholding_tax_amount,
         other_interest_deductions_amount=transaction.other_interest_deductions_amount,

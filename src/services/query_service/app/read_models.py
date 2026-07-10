@@ -53,6 +53,8 @@ class PerformanceEconomicsTransactionReadRecord:
     trade_currency: str | None
     transaction_date: datetime
     gross_transaction_amount: Decimal
+    allocated_cost_basis_local: Decimal | None
+    allocated_cost_basis_base: Decimal | None
     trade_fee: Decimal | None
     withholding_tax_amount: Decimal | None
     other_interest_deductions_amount: Decimal | None

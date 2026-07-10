@@ -40,6 +40,8 @@ def _transaction(
     trade_currency: str = " usd ",
     transaction_date: datetime | None = None,
     gross_transaction_amount: str = "125.0000",
+    allocated_cost_basis_local: str | None = None,
+    allocated_cost_basis_base: str | None = None,
     trade_fee: str | None = "2.5000",
     costs: list[PerformanceEconomicsCostReadRecord] | None = None,
     cashflow: PerformanceEconomicsCashflowReadRecord | None = None,
@@ -62,6 +64,12 @@ def _transaction(
         trade_currency=trade_currency,
         transaction_date=transaction_date or datetime(2026, 5, 10, 14, tzinfo=UTC),
         gross_transaction_amount=Decimal(gross_transaction_amount),
+        allocated_cost_basis_local=(
+            Decimal(allocated_cost_basis_local) if allocated_cost_basis_local is not None else None
+        ),
+        allocated_cost_basis_base=(
+            Decimal(allocated_cost_basis_base) if allocated_cost_basis_base is not None else None
+        ),
         trade_fee=Decimal(trade_fee) if trade_fee is not None else None,
         costs=tuple(costs or ()),
         cashflow=cashflow,

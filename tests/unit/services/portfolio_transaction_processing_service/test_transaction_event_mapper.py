@@ -30,6 +30,8 @@ def _transaction_event() -> TransactionEvent:
         currency="sgd",
         linked_component_ids=["COMP-1", "COMP-2"],
         dependency_reference_ids=["DEP-1"],
+        allocated_cost_basis_local=Decimal("50"),
+        allocated_cost_basis_base=Decimal("55"),
         epoch=7,
     )
 

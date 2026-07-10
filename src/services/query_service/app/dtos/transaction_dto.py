@@ -379,6 +379,20 @@ class TransactionRecord(BaseModel):
     fx_realized_pnl_mode: Optional[str] = Field(
         None, description="Policy-driven realized FX P&L mode.", examples=["UPSTREAM_PROVIDED"]
     )
+    allocated_cost_basis_local: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Cost basis allocated to a corporate-action cash product leg in local currency."
+        ),
+        examples=[50.0],
+    )
+    allocated_cost_basis_base: Optional[Decimal] = Field(
+        None,
+        description=(
+            "Cost basis allocated to a corporate-action cash product leg in base currency."
+        ),
+        examples=[50.0],
+    )
     realized_capital_pnl_local: Optional[Decimal] = Field(
         None,
         description="Realized capital P&L in local currency. Must be zero for FX.",

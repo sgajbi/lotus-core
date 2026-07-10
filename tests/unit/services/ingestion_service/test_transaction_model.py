@@ -460,3 +460,29 @@ def test_transaction_model_accepts_corporate_action_synthetic_flow_fields() -> N
     assert model.linked_cash_transaction_id == "CA-CIL-CASH-001"
     assert model.has_synthetic_flow is True
     assert model.synthetic_flow_classification == "POSITION_TRANSFER_OUT"
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["allocated_cost_basis_local", "allocated_cost_basis_base"],
+)
+def test_transaction_model_rejects_negative_allocated_cash_basis(field_name: str) -> None:
+    payload = {
+        "transaction_id": "CA_CASH_BASIS_NEGATIVE_001",
+        "portfolio_id": "PORT_META_001",
+        "instrument_id": "OLD_SEC_001",
+        "security_id": "OLD_SEC_001",
+        "transaction_date": "2026-03-15T10:00:00Z",
+        "transaction_type": "CASH_CONSIDERATION",
+        "quantity": "0",
+        "price": "0",
+        "gross_transaction_amount": "250.0",
+        "trade_currency": "USD",
+        "currency": "USD",
+        field_name: "-0.01",
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        Transaction(**payload)
+
+    assert any(field_name in error["loc"] for error in exc_info.value.errors())

@@ -40,6 +40,8 @@ def _performance_component_economics_row(
         currency=str(transaction.currency).strip().upper(),
         trade_currency=_transaction_trade_currency(transaction),
         gross_transaction_amount=decimal_or_zero(transaction.gross_transaction_amount),
+        allocated_cost_basis_local=decimal_or_zero(transaction.allocated_cost_basis_local),
+        allocated_cost_basis_base=decimal_or_zero(transaction.allocated_cost_basis_base),
         trade_fee_amount=(
             trade_fee_components[0].amount if len(trade_fee_components) == 1 else Decimal("0")
         ),

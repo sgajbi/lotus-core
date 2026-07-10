@@ -74,6 +74,8 @@ TRANSACTION_METADATA_FIELDS = (
     "far_leg_group_id",
     "spot_exposure_model",
     "fx_realized_pnl_mode",
+    "allocated_cost_basis_local",
+    "allocated_cost_basis_base",
     "realized_capital_pnl_local",
     "realized_fx_pnl_local",
     "realized_total_pnl_local",

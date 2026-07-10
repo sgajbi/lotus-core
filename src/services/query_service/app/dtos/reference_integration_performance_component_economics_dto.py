@@ -121,6 +121,22 @@ class PerformanceComponentEconomicsRow(BaseModel):
     gross_transaction_amount: Decimal = Field(
         ..., description="Gross transaction amount recorded by core.", examples=["125.0000000000"]
     )
+    allocated_cost_basis_local: Decimal = Field(
+        ...,
+        description=(
+            "Cost basis allocated to non-security consideration in the transaction local "
+            "currency. Zero when no basis allocation was recorded."
+        ),
+        examples=["50.0000000000"],
+    )
+    allocated_cost_basis_base: Decimal = Field(
+        ...,
+        description=(
+            "Cost basis allocated to non-security consideration in the portfolio base "
+            "currency. Zero when no basis allocation was recorded."
+        ),
+        examples=["55.0000000000"],
+    )
     trade_fee_amount: Decimal = Field(
         ...,
         description=(
