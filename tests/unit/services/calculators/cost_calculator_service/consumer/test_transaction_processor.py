@@ -222,7 +222,7 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
     incremental_processed, incremental_errors, incremental_states = build_transaction_processor(
         cost_basis_method
     ).process_increment(
-        initial_open_lots_raw=checkpoint,
+        initial_open_lots_raw=list(reversed(checkpoint)),
         new_transactions_raw=[appended_sell],
     )
     full_processed, full_errors, full_states = build_transaction_processor(
