@@ -189,6 +189,116 @@ async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine
     assert lot.lot_cost_base == Decimal("4000")
 
 
+async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
+    clean_db, async_db_session: AsyncSession
+) -> None:
+    portfolio_id = "PORT_FIFO_BOUNDED_01"
+    security_id = "EQ_FIFO_BOUNDED_01"
+    async_db_session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Medium",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id="CIF_FIFO_BOUNDED_01",
+            status="ACTIVE",
+        )
+    )
+    lot_inputs = (
+        ("BUY_FIFO_01", datetime(2026, 1, 1, 10, 0, 0), Decimal("4")),
+        ("BUY_FIFO_02", datetime(2026, 1, 2, 10, 0, 0), Decimal("5")),
+        ("BUY_FIFO_03", datetime(2026, 1, 3, 10, 0, 0), Decimal("7")),
+    )
+    for transaction_id, transaction_date, quantity in lot_inputs:
+        async_db_session.add(
+            DBTransaction(
+                transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                instrument_id=security_id,
+                security_id=security_id,
+                transaction_type="BUY",
+                quantity=quantity,
+                price=Decimal("100"),
+                gross_transaction_amount=quantity * Decimal("100"),
+                trade_currency="USD",
+                currency="USD",
+                transaction_date=transaction_date,
+            )
+        )
+    await async_db_session.commit()
+
+    for transaction_id, transaction_date, quantity in lot_inputs:
+        async_db_session.add(
+            PositionLotState(
+                lot_id=f"LOT-{transaction_id}",
+                source_transaction_id=transaction_id,
+                portfolio_id=portfolio_id,
+                instrument_id=security_id,
+                security_id=security_id,
+                acquisition_date=transaction_date.date(),
+                original_quantity=quantity,
+                open_quantity=quantity,
+                lot_cost_local=quantity * Decimal("100"),
+                lot_cost_base=quantity * Decimal("100"),
+            )
+        )
+    await async_db_session.commit()
+
+    repo = CostCalculatorRepository(async_db_session)
+    records = await repo.get_fifo_disposal_lot_checkpoint_records(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        required_quantity=Decimal("6"),
+    )
+
+    assert [record.transaction.transaction_id for record in records] == [
+        "BUY_FIFO_01",
+        "BUY_FIFO_02",
+    ]
+    await repo.update_selected_open_lot_states(
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        states_by_source_transaction_id={
+            "BUY_FIFO_01": OpenLotState(
+                quantity=Decimal(0),
+                cost_local=Decimal(0),
+                cost_base=Decimal(0),
+            ),
+            "BUY_FIFO_02": OpenLotState(
+                quantity=Decimal("3"),
+                cost_local=Decimal("300"),
+                cost_base=Decimal("300"),
+            ),
+        },
+    )
+    await async_db_session.commit()
+
+    lot_rows = list(
+        (
+            await async_db_session.execute(
+                select(PositionLotState)
+                .where(PositionLotState.portfolio_id == portfolio_id)
+                .order_by(PositionLotState.source_transaction_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert [lot.open_quantity for lot in lot_rows] == [
+        Decimal(0),
+        Decimal("3"),
+        Decimal("7"),
+    ]
+    assert [lot.lot_cost_base for lot in lot_rows] == [
+        Decimal(0),
+        Decimal("300"),
+        Decimal("700"),
+    ]
+
+
 async def test_cost_repository_upserts_buy_lot_state_idempotently(
     clean_db, async_db_session: AsyncSession
 ) -> None:
