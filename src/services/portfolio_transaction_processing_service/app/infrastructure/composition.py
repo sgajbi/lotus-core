@@ -20,8 +20,9 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
 )
 
 from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
-from ..ports import TransactionProcessingUnitOfWork
+from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
 from .cashflow_processing_adapter import CashflowStagingWorkflow
+from .prometheus_observability import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
 from .transaction_replay_adapter import (
     CanonicalTransactionReplayer,
@@ -60,6 +61,7 @@ class CanonicalBookedTransactionReplayerFactory:
 def build_process_transaction_use_case(
     *,
     session_factory: Callable[[], AsyncSession] | None = None,
+    observer: TransactionProcessingObserver | None = None,
 ) -> ProcessTransactionUseCase:
     resolved_session_factory = session_factory or get_async_session_factory()
     unit_of_work_factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
@@ -67,13 +69,17 @@ def build_process_transaction_use_case(
         cost_workflow=CostCalculationWorkflow(),
         cashflow_workflow=cashflow.CashflowCalculationWorkflow(),
     )
-    return ProcessTransactionUseCase(unit_of_work_factory)
+    return ProcessTransactionUseCase(
+        unit_of_work_factory,
+        observer=(observer if observer is not None else PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER),
+    )
 
 
 def build_replay_booked_transaction_use_case(
     *,
     session_factory: Callable[[], AsyncSession] | None = None,
     kafka_producer: KafkaProducer | None = None,
+    observer: TransactionProcessingObserver | None = None,
 ) -> ReplayBookedTransactionUseCase:
     resolved_session_factory = session_factory or get_async_session_factory()
     resolved_kafka_producer = kafka_producer if kafka_producer is not None else get_kafka_producer()
@@ -83,4 +89,7 @@ def build_replay_booked_transaction_use_case(
             kafka_producer=resolved_kafka_producer
         ),
     )
-    return ReplayBookedTransactionUseCase(replay_adapter)
+    return ReplayBookedTransactionUseCase(
+        replay_adapter,
+        observer=(observer if observer is not None else PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER),
+    )

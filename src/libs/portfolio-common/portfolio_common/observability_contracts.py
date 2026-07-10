@@ -71,6 +71,12 @@ SERVICE_LOCAL_METRIC_OWNERS: dict[str, str] = {
     "event_processing_latency_seconds": "persistence_service",
     "events_dlqd_total": "persistence_service",
     "events_processed_total": "persistence_service",
+    "lotus_core_transaction_processing_operation_duration_seconds": (
+        "portfolio_transaction_processing_service"
+    ),
+    "lotus_core_transaction_processing_operations_total": (
+        "portfolio_transaction_processing_service"
+    ),
     "recalculation_depth": "cost_calculator_service",
     "recalculation_duration_seconds": "cost_calculator_service",
 }

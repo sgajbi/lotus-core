@@ -1668,6 +1668,11 @@ Most relevant current governance:
      one another. Build one target wheel, install `portfolio-common`, and copy only the bounded
      calculator source closure under `src.services.calculators...`; never copy all Core services to
      make imports pass. Keep `test_image_package_contract.py` and image provenance gates blocking.
+     Combined-runtime business metrics must enter through the framework-neutral
+     `TransactionProcessingObserver` port. Keep Prometheus and clocks in infrastructure; use only
+     governed `stage` and `outcome` labels; never label by portfolio, transaction, event,
+     correlation, trace, exception, or error text. Preserve target attribution for live/replay,
+     idempotency, cost, cashflow, each position leg, and commit after service consolidation.
 
 ## Context Maintenance Rule
 

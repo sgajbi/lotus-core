@@ -60,6 +60,12 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     account, client, security, request, correlation, or trace identifiers in free-text log
     messages; use support APIs, audit tables, DLQ evidence, or bounded structured fields for
     drill-through. `make structured-log-guard` is enforced through `make lint`.
+14. The pre-cutover combined transaction-processing target exposes
+    `lotus_core_transaction_processing_operations_total{stage,outcome}` and
+    `lotus_core_transaction_processing_operation_duration_seconds{stage,outcome}` through an
+    application observer port and Prometheus infrastructure adapter. Bounded stages distinguish
+    transaction, replay, idempotency, cost, cashflow, position, and commit work without business
+    identifiers. This is local target evidence until the combined runtime is deployed.
 
 ## Current Gaps
 
@@ -72,4 +78,6 @@ and processing metrics. Structured operational log taxonomy is now enforced for 
 Kafka, outbox, ingestion, query, replay, and scheduler paths. Future slices should expand the guard
 coverage as additional services standardize their logging surfaces, add automated checks for
 correlation ID propagation, health/readiness completeness, and inventory enforcement that prevents
-new runtime web apps from bypassing the shared metrics policy.
+new runtime web apps from bypassing the shared metrics policy. The combined transaction-processing
+target now has bounded stage outcome/latency metrics, but still requires lag, dependency/outbox,
+trace-export, dashboard, alert, and support-runbook closure before cutover.

@@ -9,6 +9,10 @@ from .composition import (
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
+from .prometheus_observability import (
+    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    PrometheusTransactionProcessingObserver,
+)
 from .sqlalchemy_unit_of_work import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
     SqlAlchemyTransactionIdempotencyAdapter,
@@ -25,6 +29,8 @@ __all__ = [
     "CashflowProcessingCompatibilityAdapter",
     "CostProcessingCompatibilityAdapter",
     "PositionProcessingCompatibilityAdapter",
+    "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
+    "PrometheusTransactionProcessingObserver",
     "SqlAlchemyBookedTransactionReplayAdapter",
     "SqlAlchemyTransactionIdempotencyAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWork",

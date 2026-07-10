@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from ..ports import BookedTransactionReplayPort
+from ..ports import (
+    BookedTransactionReplayPort,
+    TransactionProcessingObserver,
+    TransactionProcessingOperation,
+    TransactionProcessingOutcome,
+)
 
 
 class BookedTransactionReplayDependencyUnavailable(RuntimeError):
@@ -38,22 +43,30 @@ class ReplayBookedTransactionResult:
 
 
 class ReplayBookedTransactionUseCase:
-    def __init__(self, replay: BookedTransactionReplayPort) -> None:
+    def __init__(
+        self,
+        replay: BookedTransactionReplayPort,
+        observer: TransactionProcessingObserver,
+    ) -> None:
         self._replay = replay
+        self._observer = observer
 
     async def execute(
         self,
         command: ReplayBookedTransactionCommand,
     ) -> ReplayBookedTransactionResult:
-        replayed = await self._replay.replay_booked_transaction(
-            transaction_id=command.transaction_id,
-            correlation_id=command.correlation_id,
-        )
-        return ReplayBookedTransactionResult(
-            transaction_id=command.transaction_id,
-            status=(
+        with self._observer.observe(TransactionProcessingOperation.REPLAY) as observation:
+            replayed = await self._replay.replay_booked_transaction(
+                transaction_id=command.transaction_id,
+                correlation_id=command.correlation_id,
+            )
+            status = (
                 BookedTransactionReplayStatus.REPLAYED
                 if replayed
                 else BookedTransactionReplayStatus.NOT_FOUND
-            ),
-        )
+            )
+            observation.set_outcome(TransactionProcessingOutcome(status.value))
+            return ReplayBookedTransactionResult(
+                transaction_id=command.transaction_id,
+                status=status,
+            )
