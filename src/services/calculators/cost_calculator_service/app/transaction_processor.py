@@ -103,6 +103,34 @@ class TransactionProcessor:
             duration = time.monotonic() - start_time
             RECALCULATION_DURATION_SECONDS.observe(duration)
 
+    def process_increment(
+        self,
+        *,
+        initial_open_lots_raw: list[dict[str, Any]],
+        new_transactions_raw: list[dict[str, Any]],
+    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, OpenLotState]]:
+        """Calculate an ordered append from a previously validated open-lot checkpoint."""
+        start_time = time.monotonic()
+        try:
+            self._error_reporter.clear()
+            parsed_initial_lots = self._parser.parse_transactions(initial_open_lots_raw)
+            parsed_new = self._parser.parse_transactions(new_transactions_raw)
+            valid_initial_lots = [txn for txn in parsed_initial_lots if not txn.error_reason]
+            valid_new = [txn for txn in parsed_new if not txn.error_reason]
+
+            RECALCULATION_DEPTH.observe(len(valid_new))
+            self._disposition_engine.set_initial_lots(valid_initial_lots)
+            sorted_new = self._sorter.sort_transactions([], valid_new)
+            processed_new = self._process_sorted_timeline(sorted_new)
+            return (
+                processed_new,
+                self._error_reporter.get_errors(),
+                self._disposition_engine.get_open_lot_states(),
+            )
+        finally:
+            duration = time.monotonic() - start_time
+            RECALCULATION_DURATION_SECONDS.observe(duration)
+
     @staticmethod
     def _valid_transaction_ids(transactions: list[Transaction]) -> set[str]:
         return {txn.transaction_id for txn in transactions if not txn.error_reason}
