@@ -166,3 +166,15 @@ def test_set_initial_lots_normalizes_buy_transaction_type(
     disposition_engine.set_initial_lots([sell_transaction, padded_buy])
 
     mock_strategy.set_initial_lots.assert_called_once_with([padded_buy])
+
+
+def test_restore_open_lots_preserves_non_buy_source_semantics(
+    disposition_engine: DispositionEngine,
+    mock_strategy,
+    sample_transaction: Transaction,
+) -> None:
+    transfer_in = sample_transaction.model_copy(update={"transaction_type": "TRANSFER_IN"})
+
+    disposition_engine.restore_open_lots([transfer_in])
+
+    mock_strategy.restore_open_lots.assert_called_once_with([transfer_in])

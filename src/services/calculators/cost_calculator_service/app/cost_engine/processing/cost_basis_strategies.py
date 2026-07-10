@@ -115,6 +115,7 @@ class CostBasisStrategy(Protocol):
         cost_local: Decimal,
     ) -> str | None: ...
     def set_initial_lots(self, transactions: list[Transaction]) -> None: ...
+    def restore_open_lots(self, transactions: list[Transaction]) -> None: ...
     def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
 
 
@@ -208,6 +209,10 @@ class FIFOBasisStrategy:
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
+
+    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+        for transaction in transactions:
+            self.add_buy_lot(transaction)
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
         return {
@@ -321,6 +326,10 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
+
+    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+        for transaction in transactions:
+            self.add_buy_lot(transaction)
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:
         return self._source_allocation.materialize(self._pools)
