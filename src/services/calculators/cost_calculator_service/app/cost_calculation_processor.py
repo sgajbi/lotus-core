@@ -20,7 +20,7 @@ class PortfolioNotFoundError(Exception):
     pass
 
 
-class CostCalculationWorkflow(Protocol):
+class CostCalculationWorkflowPort(Protocol):
     async def _prepare_transaction_event(
         self,
         event: TransactionEvent,
@@ -95,7 +95,7 @@ class CostCalculationProcessorDependencyFactory:
 
 
 class CostCalculationEventProcessor:
-    def __init__(self, workflow: CostCalculationWorkflow) -> None:
+    def __init__(self, workflow: CostCalculationWorkflowPort) -> None:
         self._workflow = workflow
 
     async def process_valid_event(

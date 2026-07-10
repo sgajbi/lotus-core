@@ -162,10 +162,12 @@ class InstrumentReferenceUnavailableError(Exception):
     pass
 
 
-class CostCalculatorConsumer(BaseConsumer):
+class CostCalculationWorkflow:
     """
-    Consumes raw transaction events, calculates costs/realized P&L,
-    persists updates, and emits a full TransactionEvent downstream.
+    Calculates and stages cost, lot, transaction, instrument, and outbox effects.
+
+    Database transaction, idempotency, retry, and delivery lifecycle ownership remain outside this
+    workflow.
     """
 
     def _get_transaction_processor(
@@ -1069,6 +1071,10 @@ class CostCalculatorConsumer(BaseConsumer):
                 payload=instrument_event.model_dump(mode="json"),
                 correlation_id=correlation_id,
             )
+
+
+class CostCalculatorConsumer(CostCalculationWorkflow, BaseConsumer):
+    """Consume booked transactions and run the cost workflow with delivery controls."""
 
     @retry(
         wait=wait_fixed(3),
