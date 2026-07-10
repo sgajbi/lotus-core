@@ -420,6 +420,7 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
+        await repo.acquire_cost_basis_processing_lock(event.portfolio_id, event.security_id)
         calculation = await self._calculate_cost_engine(
             event=event,
             event_transaction_type=event_transaction_type,

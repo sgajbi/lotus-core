@@ -82,6 +82,52 @@ async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None
     assert not hasattr(workflow, "_consumer_config")
 
 
+async def test_cost_engine_acquires_key_lock_before_reading_processing_state() -> None:
+    event = TransactionEvent(
+        transaction_id="BUY-LOCK-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150"),
+        gross_transaction_amount=Decimal("1500"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    workflow = CostCalculationWorkflow()
+    calculation = MagicMock(
+        processed=[],
+        errored=[],
+        open_lot_states={},
+        incremental=True,
+        open_lot_state_update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+        average_cost_pool_transition=None,
+    )
+    workflow._calculate_cost_engine = AsyncMock(return_value=calculation)
+    workflow._persist_affected_processed_transactions = AsyncMock(return_value=[])
+    workflow._update_open_lot_states_if_required = AsyncMock()
+    workflow._persist_cost_basis_processing_checkpoint = AsyncMock()
+
+    await workflow._build_cost_engine_events_to_publish(
+        event=event,
+        event_transaction_type="BUY",
+        portfolio=MagicMock(base_currency="USD"),
+        instrument=MagicMock(),
+        repo=repo,
+        cost_basis_method=CostBasisMethod.FIFO,
+    )
+
+    repo.acquire_cost_basis_processing_lock.assert_awaited_once_with(
+        "PORT_COST_01", "SEC_COST_01"
+    )
+    assert repo.method_calls[0] == call.acquire_cost_basis_processing_lock(
+        "PORT_COST_01", "SEC_COST_01"
+    )
+
+
 def _bundle_a_transaction_event(
     *,
     transaction_id: str,

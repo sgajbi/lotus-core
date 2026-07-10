@@ -107,6 +107,10 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
             async with self._session_factory() as session:
                 async with session.begin():
                     repository = self._repository_factory(session)
+                    await repository.acquire_cost_basis_processing_lock(
+                        key.portfolio_id,
+                        key.security_id,
+                    )
                     plan = await self._workflow.build_average_cost_pool_rebuild_plan(
                         portfolio_id=key.portfolio_id,
                         security_id=key.security_id,

@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import (
@@ -32,9 +32,52 @@ from src.services.calculators.cost_calculator_service.app.cost_processing_checkp
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
+    _cost_basis_processing_lock_key,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_acquire_cost_basis_processing_lock_uses_stable_normalized_key() -> None:
+    db_session = AsyncMock()
+    clock = MagicMock(side_effect=[10.0, 10.125])
+    repository = CostCalculatorRepository(db_session, clock=clock)
+
+    with patch(
+        "src.services.calculators.cost_calculator_service.app.repository."
+        "observe_cost_basis_processing_lock_wait"
+    ) as observe_wait:
+        await repository.acquire_cost_basis_processing_lock(" PORT_COST_01 ", " SEC01 ")
+
+    statement = db_session.execute.call_args.args[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
+    assert statement.compile().params == {
+        "lock_key": _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+    }
+    assert _cost_basis_processing_lock_key(" PORT_COST_01 ", " SEC01 ") == (
+        _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+    )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+
+
+async def test_acquire_cost_basis_processing_lock_records_failure_without_swallowing() -> None:
+    db_session = AsyncMock()
+    db_session.execute.side_effect = RuntimeError("lock unavailable")
+    repository = CostCalculatorRepository(
+        db_session,
+        clock=MagicMock(side_effect=[20.0, 20.25]),
+    )
+
+    with (
+        patch(
+            "src.services.calculators.cost_calculator_service.app.repository."
+            "observe_cost_basis_processing_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="lock unavailable"),
+    ):
+        await repository.acquire_cost_basis_processing_lock("P1", "S1")
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
 
 
 async def test_get_fx_rate_window_fetches_one_seed_plus_bounded_effective_window():

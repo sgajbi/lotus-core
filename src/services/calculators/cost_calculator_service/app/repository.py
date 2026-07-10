@@ -1,7 +1,11 @@
 # services/calculators/cost_calculator_service/app/repository.py
+import hashlib
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from datetime import date
 from decimal import Decimal
+from time import monotonic
 from typing import Any, List, Optional, cast
 
 from portfolio_common.currency_codes import normalize_currency_code
@@ -22,7 +26,9 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import func, or_, select, update
+from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait
+from portfolio_common.utils import async_timed
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -36,6 +42,16 @@ from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+
+logger = logging.getLogger(__name__)
+
+
+def _cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
+    normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+    normalized_security_id = normalize_lookup_identifier(security_id)
+    lock_scope = f"cost-basis-processing:{normalized_portfolio_id}:{normalized_security_id}"
+    digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=True)
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -242,8 +258,52 @@ def _scaled_persisted_value(
 class CostCalculatorRepository:
     AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 500
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
+        self._clock = clock
+
+    @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
+    async def acquire_cost_basis_processing_lock(
+        self,
+        portfolio_id: str,
+        security_id: str,
+    ) -> None:
+        """Serialize cost-basis state transitions for one portfolio/security key."""
+        lock_key = _cost_basis_processing_lock_key(portfolio_id, security_id)
+        started_at = self._clock()
+        try:
+            await self.db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+            )
+        except BaseException:
+            wait_seconds = max(0.0, self._clock() - started_at)
+            observe_cost_basis_processing_lock_wait(
+                outcome="failed",
+                seconds=wait_seconds,
+            )
+            logger.warning(
+                "Cost-basis processing lock acquisition failed.",
+                extra={
+                    "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                    "security_id": normalize_lookup_identifier(security_id),
+                    "lock_wait_seconds": wait_seconds,
+                },
+                exc_info=True,
+            )
+            raise
+        wait_seconds = max(0.0, self._clock() - started_at)
+        observe_cost_basis_processing_lock_wait(
+            outcome="acquired",
+            seconds=wait_seconds,
+        )
+        logger.info(
+            "Cost-basis processing lock acquired.",
+            extra={
+                "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                "security_id": normalize_lookup_identifier(security_id),
+                "lock_wait_seconds": wait_seconds,
+            },
+        )
 
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
         """Fetches a portfolio by its portfolio_id string."""

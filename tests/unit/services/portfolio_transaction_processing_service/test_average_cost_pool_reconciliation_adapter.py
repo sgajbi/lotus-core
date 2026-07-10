@@ -126,6 +126,7 @@ async def test_dry_run_reports_replay_proven_drift_without_writes() -> None:
     assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
     assert assessment.reason_code == "pool_state_missing"
     assert assessment.expected_quantity == Decimal("15")
+    repository.acquire_cost_basis_processing_lock.assert_awaited_once_with("P1", "S1")
     repository.apply_average_cost_pool_rebuild.assert_not_awaited()
 
 
