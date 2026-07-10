@@ -11,9 +11,11 @@ from .transaction_processing import (
     TransactionProcessingUnitOfWork,
     TransactionProcessingUnitOfWorkFactory,
 )
+from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
     "CashflowProcessingPort",
+    "BookedTransactionReplayPort",
     "CashflowProcessingResult",
     "CostProcessingPort",
     "CostProcessingResult",
