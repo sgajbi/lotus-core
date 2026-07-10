@@ -2,7 +2,7 @@
 
 Date: 2026-07-10
 Issue: #468
-Status: Hardened locally; remaining backdated combinations tracked
+Status: Hardened locally
 
 ## Objective
 
@@ -49,6 +49,5 @@ topic/group/payload shape, database schema, idempotency identity, and normal eve
 unchanged. Recalculation now fails closed when any historical or later row cannot be recalculated,
 instead of committing around an ignored timeline error.
 
-Backdated multi-lot fee and cross-currency combinations remain explicit cutover evidence. The
-generic suffix algorithm applies to them, and existing in-order fee, FX, and multi-lot combined
-paths remain green, but this CR does not claim those backdated combinations without direct proof.
+CR-1464 adds direct backdated multi-lot fee and cross-currency local/base proof for the generic
+suffix algorithm. Runtime capacity and deployment cutover evidence remain separate requirements.
