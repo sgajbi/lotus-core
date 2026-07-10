@@ -117,10 +117,10 @@ def _build_transaction_batch(
     portfolio_id: str,
     batch_size: int,
     seed: str,
+    transaction_date: str,
     security_prefix: str = "SEC",
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    base_ts = "2026-03-01T09:00:00Z"
     for index in range(batch_size):
         txn_suffix = f"{seed}-{index:04d}"
         rows.append(
@@ -129,7 +129,7 @@ def _build_transaction_batch(
                 "portfolio_id": portfolio_id,
                 "instrument_id": f"{security_prefix}_{index % 20:03d}",
                 "security_id": f"{security_prefix}_{index % 20:03d}",
-                "transaction_date": base_ts,
+                "transaction_date": transaction_date,
                 "transaction_type": "BUY",
                 "quantity": "10",
                 "price": "100.00",
@@ -150,6 +150,7 @@ def _ingest_transactions(
     sleep_seconds_between_batches: float,
     seed_prefix: str,
     security_prefix: str,
+    transaction_date: str,
 ) -> tuple[list[str], int]:
     transaction_ids: list[str] = []
     total_batches = 0
@@ -159,6 +160,7 @@ def _ingest_transactions(
             portfolio_id=portfolio_id,
             batch_size=batch_size,
             seed=seed,
+            transaction_date=transaction_date,
             security_prefix=security_prefix,
         )
         payload = {"transactions": transactions}
@@ -233,8 +235,23 @@ def _seed_load_context(
     run_id: str,
     portfolio_id: str,
     security_prefix: str,
+    business_date: str,
     timeout_seconds: int,
 ) -> None:
+    _post_ingestion_records(
+        ingestion_base_url=ingestion_base_url,
+        endpoint="/ingest/business-dates",
+        root_key="business_dates",
+        rows=[{"business_date": business_date}],
+    )
+    _wait_for_database_count(
+        engine=engine,
+        sql="SELECT count(*) FROM business_dates WHERE date = :value",
+        params={"value": business_date},
+        expected=1,
+        label="performance business-date seed",
+        timeout_seconds=timeout_seconds,
+    )
     _post_ingestion_records(
         ingestion_base_url=ingestion_base_url,
         endpoint="/ingest/portfolios",
@@ -244,7 +261,7 @@ def _seed_load_context(
                 "portfolio_id": portfolio_id,
                 "portfolio_name": f"Performance Load {run_id}",
                 "base_currency": "USD",
-                "open_date": "2026-03-01",
+                "open_date": business_date,
                 "risk_exposure": "BALANCED",
                 "investment_time_horizon": "MEDIUM_TERM",
                 "portfolio_type": "DISCRETIONARY",
@@ -638,6 +655,8 @@ def main() -> int:
     )
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    business_date = datetime.now(UTC).date().isoformat()
+    transaction_timestamp = f"{business_date}T09:00:00Z"
     portfolio_id = f"PERF_LOAD_{run_id}"
     security_prefix = f"PERF_{run_id}_SEC"
     engine = create_engine(args.host_database_url, pool_pre_ping=True)
@@ -647,6 +666,7 @@ def main() -> int:
         run_id=run_id,
         portfolio_id=portfolio_id,
         security_prefix=security_prefix,
+        business_date=business_date,
         timeout_seconds=args.ready_timeout_seconds,
     )
     all_results: list[ProfileResult] = []
@@ -732,6 +752,7 @@ def main() -> int:
             sleep_seconds_between_batches=profile["sleep_seconds"],
             seed_prefix=transaction_seed,
             security_prefix=security_prefix,
+            transaction_date=transaction_timestamp,
         )
         drain_seconds = _wait_for_transaction_processing(
             engine=engine,
@@ -774,6 +795,7 @@ def main() -> int:
         portfolio_id=portfolio_id,
         batch_size=120,
         seed=replay_source_seed,
+        transaction_date=transaction_timestamp,
         security_prefix=security_prefix,
     )
     replay_ids = [row["transaction_id"] for row in replay_source_transactions]

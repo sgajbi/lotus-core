@@ -12,6 +12,7 @@ def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() 
         portfolio_id="PERF_LOAD_RUN1",
         batch_size=2,
         seed="PERF-RUN1-steady",
+        transaction_date="2026-07-10T09:00:00Z",
         security_prefix="PERF_RUN1_SEC",
     )
 
@@ -24,6 +25,7 @@ def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() 
         "PERF_RUN1_SEC_000",
         "PERF_RUN1_SEC_001",
     ]
+    assert {row["transaction_date"] for row in rows} == {"2026-07-10T09:00:00Z"}
 
 
 def test_evaluate_profile_requires_transaction_processing_drain_when_governed() -> None:
