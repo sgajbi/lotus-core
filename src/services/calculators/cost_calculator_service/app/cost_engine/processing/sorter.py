@@ -1,3 +1,6 @@
+from datetime import datetime
+from decimal import Decimal
+
 from portfolio_common.ca_bundle_a_ordering import (
     ca_bundle_a_dependency_rank,
     ca_bundle_a_target_order_key,
@@ -13,6 +16,21 @@ _CASH_INFLOW_TRANSACTION_TYPES = frozenset(
 )
 _CASH_OUTFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_SELL"})
 _CASH_OUTFLOW_TRANSACTION_TYPES = frozenset({"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"})
+TransactionOrderKey = tuple[datetime, int, int, int, str, Decimal, str]
+
+
+def transaction_order_key(transaction: Transaction) -> TransactionOrderKey:
+    """Return the canonical total ordering used by cost calculation and replay."""
+    target_sequence, target_instrument_id = ca_bundle_a_target_order_key(transaction)
+    return (
+        transaction.transaction_date,
+        ca_bundle_a_dependency_rank(transaction),
+        _cash_dependency_rank(transaction),
+        target_sequence,
+        target_instrument_id,
+        -transaction.quantity,
+        transaction.transaction_id,
+    )
 
 
 class TransactionSorter:
@@ -33,16 +51,7 @@ class TransactionSorter:
         5. Stable transaction_id tiebreak.
         """
         all_transactions = existing_transactions + new_transactions
-        all_transactions.sort(
-            key=lambda txn: (
-                txn.transaction_date,
-                ca_bundle_a_dependency_rank(txn),
-                _cash_dependency_rank(txn),
-                *ca_bundle_a_target_order_key(txn),
-                -txn.quantity,
-                txn.transaction_id,
-            )
-        )
+        all_transactions.sort(key=transaction_order_key)
         return all_transactions
 
 
