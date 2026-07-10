@@ -1656,6 +1656,10 @@ Most relevant current governance:
      advance the compare-and-set epoch and rebuild ordered current-epoch history in the combined
      unit of work. Do not emit `ReprocessTransactionReplay` from the final two-consumer path because
      it intentionally has no `transactions.cost.processed` replay consumer.
+     The target health contract is locked by
+     `test_web_health_contract.py`: readiness requires database, Kafka, and worker runtime; a failed
+     runtime task returns 503; and `/version` must equal readiness build metadata for commit, branch,
+     timestamp, repo, image version/digest, CI run ID, and OCI labels.
 
 ## Context Maintenance Rule
 
