@@ -213,6 +213,7 @@ class BaseConsumer(ABC):
         execution_profile: KafkaConsumerExecutionProfile | None = None,
     ):
         self.topic = topic
+        self._group_id = group_id
         self.dlq_topic = dlq_topic
         self.service_prefix = service_prefix
         self._metrics = metrics
@@ -273,6 +274,10 @@ class BaseConsumer(ABC):
                 reason_code="dlq_configured",
                 dlq_topic=self.dlq_topic,
             )
+
+    @property
+    def group_id(self) -> str:
+        return self._group_id
 
     def _initialize_consumer(self):
         """Initializes and subscribes the Kafka consumer."""

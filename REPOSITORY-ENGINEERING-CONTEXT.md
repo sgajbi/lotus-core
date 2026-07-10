@@ -1454,7 +1454,10 @@ Most relevant current governance:
      `wait_for_shutdown_or_task_failure(...)` so critical consumer, dispatcher, scheduler, and
      embedded runtime task exits surface as bounded readiness dependency states instead of leaving
      `/health/ready` green from database reachability alone. Keep liveness lightweight and do not
-     expose raw exception strings or unbounded task details in readiness responses.
+     expose raw exception strings or unbounded task details in readiness responses. Shared worker
+     tasks use bounded source-safe identities: Kafka loops include consumer group and topic, while
+     the dispatcher and health server use stable component names. Do not revert to generic
+     `Task-N` identities that hide the failed runtime component during support triage.
 117. Ingestion DTO domain validation must use
      `ingestion_service.app.DTOs.ingestion_validation_errors` for stable machine-readable codes,
      field paths, remediation hints, duplicate-source-key detection, effective-window checks,

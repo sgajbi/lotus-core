@@ -150,6 +150,12 @@ Readiness dependency checks emit bounded Prometheus telemetry:
 Use these for dependency flapping and latency trends. Keep portfolio, security, request,
 correlation, trace, and raw exception details in logs or support APIs, not metric labels.
 
+Web-backed worker supervision uses bounded task names: Kafka loops include consumer group and topic,
+and the shared outbox dispatcher and health server use stable component names. If `worker_runtime`
+is failed, use that component identity in supervision logs to distinguish a live-consumer,
+replay-consumer, dispatcher, or health-server exit; readiness payloads intentionally remain bounded
+and do not expose raw exceptions.
+
 Metric vocabulary is guarded by `make metric-vocabulary-guard`. HTTP request metrics use
 `endpoint_template` for route templates; raw `path`, portfolio/account/client/security IDs,
 request/correlation/trace IDs, payload fields, stack traces, and raw exception text are forbidden

@@ -12,7 +12,10 @@ from portfolio_common import worker_runtime
 async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health(
     monkeypatch,
 ) -> None:
-    consumer = MagicMock(topic="transactions.persisted")
+    consumer = MagicMock(
+        topic="transactions.persisted",
+        group_id="portfolio_transaction_processing_group",
+    )
     consumer.run = AsyncMock()
     dispatcher = MagicMock()
     dispatcher.run = AsyncMock()
@@ -60,10 +63,31 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
     )
     server_factory.assert_called_once_with("server-config")
     assert len(tasks) == 3
+    assert [task.get_name() for task in tasks] == [
+        "kafka-consumer:portfolio_transaction_processing_group:transactions.persisted",
+        "outbox-dispatcher",
+        "health-server",
+    ]
     consumer.run.assert_awaited_once()
     dispatcher.run.assert_awaited_once()
     server.serve.assert_awaited_once()
     shutdown.assert_awaited_once()
+
+
+def test_consumer_task_name_is_bounded_and_source_safe() -> None:
+    consumer = MagicMock(
+        group_id=" replay group\nunsafe ",
+        topic=" transactions/reprocessing.requested ",
+    )
+
+    task_name = worker_runtime._consumer_task_name(consumer, index=3)
+
+    assert task_name == "kafka-consumer:replay_group_unsafe:transactions_reprocessing.requested"
+    assert len(task_name) <= 128
+
+
+def test_consumer_task_name_falls_back_when_identity_is_unavailable() -> None:
+    assert worker_runtime._consumer_task_name(object(), index=3) == "kafka-consumer:3"
 
 
 @pytest.mark.asyncio

@@ -50,6 +50,9 @@ workers, ingestion, reconciliation, supportability, and source-data product fres
     `kafka_consumer_processing_duration_seconds{service,topic,group_id}`. The shared class owns
     processing attempts, success, retryable failure, terminal failure, DLQ success/failure, commit
     failure, poll error, critical loop exit, and shutdown-failure outcomes.
+    Shared worker supervision names Kafka tasks with bounded consumer-group/topic identity and uses
+    stable `outbox-dispatcher` and `health-server` task names, so critical task exits are attributable
+    without putting exception text or business identifiers into readiness payloads or metrics.
 13. Operational logs in shared health, Kafka, outbox, ingestion, query, replay, and scheduler
     paths use constant message text plus structured taxonomy fields: `event_name`, `operation`,
     `status`, and `reason_code`. Use `portfolio_common.logging_utils.operation_log_extra(...)` or
