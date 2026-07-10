@@ -1640,6 +1640,10 @@ Most relevant current governance:
      header-first correlation, payload fallback, and acknowledged missing/not-found requests unless
      a future contract change is intentional and versioned. Keep replay as the second consumer in
      the combined deployable because its backlog and operator controls differ from normal booking.
+     Compose the final pair only through
+     `app.runtime.consumer_composition.build_transaction_processing_consumers`; construct each
+     application use case once per process. Until cutover gates pass, the manager must select either
+     the six-consumer legacy registry or this two-consumer composition, never both.
 
 ## Context Maintenance Rule
 
