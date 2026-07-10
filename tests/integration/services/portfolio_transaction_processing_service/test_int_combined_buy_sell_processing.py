@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import (
     Cashflow,
+    CostBasisProcessingState,
     OutboxEvent,
     PositionHistory,
     PositionLotState,
@@ -139,6 +140,14 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
             .scalars()
             .all()
         )
+        cost_checkpoint = (
+            await verification_session.execute(
+                select(CostBasisProcessingState).where(
+                    CostBasisProcessingState.portfolio_id == portfolio_id,
+                    CostBasisProcessingState.security_id == security_id,
+                )
+            )
+        ).scalar_one()
 
     assert lot.original_quantity == Decimal("420")
     assert lot.open_quantity == Decimal("310")
@@ -160,3 +169,7 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
         "ProcessedTransactionPersisted",
         "ProcessedTransactionPersisted",
     ]
+    assert cost_checkpoint.latest_transaction_id == sell_event.transaction_id
+    assert cost_checkpoint.latest_transaction_date == sell_event.transaction_date
+    assert cost_checkpoint.cost_basis_method == "FIFO"
+    assert cost_checkpoint.engine_state_version == "open-lot-v1"

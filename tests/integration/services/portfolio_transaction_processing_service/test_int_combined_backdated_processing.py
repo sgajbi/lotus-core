@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    CostBasisProcessingState,
     OutboxEvent,
     PositionHistory,
     PositionLotState,
@@ -265,6 +266,14 @@ async def test_backdated_buy_corrects_later_disposal_without_duplicate_delivery(
             )
             or 0
         )
+        cost_checkpoint = (
+            await verification_session.execute(
+                select(CostBasisProcessingState).where(
+                    CostBasisProcessingState.portfolio_id == portfolio_id,
+                    CostBasisProcessingState.security_id == security_id,
+                )
+            )
+        ).scalar_one()
 
     assert initial_sell_gain == Decimal("200")
     assert corrected_sell_gain == expected_corrected_gain
@@ -280,6 +289,8 @@ async def test_backdated_buy_corrects_later_disposal_without_duplicate_delivery(
         Decimal("100"),
     ]
     assert processed_event_count == 3
+    assert cost_checkpoint.latest_transaction_id == later_sell.transaction_id
+    assert cost_checkpoint.latest_transaction_date == later_sell.transaction_date
 
 
 async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(
