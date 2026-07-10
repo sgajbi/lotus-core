@@ -1619,6 +1619,9 @@ Most relevant current governance:
      transactions using plain `CostCalculationWorkflow` and `CashflowCalculationWorkflow`
      collaborators; separate calculator consumers are migration-only. Replay remains a separate
      use case/consumer in the same deployable because it has distinct epoch and backlog controls.
+     `transactions.persisted` requires the canonical transaction row to exist first; ingestion owns
+     that persistence, while combined processing atomically owns derived cost/lot, cashflow,
+     position, idempotency, and compatibility outbox effects.
 
 ## Context Maintenance Rule
 
