@@ -1517,6 +1517,9 @@ Most relevant current governance:
      environment-backed policy
      source, tenant override parsing, policy resolver, and response assembler; keep env/settings
      reads in the policy source adapter, exercise policy logic with explicit in-memory inputs, and
+     resolve persisted business dates through `BusinessDateProvider` with SQLAlchemy construction
+     in QCP infrastructure and injection at delivery composition; application modules must not
+     import `SessionLocal`, SQLAlchemy, or ORM models,
      preserve public capability DTO compatibility unless a contract change is intentional,
      documented, and tested.
 119. Broad query/control-plane services should expose repository and port dependencies through

@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, date, datetime
-
-from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.database_models import BusinessDate
-from portfolio_common.db import SessionLocal
-from sqlalchemy import func, select
 
 from ..contracts.capabilities import (
     ConsumerSystem,
     IntegrationCapabilitiesResponse,
 )
-from ..settings import load_query_control_plane_settings
+from ..ports import BusinessDateProvider
 from .capability_policy import (
     CapabilitiesResponseAssembler,
     CapabilityCatalog,
@@ -22,8 +16,6 @@ from .capability_policy import (
     CapabilityPolicySource,
     EnvironmentCapabilityPolicySource,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class CapabilitiesService:
@@ -34,30 +26,19 @@ class CapabilitiesService:
         catalog: CapabilityCatalog | None = None,
         resolver: CapabilityPolicyResolver | None = None,
         assembler: CapabilitiesResponseAssembler | None = None,
+        business_dates: BusinessDateProvider | None = None,
     ) -> None:
         self._catalog = catalog or CapabilityCatalog()
         self._policy_source = policy_source or EnvironmentCapabilityPolicySource(self._catalog)
         self._resolver = resolver or CapabilityPolicyResolver(self._catalog)
         self._assembler = assembler or CapabilitiesResponseAssembler(self._catalog)
+        self._business_dates = business_dates
 
-    @staticmethod
-    def _resolve_as_of_date() -> date:
-        if not load_query_control_plane_settings().has_database_url:
-            return datetime.now(UTC).date()
-        try:
-            with SessionLocal() as db:
-                stmt = select(func.max(BusinessDate.date)).where(
-                    BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
-                )
-                latest = db.execute(stmt).scalar_one_or_none()
-                if isinstance(latest, date):
-                    return latest
-        except Exception:
-            logger.warning(
-                "Failed to resolve as_of_date from business_dates; "
-                "falling back to current UTC date.",
-                exc_info=True,
-            )
+    def _resolve_as_of_date(self) -> date:
+        if self._business_dates is not None:
+            latest = self._business_dates.latest_business_date()
+            if latest is not None:
+                return latest
         return datetime.now(UTC).date()
 
     def get_integration_capabilities(
