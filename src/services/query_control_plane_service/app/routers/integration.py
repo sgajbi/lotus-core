@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkMarketSeriesRequest,
-    BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
     CoverageRequest,
@@ -56,6 +54,10 @@ from ..contracts.benchmark_composition import (
 from ..contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
     BenchmarkDefinitionResponse,
+)
+from ..contracts.benchmark_market_series import (
+    BenchmarkMarketSeriesRequest,
+    BenchmarkMarketSeriesResponse,
 )
 from ..contracts.benchmark_return_series import (
     BenchmarkReturnSeriesRequest,
