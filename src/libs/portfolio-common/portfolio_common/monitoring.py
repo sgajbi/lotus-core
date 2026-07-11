@@ -481,7 +481,7 @@ POSITION_RECALCULATION_COORDINATION_TOTAL = Counter(
 
 POSITION_RECALCULATION_WORK_ITEMS = Histogram(
     "position_recalculation_work_items",
-    "Transactions rebuilt or published by one position recalculation decision.",
+    "Transactions rebuilt by one position recalculation decision, including coalesced zero work.",
     labelnames=("mode",),
     buckets=(0, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 5000),
 )

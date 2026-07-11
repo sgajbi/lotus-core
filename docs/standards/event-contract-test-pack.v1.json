@@ -76,8 +76,7 @@
     {"event_type": "PortfolioAggregationDayCompleted", "topic": "portfolio_day.aggregation.completed", "schema_model": "PortfolioAggregationDayCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
     {"event_type": "FinancialReconciliationRequested", "topic": "portfolio_day.reconciliation.requested", "schema_model": "FinancialReconciliationRequestedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
     {"event_type": "FinancialReconciliationCompleted", "topic": "portfolio_day.reconciliation.completed", "schema_model": "FinancialReconciliationCompletedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
-    {"event_type": "PortfolioDayControlsEvaluated", "topic": "portfolio_day.controls.evaluated", "schema_model": "PortfolioDayControlsEvaluatedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"},
-    {"event_type": "ReprocessTransactionReplay", "topic": "transactions.cost.processed", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"}
+    {"event_type": "PortfolioDayControlsEvaluated", "topic": "portfolio_day.controls.evaluated", "schema_model": "PortfolioDayControlsEvaluatedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio/date"}
   ],
   "direct_kafka_topics": [
     {"name": "RawPortfolioReceived", "topic": "portfolios.raw.received", "payload_contract": "PortfolioEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source portfolio id"},

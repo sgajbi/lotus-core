@@ -6,13 +6,11 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import PositionHistory, PositionState
-from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.calculators.position_calculator.app.core.position_logic import (
-    BackdatedPositionHandling,
     PositionCalculationResult,
     PositionCalculator,
 )
@@ -90,8 +88,6 @@ async def _calculate_position(
             session,
             repository_factory(session),
             PositionStateRepository(session),
-            OutboxRepository(session),
-            backdated_handling=BackdatedPositionHandling.REBUILD_INLINE,
         )
 
 

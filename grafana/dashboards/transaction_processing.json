@@ -432,7 +432,7 @@
         "type": "prometheus",
         "uid": "Prometheus"
       },
-      "description": "Five-minute p95 transaction count rebuilt, republished, or coalesced by each position recalculation decision.",
+      "description": "Five-minute p95 transaction count rebuilt or coalesced by each position recalculation decision.",
       "fieldConfig": {
         "defaults": {
           "color": {

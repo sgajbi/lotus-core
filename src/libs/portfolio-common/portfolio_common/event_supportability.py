@@ -336,22 +336,6 @@ EVENT_FAMILY_DEFINITIONS: tuple[EventFamilyDefinition, ...] = (
         ),
         source_data_products=("DataQualityCoverageReport",),
     ),
-    EventFamilyDefinition(
-        event_type="ReprocessTransactionReplay",
-        schema_model="TransactionEvent",
-        family=SUPPORTABILITY_RECOVERY_EVENT,
-        direction=INTERNAL_EVENT,
-        aggregate_type="transaction",
-        topic="transactions.cost.processed",
-        producer_service="portfolio_transaction_processing_service",
-        consumer_services=(),
-        runtime_active=False,
-        idempotency_required=True,
-        correlation_required=True,
-        schema_version_required=True,
-        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
-        source_data_products=("TransactionLedgerWindow", "HoldingsAsOf"),
-    ),
 )
 
 

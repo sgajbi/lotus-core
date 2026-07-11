@@ -13,7 +13,6 @@ from portfolio_common.event_supportability import (
     RECONCILIATION_CONTROL_EVENT,
     RECONCILIATION_EVIDENCE_BUNDLE,
     SOURCE_INGESTION_EVENT,
-    SUPPORTABILITY_RECOVERY_EVENT,
     SUPPORTABILITY_SURFACE_DEFINITIONS,
     DirectKafkaTopicDefinition,
     EventFamilyDefinition,
@@ -289,15 +288,9 @@ def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
         assert definition.correlation_header_supported is True
 
 
-def test_replay_event_is_cataloged_as_supportability_recovery() -> None:
-    definition = get_event_family_definition("ReprocessTransactionReplay")
-
-    assert definition.family == SUPPORTABILITY_RECOVERY_EVENT
-    assert definition.topic == "transactions.cost.processed"
-    assert definition.producer_service == "portfolio_transaction_processing_service"
-    assert definition.consumer_services == ()
-    assert definition.runtime_active is False
-    assert INGESTION_EVIDENCE_BUNDLE in definition.supportability_evidence
+def test_retired_internal_position_replay_event_is_not_an_active_contract() -> None:
+    with pytest.raises(KeyError, match="Unknown event family definition"):
+        get_event_family_definition("ReprocessTransactionReplay")
 
 
 def test_transaction_reprocessing_commands_target_unified_runtime() -> None:

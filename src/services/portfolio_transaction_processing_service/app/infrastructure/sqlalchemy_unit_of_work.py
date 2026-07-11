@@ -150,7 +150,6 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             db_session=session,
             repository=position_repository.PositionRepository(session),
             position_state_repository=PositionStateRepository(session),
-            outbox_repository=outbox_repository,
         )
         self._pipeline = PipelineStageProcessingCompatibilityAdapter(
             PipelineOrchestratorService(
