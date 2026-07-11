@@ -1,16 +1,23 @@
 """SQLAlchemy persistence for portfolio aggregation data and job queues."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, cast
 
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
+    Portfolio,
     PortfolioAggregationJob,
+    PortfolioTimeseries,
+    PositionState,
     PositionTimeseries,
 )
-from portfolio_common.infrastructure.persistence.timeseries_repository import (
-    SharedTimeseriesRepository,
+from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.infrastructure.persistence.timeseries_market_data_reader import (
+    TimeseriesMarketDataReader,
+)
+from portfolio_common.infrastructure.persistence.timeseries_upsert_statements import (
+    build_portfolio_timeseries_upsert_statement,
 )
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, func, or_, select, update
@@ -19,8 +26,101 @@ from sqlalchemy.orm import aliased
 logger = logging.getLogger(__name__)
 
 
-class PortfolioAggregationRepository(SharedTimeseriesRepository):
+class PortfolioAggregationRepository(TimeseriesMarketDataReader):
     """Persist portfolio aggregation outputs and coordinate aggregation jobs."""
+
+    @async_timed(repository="TimeseriesRepository", method="get_current_epoch_for_portfolio")
+    async def get_current_epoch_for_portfolio(self, portfolio_id: str) -> int:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        result = await self.db.execute(
+            select(func.max(PositionState.epoch)).where(
+                func.trim(PositionState.portfolio_id) == normalized_portfolio_id
+            )
+        )
+        return result.scalar_one_or_none() or 0
+
+    @async_timed(repository="TimeseriesRepository", method="upsert_portfolio_timeseries")
+    async def upsert_portfolio_timeseries(self, record: PortfolioTimeseries) -> None:
+        try:
+            await self.db.execute(build_portfolio_timeseries_upsert_statement(record))
+            logger.info(
+                "Staged upsert for portfolio time series for %s on %s",
+                record.portfolio_id,
+                record.date,
+            )
+        except Exception as exc:
+            logger.error("Failed to stage portfolio time series upsert: %s", exc, exc_info=True)
+            raise
+
+    @async_timed(repository="TimeseriesRepository", method="get_portfolio")
+    async def get_portfolio(self, portfolio_id: str) -> Portfolio | None:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        result = await self.db.execute(
+            select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
+        )
+        return result.scalars().first()
+
+    @async_timed(repository="TimeseriesRepository", method="get_all_position_timeseries_for_date")
+    async def get_all_position_timeseries_for_date(
+        self,
+        portfolio_id: str,
+        a_date: date,
+        epoch: int,
+    ) -> list[PositionTimeseries]:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        security_id = func.trim(PositionTimeseries.security_id)
+        ranked_rows = (
+            select(
+                func.trim(PositionTimeseries.portfolio_id).label("portfolio_id"),
+                security_id.label("security_id"),
+                PositionTimeseries.date.label("date"),
+                PositionTimeseries.epoch.label("epoch"),
+                func.row_number()
+                .over(
+                    partition_by=(security_id,),
+                    order_by=(PositionTimeseries.date.desc(), PositionTimeseries.epoch.desc()),
+                )
+                .label("rn"),
+            )
+            .where(
+                func.trim(PositionTimeseries.portfolio_id) == normalized_portfolio_id,
+                PositionTimeseries.date <= a_date,
+                PositionTimeseries.epoch <= epoch,
+            )
+            .subquery()
+        )
+        result = await self.db.execute(
+            select(PositionTimeseries)
+            .join(
+                ranked_rows,
+                and_(
+                    func.trim(PositionTimeseries.portfolio_id) == ranked_rows.c.portfolio_id,
+                    func.trim(PositionTimeseries.security_id) == ranked_rows.c.security_id,
+                    PositionTimeseries.date == ranked_rows.c.date,
+                    PositionTimeseries.epoch == ranked_rows.c.epoch,
+                ),
+            )
+            .where(ranked_rows.c.rn == 1)
+            .order_by(PositionTimeseries.security_id)
+        )
+        return cast(list[PositionTimeseries], result.scalars().all())
+
+    @async_timed(repository="TimeseriesRepository", method="get_last_portfolio_timeseries_before")
+    async def get_last_portfolio_timeseries_before(
+        self,
+        portfolio_id: str,
+        a_date: date,
+    ) -> PortfolioTimeseries | None:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        result = await self.db.execute(
+            select(PortfolioTimeseries)
+            .where(
+                func.trim(PortfolioTimeseries.portfolio_id) == normalized_portfolio_id,
+                PortfolioTimeseries.date < a_date,
+            )
+            .order_by(PortfolioTimeseries.date.desc(), PortfolioTimeseries.epoch.desc())
+        )
+        return result.scalars().first()
 
     @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[PortfolioAggregationJob]:

@@ -1,4 +1,5 @@
-# src/services/timeseries_generator_service/app/core/portfolio_timeseries_logic.py
+"""Calculate portfolio timeseries from position-level derived state."""
+
 import logging
 from datetime import date
 from decimal import Decimal
@@ -11,8 +12,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
-
-from ..infrastructure.portfolio_aggregation_repository import PortfolioAggregationRepository
+from portfolio_common.ports.timeseries_market_data import TimeseriesMarketDataPort
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class PortfolioTimeseriesLogic:
         a_date: date,
         epoch: int,
         position_timeseries_list: List[PositionTimeseries],
-        repo: PortfolioAggregationRepository,
+        repo: TimeseriesMarketDataPort,
     ) -> PortfolioTimeseries:
         """
         Calculates a single, complete portfolio time series record for a given day and epoch.
@@ -97,7 +97,7 @@ class PortfolioTimeseriesLogic:
 
     @staticmethod
     async def _resolve_fx_rate(
-        repo: PortfolioAggregationRepository,
+        repo: TimeseriesMarketDataPort,
         instrument_currency: str,
         portfolio_currency: str,
         valuation_date: date,
@@ -120,7 +120,7 @@ class PortfolioTimeseriesLogic:
             logger.error(error_msg)
             raise FxRateNotFoundError(error_msg)
 
-        normalized_rate = coerce_positive_fx_rate_or_none(fx_rate.rate)
+        normalized_rate: Decimal | None = coerce_positive_fx_rate_or_none(fx_rate.rate)
         if normalized_rate is None:
             error_msg = (
                 f"Non-positive FX rate from {instrument_currency} "
