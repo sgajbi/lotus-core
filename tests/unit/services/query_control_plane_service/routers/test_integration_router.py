@@ -58,6 +58,9 @@ from src.services.query_control_plane_service.app.application.integration_policy
 from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
     PortfolioManagerBookService,
 )
+from src.services.query_control_plane_service.app.application.risk_free_series import (
+    RiskFreeSeriesService,
+)
 from src.services.query_control_plane_service.app.application.transaction_economics.service import (
     TransactionEconomicsService,
 )
@@ -151,6 +154,12 @@ from src.services.query_control_plane_service.app.contracts.portfolio_manager_bo
 from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
 )
+from src.services.query_control_plane_service.app.contracts.risk_free_series import (
+    IntegrationWindow as RiskFreeIntegrationWindow,
+)
+from src.services.query_control_plane_service.app.contracts.risk_free_series import (
+    RiskFreeSeriesRequest,
+)
 from src.services.query_control_plane_service.app.contracts.transaction_cost_curve import (
     TransactionCostCurveRequest,
 )
@@ -216,7 +225,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyRequest,
     CoverageRequest,
     IntegrationWindow,
-    RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -2763,6 +2771,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
     benchmark_return_series_service = MagicMock(spec=BenchmarkReturnSeriesService)
     index_series_service = MagicMock(spec=IndexSeriesService)
+    risk_free_series_service = MagicMock(spec=RiskFreeSeriesService)
     composition_service = MagicMock(spec=BenchmarkCompositionService)
     composition_service.resolve = AsyncMock(
         return_value={
@@ -2838,7 +2847,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_risk_free_series = AsyncMock(
+    risk_free_series_service.get = AsyncMock(
         return_value={
             "currency": "USD",
             "as_of_date": "2026-01-31",
@@ -2846,6 +2855,8 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-risk-free-1",
+            "record_count": 0,
+            "completeness_status": "EMPTY",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -2877,6 +2888,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     benchmark_return_window = BenchmarkReturnIntegrationWindow(
         start_date="2026-01-01", end_date="2026-01-31"
     )
+    risk_free_window = RiskFreeIntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
     benchmark_market_response = await fetch_benchmark_market_series(
         benchmark_id="B1",
         request=BenchmarkMarketSeriesRequest(
@@ -2952,16 +2964,16 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     risk_free_response = await fetch_risk_free_series(
         request=RiskFreeSeriesRequest(
             as_of_date="2026-01-31",
-            window=request_window,
+            window=risk_free_window,
             frequency="daily",
             currency="USD",
             series_mode="annualized_rate_series",
         ),
-        integration_service=mock_service,
+        risk_free_series_service=risk_free_series_service,
     )
     assert risk_free_response["currency"] == "USD"
     assert risk_free_response["request_fingerprint"] == "fp-risk-free-1"
-    mock_service.get_risk_free_series.assert_awaited_once()
+    risk_free_series_service.get.assert_awaited_once()
 
     taxonomy_response = await fetch_classification_taxonomy(
         request=ClassificationTaxonomyRequest(as_of_date="2026-01-31"),

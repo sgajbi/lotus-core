@@ -6,24 +6,10 @@ from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_market_series_point,
     classification_taxonomy_entry,
-    risk_free_series_point,
 )
 
 
-def test_market_reference_series_points_map_provider_rows() -> None:
-    series_date = date(2026, 1, 2)
-
-    risk_free = risk_free_series_point(
-        SimpleNamespace(
-            series_date=series_date,
-            value="0.0350000000",
-            value_convention="annualized_rate",
-            day_count_convention="act_360",
-            compounding_convention="simple",
-            series_currency="USD",
-            quality_status="accepted",
-        )
-    )
+def test_classification_taxonomy_entry_maps_provider_row() -> None:
     taxonomy = classification_taxonomy_entry(
         SimpleNamespace(
             classification_set_id="wm_global_taxonomy_v1",
@@ -37,8 +23,6 @@ def test_market_reference_series_points_map_provider_rows() -> None:
         )
     )
 
-    assert risk_free.value == Decimal("0.0350000000")
-    assert risk_free.day_count_convention == "act_360"
     assert taxonomy.dimension_name == "asset_class"
     assert taxonomy.dimension_value == "equity"
 

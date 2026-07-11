@@ -10,14 +10,11 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    RiskFreeSeriesRequest,
-    RiskFreeSeriesResponse,
 )
 from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import resolve_benchmark_market_series_response
 from .classification_taxonomy import resolve_classification_taxonomy_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
-from .risk_free_series import resolve_risk_free_series_response
 
 
 @dataclass(frozen=True)
@@ -39,18 +36,6 @@ class BenchmarkReferenceIntegrationService:
             request=request,
             decode_page_token=self.decode_page_token,
             encode_page_token=self.encode_page_token,
-        )
-
-    async def get_risk_free_series(
-        self,
-        request: RiskFreeSeriesRequest,
-    ) -> RiskFreeSeriesResponse:
-        return cast(
-            RiskFreeSeriesResponse,
-            await resolve_risk_free_series_response(
-                repository=self.reference_repository_provider(),
-                request=request,
-            ),
         )
 
     async def get_benchmark_coverage(

@@ -6,7 +6,6 @@ from typing import Any, cast
 from ..dtos.reference_integration_dto import (
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
-    RiskFreeSeriesPoint,
     SeriesPoint,
 )
 from .integration_value_normalization import (
@@ -93,18 +92,6 @@ def benchmark_component_series_response(
     points: list[SeriesPoint],
 ) -> ComponentSeriesResponse:
     return ComponentSeriesResponse(index_id=index_id, points=points)
-
-
-def risk_free_series_point(row: Any) -> RiskFreeSeriesPoint:
-    return RiskFreeSeriesPoint(
-        series_date=row.series_date,
-        value=as_decimal(row.value),
-        value_convention=row.value_convention,
-        day_count_convention=row.day_count_convention,
-        compounding_convention=row.compounding_convention,
-        series_currency=row.series_currency,
-        quality_status=row.quality_status,
-    )
 
 
 def classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:

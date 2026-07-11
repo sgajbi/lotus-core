@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from typing import Literal
 
 from portfolio_common.source_data_product_metadata import (
@@ -49,76 +48,6 @@ from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, 
     ComponentSeriesResponse,
     SeriesPoint,
 )
-
-
-class RiskFreeSeriesRequest(SeriesRequest):
-    currency: str = Field(
-        ...,
-        description="Series currency.",
-        examples=["USD"],
-    )
-    series_mode: Literal["annualized_rate_series", "return_series"] = Field(
-        ...,
-        description="Risk-free series mode requested by the integration client.",
-        examples=["annualized_rate_series"],
-    )
-
-    model_config = ConfigDict()
-
-
-class RiskFreeSeriesPoint(BaseModel):
-    series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    value: Decimal = Field(..., description="Risk-free series value.", examples=["0.0350000000"])
-    value_convention: str = Field(
-        ..., description="Value convention label.", examples=["annualized_rate"]
-    )
-    day_count_convention: str | None = Field(
-        None,
-        description="Day-count convention for annualized rate interpretation.",
-        examples=["act_360"],
-    )
-    compounding_convention: str | None = Field(
-        None,
-        description="Compounding convention associated with rate series.",
-        examples=["simple"],
-    )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
-    model_config = ConfigDict()
-
-
-class RiskFreeSeriesResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["RiskFreeSeriesWindow"] = product_name_field("RiskFreeSeriesWindow")
-    product_version: Literal["v1"] = product_version_field()
-    currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    as_of_date: date = Field(
-        ...,
-        description="As-of date used for deterministic contract resolution.",
-        examples=["2026-01-31"],
-    )
-    series_mode: Literal["annualized_rate_series", "return_series"] = Field(
-        ...,
-        description="Series mode returned by the endpoint.",
-        examples=["annualized_rate_series"],
-    )
-    resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
-    frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    request_fingerprint: str = Field(
-        ...,
-        description="Deterministic request fingerprint for the raw risk-free series scope.",
-        examples=["6dfc8591d95a53060efd94ddca9a266e"],
-    )
-    points: list[RiskFreeSeriesPoint] = Field(
-        default_factory=list, description="Risk-free series points."
-    )
-    lineage: dict[str, str] = Field(
-        default_factory=dict,
-        description="Lineage metadata for returned records.",
-        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
-    )
-
-    model_config = ConfigDict()
 
 
 class CoverageRequest(BaseModel):
