@@ -31,6 +31,9 @@ from src.services.query_control_plane_service.app.application.external_hedge_pos
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
 )
+from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
+    PortfolioManagerBookService,
+)
 from src.services.query_control_plane_service.app.contracts import (
     sustainability_preference_profile as preference_contracts,
 )
@@ -67,6 +70,9 @@ from src.services.query_control_plane_service.app.contracts.instrument_enrichmen
 from src.services.query_control_plane_service.app.contracts.integration_policy import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
+)
+from src.services.query_control_plane_service.app.contracts.portfolio_manager_book import (
+    PortfolioManagerBookMembershipRequest,
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_client_liquidity_evidence_service,
@@ -144,7 +150,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
     PerformanceComponentEconomicsRequest,
-    PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
     TransactionCostCurveRequest,
@@ -781,8 +786,8 @@ async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_portfolio_manager_book_membership = AsyncMock(
+    mock_service = MagicMock(spec=PortfolioManagerBookService)
+    mock_service.resolve_membership = AsyncMock(
         return_value={
             "product_name": "PortfolioManagerBookMembership",
             "product_version": "v1",
@@ -816,12 +821,12 @@ async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
     response = await resolve_portfolio_manager_book_membership(
         portfolio_manager_id="PM_SG_DPM_001",
         request=request,
-        integration_service=mock_service,
+        portfolio_manager_book_service=mock_service,
     )
 
     assert response["product_name"] == "PortfolioManagerBookMembership"
     assert response["members"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
-    mock_service.resolve_portfolio_manager_book_membership.assert_awaited_once_with(
+    mock_service.resolve_membership.assert_awaited_once_with(
         portfolio_manager_id="PM_SG_DPM_001",
         request=request,
     )
@@ -829,16 +834,14 @@ async def test_resolve_portfolio_manager_book_membership_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_portfolio_manager_book_membership = AsyncMock(
-        return_value=MagicMock(members=[])
-    )
+    mock_service = MagicMock(spec=PortfolioManagerBookService)
+    mock_service.resolve_membership = AsyncMock(return_value=MagicMock(members=[]))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_manager_book_membership(
             portfolio_manager_id="PM_EMPTY",
             request=PortfolioManagerBookMembershipRequest(as_of_date="2026-05-03"),
-            integration_service=mock_service,
+            portfolio_manager_book_service=mock_service,
         )
 
     assert_query_control_plane_problem(

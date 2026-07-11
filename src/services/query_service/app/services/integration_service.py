@@ -38,8 +38,6 @@ from ..dtos.reference_integration_dto import (
     ModelPortfolioTargetResponse,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
-    PortfolioManagerBookMembershipRequest,
-    PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
@@ -48,7 +46,6 @@ from ..dtos.reference_integration_dto import (
     TransactionCostCurveResponse,
 )
 from ..repositories.buy_state_repository import BuyStateRepository
-from ..repositories.portfolio_repository import PortfolioRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
@@ -66,7 +63,6 @@ logger = logging.getLogger(__name__)
 class IntegrationServiceDependencies:
     reference_repository: ReferenceDataRepository
     buy_state_repository: BuyStateRepository
-    portfolio_repository: PortfolioRepository
     transaction_repository: TransactionRepository
     page_token_codec: PageTokenCodec
 
@@ -76,7 +72,6 @@ class IntegrationServiceDependencies:
         return cls(
             reference_repository=ReferenceDataRepository(db),
             buy_state_repository=BuyStateRepository(db),
-            portfolio_repository=PortfolioRepository(db),
             transaction_repository=TransactionRepository(db),
             page_token_codec=PageTokenCodec(
                 secret=settings.page_token_secret,
@@ -101,7 +96,6 @@ class IntegrationService:
         self.db = db
         self._reference_repository = dependencies.reference_repository
         self._buy_state_repository = dependencies.buy_state_repository
-        self._portfolio_repository = dependencies.portfolio_repository
         self._transaction_repository = dependencies.transaction_repository
         self._page_token_codec = dependencies.page_token_codec
         self._dpm_readiness_service = DpmReadinessIntegrationService.from_facade(
@@ -122,7 +116,6 @@ class IntegrationService:
         )
         self._dpm_portfolio_management_service = DpmPortfolioManagementIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
-            portfolio_repository_provider=lambda: self._portfolio_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
         )
@@ -149,18 +142,6 @@ class IntegrationService:
         return await self._dpm_readiness_service.resolve_model_portfolio_targets(
             model_portfolio_id=model_portfolio_id,
             request=request,
-        )
-
-    async def resolve_portfolio_manager_book_membership(
-        self,
-        portfolio_manager_id: str,
-        request: PortfolioManagerBookMembershipRequest,
-    ) -> PortfolioManagerBookMembershipResponse:
-        return (
-            await self._dpm_portfolio_management_service.resolve_portfolio_manager_book_membership(
-                portfolio_manager_id=portfolio_manager_id,
-                request=request,
-            )
         )
 
     async def resolve_cio_model_change_affected_cohort(

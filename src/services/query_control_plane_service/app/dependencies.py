@@ -29,6 +29,7 @@ from .application.integration_policy import (
     IntegrationPolicyConfiguration,
     IntegrationPolicyService,
 )
+from .application.portfolio_manager_book import PortfolioManagerBookService
 from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
@@ -44,6 +45,7 @@ from .infrastructure.client_tax_profile_sources import SqlAlchemyClientTaxProfil
 from .infrastructure.client_tax_rule_set_sources import SqlAlchemyClientTaxRuleSetSourceReader
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
+from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
     SqlAlchemySimulationStore,
@@ -142,6 +144,15 @@ def get_integration_policy_service() -> IntegrationPolicyService:
             policy_version=settings.lotus_core_policy_version,
             policy_json=settings.integration_snapshot_policy_json,
         ),
+        clock=SystemClock(),
+    )
+
+
+def get_portfolio_manager_book_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> PortfolioManagerBookService:
+    return PortfolioManagerBookService(
+        reader=SqlAlchemyPortfolioManagerBookReader(db),
         clock=SystemClock(),
     )
 

@@ -13,6 +13,10 @@ hot path: it resolves the portfolios owned by an advisor or portfolio manager fo
 The query always filters by `advisor_id`, commonly filters active book membership by status and
 open/close date, and returns deterministic `portfolio_id` ordering.
 
+Current ownership: CR-1521 moved the indexed query to
+`SqlAlchemyPortfolioManagerBookReader.list_members(...)` in Query Control Plane. The index rationale
+and migration evidence remain valid; the query-service repository method no longer exists.
+
 The `portfolios` table had indexes for portfolio identity and booking center, but no composite index
 matching the advisor book membership shape. The active-status predicate also wrapped stored status
 values in `upper(trim(...))`, making the persisted status contract less explicit.

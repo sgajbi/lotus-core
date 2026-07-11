@@ -43,8 +43,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ModelPortfolioTargetResponse,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
-    PortfolioManagerBookMembershipRequest,
-    PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
@@ -70,6 +68,7 @@ from ..application.core_snapshot.service import (
 )
 from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.integration_policy import IntegrationPolicyService
+from ..application.portfolio_manager_book import PortfolioManagerBookService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -109,6 +108,10 @@ from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkResponse,
 )
 from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
+from ..contracts.portfolio_manager_book import (
+    PortfolioManagerBookMembershipRequest,
+    PortfolioManagerBookMembershipResponse,
+)
 from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
@@ -122,6 +125,7 @@ from ..dependencies import (
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
+    get_portfolio_manager_book_service,
     get_sustainability_preference_profile_service,
 )
 from .response_helpers import (
@@ -1223,9 +1227,11 @@ async def resolve_portfolio_manager_book_membership(
         ),
         examples=["PM_SG_DPM_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    portfolio_manager_book_service: PortfolioManagerBookService = Depends(
+        get_portfolio_manager_book_service
+    ),
 ) -> PortfolioManagerBookMembershipResponse:
-    response = await integration_service.resolve_portfolio_manager_book_membership(
+    response = await portfolio_manager_book_service.resolve_membership(
         portfolio_manager_id=portfolio_manager_id,
         request=request,
     )

@@ -1540,19 +1540,16 @@ Most relevant current governance:
      `IntegrationServiceDependencies`, and `OperationsServiceDependencies` provide the current
      representative pattern: keep `from_session(...)` construction at the FastAPI/deployment wiring
      boundary, support fake dependencies in focused tests, and require repository additions to
-     change a visible dependency factory or bundle. For broad source-data facades, extract cohesive
-     contract-family services behind compatibility delegates before adding more methods to the
-     facade; `DpmReadinessIntegrationService` is the current pattern for keeping DPM readiness
-     reader composition, page-token adapters, and related source-data product methods testable, and
-     `ExternalHedgeIntegrationService` applies the same pattern to external treasury and OMS
-     products. `TransactionEconomicsIntegrationService` owns transaction-cost and performance
-     economics repository/page-token wiring. `BenchmarkReferenceIntegrationService` owns
-     benchmark, index, risk-free, coverage, and classification reference repository/page-token
-     wiring. `ClientProfileIncomeIntegrationService` owns client suitability, tax, income,
-     liquidity reserve, and planned-withdrawal reference repository wiring.
-     `DpmPortfolioManagementIntegrationService` owns portfolio-manager book membership, CIO
-     model-change cohort, and DPM portfolio-universe repository/page-token wiring. Do not add new
-     cohesive source-data product families directly to the full `IntegrationService` facade.
+     change a visible dependency factory or bundle. New Query Control Plane capabilities must use
+     domain-named contract, application, domain, port, and infrastructure modules where those
+     layers have real responsibilities. `PortfolioManagerBookService` is the representative
+     source-read pattern: the router binds the API contract, the application service owns the use
+     case and metadata, the port returns immutable domain records, and the SQL adapter alone maps
+     persistence rows. Do not add new methods to `IntegrationService` or reproduce broad
+     contract-family facades. `DpmReadinessIntegrationService`,
+     `DpmPortfolioManagementIntegrationService`, `TransactionEconomicsIntegrationService`, and
+     `BenchmarkReferenceIntegrationService` are migration debt to be retired by complete vertical
+     capability moves, not target-state examples.
 120. Kafka consumers must keep transport responsibilities separate from application orchestration.
      The active combined path uses `ProcessTransactionUseCase` and target ports. Transitional cost
      SQL/outbox staging belongs to `CostProcessingCompatibilityAdapter`; the quarantined legacy

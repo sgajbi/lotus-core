@@ -169,9 +169,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/portfolio_repository.py:get_portfolios": (
         "Portfolio",
     ),
-    "src/services/query_service/app/repositories/portfolio_repository.py:list_portfolio_manager_book_members": (
-        "Portfolio",
-    ),
     "src/services/query_service/app/repositories/price_repository.py:get_prices": ("MarketPrice",),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_components": (
         "BenchmarkCompositionSeries",

@@ -21,7 +21,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     missing_market_data_fx_coverage_record,
     missing_market_data_price_coverage_record,
     model_portfolio_target_row,
-    portfolio_manager_book_member,
     portfolio_tax_lot_record,
     risk_free_series_point,
 )
@@ -107,18 +106,6 @@ def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
             source_record_id="target-1",
         )
     )
-    member = portfolio_manager_book_member(
-        SimpleNamespace(
-            portfolio_id="PB_SG_GLOBAL_BAL_001",
-            client_id="CIF_SG_GLOBAL_BAL_001",
-            booking_center_code="Singapore",
-            portfolio_type="DISCRETIONARY",
-            status="ACTIVE",
-            open_date=date(2025, 3, 31),
-            close_date=None,
-            base_currency="USD",
-        )
-    )
     affected_mandate = cio_model_change_affected_mandate(
         SimpleNamespace(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -159,7 +146,6 @@ def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
     assert target.target_weight == Decimal("0.1200000000")
     assert target.min_weight == Decimal("0.0800000000")
     assert target.max_weight is None
-    assert member.source_record_id == "portfolio:PB_SG_GLOBAL_BAL_001"
     assert affected_mandate.binding_version == 6
     assert affected_mandate.policy_pack_id == "POLICY_PACK_BALANCED"
     assert candidate.binding_version == 7

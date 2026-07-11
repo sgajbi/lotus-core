@@ -18,7 +18,6 @@ from ..dtos.reference_integration_dto import (
     MarketDataFxCoverageRecord,
     MarketDataPriceCoverageRecord,
     ModelPortfolioTargetRow,
-    PortfolioManagerBookMember,
     PortfolioTaxLotRecord,
     RiskFreeSeriesPoint,
     SeriesPoint,
@@ -98,20 +97,6 @@ def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
         target_status=row.target_status,
         quality_status=row.quality_status,
         source_record_id=row.source_record_id,
-    )
-
-
-def portfolio_manager_book_member(row: Any) -> PortfolioManagerBookMember:
-    return PortfolioManagerBookMember(
-        portfolio_id=row.portfolio_id,
-        client_id=row.client_id,
-        booking_center_code=row.booking_center_code,
-        portfolio_type=row.portfolio_type,
-        status=row.status,
-        open_date=row.open_date,
-        close_date=row.close_date,
-        base_currency=row.base_currency,
-        source_record_id=f"portfolio:{row.portfolio_id}",
     )
 
 
