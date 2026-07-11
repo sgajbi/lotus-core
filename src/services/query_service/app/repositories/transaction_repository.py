@@ -112,7 +112,7 @@ class TransactionRepository:
         from_currency: str,
         to_currency: str,
         as_of_date: date,
-    ) -> Optional[float | Decimal]:
+    ) -> Decimal | None:
         normalized_from_currency = normalize_currency_code(from_currency)
         normalized_to_currency = normalize_currency_code(to_currency)
         if normalized_from_currency == normalized_to_currency:
@@ -129,10 +129,7 @@ class TransactionRepository:
             .order_by(FxRate.rate_date.desc())
             .limit(1)
         )
-        return cast(
-            Optional[float | Decimal],
-            (await self.db.execute(stmt)).scalar_one_or_none(),
-        )
+        return cast(Decimal | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
         normalized_security_ids = list(

@@ -70,6 +70,54 @@ def test_monetary_float_guard_ignores_generic_parser_value_conversion(tmp_path):
     assert scan_repo(tmp_path) == []
 
 
+def test_monetary_float_guard_ignores_duration_annotation_in_cost_observer(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "monitoring.py"
+    source_file.write_text(
+        "def observe_cost_basis_processing_lock_wait(*, outcome: str, seconds: float) -> None:\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+
+    assert scan_repo(tmp_path) == []
+
+
+def test_monetary_float_guard_flags_monetary_parameter_annotation(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "pricing.py"
+    source_file.write_text(
+        "def calculate(*, market_value: float) -> None:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    assert scan_repo(tmp_path) == [
+        "src/pricing.py:1:def calculate(*, market_value: float) -> None:"
+    ]
+
+
+def test_monetary_float_guard_flags_monetary_return_annotation(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "pricing.py"
+    source_file.write_text(
+        "def calculate_price(\n    raw: str,\n) -> float:\n    return 0.0\n",
+        encoding="utf-8",
+    )
+
+    assert scan_repo(tmp_path) == ["src/pricing.py:3:) -> float:"]
+
+
+def test_monetary_float_guard_flags_monetary_annotated_assignment(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "pricing.py"
+    source_file.write_text("market_value: float = 0.0\n", encoding="utf-8")
+
+    assert scan_repo(tmp_path) == ["src/pricing.py:1:market_value: float = 0.0"]
+
+
 def test_monetary_float_guard_fails_stale_allowlist_entries(tmp_path, monkeypatch, capsys):
     allowlist_path = tmp_path / "allowlist.json"
     allowlist_path.write_text(
