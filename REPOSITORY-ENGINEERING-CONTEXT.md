@@ -1900,10 +1900,10 @@ Most relevant current governance:
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
      application collaborators. The installed target image must not copy
-     `calculators/cost_calculator_service`. `CostCalculatorConsumer` is a non-deployed, test-only
-     compatibility shell pending decomposition of retained workflow coverage from obsolete
-     standalone Kafka, physical-idempotency, retry, and DLQ tests. Do not move that shell into the
-     target package or restore it to runtime composition.
+     `calculators/cost_calculator_service`. The standalone `CostCalculatorConsumer` and its
+     physical-idempotency, retry, and DLQ transaction boundary are retired. Unified Kafka delivery
+     tests, `ProcessTransactionUseCase`, target adapters, and combined PostgreSQL tests are the
+     authoritative delivery and atomicity evidence; do not recreate a calculator worker shell.
 141. Cashflow source ownership belongs to
      `portfolio_transaction_processing_service`: vocabulary is under `app.domain.cashflow`, while
      calculation, rule caching, SQL persistence, epoch fencing, and compatibility outbox staging are

@@ -36,20 +36,16 @@ into governed cost-aware state inside the same unit of work as cashflow and posi
 
 Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash economics,
 incremental and average-cost checkpoint state, and calculation diagnostics live in the
-target-owned `app/domain/cost_basis` package behind one public domain API. The transitional
-timeline coordinator is target-owned application behavior behind a framework-neutral observation
-port; Prometheus duration/depth recording and legacy SQL/outbox staging are target infrastructure
+target-owned `app/domain/cost_basis` package behind one public domain API. The timeline
+coordinator is target-owned application behavior behind a framework-neutral observation port;
+Prometheus duration/depth recording, SQL persistence, and outbox staging are target infrastructure
 adapters. `ProcessTransactionUseCase` remains the single combined application coordinator. The
-transitional application workflow is
-`cost_calculator_service/app/cost_calculation_workflow.py`, imported by target infrastructure until
-its application and persistence ports are extracted. The repository explicitly maps the domain's
-`calculation_state_version` to the compatible `engine_state_version` database column;
-`app/consumer.py` is a quarantined compatibility shell for legacy delivery tests and must not be
-imported by the unified runtime.
+repository explicitly maps the domain's `calculation_state_version` to the compatible
+`engine_state_version` database column.
 
-The removed `cost_calculation_processor.py` is not an extension point. The quarantined compatibility
-consumer retains its old physical idempotency name and retry/DLQ lifecycle only for rollback and
-characterization; new processing paths must use the combined application use case and ports.
+The legacy cost calculator source root, standalone consumer, mixed processor, and separate
+physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
+processing paths and tests use the combined application use case, target modules, and ports.
 
 For an eligible persisted transaction event, the service:
 

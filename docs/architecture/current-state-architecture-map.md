@@ -139,19 +139,16 @@ builders. A future runtime merge remains evidence-gated by the end-state runtime
 App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
 transaction processor; the three legacy worker shells are absent from those inventories. Registry
 publication, controlled cluster rollout, platform observability publication, canonical QA,
-downstream stage retirement, and remaining cost/cashflow legacy package removal remain governed prerequisites
+and downstream stage retirement remain governed prerequisites
 before full production cutover is claimed.
 
-## Transitional Internal Package Roots
+## Retired Calculator Roots
 
-These cataloged roots remain source dependencies of the combined image but are not deployables or
-standalone packages. Their `main.py`, `consumer_manager.py`, `web.py`, Dockerfiles, and package
-manifests are deleted; do not recreate them:
-
-| Compatibility package | Path | Current use | Removal condition |
-| --- | --- | --- | --- |
-| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Transitional cost workflow, SQL repository, and quarantined compatibility delivery/tests; cost policy, checkpoints, timeline orchestration, and compatibility staging adapter are target-owned; the mixed processor and old replay delivery are removed | Extract target workflow/publication ports and SQL adapter ownership, migrate delivery tests, then delete the legacy root after canonical QA. |
-| `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow workflow/domain/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after canonical QA. |
+`src/services/calculators/position_calculator`,
+`src/services/calculators/cashflow_calculator_service`, and
+`src/services/calculators/cost_calculator_service` are retired. Cost, cashflow, and position
+source and test ownership is under `portfolio_transaction_processing_service`; do not recreate
+standalone calculator packages, consumers, images, or transaction boundaries.
 
 ## Database Ownership
 

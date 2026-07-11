@@ -212,19 +212,15 @@ CR-880 reduced the advisory proposal simulation complexity hotspot by extracting
 inside `advisory_engine.py`. `run_proposal_simulation` now reports `B (6)` under
 `python -m radon cc src\services\query_service\app\advisory_simulation\advisory_engine.py -s`, and
 the focused advisory simulation suite reports `29 passed`. Repository-wide Xenon complexity
-enforcement remains report-only because
-`src/services/calculators/cost_calculator_service/app/consumer.py:227 process_message` remains
-F-ranked and `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains
-a D-ranked module.
+enforcement remained report-only at that review point because the then-active cost consumer and
+`portfolio_common.transaction_domain.fx_linkage` were complexity hotspots.
 
 CR-881 reduced the cost-calculator consumer complexity hotspot by extracting private helpers for
 transaction preparation, cost-engine processing, persistence, cash-leg validation, bundle-A
 diagnostics, and outbox emission. `CostCalculatorConsumer.process_message` now reports `C (11)`
 under `python -m radon cc src\services\calculators\cost_calculator_service\app\consumer.py -s`,
-and the focused cost-consumer suite reports `26 passed`. Repository-wide Xenon complexity
-enforcement remains report-only because
-`src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py` remains a D-ranked
-module.
+and the focused cost-consumer suite reported `26 passed`. Repository-wide Xenon complexity
+enforcement remained report-only until the FX linkage follow-up.
 
 CR-882 reduced the final current Xenon blocker by extracting pure helper boundaries inside
 `fx_linkage.py`. `enrich_fx_transaction_metadata` now reports `B (7)` under
@@ -232,6 +228,10 @@ CR-882 reduced the final current Xenon blocker by extracting pure helper boundar
 and the focused FX linkage suite reports `5 passed`. `make quality-complexity-gate` now runs
 `python -m xenon --max-absolute E --max-modules C --max-average A src` cleanly and is enforced in
 the quality-baseline workflow.
+
+CR-1525 later retired the standalone cost consumer after moving retained workflow and domain tests
+to `portfolio_transaction_processing_service`. Current complexity inventories must use the target
+package and must not restore the deleted calculator source path.
 
 CR-883 reduced the shared OpenAPI enrichment maintainability hotspot by extracting schema
 example/description inference into `portfolio_common.openapi_examples`. `openapi_enrichment.py` now
