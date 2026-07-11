@@ -6,6 +6,9 @@ import pytest
 from src.services.query_control_plane_service.app.application import (
     sustainability_preference_profile as preference_application,
 )
+from src.services.query_control_plane_service.app.application.benchmark_assignment import (
+    BenchmarkAssignmentService,
+)
 from src.services.query_control_plane_service.app.application.client_liquidity_evidence import (
     ClientLiquidityEvidenceService,
 )
@@ -45,6 +48,9 @@ from src.services.query_control_plane_service.app.application.transaction_econom
 )
 from src.services.query_control_plane_service.app.contracts import (
     sustainability_preference_profile as preference_contracts,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_assignment import (
+    BenchmarkAssignmentRequest,
 )
 from src.services.query_control_plane_service.app.contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -169,7 +175,6 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
     QueryControlPlaneProblem,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkAssignmentRequest,
     BenchmarkCatalogRequest,
     BenchmarkCompositionWindowRequest,
     BenchmarkDefinitionRequest,
@@ -700,14 +705,14 @@ async def test_get_instrument_enrichment_bulk_maps_bad_request_to_400() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_portfolio_benchmark_assignment_maps_not_found_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_benchmark_assignment = AsyncMock(return_value=None)
+    mock_service = MagicMock(spec=BenchmarkAssignmentService)
+    mock_service.resolve = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_portfolio_benchmark_assignment(
             portfolio_id="DEMO_DPM_EUR_001",
             request=BenchmarkAssignmentRequest(as_of_date="2026-01-31"),
-            integration_service=mock_service,
+            benchmark_assignment_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -725,8 +730,8 @@ async def test_resolve_portfolio_benchmark_assignment_maps_not_found_to_404() ->
 
 @pytest.mark.asyncio
 async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_benchmark_assignment = AsyncMock(
+    mock_service = MagicMock(spec=BenchmarkAssignmentService)
+    mock_service.resolve = AsyncMock(
         return_value={
             "portfolio_id": "DEMO_DPM_EUR_001",
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -739,7 +744,7 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
     response = await resolve_portfolio_benchmark_assignment(
         portfolio_id="DEMO_DPM_EUR_001",
         request=BenchmarkAssignmentRequest(as_of_date="2026-01-31"),
-        integration_service=mock_service,
+        benchmark_assignment_service=mock_service,
     )
 
     assert response["portfolio_id"] == "DEMO_DPM_EUR_001"

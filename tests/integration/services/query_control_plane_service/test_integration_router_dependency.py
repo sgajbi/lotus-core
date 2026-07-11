@@ -19,6 +19,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     PolicyProvenanceMetadata,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_benchmark_assignment_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -115,7 +116,7 @@ async def async_test_client():
         allowed_sections=["POSITIONS_BASELINE"],
         warnings=[],
     )
-    mock_integration_service.resolve_benchmark_assignment = AsyncMock(
+    mock_integration_service.resolve = AsyncMock(
         return_value={
             "portfolio_id": "PORT-INT-001",
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -532,6 +533,7 @@ async def async_test_client():
     )
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
+    app.dependency_overrides[get_benchmark_assignment_service] = lambda: mock_integration_service
     app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
         mock_integration_service
     )
@@ -555,6 +557,7 @@ async def async_test_client():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
+    app.dependency_overrides.pop(get_benchmark_assignment_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
@@ -1029,15 +1032,16 @@ async def test_benchmark_assignment_success(async_test_client):
     assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "COMPLETE"
-    mock_integration_service.resolve_benchmark_assignment.assert_awaited_once_with(
-        portfolio_id="PORT-INT-001",
-        as_of_date=date(2026, 1, 31),
+    mock_integration_service.resolve.assert_awaited_once()
+    assert mock_integration_service.resolve.await_args.kwargs["portfolio_id"] == "PORT-INT-001"
+    assert mock_integration_service.resolve.await_args.kwargs["request"].as_of_date == date(
+        2026, 1, 31
     )
 
 
 async def test_benchmark_assignment_not_found_maps_to_404(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.resolve_benchmark_assignment = AsyncMock(return_value=None)
+    mock_integration_service.resolve = AsyncMock(return_value=None)
 
     response = await client.post(
         "/integration/portfolios/PORT-INT-001/benchmark-assignment",

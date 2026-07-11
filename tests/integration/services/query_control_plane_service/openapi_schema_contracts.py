@@ -10,7 +10,7 @@ ANALYTICS_INPUT_SCHEMA_ROOTS = {
 BENCHMARK_ASSIGNMENT_SCHEMA_ROOTS = {
     "BenchmarkAssignmentRequest",
     "BenchmarkAssignmentResponse",
-    "IntegrationPolicyContext",
+    "BenchmarkAssignmentPolicyContext",
 }
 
 DPM_MODEL_PORTFOLIO_TARGET_SCHEMA_ROOTS = {

@@ -17,6 +17,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
 )
+from .application.benchmark_assignment import BenchmarkAssignmentService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
@@ -48,6 +49,9 @@ from .application.transaction_economics.service import TransactionEconomicsServi
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
+from .infrastructure.benchmark_assignment_sources import (
+    SqlAlchemyBenchmarkAssignmentReader,
+)
 from .infrastructure.client_liquidity_evidence_sources import (
     SqlAlchemyClientLiquidityEvidenceReader,
 )
@@ -106,6 +110,17 @@ def get_core_snapshot_service(
             simulation_store=SqlAlchemySimulationStore(db),
             clock=SystemClock(),
         )
+    )
+
+
+def get_benchmark_assignment_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> BenchmarkAssignmentService:
+    """Compose the QCP-owned benchmark assignment use case."""
+
+    return BenchmarkAssignmentService(
+        reader=SqlAlchemyBenchmarkAssignmentReader(db),
+        clock=SystemClock().utc_now,
     )
 
 

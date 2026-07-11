@@ -14,7 +14,6 @@ from portfolio_common.database_models import (
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
-    PortfolioBenchmarkAssignment,
     RiskFreeSeries,
 )
 from sqlalchemy import or_, select
@@ -38,27 +37,6 @@ from .reference_data_query_helpers import (
 class ReferenceDataRepository:
     def __init__(self, db: AsyncSession):
         self._db = db
-
-    async def resolve_benchmark_assignment(self, portfolio_id: str, as_of_date: date):
-        stmt = (
-            select(PortfolioBenchmarkAssignment)
-            .where(
-                PortfolioBenchmarkAssignment.portfolio_id == portfolio_id,
-                effective_filter(
-                    PortfolioBenchmarkAssignment.effective_from,
-                    PortfolioBenchmarkAssignment.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                PortfolioBenchmarkAssignment.effective_from.desc(),
-                PortfolioBenchmarkAssignment.assignment_recorded_at.desc(),
-                PortfolioBenchmarkAssignment.assignment_version.desc(),
-            )
-            .limit(1)
-        )
-        result = await self._db.execute(stmt)
-        return result.scalars().first()
 
     async def get_benchmark_definition(self, benchmark_id: str, as_of_date: date):
         stmt = (
