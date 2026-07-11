@@ -24,4 +24,5 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["app"]
+where = ["."]
+include = ["app*"]

@@ -2020,6 +2020,13 @@ Most relevant current governance:
      remains `ProcessTransactionUseCase` -> `CostProcessingPort` -> adapter inside one SQLAlchemy
      unit of work. Keep legacy physical idempotency only in the quarantined consumer; never restore
      `cost_calculation_processor.py`, its dependency bundle/factory, or generic processor aliases.
+153. Every independently built service wheel must discover packages from the service root and
+     explicitly include the runtime `app` namespace. Use setuptools `where = ["."]` with an
+     `app*` include unless a separately proven packaging model replaces it. A Dockerfile entrypoint
+     such as `python -m app.main` requires built-wheel or installed-image proof that `app/main.py`
+     and imported subpackages are present; repo-root tests and bind-mounted Compose are not package
+     closure evidence. Keep `tests/unit/test_service_wheel_package_contract.py` in the fast lane and
+     extend it when adding service projects.
 
 ## Context Maintenance Rule
 
