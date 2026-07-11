@@ -29,10 +29,13 @@ from portfolio_common.transaction_domain import (
     resolve_effective_processing_transaction_type,
 )
 
-from .core.cashflow_logic import CashflowLogic
-from .core.stored_cashflow import StoredCashflow
-from .repositories.cashflow_repository import CashflowRepository
-from .repositories.cashflow_rules_repository import CashflowRuleSetVersion, CashflowRulesRepository
+from ..domain.cashflow import StoredCashflow
+from .cashflow_calculation import CashflowCalculator
+from .cashflow_repository import SqlAlchemyCashflowRepository
+from .cashflow_rules_repository import (
+    CashflowRuleSetVersion,
+    SqlAlchemyCashflowRulesRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -244,20 +247,20 @@ def _log_semantic_cashflow_duplicate(
 
 
 async def _stage_cashflow_calculation(
-    cashflow_repo: CashflowRepository,
+    cashflow_repo: SqlAlchemyCashflowRepository,
     outbox_repo: OutboxRepository,
     event: TransactionEvent,
     rule: CachedCashflowRule,
     correlation_id: str,
     repair_existing: bool,
 ) -> int:
-    cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
+    cashflow_to_save = CashflowCalculator.calculate(event, rule, epoch=event.epoch)
     saved = (
         await cashflow_repo.replace_cashflow(cashflow_to_save)
         if repair_existing
         else await cashflow_repo.create_cashflow(cashflow_to_save)
     )
-    completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved, event)
+    completion_evt = cashflow_calculated_event_from_stored_cashflow(saved, event)
     await outbox_repo.create_outbox_event(
         aggregate_type="Cashflow",
         aggregate_id=str(saved.portfolio_id),
@@ -269,7 +272,7 @@ async def _stage_cashflow_calculation(
     return 1
 
 
-def _cashflow_calculated_event_from_saved_cashflow(
+def cashflow_calculated_event_from_stored_cashflow(
     saved: StoredCashflow,
     source_event: TransactionEvent,
 ) -> CashflowCalculatedEvent:
@@ -303,7 +306,7 @@ class CashflowCalculationWorkflow:
     """
 
     async def _load_cashflow_rules_cache(self, db_session) -> CashflowRuleCacheState:
-        repo = CashflowRulesRepository(db_session)
+        repo = SqlAlchemyCashflowRulesRepository(db_session)
         rules_list = await repo.get_all_rules()
         rule_set_version = _cashflow_rule_set_version_from_rules(rules_list)
         logger.info("Loaded %s cashflow rules from repository.", len(rules_list))
@@ -383,7 +386,7 @@ class CashflowCalculationWorkflow:
         db_session,
         cache_state: CashflowRuleCacheState,
     ) -> bool:
-        repo = CashflowRulesRepository(db_session)
+        repo = SqlAlchemyCashflowRulesRepository(db_session)
         source_version = await repo.get_rule_set_version()
         return bool(source_version.fingerprint == cache_state.rule_set_version)
 
@@ -416,7 +419,7 @@ class CashflowCalculationWorkflow:
         self,
         *,
         db,
-        cashflow_repo: CashflowRepository,
+        cashflow_repo: SqlAlchemyCashflowRepository,
         idempotency_repo: IdempotencyRepository,
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
@@ -479,7 +482,7 @@ class CashflowCalculationWorkflow:
         self,
         *,
         db,
-        cashflow_repo: CashflowRepository,
+        cashflow_repo: SqlAlchemyCashflowRepository,
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
         correlation_id: str,

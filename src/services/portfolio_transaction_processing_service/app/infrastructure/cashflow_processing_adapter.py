@@ -8,19 +8,16 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+from ..application import TransactionProcessingError, TransactionProcessingRejected
+from ..domain import BookedTransaction
+from ..ports import CashflowProcessingResult
+from .cashflow_repository import SqlAlchemyCashflowRepository
+from .cashflow_staging_workflow import (
     CashflowProcessingOutcome,
     CashflowStageResult,
     LinkedCashLegError,
     NoCashflowRuleError,
 )
-from src.services.calculators.cashflow_calculator_service.app.repositories import (
-    cashflow_repository,
-)
-
-from ..application import TransactionProcessingError, TransactionProcessingRejected
-from ..domain import BookedTransaction
-from ..ports import CashflowProcessingResult
 from .legacy_transaction_event_mapper import to_transaction_event
 
 
@@ -29,7 +26,7 @@ class CashflowStagingWorkflow(Protocol):
         self,
         *,
         db: AsyncSession,
-        cashflow_repo: cashflow_repository.CashflowRepository,
+        cashflow_repo: SqlAlchemyCashflowRepository,
         idempotency_repo: IdempotencyRepository,
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
@@ -48,7 +45,7 @@ class CashflowProcessingCompatibilityAdapter:
         *,
         workflow: CashflowStagingWorkflow,
         db_session: AsyncSession,
-        repository: cashflow_repository.CashflowRepository,
+        repository: SqlAlchemyCashflowRepository,
         idempotency_repository: IdempotencyRepository,
         outbox_repository: OutboxRepository,
         source_topic: str = KAFKA_TRANSACTIONS_PERSISTED_TOPIC,

@@ -1,3 +1,5 @@
+"""Calculate persisted cashflow records from governed transaction rules."""
+
 import logging
 from dataclasses import dataclass
 from datetime import date
@@ -13,7 +15,7 @@ from portfolio_common.transaction_fee_components import (
 )
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
-from .enums import CashflowCalculationType, CashflowClassification
+from ..domain.cashflow import CashflowCalculationType, CashflowClassification
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +51,13 @@ TRANSFER_INFLOW_TRANSACTION_TYPES = (
     | _TRANSFER_SIGNING_INFLOW_CASH_EFFECT_TYPES
 )
 TRANSFER_OUTFLOW_TRANSACTION_TYPES = _transfer_signing_types_for_position_effect("decrease")
-CLASSIFICATION_SIGN_FACTORS = {
-    CashflowClassification.FX_BUY: 1,
-    CashflowClassification.FX_SELL: -1,
-    CashflowClassification.INVESTMENT_INFLOW: 1,
-    CashflowClassification.CORPORATE_ACTION_PROCEEDS: 1,
-    CashflowClassification.INCOME: 1,
-    CashflowClassification.CASHFLOW_IN: 1,
+CLASSIFICATION_SIGN_FACTORS: dict[str, int] = {
+    CashflowClassification.FX_BUY.value: 1,
+    CashflowClassification.FX_SELL.value: -1,
+    CashflowClassification.INVESTMENT_INFLOW.value: 1,
+    CashflowClassification.CORPORATE_ACTION_PROCEEDS.value: 1,
+    CashflowClassification.INCOME.value: 1,
+    CashflowClassification.CASHFLOW_IN.value: 1,
 }
 _SYNTHETIC_TRANSFER_CLASSIFICATION_SIGN = {
     "POSITION_TRANSFER_IN": 1,
@@ -88,12 +90,12 @@ def _normalize_classification(value: object) -> str:
 
 
 def _transaction_date(transaction: TransactionEvent) -> date:
-    return transaction.transaction_date.date()
+    return cast(date, transaction.transaction_date.date())
 
 
 def _settlement_date_or_transaction_date(transaction: TransactionEvent) -> date:
     if transaction.settlement_date is not None:
-        return transaction.settlement_date.date()
+        return cast(date, transaction.settlement_date.date())
     return _transaction_date(transaction)
 
 
@@ -103,7 +105,7 @@ def _resolve_cashflow_date(
     transaction_type: str,
 ) -> date:
     if transaction.synthetic_flow_effective_date is not None:
-        return transaction.synthetic_flow_effective_date
+        return cast(date, transaction.synthetic_flow_effective_date)
     if transaction_type in _SETTLEMENT_DATED_CASHFLOW_TYPES:
         return _settlement_date_or_transaction_date(transaction)
     if transaction_type in _PAYMENT_DATED_CASHFLOW_TYPES:
@@ -223,7 +225,7 @@ def _is_duplicate_corporate_action_cash_settlement(transaction: TransactionEvent
 
 
 def _signed_by_classification(classification: str, amount: Decimal) -> Decimal:
-    sign_factor = CLASSIFICATION_SIGN_FACTORS.get(classification, -1)
+    sign_factor = CLASSIFICATION_SIGN_FACTORS.get(_normalize_classification(classification), -1)
     return abs(amount) if sign_factor > 0 else -abs(amount)
 
 
@@ -255,7 +257,7 @@ def _signed_transfer_amount(
     return abs(amount) if transaction.quantity > 0 else -abs(amount)
 
 
-class CashflowLogic:
+class CashflowCalculator:
     """
     A stateless calculator that generates a Cashflow object from a transaction
     based on a given business rule from the database.
@@ -301,6 +303,7 @@ class CashflowLogic:
         return cashflow
 
 
+# Temporary source-compatible name while transaction RFC tests migrate terminology.
 class CashflowRuleView(Protocol):
     classification: str
     timing: str

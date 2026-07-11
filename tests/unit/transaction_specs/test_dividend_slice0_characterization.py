@@ -7,15 +7,12 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
-    CashflowLogic,
-)
-from src.services.calculators.cashflow_calculator_service.app.core.enums import (
-    CashflowClassification,
-    CashflowTiming,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowClassification,
+    CashflowTiming,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
@@ -27,6 +24,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CashflowCalculator,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
     PositionCalculationWorkflow,
@@ -136,7 +136,7 @@ def test_dividend_position_calculation_preserves_quantity_and_cost_basis() -> No
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) -> None:
     event = TransactionEvent(
@@ -161,7 +161,7 @@ def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) 
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("600.0")
     assert cashflow.amount > 0

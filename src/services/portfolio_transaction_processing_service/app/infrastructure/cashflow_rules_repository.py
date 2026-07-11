@@ -1,4 +1,5 @@
-# src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_rules_repository.py
+"""SQLAlchemy access to effective cashflow classification rules."""
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -31,7 +32,7 @@ def _version_timestamp_text(value: datetime | None) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
-class CashflowRulesRepository:
+class SqlAlchemyCashflowRulesRepository:
     """
     Handles read-only database queries for cashflow rule data.
     """
@@ -48,7 +49,7 @@ class CashflowRulesRepository:
         result = await self.db.execute(stmt)
         rules = result.scalars().all()
         logger.info(f"Loaded {len(rules)} cashflow rules from the database.")
-        return rules
+        return list(rules)
 
     @async_timed(repository="CashflowRulesRepository", method="get_rule_set_version")
     async def get_rule_set_version(self) -> CashflowRuleSetVersion:
@@ -65,3 +66,6 @@ class CashflowRulesRepository:
             rule_count=int(rule_count or 0),
             latest_updated_at=latest_updated_at,
         )
+
+
+# Temporary source-compatible name for callers moving into the unified service.

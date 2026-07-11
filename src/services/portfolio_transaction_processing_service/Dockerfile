@@ -84,8 +84,6 @@ COPY --chown=appuser:appuser src/__init__.py /app/src/__init__.py
 COPY --chown=appuser:appuser src/services/__init__.py /app/src/services/__init__.py
 COPY --chown=appuser:appuser src/services/calculators/cost_calculator_service \
     /app/src/services/calculators/cost_calculator_service
-COPY --chown=appuser:appuser src/services/calculators/cashflow_calculator_service \
-    /app/src/services/calculators/cashflow_calculator_service
 # Bounded pipeline-readiness closure used by the combined unit of work.
 COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/__init__.py \
     /app/src/services/pipeline_orchestrator_service/app/__init__.py

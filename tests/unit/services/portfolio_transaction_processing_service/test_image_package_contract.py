@@ -31,12 +31,10 @@ def test_target_image_uses_bounded_source_closure_without_legacy_wheel_collision
     assert "cost_calculator_service/pyproject.toml" not in dockerfile
     assert "cashflow_calculator_service/pyproject.toml" not in dockerfile
     assert "position_calculator/pyproject.toml" not in dockerfile
-    for module_root in (
-        "cost_calculator_service",
-        "cashflow_calculator_service",
-    ):
-        assert f"src/services/calculators/{module_root} " in dockerfile
-        assert f"/app/src/services/calculators/{module_root}" in dockerfile
+    assert "src/services/calculators/cost_calculator_service " in dockerfile
+    assert "/app/src/services/calculators/cost_calculator_service" in dockerfile
+    assert "src/services/calculators/cashflow_calculator_service " not in dockerfile
+    assert "/app/src/services/calculators/cashflow_calculator_service" not in dockerfile
     assert "src/services/calculators/position_calculator" not in dockerfile
     assert (
         "COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app "

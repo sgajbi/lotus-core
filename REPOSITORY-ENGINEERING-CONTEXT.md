@@ -1905,17 +1905,15 @@ Most relevant current governance:
      instantiate `CostCalculationWorkflow` directly. Delete the shell after its delivery-specific
      evidence is migrated; do not move it into the target package or restore it to runtime
      composition.
-141. Active target cashflow composition imports
-     `cashflow_calculator_service.app.cashflow_calculation_workflow`, never the compatibility
-     `app.consumers.transaction_consumer` module. Keep cashflow rule caching, transaction and
-     linked-leg validation, semantic identity, epoch fencing, calculation, persistence staging,
-     and compatibility outbox staging independent of Kafka decoding, session construction,
-     physical replay claims, commit/rollback, retry, and DLQ routing. New cashflow domain tests must
-     instantiate `CashflowCalculationWorkflow` directly and patch collaborators in its owning
-     module. `CashflowCalculatorConsumer` is quarantined characterization debt, not a runtime
-     extension point; delete it after delivery-specific evidence is migrated. After any workflow
-     package move used by the target's transitional source closure, rebuild the target image and
-     prove the installed entrypoint and workflow imports rather than relying only on repo-root tests.
+141. Cashflow source ownership belongs to
+     `portfolio_transaction_processing_service`: vocabulary is under `app.domain.cashflow`, while
+     calculation, rule caching, SQL persistence, epoch fencing, and compatibility outbox staging are
+     under `app.infrastructure` behind `CashflowProcessingPort`. Do not recreate
+     `calculators/cashflow_calculator_service`, a standalone cashflow consumer, or a second
+     transaction/physical-idempotency boundary. Preserve the historical semantic-idempotency service
+     name unless replay migration evidence explicitly approves a change. New cashflow tests belong
+     with the target service. Rebuild the target image and prove the installed entrypoint after any
+     source-ownership move; repo-root imports are insufficient.
 142. Combined transaction idempotency is semantic as well as physical. Derive the versioned key and
      SHA-256 payload fingerprint from the framework-neutral `BookedTransaction`, never raw Kafka
      JSON. Claim it inside the same SQLAlchemy unit of work before cost, cashflow, position, or

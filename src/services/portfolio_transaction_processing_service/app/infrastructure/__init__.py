@@ -3,7 +3,25 @@
 from .average_cost_pool_reconciliation_adapter import (
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
+from .cashflow_calculation import (
+    TRANSFER_INFLOW_TRANSACTION_TYPES,
+    TRANSFER_OUTFLOW_TRANSACTION_TYPES,
+    CashflowCalculator,
+)
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
+from .cashflow_repository import SqlAlchemyCashflowRepository
+from .cashflow_rules_repository import (
+    CashflowRuleSetVersion,
+    SqlAlchemyCashflowRulesRepository,
+)
+from .cashflow_staging_workflow import (
+    CashflowCalculationWorkflow,
+    CashflowProcessingOutcome,
+    CashflowStageResult,
+    LinkedCashLegError,
+    NoCashflowRuleError,
+    cashflow_calculated_event_from_stored_cashflow,
+)
 from .composition import (
     CanonicalBookedTransactionReplayerFactory,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
@@ -40,13 +58,22 @@ from .transaction_replay_adapter import (
 __all__ = [
     "CanonicalBookedTransactionReplayerFactory",
     "CanonicalTransactionReplayer",
+    "CashflowCalculationWorkflow",
+    "CashflowCalculator",
     "CashflowProcessingCompatibilityAdapter",
+    "CashflowProcessingOutcome",
+    "SqlAlchemyCashflowRepository",
+    "SqlAlchemyCashflowRulesRepository",
+    "CashflowRuleSetVersion",
+    "CashflowStageResult",
     "CostProcessingCompatibilityAdapter",
     "CostStagingResult",
     "CostStagingWorkflow",
     "PositionProcessingCompatibilityAdapter",
     "PipelineStageProcessingCompatibilityAdapter",
     "PortfolioNotFoundError",
+    "LinkedCashLegError",
+    "NoCashflowRuleError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
@@ -57,7 +84,10 @@ __all__ = [
     "SqlAlchemyTransactionProcessingUnitOfWork",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
+    "TRANSFER_INFLOW_TRANSACTION_TYPES",
+    "TRANSFER_OUTFLOW_TRANSACTION_TYPES",
     "build_process_transaction_use_case",
+    "cashflow_calculated_event_from_stored_cashflow",
     "build_reconcile_average_cost_pools_use_case",
     "build_replay_booked_transaction_use_case",
 ]

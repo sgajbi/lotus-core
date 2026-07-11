@@ -1,4 +1,5 @@
-# services/calculators/cashflow_calculator_service/app/repositories/cashflow_repository.py
+"""Persist transaction-processing cashflows without leaking mutable ORM rows."""
+
 import logging
 
 from portfolio_common.database_models import Cashflow, Portfolio, Transaction
@@ -7,12 +8,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.stored_cashflow import StoredCashflow
+from ..domain.cashflow import StoredCashflow
 
 logger = logging.getLogger(__name__)
 
 
-class CashflowRepository:
+class SqlAlchemyCashflowRepository:
     """
     Handles all database operations for the Cashflow model.
     """

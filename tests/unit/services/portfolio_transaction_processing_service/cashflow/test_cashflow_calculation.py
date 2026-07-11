@@ -6,12 +6,12 @@ import pytest
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
-    CashflowLogic,
-)
-from src.services.calculators.cashflow_calculator_service.app.core.enums import (
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CashflowCalculator,
 )
 
 
@@ -35,7 +35,7 @@ def base_transaction_event() -> TransactionEvent:
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_buy_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A BUY is a negative cashflow (outflow)."""
@@ -49,7 +49,7 @@ def test_calculate_buy_transaction(mock_metric, base_transaction_event: Transact
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.amount < 0
@@ -63,7 +63,7 @@ def test_calculate_buy_transaction(mock_metric, base_transaction_event: Transact
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_buy_transaction_normalizes_transaction_type(
     mock_metric, base_transaction_event: TransactionEvent
@@ -76,7 +76,7 @@ def test_calculate_buy_transaction_normalizes_transaction_type(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("-1005.50")
     mock_metric.labels.assert_called_once_with(classification="INVESTMENT_OUTFLOW", timing="BOD")
@@ -84,7 +84,7 @@ def test_calculate_buy_transaction_normalizes_transaction_type(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_rejects_post_validation_negative_trade_fee(
     mock_metric, base_transaction_event: TransactionEvent
@@ -99,13 +99,13 @@ def test_calculate_rejects_post_validation_negative_trade_fee(
     )
 
     with pytest.raises(ValueError, match="trade_fee"):
-        CashflowLogic.calculate(event, rule)
+        CashflowCalculator.calculate(event, rule)
 
     mock_metric.labels.assert_not_called()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_rejects_post_validation_negative_fee_component(
     mock_metric, base_transaction_event: TransactionEvent
@@ -120,13 +120,13 @@ def test_calculate_rejects_post_validation_negative_fee_component(
     )
 
     with pytest.raises(ValueError, match="brokerage"):
-        CashflowLogic.calculate(event, rule)
+        CashflowCalculator.calculate(event, rule)
 
     mock_metric.labels.assert_not_called()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_sell_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A SELL is a positive cashflow (inflow)."""
@@ -141,7 +141,7 @@ def test_calculate_sell_transaction(mock_metric, base_transaction_event: Transac
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.amount > 0
@@ -164,7 +164,7 @@ def test_calculate_sell_transaction(mock_metric, base_transaction_event: Transac
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_uses_settlement_date_for_settlement_dated_cashflows(
     mock_metric,
@@ -187,7 +187,7 @@ def test_calculate_uses_settlement_date_for_settlement_dated_cashflows(
         is_portfolio_flow=transaction_type in {"DEPOSIT", "WITHDRAWAL"},
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.cashflow_date == date(2026, 4, 12)
     mock_metric.labels.return_value.inc.assert_called_once()
@@ -195,7 +195,7 @@ def test_calculate_uses_settlement_date_for_settlement_dated_cashflows(
 
 @pytest.mark.parametrize("transaction_type", ["DIVIDEND", "INTEREST"])
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_uses_settlement_date_as_income_payment_value_date_proxy(
     mock_metric,
@@ -219,14 +219,14 @@ def test_calculate_uses_settlement_date_as_income_payment_value_date_proxy(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.cashflow_date == date(2026, 1, 25)
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
     mock_metric, base_transaction_event: TransactionEvent
@@ -250,7 +250,7 @@ def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.cashflow_date == date(2026, 5, 3)
     mock_metric.labels.return_value.inc.assert_called_once()
@@ -264,7 +264,7 @@ def test_calculate_uses_synthetic_flow_effective_date_before_settlement_date(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_uses_explicit_synthetic_market_value_economics(
     mock_metric,
@@ -296,7 +296,7 @@ def test_calculate_transfer_uses_explicit_synthetic_market_value_economics(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == expected_amount
     assert cashflow.amount != event.gross_transaction_amount
@@ -309,7 +309,7 @@ def test_calculate_transfer_uses_explicit_synthetic_market_value_economics(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_cash_consideration_remains_real_net_cashflow(
     mock_metric,
@@ -333,7 +333,7 @@ def test_calculate_cash_consideration_remains_real_net_cashflow(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("275")
     assert cashflow.classification == "CORPORATE_ACTION_PROCEEDS"
@@ -370,7 +370,7 @@ def test_calculate_cash_consideration_remains_real_net_cashflow(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_rejects_invalid_synthetic_position_flow_contract(
     mock_metric,
@@ -401,7 +401,7 @@ def test_calculate_rejects_invalid_synthetic_position_flow_contract(
     rule = CashflowRule(**rule_values)
 
     with pytest.raises(ValueError, match=message):
-        CashflowLogic.calculate(event, rule)
+        CashflowCalculator.calculate(event, rule)
 
     mock_metric.labels.assert_not_called()
 
@@ -414,7 +414,7 @@ def test_calculate_rejects_invalid_synthetic_position_flow_contract(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_linked_internal_position_transfer_market_values_sum_to_zero(
     mock_metric,
@@ -460,7 +460,7 @@ def test_linked_internal_position_transfer_market_values_sum_to_zero(
         is_portfolio_flow=False,
     )
 
-    transfer_flows = [CashflowLogic.calculate(event, rule) for event in events]
+    transfer_flows = [CashflowCalculator.calculate(event, rule) for event in events]
 
     assert sum(flow.amount for flow in transfer_flows) == Decimal("0")
     assert all(flow.calculation_type == "MVT" for flow in transfer_flows)
@@ -471,7 +471,7 @@ def test_linked_internal_position_transfer_market_values_sum_to_zero(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_corporate_action_cash_settlement_is_excluded_from_flow_levels(
     mock_metric,
@@ -502,7 +502,7 @@ def test_corporate_action_cash_settlement_is_excluded_from_flow_levels(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(settlement, legacy_adjustment_rule)
+    cashflow = CashflowCalculator.calculate(settlement, legacy_adjustment_rule)
 
     assert cashflow.amount == Decimal("275")
     assert cashflow.is_position_flow is False
@@ -520,7 +520,7 @@ def test_corporate_action_cash_settlement_is_excluded_from_flow_levels(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_linked_trade_cash_settlement_remains_a_position_flow(
     mock_metric,
@@ -552,7 +552,7 @@ def test_linked_trade_cash_settlement_remains_a_position_flow(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(settlement, adjustment_rule)
+    cashflow = CashflowCalculator.calculate(settlement, adjustment_rule)
 
     assert cashflow.amount == expected_amount
     assert cashflow.is_position_flow is True
@@ -561,7 +561,7 @@ def test_linked_trade_cash_settlement_remains_a_position_flow(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_falls_back_to_transaction_date_when_policy_source_date_missing(
     mock_metric, base_transaction_event: TransactionEvent
@@ -580,14 +580,14 @@ def test_calculate_falls_back_to_transaction_date_when_policy_source_date_missin
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.cashflow_date == date(2026, 4, 10)
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_dividend_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A DIVIDEND is a positive cashflow (inflow)."""
@@ -602,7 +602,7 @@ def test_calculate_dividend_transaction(mock_metric, base_transaction_event: Tra
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.amount > 0
@@ -614,7 +614,7 @@ def test_calculate_dividend_transaction(mock_metric, base_transaction_event: Tra
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_interest_income_transaction(
     mock_metric, base_transaction_event: TransactionEvent
@@ -635,7 +635,7 @@ def test_calculate_interest_income_transaction(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("115")
     assert cashflow.amount > 0
@@ -644,7 +644,7 @@ def test_calculate_interest_income_transaction(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_interest_income_uses_net_interest_when_present(
     mock_metric, base_transaction_event: TransactionEvent
@@ -667,7 +667,7 @@ def test_calculate_interest_income_uses_net_interest_when_present(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("1187.00")
     assert cashflow.amount > 0
@@ -676,7 +676,7 @@ def test_calculate_interest_income_uses_net_interest_when_present(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_interest_expense_transaction(
     mock_metric, base_transaction_event: TransactionEvent
@@ -697,7 +697,7 @@ def test_calculate_interest_expense_transaction(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("-115")
     assert cashflow.amount < 0
@@ -706,7 +706,7 @@ def test_calculate_interest_expense_transaction(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_interest_expense_normalizes_direction(
     mock_metric, base_transaction_event: TransactionEvent
@@ -726,7 +726,7 @@ def test_calculate_interest_expense_normalizes_direction(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("-115")
     mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
@@ -734,7 +734,7 @@ def test_calculate_interest_expense_normalizes_direction(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_deposit_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A DEPOSIT is a positive cashflow (inflow)."""
@@ -749,7 +749,7 @@ def test_calculate_deposit_transaction(mock_metric, base_transaction_event: Tran
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.classification == "CASHFLOW_IN"
@@ -761,7 +761,7 @@ def test_calculate_deposit_transaction(mock_metric, base_transaction_event: Tran
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_fee_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A FEE is a negative cashflow (outflow)."""
@@ -776,7 +776,7 @@ def test_calculate_fee_transaction(mock_metric, base_transaction_event: Transact
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.amount < 0
@@ -787,7 +787,7 @@ def test_calculate_fee_transaction(mock_metric, base_transaction_event: Transact
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_withdrawal_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A WITHDRAWAL is a negative cashflow (outflow)."""
@@ -804,7 +804,7 @@ def test_calculate_withdrawal_transaction(mock_metric, base_transaction_event: T
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.amount == -event.gross_transaction_amount
@@ -817,7 +817,7 @@ def test_calculate_withdrawal_transaction(mock_metric, base_transaction_event: T
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_in_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A TRANSFER_IN is a positive cashflow (inflow)."""
@@ -832,7 +832,7 @@ def test_calculate_transfer_in_transaction(mock_metric, base_transaction_event: 
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.classification == "TRANSFER"
@@ -843,7 +843,7 @@ def test_calculate_transfer_in_transaction(mock_metric, base_transaction_event: 
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_out_transaction(mock_metric, base_transaction_event: TransactionEvent):
     """A TRANSFER_OUT is a negative cashflow (outflow)."""
@@ -858,7 +858,7 @@ def test_calculate_transfer_out_transaction(mock_metric, base_transaction_event:
     )
 
     # ACT
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     # ASSERT
     assert cashflow.classification == "TRANSFER"
@@ -869,7 +869,7 @@ def test_calculate_transfer_out_transaction(mock_metric, base_transaction_event:
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_out_normalizes_transaction_type(
     mock_metric, base_transaction_event: TransactionEvent
@@ -882,7 +882,7 @@ def test_calculate_transfer_out_normalizes_transaction_type(
         is_portfolio_flow=True,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("-994.50")
     assert cashflow.classification == "TRANSFER"
@@ -908,7 +908,7 @@ def test_calculate_transfer_out_normalizes_transaction_type(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_classification_for_ca_expansion_types(
     mock_metric,
@@ -924,7 +924,7 @@ def test_calculate_transfer_classification_for_ca_expansion_types(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount * expected_sign > 0
     mock_metric.labels.return_value.inc.assert_called_once()
 
@@ -939,7 +939,7 @@ def test_calculate_transfer_classification_for_ca_expansion_types(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_transfer_fallback_sign_uses_quantity_for_unmapped_transfer_type(
     mock_metric,
@@ -966,13 +966,13 @@ def test_calculate_transfer_fallback_sign_uses_quantity_for_unmapped_transfer_ty
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount * expected_sign > 0
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_buy_propagates_linkage_metadata(
     mock_metric, base_transaction_event: TransactionEvent
@@ -988,7 +988,7 @@ def test_calculate_buy_propagates_linkage_metadata(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.economic_event_id == "EVT-2026-9001"
     assert cashflow.linked_transaction_group_id == "LTG-2026-9001"
@@ -996,7 +996,7 @@ def test_calculate_buy_propagates_linkage_metadata(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_adjustment_inflow_uses_movement_direction(
     mock_metric, base_transaction_event: TransactionEvent
@@ -1016,14 +1016,14 @@ def test_calculate_adjustment_inflow_uses_movement_direction(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount == Decimal("250")
     assert cashflow.amount > 0
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_adjustment_outflow_uses_movement_direction(
     mock_metric, base_transaction_event: TransactionEvent
@@ -1043,14 +1043,14 @@ def test_calculate_adjustment_outflow_uses_movement_direction(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount == Decimal("-250")
     assert cashflow.amount < 0
     mock_metric.labels.return_value.inc.assert_called_once()
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_fx_cash_settlement_buy_is_positive(
     mock_metric, base_transaction_event: TransactionEvent
@@ -1070,7 +1070,7 @@ def test_calculate_fx_cash_settlement_buy_is_positive(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount == Decimal("13450")
     assert cashflow.classification == "FX_BUY"
     assert cashflow.is_position_flow is True
@@ -1080,7 +1080,7 @@ def test_calculate_fx_cash_settlement_buy_is_positive(
 
 
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_calculate_fx_cash_settlement_sell_is_negative(
     mock_metric, base_transaction_event: TransactionEvent
@@ -1100,7 +1100,7 @@ def test_calculate_fx_cash_settlement_sell_is_negative(
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
     assert cashflow.amount == Decimal("-10000")
     assert cashflow.classification == "FX_SELL"
     assert cashflow.is_position_flow is True

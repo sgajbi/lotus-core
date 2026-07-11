@@ -75,8 +75,8 @@ Control execution and reconciliation run contracts.
 
 ### transaction processing and generators
 
-- one `portfolio_transaction_processing_service` deployable with target-owned position domain and
-  infrastructure modules plus transitional cost/cashflow modules behind one atomic use case and
+- one `portfolio_transaction_processing_service` deployable with target-owned position and
+  cashflow modules plus transitional cost workflow/repository source behind one atomic use case and
   database unit of work
 - one authoritative `transactions.cost.processed` completion input to pipeline readiness; the
   retained `cashflows.calculated` compatibility fact is not a second prerequisite
