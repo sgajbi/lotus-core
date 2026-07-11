@@ -6,7 +6,6 @@ from datetime import date
 from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkCatalogResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -20,7 +19,6 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
-from .benchmark_catalog import resolve_benchmark_catalog_response
 from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import resolve_benchmark_market_series_response
 from .benchmark_return_series import resolve_benchmark_return_series_response
@@ -39,24 +37,6 @@ class BenchmarkReferenceIntegrationService:
     reference_repository_provider: Callable[[], Any]
     decode_page_token: Callable[[str | None], dict[str, Any]]
     encode_page_token: Callable[[dict[str, Any]], str]
-
-    async def list_benchmark_catalog(
-        self,
-        as_of_date: date,
-        benchmark_type: str | None,
-        benchmark_currency: str | None,
-        benchmark_status: str | None,
-    ) -> BenchmarkCatalogResponse:
-        return cast(
-            BenchmarkCatalogResponse,
-            await resolve_benchmark_catalog_response(
-                repository=self.reference_repository_provider(),
-                as_of_date=as_of_date,
-                benchmark_type=benchmark_type,
-                benchmark_currency=benchmark_currency,
-                benchmark_status=benchmark_status,
-            ),
-        )
 
     async def list_index_catalog(
         self,

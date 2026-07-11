@@ -157,3 +157,71 @@ async def test_overlapping_component_query_preserves_all_rebalance_segments() ->
     assert "benchmark_composition_series.composition_effective_from <=" in sql
     assert "benchmark_composition_series.composition_effective_to IS NULL" in sql
     assert "benchmark_composition_series.index_id ASC" in sql
+
+
+@pytest.mark.asyncio
+async def test_catalog_definition_query_normalizes_filters_and_ranks_current_rows() -> None:
+    row = SimpleNamespace(
+        benchmark_id="BMK_1",
+        benchmark_name="Benchmark 1",
+        benchmark_type="composite",
+        benchmark_currency="USD",
+        return_convention="total_return_index",
+        benchmark_status="active",
+        benchmark_family=None,
+        benchmark_provider="provider",
+        rebalance_frequency="quarterly",
+        classification_set_id=None,
+        classification_labels={},
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        source_vendor="provider",
+        source_record_id="definition:1",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    session = _session_returning(row)
+
+    records = await benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(
+        session
+    ).list_definitions(
+        as_of_date=date(2026, 4, 10),
+        benchmark_type=" Composite ",
+        benchmark_currency=" usd ",
+        benchmark_status=" ACTIVE ",
+    )
+
+    assert records[0].benchmark_id == "BMK_1"
+    sql = str(session.execute.await_args.args[0])
+    assert "row_number() OVER" in sql
+    assert "benchmark_definitions.benchmark_type" in sql
+    assert "benchmark_definitions.benchmark_currency" in sql
+    assert "benchmark_definitions.benchmark_status" in sql
+    assert "ORDER BY benchmark_definitions.benchmark_id ASC" in sql
+
+
+@pytest.mark.asyncio
+async def test_catalog_component_query_groups_current_rows_by_benchmark() -> None:
+    row = SimpleNamespace(
+        benchmark_id="BMK_1",
+        index_id="IDX_1",
+        composition_effective_from=date(2026, 1, 1),
+        composition_effective_to=None,
+        composition_weight="1.0000000000",
+        rebalance_event_id="rebalance_1",
+        source_vendor="provider",
+        source_record_id="component:1",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    session = _session_returning(row)
+
+    grouped = await benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(
+        session
+    ).list_components_for_benchmarks(benchmark_ids=["BMK_1"], as_of_date=date(2026, 4, 10))
+
+    assert grouped["BMK_1"][0].index_id == "IDX_1"
+    sql = str(session.execute.await_args.args[0])
+    assert "row_number() OVER" in sql
+    assert "benchmark_composition_series.benchmark_id IN" in sql
+    assert "benchmark_composition_series.index_id ASC" in sql

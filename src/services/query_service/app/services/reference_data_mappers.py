@@ -4,8 +4,6 @@ from decimal import Decimal
 from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkCatalogRecord,
-    BenchmarkConstituentSegmentResponse,
     BenchmarkReturnSeriesPoint,
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
@@ -18,45 +16,6 @@ from ..dtos.reference_integration_dto import (
 from .integration_value_normalization import (
     as_decimal,
 )
-
-
-def benchmark_constituent_segment_response(row: Any) -> BenchmarkConstituentSegmentResponse:
-    return BenchmarkConstituentSegmentResponse(
-        index_id=row.index_id,
-        composition_weight=as_decimal(row.composition_weight),
-        composition_effective_from=row.composition_effective_from,
-        composition_effective_to=row.composition_effective_to,
-        rebalance_event_id=row.rebalance_event_id,
-    )
-
-
-def benchmark_catalog_record(
-    row: Any,
-    *,
-    components: list[Any] | None = None,
-) -> BenchmarkCatalogRecord:
-    return BenchmarkCatalogRecord(
-        benchmark_id=row.benchmark_id,
-        benchmark_name=row.benchmark_name,
-        benchmark_type=row.benchmark_type,
-        benchmark_currency=row.benchmark_currency,
-        return_convention=row.return_convention,
-        benchmark_status=row.benchmark_status,
-        benchmark_family=row.benchmark_family,
-        benchmark_provider=row.benchmark_provider,
-        rebalance_frequency=row.rebalance_frequency,
-        classification_set_id=row.classification_set_id,
-        classification_labels=dict(row.classification_labels or {}),
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        quality_status=row.quality_status,
-        source_timestamp=row.source_timestamp,
-        source_vendor=row.source_vendor,
-        source_record_id=row.source_record_id,
-        components=[
-            benchmark_constituent_segment_response(component) for component in components or []
-        ],
-    )
 
 
 def index_definition_response(row: Any) -> IndexDefinitionResponse:

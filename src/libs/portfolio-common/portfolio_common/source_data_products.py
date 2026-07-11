@@ -249,7 +249,10 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         serving_plane=QUERY_CONTROL_PLANE_SERVICE,
         owner="lotus-core",
         consumers=("lotus-performance", "lotus-risk"),
-        current_routes=("/integration/benchmarks/{benchmark_id}/definition",),
+        current_routes=(
+            "/integration/benchmarks/{benchmark_id}/definition",
+            "/integration/benchmarks/catalog",
+        ),
         notes=(
             "Effective benchmark master and unit-weight constituent evidence for an as-of date."
         ),

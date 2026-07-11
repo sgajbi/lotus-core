@@ -409,9 +409,6 @@ async def test_reference_contract_methods() -> None:
         ),
     )
 
-    benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
-    assert benchmark_catalog.records == []
-
     index_catalog = await service.list_index_catalog(date(2026, 1, 1), [], None, None, None)
     assert index_catalog.records[0].index_id == "IDX1"
 
@@ -679,11 +676,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_taxonomy=AsyncMock(return_value=[]),
     )
 
-    benchmark_catalog = await service.list_benchmark_catalog(
-        date(2026, 1, 1), "single_index", "EUR", "active"
-    )
-    assert benchmark_catalog.records
-
     await service.get_benchmark_market_series(
         benchmark_id="B1",
         request=SimpleNamespace(
@@ -713,72 +705,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
     )
     assert benchmark_market_series.fx_context_source_currency == "EUR"
     assert benchmark_market_series.fx_context_target_currency == "USD"
-
-
-@pytest.mark.asyncio
-async def test_benchmark_catalog_uses_repository_ranked_current_rows() -> None:
-    service = make_service()
-    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        list_benchmark_definitions=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_name="Benchmark New",
-                    benchmark_type="composite",
-                    benchmark_currency="USD",
-                    return_convention="total_return_index",
-                    benchmark_status="active",
-                    benchmark_family="family",
-                    benchmark_provider="provider",
-                    rebalance_frequency="monthly",
-                    classification_set_id="set1",
-                    classification_labels={"asset_class": "multi_asset"},
-                    effective_from=date(2025, 3, 27),
-                    effective_to=None,
-                    quality_status="accepted",
-                    source_timestamp=None,
-                    source_vendor="vendor",
-                    source_record_id="src-new",
-                ),
-            ]
-        ),
-        list_benchmark_components_for_benchmarks=AsyncMock(
-            return_value={
-                "B1": [
-                    SimpleNamespace(
-                        index_id="IDX_BOND",
-                        composition_weight=Decimal("0.4"),
-                        composition_effective_from=date(2025, 3, 27),
-                        composition_effective_to=None,
-                        rebalance_event_id="new",
-                    ),
-                    SimpleNamespace(
-                        index_id="IDX_EQ",
-                        composition_weight=Decimal("0.6"),
-                        composition_effective_from=date(2025, 3, 27),
-                        composition_effective_to=None,
-                        rebalance_event_id="new",
-                    ),
-                ]
-            }
-        ),
-    )
-
-    response = await service.list_benchmark_catalog(date(2026, 3, 27), None, None, None)
-
-    assert len(response.records) == 1
-    assert response.records[0].benchmark_name == "Benchmark New"
-    assert [component.index_id for component in response.records[0].components] == [
-        "IDX_BOND",
-        "IDX_EQ",
-    ]
-    assert response.records[0].components[0].composition_effective_from == date(2025, 3, 27)
-    service._reference_repository.list_benchmark_definitions.assert_awaited_once_with(
-        as_of_date=date(2026, 3, 27),
-        benchmark_type=None,
-        benchmark_currency=None,
-        benchmark_status=None,
-    )
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,6 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from src.services.query_service.app.services.reference_data_mappers import (
-    benchmark_catalog_record,
     benchmark_component_series_response,
     benchmark_market_series_point,
     benchmark_return_series_point,
@@ -13,46 +12,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     index_return_series_point,
     risk_free_series_point,
 )
-
-
-def test_benchmark_catalog_record_maps_master_row_and_components() -> None:
-    source_timestamp = datetime(2026, 1, 31, 8, tzinfo=UTC)
-
-    response = benchmark_catalog_record(
-        SimpleNamespace(
-            benchmark_id="BMK_GLOBAL_BALANCED_60_40",
-            benchmark_name="Global Balanced 60/40",
-            benchmark_type="composite",
-            benchmark_currency="USD",
-            return_convention="total_return_index",
-            benchmark_status="active",
-            benchmark_family="multi_asset",
-            benchmark_provider="MSCI",
-            rebalance_frequency="quarterly",
-            classification_set_id="wm_global_taxonomy_v1",
-            classification_labels={"asset_class": "multi_asset"},
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            quality_status="accepted",
-            source_timestamp=source_timestamp,
-            source_vendor="MSCI",
-            source_record_id="bmk_60_40_v20260131",
-        ),
-        components=[
-            SimpleNamespace(
-                index_id="IDX_MSCI_WORLD_TR",
-                composition_weight="0.6000000000",
-                composition_effective_from=date(2026, 1, 1),
-                composition_effective_to=None,
-                rebalance_event_id="rebalance_2026q1",
-            )
-        ],
-    )
-
-    assert response.benchmark_id == "BMK_GLOBAL_BALANCED_60_40"
-    assert response.classification_labels == {"asset_class": "multi_asset"}
-    assert response.components[0].composition_weight == Decimal("0.6000000000")
-    assert response.components[0].rebalance_event_id == "rebalance_2026q1"
 
 
 def test_index_definition_response_maps_reference_catalog_row() -> None:
