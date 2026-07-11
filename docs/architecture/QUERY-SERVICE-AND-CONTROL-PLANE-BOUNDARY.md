@@ -241,20 +241,24 @@ Reason:
 
 #### `POST /integration/benchmarks/{benchmark_id}/coverage`
 
-Call: **Correct**
+Call: **Correct and QCP-owned**
 
 Reason:
 
 - support/ops and readiness contract, not raw data retrieval
+- QCP owns the response contract, coverage policy, typed benchmark/index/return ports, source
+  proof, SQL adapters, dependency composition, and route
+- Query Service must not recreate coverage calculation or repository methods
 
 #### `POST /integration/reference/risk-free-series/coverage`
 
-Call: **Correct**
+Call: **Correct and QCP-owned**
 
 Reason:
 
 - readiness/coverage diagnostic surface
 - belongs with contract governance
+- QCP owns its typed risk-free port, canonical SQL selection, deterministic source proof, and route
 
 ### Acceptable in `query_control_plane_service`, but borderline
 
@@ -336,12 +340,16 @@ Reason:
 
 #### `POST /integration/reference/classification-taxonomy`
 
-Call: **Borderline**
+Call: **Correct and QCP-owned**
 
 Reason:
 
-- canonical taxonomy retrieval could plausibly live in `query_service`
-- it remains acceptable in control-plane if the contract is intended as the official external analytics taxonomy surface
+- this is the official governed external taxonomy product, not an ad hoc table read
+- QCP owns the public contract, application policy, immutable evidence, source port, deterministic
+  effective-date SQL adapter, source proof, dependency composition, and route
+- the response exposes source-owned generation time, evidence timestamp, deterministic content
+  hash/fingerprint, source references/lineage, quality, freshness, and current status
+- Query Service must not restore its retired taxonomy DTO, facade, helper, or repository path
 
 ## Decision Guidance for Future APIs
 

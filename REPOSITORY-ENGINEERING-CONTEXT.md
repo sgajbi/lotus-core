@@ -1308,6 +1308,12 @@ Most relevant current governance:
     assembly, proof policy, ports, SQL adapters, route-scoped signed tokens, composition, and route.
     Keep raw operational reads in Query Service, and do not restore its obsolete market-series
     facade or delegate source hash/freshness authority to consumers.
+    `DataQualityCoverageReport:v1` and the classification-taxonomy
+    `InstrumentReferenceBundle:v1` are also QCP-owned through public contracts, application
+    policy, immutable evidence, typed source ports, deterministic SQL adapters, source proof,
+    composition, and routes. Do not restore Query Service coverage/taxonomy DTOs, helpers,
+    repository methods, tests, or facade paths. QCP operations and advisory-simulation package
+    imports remain separate migration scope under issue #465 and must not be represented as closed.
 89. Resilience-critical runtime settings should use `portfolio_common.runtime_settings` so invalid
     values fail fast in strict or non-local profiles while local fallback remains explicit and
     logged. Current migrated families include ingestion, query service, query-control-plane,

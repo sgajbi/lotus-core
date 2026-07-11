@@ -4,10 +4,6 @@ from portfolio_common.page_tokens import PageTokenCodec
 from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.services.integration_service import (
-    IntegrationService,
-    IntegrationServiceDependencies,
-)
 from src.services.query_service.app.services.operations_service import (
     OperationsService,
     OperationsServiceDependencies,
@@ -23,6 +19,7 @@ from .application.benchmark_composition import BenchmarkCompositionService
 from .application.benchmark_definition import BenchmarkDefinitionService
 from .application.benchmark_market_series.service import BenchmarkMarketSeriesService
 from .application.benchmark_return_series import BenchmarkReturnSeriesService
+from .application.classification_taxonomy import ClassificationTaxonomyService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
@@ -66,6 +63,9 @@ from .infrastructure.benchmark_definition_sources import (
 )
 from .infrastructure.benchmark_return_series_sources import (
     SqlAlchemyBenchmarkReturnSeriesReader,
+)
+from .infrastructure.classification_taxonomy_sources import (
+    SqlAlchemyClassificationTaxonomyReader,
 )
 from .infrastructure.client_liquidity_evidence_sources import (
     SqlAlchemyClientLiquidityEvidenceReader,
@@ -401,10 +401,15 @@ def get_portfolio_manager_book_service(
     )
 
 
-def get_integration_service(
+def get_classification_taxonomy_service(
     db: AsyncSession = Depends(get_async_db_session),
-) -> IntegrationService:
-    return IntegrationService(dependencies=IntegrationServiceDependencies.from_session(db))
+) -> ClassificationTaxonomyService:
+    """Compose the QCP-owned classification taxonomy use case."""
+
+    return ClassificationTaxonomyService(
+        reader=SqlAlchemyClassificationTaxonomyReader(db),
+        clock=SystemClock().utc_now,
+    )
 
 
 def get_operations_service(
