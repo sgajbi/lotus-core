@@ -85,7 +85,7 @@ def _normalize_code(value: object, default: str = "") -> str:
 
 def _normalize_classification(value: object) -> str:
     if isinstance(value, CashflowClassification):
-        return value.value
+        return cast(str, value.value)
     return _normalize_code(value)
 
 

@@ -12,9 +12,6 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
-from src.services.calculators.cost_calculator_service.app.repository import (
-    CostCalculatorRepository,
-)
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
     PipelineStageRepository,
 )
@@ -36,6 +33,7 @@ from .cashflow_processing_adapter import (
 )
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter, CostStagingWorkflow
+from .cost_repository import CostCalculatorRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
 from .position_repository import PositionRepository

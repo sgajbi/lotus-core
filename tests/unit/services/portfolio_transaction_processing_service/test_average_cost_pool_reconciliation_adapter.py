@@ -5,16 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    CostCalculationWorkflow,
-)
-from src.services.calculators.cost_calculator_service.app.repository import (
-    AverageCostPoolPersistedSummary,
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    AverageCostPoolPersistedSummary,
+    CostCalculationWorkflow,
+    CostCalculatorRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.average_cost_pool_reconciliation_adapter import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,

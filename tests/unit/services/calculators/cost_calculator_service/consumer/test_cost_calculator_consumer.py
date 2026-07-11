@@ -36,7 +36,6 @@ from src.services.calculators.cost_calculator_service.app.consumer import (
     PortfolioNotFoundError,
     _normalize_fee_amount,
 )
-from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
@@ -48,6 +47,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostBasisTransaction as EngineTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
@@ -1352,12 +1352,12 @@ async def test_consumer_emits_sell_lifecycle_metrics(
 
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_calculation_workflow."
             "SELL_LIFECYCLE_STAGE_TOTAL",
             sell_counter,
         ),
         patch(
-            "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_calculation_workflow."
             "BUY_LIFECYCLE_STAGE_TOTAL",
             buy_counter,
         ),

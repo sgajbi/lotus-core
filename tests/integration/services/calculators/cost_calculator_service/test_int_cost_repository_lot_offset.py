@@ -15,15 +15,15 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.repository import (
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     Fees,
     OpenLotState,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculatorRepository,
 )
 
 pytestmark = pytest.mark.asyncio

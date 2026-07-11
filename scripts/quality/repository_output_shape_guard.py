@@ -21,25 +21,25 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_rules_repository.py:get_all_rules": (
         "CashflowRule",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:create_or_update_transaction_event": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:create_or_update_transaction_event": (
         "Transaction",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_bundle_a_group_transactions": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_bundle_a_group_transactions": (
         "Transaction",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_instrument": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_instrument": (
         "Instrument",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_portfolio": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_portfolio": (
         "Portfolio",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_transaction_by_id": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_transaction_by_id": (
         "Transaction",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:get_transaction_history": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_transaction_history": (
         "Transaction",
     ),
-    "src/services/calculators/cost_calculator_service/app/repository.py:update_transaction_costs": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:update_transaction_costs": (
         "Transaction",
     ),
     "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py:get_all_transactions_for_security": (

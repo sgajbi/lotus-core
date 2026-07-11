@@ -7,9 +7,6 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    CostCalculationWorkflow,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
@@ -27,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.position_r
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
+    CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
     PositionCalculationWorkflow,

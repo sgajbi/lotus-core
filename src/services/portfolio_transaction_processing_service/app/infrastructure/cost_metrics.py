@@ -1,3 +1,5 @@
+"""Prometheus instruments for cost-basis processing modes and replay depth."""
+
 from prometheus_client import Counter, Histogram
 
 COST_PROCESSING_EXECUTION_TOTAL = Counter(

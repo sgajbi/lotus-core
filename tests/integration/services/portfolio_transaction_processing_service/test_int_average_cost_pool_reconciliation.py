@@ -12,10 +12,6 @@ from portfolio_common.database_models import (
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    CostCalculationWorkflow,
-)
-from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     ReconcileAverageCostPoolsCommand,
     ReconcileAverageCostPoolsUseCase,
@@ -25,6 +21,8 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolReconciliationStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculationWorkflow,
+    CostCalculatorRepository,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from tests.test_support.transaction_processing import (

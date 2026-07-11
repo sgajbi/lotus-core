@@ -10,14 +10,12 @@ from portfolio_common.database_models import Portfolio
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
-from src.services.calculators.cost_calculator_service.app.repository import (
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
 )
 

@@ -13,10 +13,6 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.dialects import postgresql
 
-from src.services.calculators.cost_calculator_service.app.repository import (
-    CostCalculatorRepository,
-    _cost_basis_processing_lock_key,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
@@ -28,6 +24,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculatorRepository,
+    cost_basis_processing_lock_key,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -38,7 +38,7 @@ async def test_acquire_cost_basis_processing_lock_uses_stable_normalized_key() -
     repository = CostCalculatorRepository(db_session, clock=clock)
 
     with patch(
-        "src.services.calculators.cost_calculator_service.app.repository."
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_repository."
         "observe_cost_basis_processing_lock_wait"
     ) as observe_wait:
         await repository.acquire_cost_basis_processing_lock(" PORT_COST_01 ", " SEC01 ")
@@ -46,10 +46,10 @@ async def test_acquire_cost_basis_processing_lock_uses_stable_normalized_key() -
     statement = db_session.execute.call_args.args[0]
     assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
     assert statement.compile().params == {
-        "lock_key": _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+        "lock_key": cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
     }
-    assert _cost_basis_processing_lock_key(" PORT_COST_01 ", " SEC01 ") == (
-        _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+    assert cost_basis_processing_lock_key(" PORT_COST_01 ", " SEC01 ") == (
+        cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
     )
     observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
 
@@ -64,7 +64,7 @@ async def test_acquire_cost_basis_processing_lock_records_failure_without_swallo
 
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.repository."
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_repository."
             "observe_cost_basis_processing_lock_wait"
         ) as observe_wait,
         pytest.raises(RuntimeError, match="lock unavailable"),
