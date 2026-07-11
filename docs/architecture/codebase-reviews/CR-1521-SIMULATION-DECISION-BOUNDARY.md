@@ -34,7 +34,8 @@ existing advisory compatibility endpoint and consumer contract during a governed
   existing `models.py` compatibility surface.
 - Narrowed proposal status typing to its three contract values instead of arbitrary `str`.
 - Raised or reused GitHub issues for every actionable deferred finding rather than retaining them in
-  chat: #465, #470, and #709 through #714.
+  chat: #465, #470, and #709 through #714. The destination migration is tracked separately in
+  `sgajbi/lotus-advise#434` so producer and consumer closure cannot drift apart.
 
 ## Ownership Decision
 
@@ -63,7 +64,8 @@ decisioning.
 ## Follow-Up
 
 1. Complete #470 by splitting source inputs/projected effects from downstream decision outputs and
-   migrating advisory decision ownership with versioned consumer proof.
+   migrating advisory decision ownership with versioned consumer proof under
+   `sgajbi/lotus-advise#434`.
 2. Complete #465 by deciding query-service versus query-control-plane module and runtime ownership.
 3. Complete #709 through #711 for unified transaction-economics projection, immutable baseline
    lineage, and session isolation/concurrency/idempotency.

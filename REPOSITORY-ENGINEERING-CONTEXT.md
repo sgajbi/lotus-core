@@ -474,7 +474,10 @@ be completed in the current slice:
 3. otherwise raise one focused issue with current evidence, expected standard, impact, owner
    boundary, acceptance criteria, evaluation condition, non-goals, related work, and recheck trigger;
 4. link child issues to the active parent/refactor issue and update the issue-discovery ledger;
-5. keep speculative, stale, or not-yet-actionable observations in the codebase review ledger until
+5. when the correct owner is another Lotus application, raise or reuse linked issues in both the
+   source and destination repositories; record the field/capability ownership matrix, producer and
+   consumer contract, compatibility window, migration order, rollback, and cross-repo validation;
+6. keep speculative, stale, or not-yet-actionable observations in the codebase review ledger until
    they have enough evidence to become useful issues.
 
 Issue labels and chat summaries are visibility aids, not closure proof. An issue is locally fixed
