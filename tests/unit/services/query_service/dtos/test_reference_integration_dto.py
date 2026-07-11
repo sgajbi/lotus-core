@@ -4,10 +4,16 @@ from datetime import date
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from src.services.query_control_plane_service.app.contracts import (
+    classification_taxonomy as reference_integration_dto,
+)
 from src.services.query_control_plane_service.app.contracts import dpm_portfolio_population
 from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
+)
+from src.services.query_control_plane_service.app.contracts.classification_taxonomy import (
+    ClassificationTaxonomyResponse,
 )
 from src.services.query_control_plane_service.app.contracts.dpm_portfolio_population import (
     DpmPortfolioUniverseCandidateResponse,
@@ -15,6 +21,10 @@ from src.services.query_control_plane_service.app.contracts.dpm_portfolio_popula
 )
 from src.services.query_control_plane_service.app.contracts.dpm_source_readiness import (
     DpmSourceReadinessRequest,
+)
+from src.services.query_control_plane_service.app.contracts.index_series import (
+    IndexPriceSeriesResponse,
+    IndexReturnSeriesResponse,
 )
 from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
     InstrumentEligibilityBulkRequest,
@@ -28,10 +38,6 @@ from src.services.query_control_plane_service.app.contracts.market_data_coverage
 )
 from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
-)
-from src.services.query_service.app.dtos import reference_integration_dto
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    ClassificationTaxonomyResponse,
 )
 
 
@@ -166,6 +172,8 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
     ("response_model", "product_name"),
     [
         (BenchmarkMarketSeriesResponse, "MarketDataWindow"),
+        (IndexPriceSeriesResponse, "IndexSeriesWindow"),
+        (IndexReturnSeriesResponse, "IndexSeriesWindow"),
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
         (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
         (DpmPortfolioUniverseCandidateResponse, "DpmPortfolioUniverseCandidate"),

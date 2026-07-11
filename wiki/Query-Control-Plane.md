@@ -201,6 +201,13 @@ router inside the operational read plane.
   ports, SQL adapters, signed route-scoped continuation tokens, dependency composition, and route
   handling must remain QCP-owned; do not restore the obsolete Query Service market-series facade
   or derive source hashes/freshness in downstream consumers
+- benchmark and risk-free `DataQualityCoverageReport` contracts, policies, source proof, ports,
+  adapters, composition, and routes must remain QCP-owned; do not restore Query Service coverage
+  builders, calculations, repository methods, or facade methods
+- classification-taxonomy `InstrumentReferenceBundle` contracts, application policy, immutable
+  evidence, source port, effective-date SQL adapter, source proof, composition, and route must
+  remain QCP-owned; use `source_lineage` for source proof and do not add a duplicate `lineage`
+  alias or restore the retired Query Service taxonomy path
 - client-restriction contracts, application policy, immutable records, source port, and SQL adapter
   must remain QCP package-owned; Core publishes effective restriction evidence while
   `lotus-manage` owns DPM interpretation, enforcement, workflow, and client-facing conclusions

@@ -25,6 +25,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_definition_service,
     get_benchmark_market_series_service,
     get_benchmark_return_series_service,
+    get_classification_taxonomy_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -36,7 +37,6 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_index_catalog_service,
     get_index_series_service,
     get_integration_policy_service,
-    get_integration_service,
     get_reference_coverage_service,
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
@@ -441,7 +441,8 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_classification_taxonomy = AsyncMock(
+    mock_classification_taxonomy_service = MagicMock()
+    mock_classification_taxonomy_service.get = AsyncMock(
         return_value={
             "as_of_date": "2026-01-31",
             "records": [],
@@ -547,6 +548,9 @@ async def async_test_client():
                 generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
             ),
         }
+    )
+    mock_integration_service.classification_taxonomy_service = (
+        mock_classification_taxonomy_service
     )
     mock_integration_service.benchmark_market_series_service = (
         mock_benchmark_market_series_service
@@ -657,7 +661,9 @@ async def async_test_client():
     app.dependency_overrides[get_dpm_source_readiness_service] = lambda: mock_integration_service
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
-    app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_classification_taxonomy_service] = lambda: (
+        mock_integration_service.classification_taxonomy_service
+    )
     app.dependency_overrides[get_reference_coverage_service] = lambda: (
         mock_reference_coverage_service
     )
@@ -690,7 +696,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
-    app.dependency_overrides.pop(get_integration_service, None)
+    app.dependency_overrides.pop(get_classification_taxonomy_service, None)
     app.dependency_overrides.pop(get_reference_coverage_service, None)
     app.dependency_overrides.pop(get_risk_free_series_service, None)
     app.dependency_overrides.pop(get_index_catalog_service, None)
@@ -1789,6 +1795,7 @@ async def test_risk_free_coverage_success(async_test_client):
 
 async def test_classification_taxonomy_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    taxonomy_service = mock_integration_service.classification_taxonomy_service
 
     response = await client.post(
         "/integration/reference/classification-taxonomy",
@@ -1804,15 +1811,16 @@ async def test_classification_taxonomy_success(async_test_client):
     assert body["request_fingerprint"] == "fp-taxonomy-1"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_classification_taxonomy.assert_awaited_once_with(
-        as_of_date=date(2026, 1, 31),
-        taxonomy_scope=None,
-    )
+    taxonomy_service.get.assert_awaited_once()
+    request = taxonomy_service.get.await_args.kwargs["request"]
+    assert request.as_of_date == date(2026, 1, 31)
+    assert request.taxonomy_scope is None
 
 
 async def test_classification_taxonomy_scope_filter_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.get_classification_taxonomy = AsyncMock(
+    taxonomy_service = mock_integration_service.classification_taxonomy_service
+    taxonomy_service.get = AsyncMock(
         return_value={
             "as_of_date": "2026-01-31",
             "records": [
@@ -1847,7 +1855,7 @@ async def test_classification_taxonomy_scope_filter_success(async_test_client):
     assert body["request_fingerprint"] == "fp-taxonomy-index-1"
     assert body["records"][0]["taxonomy_scope"] == "index"
     assert body["records"][0]["dimension_name"] == "sector"
-    mock_integration_service.get_classification_taxonomy.assert_awaited_once_with(
-        as_of_date=date(2026, 1, 31),
-        taxonomy_scope="index",
-    )
+    taxonomy_service.get.assert_awaited_once()
+    request = taxonomy_service.get.await_args.kwargs["request"]
+    assert request.as_of_date == date(2026, 1, 31)
+    assert request.taxonomy_scope == "index"

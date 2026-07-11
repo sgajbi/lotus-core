@@ -75,6 +75,8 @@ class IndexSeriesResponseMetadata(SourceDataProductRuntimeMetadata):
 class IndexPriceSeriesResponse(IndexSeriesResponseMetadata):
     """Canonical index price observations and source-owned proof."""
 
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     request_fingerprint: str = Field(
         ...,
         description="Deterministic request fingerprint for the raw index price series scope.",
@@ -85,6 +87,8 @@ class IndexPriceSeriesResponse(IndexSeriesResponseMetadata):
 class IndexReturnSeriesResponse(IndexSeriesResponseMetadata):
     """Canonical index return observations and source-owned proof."""
 
+    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
+    product_version: Literal["v1"] = product_version_field()
     request_fingerprint: str = Field(
         ...,
         description="Deterministic request fingerprint for the raw index return series scope.",

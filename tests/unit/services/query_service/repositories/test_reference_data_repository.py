@@ -1,4 +1,4 @@
-"""SQL contract tests for Query Service taxonomy and FX reference reads."""
+"""SQL contract tests for Query Service FX reference reads."""
 
 from __future__ import annotations
 
@@ -24,28 +24,6 @@ class _FakeExecuteResult:
 
     def all(self) -> list[object]:
         return self._rows
-
-
-@pytest.mark.asyncio
-async def test_list_taxonomy_applies_effective_date_and_scope() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    expected = SimpleNamespace(taxonomy_scope="index")
-    db.execute.return_value = _FakeExecuteResult([expected])
-    repository = ReferenceDataRepository(db)
-
-    rows = await repository.list_taxonomy(
-        as_of_date=date(2026, 4, 10),
-        taxonomy_scope="index",
-    )
-
-    assert rows == [expected]
-    statement = db.execute.await_args.args[0]
-    sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
-    assert "classification_taxonomy.effective_from <= '2026-04-10'" in sql
-    assert "classification_taxonomy.effective_to IS NULL" in sql
-    assert "classification_taxonomy.effective_to >= '2026-04-10'" in sql
-    assert "classification_taxonomy.taxonomy_scope = 'index'" in sql
-    assert "classification_taxonomy.dimension_name ASC" in sql
 
 
 @pytest.mark.asyncio

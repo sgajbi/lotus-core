@@ -5,18 +5,13 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    ClassificationTaxonomyRequest,
-    ClassificationTaxonomyResponse,
-)
-from src.services.query_service.app.services.integration_service import IntegrationService
-
 from ..application.benchmark_assignment import BenchmarkAssignmentService
 from ..application.benchmark_catalog import BenchmarkCatalogService
 from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
 from ..application.benchmark_market_series.service import BenchmarkMarketSeriesService
 from ..application.benchmark_return_series import BenchmarkReturnSeriesService
+from ..application.classification_taxonomy import ClassificationTaxonomyService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
@@ -62,6 +57,10 @@ from ..contracts.benchmark_market_series import (
 from ..contracts.benchmark_return_series import (
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
+)
+from ..contracts.classification_taxonomy import (
+    ClassificationTaxonomyRequest,
+    ClassificationTaxonomyResponse,
 )
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -162,6 +161,7 @@ from ..dependencies import (
     get_benchmark_definition_service,
     get_benchmark_market_series_service,
     get_benchmark_return_series_service,
+    get_classification_taxonomy_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -173,7 +173,6 @@ from ..dependencies import (
     get_index_catalog_service,
     get_index_series_service,
     get_integration_policy_service,
-    get_integration_service,
     get_portfolio_manager_book_service,
     get_reference_coverage_service,
     get_risk_free_series_service,
@@ -2502,15 +2501,11 @@ async def fetch_risk_free_series(
 )
 async def fetch_classification_taxonomy(
     request: ClassificationTaxonomyRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    classification_taxonomy_service: ClassificationTaxonomyService = Depends(
+        get_classification_taxonomy_service
+    ),
 ) -> ClassificationTaxonomyResponse:
-    return cast(
-        ClassificationTaxonomyResponse,
-        await integration_service.get_classification_taxonomy(
-            as_of_date=request.as_of_date,
-            taxonomy_scope=request.taxonomy_scope,
-        ),
-    )
+    return await classification_taxonomy_service.get(request=request)
 
 
 @router.post(

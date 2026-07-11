@@ -23,6 +23,9 @@ from src.services.query_control_plane_service.app.application.benchmark_market_s
 from src.services.query_control_plane_service.app.application.benchmark_return_series import (
     BenchmarkReturnSeriesService,
 )
+from src.services.query_control_plane_service.app.application.classification_taxonomy import (
+    ClassificationTaxonomyService,
+)
 from src.services.query_control_plane_service.app.application.client_liquidity_evidence import (
     ClientLiquidityEvidenceService,
 )
@@ -93,6 +96,9 @@ from src.services.query_control_plane_service.app.contracts.benchmark_return_ser
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_return_series import (
     IntegrationWindow as BenchmarkReturnIntegrationWindow,
+)
+from src.services.query_control_plane_service.app.contracts.classification_taxonomy import (
+    ClassificationTaxonomyRequest,
 )
 from src.services.query_control_plane_service.app.contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -180,6 +186,7 @@ from src.services.query_control_plane_service.app.contracts.transaction_cost_cur
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_market_series_service,
+    get_classification_taxonomy_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -187,7 +194,6 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
     get_external_hedge_posture_service,
     get_integration_policy_service,
-    get_integration_service,
     get_reference_coverage_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
@@ -237,10 +243,6 @@ from src.services.query_control_plane_service.app.routers.integration import (
 from src.services.query_control_plane_service.app.routers.response_helpers import (
     QueryControlPlaneProblem,
 )
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    ClassificationTaxonomyRequest,
-)
-from src.services.query_service.app.services.integration_service import IntegrationService
 
 SustainabilityPreferenceProfileService = (
     preference_application.SustainabilityPreferenceProfileService
@@ -298,9 +300,9 @@ async def test_get_effective_integration_policy_router_function() -> None:
     assert response["consumer_system"] == "lotus-manage"
 
 
-def test_get_integration_service_factory_returns_service() -> None:
-    service = get_integration_service(db=MagicMock())
-    assert isinstance(service, IntegrationService)
+def test_get_classification_taxonomy_service_factory_returns_narrow_service() -> None:
+    service = get_classification_taxonomy_service(db=MagicMock())
+    assert isinstance(service, ClassificationTaxonomyService)
 
 
 def test_get_benchmark_market_series_service_factory_returns_narrow_service() -> None:
@@ -2792,7 +2794,7 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    taxonomy_service = MagicMock(spec=ClassificationTaxonomyService)
     reference_coverage_service = MagicMock(spec=ReferenceCoverageService)
     benchmark_market_series_service = MagicMock(spec=BenchmarkMarketSeriesService)
     benchmark_return_series_service = MagicMock(spec=BenchmarkReturnSeriesService)
@@ -2887,7 +2889,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_classification_taxonomy = AsyncMock(
+    taxonomy_service.get = AsyncMock(
         return_value={
             "as_of_date": "2026-01-31",
             "records": [],
@@ -3003,13 +3005,12 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
 
     taxonomy_response = await fetch_classification_taxonomy(
         request=ClassificationTaxonomyRequest(as_of_date="2026-01-31"),
-        integration_service=mock_service,
+        classification_taxonomy_service=taxonomy_service,
     )
     assert taxonomy_response["taxonomy_version"] == "rfc_062_v1"
     assert taxonomy_response["request_fingerprint"] == "fp-taxonomy-1"
-    mock_service.get_classification_taxonomy.assert_awaited_once_with(
-        as_of_date=ClassificationTaxonomyRequest(as_of_date="2026-01-31").as_of_date,
-        taxonomy_scope=None,
+    taxonomy_service.get.assert_awaited_once_with(
+        request=ClassificationTaxonomyRequest(as_of_date="2026-01-31"),
     )
 
     risk_free_coverage_response = await get_risk_free_coverage(
