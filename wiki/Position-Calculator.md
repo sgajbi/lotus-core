@@ -60,8 +60,16 @@ overwriting newer history. Different securities and epochs retain independent co
 
 Backdated requests also use compare-and-set epoch advancement. One request advances the epoch; a
 losing concurrent request is recorded as `coalesced/stale_epoch` and performs no replay or rebuild
-work. Operators use the transaction-processing dashboard's position lock-wait p95 and coordination
-rate panels with database pool and consumer-lag signals. Thresholds require a deployed baseline.
+work. After a winning rebuild commits, a later trigger whose transaction lineage is already present
+in the current epoch is recorded as `coalesced/already_materialized`; it does not advance another
+epoch or reread and rewrite history. The lookup uses the normalized
+portfolio/security/epoch/transaction index and runs only for events already classified as
+backdated.
+
+Operators use the transaction-processing dashboard's position lock-wait p95, coordination rate,
+and recalculation-work p95 panels with database pool and consumer-lag signals. The work histogram
+distinguishes inline rebuild, compatibility replay, and coalesced zero-work decisions. Thresholds
+require a deployed baseline.
 
 ## Data it owns
 

@@ -1892,6 +1892,16 @@ Most relevant current governance:
      Any lock-key or mutation-boundary change requires same-key PostgreSQL BUY/SELL/replay overlap
      proof, different-key non-blocking proof, exact lot/checkpoint reconciliation, bounded lock-wait
      telemetry, and deployed pool/latency evidence before cutover.
+145. A backdated position trigger is zero-work when its transaction lineage already exists in the
+     current portfolio/security epoch. Evaluate the pure backdated-date policy first, then use the
+     indexed normalized portfolio/security/epoch/transaction existence query before compare-and-set
+     epoch advancement. Record `coalesced/already_materialized`, do not read full history, advance
+     epoch, delete/reinsert positions, or publish replay events, and keep normal ordered processing
+     free of this extra query. This is safe because combined semantic idempotency rejects materially
+     changed content for the same transaction identity and the cost-basis key lock serializes the
+     caller-owned units of work. Any change requires concurrent committed backdated-trigger proof,
+     exact current-epoch quantities/cost, one-winner epoch evidence, zero active-runtime replay
+     fan-out, bounded recalculation work-volume metrics, and migration/index validation.
 
 ## Context Maintenance Rule
 
