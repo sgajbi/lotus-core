@@ -130,6 +130,12 @@ Rules:
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.
 
+Timeseries generation and portfolio aggregation currently share the concrete
+`portfolio_common.infrastructure.persistence.SharedTimeseriesRepository` adapter. This is
+transitional: aggregation job claim/recovery/queue behavior belongs to portfolio aggregation, and
+snapshot/cashflow/position-timeseries behavior belongs to timeseries generation. The split requires
+PostgreSQL locking, upsert, and as-of query evidence; it does not require another deployable.
+
 App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
 transaction processor; the three legacy worker shells are absent from those inventories. Registry
 publication, controlled cluster rollout, platform observability publication, canonical QA,

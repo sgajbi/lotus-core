@@ -20,6 +20,7 @@ DOMAIN_FORBIDDEN_DEPENDENCIES = {
 RETIRED_ROOT_MODULES = {
     "portfolio_common.control_code_normalization",
     "portfolio_common.models",
+    "portfolio_common.timeseries_repository_base",
     "portfolio_common.transaction_domain.control_code_normalization",
 }
 
@@ -56,6 +57,7 @@ def test_retired_root_modules_are_absent() -> None:
     retired_paths = {
         PACKAGE_ROOT / "control_code_normalization.py",
         PACKAGE_ROOT / "models.py",
+        PACKAGE_ROOT / "timeseries_repository_base.py",
         PACKAGE_ROOT / "transaction_domain" / "control_code_normalization.py",
     }
     assert {path for path in retired_paths if path.exists()} == set()

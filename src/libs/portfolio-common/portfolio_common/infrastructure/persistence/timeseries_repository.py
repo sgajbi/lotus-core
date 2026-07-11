@@ -1,14 +1,16 @@
+"""SQLAlchemy persistence shared by timeseries generation and portfolio aggregation."""
+
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, List, Optional
+from typing import Any, List, Optional, cast
 
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from .currency_codes import normalize_currency_code
-from .database_models import (
+from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
     FxRate,
@@ -19,8 +21,8 @@ from .database_models import (
     PositionState,
     PositionTimeseries,
 )
-from .identifiers import normalize_lookup_identifier
-from .utils import async_timed
+from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.utils import async_timed
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +96,8 @@ def _missing_position_timeseries_exists(
     )
 
 
-class TimeseriesRepositoryBase:
-    """Shared repository logic for timeseries worker and portfolio aggregation services."""
+class SharedTimeseriesRepository:
+    """Concrete persistence used by timeseries generation and portfolio aggregation."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -120,7 +122,7 @@ class TimeseriesRepositoryBase:
             DailyPositionSnapshot.date == a_date,
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[DailyPositionSnapshot], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="upsert_position_timeseries")
     async def upsert_position_timeseries(self, timeseries_record: PositionTimeseries):
@@ -263,7 +265,7 @@ class TimeseriesRepositoryBase:
             func.trim(Instrument.security_id).in_(normalized_security_ids)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[Instrument], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="get_fx_rate")
     async def get_fx_rate(
@@ -330,7 +332,7 @@ class TimeseriesRepositoryBase:
             .order_by(PositionTimeseries.security_id)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[PositionTimeseries], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="get_all_cashflows_for_security_date")
     async def get_all_cashflows_for_security_date(
@@ -363,7 +365,7 @@ class TimeseriesRepositoryBase:
             .order_by(Cashflow.timing.asc(), Cashflow.transaction_id.asc())
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[Cashflow], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="get_last_portfolio_timeseries_before")
     async def get_last_portfolio_timeseries_before(
@@ -433,7 +435,7 @@ class TimeseriesRepositoryBase:
             .order_by(DailyPositionSnapshot.security_id)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[DailyPositionSnapshot], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="find_and_reset_stale_jobs")
     async def find_and_reset_stale_jobs(
@@ -455,7 +457,8 @@ class TimeseriesRepositoryBase:
         return await self._reset_retryable_stale_aggregation_jobs(reset_job_ids, stale_threshold)
 
     async def _find_stale_aggregation_job_rows(self, stale_threshold: datetime) -> list[Any]:
-        return (await self.db.execute(_stale_aggregation_jobs_stmt(stale_threshold))).all()
+        result = await self.db.execute(_stale_aggregation_jobs_stmt(stale_threshold))
+        return cast(list[Any], result.all())
 
     async def _mark_over_limit_stale_aggregation_jobs_failed(
         self,
@@ -483,7 +486,7 @@ class TimeseriesRepositoryBase:
         result = await self.db.execute(
             _reset_stale_aggregation_jobs_update_stmt(reset_job_ids, stale_threshold)
         )
-        reset_count = result.rowcount
+        reset_count = int(result.rowcount or 0)
         if reset_count > 0:
             logger.warning(
                 "Reset %s stale aggregation jobs from 'PROCESSING' to 'PENDING'.",
@@ -564,7 +567,7 @@ class TimeseriesRepositoryBase:
             .limit(max_rows)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[DailyPositionSnapshot], result.scalars().all())
 
     @async_timed(repository="TimeseriesRepository", method="get_cashflows_for_security_dates")
     async def get_cashflows_for_security_dates(

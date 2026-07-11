@@ -117,6 +117,11 @@ framework-independent cross-service policy under `portfolio_common.domain`. Clas
 clients, runtime adapters, and orchestration by their actual service and transaction ownership
 before moving them; repeated imports alone do not justify shared ownership.
 
+Concrete shared adapters live under `portfolio_common.infrastructure`, never in the domain
+namespace or behind misleading `Base` names. The current timeseries persistence adapter is a
+transitional shared implementation; timeseries generation and portfolio aggregation remain
+separate modules, and their repository responsibilities will be split without adding a runtime.
+
 After transaction-processing source consolidation is complete, the next governed boundary review
 covers timeseries generation, valuation orchestration/execution, pipeline orchestration, and
 portfolio aggregation. That review must classify each runtime as keep, merge into explicit
