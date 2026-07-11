@@ -1,22 +1,21 @@
 from decimal import Decimal
 
 import pytest
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
-)
-from cost_engine.processing.parser import (
-    TransactionParser,
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostCalculationErrorCollector,
+    CostTransactionParser,
 )
 
 
 @pytest.fixture
 def error_reporter():
-    return ErrorReporter()
+    return CostCalculationErrorCollector()
 
 
 @pytest.fixture
 def parser(error_reporter):
-    return TransactionParser(error_reporter=error_reporter)
+    return CostTransactionParser(error_reporter=error_reporter)
 
 
 def test_parse_valid_transaction(parser, error_reporter):
@@ -54,7 +53,7 @@ def test_parse_transaction_missing_multiple_fields_creates_valid_stub(parser, er
     GIVEN a raw transaction dictionary missing multiple required fields
     (including portfolio_base_currency)
     WHEN it is parsed
-    THEN it should create a single valid stub Transaction object with an error reason
+    THEN it should create a single valid stub CostBasisTransaction object with an error reason
     AND not raise a secondary validation error.
     """
     raw_data = [

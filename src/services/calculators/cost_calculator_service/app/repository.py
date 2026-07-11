@@ -33,14 +33,19 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    EffectiveFxRate,
+    OpenLotState,
+)
+
 from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
 )
-from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
-from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
-from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 
 logger = logging.getLogger(__name__)

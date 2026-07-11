@@ -1,7 +1,8 @@
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.corporate_action_cash_economics import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CorporateActionCashEconomicsError,
     calculate_corporate_action_cash_economics,
 )

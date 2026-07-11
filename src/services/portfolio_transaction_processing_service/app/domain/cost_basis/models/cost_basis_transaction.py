@@ -1,3 +1,5 @@
+"""Represent normalized transaction inputs and calculated cost-basis fields."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
@@ -145,7 +147,7 @@ class Fees:
 
 
 @dataclass(init=False)
-class Transaction:
+class CostBasisTransaction:
     """
     Represents a single financial transaction.
     """
@@ -257,15 +259,15 @@ class Transaction:
         for field_name, value in self._extra_fields.items():
             setattr(self, field_name, value)
 
-    def model_copy(self, *, update: dict[str, Any] | None = None) -> Transaction:
-        copied = object.__new__(Transaction)
+    def model_copy(self, *, update: dict[str, Any] | None = None) -> CostBasisTransaction:
+        copied = object.__new__(CostBasisTransaction)
         for field_name, value in vars(self).items():
             setattr(copied, field_name, value)
         copied._extra_fields = dict(self._extra_fields)
         if update:
             for field_name, value in update.items():
                 setattr(copied, field_name, value)
-                if field_name not in {field.name for field in fields(Transaction)}:
+                if field_name not in {field.name for field in fields(CostBasisTransaction)}:
                     copied._extra_fields[field_name] = value
         return copied
 

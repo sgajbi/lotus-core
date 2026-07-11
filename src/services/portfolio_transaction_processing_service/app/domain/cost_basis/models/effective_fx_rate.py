@@ -1,3 +1,5 @@
+"""Represent the effective FX rate selected for cost-basis conversion."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

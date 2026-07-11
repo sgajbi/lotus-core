@@ -3,20 +3,21 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from cost_engine.domain.models.transaction import (
-    Transaction,
-)
-from cost_engine.processing.cost_basis_strategies import (
-    AverageCostBasisStrategy,
-    FIFOBasisStrategy,
-)
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AverageCostBasisStrategy,
+    CostBasisTransaction,
+    FIFOBasisStrategy,
+)
 
-def _buy_txn(transaction_id: str, quantity: Decimal, cost_per_share: Decimal) -> Transaction:
+
+def _buy_txn(
+    transaction_id: str, quantity: Decimal, cost_per_share: Decimal
+) -> CostBasisTransaction:
     total_cost = quantity * cost_per_share
-    return Transaction(
+    return CostBasisTransaction(
         transaction_id=transaction_id,
         portfolio_id="P_PROP",
         instrument_id="I_PROP",

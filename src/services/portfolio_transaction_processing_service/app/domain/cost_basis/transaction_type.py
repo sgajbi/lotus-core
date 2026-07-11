@@ -1,3 +1,5 @@
+"""Enumerate transaction types supported by cost-basis calculation policy."""
+
 from enum import Enum
 
 

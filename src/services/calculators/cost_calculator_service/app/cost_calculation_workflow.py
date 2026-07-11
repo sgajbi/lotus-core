@@ -45,14 +45,19 @@ from portfolio_common.transaction_domain import (
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    OpenLotState,
+    transaction_order_key,
+)
+
 from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
 )
-from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
-from .cost_engine.processing.cost_objects import OpenLotState
-from .cost_engine.processing.sorter import transaction_order_key
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
@@ -370,7 +375,7 @@ class CostCalculationWorkflow:
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         if event_transaction_type in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
             return await self._build_fx_events_to_publish(event=event, repo=repo)
-        return await self._build_cost_engine_events_to_publish(
+        return await self._build_cost_basis_events_to_publish(
             event=event,
             event_transaction_type=event_transaction_type,
             portfolio=portfolio,
@@ -410,7 +415,7 @@ class CostCalculationWorkflow:
             instrument_events.append(contract_instrument)
         return [processed_event], instrument_events
 
-    async def _build_cost_engine_events_to_publish(
+    async def _build_cost_basis_events_to_publish(
         self,
         *,
         event: TransactionEvent,
@@ -421,7 +426,7 @@ class CostCalculationWorkflow:
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         await repo.acquire_cost_basis_processing_lock(event.portfolio_id, event.security_id)
-        calculation = await self._calculate_cost_engine(
+        calculation = await self._calculate_cost_basis(
             event=event,
             event_transaction_type=event_transaction_type,
             portfolio_base_currency=portfolio.base_currency,
@@ -455,7 +460,7 @@ class CostCalculationWorkflow:
 
         return events_to_publish, []
 
-    async def _calculate_cost_engine(
+    async def _calculate_cost_basis(
         self,
         *,
         event: TransactionEvent,
@@ -471,7 +476,7 @@ class CostCalculationWorkflow:
         )
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
         if checkpoint is not None and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS:
-            incoming_raw = await self._load_incoming_cost_engine_transaction(
+            incoming_raw = await self._load_incoming_cost_basis_transaction(
                 event=event,
                 portfolio_base_currency=portfolio_base_currency,
                 instrument=instrument,
@@ -578,7 +583,7 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
-        all_transactions_raw = await self._load_cost_engine_transactions(
+        all_transactions_raw = await self._load_cost_basis_transactions(
             event=event,
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
@@ -603,7 +608,7 @@ class CostCalculationWorkflow:
             average_cost_pool_transition=None,
         )
 
-    async def _load_incoming_cost_engine_transaction(
+    async def _load_incoming_cost_basis_transaction(
         self,
         *,
         event: TransactionEvent,
@@ -737,7 +742,7 @@ class CostCalculationWorkflow:
             )
         return checkpoint_transactions
 
-    async def _load_cost_engine_transactions(
+    async def _load_cost_basis_transactions(
         self,
         *,
         event: TransactionEvent,
@@ -873,7 +878,7 @@ class CostCalculationWorkflow:
     ) -> None:
         if errored:
             raise ValueError(
-                f"Transaction engine failed for {errored[0].transaction_id}: "
+                f"Cost-basis calculation failed for {errored[0].transaction_id}: "
                 f"{errored[0].error_reason}"
             )
 

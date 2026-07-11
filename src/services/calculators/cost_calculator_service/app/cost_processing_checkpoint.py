@@ -6,8 +6,11 @@ from decimal import Decimal
 
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 
-from .cost_engine.domain.models.transaction import Transaction
-from .cost_engine.processing.sorter import TransactionOrderKey, transaction_order_key
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction,
+    TransactionOrderKey,
+    transaction_order_key,
+)
 
 COST_ENGINE_STATE_VERSION = "open-lot-v1"
 
@@ -29,7 +32,7 @@ class CostBasisProcessingCheckpoint:
     @classmethod
     def from_transaction(
         cls,
-        transaction: Transaction,
+        transaction: CostBasisTransaction,
         *,
         cost_basis_method: str | CostBasisMethod,
     ) -> CostBasisProcessingCheckpoint:
@@ -69,7 +72,7 @@ class CostBasisProcessingCheckpoint:
 
     def permits_append(
         self,
-        transaction: Transaction,
+        transaction: CostBasisTransaction,
         *,
         cost_basis_method: str | CostBasisMethod,
     ) -> bool:

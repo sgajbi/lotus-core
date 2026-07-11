@@ -1,3 +1,5 @@
+"""Apply transaction-specific cost-basis and realized-P&L policies."""
+
 from decimal import Decimal
 from typing import Callable, Protocol, cast
 
@@ -13,27 +15,27 @@ from portfolio_common.transaction_type_registry import (
     is_production_booking_transaction_type,
 )
 
-from ..domain.corporate_action_cash_economics import (
+from ..corporate_action_cash_economics import (
     CorporateActionCashEconomics,
     CorporateActionCashEconomicsError,
     calculate_corporate_action_cash_economics,
 )
-from ..domain.enums.transaction_type import TransactionType
-from ..domain.models.transaction import Transaction
-from .disposition_engine import DispositionEngine
-from .error_reporter import ErrorReporter
+from ..models.cost_basis_transaction import CostBasisTransaction
+from ..transaction_type import TransactionType
+from .calculation_errors import CostCalculationErrorCollector
+from .lot_disposition import LotDispositionEngine
 
 
 class TransactionCostStrategy(Protocol):
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None: ...
 
 
-InvariantErrorAdder = Callable[[ErrorReporter, Transaction, str], None]
+InvariantErrorAdder = Callable[[CostCalculationErrorCollector, CostBasisTransaction, str], None]
 
 
 ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES = {
@@ -49,37 +51,37 @@ FX_BASELINE_TRANSACTION_TYPES = {
 }
 
 
-def _is_accrued_interest_excluded_from_book_cost(transaction: Transaction) -> bool:
+def _is_accrued_interest_excluded_from_book_cost(transaction: CostBasisTransaction) -> bool:
     policy_id = _normalize_code(getattr(transaction, "calculation_policy_id", None))
     return policy_id in ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES
 
 
 def _add_buy_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"BUY invariant violation: {message}")
 
 
 def _add_sell_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"SELL invariant violation: {message}")
 
 
 def _add_dividend_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"DIVIDEND invariant violation: {message}")
 
 
 def _add_interest_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(transaction.transaction_id, f"INTEREST invariant violation: {message}")
 
 
 def _add_cash_consideration_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(
         transaction.transaction_id,
@@ -88,7 +90,7 @@ def _add_cash_consideration_invariant_error(
 
 
 def _add_cash_in_lieu_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(
         transaction.transaction_id,
@@ -97,7 +99,7 @@ def _add_cash_in_lieu_invariant_error(
 
 
 def _add_adjustment_invariant_error(
-    error_reporter: ErrorReporter, transaction: Transaction, message: str
+    error_reporter: CostCalculationErrorCollector, transaction: CostBasisTransaction, message: str
 ) -> None:
     error_reporter.add_error(
         transaction.transaction_id,
@@ -112,7 +114,7 @@ def _normalize_decimal_field(value: object, field_name: str) -> Decimal:
     return cast(Decimal, resolved_value)
 
 
-def _is_cash_instrument(transaction: Transaction) -> bool:
+def _is_cash_instrument(transaction: CostBasisTransaction) -> bool:
     product_type = _normalize_code(getattr(transaction, "product_type", ""))
     asset_class = _normalize_code(getattr(transaction, "asset_class", ""))
     instrument_id = _normalize_code(getattr(transaction, "instrument_id", ""))
@@ -125,7 +127,7 @@ def _is_cash_instrument(transaction: Transaction) -> bool:
     )
 
 
-def _cash_movement_amount(transaction: Transaction) -> Decimal:
+def _cash_movement_amount(transaction: CostBasisTransaction) -> Decimal:
     gross_amount = _decimal_or_zero(
         transaction.gross_transaction_amount,
         field_name="gross_transaction_amount",
@@ -135,7 +137,7 @@ def _cash_movement_amount(transaction: Transaction) -> Decimal:
     return abs(movement_amount)
 
 
-def _cash_outflow_book_cost(transaction: Transaction) -> Decimal:
+def _cash_outflow_book_cost(transaction: CostBasisTransaction) -> Decimal:
     cash_amount = _cash_movement_amount(transaction)
     if _normalize_code(transaction.transaction_type) != TransactionType.FEE.value:
         return cash_amount
@@ -149,7 +151,9 @@ def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
     return _normalize_decimal_field(value, field_name)
 
 
-def _optional_transaction_decimal(transaction: Transaction, field_name: str) -> Decimal | None:
+def _optional_transaction_decimal(
+    transaction: CostBasisTransaction, field_name: str
+) -> Decimal | None:
     value = getattr(transaction, field_name, None)
     if value is None or (isinstance(value, str) and not value.strip()):
         return None
@@ -170,16 +174,16 @@ def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
     return str(transaction_type).strip().upper()
 
 
-def _transaction_fx_rate_or_one(transaction: Transaction) -> Decimal:
+def _transaction_fx_rate_or_one(transaction: CostBasisTransaction) -> Decimal:
     return transaction.transaction_fx_rate or Decimal(1)
 
 
-def _transaction_total_fees(transaction: Transaction) -> Decimal:
+def _transaction_total_fees(transaction: CostBasisTransaction) -> Decimal:
     return transaction.fees.total_fees if transaction.fees else Decimal(0)
 
 
 def _calculate_transaction_cash_economics(
-    transaction: Transaction,
+    transaction: CostBasisTransaction,
 ) -> CorporateActionCashEconomics:
     return calculate_corporate_action_cash_economics(
         gross_proceeds_local=transaction.gross_transaction_amount,
@@ -210,27 +214,27 @@ def _calculate_transaction_cash_economics(
     )
 
 
-def _apply_zero_cost_fields(transaction: Transaction) -> None:
+def _apply_zero_cost_fields(transaction: CostBasisTransaction) -> None:
     transaction.net_cost = Decimal(0)
     transaction.net_cost_local = Decimal(0)
     transaction.gross_cost = Decimal(0)
 
 
-def _apply_zero_realized_pnl(transaction: Transaction) -> None:
+def _apply_zero_realized_pnl(transaction: CostBasisTransaction) -> None:
     transaction.realized_gain_loss = Decimal(0)
     transaction.realized_gain_loss_local = Decimal(0)
 
 
-def _apply_no_realized_pnl(transaction: Transaction) -> None:
+def _apply_no_realized_pnl(transaction: CostBasisTransaction) -> None:
     transaction.realized_gain_loss = None
     transaction.realized_gain_loss_local = None
 
 
-def _has_non_zero_cost_fields(transaction: Transaction) -> bool:
+def _has_non_zero_cost_fields(transaction: CostBasisTransaction) -> bool:
     return bool(transaction.net_cost != Decimal(0) or transaction.net_cost_local != Decimal(0))
 
 
-def _has_non_zero_realized_pnl(transaction: Transaction) -> bool:
+def _has_non_zero_realized_pnl(transaction: CostBasisTransaction) -> bool:
     return bool(
         transaction.realized_gain_loss != Decimal(0)
         or transaction.realized_gain_loss_local != Decimal(0)
@@ -238,8 +242,8 @@ def _has_non_zero_realized_pnl(transaction: Transaction) -> bool:
 
 
 def _normalized_price_or_error(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
     add_invariant_error,
 ) -> Decimal | None:
     try:
@@ -250,8 +254,8 @@ def _normalized_price_or_error(
 
 
 def _validate_zero_quantity_and_price(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
     *,
     transaction_label: str,
     add_invariant_error,
@@ -275,8 +279,8 @@ def _validate_zero_quantity_and_price(
 
 
 def _validate_zero_cost_and_realized_pnl(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
     *,
     realized_label: str,
     add_invariant_error,
@@ -295,7 +299,7 @@ def _validate_zero_cost_and_realized_pnl(
     return True
 
 
-def _apply_buy_cost_fields(transaction: Transaction) -> None:
+def _apply_buy_cost_fields(transaction: CostBasisTransaction) -> None:
     total_fees_local = _transaction_total_fees(transaction)
     accrued_interest_local = transaction.accrued_interest or Decimal(0)
     fx_rate = _transaction_fx_rate_or_one(transaction)
@@ -309,7 +313,9 @@ def _apply_buy_cost_fields(transaction: Transaction) -> None:
     _apply_zero_realized_pnl(transaction)
 
 
-def _validate_buy_cost_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
+def _validate_buy_cost_fields(
+    transaction: CostBasisTransaction, error_reporter: CostCalculationErrorCollector
+) -> bool:
     if transaction.quantity <= Decimal(0):
         _add_buy_invariant_error(error_reporter, transaction, "quantity_delta must be > 0.")
         return False
@@ -324,7 +330,7 @@ def _validate_buy_cost_fields(transaction: Transaction, error_reporter: ErrorRep
 
 
 def _validate_non_negative_buy_costs(
-    transaction: Transaction, error_reporter: ErrorReporter
+    transaction: CostBasisTransaction, error_reporter: CostCalculationErrorCollector
 ) -> bool:
     if (
         transaction.gross_cost is None
@@ -350,9 +356,9 @@ def _validate_non_negative_buy_costs(
 
 
 def _record_buy_lot(
-    transaction: Transaction,
-    disposition_engine: DispositionEngine,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    disposition_engine: LotDispositionEngine,
+    error_reporter: CostCalculationErrorCollector,
 ) -> None:
     try:
         disposition_engine.add_buy_lot(transaction)
@@ -360,15 +366,15 @@ def _record_buy_lot(
         error_reporter.add_error(transaction.transaction_id, str(e))
 
 
-def _net_sell_proceeds_local(transaction: Transaction) -> Decimal:
+def _net_sell_proceeds_local(transaction: CostBasisTransaction) -> Decimal:
     return cast(Decimal, transaction.gross_transaction_amount) - _transaction_total_fees(
         transaction
     )
 
 
 def _validate_sell_quantity_and_proceeds(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
     *,
     net_sell_proceeds_local: Decimal,
     net_sell_proceeds_base: Decimal,
@@ -394,9 +400,9 @@ def _validate_sell_quantity_and_proceeds(
 
 
 def _validate_disposal_availability(
-    transaction: Transaction,
-    disposition_engine: DispositionEngine,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    disposition_engine: LotDispositionEngine,
+    error_reporter: CostCalculationErrorCollector,
     *,
     add_invariant_error: InvariantErrorAdder,
 ) -> bool:
@@ -422,9 +428,9 @@ def _validate_disposal_availability(
 
 
 def _consume_disposal_cost_basis(
-    transaction: Transaction,
-    disposition_engine: DispositionEngine,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    disposition_engine: LotDispositionEngine,
+    error_reporter: CostCalculationErrorCollector,
     *,
     add_invariant_error: InvariantErrorAdder,
 ) -> tuple[Decimal, Decimal, Decimal] | None:
@@ -449,7 +455,7 @@ def _consume_disposal_cost_basis(
 
 
 def _apply_sell_disposal_fields(
-    transaction: Transaction,
+    transaction: CostBasisTransaction,
     *,
     net_sell_proceeds_local: Decimal,
     net_sell_proceeds_base: Decimal,
@@ -463,7 +469,9 @@ def _apply_sell_disposal_fields(
     transaction.gross_cost = -cogs_base
 
 
-def _validate_sell_disposal_fields(transaction: Transaction, error_reporter: ErrorReporter) -> bool:
+def _validate_sell_disposal_fields(
+    transaction: CostBasisTransaction, error_reporter: CostCalculationErrorCollector
+) -> bool:
     if transaction.net_cost is None or transaction.net_cost_local is None:
         _add_sell_invariant_error(
             error_reporter,
@@ -482,8 +490,8 @@ def _validate_sell_disposal_fields(transaction: Transaction, error_reporter: Err
 
 
 def _resolve_interest_direction(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
 ) -> str | None:
     raw_direction = getattr(transaction, "interest_direction", None)
     direction = "INCOME" if raw_direction in (None, "") else _normalize_code(raw_direction)
@@ -497,7 +505,7 @@ def _resolve_interest_direction(
     return None
 
 
-def _normalize_transaction_currencies(transaction: Transaction) -> None:
+def _normalize_transaction_currencies(transaction: CostBasisTransaction) -> None:
     transaction.trade_currency = _normalize_currency_code(transaction.trade_currency)
     transaction.portfolio_base_currency = _normalize_currency_code(
         transaction.portfolio_base_currency
@@ -505,8 +513,8 @@ def _normalize_transaction_currencies(transaction: Transaction) -> None:
 
 
 def _normalize_existing_transaction_fx_rate(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
 ) -> bool:
     if transaction.transaction_fx_rate is None:
         return True
@@ -527,8 +535,8 @@ def _normalize_existing_transaction_fx_rate(
 
 
 def _validate_normalized_transaction_fx(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
 ) -> bool:
     if transaction.trade_currency == transaction.portfolio_base_currency:
         if transaction.transaction_fx_rate is None:
@@ -545,8 +553,8 @@ def _validate_normalized_transaction_fx(
 
 
 def _validate_transaction_currency_context(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
 ) -> bool:
     _normalize_transaction_currencies(transaction)
     if not _normalize_existing_transaction_fx_rate(transaction, error_reporter):
@@ -559,9 +567,9 @@ def _validate_transaction_currency_context(
 class BuyStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         _apply_buy_cost_fields(transaction)
         if not _validate_buy_cost_fields(transaction, error_reporter):
@@ -573,9 +581,9 @@ class BuyStrategy:
 class SellStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         net_sell_proceeds_local = _net_sell_proceeds_local(transaction)
         fx_rate = _transaction_fx_rate_or_one(transaction)
@@ -618,9 +626,9 @@ class SellStrategy:
 class CashInflowStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         cash_amount_local = _cash_movement_amount(transaction)
         transaction.gross_cost = cash_amount_local
@@ -636,9 +644,9 @@ class CashInflowStrategy:
 class CashOutflowStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         cash_amount_local = _cash_outflow_book_cost(transaction)
         fx_rate = _transaction_fx_rate_or_one(transaction)
@@ -651,9 +659,9 @@ class CashOutflowStrategy:
 class AdjustmentStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         del disposition_engine
         direction = _normalize_code(getattr(transaction, "movement_direction", None) or "INFLOW")
@@ -676,9 +684,9 @@ class AdjustmentStrategy:
 class SecurityInflowStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         transaction.gross_cost = transaction.gross_transaction_amount
         transaction.net_cost_local = transaction.gross_transaction_amount
@@ -693,9 +701,9 @@ class SecurityInflowStrategy:
 class SecurityOutflowStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         """Consumes a cost lot for a security transfer out, but does not realize a P&L."""
         cogs_base, cogs_local, consumed_quantity, error_reason = (
@@ -716,9 +724,9 @@ class SecurityOutflowStrategy:
 class PartialTransferOutStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         """
         Handles source-retained CA basis transfer-out legs.
@@ -752,9 +760,9 @@ class PartialTransferOutStrategy:
 class IncomeStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         _apply_zero_cost_fields(transaction)
         _apply_no_realized_pnl(transaction)
@@ -763,9 +771,9 @@ class IncomeStrategy:
 class CashConsiderationStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         del disposition_engine
         if not _validate_zero_quantity_and_price(
@@ -793,9 +801,9 @@ class CashConsiderationStrategy:
 class CashInLieuStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         if transaction.quantity <= Decimal(0):
             _add_cash_in_lieu_invariant_error(
@@ -853,7 +861,7 @@ class CashInLieuStrategy:
 
 
 def _apply_corporate_action_cash_economics(
-    transaction: Transaction,
+    transaction: CostBasisTransaction,
     economics: CorporateActionCashEconomics,
 ) -> None:
     transaction.set_calculated_field(
@@ -882,9 +890,9 @@ def _apply_corporate_action_cash_economics(
 class QuantityRestatementStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         """
         Handles same-instrument corporate-action quantity restatements where
@@ -897,9 +905,9 @@ class QuantityRestatementStrategy:
 class DividendStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         _apply_zero_cost_fields(transaction)
         _apply_zero_realized_pnl(transaction)
@@ -931,9 +939,9 @@ class DividendStrategy:
 class InterestStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         _apply_zero_cost_fields(transaction)
         _apply_zero_realized_pnl(transaction)
@@ -968,9 +976,9 @@ class InterestStrategy:
 class DefaultStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         transaction.gross_cost = transaction.gross_transaction_amount
         transaction.net_cost_local = transaction.gross_transaction_amount
@@ -981,9 +989,9 @@ class DefaultStrategy:
 class UnsupportedTaxStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         error_reporter.add_error(
             transaction.transaction_id,
@@ -994,9 +1002,9 @@ class UnsupportedTaxStrategy:
 class FxBaselineStrategy:
     def calculate_costs(
         self,
-        transaction: Transaction,
-        disposition_engine: DispositionEngine,
-        error_reporter: ErrorReporter,
+        transaction: CostBasisTransaction,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
     ) -> None:
         if not _validate_canonical_fx_transaction(transaction, error_reporter):
             return
@@ -1010,8 +1018,8 @@ class FxBaselineStrategy:
 
 
 def _validate_canonical_fx_transaction(
-    transaction: Transaction,
-    error_reporter: ErrorReporter,
+    transaction: CostBasisTransaction,
+    error_reporter: CostCalculationErrorCollector,
 ) -> bool:
     try:
         canonical = FxCanonicalTransaction.model_validate(transaction.model_dump(mode="python"))
@@ -1035,8 +1043,12 @@ def _validate_canonical_fx_transaction(
     return True
 
 
-class CostCalculator:
-    def __init__(self, disposition_engine: DispositionEngine, error_reporter: ErrorReporter):
+class CostBasisCalculator:
+    def __init__(
+        self,
+        disposition_engine: LotDispositionEngine,
+        error_reporter: CostCalculationErrorCollector,
+    ):
         self._disposition_engine = disposition_engine
         self._error_reporter = error_reporter
         self._strategies: dict[TransactionType, TransactionCostStrategy] = {
@@ -1082,10 +1094,10 @@ class CostCalculator:
             TransactionType.TAX: UnsupportedTaxStrategy(),
         }
 
-    def _validate_fx(self, t: Transaction) -> bool:
+    def _validate_fx(self, t: CostBasisTransaction) -> bool:
         return _validate_transaction_currency_context(t, self._error_reporter)
 
-    def calculate_transaction_costs(self, transaction: Transaction):
+    def calculate_transaction_costs(self, transaction: CostBasisTransaction):
         if not self._validate_fx(transaction):
             return
         try:
@@ -1109,7 +1121,7 @@ class CostCalculator:
         strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
 
     def _resolve_strategy(
-        self, transaction_type: TransactionType, transaction: Transaction
+        self, transaction_type: TransactionType, transaction: CostBasisTransaction
     ) -> TransactionCostStrategy | None:
         if not is_production_booking_transaction_type(transaction_type.value):
             definition = get_transaction_type_definition(transaction_type.value)
@@ -1118,7 +1130,7 @@ class CostCalculator:
             )
             self._error_reporter.add_error(
                 transaction.transaction_id,
-                "Transaction type "
+                "CostBasisTransaction type "
                 f"'{transaction_type.value}' is not allowed for production booking "
                 f"(registry_status={support_status}).",
             )

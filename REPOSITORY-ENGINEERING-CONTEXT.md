@@ -270,7 +270,8 @@ Current repository posture:
     boundary, keep domain rules framework-free, and serialize back to primitive payloads only at
     API/event/persistence edges.
     Cost-engine domain models now follow
-    `docs/standards/cost-engine-domain-model-standard.md`: `cost_engine/domain` must stay free of
+    `docs/standards/cost-basis-domain-standard.md`:
+    `portfolio_transaction_processing_service/app/domain/cost_basis` must stay free of
     Pydantic, FastAPI, SQLAlchemy, repositories, database sessions, Kafka clients, HTTP clients, and
     settings. Keep event/API validation at adapter boundaries and let parser construction map raw
     dictionaries into pure domain objects.
@@ -436,7 +437,8 @@ Current repository posture:
     add validation, cost, position, cashflow, supportability, and downstream compatibility proof.
     `SPIN_IN` and `DEMERGER_IN` are position transfer inflows; keep position rule tables aligned
     with registry-classified target-security inflow legs.
-    The cost engine must fail closed for registry-classified migration-only or target-not-implemented
+    Cost-basis calculation must fail closed for registry-classified migration-only or
+    target-not-implemented
     types such as `OTHER`; production-booking cost enum values need explicit strategy mappings.
     Query projected-position quantity and cash-position effects are registry-derived from
     production-booking `position_effect` semantics and must not reintroduce local duplicated sets.
@@ -784,7 +786,7 @@ Most relevant current governance:
     not liquidity advice, cash-deployment recommendation, performance methodology, risk
     methodology, or OMS acknowledgement.
 42. Cost-calculator product transaction processing requires instrument master data before
-    cost-engine processing, transaction-cost persistence, BUY lot-state persistence, or processed
+    cost-basis processing, transaction-cost persistence, BUY lot-state persistence, or processed
     event publication. Missing product instrument references are retryable reference-data
     dependencies, not normal cost/lot writes; FX contract and pure adjustment flows keep their
     specialized creation/validation paths. Raw transaction persistence uses the explicit
@@ -1779,7 +1781,7 @@ Most relevant current governance:
      capital P&L and zero FX P&L; cross-currency processing requires explicit capital and FX
      components and validates their totals. Bundle A must reconcile source basis to target basis
      plus cash-allocated basis and emit `insufficient_cash_basis` when evidence is absent. Keep the
-     pure policy in `cost_engine.domain.corporate_action_cash_economics`, persist calculated
+     pure policy in `portfolio_transaction_processing_service.app.domain.cost_basis`, persist calculated
      extension fields through `Transaction.set_calculated_field(...)`, and prove changes through
      the mixed-demerger PostgreSQL contract. Do not map cash consideration back to generic income,
      infer missing basis. `CASH_IN_LIEU` is the separate fractional overlay: require positive
@@ -1978,6 +1980,15 @@ Most relevant current governance:
      not automatic merge candidates. Keep position valuation separate from transaction processing
      unless measured market/job workload evidence invalidates its independent scaling and isolation
      rationale.
+148. Cost-basis models and deterministic policy are owned by
+     `portfolio_transaction_processing_service.app.domain.cost_basis`. Import its public API; do
+     not recreate `cost_engine`, generic `processing/parser/sorter/error_reporter` modules, or a
+     second transaction calculation model. Every new target-owned module requires a responsibility
+     docstring and framework-free domain proof. Keep transitional workflow, checkpoint, and
+     repository code outside the domain until explicit application ports and infrastructure
+     records exist. Database simplification follows ownership stabilization and requires additive
+     migration, rollback, replay/backfill, query-plan, concurrency, and downstream read-contract
+     evidence.
 
 ## Context Maintenance Rule
 

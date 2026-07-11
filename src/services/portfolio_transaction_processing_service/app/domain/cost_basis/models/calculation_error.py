@@ -1,8 +1,10 @@
+"""Represent a transaction-level cost-calculation validation error."""
+
 from dataclasses import dataclass
 
 
 @dataclass
-class ErroredTransaction:
+class CostCalculationError:
     """
     Represents a transaction that failed processing, along with the reason for failure.
     """

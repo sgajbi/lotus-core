@@ -44,13 +44,9 @@ class Transaction(TransactionBase):
     """
 
     id: int  # Database primary key
-    net_cost: Optional[condecimal()] = None  # NEW: Calculated net cost from transaction-cost-engine
-    gross_cost: Optional[condecimal()] = (
-        None  # NEW: Calculated gross cost from transaction-cost-engine
-    )
-    realized_gain_loss: Optional[condecimal()] = (
-        None  # NEW: Calculated realized gain/loss from transaction-cost-engine
-    )
+    net_cost: Optional[condecimal()] = None
+    gross_cost: Optional[condecimal()] = None
+    realized_gain_loss: Optional[condecimal()] = None
     created_at: datetime
     updated_at: datetime
 

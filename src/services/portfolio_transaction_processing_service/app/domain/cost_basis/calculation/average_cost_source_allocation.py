@@ -1,3 +1,5 @@
+"""Allocate average-cost source pools across linked instrument movements."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -5,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import ROUND_DOWN, Decimal
 
-from .cost_objects import OpenLotState
+from .lot_state import OpenLotState
 
 BookKey = tuple[str, str]
 LOT_QUANTITY_QUANTUM = Decimal("0.0000000001")

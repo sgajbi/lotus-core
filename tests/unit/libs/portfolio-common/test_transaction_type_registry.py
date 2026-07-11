@@ -28,14 +28,14 @@ from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logi
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
 )
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.enums import (
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CASH_INFLOW_TRANSACTION_TYPES as COST_SORTCASH_INFLOW_TRANSACTION_TYPES,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CASH_OUTFLOW_TRANSACTION_TYPES as COST_SORTCASH_OUTFLOW_TRANSACTION_TYPES,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     transaction_type as cost_transaction_type,
-)
-from src.services.calculators.cost_calculator_service.app.cost_engine.processing.sorter import (
-    _CASH_INFLOW_TRANSACTION_TYPES as COST_SORT_CASH_INFLOW_TRANSACTION_TYPES,
-)
-from src.services.calculators.cost_calculator_service.app.cost_engine.processing.sorter import (
-    _CASH_OUTFLOW_TRANSACTION_TYPES as COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     CASH_POSITION_DELTA_TRANSACTION_TYPES,
@@ -53,19 +53,19 @@ from src.services.query_service.app.services.position_flow_effects import (
 
 
 def test_registry_classifies_every_cost_engine_transaction_type() -> None:
-    cost_engine_types = {
+    cost_basis_types = {
         transaction_type.value for transaction_type in cost_transaction_type.TransactionType
     }
 
-    assert cost_engine_types <= TRANSACTION_TYPE_CODES
+    assert cost_basis_types <= TRANSACTION_TYPE_CODES
 
 
 def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> None:
     local_rule_table_types = (
         TRANSFER_INFLOW_TRANSACTION_TYPES
         | TRANSFER_OUTFLOW_TRANSACTION_TYPES
-        | COST_SORT_CASH_INFLOW_TRANSACTION_TYPES
-        | COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES
+        | COST_SORTCASH_INFLOW_TRANSACTION_TYPES
+        | COST_SORTCASH_OUTFLOW_TRANSACTION_TYPES
         | CASH_POSITION_DELTA_TRANSACTION_TYPES
         | POSITION_TRANSFER_TRANSACTION_TYPES
         | POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES
@@ -170,7 +170,7 @@ def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_imple
 
 
 def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:
-    assert COST_SORT_CASH_INFLOW_TRANSACTION_TYPES <= {
+    assert COST_SORTCASH_INFLOW_TRANSACTION_TYPES <= {
         code
         for code, definition in TRANSACTION_TYPE_REGISTRY.items()
         if definition.production_booking_allowed
@@ -179,7 +179,7 @@ def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:
             or definition.cash_effect == "inflow"
         )
     }
-    assert COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES <= {
+    assert COST_SORTCASH_OUTFLOW_TRANSACTION_TYPES <= {
         code
         for code, definition in TRANSACTION_TYPE_REGISTRY.items()
         if definition.production_booking_allowed
@@ -188,9 +188,7 @@ def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:
             or definition.cash_effect == "outflow"
         )
     }
-    assert (
-        COST_SORT_CASH_INFLOW_TRANSACTION_TYPES & COST_SORT_CASH_OUTFLOW_TRANSACTION_TYPES == set()
-    )
+    assert COST_SORTCASH_INFLOW_TRANSACTION_TYPES & COST_SORTCASH_OUTFLOW_TRANSACTION_TYPES == set()
 
 
 def test_other_is_registered_only_as_migration_type_not_production_booking() -> None:

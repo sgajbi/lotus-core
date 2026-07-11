@@ -1,27 +1,31 @@
+"""Map raw ledger records into validated cost-basis transactions."""
+
 import logging
 from decimal import Decimal
 from typing import Any
 
-from ..domain.models.transaction import Transaction
-from .error_reporter import ErrorReporter
+from ..models.cost_basis_transaction import CostBasisTransaction
+from .calculation_errors import CostCalculationErrorCollector
 
 logger = logging.getLogger(__name__)
 
 
-class TransactionParser:
+class CostTransactionParser:
     """
-    Parses raw transaction dictionaries into validated Transaction objects.
+    Parses raw transaction dictionaries into validated CostBasisTransaction objects.
     """
 
-    def __init__(self, error_reporter: ErrorReporter):
+    def __init__(self, error_reporter: CostCalculationErrorCollector):
         self._error_reporter = error_reporter
 
-    def parse_transactions(self, raw_transaction_data: list[dict[str, Any]]) -> list[Transaction]:
-        parsed_transactions: list[Transaction] = []
+    def parse_transactions(
+        self, raw_transaction_data: list[dict[str, Any]]
+    ) -> list[CostBasisTransaction]:
+        parsed_transactions: list[CostBasisTransaction] = []
         for raw_txn_data in raw_transaction_data:
             transaction_id = raw_txn_data.get("transaction_id", "UNKNOWN_ID_BEFORE_PARSE")
             try:
-                validated_txn = Transaction(**raw_txn_data)
+                validated_txn = CostBasisTransaction(**raw_txn_data)
                 parsed_transactions.append(validated_txn)
             except (TypeError, ValueError) as e:
                 error_reason = f"Validation error: {str(e)}"
@@ -35,9 +39,9 @@ class TransactionParser:
                 parsed_transactions.append(stub_txn)
         return parsed_transactions
 
-    def _create_stub_transaction(self, raw_data: dict, error_reason: str) -> Transaction:
-        """Creates a minimal Transaction object to hold error information."""
-        return Transaction(
+    def _create_stub_transaction(self, raw_data: dict, error_reason: str) -> CostBasisTransaction:
+        """Creates a minimal CostBasisTransaction object to hold error information."""
+        return CostBasisTransaction(
             transaction_id=raw_data.get("transaction_id", "UNKNOWN_ID"),
             portfolio_id=raw_data.get("portfolio_id", "UNKNOWN"),
             instrument_id=raw_data.get("instrument_id", "UNKNOWN"),
@@ -48,7 +52,6 @@ class TransactionParser:
             quantity=raw_data.get("quantity", Decimal(0)),
             gross_transaction_amount=raw_data.get("gross_transaction_amount", Decimal(0)),
             trade_currency=raw_data.get("trade_currency", "UNK"),
-            # --- FIX: Add required field with a sensible default ---
             portfolio_base_currency=raw_data.get("portfolio_base_currency", "UNK"),
             error_reason=error_reason,
         )

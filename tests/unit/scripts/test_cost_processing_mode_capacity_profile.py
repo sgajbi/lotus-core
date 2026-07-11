@@ -22,7 +22,7 @@ def test_processing_mode_profile_separates_append_and_backdated_work() -> None:
 
     assert report["schema_version"] == SCHEMA_VERSION
     assert report["scope"] == {
-        "layer": "cost_engine",
+        "layer": "cost_basis_calculation",
         "includes_database_io": False,
         "includes_kafka_io": False,
         "ordered_opening_append_requires_prior_lot_restore": False,

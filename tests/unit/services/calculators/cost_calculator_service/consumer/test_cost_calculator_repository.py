@@ -18,21 +18,19 @@ from src.services.calculators.cost_calculator_service.app.average_cost_pool_chec
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
 )
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.effective_fx_rate import (  # noqa: E501
-    EffectiveFxRate,
-)
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
-    Transaction as EngineTransaction,
-)
-from src.services.calculators.cost_calculator_service.app.cost_engine.processing.cost_objects import (  # noqa: E501
-    OpenLotState,
-)
 from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
     CostBasisProcessingCheckpoint,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
     _cost_basis_processing_lock_key,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
+    EffectiveFxRate,
+    OpenLotState,
 )
 
 pytestmark = pytest.mark.asyncio

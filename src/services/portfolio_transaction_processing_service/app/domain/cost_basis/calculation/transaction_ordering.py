@@ -1,3 +1,5 @@
+"""Define deterministic ledger ordering for cost-basis transactions."""
+
 from datetime import datetime
 from decimal import Decimal
 
@@ -6,20 +8,20 @@ from portfolio_common.ca_bundle_a_ordering import (
     ca_bundle_a_target_order_key,
 )
 
-from ..domain.models.transaction import Transaction
+from ..models.cost_basis_transaction import CostBasisTransaction
 
 _DEFAULT_CASH_DEPENDENCY_RANK = 1
 
 _CASH_INFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_BUY"})
-_CASH_INFLOW_TRANSACTION_TYPES = frozenset(
+CASH_INFLOW_TRANSACTION_TYPES = frozenset(
     {"DEPOSIT", "TRANSFER_IN", "MERGER_IN", "EXCHANGE_IN", "REPLACEMENT_IN", "BUY"}
 )
 _CASH_OUTFLOW_COMPONENT_TYPES = frozenset({"FX_CASH_SETTLEMENT_SELL"})
-_CASH_OUTFLOW_TRANSACTION_TYPES = frozenset({"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"})
+CASH_OUTFLOW_TRANSACTION_TYPES = frozenset({"SELL", "WITHDRAWAL", "FEE", "TAX", "TRANSFER_OUT"})
 TransactionOrderKey = tuple[datetime, int, int, int, str, Decimal, str]
 
 
-def transaction_order_key(transaction: Transaction) -> TransactionOrderKey:
+def transaction_order_key(transaction: CostBasisTransaction) -> TransactionOrderKey:
     """Return the canonical total ordering used by cost calculation and replay."""
     target_sequence, target_instrument_id = ca_bundle_a_target_order_key(transaction)
     order_quantity = getattr(transaction, "source_lot_order_quantity", transaction.quantity)
@@ -36,14 +38,16 @@ def transaction_order_key(transaction: Transaction) -> TransactionOrderKey:
     )
 
 
-class TransactionSorter:
+class CostTransactionSorter:
     """
     Responsible for merging and sorting transactions according to processing rules.
     """
 
     def sort_transactions(
-        self, existing_transactions: list[Transaction], new_transactions: list[Transaction]
-    ) -> list[Transaction]:
+        self,
+        existing_transactions: list[CostBasisTransaction],
+        new_transactions: list[CostBasisTransaction],
+    ) -> list[CostBasisTransaction]:
         """
         Merges and sorts transactions.
         Sorting Rules:
@@ -58,7 +62,7 @@ class TransactionSorter:
         return all_transactions
 
 
-def _cash_dependency_rank(txn: Transaction) -> int:
+def _cash_dependency_rank(txn: CostBasisTransaction) -> int:
     component_type = _normalize_sort_code(getattr(txn, "component_type", ""))
     transaction_type = _normalize_sort_code(getattr(txn, "transaction_type", ""))
 
@@ -71,7 +75,7 @@ def _cash_dependency_rank(txn: Transaction) -> int:
     return _DEFAULT_CASH_DEPENDENCY_RANK
 
 
-def _is_cash_transaction(txn: Transaction) -> bool:
+def _is_cash_transaction(txn: CostBasisTransaction) -> bool:
     product_type = _normalize_sort_code(getattr(txn, "product_type", ""))
     asset_class = _normalize_sort_code(getattr(txn, "asset_class", ""))
     instrument_id = _normalize_sort_code(getattr(txn, "instrument_id", ""))
@@ -87,14 +91,14 @@ def _is_cash_transaction(txn: Transaction) -> bool:
 def _is_cash_inflow(component_type: str, transaction_type: str) -> bool:
     return (
         component_type in _CASH_INFLOW_COMPONENT_TYPES
-        or transaction_type in _CASH_INFLOW_TRANSACTION_TYPES
+        or transaction_type in CASH_INFLOW_TRANSACTION_TYPES
     )
 
 
 def _is_cash_outflow(component_type: str, transaction_type: str) -> bool:
     return (
         component_type in _CASH_OUTFLOW_COMPONENT_TYPES
-        or transaction_type in _CASH_OUTFLOW_TRANSACTION_TYPES
+        or transaction_type in CASH_OUTFLOW_TRANSACTION_TYPES
     )
 
 

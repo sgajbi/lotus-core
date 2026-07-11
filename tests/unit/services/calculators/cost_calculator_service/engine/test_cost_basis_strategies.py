@@ -3,14 +3,13 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.models.transaction import (
-    Transaction,
-)
-from cost_engine.processing.cost_basis_strategies import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostBasisStrategy,
+    CostBasisTransaction,
     FIFOBasisStrategy,
+    OpenLotState,
 )
-from cost_engine.processing.cost_objects import OpenLotState
 
 # --- Tests for AverageCostBasisStrategy ---
 
@@ -48,7 +47,7 @@ def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy
     3. Sell 50 shares.
     """
     # Arrange: Create the two buy transactions
-    buy_txn_1 = Transaction(
+    buy_txn_1 = CostBasisTransaction(
         transaction_id="BUY001",
         portfolio_id="P1",
         instrument_id="AVCO_STOCK",
@@ -62,7 +61,7 @@ def test_average_cost_simple_disposition(avco_strategy: AverageCostBasisStrategy
         portfolio_base_currency="USD",
         net_cost_local=Decimal("1000"),
     )
-    buy_txn_2 = Transaction(
+    buy_txn_2 = CostBasisTransaction(
         transaction_id="BUY002",
         portfolio_id="P1",
         instrument_id="AVCO_STOCK",
@@ -116,7 +115,7 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
     """
     # ARRANGE
     # Buy 1: 100 shares @ €10/share, FX=1.10. Cost: €1000 local, $1100 base.
-    buy1 = Transaction(
+    buy1 = CostBasisTransaction(
         transaction_id="AVCO_BUY_1",
         portfolio_id="P_USD",
         instrument_id="EUR_STOCK",
@@ -131,7 +130,7 @@ def test_average_cost_dual_currency(avco_strategy: AverageCostBasisStrategy):
         portfolio_base_currency="USD",
     )
     # Buy 2: 100 shares @ €12/share, FX=1.15. Cost: €1200 local, $1380 base.
-    buy2 = Transaction(
+    buy2 = CostBasisTransaction(
         transaction_id="AVCO_BUY_2",
         portfolio_id="P_USD",
         instrument_id="EUR_STOCK",
@@ -183,7 +182,7 @@ def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
         ("AVCO_SEQUENCE_BUY_2", "100", "1200"),
     ):
         avco_strategy.add_buy_lot(
-            Transaction(
+            CostBasisTransaction(
                 transaction_id=transaction_id,
                 portfolio_id="P1",
                 instrument_id="AVCO_SEQUENCE_STOCK",
@@ -201,7 +200,7 @@ def test_average_cost_source_quantities_remain_exact_after_new_buy_and_disposal(
 
     avco_strategy.consume_sell_quantity("P1", "AVCO_SEQUENCE_STOCK", Decimal("50"))
     avco_strategy.add_buy_lot(
-        Transaction(
+        CostBasisTransaction(
             transaction_id="AVCO_SEQUENCE_BUY_3",
             portfolio_id="P1",
             instrument_id="AVCO_SEQUENCE_STOCK",
@@ -243,7 +242,7 @@ def test_average_cost_source_quantities_reconcile_at_database_scale(
 ):
     for index in range(3):
         avco_strategy.add_buy_lot(
-            Transaction(
+            CostBasisTransaction(
                 transaction_id=f"AVCO_FRACTIONAL_BUY_{index}",
                 portfolio_id="P1",
                 instrument_id="AVCO_FRACTIONAL_STOCK",
@@ -277,7 +276,7 @@ def test_average_cost_source_allocation_is_independent_of_sell_batching() -> Non
     sequential = AverageCostBasisStrategy()
     combined = AverageCostBasisStrategy()
     for index in range(3):
-        transaction = Transaction(
+        transaction = CostBasisTransaction(
             transaction_id=f"AVCO_BATCHING_BUY_{index}",
             portfolio_id="P1",
             instrument_id="AVCO_BATCHING_STOCK",
@@ -309,7 +308,7 @@ def test_average_cost_source_allocation_is_independent_of_sell_batching() -> Non
 
 def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -> None:
     strategy = AverageCostBasisStrategy()
-    closed_source = Transaction(
+    closed_source = CostBasisTransaction(
         transaction_id="AVCO_CLOSED_SOURCE",
         portfolio_id="P1",
         instrument_id="AVCO_REOPEN_STOCK",
@@ -355,7 +354,7 @@ def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -
 def test_average_cost_basis_transfer_restarts_disposal_segment_after_partial_sale() -> None:
     strategy = AverageCostBasisStrategy()
     strategy.add_buy_lot(
-        Transaction(
+        CostBasisTransaction(
             transaction_id="AVCO-PARTIAL-BASIS-SOURCE",
             portfolio_id="P-BASIS",
             instrument_id="PARENT-SECURITY",
@@ -417,7 +416,7 @@ def test_basis_only_transfer_reduces_source_lot_cost_without_changing_quantity(
         ("BASIS-SOURCE-2", "40", "800"),
     ):
         strategy.add_buy_lot(
-            Transaction(
+            CostBasisTransaction(
                 transaction_id=transaction_id,
                 portfolio_id="P-BASIS",
                 instrument_id="PARENT-SECURITY",
@@ -449,7 +448,7 @@ def test_basis_only_transfer_reduces_source_lot_cost_without_changing_quantity(
 
 def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zero() -> None:
     strategy = AverageCostBasisStrategy()
-    original = Transaction(
+    original = CostBasisTransaction(
         transaction_id="ZERO-BASIS-SOURCE",
         portfolio_id="P-BASIS",
         instrument_id="PARENT-SECURITY",
@@ -497,7 +496,7 @@ def test_average_cost_full_basis_transfer_then_new_buy_keeps_old_source_cost_zer
 def test_basis_transfer_rejects_amount_above_available_basis(strategy_type) -> None:
     strategy = strategy_type()
     strategy.add_buy_lot(
-        Transaction(
+        CostBasisTransaction(
             transaction_id="BASIS-LIMIT-SOURCE",
             portfolio_id="P-BASIS",
             instrument_id="PARENT-SECURITY",
@@ -525,7 +524,7 @@ def test_basis_transfer_rejects_amount_above_available_basis(strategy_type) -> N
 def test_average_cost_initial_lots_normalize_buy_transaction_type(
     avco_strategy: AverageCostBasisStrategy,
 ):
-    buy_txn = Transaction(
+    buy_txn = CostBasisTransaction(
         transaction_id="AVCO_PADDED_BUY_1",
         portfolio_id="P1",
         instrument_id="AVCO_STOCK",
@@ -548,7 +547,7 @@ def test_average_cost_initial_lots_normalize_buy_transaction_type(
 @pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
 def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_quantity(strategy_cls):
     strategy = strategy_cls()
-    buy_txn = Transaction(
+    buy_txn = CostBasisTransaction(
         transaction_id="DIRTY_NEGATIVE_QTY_BUY",
         portfolio_id="P1",
         instrument_id="DIRTY_STOCK",
@@ -573,7 +572,7 @@ def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_quantity(strategy_cl
 @pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
 def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_cost_basis(strategy_cls):
     strategy = strategy_cls()
-    buy_txn = Transaction(
+    buy_txn = CostBasisTransaction(
         transaction_id="DIRTY_NEGATIVE_COST_BUY",
         portfolio_id="P1",
         instrument_id="DIRTY_STOCK",
@@ -598,7 +597,7 @@ def test_cost_basis_strategy_rejects_dirty_negative_buy_lot_cost_basis(strategy_
 @pytest.mark.parametrize("strategy_cls", [AverageCostBasisStrategy, FIFOBasisStrategy])
 def test_cost_basis_strategy_normalizes_buy_lot_inputs_once(strategy_cls):
     strategy = strategy_cls()
-    buy_txn = Transaction(
+    buy_txn = CostBasisTransaction(
         transaction_id="COUNTED_AMOUNT_BUY",
         portfolio_id="P1",
         instrument_id="COUNTED_STOCK",
@@ -632,7 +631,7 @@ def test_cost_basis_strategy_rejects_non_positive_sell_quantity_without_state_ch
     strategy_cls,
 ):
     strategy = strategy_cls()
-    buy_txn = Transaction(
+    buy_txn = CostBasisTransaction(
         transaction_id="SELL_GUARD_BUY",
         portfolio_id="P1",
         instrument_id="SELL_GUARD_STOCK",
@@ -671,9 +670,9 @@ def fifo_strategy() -> FIFOBasisStrategy:
 
 
 @pytest.fixture
-def sample_buy_transaction() -> Transaction:
+def sample_buy_transaction() -> CostBasisTransaction:
     """Provides a sample BUY transaction for FIFO tests."""
-    return Transaction(
+    return CostBasisTransaction(
         transaction_id="FIFO_BUY_01",
         portfolio_id="P1",
         instrument_id="FIFO_STOCK",
@@ -689,7 +688,9 @@ def sample_buy_transaction() -> Transaction:
     )
 
 
-def test_fifo_add_buy_lot(fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction):
+def test_fifo_add_buy_lot(
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: CostBasisTransaction
+):
     # Act
     fifo_strategy.add_buy_lot(sample_buy_transaction)
 
@@ -702,7 +703,7 @@ def test_fifo_add_buy_lot(fifo_strategy: FIFOBasisStrategy, sample_buy_transacti
 
 
 def test_fifo_initial_lots_normalize_buy_transaction_type(
-    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: CostBasisTransaction
 ):
     padded_buy = sample_buy_transaction.model_copy(update={"transaction_type": " buy "})
 
@@ -714,7 +715,7 @@ def test_fifo_initial_lots_normalize_buy_transaction_type(
 
 
 def test_fifo_consume_sell_fully(
-    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: CostBasisTransaction
 ):
     # Arrange
     fifo_strategy.add_buy_lot(sample_buy_transaction)
@@ -732,7 +733,7 @@ def test_fifo_consume_sell_fully(
 
 
 def test_fifo_consume_sell_partially(
-    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: CostBasisTransaction
 ):
     # Arrange
     fifo_strategy.add_buy_lot(sample_buy_transaction)
@@ -752,7 +753,7 @@ def test_fifo_consume_sell_partially(
 
 
 def test_fifo_consume_sell_insufficient_quantity(
-    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: Transaction
+    fifo_strategy: FIFOBasisStrategy, sample_buy_transaction: CostBasisTransaction
 ):
     # Arrange
     fifo_strategy.add_buy_lot(sample_buy_transaction)
@@ -771,7 +772,7 @@ def test_fifo_consume_sell_insufficient_quantity(
 
 def test_fifo_multi_lot_disposition(fifo_strategy: FIFOBasisStrategy):
     # Arrange: Two buy lots
-    buy1 = Transaction(
+    buy1 = CostBasisTransaction(
         transaction_id="FIFO_BUY_01",
         portfolio_id="P1",
         instrument_id="FIFO_STOCK",
@@ -785,7 +786,7 @@ def test_fifo_multi_lot_disposition(fifo_strategy: FIFOBasisStrategy):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )  # Cost: $10/share
-    buy2 = Transaction(
+    buy2 = CostBasisTransaction(
         transaction_id="FIFO_BUY_02",
         portfolio_id="P1",
         instrument_id="FIFO_STOCK",
@@ -822,7 +823,7 @@ def test_fifo_multi_lot_disposition(fifo_strategy: FIFOBasisStrategy):
 
 def test_fifo_available_quantity_does_not_scan_open_lots(
     fifo_strategy: FIFOBasisStrategy,
-    sample_buy_transaction: Transaction,
+    sample_buy_transaction: CostBasisTransaction,
 ) -> None:
     class IterationForbiddenDeque(deque):
         def __iter__(self):
@@ -849,7 +850,7 @@ def test_fifo_dual_currency_disposition(fifo_strategy: FIFOBasisStrategy):
     """
     # ARRANGE
     # Lot 1: 100 shares @ €10/share, FX=1.10. Cost: €1000 local, $1100 base.
-    buy1 = Transaction(
+    buy1 = CostBasisTransaction(
         transaction_id="FIFO_DC_BUY_1",
         portfolio_id="P_USD",
         instrument_id="EUR_STOCK",
@@ -864,7 +865,7 @@ def test_fifo_dual_currency_disposition(fifo_strategy: FIFOBasisStrategy):
         portfolio_base_currency="USD",
     )
     # Lot 2: 50 shares @ €12/share, FX=1.15. Cost: €600 local, $690 base.
-    buy2 = Transaction(
+    buy2 = CostBasisTransaction(
         transaction_id="FIFO_DC_BUY_2",
         portfolio_id="P_USD",
         instrument_id="EUR_STOCK",

@@ -1,7 +1,8 @@
 from decimal import Decimal
 
 import pytest
-from cost_engine.processing.average_cost_source_allocation import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPool,
     AverageCostSourceAllocation,
 )

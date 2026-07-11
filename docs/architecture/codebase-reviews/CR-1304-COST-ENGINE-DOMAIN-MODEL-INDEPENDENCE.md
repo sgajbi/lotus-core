@@ -10,7 +10,7 @@ existing cost-calculation behavior and internal engine compatibility.
 ## Objective
 
 Make `Fees`, `Transaction`, and `ErroredTransaction` usable by the cost engine without importing
-Pydantic from `cost_engine/domain`, and keep validation/coercion at the parser/adapter boundary.
+Pydantic from `portfolio_transaction_processing_service/app/domain/cost_basis`, and keep validation/coercion at the parser/adapter boundary.
 
 ## Changes
 
@@ -21,8 +21,8 @@ Pydantic from `cost_engine/domain`, and keep validation/coercion at the parser/a
    - `Fees.model_dump(...)`.
 3. Rewired `TransactionParser` to construct domain transactions directly instead of using Pydantic
    `TypeAdapter`.
-4. Added a focused guard test proving `cost_engine/domain` does not import Pydantic.
-5. Added `docs/standards/cost-engine-domain-model-standard.md` to make the boundary rule explicit.
+4. Added a focused guard test proving `portfolio_transaction_processing_service/app/domain/cost_basis` does not import Pydantic.
+5. Added `docs/standards/cost-basis-domain-standard.md` to make the boundary rule explicit.
 
 ## Behavior And Compatibility
 

@@ -1,4 +1,4 @@
-"""Profile ordered append and backdated rebuild cost-engine workloads."""
+"""Profile ordered append and backdated rebuild cost-basis workloads."""
 
 from __future__ import annotations
 
@@ -257,7 +257,7 @@ def run_processing_mode_profile(
         "schema_version": SCHEMA_VERSION,
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "scope": {
-            "layer": "cost_engine",
+            "layer": "cost_basis_calculation",
             "includes_database_io": False,
             "includes_kafka_io": False,
             "ordered_opening_append_requires_prior_lot_restore": False,

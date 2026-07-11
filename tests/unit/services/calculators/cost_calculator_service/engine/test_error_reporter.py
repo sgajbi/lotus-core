@@ -1,12 +1,13 @@
 import pytest
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostCalculationErrorCollector,
 )
 
 
 @pytest.fixture
 def error_reporter():
-    return ErrorReporter()
+    return CostCalculationErrorCollector()
 
 
 def test_add_and_get_error(error_reporter):

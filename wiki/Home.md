@@ -55,7 +55,7 @@ tests, contracts, generated evidence, RFC/docs truth, and validation on the corr
 - [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
-- [Cost Calculator](Cost-Calculator)
+- [Cost Processing](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Financial Reconciliation](Financial-Reconciliation)
 - [Position Processing](Position-Calculator)

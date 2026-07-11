@@ -4,37 +4,25 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
-from cost_engine.domain.models.transaction import (
-    Transaction,
-)
-from cost_engine.processing.cost_basis_strategies import (
-    FIFOBasisStrategy,
-)
-from cost_engine.processing.cost_calculator import (
-    CostCalculator,
-)
-from cost_engine.processing.cost_objects import OpenLotState
-from cost_engine.processing.disposition_engine import (
-    DispositionEngine,
-)
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
-)
-from cost_engine.processing.parser import (
-    TransactionParser,
-)
-from cost_engine.processing.sorter import (
-    TransactionSorter,
-)
 
 from src.services.calculators.cost_calculator_service.app.transaction_processor import (
     TransactionProcessor,
     build_transaction_processor,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisCalculator,
+    CostBasisTransaction,
+    CostCalculationErrorCollector,
+    CostTransactionParser,
+    CostTransactionSorter,
+    FIFOBasisStrategy,
+    LotDispositionEngine,
+    OpenLotState,
+)
 
 
-def _transaction(transaction_id: str) -> Transaction:
-    return Transaction(
+def _transaction(transaction_id: str) -> CostBasisTransaction:
+    return CostBasisTransaction(
         transaction_id=transaction_id,
         portfolio_id="P1",
         instrument_id="I1",
@@ -76,12 +64,12 @@ def _raw_transaction(
 @pytest.fixture
 def transaction_processor() -> TransactionProcessor:
     """Provides a fully wired instance of the TransactionProcessor with real components."""
-    error_reporter = ErrorReporter()
-    parser = TransactionParser(error_reporter=error_reporter)
-    sorter = TransactionSorter()
+    error_reporter = CostCalculationErrorCollector()
+    parser = CostTransactionParser(error_reporter=error_reporter)
+    sorter = CostTransactionSorter()
     strategy = FIFOBasisStrategy()
-    disposition_engine = DispositionEngine(cost_basis_strategy=strategy)
-    cost_calculator = CostCalculator(
+    disposition_engine = LotDispositionEngine(cost_basis_strategy=strategy)
+    cost_calculator = CostBasisCalculator(
         disposition_engine=disposition_engine, error_reporter=error_reporter
     )
     return TransactionProcessor(
@@ -375,7 +363,7 @@ def test_transaction_processor_reports_unexpected_calculator_errors():
                 )
             }
 
-    error_reporter = ErrorReporter()
+    error_reporter = CostCalculationErrorCollector()
     processor = TransactionProcessor(
         parser=_Parser(),
         sorter=_Sorter(),

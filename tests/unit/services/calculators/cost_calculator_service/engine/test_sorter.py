@@ -2,19 +2,18 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.models.transaction import (
-    Transaction,
-)
-from cost_engine.processing.sorter import (
-    TransactionSorter,
-    transaction_order_key,
-)
 from portfolio_common.ca_bundle_a_constants import (
     CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
     CA_BUNDLE_A_SOURCE_OUT_TYPES,
     CA_BUNDLE_A_TARGET_IN_TYPES,
 )
 from portfolio_common.ca_bundle_a_ordering import ca_bundle_a_dependency_rank
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction,
+    CostTransactionSorter,
+    transaction_order_key,
+)
 
 _CANONICAL_BUNDLE_A_SORT_TYPES = (
     *sorted(CA_BUNDLE_A_SOURCE_OUT_TYPES),
@@ -34,7 +33,7 @@ _CANONICAL_BUNDLE_A_SORT_TYPES = (
 
 @pytest.fixture
 def sorter():
-    return TransactionSorter()
+    return CostTransactionSorter()
 
 
 def _transaction(
@@ -48,8 +47,8 @@ def _transaction(
     product_type: str | None = None,
     asset_class: str | None = None,
     component_type: str | None = None,
-) -> Transaction:
-    return Transaction(
+) -> CostBasisTransaction:
+    return CostBasisTransaction(
         transaction_id=transaction_id,
         transaction_date=transaction_date,
         quantity=quantity,
@@ -69,7 +68,7 @@ def _transaction(
 
 def test_sort_by_date(sorter):
     # Arrange
-    t1 = Transaction(
+    t1 = CostBasisTransaction(
         transaction_id="t1",
         transaction_date=datetime(2023, 1, 5),
         quantity=Decimal("1"),
@@ -82,7 +81,7 @@ def test_sort_by_date(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    t2 = Transaction(
+    t2 = CostBasisTransaction(
         transaction_id="t2",
         transaction_date=datetime(2023, 1, 1),
         quantity=Decimal("1"),
@@ -110,7 +109,7 @@ def test_sort_by_quantity_on_same_day(sorter):
     """
     # Arrange
     same_day = datetime(2023, 1, 10)
-    t_small_qty = Transaction(
+    t_small_qty = CostBasisTransaction(
         transaction_id="t_small",
         transaction_date=same_day,
         quantity=Decimal("50"),
@@ -123,7 +122,7 @@ def test_sort_by_quantity_on_same_day(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    t_large_qty = Transaction(
+    t_large_qty = CostBasisTransaction(
         transaction_id="t_large",
         transaction_date=same_day,
         quantity=Decimal("100"),
@@ -179,7 +178,7 @@ def test_sort_bundle_a_dependency_and_target_ordering(sorter):
     and target-in legs should follow child_sequence_hint.
     """
     same_day = datetime(2026, 1, 10)
-    target_2 = Transaction(
+    target_2 = CostBasisTransaction(
         transaction_id="t_target_2",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -194,7 +193,7 @@ def test_sort_bundle_a_dependency_and_target_ordering(sorter):
         child_sequence_hint=2,
         target_instrument_id="TGT2",
     )
-    source = Transaction(
+    source = CostBasisTransaction(
         transaction_id="t_source",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -207,7 +206,7 @@ def test_sort_bundle_a_dependency_and_target_ordering(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    target_1 = Transaction(
+    target_1 = CostBasisTransaction(
         transaction_id="t_target_1",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -229,7 +228,7 @@ def test_sort_bundle_a_dependency_and_target_ordering(sorter):
 
 def test_sort_rights_lifecycle_dependency_ordering(sorter):
     same_day = datetime(2026, 1, 10)
-    allocate = Transaction(
+    allocate = CostBasisTransaction(
         transaction_id="t_allocate",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -242,7 +241,7 @@ def test_sort_rights_lifecycle_dependency_ordering(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    subscribe = Transaction(
+    subscribe = CostBasisTransaction(
         transaction_id="t_subscribe",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -255,7 +254,7 @@ def test_sort_rights_lifecycle_dependency_ordering(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    delivery = Transaction(
+    delivery = CostBasisTransaction(
         transaction_id="t_delivery",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -268,7 +267,7 @@ def test_sort_rights_lifecycle_dependency_ordering(sorter):
         trade_currency="USD",
         portfolio_base_currency="USD",
     )
-    refund = Transaction(
+    refund = CostBasisTransaction(
         transaction_id="t_refund",
         transaction_date=same_day,
         quantity=Decimal("1"),
@@ -293,7 +292,7 @@ def test_sort_rights_lifecycle_dependency_ordering(sorter):
 
 def test_sort_cash_inflow_before_cash_outflow_on_same_timestamp(sorter):
     same_day = datetime(2025, 8, 28)
-    deposit = Transaction(
+    deposit = CostBasisTransaction(
         transaction_id="TS_DEP_01",
         transaction_date=same_day,
         quantity=Decimal("5500"),
@@ -308,7 +307,7 @@ def test_sort_cash_inflow_before_cash_outflow_on_same_timestamp(sorter):
         product_type="Cash",
         asset_class="Cash",
     )
-    settlement_sell = Transaction(
+    settlement_sell = CostBasisTransaction(
         transaction_id="TS_CASH_SETTLE_BUY_01",
         transaction_date=same_day,
         quantity=Decimal("5500"),

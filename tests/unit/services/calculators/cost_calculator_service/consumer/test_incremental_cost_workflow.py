@@ -14,9 +14,6 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_workf
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
 )
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
-    Transaction as EngineTransaction,
-)
 from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
     CostBasisProcessingCheckpoint,
 )
@@ -24,6 +21,9 @@ from src.services.calculators.cost_calculator_service.app.repository import (
     AverageCostPoolCheckpointRecord,
     CostCalculatorRepository,
     OpenLotCheckpointRecord,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostBasisTransaction as EngineTransaction,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             "COST_PROCESSING_OPEN_LOTS_RESTORED"
         ) as restore_metric,
     ):
-        calculation = await workflow._calculate_cost_engine(
+        calculation = await workflow._calculate_cost_basis(
             event=sell_event,
             event_transaction_type=sell_type,
             portfolio_base_currency="USD",
@@ -187,7 +187,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         MagicMock(cost_basis_method="AVCO"),
     )
 
-    calculation = await workflow._calculate_cost_engine(
+    calculation = await workflow._calculate_cost_basis(
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
@@ -246,7 +246,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         MagicMock(cost_basis_method="AVCO"),
     )
 
-    calculation = await workflow._calculate_cost_engine(
+    calculation = await workflow._calculate_cost_basis(
         event=buy_event,
         event_transaction_type=buy_type,
         portfolio_base_currency="USD",
@@ -290,7 +290,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         MagicMock(cost_basis_method="AVCO"),
     )
 
-    calculation = await workflow._calculate_cost_engine(
+    calculation = await workflow._calculate_cost_basis(
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
@@ -401,7 +401,7 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
         )
     ]
 
-    with pytest.raises(ValueError, match="Transaction engine failed"):
+    with pytest.raises(ValueError, match="Cost-basis calculation failed"):
         await CostCalculationWorkflow().build_average_cost_pool_rebuild_plan(
             portfolio_id="P1",
             security_id="S1",
@@ -426,7 +426,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         "src.services.calculators.cost_calculator_service.app.cost_calculation_workflow."
         "COST_PROCESSING_EXECUTION_TOTAL"
     ) as execution_metric:
-        calculation = await workflow._calculate_cost_engine(
+        calculation = await workflow._calculate_cost_basis(
             event=_event(
                 transaction_id="BUY-EARLIER",
                 transaction_date=earlier_date,
@@ -468,7 +468,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         quantity="0",
     )
 
-    calculation = await workflow._calculate_cost_engine(
+    calculation = await workflow._calculate_cost_basis(
         event=dividend,
         event_transaction_type="DIVIDEND",
         portfolio_base_currency="USD",

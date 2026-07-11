@@ -2,13 +2,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.models.transaction import (
-    Fees,
-)
-from cost_engine.domain.models.transaction import (
-    Transaction as EngineTransaction,
-)
-from cost_engine.processing.cost_objects import OpenLotState
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     Portfolio,
@@ -23,6 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    Fees,
+    OpenLotState,
 )
 
 pytestmark = pytest.mark.asyncio

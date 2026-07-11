@@ -1,6 +1,6 @@
 # Calculator Runtime Consolidation Decision
 
-Status: App-local/CI and Kubernetes manifests cut over; position source moved; registry/cluster and cost/cashflow source removal pending
+Status: App-local/CI and Kubernetes manifests cut over; position and cost-basis domain source moved; registry/cluster and remaining cost/cashflow source removal pending
 Date: 2026-07-10  
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
@@ -104,9 +104,9 @@ combined completion contract.
    workflow/domain/repository modules and remove the obsolete normal-path stage wait only after
    downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
-Steps 1 through 6 and the position source move from step 7 are implemented locally. The branch
-must not claim full runtime consolidation complete before cost/cashflow source retirement and the
-remaining release/deployment gates are validated.
+Steps 1 through 6, the position source move, and cost-basis domain move from step 7 are implemented
+locally. The branch must not claim full runtime consolidation complete before remaining cost
+workflow/repository and cashflow source retirement and the release/deployment gates are validated.
 
 ## Rollback
 
