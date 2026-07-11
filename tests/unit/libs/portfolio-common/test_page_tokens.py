@@ -3,7 +3,6 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from portfolio_common.page_tokens import PageTokenCodec
 
 
