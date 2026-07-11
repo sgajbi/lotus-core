@@ -3,7 +3,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
 from ..dtos.transaction_dto import PaginatedTransactionResponse, TransactionRecord
 from .transaction_metadata import ledger_data_quality_status, ledger_reason_codes
 from .transaction_reporting_currency import apply_transaction_reporting_currency_fields

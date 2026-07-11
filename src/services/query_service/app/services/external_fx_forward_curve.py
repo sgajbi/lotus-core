@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
 from ..dtos.reference_integration_dto import (
     ExternalFXForwardCurveRequest,
     ExternalFXForwardCurveResponse,
     ExternalFXForwardCurveSupportability,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from .request_fingerprint import request_fingerprint
 
 EXTERNAL_FX_FORWARD_CURVE_MISSING_FAMILIES = ["external_fx_forward_curve"]

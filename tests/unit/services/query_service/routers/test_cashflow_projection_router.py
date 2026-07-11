@@ -3,13 +3,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+)
 
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionPoint,
     CashflowProjectionResponse,
-)
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.routers.cashflow_projection import (
     get_cashflow_projection,

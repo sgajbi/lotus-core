@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
 from ..dtos.reference_integration_dto import (
     ExternalCurrencyExposureRequest,
     ExternalCurrencyExposureResponse,
     ExternalCurrencyExposureSupportability,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from .request_fingerprint import request_fingerprint
 
 EXTERNAL_CURRENCY_EXPOSURE_MISSING_FAMILIES = [

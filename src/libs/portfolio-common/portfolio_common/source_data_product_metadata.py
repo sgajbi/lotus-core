@@ -1,3 +1,5 @@
+"""Shared source-data product runtime metadata and deterministic identity contracts."""
+
 import hashlib
 import json
 from datetime import UTC, date, datetime

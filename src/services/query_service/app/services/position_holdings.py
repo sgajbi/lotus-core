@@ -3,13 +3,13 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
-
-from ..dtos.position_dto import PortfolioPositionsResponse, Position
-from ..dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationSummary,
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
+
+from ..dtos.position_dto import PortfolioPositionsResponse, Position
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero

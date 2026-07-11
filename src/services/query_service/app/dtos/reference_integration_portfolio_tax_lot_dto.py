@@ -4,14 +4,14 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .reference_integration_dto import ReferencePageMetadata
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .reference_integration_dto import ReferencePageMetadata
 
 
 def _normalize_tax_lot_security_ids(security_ids: list[str] | None) -> list[str] | None:

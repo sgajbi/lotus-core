@@ -1,11 +1,12 @@
 from datetime import date, datetime
 from typing import Any
 
-from ..dtos.position_dto import Position
-from ..dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataDegradationDetail,
     SourceDataDegradationSummary,
 )
+
+from ..dtos.position_dto import Position
 from ..repositories.identifier_normalization import normalize_security_id
 from .position_holdings import PositionRowResult, position_requires_market_price_freshness
 

@@ -24,7 +24,7 @@ from src.services.query_service.app.dtos.position_dto import (
 from src.services.query_service.app.dtos.reporting_dto import (
     CashBalancesResponse,
 )
-from src.services.query_service.app.dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SOURCE_METADATA_UNAVAILABLE_HASH,
     source_data_product_runtime_metadata,
     stable_content_hash,

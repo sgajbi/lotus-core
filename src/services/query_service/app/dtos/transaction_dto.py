@@ -3,14 +3,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from .cashflow_dto import CashflowRecord
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field
+
+from .cashflow_dto import CashflowRecord
 
 
 class TransactionCostRecord(BaseModel):

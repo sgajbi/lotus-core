@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from portfolio_common.reconciliation_quality import BLOCKED, BREAK_OPEN, COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..support_policy import DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES
 from .support_job_record_builder import is_support_job_stale
 

@@ -1,9 +1,8 @@
 from datetime import datetime
 from typing import Literal
 
+from portfolio_common.source_data_product_metadata import product_name_field, product_version_field
 from pydantic import BaseModel, ConfigDict, Field
-
-from .source_data_product_identity import product_name_field, product_version_field
 
 
 class PolicyProvenanceMetadata(BaseModel):

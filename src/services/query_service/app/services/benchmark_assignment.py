@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from portfolio_common.source_data_product_metadata import stable_content_hash
+
 from ..dtos.reference_integration_dto import BenchmarkAssignmentResponse
-from ..dtos.source_data_product_identity import stable_content_hash
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 

@@ -6,10 +6,10 @@ from decimal import Decimal
 from typing import Any, Awaitable, Callable, cast
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository

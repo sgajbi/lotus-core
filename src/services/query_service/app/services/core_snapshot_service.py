@@ -5,6 +5,10 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.runtime_providers import Clock, SystemClock
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.core_snapshot_dto import (
@@ -18,10 +22,6 @@ from ..dtos.core_snapshot_dto import (
     CoreSnapshotValuationContext,
 )
 from ..dtos.integration_dto import InstrumentEnrichmentRecord
-from ..dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
-    stable_content_hash,
-)
 from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.fx_rate_repository import FxRateRepository
 from ..repositories.instrument_repository import InstrumentRepository
