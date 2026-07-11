@@ -6,13 +6,10 @@ from datetime import date
 from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkMarketSeriesRequest,
-    BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
 )
 from .benchmark_coverage import resolve_benchmark_coverage_response
-from .benchmark_market_series import resolve_benchmark_market_series_response
 from .classification_taxonomy import resolve_classification_taxonomy_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
 
@@ -22,21 +19,6 @@ class BenchmarkReferenceIntegrationService:
     """Contract-family service for benchmark and market reference products."""
 
     reference_repository_provider: Callable[[], Any]
-    decode_page_token: Callable[[str | None], dict[str, Any]]
-    encode_page_token: Callable[[dict[str, Any]], str]
-
-    async def get_benchmark_market_series(
-        self,
-        benchmark_id: str,
-        request: BenchmarkMarketSeriesRequest,
-    ) -> BenchmarkMarketSeriesResponse:
-        return await resolve_benchmark_market_series_response(
-            repository=self.reference_repository_provider(),
-            benchmark_id=benchmark_id,
-            request=request,
-            decode_page_token=self.decode_page_token,
-            encode_page_token=self.encode_page_token,
-        )
 
     async def get_benchmark_coverage(
         self,
