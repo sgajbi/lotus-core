@@ -125,7 +125,11 @@ For each qualifying group `G`:
 12. Sort curve points by security id, transaction type, and currency.
 13. Emit a next page token when the keyset query found more grouped points than the requested page
    size.
-14. Return supportability, lineage, and runtime source-data product metadata.
+14. Map selected ORM rows into frozen booked-transaction and cost-component domain evidence before
+    application policy evaluates fees or groups points.
+15. Return supportability, lineage, and runtime source-data product metadata. The source-owned
+    deterministic SHA-256 `content_hash`, `source_digest`, and `source_batch_fingerprint` exclude
+    volatile `generated_at`; generation time comes from the injected QCP clock.
 
 ## Validation and Failure Behavior
 

@@ -22,7 +22,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     InstrumentEligibilityBulkRequest,
     MarketDataCoverageRequest,
     MarketDataCurrencyPair,
-    TransactionCostCurveRequest,
 )
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.instrument_eligibility import (
@@ -34,10 +33,6 @@ from src.services.query_service.app.services.market_data_coverage import (
 )
 from src.services.query_service.app.services.position_holdings import (
     portfolio_positions_response_data,
-)
-from src.services.query_service.app.services.transaction_cost_curve import (
-    build_transaction_cost_curve_page,
-    build_transaction_cost_curve_response,
 )
 from src.services.query_service.app.services.transaction_records import (
     paginated_transaction_ledger_response,
@@ -196,41 +191,6 @@ def test_instrument_reference_contract_reports_missing_profiles() -> None:
     assert response.correlation_id == CORRELATION_ID
 
 
-def test_valuation_contract_reports_page_scoped_degradation() -> None:
-    transactions = [
-        _costed_transaction("TXN-A", "EQ_US_AAPL", datetime(2026, 4, 1, 10, tzinfo=UTC)),
-        _costed_transaction("TXN-B", "EQ_US_MSFT", datetime(2026, 4, 2, 10, tzinfo=UTC)),
-    ]
-    curve_page = build_transaction_cost_curve_page(
-        portfolio_id="PB1",
-        transactions=transactions,
-        min_observation_count=1,
-        after_key=(),
-        page_size=1,
-    )
-    response = _with_correlation(
-        lambda: build_transaction_cost_curve_response(
-            portfolio_id="PB1",
-            request=TransactionCostCurveRequest(
-                as_of_date=date(2026, 4, 10),
-                window={"start_date": date(2026, 4, 1), "end_date": date(2026, 4, 10)},
-                page={"page_size": 1},
-            ),
-            request_scope_fingerprint="scope-123",
-            curve_page=curve_page,
-            transactions=transactions,
-            next_page_token="token-2",
-        )
-    )
-
-    assert response.product_name == "TransactionCostCurve"
-    assert response.data_quality_status == PARTIAL
-    assert response.supportability.state == "DEGRADED"
-    assert response.supportability.reason == "TRANSACTION_COST_CURVE_PAGE_PARTIAL"
-    assert response.page.next_page_token == "token-2"
-    assert response.correlation_id == CORRELATION_ID
-
-
 def test_cashflow_contract_cannot_report_current_without_source_evidence_timestamp() -> None:
     response = _with_correlation(
         lambda: CashflowProjectionResponse(
@@ -294,26 +254,6 @@ def test_reconciliation_control_contract_exposes_blocking_finding_state() -> Non
     assert response.items[0].operational_state == "BLOCKING"
     assert response.freshness_status == "CURRENT"
     assert response.correlation_id == CORRELATION_ID
-
-
-def _costed_transaction(
-    transaction_id: str,
-    security_id: str,
-    transaction_date: datetime,
-) -> SimpleNamespace:
-    return SimpleNamespace(
-        transaction_id=transaction_id,
-        portfolio_id="PB1",
-        security_id=security_id,
-        transaction_type="BUY",
-        currency="USD",
-        trade_currency="USD",
-        gross_transaction_amount=Decimal("100000"),
-        trade_fee=Decimal("20"),
-        costs=[],
-        transaction_date=transaction_date,
-        updated_at=transaction_date,
-    )
 
 
 def _with_correlation(build_response):

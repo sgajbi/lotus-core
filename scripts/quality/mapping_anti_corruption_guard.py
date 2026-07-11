@@ -77,21 +77,30 @@ REQUIRED_SNIPPETS = {
         "portfolio_day_controls_evaluated_message",
         "transaction_processing_completed_message",
     ),
-    Path("src/services/query_service/app/read_models.py"): (
-        "class PortfolioTaxLotReadRecord",
-        "class PerformanceEconomicsTransactionReadRecord",
-        "class PerformanceEconomicsCashflowReadRecord",
-        "class PerformanceEconomicsCostReadRecord",
+    Path("src/services/query_service/app/read_models.py"): ("class PortfolioTaxLotReadRecord",),
+    Path("src/services/query_control_plane_service/app/domain/transaction_economics.py"): (
+        "class BookedTransactionEconomics",
+        "class TransactionCashflowEvidence",
+        "class TransactionCostComponentEvidence",
     ),
-    Path("src/services/query_service/app/services/performance_component_economics_rows.py"): (
+    Path(
+        "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_rows.py"
+    ): (
         "def build_performance_component_economics_rows",
-        "PerformanceEconomicsTransactionReadRecord",
+        "BookedTransactionEconomics",
     ),
-    Path("src/services/query_service/app/services/performance_component_economics_policy.py"): (
+    Path(
+        "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_policy.py"
+    ): (
         "performance_component_economics_source_lineage",
         "performance_component_economics_supportability_state",
     ),
-    Path("src/services/query_service/app/services/performance_component_economics_response.py"): (
+    Path(
+        "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_response.py"
+    ): (
         "def build_performance_component_economics_response",
         "PerformanceComponentEconomicsResponse",
     ),
@@ -99,7 +108,7 @@ REQUIRED_SNIPPETS = {
         "test_transaction_mapping_chain_preserves_event_and_record_invariants",
         "test_persistence_message_adapter_preserves_event_identity_and_lineage",
         "test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity",
-        "test_performance_economics_mapping_uses_typed_read_records_for_optional_joins",
+        "test_performance_economics_mapping_uses_typed_domain_evidence_for_optional_joins",
     ),
 }
 

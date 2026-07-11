@@ -1,20 +1,25 @@
+"""Application policy for paged performance-component economics."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
 
-from ..dtos.reference_integration_dto import (
+from portfolio_common.currency_codes import normalize_currency_code
+
+from ...contracts.performance_component_economics import (
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
     PerformanceComponentEconomicsRow,
 )
-from ..repositories.currency_codes import normalize_currency_code
-from . import performance_component_economics_policy as _policy
-from .performance_component_economics_response import (
+from ...ports.transaction_economics import TransactionEconomicsReader
+from . import performance_policy as _policy
+from .performance_response import (
     build_performance_component_economics_response,
     performance_component_economics_request_fingerprint,
 )
-from .performance_component_economics_rows import (
+from .performance_rows import (
     build_performance_component_economics_rows as build_performance_component_economics_rows,
 )
 
@@ -104,11 +109,12 @@ def performance_component_economics_page_token(
 
 async def resolve_performance_component_economics_response(
     *,
-    repository: Any,
+    repository: TransactionEconomicsReader,
     portfolio_id: str,
     request: PerformanceComponentEconomicsRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
+    generated_at: datetime,
 ) -> PerformanceComponentEconomicsResponse:
     if not await repository.portfolio_exists(portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
@@ -150,4 +156,5 @@ async def resolve_performance_component_economics_response(
         request_scope_fingerprint=page_scope.request_fingerprint,
         has_more=has_more,
         next_page_token=next_page_token,
+        generated_at=generated_at,
     )

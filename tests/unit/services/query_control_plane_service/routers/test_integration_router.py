@@ -37,6 +37,9 @@ from src.services.query_control_plane_service.app.application.integration_policy
 from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
     PortfolioManagerBookService,
 )
+from src.services.query_control_plane_service.app.application.transaction_economics.service import (
+    TransactionEconomicsService,
+)
 from src.services.query_control_plane_service.app.contracts import (
     sustainability_preference_profile as preference_contracts,
 )
@@ -78,8 +81,14 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
 )
+from src.services.query_control_plane_service.app.contracts.performance_component_economics import (
+    PerformanceComponentEconomicsRequest,
+)
 from src.services.query_control_plane_service.app.contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipRequest,
+)
+from src.services.query_control_plane_service.app.contracts.transaction_cost_curve import (
+    TransactionCostCurveRequest,
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_client_liquidity_evidence_service,
@@ -91,6 +100,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_integration_policy_service,
     get_integration_service,
     get_sustainability_preference_profile_service,
+    get_transaction_economics_service,
 )
 from src.services.query_control_plane_service.app.routers.integration import (
     create_core_snapshot,
@@ -154,10 +164,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IntegrationWindow,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
-    PerformanceComponentEconomicsRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
-    TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -219,6 +227,11 @@ async def test_get_effective_integration_policy_router_function() -> None:
 def test_get_integration_service_factory_returns_service() -> None:
     service = get_integration_service(db=MagicMock())
     assert isinstance(service, IntegrationService)
+
+
+def test_get_transaction_economics_service_factory_returns_narrow_service() -> None:
+    service = get_transaction_economics_service(db=MagicMock())
+    assert isinstance(service, TransactionEconomicsService)
 
 
 def test_get_integration_policy_service_factory_returns_service() -> None:
@@ -1047,9 +1060,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
 @pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_404() -> None:
     mock_service = MagicMock(spec=DpmPortfolioPopulationService)
-    mock_service.resolve_universe_candidates = AsyncMock(
-        return_value=MagicMock(candidates=[])
-    )
+    mock_service.resolve_universe_candidates = AsyncMock(return_value=MagicMock(candidates=[]))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
@@ -1365,7 +1376,7 @@ async def test_get_portfolio_tax_lot_window_maps_bad_token_to_400() -> None:
 
 @pytest.mark.asyncio
 async def test_get_transaction_cost_curve_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_transaction_cost_curve = AsyncMock(
         return_value={
             "product_name": "TransactionCostCurve",
@@ -1426,7 +1437,7 @@ async def test_get_transaction_cost_curve_success_path() -> None:
     response = await get_transaction_cost_curve(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        transaction_economics_service=mock_service,
     )
 
     assert response["product_name"] == "TransactionCostCurve"
@@ -1438,7 +1449,7 @@ async def test_get_transaction_cost_curve_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_get_performance_component_economics_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_performance_component_economics = AsyncMock(
         return_value={
             "product_name": "PerformanceComponentEconomics",
@@ -1478,7 +1489,7 @@ async def test_get_performance_component_economics_success_path() -> None:
     response = await get_performance_component_economics(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        transaction_economics_service=mock_service,
     )
 
     assert response["product_name"] == "PerformanceComponentEconomics"
@@ -1490,7 +1501,7 @@ async def test_get_performance_component_economics_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_get_performance_component_economics_maps_missing_portfolio_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_performance_component_economics = AsyncMock(
         side_effect=LookupError("Portfolio with id PB_MISSING not found")
     )
@@ -1502,7 +1513,7 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
                 as_of_date="2026-05-10",
                 window={"start_date": "2026-05-01", "end_date": "2026-05-10"},
             ),
-            integration_service=mock_service,
+            transaction_economics_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1520,7 +1531,7 @@ async def test_get_performance_component_economics_maps_missing_portfolio_to_404
 
 @pytest.mark.asyncio
 async def test_get_performance_component_economics_maps_bad_token_to_400() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_performance_component_economics = AsyncMock(
         side_effect=ValueError("bad token")
     )
@@ -1532,7 +1543,7 @@ async def test_get_performance_component_economics_maps_bad_token_to_400() -> No
                 as_of_date="2026-05-10",
                 window={"start_date": "2026-05-01", "end_date": "2026-05-10"},
             ),
-            integration_service=mock_service,
+            transaction_economics_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1550,7 +1561,7 @@ async def test_get_performance_component_economics_maps_bad_token_to_400() -> No
 
 @pytest.mark.asyncio
 async def test_get_transaction_cost_curve_maps_missing_portfolio_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_transaction_cost_curve = AsyncMock(side_effect=LookupError("missing"))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
@@ -1560,7 +1571,7 @@ async def test_get_transaction_cost_curve_maps_missing_portfolio_to_404() -> Non
                 as_of_date="2026-05-03",
                 window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
             ),
-            integration_service=mock_service,
+            transaction_economics_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1578,7 +1589,7 @@ async def test_get_transaction_cost_curve_maps_missing_portfolio_to_404() -> Non
 
 @pytest.mark.asyncio
 async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=TransactionEconomicsService)
     mock_service.get_transaction_cost_curve = AsyncMock(side_effect=ValueError("bad token"))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
@@ -1588,7 +1599,7 @@ async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
                 as_of_date="2026-05-03",
                 window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
             ),
-            integration_service=mock_service,
+            transaction_economics_service=mock_service,
         )
 
     assert_query_control_plane_problem(

@@ -1,29 +1,36 @@
+"""Application policy for observed transaction-cost curve evidence."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
-from ..dtos.reference_integration_dto import (
+from ...contracts.transaction_cost_curve import (
     TransactionCostCurvePoint,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
     TransactionCostCurveSupportability,
 )
-from ..repositories.currency_codes import normalize_currency_code
-from ..repositories.identifier_normalization import normalize_security_id
-from .decimal_amounts import decimal_or_zero
-from .reference_data_helpers import latest_reference_evidence_timestamp
-from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
+from ...domain.transaction_economics import (
+    BookedTransactionEconomics,
+    TransactionCostComponentEvidence,
+)
+from ...ports.transaction_economics import TransactionEconomicsReader
+from .evidence import latest_evidence_timestamp
+from .metadata import transaction_economics_runtime_metadata
 
 
 @dataclass(frozen=True)
 class _CostObservation:
-    row: Any
+    row: BookedTransactionEconomics
     fee_amount: Decimal
     notional: Decimal
 
@@ -107,11 +114,12 @@ def transaction_cost_curve_page_token(
 
 async def resolve_transaction_cost_curve_response(
     *,
-    repository: Any,
+    repository: TransactionEconomicsReader,
     portfolio_id: str,
     request: TransactionCostCurveRequest,
     decode_page_token: Callable[[str | None], dict[str, Any]],
     encode_page_token: Callable[[dict[str, Any]], str],
+    generated_at: datetime,
 ) -> TransactionCostCurveResponse:
     if not await repository.portfolio_exists(portfolio_id):
         raise LookupError(f"Portfolio with id {portfolio_id} not found")
@@ -179,23 +187,26 @@ async def resolve_transaction_cost_curve_response(
         curve_page=curve_page,
         transactions=transactions,
         next_page_token=next_page_token,
+        generated_at=generated_at,
     )
 
 
-def transaction_fee_amount(transaction: Any) -> Decimal:
+def transaction_fee_amount(transaction: BookedTransactionEconomics) -> Decimal:
     costs = unique_transaction_cost_components(transaction)
     if costs:
-        return sum((decimal_or_zero(getattr(cost, "amount", Decimal("0"))) for cost in costs))
-    trade_fee = getattr(transaction, "trade_fee", None)
+        return sum((cost.amount for cost in costs), Decimal("0"))
+    trade_fee = transaction.trade_fee
     if trade_fee is None:
         return Decimal("0")
-    return decimal_or_zero(trade_fee)
+    return trade_fee
 
 
-def unique_transaction_cost_components(transaction: Any) -> list[Any]:
-    unique_costs: list[Any] = []
+def unique_transaction_cost_components(
+    transaction: BookedTransactionEconomics,
+) -> list[TransactionCostComponentEvidence]:
+    unique_costs: list[TransactionCostComponentEvidence] = []
     observed_keys: set[tuple[str, str, str]] = set()
-    for index, cost in enumerate(getattr(transaction, "costs", None) or []):
+    for index, cost in enumerate(transaction.costs):
         component_key = transaction_cost_component_identity(
             transaction=transaction,
             cost=cost,
@@ -210,20 +221,20 @@ def unique_transaction_cost_components(transaction: Any) -> list[Any]:
 
 def transaction_cost_component_identity(
     *,
-    transaction: Any,
-    cost: Any,
+    transaction: BookedTransactionEconomics,
+    cost: TransactionCostComponentEvidence,
     fallback_sequence: int,
 ) -> tuple[str, str, str]:
-    fee_type = str(getattr(cost, "fee_type", "") or "").strip().lower()
-    cost_currency = getattr(cost, "currency", None) or getattr(transaction, "trade_currency", None)
+    fee_type = str(cost.fee_type or "").strip().lower()
+    cost_currency = cost.currency or transaction.trade_currency
     if cost_currency is None:
-        cost_currency = getattr(transaction, "currency", None)
+        cost_currency = transaction.currency
     if fee_type and cost_currency:
         return ("component", fee_type, normalize_currency_code(cost_currency))
     return ("anonymous", str(fallback_sequence), "")
 
 
-def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
+def transaction_cost_curve_key(transaction: BookedTransactionEconomics) -> tuple[str, str, str]:
     return (
         normalize_security_id(transaction.security_id),
         str(transaction.transaction_type).strip().upper(),
@@ -231,15 +242,15 @@ def transaction_cost_curve_key(transaction: Any) -> tuple[str, str, str]:
     )
 
 
-def _cost_observation(transaction: Any) -> _CostObservation | None:
+def _cost_observation(transaction: BookedTransactionEconomics) -> _CostObservation | None:
     fee_amount = transaction_fee_amount(transaction)
-    notional = abs(decimal_or_zero(transaction.gross_transaction_amount))
+    notional = abs(transaction.gross_transaction_amount)
     if fee_amount <= 0 or notional <= 0:
         return None
     return _CostObservation(row=transaction, fee_amount=fee_amount, notional=notional)
 
 
-def has_observed_transaction_cost_evidence(transaction: Any) -> bool:
+def has_observed_transaction_cost_evidence(transaction: BookedTransactionEconomics) -> bool:
     return _cost_observation(transaction) is not None
 
 
@@ -247,7 +258,7 @@ def build_transaction_cost_curve_point(
     *,
     portfolio_id: str,
     key: tuple[str, str, str],
-    rows: list[Any],
+    rows: list[BookedTransactionEconomics],
 ) -> TransactionCostCurvePoint | None:
     observations = [
         observation for row in rows if (observation := _cost_observation(row)) is not None
@@ -269,8 +280,8 @@ def _build_transaction_cost_curve_point_from_observations(
     if not observations:
         return None
 
-    total_cost = sum(observation.fee_amount for observation in observations)
-    total_notional = sum(observation.notional for observation in observations)
+    total_cost = sum((observation.fee_amount for observation in observations), Decimal("0"))
+    total_notional = sum((observation.notional for observation in observations), Decimal("0"))
     if total_cost <= 0 or total_notional <= 0:
         return None
 
@@ -312,7 +323,7 @@ def _build_transaction_cost_curve_point_from_observations(
 def build_transaction_cost_curve_points(
     *,
     portfolio_id: str,
-    transactions: list[Any],
+    transactions: list[BookedTransactionEconomics],
     min_observation_count: int,
 ) -> list[TransactionCostCurvePoint]:
     grouped = _group_transaction_cost_observations(transactions)
@@ -335,7 +346,7 @@ def build_transaction_cost_curve_points(
 def build_transaction_cost_curve_page(
     *,
     portfolio_id: str,
-    transactions: list[Any],
+    transactions: list[BookedTransactionEconomics],
     min_observation_count: int,
     after_key: tuple[str, str, str] | tuple[()] = (),
     page_size: int,
@@ -374,8 +385,9 @@ def build_transaction_cost_curve_response(
     request: TransactionCostCurveRequest,
     request_scope_fingerprint: str,
     curve_page: TransactionCostCurvePage,
-    transactions: list[Any],
+    transactions: list[BookedTransactionEconomics],
     next_page_token: str | None,
+    generated_at: datetime,
 ) -> TransactionCostCurveResponse:
     requested_security_ids = {
         normalize_security_id(security_id) for security_id in request.security_ids or []
@@ -422,16 +434,33 @@ def build_transaction_cost_curve_response(
             "source_system": "transactions",
             "contract_version": "rfc_040_wtbd_007_v1",
         },
-        **source_product_runtime_metadata_without_as_of_date(
-            request.as_of_date,
+        **transaction_economics_runtime_metadata(
+            product_name="TransactionCostCurve",
+            portfolio_id=portfolio_id,
+            as_of_date=request.as_of_date,
+            generated_at=generated_at,
+            tenant_id=request.tenant_id,
             data_quality_status="COMPLETE" if supportability_state == "READY" else "PARTIAL",
-            latest_evidence_timestamp=latest_reference_evidence_timestamp(transactions),
+            latest_evidence_timestamp=latest_evidence_timestamp(transactions),
+            content_payload={
+                "portfolio_id": portfolio_id,
+                "as_of_date": request.as_of_date,
+                "window": request.window.model_dump(mode="json"),
+                "request_fingerprint": request_scope_fingerprint,
+                "curve_points": [point.model_dump(mode="json") for point in curve_page.points],
+                "supportability_state": supportability_state,
+            },
+            lineage={
+                "source_system": "transactions",
+                "source_table": "transactions,transaction_costs",
+                "contract_version": "rfc_040_wtbd_007_v1",
+            },
         ),
     )
 
 
 def _group_transaction_cost_observations(
-    transactions: list[Any],
+    transactions: list[BookedTransactionEconomics],
 ) -> dict[tuple[str, str, str], list[_CostObservation]]:
     grouped: dict[tuple[str, str, str], list[_CostObservation]] = {}
     for transaction in transactions:

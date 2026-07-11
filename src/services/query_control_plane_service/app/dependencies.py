@@ -34,6 +34,7 @@ from .application.integration_policy import (
 from .application.portfolio_manager_book import PortfolioManagerBookService
 from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
+from .application.transaction_economics.service import TransactionEconomicsService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
@@ -58,6 +59,9 @@ from .infrastructure.simulation_store import (
 from .infrastructure.simulation_unit_of_work import SqlAlchemySimulationUnitOfWork
 from .infrastructure.sustainability_preference_profile_sources import (
     SqlAlchemySustainabilityPreferenceProfileSourceReader,
+)
+from .infrastructure.transaction_economics_sources import (
+    SqlAlchemyTransactionEconomicsReader,
 )
 from .settings import load_query_control_plane_settings
 
@@ -108,6 +112,22 @@ def get_dpm_portfolio_population_service(
     settings = load_query_control_plane_settings()
     return DpmPortfolioPopulationService(
         reader=SqlAlchemyDpmPortfolioPopulationReader(db),
+        page_tokens=PageTokenCodec(
+            secret=settings.page_token_secret,
+            active_kid=settings.page_token_key_id,
+            previous_secrets=settings.page_token_previous_keys,
+            ttl_seconds=settings.page_token_ttl_seconds,
+        ),
+        clock=SystemClock(),
+    )
+
+
+def get_transaction_economics_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> TransactionEconomicsService:
+    settings = load_query_control_plane_settings()
+    return TransactionEconomicsService(
+        reader=SqlAlchemyTransactionEconomicsReader(db),
         page_tokens=PageTokenCodec(
             secret=settings.page_token_secret,
             active_kid=settings.page_token_key_id,

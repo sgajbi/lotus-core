@@ -2,30 +2,23 @@
 import logging
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
     BusinessDate,
-    Cashflow,
     FxRate,
     Instrument,
     Portfolio,
     Transaction,
-    TransactionCost,
 )
 from portfolio_common.logging_utils import operation_log_extra
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, asc, desc, exists, func, or_, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, contains_eager, joinedload
+from sqlalchemy.orm import joinedload
 
 from ..application.transaction_query import TransactionLedgerFilters, TransactionLedgerQuerySpec
-from ..read_models import (
-    PerformanceEconomicsCashflowReadRecord,
-    PerformanceEconomicsCostReadRecord,
-    PerformanceEconomicsTransactionReadRecord,
-)
 from .currency_codes import currency_code_sql_expr, normalize_currency_code
 from .date_filters import start_of_day, start_of_next_day
 from .identifier_normalization import normalize_security_id
@@ -39,122 +32,6 @@ def _identity_filter_kwargs(*, portfolio_id: str, **filters) -> dict[str, str]:
         for field_name, value in {"portfolio_id": portfolio_id, **filters}.items()
         if value
     }
-
-
-def _transaction_cost_curve_key_expressions():
-    return (
-        func.trim(Transaction.security_id),
-        func.upper(func.trim(Transaction.transaction_type)),
-        func.upper(func.trim(Transaction.currency)),
-    )
-
-
-def _transaction_cost_curve_after_key_predicate(after_key: tuple[str, str, str] | tuple[()]):
-    if not after_key:
-        return None
-    security_id, transaction_type, currency = after_key
-    security_expr, transaction_type_expr, currency_expr = _transaction_cost_curve_key_expressions()
-    return or_(
-        security_expr > security_id,
-        and_(security_expr == security_id, transaction_type_expr > transaction_type),
-        and_(
-            security_expr == security_id,
-            transaction_type_expr == transaction_type,
-            currency_expr > currency,
-        ),
-    )
-
-
-def _transaction_cost_curve_key_filter(curve_keys: list[tuple[str, str, str]]):
-    security_expr, transaction_type_expr, currency_expr = _transaction_cost_curve_key_expressions()
-    return or_(
-        *[
-            and_(
-                security_expr == security_id,
-                transaction_type_expr == transaction_type,
-                currency_expr == currency,
-            )
-            for security_id, transaction_type, currency in curve_keys
-        ]
-    )
-
-
-def _performance_component_economics_after_key_predicate(
-    after_key: tuple[str, str, str] | tuple[()],
-):
-    if not after_key:
-        return None
-    security_id, transaction_date, transaction_id = after_key
-    security_expr = func.trim(Transaction.security_id)
-    transaction_date_expr = func.date(Transaction.transaction_date)
-    return or_(
-        security_expr > security_id,
-        and_(security_expr == security_id, transaction_date_expr > transaction_date),
-        and_(
-            security_expr == security_id,
-            transaction_date_expr == transaction_date,
-            Transaction.transaction_id > transaction_id,
-        ),
-    )
-
-
-def _performance_economics_cashflow_record(
-    cashflow: Cashflow | None,
-) -> PerformanceEconomicsCashflowReadRecord | None:
-    if cashflow is None:
-        return None
-    return PerformanceEconomicsCashflowReadRecord(
-        amount=cashflow.amount,
-        currency=cashflow.currency,
-        classification=cashflow.classification,
-        timing=cashflow.timing,
-        is_position_flow=cashflow.is_position_flow,
-        is_portfolio_flow=cashflow.is_portfolio_flow,
-        updated_at=cashflow.updated_at,
-    )
-
-
-def _performance_economics_cost_record(
-    cost: TransactionCost,
-) -> PerformanceEconomicsCostReadRecord:
-    return PerformanceEconomicsCostReadRecord(
-        fee_type=cost.fee_type,
-        amount=cost.amount,
-        currency=cost.currency,
-        updated_at=cost.updated_at,
-    )
-
-
-def _performance_economics_transaction_record(
-    transaction: Transaction,
-) -> PerformanceEconomicsTransactionReadRecord:
-    return PerformanceEconomicsTransactionReadRecord(
-        transaction_id=transaction.transaction_id,
-        portfolio_id=transaction.portfolio_id,
-        security_id=transaction.security_id,
-        transaction_type=transaction.transaction_type,
-        currency=transaction.currency,
-        trade_currency=transaction.trade_currency,
-        transaction_date=transaction.transaction_date,
-        gross_transaction_amount=transaction.gross_transaction_amount,
-        allocated_cost_basis_local=transaction.allocated_cost_basis_local,
-        allocated_cost_basis_base=transaction.allocated_cost_basis_base,
-        trade_fee=transaction.trade_fee,
-        withholding_tax_amount=transaction.withholding_tax_amount,
-        other_interest_deductions_amount=transaction.other_interest_deductions_amount,
-        net_interest_amount=transaction.net_interest_amount,
-        realized_capital_pnl_local=transaction.realized_capital_pnl_local,
-        realized_fx_pnl_local=transaction.realized_fx_pnl_local,
-        realized_total_pnl_local=transaction.realized_total_pnl_local,
-        realized_capital_pnl_base=transaction.realized_capital_pnl_base,
-        realized_fx_pnl_base=transaction.realized_fx_pnl_base,
-        realized_total_pnl_base=transaction.realized_total_pnl_base,
-        transaction_fx_rate=transaction.transaction_fx_rate,
-        fx_contract_id=transaction.fx_contract_id,
-        cashflow=_performance_economics_cashflow_record(transaction.cashflow),
-        costs=tuple(_performance_economics_cost_record(cost) for cost in transaction.costs),
-        updated_at=transaction.updated_at,
-    )
 
 
 def _apply_security_filter(stmt, security_id: Optional[str]):
@@ -218,7 +95,7 @@ class TransactionRepository:
         stmt = (
             select(Portfolio.base_currency).where(Portfolio.portfolio_id == portfolio_id).limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(Optional[str], (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_latest_business_date(
         self,
@@ -227,7 +104,7 @@ class TransactionRepository:
         stmt = select(func.max(BusinessDate.date)).where(
             BusinessDate.calendar_code == calendar_code
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(Optional[date], (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def get_latest_fx_rate(
         self,
@@ -252,7 +129,10 @@ class TransactionRepository:
             .order_by(FxRate.rate_date.desc())
             .limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(
+            Optional[float | Decimal],
+            (await self.db.execute(stmt)).scalar_one_or_none(),
+        )
 
     async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]:
         normalized_security_ids = list(
@@ -341,7 +221,7 @@ class TransactionRepository:
                 has_as_of_date_filter=filters.as_of_date is not None,
             ),
         )
-        return transactions
+        return cast(List[Transaction], transactions)
 
     @async_timed(repository="TransactionRepository", method="get_transactions_count")
     async def get_transactions_count(
@@ -360,260 +240,6 @@ class TransactionRepository:
         count = (await self.db.execute(stmt)).scalar() or 0
         return count
 
-    async def list_transaction_cost_evidence(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        as_of_date: date,
-        security_ids: list[str] | None = None,
-        transaction_types: list[str] | None = None,
-        curve_keys: list[tuple[str, str, str]] | None = None,
-    ) -> List[Transaction]:
-        stmt = (
-            select(Transaction)
-            .options(joinedload(Transaction.costs))
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_date >= start_of_day(start_date),
-                Transaction.transaction_date < start_of_next_day(end_date),
-                Transaction.transaction_date < start_of_next_day(as_of_date),
-                func.abs(Transaction.gross_transaction_amount) > 0,
-                or_(
-                    Transaction.trade_fee > 0,
-                    exists(
-                        select(1).where(
-                            TransactionCost.transaction_id == Transaction.transaction_id,
-                            TransactionCost.amount > 0,
-                        )
-                    ),
-                ),
-            )
-        )
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            ]
-            if not normalized_security_ids:
-                return []
-            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
-        if transaction_types:
-            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
-        if curve_keys is not None:
-            if not curve_keys:
-                return []
-            stmt = stmt.where(_transaction_cost_curve_key_filter(curve_keys))
-        stmt = stmt.order_by(
-            Transaction.security_id.asc(),
-            Transaction.transaction_type.asc(),
-            Transaction.currency.asc(),
-            Transaction.transaction_date.asc(),
-            Transaction.transaction_id.asc(),
-        )
-        results = await self.db.execute(stmt)
-        return list(results.scalars().unique().all())
-
-    async def list_transaction_cost_curve_keys(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        as_of_date: date,
-        security_ids: list[str] | None = None,
-        transaction_types: list[str] | None = None,
-        min_observation_count: int,
-        after_key: tuple[str, str, str] | tuple[()] = (),
-        limit: int,
-    ) -> list[tuple[str, str, str]]:
-        security_expr, transaction_type_expr, currency_expr = (
-            _transaction_cost_curve_key_expressions()
-        )
-        stmt = (
-            select(
-                security_expr.label("security_id"),
-                transaction_type_expr.label("transaction_type"),
-                currency_expr.label("currency"),
-            )
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_date >= start_of_day(start_date),
-                Transaction.transaction_date < start_of_next_day(end_date),
-                Transaction.transaction_date < start_of_next_day(as_of_date),
-                func.abs(Transaction.gross_transaction_amount) > 0,
-                or_(
-                    Transaction.trade_fee > 0,
-                    exists(
-                        select(1).where(
-                            TransactionCost.transaction_id == Transaction.transaction_id,
-                            TransactionCost.amount > 0,
-                        )
-                    ),
-                ),
-            )
-            .group_by(security_expr, transaction_type_expr, currency_expr)
-            .having(func.count(Transaction.id) >= min_observation_count)
-            .order_by(security_expr.asc(), transaction_type_expr.asc(), currency_expr.asc())
-            .limit(limit)
-        )
-
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            ]
-            if not normalized_security_ids:
-                return []
-            stmt = stmt.where(security_expr.in_(normalized_security_ids))
-        if transaction_types:
-            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
-        after_predicate = _transaction_cost_curve_after_key_predicate(after_key)
-        if after_predicate is not None:
-            stmt = stmt.where(after_predicate)
-
-        result = await self.db.execute(stmt)
-        return [
-            (security_id, transaction_type, currency)
-            for security_id, transaction_type, currency in result.all()
-        ]
-
-    async def list_transaction_cost_curve_available_security_ids(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        as_of_date: date,
-        security_ids: list[str] | None = None,
-        transaction_types: list[str] | None = None,
-        min_observation_count: int,
-    ) -> set[str]:
-        security_expr, transaction_type_expr, currency_expr = (
-            _transaction_cost_curve_key_expressions()
-        )
-        eligible_groups = (
-            select(security_expr.label("security_id"))
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_date >= start_of_day(start_date),
-                Transaction.transaction_date < start_of_next_day(end_date),
-                Transaction.transaction_date < start_of_next_day(as_of_date),
-                func.abs(Transaction.gross_transaction_amount) > 0,
-                or_(
-                    Transaction.trade_fee > 0,
-                    exists(
-                        select(1).where(
-                            TransactionCost.transaction_id == Transaction.transaction_id,
-                            TransactionCost.amount > 0,
-                        )
-                    ),
-                ),
-            )
-            .group_by(security_expr, transaction_type_expr, currency_expr)
-            .having(func.count(Transaction.id) >= min_observation_count)
-        )
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            ]
-            if not normalized_security_ids:
-                return set()
-            eligible_groups = eligible_groups.where(security_expr.in_(normalized_security_ids))
-        if transaction_types:
-            eligible_groups = eligible_groups.where(
-                Transaction.transaction_type.in_(transaction_types)
-            )
-
-        eligible_groups_subquery = eligible_groups.subquery()
-        result = await self.db.execute(
-            select(eligible_groups_subquery.c.security_id)
-            .distinct()
-            .order_by(eligible_groups_subquery.c.security_id.asc())
-        )
-        return set(result.scalars().all())
-
-    async def list_performance_component_economics_evidence(
-        self,
-        *,
-        portfolio_id: str,
-        start_date: date,
-        end_date: date,
-        as_of_date: date,
-        security_ids: list[str] | None = None,
-        transaction_types: list[str] | None = None,
-        after_key: tuple[str, str, str] | tuple[()] = (),
-        limit: int | None = None,
-    ) -> list[PerformanceEconomicsTransactionReadRecord]:
-        ranked_cashflows = (
-            select(
-                Cashflow.id.label("id"),
-                Cashflow.transaction_id.label("transaction_id"),
-                func.row_number()
-                .over(
-                    partition_by=Cashflow.transaction_id,
-                    order_by=(Cashflow.epoch.desc(), Cashflow.id.desc()),
-                )
-                .label("rn"),
-            )
-            .where(Cashflow.portfolio_id == portfolio_id)
-            .subquery()
-        )
-        latest_cashflow = aliased(Cashflow)
-        stmt = (
-            select(Transaction)
-            .outerjoin(
-                ranked_cashflows,
-                and_(
-                    ranked_cashflows.c.transaction_id == Transaction.transaction_id,
-                    ranked_cashflows.c.rn == 1,
-                ),
-            )
-            .outerjoin(latest_cashflow, latest_cashflow.id == ranked_cashflows.c.id)
-            .options(
-                joinedload(Transaction.costs),
-                contains_eager(Transaction.cashflow, alias=latest_cashflow),
-            )
-            .where(
-                Transaction.portfolio_id == portfolio_id,
-                Transaction.transaction_date >= start_of_day(start_date),
-                Transaction.transaction_date < start_of_next_day(end_date),
-                Transaction.transaction_date < start_of_next_day(as_of_date),
-            )
-            .order_by(
-                func.trim(Transaction.security_id).asc(),
-                func.date(Transaction.transaction_date).asc(),
-                Transaction.transaction_id.asc(),
-            )
-        )
-        if security_ids:
-            normalized_security_ids = [
-                normalized
-                for security_id in security_ids
-                if (normalized := normalize_security_id(security_id))
-            ]
-            if not normalized_security_ids:
-                return []
-            stmt = stmt.where(func.trim(Transaction.security_id).in_(normalized_security_ids))
-        if transaction_types:
-            stmt = stmt.where(Transaction.transaction_type.in_(transaction_types))
-        after_predicate = _performance_component_economics_after_key_predicate(after_key)
-        if after_predicate is not None:
-            stmt = stmt.where(after_predicate)
-        if limit is not None:
-            stmt = stmt.limit(limit)
-
-        results = await self.db.execute(stmt)
-        return [
-            _performance_economics_transaction_record(transaction)
-            for transaction in results.scalars().unique().all()
-        ]
-
     async def get_latest_evidence_timestamp(
         self,
         *,
@@ -626,7 +252,7 @@ class TransactionRepository:
             select(func.max(Transaction.updated_at)),
             filters=filters,
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(Optional[datetime], (await self.db.execute(stmt)).scalar_one_or_none())
 
     async def list_realized_tax_evidence_transactions(
         self,

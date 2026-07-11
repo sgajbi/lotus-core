@@ -62,6 +62,10 @@ services should not recreate these semantics independently.
 duplicate booked-fee evidence from inflating source-data products such as
 `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1`.
 
+The QCP transaction-economics adapter reads these tables with bounded keyset queries and maps ORM
+rows into frozen booked-transaction, linked-cashflow, and cost-component evidence before application
+policy executes. API/application code must not consume SQLAlchemy models directly.
+
 ### Position and valuation state
 
 Primary position and valuation tables include:

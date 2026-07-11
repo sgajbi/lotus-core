@@ -32,22 +32,16 @@ from ..dtos.reference_integration_dto import (
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
-    PerformanceComponentEconomicsRequest,
-    PerformanceComponentEconomicsResponse,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    TransactionCostCurveRequest,
-    TransactionCostCurveResponse,
 )
 from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
-from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
-from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +50,6 @@ logger = logging.getLogger(__name__)
 class IntegrationServiceDependencies:
     reference_repository: ReferenceDataRepository
     buy_state_repository: BuyStateRepository
-    transaction_repository: TransactionRepository
     page_token_codec: PageTokenCodec
 
     @classmethod
@@ -65,7 +58,6 @@ class IntegrationServiceDependencies:
         return cls(
             reference_repository=ReferenceDataRepository(db),
             buy_state_repository=BuyStateRepository(db),
-            transaction_repository=TransactionRepository(db),
             page_token_codec=PageTokenCodec(
                 secret=settings.page_token_secret,
                 active_kid=settings.page_token_key_id,
@@ -89,16 +81,10 @@ class IntegrationService:
         self.db = db
         self._reference_repository = dependencies.reference_repository
         self._buy_state_repository = dependencies.buy_state_repository
-        self._transaction_repository = dependencies.transaction_repository
         self._page_token_codec = dependencies.page_token_codec
         self._dpm_readiness_service = DpmReadinessIntegrationService.from_facade(
             reference_repository_provider=lambda: self._reference_repository,
             buy_state_repository_provider=lambda: self._buy_state_repository,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
-        )
-        self._transaction_economics_service = TransactionEconomicsIntegrationService(
-            transaction_repository_provider=lambda: self._transaction_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
         )
@@ -155,28 +141,6 @@ class IntegrationService:
         request: PortfolioTaxLotWindowRequest,
     ) -> PortfolioTaxLotWindowResponse:
         return await self._dpm_readiness_service.get_portfolio_tax_lot_window(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_transaction_cost_curve(
-        self,
-        *,
-        portfolio_id: str,
-        request: TransactionCostCurveRequest,
-    ) -> TransactionCostCurveResponse:
-        return await self._transaction_economics_service.get_transaction_cost_curve(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_performance_component_economics(
-        self,
-        *,
-        portfolio_id: str,
-        request: PerformanceComponentEconomicsRequest,
-    ) -> PerformanceComponentEconomicsResponse:
-        return await self._transaction_economics_service.get_performance_component_economics(
             portfolio_id=portfolio_id,
             request=request,
         )

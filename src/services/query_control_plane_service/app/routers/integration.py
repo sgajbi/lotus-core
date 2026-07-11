@@ -37,14 +37,10 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
-    PerformanceComponentEconomicsRequest,
-    PerformanceComponentEconomicsResponse,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    TransactionCostCurveRequest,
-    TransactionCostCurveResponse,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -67,6 +63,7 @@ from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
+from ..application.transaction_economics.service import TransactionEconomicsService
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
@@ -111,6 +108,10 @@ from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkResponse,
 )
 from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
+from ..contracts.performance_component_economics import (
+    PerformanceComponentEconomicsRequest,
+    PerformanceComponentEconomicsResponse,
+)
 from ..contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
@@ -118,6 +119,10 @@ from ..contracts.portfolio_manager_book import (
 from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
+)
+from ..contracts.transaction_cost_curve import (
+    TransactionCostCurveRequest,
+    TransactionCostCurveResponse,
 )
 from ..dependencies import (
     get_client_liquidity_evidence_service,
@@ -131,6 +136,7 @@ from ..dependencies import (
     get_integration_service,
     get_portfolio_manager_book_service,
     get_sustainability_preference_profile_service,
+    get_transaction_economics_service,
 )
 from .response_helpers import (
     problem_example,
@@ -1093,10 +1099,12 @@ async def get_transaction_cost_curve(
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
     request: TransactionCostCurveRequest = Body(...),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    transaction_economics_service: TransactionEconomicsService = Depends(
+        get_transaction_economics_service
+    ),
 ) -> TransactionCostCurveResponse:
     try:
-        return await integration_service.get_transaction_cost_curve(
+        return await transaction_economics_service.get_transaction_cost_curve(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -1148,10 +1156,12 @@ async def get_performance_component_economics(
         description="Portfolio identifier whose component economics evidence should be returned.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    transaction_economics_service: TransactionEconomicsService = Depends(
+        get_transaction_economics_service
+    ),
 ) -> PerformanceComponentEconomicsResponse:
     try:
-        return await integration_service.get_performance_component_economics(
+        return await transaction_economics_service.get_performance_component_economics(
             portfolio_id=portfolio_id,
             request=request,
         )

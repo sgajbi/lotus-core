@@ -171,13 +171,15 @@ Current repository posture:
     work. Persistence repositories must consume adapter-owned event record values and keep only
     table-specific SQL conflict/update policy locally.
     `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` as the typed
-    repository-to-source-data boundary. `PerformanceComponentEconomics:v1` uses
-    `PerformanceEconomicsTransactionReadRecord`, `PerformanceEconomicsCashflowReadRecord`, and
-    `PerformanceEconomicsCostReadRecord` so latest optional cashflow evidence and transaction-cost
-    component evidence are modeled explicitly before source-data response assembly. Its source-data
-    builder is split into row mapping, source-evidence policy, and response-envelope assembly
-    modules; preserve that shape before adding component-family, supportability, lineage, runtime
-    metadata, or response DTO behavior. Extend this pattern before adding new high-value
+    repository-to-source-data boundary. `TransactionCostCurve:v1` and
+    `PerformanceComponentEconomics:v1` are QCP-owned end to end and use
+    `BookedTransactionEconomics`, `TransactionCashflowEvidence`, and
+    `TransactionCostComponentEvidence` so latest optional cashflow evidence and transaction-cost
+    component evidence are modeled explicitly before source-data response assembly. Their QCP
+    capability separates API contracts, application row/policy/response assembly, a source-reader
+    port, and a SQLAlchemy adapter; preserve that shape before adding component-family,
+    supportability, lineage, runtime metadata, or response behavior. Extend this pattern before
+    adding new high-value
     source-data mappers that would otherwise accept raw ORM rows, ORM relationship objects, or
     tuple-shaped SQL results.
     Repository output-shape governance now also has `make repository-output-shape-guard`, wired into
@@ -1546,9 +1548,9 @@ Most relevant current governance:
      source-read pattern: the router binds the API contract, the application service owns the use
      case and metadata, the port returns immutable domain records, and the SQL adapter alone maps
      persistence rows. Do not add new methods to `IntegrationService` or reproduce broad
-     contract-family facades. `DpmReadinessIntegrationService`,
-     `TransactionEconomicsIntegrationService`, and `BenchmarkReferenceIntegrationService` are
-     migration debt to be retired by complete vertical capability moves, not target-state examples.
+     contract-family facades. `DpmReadinessIntegrationService` and
+     `BenchmarkReferenceIntegrationService` are migration debt to be retired by complete vertical
+     capability moves, not target-state examples.
      `PortfolioManagerBookService` and `DpmPortfolioPopulationService` demonstrate why source
      authority and domain language must determine module boundaries instead of legacy facade
      adjacency.
@@ -2178,6 +2180,19 @@ Most relevant current governance:
      deleted Query Service DTO/service/facade paths. Forward pricing, exposure calculation, hedge
      advice or approval, suitability, counterparty selection, order generation/routing, best
      execution, OMS acknowledgement, fills, settlement, and autonomous action remain non-claims.
+168. `TransactionCostCurve:v1` and `PerformanceComponentEconomics:v1` form one QCP-owned
+     `transaction_economics` capability. Public contracts live under QCP `app/contracts`; frozen
+     booked-transaction, cashflow, and cost-component evidence records live under `app/domain`; the
+     application package owns keyset paging, fee-component identity, row mapping, component totals,
+     supportability, and response assembly; `TransactionEconomicsReader` is the source port; and
+     `SqlAlchemyTransactionEconomicsReader` owns grouped keys, bounded evidence reads, latest
+     cashflow-epoch selection, and ORM mapping. Do not restore the deleted Query Service DTOs,
+     facade methods, economics services, read records, or repository methods. Runtime metadata must
+     use an injected UTC clock and source-owned deterministic SHA-256 content hash, digest,
+     fingerprint, source reference, lineage, and current freshness derived from durable evidence.
+     Core publishes observed cost and transaction component evidence only; market-impact prediction,
+     execution quality, best execution, contribution/attribution calculation, performance returns,
+     and tax advice remain explicit non-claims.
 
 ## Context Maintenance Rule
 
