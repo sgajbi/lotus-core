@@ -4,14 +4,14 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from .reference_integration_common_dto import IntegrationWindow
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field
+
+from .reference_integration_common_dto import IntegrationWindow
 
 
 class IntegrationPolicyContext(BaseModel):

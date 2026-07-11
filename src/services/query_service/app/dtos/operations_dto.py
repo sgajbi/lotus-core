@@ -2,17 +2,17 @@ from datetime import date, datetime
 from typing import Any, Literal, Optional
 
 from portfolio_common.observability_contracts import PORTFOLIO_SUPPORTABILITY_METRIC_LABELS
+from portfolio_common.source_data_product_metadata import (
+    SourceDataProductRuntimeMetadata,
+    product_name_field,
+    product_version_field,
+)
 from pydantic import BaseModel, Field
 
 from ..support_policy import (
     CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_FAILED_WINDOW_DESCRIPTION,
     SUPPORT_STALE_THRESHOLD_DESCRIPTION,
-)
-from .source_data_product_identity import (
-    SourceDataProductRuntimeMetadata,
-    product_name_field,
-    product_version_field,
 )
 
 

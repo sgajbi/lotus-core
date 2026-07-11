@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 
 def source_product_runtime_metadata(

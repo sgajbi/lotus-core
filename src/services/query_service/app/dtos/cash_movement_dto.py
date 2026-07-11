@@ -2,13 +2,12 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Literal
 
-from pydantic import BaseModel, Field
-
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, Field
 
 
 class CashMovementBucket(BaseModel):

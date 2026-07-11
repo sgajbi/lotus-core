@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .reference_integration_market_data_coverage_dto import MarketDataCurrencyPair
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .reference_integration_market_data_coverage_dto import MarketDataCurrencyPair
 
 DpmSourceFamilyState = Literal["READY", "DEGRADED", "INCOMPLETE", "UNAVAILABLE"]
 

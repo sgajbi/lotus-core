@@ -6,15 +6,15 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
 from ..dtos.position_dto import (
     PortfolioMaturitySummaryResponse,
     PortfolioPositionsResponse,
     Position,
-)
-from ..dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
-    stable_content_hash,
 )
 
 MATURITY_BEARING_TERMS = (

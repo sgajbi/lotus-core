@@ -13,6 +13,7 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
     ANALYTICS_EXPORT_JOBS_TOTAL,
 )
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.analytics_input_dto import (
@@ -34,7 +35,6 @@ from ..dtos.analytics_input_dto import (
     PositionTimeseriesRow,
     QualityDiagnostics,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from ..repositories.analytics_export_repository import AnalyticsExportRepository
 from ..repositories.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from ..repositories.currency_codes import normalize_currency_code

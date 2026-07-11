@@ -4,13 +4,13 @@ from decimal import Decimal
 from typing import Optional
 
 from portfolio_common.reconciliation_quality import COMPLETE
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
-from ..dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
     stable_content_hash,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..repositories.cashflow_repository import CashflowRepository
 from .cashflow_evidence_window import read_cashflow_evidence_window
 from .decimal_amounts import decimal_or_zero

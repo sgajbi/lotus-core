@@ -11,6 +11,11 @@
 - Source declaration: `contracts/domain-data-products/`
 - Trust telemetry: `contracts/trust-telemetry/`
 
+The shared source-product catalog and runtime metadata contract are owned by
+`portfolio_common.source_data_products` and `portfolio_common.source_data_product_metadata`.
+Serving applications own their route DTOs and workflows; they must not duplicate hashing,
+lineage, freshness, or product-identity semantics in service-local helper modules.
+
 ## Active DPM Source Products
 
 RFC-087 Slices 4 through 9 and the RFC41-WTBD-001/RFC41-WTBD-002 source-owner foundations promote the first DPM

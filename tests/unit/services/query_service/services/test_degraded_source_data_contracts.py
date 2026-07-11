@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
+from portfolio_common.source_data_product_metadata import (
+    SourceDataDegradationDetail,
+    SourceDataDegradationSummary,
+    source_data_product_runtime_metadata,
+)
 
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionResponse,
@@ -18,11 +23,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     MarketDataCoverageRequest,
     MarketDataCurrencyPair,
     TransactionCostCurveRequest,
-)
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    SourceDataDegradationDetail,
-    SourceDataDegradationSummary,
-    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.instrument_eligibility import (

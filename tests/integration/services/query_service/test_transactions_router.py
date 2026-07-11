@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 import pytest_asyncio
-
-from src.services.query_service.app.dependencies import get_transaction_service
-from src.services.query_service.app.dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
+
+from src.services.query_service.app.dependencies import get_transaction_service
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,
     PortfolioRealizedTaxSummaryResponse,

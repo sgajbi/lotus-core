@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
 from ..dtos.transaction_dto import (
     PortfolioRealizedTaxSummaryResponse,
     RealizedTaxCurrencyTotal,

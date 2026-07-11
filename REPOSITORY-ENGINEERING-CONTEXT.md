@@ -2108,6 +2108,12 @@ Most relevant current governance:
      Core-snapshot compatibility only and must retire with that ownership move. QCP `app.main`
      remains package-closure incomplete until analytics, integration/Core snapshot,
      operations/support, and advisory compatibility no longer import QS implementation modules.
+160. Source-data product runtime metadata is a stable cross-service contract owned by
+     `portfolio_common.source_data_product_metadata` beside the source-product catalog. Query
+     Service and Query Control Plane response contracts may import its Pydantic metadata models,
+     product identity field helpers, deterministic content hash, lineage normalization, and
+     freshness builder. Do not recreate service-local metadata helpers or use this shared boundary
+     for service-owned API DTOs, workflows, repositories, settings, or SQL adapters.
 
 ## Context Maintenance Rule
 

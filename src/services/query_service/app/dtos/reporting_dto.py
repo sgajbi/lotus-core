@@ -4,13 +4,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
-
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, Field, model_validator
 
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
+
 from ..dtos.reference_integration_dto import (
     ClientTaxRuleSetRequest,
     ClientTaxRuleSetResponse,
     ClientTaxRuleSetSupportability,
 )
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .reference_data_mappers import client_tax_rule_set_entry
 from .request_fingerprint import request_fingerprint

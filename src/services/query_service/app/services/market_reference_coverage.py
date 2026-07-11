@@ -11,9 +11,9 @@ from portfolio_common.market_reference_quality import (
     MarketReferenceCoverageSignal,
     classify_market_reference_coverage,
 )
+from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 from ..dtos.reference_integration_dto import CoverageResponse
-from ..dtos.source_data_product_identity import source_data_product_runtime_metadata
 
 
 def _iter_dates(start_date: date, end_date: date) -> Iterator[date]:

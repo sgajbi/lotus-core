@@ -4,15 +4,15 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .reference_integration_common_dto import IntegrationWindow
-from .reference_integration_dto import ReferencePageMetadata, ReferencePageRequest
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .reference_integration_common_dto import IntegrationWindow
+from .reference_integration_dto import ReferencePageMetadata, ReferencePageRequest
 
 SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES = (
     "cashflow",

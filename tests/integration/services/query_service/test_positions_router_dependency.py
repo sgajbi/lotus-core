@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dependencies import get_position_service
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
-)
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.position_service import PositionService
 

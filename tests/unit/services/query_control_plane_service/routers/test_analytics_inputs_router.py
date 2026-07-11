@@ -5,6 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.responses import Response
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+)
 
 from src.services.query_control_plane_service.app.dependencies import (
     get_analytics_timeseries_service,
@@ -27,9 +30,6 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PortfolioAnalyticsReferenceRequest,
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
-)
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.services.analytics_timeseries_service import AnalyticsInputError
 

@@ -3,13 +3,12 @@ from decimal import Decimal
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from .source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
     product_version_field,
 )
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CoreSnapshotMode(str, Enum):

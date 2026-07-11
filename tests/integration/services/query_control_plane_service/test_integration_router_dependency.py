@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 import pytest_asyncio
+from portfolio_common.source_data_product_metadata import (
+    source_data_product_runtime_metadata,
+)
 
 from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
@@ -13,9 +16,6 @@ from src.services.query_control_plane_service.app.main import app
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
-)
-from src.services.query_service.app.dtos.source_data_product_identity import (
-    source_data_product_runtime_metadata,
 )
 from src.services.query_service.app.services.core_snapshot_service import (
     CoreSnapshotBadRequestError,

@@ -2,11 +2,11 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, STALE, UNKNOWN
-
-from src.services.query_service.app.dtos.position_dto import PortfolioPositionsResponse, Position
-from src.services.query_service.app.dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
+
+from src.services.query_service.app.dtos.position_dto import PortfolioPositionsResponse, Position
 from src.services.query_service.app.services.position_maturity_summary import (
     portfolio_maturity_summary_response,
 )

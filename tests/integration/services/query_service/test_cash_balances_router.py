@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 import pytest_asyncio
-
-from src.services.query_service.app.dependencies import get_cash_balance_service
-from src.services.query_service.app.dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
+
+from src.services.query_service.app.dependencies import get_cash_balance_service
 from src.services.query_service.app.main import app
 from src.services.query_service.app.services.cash_balance_service import CashBalanceService
 

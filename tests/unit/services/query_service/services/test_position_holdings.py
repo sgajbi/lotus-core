@@ -8,11 +8,11 @@ from portfolio_common.database_models import (
     PositionHistory,
     PositionState,
 )
-
-from src.services.query_service.app.dtos.position_dto import Position
-from src.services.query_service.app.dtos.source_data_product_identity import (
+from portfolio_common.source_data_product_metadata import (
     SOURCE_METADATA_UNAVAILABLE_HASH,
 )
+
+from src.services.query_service.app.dtos.position_dto import Position
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
 from src.services.query_service.app.services.position_holdings import (
     apply_held_since_dates,
