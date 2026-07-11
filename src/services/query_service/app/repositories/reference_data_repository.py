@@ -11,7 +11,6 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
     ClientIncomeNeedsSchedule,
-    ClientTaxRuleSet,
     FxRate,
     IndexDefinition,
     IndexPriceSeries,
@@ -28,7 +27,6 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.source_lifecycle_predicates import (
     CLIENT_INCOME_NEEDS_ACTIVE,
-    CLIENT_TAX_RULE_SET_ACTIVE,
     DISCRETIONARY_MANDATE_TYPE,
     DPM_DISCRETIONARY_MANDATE_ACTIVE,
     LIQUIDITY_RESERVE_ACTIVE,
@@ -235,64 +233,6 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
-
-    async def list_client_tax_rule_sets(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_rules: bool = False,
-    ) -> list[ClientTaxRuleSet]:
-        predicates = [
-            ClientTaxRuleSet.portfolio_id == portfolio_id,
-            ClientTaxRuleSet.client_id == client_id,
-            effective_filter(
-                ClientTaxRuleSet.effective_from,
-                ClientTaxRuleSet.effective_to,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    ClientTaxRuleSet.mandate_id.is_(None),
-                    ClientTaxRuleSet.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_rules:
-            predicates.append(
-                CLIENT_TAX_RULE_SET_ACTIVE.sqlalchemy_filter(ClientTaxRuleSet.rule_status)
-            )
-
-        ranked = ranked_latest_effective_ids(
-            ClientTaxRuleSet,
-            ClientTaxRuleSet.rule_set_id,
-            ClientTaxRuleSet.jurisdiction_code,
-            ClientTaxRuleSet.rule_code,
-            predicates=predicates,
-            order_by=(
-                ClientTaxRuleSet.effective_from.desc(),
-                ClientTaxRuleSet.observed_at.desc().nullslast(),
-                ClientTaxRuleSet.rule_version.desc(),
-                ClientTaxRuleSet.updated_at.desc(),
-                ClientTaxRuleSet.created_at.desc(),
-                ClientTaxRuleSet.id.desc(),
-            ),
-        )
-        stmt = (
-            select(ClientTaxRuleSet)
-            .join(ranked, ClientTaxRuleSet.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                ClientTaxRuleSet.rule_set_id.asc(),
-                ClientTaxRuleSet.jurisdiction_code.asc(),
-                ClientTaxRuleSet.rule_code.asc(),
-            )
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
 
     async def list_client_income_needs_schedules(
         self,

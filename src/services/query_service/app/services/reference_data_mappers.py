@@ -10,7 +10,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClientIncomeNeedsScheduleEntry,
-    ClientTaxRuleSetEntry,
     ComponentSeriesResponse,
     DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
@@ -33,7 +32,6 @@ from .integration_value_normalization import (
     as_decimal,
     as_optional_decimal,
     control_code,
-    string_list,
 )
 
 
@@ -431,28 +429,6 @@ def classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         quality_status=row.quality_status,
-    )
-
-
-def client_tax_rule_set_entry(row: Any) -> ClientTaxRuleSetEntry:
-    return ClientTaxRuleSetEntry(
-        rule_set_id=row.rule_set_id,
-        tax_year=int(row.tax_year),
-        jurisdiction_code=row.jurisdiction_code,
-        rule_code=row.rule_code,
-        rule_category=row.rule_category,
-        rule_status=row.rule_status,
-        rule_source=row.rule_source,
-        applies_to_asset_classes=string_list(row.applies_to_asset_classes),
-        applies_to_security_ids=string_list(row.applies_to_security_ids),
-        applies_to_income_types=string_list(row.applies_to_income_types),
-        rate=as_optional_decimal(row.rate),
-        threshold_amount=as_optional_decimal(row.threshold_amount),
-        threshold_currency=row.threshold_currency,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        rule_version=int(row.rule_version),
-        source_record_id=row.source_record_id,
     )
 
 

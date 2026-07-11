@@ -2156,6 +2156,11 @@ Most relevant current governance:
      Core publishes bounded tax-reference evidence only; do not add tax advice, after-tax
      optimization, tax-loss-harvesting suitability, client approval, or jurisdiction-specific
      recommendations to this source product.
+165. `ClientTaxRuleSet:v1` is QCP-owned end to end and shares the same profile foundation while
+     retaining rule-set, tax-year, jurisdiction, rule-code, rate, threshold, and version semantics
+     in its own contract/domain/port/adapter. Do not restore its Query Service path. Core publishes
+     reference rules only; tax advice, approval, optimization, suitability, reporting
+     certification, and jurisdictional recommendations remain outside Core.
 
 ## Context Maintenance Rule
 
