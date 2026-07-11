@@ -320,19 +320,6 @@ async def test_reference_contract_methods() -> None:
             ]
         ),
         get_fx_rates=AsyncMock(return_value={date(2026, 1, 1): Decimal("1.1")}),
-        list_risk_free_series=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    value=Decimal("0.03"),
-                    value_convention="annualized_rate",
-                    day_count_convention="act_360",
-                    compounding_convention="simple",
-                    series_currency="USD",
-                    quality_status="accepted",
-                )
-            ]
-        ),
         get_benchmark_coverage=AsyncMock(
             return_value={
                 "total_points": 10,
@@ -398,20 +385,6 @@ async def test_reference_contract_methods() -> None:
     assert market_series.reconciliation_status == "UNKNOWN"
     assert market_series.data_quality_status == COMPLETE
 
-    risk_free = await service.get_risk_free_series(
-        request=SimpleNamespace(
-            as_of_date=date(2026, 1, 1),
-            currency="USD",
-            series_mode="annualized_rate_series",
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
-            frequency="daily",
-        ),
-    )
-    assert risk_free.points
-    assert risk_free.as_of_date == date(2026, 1, 1)
-    assert risk_free.request_fingerprint
-    assert risk_free.product_name == "RiskFreeSeriesWindow"
-
     coverage = await service.get_benchmark_coverage("B1", date(2026, 1, 1), date(2026, 1, 3))
     assert coverage.total_points == 10
     assert coverage.request_fingerprint
@@ -432,22 +405,9 @@ async def test_reference_contract_methods() -> None:
 
 
 @pytest.mark.asyncio
-async def test_risk_free_products_normalize_currency_before_repository_lookup() -> None:
+async def test_risk_free_coverage_normalizes_currency_before_repository_lookup() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment] # pylint: disable=protected-access
-        list_risk_free_series=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    value=Decimal("0.03"),
-                    value_convention="annualized_rate",
-                    day_count_convention="act_360",
-                    compounding_convention="simple",
-                    series_currency="USD",
-                    quality_status="accepted",
-                )
-            ]
-        ),
         get_risk_free_coverage=AsyncMock(
             return_value={
                 "total_points": 1,
@@ -458,29 +418,13 @@ async def test_risk_free_products_normalize_currency_before_repository_lookup() 
         ),
     )
 
-    risk_free = await service.get_risk_free_series(
-        request=SimpleNamespace(
-            as_of_date=date(2026, 1, 1),
-            currency=" usd ",
-            series_mode="annualized_rate_series",
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 1)),
-            frequency="daily",
-        ),
-    )
     coverage = await service.get_risk_free_coverage(" usd ", date(2026, 1, 1), date(2026, 1, 1))
 
-    service._reference_repository.list_risk_free_series.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
-        currency="USD",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 1, 1),
-    )
     service._reference_repository.get_risk_free_coverage.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
         currency="USD",
         start_date=date(2026, 1, 1),
         end_date=date(2026, 1, 1),
     )
-    assert risk_free.currency == "USD"
-    assert risk_free.request_fingerprint
     assert coverage.request_fingerprint
 
 
@@ -526,7 +470,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),
         get_fx_rates=AsyncMock(return_value={}),
-        list_risk_free_series=AsyncMock(return_value=[]),
         get_benchmark_coverage=AsyncMock(
             return_value={
                 "total_points": 0,

@@ -49,6 +49,7 @@ from .application.integration_policy import (
     IntegrationPolicyService,
 )
 from .application.portfolio_manager_book import PortfolioManagerBookService
+from .application.risk_free_series import RiskFreeSeriesService
 from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from .application.transaction_economics.service import TransactionEconomicsService
@@ -82,6 +83,7 @@ from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandate
 from .infrastructure.index_definition_sources import SqlAlchemyIndexDefinitionReader
 from .infrastructure.index_series_sources import SqlAlchemyIndexSeriesReader
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
+from .infrastructure.risk_free_series_sources import SqlAlchemyRiskFreeSeriesReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
     SqlAlchemySimulationStore,
@@ -200,6 +202,17 @@ def get_index_series_service(
 
     return IndexSeriesService(
         reader=SqlAlchemyIndexSeriesReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_risk_free_series_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> RiskFreeSeriesService:
+    """Compose the QCP-owned risk-free series use case."""
+
+    return RiskFreeSeriesService(
+        reader=SqlAlchemyRiskFreeSeriesReader(db),
         clock=SystemClock().utc_now,
     )
 

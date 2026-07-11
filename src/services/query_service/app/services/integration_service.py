@@ -11,8 +11,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    RiskFreeSeriesRequest,
-    RiskFreeSeriesResponse,
 )
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..settings import load_query_service_settings
@@ -75,9 +73,6 @@ class IntegrationService:
             benchmark_id=benchmark_id,
             request=request,
         )
-
-    async def get_risk_free_series(self, request: RiskFreeSeriesRequest) -> RiskFreeSeriesResponse:
-        return await self._benchmark_reference_service.get_risk_free_series(request)
 
     async def get_benchmark_coverage(
         self,

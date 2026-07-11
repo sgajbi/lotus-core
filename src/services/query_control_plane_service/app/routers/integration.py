@@ -12,8 +12,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
-    RiskFreeSeriesRequest,
-    RiskFreeSeriesResponse,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -43,6 +41,7 @@ from ..application.index_catalog import IndexCatalogService
 from ..application.index_series import IndexSeriesService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
+from ..application.risk_free_series import RiskFreeSeriesService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..application.transaction_economics.service import TransactionEconomicsService
 from ..contracts.benchmark_assignment import (
@@ -144,6 +143,7 @@ from ..contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
 )
+from ..contracts.risk_free_series import RiskFreeSeriesRequest, RiskFreeSeriesResponse
 from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileRequest,
     SustainabilityPreferenceProfileResponse,
@@ -171,6 +171,7 @@ from ..dependencies import (
     get_integration_policy_service,
     get_integration_service,
     get_portfolio_manager_book_service,
+    get_risk_free_series_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
@@ -2475,12 +2476,9 @@ async def fetch_benchmark_return_series(
 )
 async def fetch_risk_free_series(
     request: RiskFreeSeriesRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    risk_free_series_service: RiskFreeSeriesService = Depends(get_risk_free_series_service),
 ) -> RiskFreeSeriesResponse:
-    return cast(
-        RiskFreeSeriesResponse,
-        await integration_service.get_risk_free_series(request=request),
-    )
+    return await risk_free_series_service.get(request=request)
 
 
 @router.post(

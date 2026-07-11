@@ -32,7 +32,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageResponse,
     IntegrationWindow,
-    RiskFreeSeriesResponse,
 )
 
 
@@ -167,7 +166,6 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
     ("response_model", "product_name"),
     [
         (BenchmarkMarketSeriesResponse, "MarketDataWindow"),
-        (RiskFreeSeriesResponse, "RiskFreeSeriesWindow"),
         (CoverageResponse, "DataQualityCoverageReport"),
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
         (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),

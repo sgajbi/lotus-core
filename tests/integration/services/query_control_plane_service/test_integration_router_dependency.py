@@ -36,6 +36,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_index_series_service,
     get_integration_policy_service,
     get_integration_service,
+    get_risk_free_series_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
@@ -109,6 +110,8 @@ async def async_test_client():
     )
 
     mock_integration_service = MagicMock()
+    mock_risk_free_series_service = MagicMock()
+    mock_integration_service.risk_free_series_service = mock_risk_free_series_service
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-gateway",
         tenant_id="default",
@@ -383,7 +386,7 @@ async def async_test_client():
         }
     )
     mock_integration_service.index_catalog_service = mock_index_catalog_service
-    mock_integration_service.get_risk_free_series = AsyncMock(
+    mock_risk_free_series_service.get = AsyncMock(
         return_value={
             "currency": "USD",
             "as_of_date": "2026-01-31",
@@ -391,6 +394,8 @@ async def async_test_client():
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-risk-free-1",
+            "record_count": 1,
+            "completeness_status": "PARTIAL",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1", "source_system": "lotus-core"},
             **source_data_product_runtime_metadata(
@@ -642,6 +647,7 @@ async def async_test_client():
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_risk_free_series_service] = lambda: mock_risk_free_series_service
     app.dependency_overrides[get_index_catalog_service] = lambda: mock_index_catalog_service
     app.dependency_overrides[get_index_series_service] = lambda: mock_integration_service
     app.dependency_overrides[get_transaction_economics_service] = lambda: mock_integration_service
@@ -670,6 +676,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
+    app.dependency_overrides.pop(get_risk_free_series_service, None)
     app.dependency_overrides.pop(get_index_catalog_service, None)
     app.dependency_overrides.pop(get_index_series_service, None)
     app.dependency_overrides.pop(get_transaction_economics_service, None)
@@ -1701,8 +1708,8 @@ async def test_risk_free_series_success(async_test_client):
     assert body["as_of_date"] == "2026-01-31"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_risk_free_series.assert_awaited_once()
-    risk_free_call = mock_integration_service.get_risk_free_series.await_args.kwargs
+    mock_integration_service.risk_free_series_service.get.assert_awaited_once()
+    risk_free_call = mock_integration_service.risk_free_series_service.get.await_args.kwargs
     assert risk_free_call["request"].as_of_date == date(2026, 1, 31)
     assert risk_free_call["request"].window.start_date == date(2026, 1, 1)
     assert risk_free_call["request"].window.end_date == date(2026, 1, 31)

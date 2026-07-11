@@ -57,6 +57,7 @@ def build_source_series_metadata(
     request: SourceSeriesRequest,
     rows: Sequence[SourceSeriesEvidence],
     generated_at: datetime,
+    request_fingerprint_extras: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     """Build deterministic identity, completeness, freshness, and lineage metadata."""
 
@@ -71,6 +72,7 @@ def build_source_series_metadata(
         identifier_key=identifier_key,
         identifier_value=identifier_value,
         request=request,
+        extras=request_fingerprint_extras,
     )
     content_hash = stable_content_hash(
         {
