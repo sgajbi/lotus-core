@@ -1708,7 +1708,9 @@ Most relevant current governance:
      use case/consumer in the same deployable because it has distinct epoch and backlog controls.
      `transactions.persisted` requires the canonical transaction row to exist first; ingestion owns
      that persistence, while combined processing atomically owns derived cost/lot, cashflow,
-     position, idempotency, and compatibility outbox effects.
+     position, idempotency, and compatibility outbox effects. Every transaction emitted by the cost
+     stage, including an `AUTO_GENERATE` settlement cash leg, must traverse both cashflow and
+     position before the single commit; aggregate result counts must include every emitted leg.
 128. Cost-basis strategies must reconcile aggregate holdings with source-level lot evidence. FIFO
      returns actual remaining source-lot quantity and cost. AVCO returns deterministic pro-rata
      source quantity and local/base cost whose sums exactly equal pooled holdings after every

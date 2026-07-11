@@ -22,9 +22,10 @@ This makes the module a governed semantic transformation stage, not a simple amo
 
 ## Runtime role
 
-The active application workflow is `app/cashflow_calculation_workflow.py`, imported directly by
-target infrastructure. `app/consumers/transaction_consumer.py` is a quarantined compatibility shell
-for legacy delivery tests and must not be imported by the combined runtime.
+The active workflow is implemented by
+`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow` and its
+cashflow calculation/repository adapters. The retired standalone calculator consumer is not part of
+the source tree or runtime.
 
 For an eligible booked transaction, the module:
 
@@ -33,6 +34,12 @@ For an eligible booked transaction, the module:
 3. loads the governed cashflow rule for that transaction type
 4. calculates the normalized amount, timing, and flow classification
 5. persists the resulting cashflow row and stages the completion event
+
+Every transaction emitted by the cost stage traverses this workflow. For `AUTO_GENERATE` booking,
+that includes both the product transaction and its generated settlement cash leg. Both rows retain
+position-flow classification because they belong to the same linked transaction group; the
+settlement row is not a portfolio flow, which prevents cash-account movement from being counted as
+external portfolio funding.
 
 The service also keeps operational rule lookup supportable through cache refresh and invalidation
 behavior rather than requiring a restart for every rule update. Rule writes, including upgrade and
