@@ -18,11 +18,11 @@ from portfolio_common.transaction_domain import SELL_AVCO_POLICY_ID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.repository import (
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculatorRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_unit_of_work import (  # noqa: E501
     TRANSACTION_PROCESSING_SERVICE_NAME,

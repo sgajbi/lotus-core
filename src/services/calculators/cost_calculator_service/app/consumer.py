@@ -15,21 +15,18 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostProcessingCompatibilityAdapter,
-    PortfolioNotFoundError,
-)
-
-from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
+    CostCalculatorRepository,
+    CostProcessingCompatibilityAdapter,
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
     OpenLotStateUpdateScope,
+    PortfolioNotFoundError,
     UpstreamCashLegUnavailableError,
-    _normalize_event_code,
-    _normalize_fee_amount,
+    normalize_cost_event_code,
+    normalize_cost_fee_amount,
 )
-from .repository import CostCalculatorRepository
 
 __all__ = [
     "LOT_OPENING_BEHAVIORS",
@@ -42,6 +39,8 @@ __all__ = [
     "UpstreamCashLegUnavailableError",
     "_normalize_fee_amount",
 ]
+
+_normalize_fee_amount = normalize_cost_fee_amount
 
 logger = logging.getLogger(__name__)
 COST_CALCULATOR_COMPATIBILITY_SERVICE_NAME = "cost-calculator"
@@ -147,5 +146,5 @@ class CostCalculatorConsumer(CostCalculationWorkflow, BaseConsumer):
     @staticmethod
     def _record_process_message_failure(event: TransactionEvent | None, status: str) -> None:
         BUY_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()
-        if _normalize_event_code(getattr(event, "transaction_type", "")) == "SELL":
+        if normalize_cost_event_code(getattr(event, "transaction_type", "")) == "SELL":
             SELL_LIFECYCLE_STAGE_TOTAL.labels("process_message", status).inc()

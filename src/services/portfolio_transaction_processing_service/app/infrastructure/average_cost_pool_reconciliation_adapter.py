@@ -10,19 +10,18 @@ from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    LOT_OPENING_BEHAVIORS,
-    CostCalculationWorkflow,
-)
-from src.services.calculators.cost_calculator_service.app.repository import (
-    AverageCostPoolPersistedSummary,
-    CostCalculatorRepository,
-)
-
 from ..domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
+)
+from .cost_calculation_workflow import (
+    LOT_OPENING_BEHAVIORS,
+    CostCalculationWorkflow,
+)
+from .cost_repository import (
+    AverageCostPoolPersistedSummary,
+    CostCalculatorRepository,
 )
 
 logger = logging.getLogger(__name__)

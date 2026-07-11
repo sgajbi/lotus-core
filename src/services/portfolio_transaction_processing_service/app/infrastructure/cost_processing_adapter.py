@@ -8,18 +8,17 @@ from typing import Any, Protocol
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+from ..application import TransactionProcessingError
+from ..domain import BookedTransaction
+from ..ports import CostProcessingResult
+from .cost_calculation_workflow import (
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
     UpstreamCashLegUnavailableError,
 )
-from src.services.calculators.cost_calculator_service.app.repository import (
+from .cost_repository import (
     CostCalculatorRepository,
 )
-
-from ..application import TransactionProcessingError
-from ..domain import BookedTransaction
-from ..ports import CostProcessingResult
 from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
 
 

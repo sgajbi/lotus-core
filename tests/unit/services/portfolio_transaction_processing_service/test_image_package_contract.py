@@ -31,8 +31,8 @@ def test_target_image_uses_bounded_source_closure_without_legacy_wheel_collision
     assert "cost_calculator_service/pyproject.toml" not in dockerfile
     assert "cashflow_calculator_service/pyproject.toml" not in dockerfile
     assert "position_calculator/pyproject.toml" not in dockerfile
-    assert "src/services/calculators/cost_calculator_service " in dockerfile
-    assert "/app/src/services/calculators/cost_calculator_service" in dockerfile
+    assert "src/services/calculators/cost_calculator_service " not in dockerfile
+    assert "/app/src/services/calculators/cost_calculator_service" not in dockerfile
     assert "src/services/calculators/cashflow_calculator_service " not in dockerfile
     assert "/app/src/services/calculators/cashflow_calculator_service" not in dockerfile
     assert "src/services/calculators/position_calculator" not in dockerfile

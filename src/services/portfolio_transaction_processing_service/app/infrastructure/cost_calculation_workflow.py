@@ -1,3 +1,5 @@
+"""Stage cost-basis effects inside the unified transaction-processing boundary."""
+
 import hashlib
 import json
 import logging
@@ -45,11 +47,11 @@ from portfolio_common.transaction_domain import (
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
-from src.services.portfolio_transaction_processing_service.app.application import (
+from ..application import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
@@ -57,15 +59,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     OpenLotState,
     transaction_order_key,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
-from src.services.portfolio_transaction_processing_service.app.ports import (
+from ..ports import (
     CostBasisCalculationObserver,
 )
-
-from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
-from .repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
+from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
+from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -128,6 +129,10 @@ def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
     if amount is None:
         raise ValueError(f"{field_name} must be numeric.")
     return amount
+
+
+normalize_cost_event_code = _normalize_event_code
+normalize_cost_fee_amount = _normalize_fee_amount
 
 
 FEE_COMPONENT_FIELDS = ("brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees")

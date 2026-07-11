@@ -1896,15 +1896,14 @@ Most relevant current governance:
      local service list. Any operational driver that calls `build_test_runtime_env(...)` must use
      the returned PostgreSQL, Kafka, and HTTP endpoints by default; fixed local endpoints are valid
      only as explicit operator overrides after dynamic runtime allocation.
-140. Active target cost composition imports
-     `cost_calculator_service.app.cost_calculation_workflow`, never the compatibility
-     `app.consumer` module. Keep cost policy, financial staging, AVCO/FIFO state, corporate-action
-     reconciliation, and workflow metrics independent of Kafka, DB-session construction, retries,
-     and DLQ handling. `CostCalculatorConsumer` is a quarantined compatibility shell for remaining
-     characterization tests, not a runtime extension point. New tests for domain behavior must
-     instantiate `CostCalculationWorkflow` directly. Delete the shell after its delivery-specific
-     evidence is migrated; do not move it into the target package or restore it to runtime
-     composition.
+140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
+     reconciliation, and workflow metrics belong to
+     `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
+     application collaborators. The installed target image must not copy
+     `calculators/cost_calculator_service`. `CostCalculatorConsumer` is a non-deployed, test-only
+     compatibility shell pending decomposition of retained workflow coverage from obsolete
+     standalone Kafka, physical-idempotency, retry, and DLQ tests. Do not move that shell into the
+     target package or restore it to runtime composition.
 141. Cashflow source ownership belongs to
      `portfolio_transaction_processing_service`: vocabulary is under `app.domain.cashflow`, while
      calculation, rule caching, SQL persistence, epoch fencing, and compatibility outbox staging are

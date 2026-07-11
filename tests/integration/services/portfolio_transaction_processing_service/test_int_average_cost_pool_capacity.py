@@ -13,10 +13,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    CostCalculationWorkflow,
-)
-from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
 )
@@ -25,6 +21,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostCalculationWorkflow,
+    CostCalculatorRepository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,

@@ -9,10 +9,6 @@ from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
-    CostCalculationWorkflow,
-)
-
 from ..application import (
     ProcessTransactionUseCase,
     ReconcileAverageCostPoolsUseCase,
@@ -24,6 +20,7 @@ from .average_cost_pool_reconciliation_adapter import (
 )
 from .cashflow_processing_adapter import CashflowStagingWorkflow
 from .cashflow_staging_workflow import CashflowCalculationWorkflow
+from .cost_calculation_workflow import CostCalculationWorkflow
 from .cost_processing_adapter import CostStagingWorkflow
 from .prometheus_cost_basis_observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,

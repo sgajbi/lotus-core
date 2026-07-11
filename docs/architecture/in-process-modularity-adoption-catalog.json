@@ -74,7 +74,7 @@
       "legacyFolders": [
         {
           "path": "src/services/calculators/cost_calculator_service",
-          "migrationGuidance": "Cost-basis policy, checkpoint state, timeline orchestration, and compatibility staging are target-owned. Extract workflow/publication ports and SQL adapter ownership, migrate delivery tests, then delete the remaining legacy root after release/Kubernetes/canonical-QA parity."
+          "migrationGuidance": "All active cost policy, workflow, SQL repository, metrics, and compatibility staging are target-owned and absent from the image's legacy source closure. Separate retained workflow coverage from obsolete standalone consumer delivery tests, then delete this test-only root."
         }
       ],
       "retiredLegacyFolders": [
@@ -93,9 +93,10 @@
         "docs/architecture/codebase-reviews/CR-1512-COST-CHECKPOINT-DOMAIN-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1513-COST-TIMELINE-APPLICATION-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md",
-        "docs/architecture/codebase-reviews/CR-1523-CASHFLOW-TARGET-OWNERSHIP.md"
+        "docs/architecture/codebase-reviews/CR-1523-CASHFLOW-TARGET-OWNERSHIP.md",
+        "docs/architecture/codebase-reviews/CR-1524-COST-RUNTIME-SOURCE-OWNERSHIP.md"
       ],
-      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position and cashflow source ownership are target-owned. Cost-basis policy, checkpoint, timeline, and compatibility staging are target-owned; the remaining cost workflow/repository source root plus registry/Kubernetes rollout remain governed follow-up work."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. All active position, cashflow, and cost source ownership is target-owned and the installed image has no legacy calculator source closure. The remaining cost root is a non-deployed test-only consumer shell; its test decomposition plus registry/Kubernetes rollout remain governed follow-up work."
     }
   ]
 }

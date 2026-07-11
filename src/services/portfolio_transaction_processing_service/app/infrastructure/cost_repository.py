@@ -1,4 +1,5 @@
-# services/calculators/cost_calculator_service/app/repository.py
+"""SQLAlchemy persistence for transaction cost-basis processing."""
+
 import hashlib
 import logging
 from collections.abc import Callable
@@ -33,7 +34,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
@@ -41,14 +42,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     EffectiveFxRate,
     OpenLotState,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def _cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
+def cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
     normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
     normalized_security_id = normalize_lookup_identifier(security_id)
     lock_scope = f"cost-basis-processing:{normalized_portfolio_id}:{normalized_security_id}"
@@ -272,7 +273,7 @@ class CostCalculatorRepository:
         security_id: str,
     ) -> None:
         """Serialize cost-basis state transitions for one portfolio/security key."""
-        lock_key = _cost_basis_processing_lock_key(portfolio_id, security_id)
+        lock_key = cost_basis_processing_lock_key(portfolio_id, security_id)
         started_at = self._clock()
         try:
             await self.db.execute(

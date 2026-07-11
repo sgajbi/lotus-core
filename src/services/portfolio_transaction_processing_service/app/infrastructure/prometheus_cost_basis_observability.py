@@ -9,12 +9,11 @@ from types import TracebackType
 
 from prometheus_client import Histogram
 
-from src.services.calculators.cost_calculator_service.app.monitoring import (
+from ..ports import CostBasisCalculationObservation, CostBasisCalculationObserver
+from .cost_metrics import (
     RECALCULATION_DEPTH,
     RECALCULATION_DURATION_SECONDS,
 )
-
-from ..ports import CostBasisCalculationObservation, CostBasisCalculationObserver
 
 logger = logging.getLogger(__name__)
 
