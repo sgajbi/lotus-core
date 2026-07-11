@@ -10,20 +10,17 @@ from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_return_series_point,
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
-    client_income_needs_schedule_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
     instrument_eligibility_record,
-    liquidity_reserve_requirement_entry,
     market_data_fx_coverage_record,
     market_data_price_coverage_record,
     missing_instrument_eligibility_record,
     missing_market_data_fx_coverage_record,
     missing_market_data_price_coverage_record,
     model_portfolio_target_row,
-    planned_withdrawal_schedule_entry,
     portfolio_manager_book_member,
     portfolio_tax_lot_record,
     risk_free_series_point,
@@ -471,57 +468,3 @@ def test_benchmark_market_series_point_uses_price_row_precedence_for_metadata() 
 
     assert point.series_currency == "USD"
     assert point.quality_status == "accepted"
-
-
-def test_client_liquidity_entries_map_source_data_rows() -> None:
-    income = client_income_needs_schedule_entry(
-        SimpleNamespace(
-            schedule_id="INCOME_NEED_MONTHLY_001",
-            need_type="monthly_income",
-            need_status="active",
-            amount="12000.0000",
-            currency="SGD",
-            frequency="monthly",
-            start_date=date(2026, 1, 1),
-            end_date=None,
-            priority="1",
-            funding_policy="cash_first",
-            source_record_id="income-1",
-        )
-    )
-    reserve = liquidity_reserve_requirement_entry(
-        SimpleNamespace(
-            reserve_requirement_id="RESERVE_MIN_CASH_001",
-            reserve_type="minimum_cash",
-            reserve_status="active",
-            required_amount="50000.0000",
-            currency="SGD",
-            horizon_days="90",
-            priority="2",
-            policy_source="investment_policy_statement",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            requirement_version="4",
-            source_record_id="reserve-1",
-        )
-    )
-    withdrawal = planned_withdrawal_schedule_entry(
-        SimpleNamespace(
-            withdrawal_schedule_id="WITHDRAWAL_Q3_001",
-            withdrawal_type="planned_spending",
-            withdrawal_status="active",
-            amount="25000.0000",
-            currency="SGD",
-            scheduled_date=date(2026, 7, 15),
-            recurrence_frequency="quarterly",
-            purpose_code="education",
-            source_record_id="withdrawal-1",
-        )
-    )
-
-    assert income.amount == Decimal("12000.0000")
-    assert income.priority == 1
-    assert reserve.required_amount == Decimal("50000.0000")
-    assert reserve.requirement_version == 4
-    assert withdrawal.amount == Decimal("25000.0000")
-    assert withdrawal.purpose_code == "education"

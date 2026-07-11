@@ -19,8 +19,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyResponse,
-    ClientIncomeNeedsScheduleRequest,
-    ClientIncomeNeedsScheduleResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
@@ -46,16 +44,12 @@ from ..dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    LiquidityReserveRequirementRequest,
-    LiquidityReserveRequirementResponse,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
-    PlannedWithdrawalScheduleRequest,
-    PlannedWithdrawalScheduleResponse,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
@@ -71,7 +65,6 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
-from .client_profile_income_integration_service import ClientProfileIncomeIntegrationService
 from .dpm_portfolio_management_integration_service import (
     DpmPortfolioManagementIntegrationService,
 )
@@ -142,9 +135,6 @@ class IntegrationService:
             reference_repository_provider=lambda: self._reference_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
-        )
-        self._client_profile_income_service = ClientProfileIncomeIntegrationService(
-            reference_repository_provider=lambda: self._reference_repository,
         )
         self._dpm_portfolio_management_service = DpmPortfolioManagementIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
@@ -217,36 +207,6 @@ class IntegrationService:
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
         return await self._dpm_readiness_service.resolve_discretionary_mandate_binding(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_client_income_needs_schedule(
-        self,
-        portfolio_id: str,
-        request: ClientIncomeNeedsScheduleRequest,
-    ) -> ClientIncomeNeedsScheduleResponse | None:
-        return await self._client_profile_income_service.get_client_income_needs_schedule(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_liquidity_reserve_requirement(
-        self,
-        portfolio_id: str,
-        request: LiquidityReserveRequirementRequest,
-    ) -> LiquidityReserveRequirementResponse | None:
-        return await self._client_profile_income_service.get_liquidity_reserve_requirement(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_planned_withdrawal_schedule(
-        self,
-        portfolio_id: str,
-        request: PlannedWithdrawalScheduleRequest,
-    ) -> PlannedWithdrawalScheduleResponse | None:
-        return await self._client_profile_income_service.get_planned_withdrawal_schedule(
             portfolio_id=portfolio_id,
             request=request,
         )

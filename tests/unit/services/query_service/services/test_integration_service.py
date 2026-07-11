@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCompositionWindowRequest,
     CioModelChangeAffectedCohortRequest,
-    ClientIncomeNeedsScheduleRequest,
     DiscretionaryMandateBindingRequest,
     DpmPortfolioUniverseCandidateRequest,
     DpmSourceReadinessRequest,
@@ -23,10 +22,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ExternalHedgePolicyRequest,
     ExternalOrderExecutionAcknowledgementRequest,
     InstrumentEligibilityBulkRequest,
-    LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
-    PlannedWithdrawalScheduleRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     TransactionCostCurveRequest,
@@ -34,9 +31,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.benchmark_reference_integration_service import (
     BenchmarkReferenceIntegrationService,
-)
-from src.services.query_service.app.services.client_profile_income_integration_service import (
-    ClientProfileIncomeIntegrationService,
 )
 from src.services.query_service.app.services.dpm_portfolio_management_integration_service import (
     DpmPortfolioManagementIntegrationService,
@@ -753,266 +747,6 @@ async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_in
     assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
     assert response.candidates == []
     assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_client_income_needs_schedule_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_income_needs_schedules.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            schedule_id="INCOME_NEED_MONTHLY_001",
-            need_type="LIVING_EXPENSE",
-            need_status="active",
-            amount=Decimal("25000.0000"),
-            currency="SGD",
-            frequency="MONTHLY",
-            start_date=date(2026, 4, 1),
-            end_date=None,
-            priority=1,
-            funding_policy="POLICY_DPM_SG_BALANCED_V1",
-            source_record_id="income-need:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_client_income_needs_schedule(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientIncomeNeedsScheduleRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.product_name == "ClientIncomeNeedsSchedule"
-    assert response.supportability.state == "READY"
-    assert response.supportability.schedule_count == 1
-    assert response.schedules[0].amount == Decimal("25000.0000")
-    assert response.lineage["source_table"] == (
-        "client_income_needs_schedules,portfolio_mandate_bindings"
-    )
-    service._reference_repository.list_client_income_needs_schedules.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_schedules=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_client_income_needs_schedule_marks_missing_schedule_incomplete():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_income_needs_schedules.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_client_income_needs_schedule(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientIncomeNeedsScheduleRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "CLIENT_INCOME_NEEDS_SCHEDULE_EMPTY"
-    assert response.supportability.missing_data_families == ["client_income_needs_schedule"]
-    assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_client_income_needs_schedule_returns_none_without_binding():
-    service = make_service()
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_client_income_needs_schedule(
-        "PB_MISSING",
-        ClientIncomeNeedsScheduleRequest(as_of_date=date(2026, 5, 3)),
-    )
-
-    assert response is None
-    service._reference_repository.list_client_income_needs_schedules.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-
-@pytest.mark.asyncio
-async def test_liquidity_reserve_requirement_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_liquidity_reserve_requirements.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            reserve_requirement_id="RESERVE_MIN_CASH_001",
-            reserve_type="MIN_CASH_BUFFER",
-            reserve_status="active",
-            required_amount=Decimal("150000.0000"),
-            currency="SGD",
-            horizon_days=90,
-            priority=1,
-            policy_source="POLICY_DPM_SG_BALANCED_V1",
-            effective_from=date(2026, 4, 1),
-            effective_to=None,
-            requirement_version=2,
-            source_record_id="reserve:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_liquidity_reserve_requirement(
-        "PB_SG_GLOBAL_BAL_001",
-        LiquidityReserveRequirementRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.product_name == "LiquidityReserveRequirement"
-    assert response.supportability.state == "READY"
-    assert response.supportability.requirement_count == 1
-    assert response.requirements[0].required_amount == Decimal("150000.0000")
-    assert response.lineage["source_table"] == (
-        "liquidity_reserve_requirements,portfolio_mandate_bindings"
-    )
-    service._reference_repository.list_liquidity_reserve_requirements.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_requirements=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_liquidity_reserve_requirement_marks_missing_requirement_incomplete():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_liquidity_reserve_requirements.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_liquidity_reserve_requirement(
-        "PB_SG_GLOBAL_BAL_001",
-        LiquidityReserveRequirementRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.product_name == "LiquidityReserveRequirement"
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "LIQUIDITY_RESERVE_REQUIREMENT_EMPTY"
-    assert response.supportability.missing_data_families == ["liquidity_reserve_requirement"]
-    assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_liquidity_reserve_requirement_returns_none_without_binding():
-    service = make_service()
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_liquidity_reserve_requirement(
-        "PB_MISSING",
-        LiquidityReserveRequirementRequest(as_of_date=date(2026, 5, 3)),
-    )
-
-    assert response is None
-    service._reference_repository.list_liquidity_reserve_requirements.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-
-@pytest.mark.asyncio
-async def test_planned_withdrawal_schedule_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_planned_withdrawal_schedules.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            withdrawal_schedule_id="WITHDRAWAL_Q3_001",
-            withdrawal_type="PLANNED_WITHDRAWAL",
-            withdrawal_status="active",
-            amount=Decimal("50000.0000"),
-            currency="SGD",
-            scheduled_date=date(2026, 7, 15),
-            recurrence_frequency="QUARTERLY",
-            purpose_code="CLIENT_SPENDING",
-            source_record_id="withdrawal:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_planned_withdrawal_schedule(
-        "PB_SG_GLOBAL_BAL_001",
-        PlannedWithdrawalScheduleRequest(
-            as_of_date=as_of_date,
-            tenant_id="default",
-            horizon_days=180,
-        ),
-    )
-
-    assert response is not None
-    assert response.product_name == "PlannedWithdrawalSchedule"
-    assert response.supportability.state == "READY"
-    assert response.supportability.withdrawal_count == 1
-    assert response.withdrawals[0].amount == Decimal("50000.0000")
-    assert response.lineage["source_table"] == (
-        "planned_withdrawal_schedules,portfolio_mandate_bindings"
-    )
-    service._reference_repository.list_planned_withdrawal_schedules.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        horizon_days=180,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_withdrawals=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_planned_withdrawal_schedule_marks_missing_withdrawals_incomplete():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_planned_withdrawal_schedules.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_planned_withdrawal_schedule(
-        "PB_SG_GLOBAL_BAL_001",
-        PlannedWithdrawalScheduleRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "PLANNED_WITHDRAWAL_SCHEDULE_EMPTY"
-    assert response.supportability.missing_data_families == ["planned_withdrawal_schedule"]
-    assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_planned_withdrawal_schedule_returns_none_without_binding():
-    service = make_service()
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_planned_withdrawal_schedule(
-        "PB_MISSING",
-        PlannedWithdrawalScheduleRequest(as_of_date=date(2026, 5, 3)),
-    )
-
-    assert response is None
-    service._reference_repository.list_planned_withdrawal_schedules.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
 
 
 @pytest.mark.asyncio
@@ -2085,45 +1819,6 @@ async def test_benchmark_reference_family_service_runs_without_full_integration_
     assert response.product_name == "BenchmarkAssignment"
     assert response.benchmark_id == "B1"
     repository.resolve_benchmark_assignment.assert_awaited_once_with("P1", date(2026, 1, 1))
-
-
-@pytest.mark.asyncio
-async def test_client_profile_income_family_service_runs_without_full_integration_facade() -> None:
-    repository = SimpleNamespace(
-        resolve_discretionary_mandate_binding=AsyncMock(
-            return_value=SimpleNamespace(
-                client_id="CIF_SG_000184",
-                mandate_id="MANDATE_SG_001",
-                updated_at=datetime(2026, 1, 1, tzinfo=UTC),
-            )
-        ),
-        list_client_income_needs_schedules=AsyncMock(return_value=[]),
-    )
-    service = ClientProfileIncomeIntegrationService(
-        reference_repository_provider=lambda: repository,
-    )
-
-    response = await service.get_client_income_needs_schedule(
-        "P1",
-        ClientIncomeNeedsScheduleRequest(as_of_date=date(2026, 1, 1), tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.product_name == "ClientIncomeNeedsSchedule"
-    assert response.client_id == "CIF_SG_000184"
-    assert response.supportability.state == "INCOMPLETE"
-    repository.resolve_discretionary_mandate_binding.assert_awaited_once_with(
-        portfolio_id="P1",
-        as_of_date=date(2026, 1, 1),
-        mandate_id=None,
-    )
-    repository.list_client_income_needs_schedules.assert_awaited_once_with(
-        portfolio_id="P1",
-        client_id="CIF_SG_000184",
-        as_of_date=date(2026, 1, 1),
-        mandate_id="MANDATE_SG_001",
-        include_inactive_schedules=False,
-    )
 
 
 @pytest.mark.asyncio

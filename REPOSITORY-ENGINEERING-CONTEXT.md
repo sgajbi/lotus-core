@@ -2161,6 +2161,14 @@ Most relevant current governance:
      in its own contract/domain/port/adapter. Do not restore its Query Service path. Core publishes
      reference rules only; tax advice, approval, optimization, suitability, reporting
      certification, and jurisdictional recommendations remain outside Core.
+166. `ClientIncomeNeedsSchedule:v1`, `LiquidityReserveRequirement:v1`, and
+     `PlannedWithdrawalSchedule:v1` form one QCP-owned `client_liquidity_evidence` capability. Keep
+     separate API contracts, immutable records, selection predicates, ordering, lifecycle filters,
+     supportability reasons, and source identity while sharing mandate resolution, runtime evidence,
+     the source-reader port, and SQL adapter. Do not restore Query Service DTOs, response modules,
+     mappers, ORM repository methods, facade methods, or output-shape exceptions. Core owns captured
+     source facts only; financial planning, suitability, funding recommendations, treasury
+     instructions, OMS acknowledgement, and downstream DPM decisions remain outside Core.
 
 ## Context Maintenance Rule
 

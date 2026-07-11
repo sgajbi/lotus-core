@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -439,122 +439,6 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
-async def test_reference_data_repository_lists_latest_income_needs_schedules() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(
-                schedule_id="INCOME_NEED_ANNUAL_001",
-                updated_at=datetime(2026, 5, 2, 9),
-            ),
-            SimpleNamespace(
-                schedule_id="INCOME_NEED_MONTHLY_001",
-                updated_at=datetime(2026, 5, 3, 9),
-            ),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_client_income_needs_schedules(
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        as_of_date=date(2026, 5, 3),
-    )
-
-    assert [row.schedule_id for row in rows] == [
-        "INCOME_NEED_ANNUAL_001",
-        "INCOME_NEED_MONTHLY_001",
-    ]
-    assert rows[1].updated_at == datetime(2026, 5, 3, 9)
-    db.execute.assert_awaited_once()
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "row_number() OVER (PARTITION BY client_income_needs_schedules.schedule_id" in compiled
-    assert "anon_1.rn = 1" in compiled
-
-
-@pytest.mark.asyncio
-async def test_reference_data_repository_lists_latest_liquidity_reserve_requirements() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(
-                reserve_requirement_id="RESERVE_MIN_CASH_001",
-                effective_from=date(2026, 5, 1),
-                requirement_version=2,
-            ),
-            SimpleNamespace(
-                reserve_requirement_id="RESERVE_SPENDING_001",
-                effective_from=date(2026, 4, 1),
-                requirement_version=1,
-            ),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_liquidity_reserve_requirements(
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        as_of_date=date(2026, 5, 3),
-    )
-
-    assert [row.reserve_requirement_id for row in rows] == [
-        "RESERVE_MIN_CASH_001",
-        "RESERVE_SPENDING_001",
-    ]
-    assert rows[0].requirement_version == 2
-    db.execute.assert_awaited_once()
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert (
-        "row_number() OVER (PARTITION BY liquidity_reserve_requirements.reserve_requirement_id"
-    ) in compiled
-    assert "anon_1.rn = 1" in compiled
-
-
-@pytest.mark.asyncio
-async def test_reference_data_repository_lists_latest_planned_withdrawals() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(
-                withdrawal_schedule_id="WITHDRAWAL_Q3_001",
-                scheduled_date=date(2026, 7, 15),
-                updated_at=datetime(2026, 5, 3, 9),
-            ),
-            SimpleNamespace(
-                withdrawal_schedule_id="WITHDRAWAL_Q4_001",
-                scheduled_date=date(2026, 10, 15),
-                updated_at=datetime(2026, 5, 2, 9),
-            ),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_planned_withdrawal_schedules(
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        as_of_date=date(2026, 5, 3),
-        horizon_days=365,
-    )
-
-    assert [row.withdrawal_schedule_id for row in rows] == [
-        "WITHDRAWAL_Q3_001",
-        "WITHDRAWAL_Q4_001",
-    ]
-    assert rows[0].updated_at == datetime(2026, 5, 3, 9)
-    db.execute.assert_awaited_once()
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert (
-        "row_number() OVER (PARTITION BY "
-        "planned_withdrawal_schedules.withdrawal_schedule_id, "
-        "planned_withdrawal_schedules.scheduled_date"
-    ) in compiled
-    assert "anon_1.rn = 1" in compiled
-
-
-@pytest.mark.asyncio
 async def test_list_instrument_eligibility_profiles_returns_latest_effective_rows() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
@@ -891,40 +775,6 @@ async def test_resolve_discretionary_mandate_binding_uses_effective_filters() ->
     assert "portfolio_mandate_bindings.effective_from <= '2026-04-10'" in compiled
     assert "portfolio_mandate_bindings.mandate_id = 'MANDATE_PB_SG_GLOBAL_BAL_001'" in compiled
     assert "portfolio_mandate_bindings.booking_center_code = 'Singapore'" in compiled
-
-
-@pytest.mark.asyncio
-async def test_client_source_data_filters_use_normalized_active_statuses() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(3)]
-    repo = ReferenceDataRepository(db)
-
-    common_kwargs = {
-        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
-        "client_id": "CLIENT_SG_001",
-        "as_of_date": date(2026, 5, 3),
-        "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
-    }
-
-    await repo.list_client_income_needs_schedules(**common_kwargs)
-    await repo.list_liquidity_reserve_requirements(**common_kwargs)
-    await repo.list_planned_withdrawal_schedules(**common_kwargs, horizon_days=90)
-
-    compiled_statements = [
-        str(call.args[0].compile(compile_kwargs={"literal_binds": True}))
-        for call in db.execute.await_args_list
-    ]
-
-    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[0]
-    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[0]
-    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[1]
-    assert (
-        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[1]
-    )
-    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[2]
-    assert (
-        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[2]
-    )
 
 
 @pytest.mark.asyncio

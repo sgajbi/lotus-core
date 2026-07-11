@@ -9,18 +9,15 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesPoint,
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
-    ClientIncomeNeedsScheduleEntry,
     ComponentSeriesResponse,
     DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
     IndexReturnSeriesPoint,
     InstrumentEligibilityRecord,
-    LiquidityReserveRequirementEntry,
     MarketDataFxCoverageRecord,
     MarketDataPriceCoverageRecord,
     ModelPortfolioTargetRow,
-    PlannedWithdrawalScheduleEntry,
     PortfolioManagerBookMember,
     PortfolioTaxLotRecord,
     RiskFreeSeriesPoint,
@@ -429,51 +426,4 @@ def classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         quality_status=row.quality_status,
-    )
-
-
-def client_income_needs_schedule_entry(row: Any) -> ClientIncomeNeedsScheduleEntry:
-    return ClientIncomeNeedsScheduleEntry(
-        schedule_id=row.schedule_id,
-        need_type=row.need_type,
-        need_status=row.need_status,
-        amount=as_decimal(row.amount),
-        currency=row.currency,
-        frequency=row.frequency,
-        start_date=row.start_date,
-        end_date=row.end_date,
-        priority=int(row.priority),
-        funding_policy=row.funding_policy,
-        source_record_id=row.source_record_id,
-    )
-
-
-def liquidity_reserve_requirement_entry(row: Any) -> LiquidityReserveRequirementEntry:
-    return LiquidityReserveRequirementEntry(
-        reserve_requirement_id=row.reserve_requirement_id,
-        reserve_type=row.reserve_type,
-        reserve_status=row.reserve_status,
-        required_amount=as_decimal(row.required_amount),
-        currency=row.currency,
-        horizon_days=int(row.horizon_days),
-        priority=int(row.priority),
-        policy_source=row.policy_source,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        requirement_version=int(row.requirement_version),
-        source_record_id=row.source_record_id,
-    )
-
-
-def planned_withdrawal_schedule_entry(row: Any) -> PlannedWithdrawalScheduleEntry:
-    return PlannedWithdrawalScheduleEntry(
-        withdrawal_schedule_id=row.withdrawal_schedule_id,
-        withdrawal_type=row.withdrawal_type,
-        withdrawal_status=row.withdrawal_status,
-        amount=as_decimal(row.amount),
-        currency=row.currency,
-        scheduled_date=row.scheduled_date,
-        recurrence_frequency=row.recurrence_frequency,
-        purpose_code=row.purpose_code,
-        source_record_id=row.source_record_id,
     )

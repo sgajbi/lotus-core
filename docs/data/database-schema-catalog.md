@@ -497,7 +497,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   financial-planning advice, suitability approval, cashflow forecasting, funding recommendations,
   or OMS acknowledgement.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: QCP `client_liquidity_evidence` application and SQL source adapter,
+  QCP integration routes, and reference-data ingestion DTO/router/service paths.
 - **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
   as-of date; active schedules are returned by default and deterministic latest selection is
   applied by schedule id.
@@ -533,7 +534,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   cash reserve recommendations, financial-planning advice, suitability, treasury instructions, or
   OMS acknowledgement.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: QCP `client_liquidity_evidence` application and SQL source adapter,
+  QCP integration routes, and reference-data ingestion DTO/router/service paths.
 - **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
   as-of date; active requirements are returned by default and deterministic latest-version
   selection is applied by reserve requirement id.
@@ -570,7 +572,8 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   cashflow forecast, financial-planning advice, suitability approval, funding recommendation,
   treasury instruction, or OMS acknowledgement.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: QCP `client_liquidity_evidence` application and SQL source adapter,
+  QCP integration routes, and reference-data ingestion DTO/router/service paths.
 - **Typical access patterns**: Forward-window lookup by portfolio id, client id, mandate id,
   `as_of_date`, and `horizon_days`; active withdrawals are returned by default and deterministic
   latest selection is applied by withdrawal schedule id and scheduled date.

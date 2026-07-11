@@ -22,8 +22,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
-    ClientIncomeNeedsScheduleRequest,
-    ClientIncomeNeedsScheduleResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -51,16 +49,12 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
-    LiquidityReserveRequirementRequest,
-    LiquidityReserveRequirementResponse,
     MarketDataCoverageRequest,
     MarketDataCoverageWindowResponse,
     ModelPortfolioTargetRequest,
     ModelPortfolioTargetResponse,
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
-    PlannedWithdrawalScheduleRequest,
-    PlannedWithdrawalScheduleResponse,
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
     PortfolioTaxLotWindowRequest,
@@ -72,6 +66,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
+from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
 from ..application.client_tax_rule_set import ClientTaxRuleSetService
@@ -87,6 +82,14 @@ from ..application.core_snapshot.service import (
 )
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
+from ..contracts.client_liquidity_evidence import (
+    ClientIncomeNeedsScheduleRequest,
+    ClientIncomeNeedsScheduleResponse,
+    LiquidityReserveRequirementRequest,
+    LiquidityReserveRequirementResponse,
+    PlannedWithdrawalScheduleRequest,
+    PlannedWithdrawalScheduleResponse,
+)
 from ..contracts.client_restriction_profile import (
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
@@ -108,6 +111,7 @@ from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileResponse,
 )
 from ..dependencies import (
+    get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
@@ -1742,14 +1746,13 @@ async def get_client_income_needs_schedule(
         description="Portfolio identifier whose client income-needs schedule is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    liquidity_evidence_service: ClientLiquidityEvidenceService = Depends(
+        get_client_liquidity_evidence_service
+    ),
 ) -> ClientIncomeNeedsScheduleResponse:
-    response = cast(
-        ClientIncomeNeedsScheduleResponse | None,
-        await integration_service.get_client_income_needs_schedule(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await liquidity_evidence_service.get_client_income_needs_schedule(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -1789,14 +1792,13 @@ async def get_liquidity_reserve_requirement(
         description="Portfolio identifier whose liquidity reserve requirement is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    liquidity_evidence_service: ClientLiquidityEvidenceService = Depends(
+        get_client_liquidity_evidence_service
+    ),
 ) -> LiquidityReserveRequirementResponse:
-    response = cast(
-        LiquidityReserveRequirementResponse | None,
-        await integration_service.get_liquidity_reserve_requirement(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await liquidity_evidence_service.get_liquidity_reserve_requirement(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -1835,14 +1837,13 @@ async def get_planned_withdrawal_schedule(
         description="Portfolio identifier whose planned withdrawal schedule is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    liquidity_evidence_service: ClientLiquidityEvidenceService = Depends(
+        get_client_liquidity_evidence_service
+    ),
 ) -> PlannedWithdrawalScheduleResponse:
-    response = cast(
-        PlannedWithdrawalScheduleResponse | None,
-        await integration_service.get_planned_withdrawal_schedule(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await liquidity_evidence_service.get_planned_withdrawal_schedule(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(

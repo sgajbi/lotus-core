@@ -6,6 +6,9 @@ import pytest
 from src.services.query_control_plane_service.app.application import (
     sustainability_preference_profile as preference_application,
 )
+from src.services.query_control_plane_service.app.application.client_liquidity_evidence import (
+    ClientLiquidityEvidenceService,
+)
 from src.services.query_control_plane_service.app.application.client_restriction_profile import (
     ClientRestrictionProfileService,
 )
@@ -27,6 +30,11 @@ from src.services.query_control_plane_service.app.application.integration_policy
 )
 from src.services.query_control_plane_service.app.contracts import (
     sustainability_preference_profile as preference_contracts,
+)
+from src.services.query_control_plane_service.app.contracts.client_liquidity_evidence import (
+    ClientIncomeNeedsScheduleRequest,
+    LiquidityReserveRequirementRequest,
+    PlannedWithdrawalScheduleRequest,
 )
 from src.services.query_control_plane_service.app.contracts.client_restriction_profile import (
     ClientRestrictionProfileRequest,
@@ -50,6 +58,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     PolicyProvenanceMetadata,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
@@ -112,7 +121,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
-    ClientIncomeNeedsScheduleRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmPortfolioUniverseCandidateRequest,
@@ -127,11 +135,9 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
     IntegrationWindow,
-    LiquidityReserveRequirementRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
     PerformanceComponentEconomicsRequest,
-    PlannedWithdrawalScheduleRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
@@ -211,6 +217,11 @@ def test_get_core_snapshot_service_factory_returns_service() -> None:
 def test_get_client_restriction_profile_service_factory_returns_service() -> None:
     service = get_client_restriction_profile_service(db=MagicMock())
     assert isinstance(service, ClientRestrictionProfileService)
+
+
+def test_get_client_liquidity_evidence_service_factory_returns_service() -> None:
+    service = get_client_liquidity_evidence_service(db=MagicMock())
+    assert isinstance(service, ClientLiquidityEvidenceService)
 
 
 def test_get_client_tax_profile_service_factory_returns_service() -> None:
@@ -1973,7 +1984,7 @@ async def test_client_tax_rule_set_maps_missing_binding_to_problem_details() -> 
 
 @pytest.mark.asyncio
 async def test_get_client_income_needs_schedule_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ClientLiquidityEvidenceService)
     mock_service.get_client_income_needs_schedule = AsyncMock(
         return_value={
             "product_name": "ClientIncomeNeedsSchedule",
@@ -1997,7 +2008,7 @@ async def test_get_client_income_needs_schedule_router_function() -> None:
     response = await get_client_income_needs_schedule(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        liquidity_evidence_service=mock_service,
     )
 
     assert response["product_name"] == "ClientIncomeNeedsSchedule"
@@ -2009,7 +2020,7 @@ async def test_get_client_income_needs_schedule_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_liquidity_reserve_requirement_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ClientLiquidityEvidenceService)
     mock_service.get_liquidity_reserve_requirement = AsyncMock(
         return_value={
             "product_name": "LiquidityReserveRequirement",
@@ -2033,7 +2044,7 @@ async def test_get_liquidity_reserve_requirement_router_function() -> None:
     response = await get_liquidity_reserve_requirement(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        liquidity_evidence_service=mock_service,
     )
 
     assert response["product_name"] == "LiquidityReserveRequirement"
@@ -2045,7 +2056,7 @@ async def test_get_liquidity_reserve_requirement_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_planned_withdrawal_schedule_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ClientLiquidityEvidenceService)
     mock_service.get_planned_withdrawal_schedule = AsyncMock(
         return_value={
             "product_name": "PlannedWithdrawalSchedule",
@@ -2070,7 +2081,7 @@ async def test_get_planned_withdrawal_schedule_router_function() -> None:
     response = await get_planned_withdrawal_schedule(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        liquidity_evidence_service=mock_service,
     )
 
     assert response["product_name"] == "PlannedWithdrawalSchedule"
@@ -2144,6 +2155,43 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
             PlannedWithdrawalScheduleRequest(as_of_date="2026-05-03"),
             "PlannedWithdrawalSchedule",
         ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_liquidity_source_routes_map_missing_binding_to_problem_details(
+    route_handler,
+    service_method: str,
+    route_request,
+    source_product: str,
+) -> None:
+    mock_service = MagicMock(spec=ClientLiquidityEvidenceService)
+    service_call = AsyncMock(return_value=None)
+    setattr(mock_service, service_method, service_call)
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await route_handler(
+            portfolio_id="PB_MISSING",
+            request=route_request,
+            liquidity_evidence_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": source_product,
+            "portfolio_id": "PB_MISSING",
+            "reason": "not_found",
+        },
+    )
+    service_call.assert_awaited_once_with(portfolio_id="PB_MISSING", request=route_request)
+
+
+@pytest.mark.parametrize(
+    ("route_handler", "service_method", "route_request", "source_product"),
+    [
         (
             get_external_hedge_policy,
             "get_external_hedge_policy",

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -10,28 +10,22 @@ from portfolio_common.database_models import (
     BenchmarkDefinition,
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
-    ClientIncomeNeedsSchedule,
     FxRate,
     IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
     InstrumentEligibilityProfile,
-    LiquidityReserveRequirement,
     MarketPrice,
     ModelPortfolioDefinition,
     ModelPortfolioTarget,
-    PlannedWithdrawalSchedule,
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
 )
 from portfolio_common.source_lifecycle_predicates import (
-    CLIENT_INCOME_NEEDS_ACTIVE,
     DISCRETIONARY_MANDATE_TYPE,
     DPM_DISCRETIONARY_MANDATE_ACTIVE,
-    LIQUIDITY_RESERVE_ACTIVE,
     MODEL_PORTFOLIO_TARGET_ACTIVE,
-    PLANNED_WITHDRAWAL_ACTIVE,
 )
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -233,166 +227,6 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
-
-    async def list_client_income_needs_schedules(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_schedules: bool = False,
-    ) -> list[ClientIncomeNeedsSchedule]:
-        predicates = [
-            ClientIncomeNeedsSchedule.portfolio_id == portfolio_id,
-            ClientIncomeNeedsSchedule.client_id == client_id,
-            effective_filter(
-                ClientIncomeNeedsSchedule.start_date,
-                ClientIncomeNeedsSchedule.end_date,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    ClientIncomeNeedsSchedule.mandate_id.is_(None),
-                    ClientIncomeNeedsSchedule.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_schedules:
-            predicates.append(
-                CLIENT_INCOME_NEEDS_ACTIVE.sqlalchemy_filter(ClientIncomeNeedsSchedule.need_status)
-            )
-
-        ranked = ranked_latest_effective_ids(
-            ClientIncomeNeedsSchedule,
-            ClientIncomeNeedsSchedule.schedule_id,
-            predicates=predicates,
-            order_by=(
-                ClientIncomeNeedsSchedule.start_date.desc(),
-                ClientIncomeNeedsSchedule.observed_at.desc().nullslast(),
-                ClientIncomeNeedsSchedule.updated_at.desc(),
-                ClientIncomeNeedsSchedule.created_at.desc(),
-                ClientIncomeNeedsSchedule.id.desc(),
-            ),
-        )
-        stmt = (
-            select(ClientIncomeNeedsSchedule)
-            .join(ranked, ClientIncomeNeedsSchedule.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(ClientIncomeNeedsSchedule.schedule_id.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_liquidity_reserve_requirements(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_requirements: bool = False,
-    ) -> list[LiquidityReserveRequirement]:
-        predicates = [
-            LiquidityReserveRequirement.portfolio_id == portfolio_id,
-            LiquidityReserveRequirement.client_id == client_id,
-            effective_filter(
-                LiquidityReserveRequirement.effective_from,
-                LiquidityReserveRequirement.effective_to,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    LiquidityReserveRequirement.mandate_id.is_(None),
-                    LiquidityReserveRequirement.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_requirements:
-            predicates.append(
-                LIQUIDITY_RESERVE_ACTIVE.sqlalchemy_filter(
-                    LiquidityReserveRequirement.reserve_status
-                )
-            )
-
-        ranked = ranked_latest_effective_ids(
-            LiquidityReserveRequirement,
-            LiquidityReserveRequirement.reserve_requirement_id,
-            predicates=predicates,
-            order_by=(
-                LiquidityReserveRequirement.effective_from.desc(),
-                LiquidityReserveRequirement.observed_at.desc().nullslast(),
-                LiquidityReserveRequirement.requirement_version.desc(),
-                LiquidityReserveRequirement.updated_at.desc(),
-                LiquidityReserveRequirement.created_at.desc(),
-                LiquidityReserveRequirement.id.desc(),
-            ),
-        )
-        stmt = (
-            select(LiquidityReserveRequirement)
-            .join(ranked, LiquidityReserveRequirement.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(LiquidityReserveRequirement.reserve_requirement_id.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_planned_withdrawal_schedules(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        horizon_days: int,
-        mandate_id: str | None = None,
-        include_inactive_withdrawals: bool = False,
-    ) -> list[PlannedWithdrawalSchedule]:
-        window_end = as_of_date + timedelta(days=horizon_days)
-        predicates = [
-            PlannedWithdrawalSchedule.portfolio_id == portfolio_id,
-            PlannedWithdrawalSchedule.client_id == client_id,
-            PlannedWithdrawalSchedule.scheduled_date >= as_of_date,
-            PlannedWithdrawalSchedule.scheduled_date <= window_end,
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    PlannedWithdrawalSchedule.mandate_id.is_(None),
-                    PlannedWithdrawalSchedule.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_withdrawals:
-            predicates.append(
-                PLANNED_WITHDRAWAL_ACTIVE.sqlalchemy_filter(
-                    PlannedWithdrawalSchedule.withdrawal_status
-                )
-            )
-
-        ranked = ranked_latest_effective_ids(
-            PlannedWithdrawalSchedule,
-            PlannedWithdrawalSchedule.withdrawal_schedule_id,
-            PlannedWithdrawalSchedule.scheduled_date,
-            predicates=predicates,
-            order_by=(
-                PlannedWithdrawalSchedule.observed_at.desc().nullslast(),
-                PlannedWithdrawalSchedule.updated_at.desc(),
-                PlannedWithdrawalSchedule.created_at.desc(),
-                PlannedWithdrawalSchedule.id.desc(),
-            ),
-        )
-        stmt = (
-            select(PlannedWithdrawalSchedule)
-            .join(ranked, PlannedWithdrawalSchedule.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                PlannedWithdrawalSchedule.scheduled_date.asc(),
-                PlannedWithdrawalSchedule.withdrawal_schedule_id.asc(),
-            )
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
 
     async def list_instrument_eligibility_profiles(
         self,

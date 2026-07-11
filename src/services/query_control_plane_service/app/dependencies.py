@@ -16,6 +16,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
 )
+from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
 from .application.client_tax_rule_set import ClientTaxRuleSetService
@@ -32,6 +33,9 @@ from .application.sustainability_preference_profile import SustainabilityPrefere
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
+from .infrastructure.client_liquidity_evidence_sources import (
+    SqlAlchemyClientLiquidityEvidenceReader,
+)
 from .infrastructure.client_restriction_profile_sources import (
     SqlAlchemyClientRestrictionProfileSourceReader,
 )
@@ -87,6 +91,16 @@ def get_client_restriction_profile_service(
     return ClientRestrictionProfileService(
         mandate_reader=SqlAlchemyEffectiveMandateReader(db),
         reader=SqlAlchemyClientRestrictionProfileSourceReader(db),
+        clock=SystemClock(),
+    )
+
+
+def get_client_liquidity_evidence_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ClientLiquidityEvidenceService:
+    return ClientLiquidityEvidenceService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
+        reader=SqlAlchemyClientLiquidityEvidenceReader(db),
         clock=SystemClock(),
     )
 

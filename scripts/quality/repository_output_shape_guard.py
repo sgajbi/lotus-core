@@ -191,9 +191,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_return_points": (
         "BenchmarkReturnSeries",
     ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_client_income_needs_schedules": (
-        "ClientIncomeNeedsSchedule",
-    ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_dpm_portfolio_universe_candidates": (
         "PortfolioMandateBinding",
     ),
@@ -221,17 +218,11 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/reference_data_repository.py:list_latest_market_prices": (
         "MarketPrice",
     ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_liquidity_reserve_requirements": (
-        "LiquidityReserveRequirement",
-    ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_model_portfolio_affected_mandates": (
         "PortfolioMandateBinding",
     ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_model_portfolio_targets": (
         "ModelPortfolioTarget",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_planned_withdrawal_schedules": (
-        "PlannedWithdrawalSchedule",
     ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_risk_free_series": (
         "RiskFreeSeries",
