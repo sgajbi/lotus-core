@@ -398,18 +398,6 @@ async def test_reference_contract_methods() -> None:
     assert market_series.reconciliation_status == "UNKNOWN"
     assert market_series.data_quality_status == COMPLETE
 
-    benchmark_return = await service.get_benchmark_return_series(
-        benchmark_id="B1",
-        request=SimpleNamespace(
-            as_of_date=date(2026, 1, 1),
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
-            frequency="daily",
-        ),
-    )
-    assert benchmark_return.points
-    assert benchmark_return.as_of_date == date(2026, 1, 1)
-    assert benchmark_return.request_fingerprint
-
     risk_free = await service.get_risk_free_series(
         request=SimpleNamespace(
             as_of_date=date(2026, 1, 1),

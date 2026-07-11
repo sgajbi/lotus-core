@@ -17,6 +17,9 @@ from src.services.query_control_plane_service.app.application.benchmark_composit
 from src.services.query_control_plane_service.app.application.benchmark_definition import (
     BenchmarkDefinitionService,
 )
+from src.services.query_control_plane_service.app.application.benchmark_return_series import (
+    BenchmarkReturnSeriesService,
+)
 from src.services.query_control_plane_service.app.application.client_liquidity_evidence import (
     ClientLiquidityEvidenceService,
 )
@@ -72,6 +75,12 @@ from src.services.query_control_plane_service.app.contracts.benchmark_compositio
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_return_series import (
+    BenchmarkReturnSeriesRequest,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_return_series import (
+    IntegrationWindow as BenchmarkReturnIntegrationWindow,
 )
 from src.services.query_control_plane_service.app.contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -204,7 +213,6 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
-    BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
     IntegrationWindow,
@@ -2753,6 +2761,7 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
+    benchmark_return_series_service = MagicMock(spec=BenchmarkReturnSeriesService)
     index_series_service = MagicMock(spec=IndexSeriesService)
     composition_service = MagicMock(spec=BenchmarkCompositionService)
     composition_service.resolve = AsyncMock(
@@ -2816,13 +2825,15 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_benchmark_return_series = AsyncMock(
+    benchmark_return_series_service.get = AsyncMock(
         return_value={
             "benchmark_id": "B1",
             "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-benchmark-return-1",
+            "record_count": 0,
+            "completeness_status": "EMPTY",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -2863,6 +2874,9 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
 
     request_window = IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
     index_request_window = IndexIntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
+    benchmark_return_window = BenchmarkReturnIntegrationWindow(
+        start_date="2026-01-01", end_date="2026-01-31"
+    )
     benchmark_market_response = await fetch_benchmark_market_series(
         benchmark_id="B1",
         request=BenchmarkMarketSeriesRequest(
@@ -2926,14 +2940,14 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
         benchmark_id="B1",
         request=BenchmarkReturnSeriesRequest(
             as_of_date="2026-01-31",
-            window=request_window,
+            window=benchmark_return_window,
             frequency="daily",
         ),
-        integration_service=mock_service,
+        benchmark_return_series_service=benchmark_return_series_service,
     )
     assert benchmark_return_response["benchmark_id"] == "B1"
     assert benchmark_return_response["request_fingerprint"] == "fp-benchmark-return-1"
-    mock_service.get_benchmark_return_series.assert_awaited_once()
+    benchmark_return_series_service.get.assert_awaited_once()
 
     risk_free_response = await fetch_risk_free_series(
         request=RiskFreeSeriesRequest(

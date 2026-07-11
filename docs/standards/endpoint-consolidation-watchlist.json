@@ -244,30 +244,30 @@
       "method": "POST",
       "path": "/integration/benchmarks/{benchmark_id}/return-series",
       "routeFamily": "Analytics Input",
-      "disposition": "keep_bounded_reference_series",
+      "disposition": "keep_source_data_product",
       "owner": "lotus-core",
-      "sourceDataProductRequired": false,
+      "sourceDataProductRequired": true,
       "sourceDataProducts": [
-        "BenchmarkReturnSeries"
+        "BenchmarkReturnSeriesWindow"
       ],
-      "approvedRationale": "Benchmark return series remains bounded reference input while product identity is completed.",
-      "boundaryGuardrail": "Do not add downstream-specific performance analytics, attribution, or narrative.",
-      "consumerGuidance": "Prefer named benchmark/reference source-data products where durable product identity is required."
+      "approvedRationale": "Core owns source-supplied benchmark return windows used for governed override modes.",
+      "boundaryGuardrail": "Do not make source-supplied benchmark returns the default when constituent and index source evidence is available.",
+      "consumerGuidance": "Consume this route as BenchmarkReturnSeriesWindow:v1 and retain source-mode lineage."
     },
     {
       "service": "query_control_plane_service",
       "method": "POST",
       "path": "/integration/indices/catalog",
       "routeFamily": "Analytics Input",
-      "disposition": "keep_bounded_reference_catalog",
+      "disposition": "keep_source_data_product",
       "owner": "lotus-core",
-      "sourceDataProductRequired": false,
+      "sourceDataProductRequired": true,
       "sourceDataProducts": [
-        "IndexSeriesWindow"
+        "IndexDefinition"
       ],
-      "approvedRationale": "Index catalog lookup is a bounded reference surface while complete catalog product identity is completed.",
+      "approvedRationale": "Core owns effective canonical index definitions and governed classification labels.",
       "boundaryGuardrail": "Do not add consumer-specific index ranking, performance interpretation, or reporting narrative.",
-      "consumerGuidance": "Prefer named index/reference source-data products for durable downstream analytics contracts."
+      "consumerGuidance": "Consume this route as IndexDefinition:v1 and prefer targeted index identifiers."
     },
     {
       "service": "query_control_plane_service",

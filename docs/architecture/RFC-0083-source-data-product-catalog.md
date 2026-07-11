@@ -63,6 +63,7 @@ evidence reference rather than omitting the concept.
 | `BenchmarkConstituentWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/composition-window` |
 | `IndexDefinition` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/catalog` |
 | `IndexSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series` |
+| `BenchmarkReturnSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/benchmarks/{benchmark_id}/return-series` |
 | `RiskFreeSeriesWindow` | Analytics input | `query_control_plane_service` | performance, risk | `/integration/reference/risk-free-series` |
 | `PortfolioManagerBookMembership` | Analytics input | `query_control_plane_service` | manage | `/integration/portfolio-manager-books/{portfolio_manager_id}/memberships` |
 | `DpmPortfolioUniverseCandidate` | Analytics input | `query_control_plane_service` | manage | `/integration/dpm/portfolio-universe/candidates` |

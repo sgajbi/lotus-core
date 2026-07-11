@@ -4,7 +4,6 @@ from decimal import Decimal
 from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkReturnSeriesPoint,
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
     RiskFreeSeriesPoint,
@@ -13,17 +12,6 @@ from ..dtos.reference_integration_dto import (
 from .integration_value_normalization import (
     as_decimal,
 )
-
-
-def benchmark_return_series_point(row: Any) -> BenchmarkReturnSeriesPoint:
-    return BenchmarkReturnSeriesPoint(
-        series_date=row.series_date,
-        benchmark_return=as_decimal(row.benchmark_return),
-        return_period=row.return_period,
-        return_convention=row.return_convention,
-        series_currency=row.series_currency,
-        quality_status=row.quality_status,
-    )
 
 
 def benchmark_market_series_point(

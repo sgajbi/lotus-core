@@ -151,6 +151,7 @@ date parameters should be reviewed before they become public contract precedent.
 | `BenchmarkAssignment` | benchmark assignment route and table | Strong baseline | Add product-level provenance and version/deprecation rules |
 | `BenchmarkConstituentWindow` | benchmark composition window route and table | Strong baseline | Add completeness and observed/ingested timestamp semantics |
 | `IndexSeriesWindow` | index price and return series routes and tables | Strong baseline | Standardize freshness, paging, and source lineage |
+| `BenchmarkReturnSeriesWindow` | source-supplied benchmark return series route and table | Strong baseline | Standardize freshness, completeness, paging, and override lineage |
 | `RiskFreeSeriesWindow` | risk-free series route and table | Strong baseline | Standardize source lineage and coverage metadata |
 | `ReconciliationEvidenceBundle` | financial reconciliation routes and findings | Partial | Create a consumer-safe evidence product linked to portfolios and source scope |
 | `DataQualityCoverageReport` | coverage, readiness, support, and SLO routes | Partial | Define one governed report shape for downstream gating |

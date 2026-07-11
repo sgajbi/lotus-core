@@ -295,6 +295,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Canonical index price and return source series.",
     ),
     SourceDataProductDefinition(
+        product_name="BenchmarkReturnSeriesWindow",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-performance", "lotus-risk"),
+        current_routes=("/integration/benchmarks/{benchmark_id}/return-series",),
+        paging_mode=INLINE_PAGED,
+        export_mode=EXPORT_ONLY_FOR_LARGE_WINDOWS,
+        notes="Canonical source-supplied benchmark return series for governed override modes.",
+    ),
+    SourceDataProductDefinition(
         product_name="RiskFreeSeriesWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

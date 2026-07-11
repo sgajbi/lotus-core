@@ -8,8 +8,6 @@ from portfolio_common.source_data_products import source_data_product_openapi_ex
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
-    BenchmarkReturnSeriesRequest,
-    BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
     CoverageRequest,
@@ -23,6 +21,7 @@ from ..application.benchmark_assignment import BenchmarkAssignmentService
 from ..application.benchmark_catalog import BenchmarkCatalogService
 from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
+from ..application.benchmark_return_series import BenchmarkReturnSeriesService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
@@ -58,6 +57,10 @@ from ..contracts.benchmark_composition import (
 from ..contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
     BenchmarkDefinitionResponse,
+)
+from ..contracts.benchmark_return_series import (
+    BenchmarkReturnSeriesRequest,
+    BenchmarkReturnSeriesResponse,
 )
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -154,6 +157,7 @@ from ..dependencies import (
     get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
+    get_benchmark_return_series_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -2435,6 +2439,7 @@ async def fetch_index_return_series(
         "or explicit override modes. This is not the default benchmark-math source when "
         "lower-level benchmark composition and market-series contracts are available."
     ),
+    openapi_extra=source_data_product_openapi_extra("BenchmarkReturnSeriesWindow"),
 )
 async def fetch_benchmark_return_series(
     request: BenchmarkReturnSeriesRequest,
@@ -2443,14 +2448,13 @@ async def fetch_benchmark_return_series(
         description="Benchmark identifier for the requested raw return series.",
         examples=["BENCH-SP500-TR"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_return_series_service: BenchmarkReturnSeriesService = Depends(
+        get_benchmark_return_series_service
+    ),
 ) -> BenchmarkReturnSeriesResponse:
-    return cast(
-        BenchmarkReturnSeriesResponse,
-        await integration_service.get_benchmark_return_series(
-            benchmark_id=benchmark_id,
-            request=request,
-        ),
+    return await benchmark_return_series_service.get(
+        benchmark_id=benchmark_id,
+        request=request,
     )
 
 

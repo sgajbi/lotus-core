@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_market_series_point,
-    benchmark_return_series_point,
     classification_taxonomy_entry,
     risk_free_series_point,
 )
@@ -14,16 +13,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
 def test_market_reference_series_points_map_provider_rows() -> None:
     series_date = date(2026, 1, 2)
 
-    benchmark_return = benchmark_return_series_point(
-        SimpleNamespace(
-            series_date=series_date,
-            benchmark_return="0.0019000000",
-            return_period="1d",
-            return_convention="total_return_index",
-            series_currency="USD",
-            quality_status="accepted",
-        )
-    )
     risk_free = risk_free_series_point(
         SimpleNamespace(
             series_date=series_date,
@@ -48,7 +37,6 @@ def test_market_reference_series_points_map_provider_rows() -> None:
         )
     )
 
-    assert benchmark_return.benchmark_return == Decimal("0.0019000000")
     assert risk_free.value == Decimal("0.0350000000")
     assert risk_free.day_count_convention == "act_360"
     assert taxonomy.dimension_name == "asset_class"
