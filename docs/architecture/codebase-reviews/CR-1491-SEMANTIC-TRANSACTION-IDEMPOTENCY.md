@@ -14,8 +14,9 @@ recalculating it.
 ## Design
 
 - `BookedTransaction` produces a versioned semantic key from portfolio, transaction, and epoch.
-- A canonical SHA-256 fingerprint covers all booked-transaction business fields except
-  non-material record creation time. Decimal scale and timezone representations normalize before
+- A canonical SHA-256 fingerprint covers immutable booking inputs. It excludes non-material record
+  creation time and processor-owned cost, FX-allocation, and realized-P&L outputs that are written
+  back after the first processing pass. Decimal scale and timezone representations normalize before
   hashing.
 - `processed_events` retains physical event identity and gains nullable `semantic_key` and
   `payload_fingerprint` columns. A partial unique index applies only to semantic rows, preserving
@@ -55,7 +56,13 @@ schema rollback because the new worker reads and writes those fields.
 
 ## Validation
 
-- Semantic identity: `3` deterministic normalization and conflict tests.
+- Reconciliation identity cohort: `7 passed`, covering processor-owned outputs, generated cash-leg
+  normalization, custom linkage/policy materiality, correction payloads, and epoch separation.
+- PostgreSQL process/replay proof: ordinary persisted replay returns `DUPLICATE`, while canonical
+  repair replay restores missing derived state and completes as `PROCESSED`; `2 passed`.
+- Governed load proof remains pending on reconciled history. Ordinary duplicate delivery must drain
+  on the bounded `duplicate` outcome; canonical `/reprocess/transactions` repair must drain on the
+  bounded `processed` outcome.
 - Shared repository/application cohorts: `26` focused tests after legacy-fence correction.
 - Unified use case, adapter, consumer, and observability cohort: `21` tests.
 - Repository-native transaction-processing contract: `27 passed` in `113.76s` against PostgreSQL
