@@ -4,6 +4,7 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.database_models import PortfolioTimeseries
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +31,54 @@ def mock_db_session() -> AsyncMock:
 @pytest.fixture
 def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
     return PortfolioAggregationRepository(mock_db_session)
+
+
+async def test_get_portfolio_trims_portfolio_id(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    await repository.get_portfolio(" P1 ")
+    compiled = str(
+        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "WHERE trim(portfolios.portfolio_id) = 'P1'" in compiled
+
+
+async def test_get_current_epoch_for_portfolio_trims_portfolio_id(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    await repository.get_current_epoch_for_portfolio(" P1 ")
+    compiled = str(
+        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_state.portfolio_id) = 'P1'" in compiled
+
+
+async def test_upsert_portfolio_timeseries(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    record = PortfolioTimeseries(portfolio_id="P1", date=date(2025, 1, 10), epoch=1)
+    await repository.upsert_portfolio_timeseries(record)
+    compiled = str(
+        mock_db_session.execute.call_args[0][0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "INSERT INTO portfolio_timeseries" in compiled
+    assert "ON CONFLICT (portfolio_id, date, epoch) DO UPDATE" in compiled
+
+
+async def test_get_last_portfolio_timeseries_before_uses_latest_prior_row(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    await repository.get_last_portfolio_timeseries_before(" P1 ", date(2025, 1, 10))
+    compiled = str(
+        mock_db_session.execute.call_args[0][0].compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "trim(portfolio_timeseries.portfolio_id) = 'P1'" in compiled
+    assert "portfolio_timeseries.date < '2025-01-10'" in compiled
+    assert "ORDER BY portfolio_timeseries.date DESC, portfolio_timeseries.epoch DESC" in compiled
 
 
 async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(

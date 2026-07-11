@@ -28,7 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from ..core.position_timeseries_logic import PositionTimeseriesLogic
-from ..repositories.timeseries_repository import TimeseriesRepository
+from ..infrastructure.timeseries_generation_repository import TimeseriesGenerationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
 
     async def _materialize_position_timeseries(
         self,
-        repo: TimeseriesRepository,
+        repo: TimeseriesGenerationRepository,
         *,
         current_snapshot: DailyPositionSnapshot,
         previous_snapshot: DailyPositionSnapshot | None,
@@ -208,7 +208,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
     async def _propagate_dependent_position_timeseries(
         self,
         db_session,
-        repo: TimeseriesRepository,
+        repo: TimeseriesGenerationRepository,
         *,
         current_snapshot: DailyPositionSnapshot,
         epoch: int,
@@ -300,7 +300,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
 
                 async for db in get_async_db_session():
                     async with db.begin():
-                        repo = TimeseriesRepository(db)
+                        repo = TimeseriesGenerationRepository(db)
                         current_snapshot = await db.get(DailyPositionSnapshot, event.id)
                         if not current_snapshot:
                             logger.warning(

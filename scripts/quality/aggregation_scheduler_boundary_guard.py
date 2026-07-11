@@ -31,6 +31,9 @@ FORBIDDEN_SCHEDULER_SNIPPETS = {
         "database session factories belong in scheduler infrastructure adapters"
     ),
     "TimeseriesRepository": "concrete repositories belong behind the scheduler repository port",
+    "PortfolioAggregationRepository": (
+        "concrete repositories belong behind the scheduler repository port"
+    ),
     "KafkaProducer": "scheduler orchestration must use the aggregation job publisher port",
     "get_kafka_producer": "Kafka producer creation belongs in runtime composition",
     "publish_message(": "direct Kafka publication belongs in publisher adapters",
@@ -50,6 +53,7 @@ REQUIRED_PUBLISHER_SNIPPETS = (
 FORBIDDEN_PUBLISHER_SNIPPETS = {
     "get_async_db_session": "publisher planning must not depend on database sessions",
     "TimeseriesRepository": "publisher planning must not depend on repositories",
+    "PortfolioAggregationRepository": "publisher planning must not depend on repositories",
     "KafkaProducer": "publisher adapters should use portfolio_common.event_publisher",
     "get_kafka_producer": "publisher adapters should use portfolio_common.event_publisher",
 }
@@ -58,7 +62,7 @@ REQUIRED_ADAPTER_SNIPPETS = (
     "class PrometheusAggregationSchedulerMetricsSink",
     "class SystemAggregationSchedulerClock",
     "get_async_db_session",
-    "TimeseriesRepository",
+    "PortfolioAggregationRepository",
 )
 REQUIRED_PORT_SNIPPETS = (
     "class AggregationSchedulerRepository",
@@ -69,6 +73,7 @@ REQUIRED_PORT_SNIPPETS = (
 FORBIDDEN_PORT_SNIPPETS = {
     "get_async_db_session": "scheduler ports must not depend on database session factories",
     "TimeseriesRepository": "scheduler ports must not depend on concrete repositories",
+    "PortfolioAggregationRepository": "scheduler ports must not depend on concrete repositories",
     "KafkaProducer": "scheduler ports must not depend on concrete Kafka producers",
     "get_kafka_producer": "scheduler ports must not create concrete Kafka producers",
 }

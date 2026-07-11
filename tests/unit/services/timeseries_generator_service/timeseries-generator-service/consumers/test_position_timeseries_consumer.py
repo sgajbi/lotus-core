@@ -19,10 +19,12 @@ from services.timeseries_generator_service.app.consumers import (
 from services.timeseries_generator_service.app.consumers.position_timeseries_consumer import (
     PositionTimeseriesConsumer,
 )
-from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
+from src.services.timeseries_generator_service.app.infrastructure import (
+    timeseries_generation_repository,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
+
+TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.asyncio
@@ -61,7 +63,7 @@ def mock_kafka_message(mock_event: DailyPositionSnapshotPersistedEvent) -> Magic
 
 @pytest.fixture
 def mock_dependencies():
-    mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_repo = AsyncMock(spec=TimeseriesGenerationRepository)
     mock_repo.get_next_snapshots_after.return_value = []
     mock_repo.get_position_timeseries_for_dates.return_value = {}
     mock_repo.get_cashflows_for_security_dates.return_value = {}
@@ -78,7 +80,7 @@ def mock_dependencies():
             new=get_session_gen,
         ),
         patch(
-            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.TimeseriesRepository",
+            "services.timeseries_generator_service.app.consumers.position_timeseries_consumer.TimeseriesGenerationRepository",
             return_value=mock_repo,
         ),
     ):

@@ -35,7 +35,7 @@ def _write_required_boundary(root: Path) -> None:
         "class PrometheusAggregationSchedulerMetricsSink: pass\n"
         "class SystemAggregationSchedulerClock: pass\n"
         "get_async_db_session\n"
-        "TimeseriesRepository\n",
+        "PortfolioAggregationRepository\n",
     )
     _write(
         root
@@ -69,7 +69,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
         "publish_aggregation_dispatch_plan\n"
         "def _run_poll_once(): pass\n"
         "get_async_db_session\n"
-        "TimeseriesRepository\n"
+        "PortfolioAggregationRepository\n"
         "KafkaProducer\n"
         "get_kafka_producer\n"
         "publish_message(\n"
@@ -83,7 +83,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
 
     assert [finding.snippet for finding in findings] == [
         "get_async_db_session",
-        "TimeseriesRepository",
+        "PortfolioAggregationRepository",
         "KafkaProducer",
         "get_kafka_producer",
         "publish_message(",
@@ -106,7 +106,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_database_coupled_publisher
         "def plan_aggregation_job_dispatch(): pass\n"
         "def publish_aggregation_dispatch_plan(): pass\n"
         "get_async_db_session\n"
-        "TimeseriesRepository\n"
+        "PortfolioAggregationRepository\n"
         "KafkaProducer\n"
         "get_kafka_producer\n",
     )
@@ -115,7 +115,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_database_coupled_publisher
 
     assert [finding.snippet for finding in findings] == [
         "get_async_db_session",
-        "TimeseriesRepository",
+        "PortfolioAggregationRepository",
         "KafkaProducer",
         "get_kafka_producer",
     ]
@@ -133,7 +133,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_concrete_dependencies_in_p
         "class AggregationSchedulerMetricsSink: pass\n"
         "class AggregationSchedulerClock: pass\n"
         "get_async_db_session\n"
-        "TimeseriesRepository\n"
+        "PortfolioAggregationRepository\n"
         "KafkaProducer\n"
         "get_kafka_producer\n",
     )
@@ -142,7 +142,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_concrete_dependencies_in_p
 
     assert [finding.snippet for finding in findings] == [
         "get_async_db_session",
-        "TimeseriesRepository",
+        "PortfolioAggregationRepository",
         "KafkaProducer",
         "get_kafka_producer",
     ]

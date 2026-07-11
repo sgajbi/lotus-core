@@ -19,9 +19,11 @@ from sqlalchemy.orm import Session
 from src.services.portfolio_aggregation_service.app.infrastructure import (
     portfolio_aggregation_repository,
 )
-from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
+from src.services.timeseries_generator_service.app.infrastructure import (
+    timeseries_generation_repository,
 )
+
+TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
@@ -759,7 +761,7 @@ async def test_get_all_cashflows_for_security_date_returns_latest_restatement_pe
         session.commit()
     await async_db_session.rollback()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = TimeseriesGenerationRepository(async_db_session)
 
     rows = await repo.get_all_cashflows_for_security_date(
         portfolio_id, security_id, cashflow_date, 2
