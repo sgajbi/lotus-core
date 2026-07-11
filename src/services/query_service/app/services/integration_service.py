@@ -26,18 +26,6 @@ from ..dtos.reference_integration_dto import (
     DpmPortfolioUniverseCandidateResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
-    ExternalCurrencyExposureRequest,
-    ExternalCurrencyExposureResponse,
-    ExternalEligibleHedgeInstrumentRequest,
-    ExternalEligibleHedgeInstrumentResponse,
-    ExternalFXForwardCurveRequest,
-    ExternalFXForwardCurveResponse,
-    ExternalHedgeExecutionReadinessRequest,
-    ExternalHedgeExecutionReadinessResponse,
-    ExternalHedgePolicyRequest,
-    ExternalHedgePolicyResponse,
-    ExternalOrderExecutionAcknowledgementRequest,
-    ExternalOrderExecutionAcknowledgementResponse,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
@@ -69,7 +57,6 @@ from .dpm_portfolio_management_integration_service import (
     DpmPortfolioManagementIntegrationService,
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
-from .external_hedge_integration_service import ExternalHedgeIntegrationService
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)
@@ -122,9 +109,6 @@ class IntegrationService:
             buy_state_repository_provider=lambda: self._buy_state_repository,
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
-        )
-        self._external_hedge_service = ExternalHedgeIntegrationService(
-            reference_repository_provider=lambda: self._reference_repository,
         )
         self._transaction_economics_service = TransactionEconomicsIntegrationService(
             transaction_repository_provider=lambda: self._transaction_repository,
@@ -210,62 +194,6 @@ class IntegrationService:
             portfolio_id=portfolio_id,
             request=request,
         )
-
-    async def get_external_hedge_execution_readiness(
-        self,
-        portfolio_id: str,
-        request: ExternalHedgeExecutionReadinessRequest,
-    ) -> ExternalHedgeExecutionReadinessResponse | None:
-        return await self._external_hedge_service.get_execution_readiness(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_external_currency_exposure(
-        self,
-        portfolio_id: str,
-        request: ExternalCurrencyExposureRequest,
-    ) -> ExternalCurrencyExposureResponse | None:
-        return await self._external_hedge_service.get_currency_exposure(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_external_order_execution_acknowledgement(
-        self,
-        portfolio_id: str,
-        request: ExternalOrderExecutionAcknowledgementRequest,
-    ) -> ExternalOrderExecutionAcknowledgementResponse | None:
-        return await self._external_hedge_service.get_order_execution_acknowledgement(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_external_hedge_policy(
-        self,
-        portfolio_id: str,
-        request: ExternalHedgePolicyRequest,
-    ) -> ExternalHedgePolicyResponse | None:
-        return await self._external_hedge_service.get_hedge_policy(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_external_eligible_hedge_instruments(
-        self,
-        portfolio_id: str,
-        request: ExternalEligibleHedgeInstrumentRequest,
-    ) -> ExternalEligibleHedgeInstrumentResponse | None:
-        return await self._external_hedge_service.get_eligible_hedge_instruments(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_external_fx_forward_curve(
-        self,
-        request: ExternalFXForwardCurveRequest,
-    ) -> ExternalFXForwardCurveResponse:
-        return await self._external_hedge_service.get_fx_forward_curve(request)
 
     async def resolve_instrument_eligibility_bulk(
         self,

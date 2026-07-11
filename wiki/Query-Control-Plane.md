@@ -28,7 +28,7 @@ This makes it a contract and operations plane, not a generic duplicate of the re
 | --- | --- | --- |
 | Support and lineage | Portfolio readiness, support overview, control-stage evidence, replay evidence, reconciliation evidence, and lineage drill-through. | Performance, risk, or advisory business conclusions. |
 | Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
-| Integration contracts | Policy-aware snapshots; QCP-owned client restriction, sustainability, tax-reference, income-needs, liquidity-reserve, and planned-withdrawal evidence; benchmark/reference, enrichment, taxonomy, and coverage contracts. | Raw ad hoc table access, financial planning, DPM/tax decisioning, treasury/OMS workflow, or unmanaged aliases. |
+| Integration contracts | Policy-aware snapshots; QCP-owned client restriction, sustainability, tax and liquidity evidence; fail-closed external treasury/OMS posture; benchmark/reference, enrichment, taxonomy, and coverage contracts. | Raw ad hoc table access, financial planning, DPM/tax decisioning, external pricing/execution, treasury/OMS workflow, or unmanaged aliases. |
 | Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
 | Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
 
@@ -211,6 +211,11 @@ router inside the operational read plane.
 - Core publishes captured liquidity requirement and schedule facts only; financial planning,
   suitability, funding recommendations, treasury instructions, OMS acknowledgement, and DPM
   interpretation remain downstream responsibilities
+- external treasury and OMS source posture must remain QCP-owned and fail closed until governed
+  source ingestion exists; do not add placeholder repositories, external clients, or adapters
+- forward pricing, exposure calculation, hedge advice/approval, suitability, counterparty
+  selection, order generation/routing, best execution, OMS acknowledgement, fills, settlement,
+  and autonomous action are explicit non-claims
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 
