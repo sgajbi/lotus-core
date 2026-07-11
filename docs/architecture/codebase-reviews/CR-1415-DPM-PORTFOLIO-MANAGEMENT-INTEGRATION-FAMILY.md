@@ -60,3 +60,9 @@ make quality-wiki-docs-gate
 make lint
 git diff --check
 ```
+
+## Current Ownership
+
+CR-1539 separated portfolio-manager books by their portfolio-master source. CR-1540 moved CIO
+affected cohorts and DPM universe candidates into the layered `dpm_portfolio_population`
+capability. `DpmPortfolioManagementIntegrationService` is retired.

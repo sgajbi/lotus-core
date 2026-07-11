@@ -7,10 +7,8 @@ from ..dtos.reference_integration_dto import (
     BenchmarkComponentResponse,
     BenchmarkDefinitionResponse,
     BenchmarkReturnSeriesPoint,
-    CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
-    DpmPortfolioUniverseCandidate,
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
     IndexReturnSeriesPoint,
@@ -96,44 +94,6 @@ def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
         max_weight=as_optional_decimal(row.max_weight),
         target_status=row.target_status,
         quality_status=row.quality_status,
-        source_record_id=row.source_record_id,
-    )
-
-
-def cio_model_change_affected_mandate(row: Any) -> CioModelChangeAffectedMandate:
-    return CioModelChangeAffectedMandate(
-        portfolio_id=row.portfolio_id,
-        mandate_id=row.mandate_id,
-        client_id=row.client_id,
-        booking_center_code=row.booking_center_code,
-        jurisdiction_code=row.jurisdiction_code,
-        discretionary_authority_status=row.discretionary_authority_status,
-        model_portfolio_id=row.model_portfolio_id,
-        policy_pack_id=row.policy_pack_id,
-        risk_profile=row.risk_profile,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        binding_version=int(row.binding_version),
-        source_record_id=row.source_record_id,
-    )
-
-
-def dpm_portfolio_universe_candidate(row: Any) -> DpmPortfolioUniverseCandidate:
-    return DpmPortfolioUniverseCandidate(
-        portfolio_id=row.portfolio_id,
-        mandate_id=row.mandate_id,
-        client_id=row.client_id,
-        booking_center_code=row.booking_center_code,
-        jurisdiction_code=row.jurisdiction_code,
-        discretionary_authority_status=row.discretionary_authority_status,
-        model_portfolio_id=row.model_portfolio_id,
-        policy_pack_id=row.policy_pack_id,
-        mandate_objective=row.mandate_objective,
-        risk_profile=row.risk_profile,
-        investment_horizon=row.investment_horizon,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        binding_version=int(row.binding_version),
         source_record_id=row.source_record_id,
     )
 

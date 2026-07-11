@@ -47,3 +47,9 @@ Local validation passed:
 6. touched-surface `python -m ruff format --check` - passed
 7. `git diff --check` - passed
 8. `../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core` - expected `Database-Migrations.md` publication drift from earlier unmerged migration guidance
+
+## Current Ownership
+
+CR-1540 moved both ranked reads to `SqlAlchemyDpmPortfolioPopulationReader` in Query Control
+Plane. The deterministic ranking requirements remain active; the Query Service methods no longer
+exist.

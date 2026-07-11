@@ -1,5 +1,6 @@
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.page_tokens import PageTokenCodec
 from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +25,7 @@ from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
 )
+from .application.dpm_portfolio_population import DpmPortfolioPopulationService
 from .application.external_hedge_posture import ExternalHedgePostureService
 from .application.integration_policy import (
     IntegrationPolicyConfiguration,
@@ -44,6 +46,9 @@ from .infrastructure.client_restriction_profile_sources import (
 from .infrastructure.client_tax_profile_sources import SqlAlchemyClientTaxProfileSourceReader
 from .infrastructure.client_tax_rule_set_sources import SqlAlchemyClientTaxRuleSetSourceReader
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
+from .infrastructure.dpm_portfolio_population_sources import (
+    SqlAlchemyDpmPortfolioPopulationReader,
+)
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.simulation_store import (
@@ -93,6 +98,22 @@ def get_external_hedge_posture_service(
 ) -> ExternalHedgePostureService:
     return ExternalHedgePostureService(
         mandate_reader=SqlAlchemyEffectiveMandateReader(db),
+        clock=SystemClock(),
+    )
+
+
+def get_dpm_portfolio_population_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> DpmPortfolioPopulationService:
+    settings = load_query_control_plane_settings()
+    return DpmPortfolioPopulationService(
+        reader=SqlAlchemyDpmPortfolioPopulationReader(db),
+        page_tokens=PageTokenCodec(
+            secret=settings.page_token_secret,
+            active_kid=settings.page_token_key_id,
+            previous_secrets=settings.page_token_previous_keys,
+            ttl_seconds=settings.page_token_ttl_seconds,
+        ),
         clock=SystemClock(),
     )
 

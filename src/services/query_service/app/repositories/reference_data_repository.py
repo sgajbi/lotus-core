@@ -24,7 +24,6 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.source_lifecycle_predicates import (
     DISCRETIONARY_MANDATE_TYPE,
-    DPM_DISCRETIONARY_MANDATE_ACTIVE,
     MODEL_PORTFOLIO_TARGET_ACTIVE,
 )
 from sqlalchemy import and_, func, or_, select
@@ -45,9 +44,7 @@ from .reference_data_query_helpers import (
     ranked_instrument_eligibility_ids,
     ranked_latest_effective_ids,
     ranked_model_portfolio_target_ids,
-    ranked_portfolio_mandate_binding_ids,
 )
-from .reference_dpm_queries import dpm_portfolio_universe_stmt
 from .reference_fx_queries import latest_fx_rates_stmt, normalized_currency_pairs
 
 
@@ -130,66 +127,6 @@ class ReferenceDataRepository:
             .join(ranked, ModelPortfolioTarget.id == ranked.c.id)
             .where(ranked.c.rn == 1)
             .order_by(ModelPortfolioTarget.instrument_id.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_model_portfolio_affected_mandates(
-        self,
-        model_portfolio_id: str,
-        as_of_date: date,
-        *,
-        booking_center_code: str | None = None,
-        include_inactive_mandates: bool = False,
-    ) -> list[PortfolioMandateBinding]:
-        predicates = [
-            PortfolioMandateBinding.model_portfolio_id == model_portfolio_id,
-            PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
-            effective_filter(
-                PortfolioMandateBinding.effective_from,
-                PortfolioMandateBinding.effective_to,
-                as_of_date,
-            ),
-        ]
-        if booking_center_code:
-            predicates.append(PortfolioMandateBinding.booking_center_code == booking_center_code)
-        if not include_inactive_mandates:
-            predicates.append(
-                DPM_DISCRETIONARY_MANDATE_ACTIVE.sqlalchemy_filter(
-                    PortfolioMandateBinding.discretionary_authority_status
-                )
-            )
-
-        ranked = ranked_portfolio_mandate_binding_ids(*predicates)
-        stmt = (
-            select(PortfolioMandateBinding)
-            .join(ranked, PortfolioMandateBinding.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                PortfolioMandateBinding.portfolio_id.asc(),
-                PortfolioMandateBinding.mandate_id.asc(),
-            )
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_dpm_portfolio_universe_candidates(
-        self,
-        *,
-        as_of_date: date,
-        booking_center_code: str | None = None,
-        model_portfolio_ids: list[str] | None = None,
-        include_inactive_mandates: bool = False,
-        after_sort_key: tuple[str, str] | None = None,
-        limit: int | None = None,
-    ) -> list[PortfolioMandateBinding]:
-        stmt = dpm_portfolio_universe_stmt(
-            as_of_date=as_of_date,
-            booking_center_code=booking_center_code,
-            model_portfolio_ids=model_portfolio_ids,
-            include_inactive_mandates=include_inactive_mandates,
-            after_sort_key=after_sort_key,
-            limit=limit,
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

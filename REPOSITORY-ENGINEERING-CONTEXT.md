@@ -1547,9 +1547,11 @@ Most relevant current governance:
      case and metadata, the port returns immutable domain records, and the SQL adapter alone maps
      persistence rows. Do not add new methods to `IntegrationService` or reproduce broad
      contract-family facades. `DpmReadinessIntegrationService`,
-     `DpmPortfolioManagementIntegrationService`, `TransactionEconomicsIntegrationService`, and
-     `BenchmarkReferenceIntegrationService` are migration debt to be retired by complete vertical
-     capability moves, not target-state examples.
+     `TransactionEconomicsIntegrationService`, and `BenchmarkReferenceIntegrationService` are
+     migration debt to be retired by complete vertical capability moves, not target-state examples.
+     `PortfolioManagerBookService` and `DpmPortfolioPopulationService` demonstrate why source
+     authority and domain language must determine module boundaries instead of legacy facade
+     adjacency.
 120. Kafka consumers must keep transport responsibilities separate from application orchestration.
      The active combined path uses `ProcessTransactionUseCase` and target ports. Transitional cost
      SQL/outbox staging belongs to `CostProcessingCompatibilityAdapter`; the quarantined legacy

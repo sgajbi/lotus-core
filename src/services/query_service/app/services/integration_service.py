@@ -16,14 +16,10 @@ from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    CioModelChangeAffectedCohortRequest,
-    CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
-    DpmPortfolioUniverseCandidateRequest,
-    DpmPortfolioUniverseCandidateResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     IndexCatalogResponse,
@@ -50,9 +46,6 @@ from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
-from .dpm_portfolio_management_integration_service import (
-    DpmPortfolioManagementIntegrationService,
-)
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
@@ -114,11 +107,6 @@ class IntegrationService:
             decode_page_token=self._decode_page_token,
             encode_page_token=self._encode_page_token,
         )
-        self._dpm_portfolio_management_service = DpmPortfolioManagementIntegrationService(
-            reference_repository_provider=lambda: self._reference_repository,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
-        )
 
     def _encode_page_token(self, payload: dict[str, Any]) -> str:
         return cast(str, self._page_token_codec.encode(payload))
@@ -142,28 +130,6 @@ class IntegrationService:
         return await self._dpm_readiness_service.resolve_model_portfolio_targets(
             model_portfolio_id=model_portfolio_id,
             request=request,
-        )
-
-    async def resolve_cio_model_change_affected_cohort(
-        self,
-        model_portfolio_id: str,
-        request: CioModelChangeAffectedCohortRequest,
-    ) -> CioModelChangeAffectedCohortResponse | None:
-        return (
-            await self._dpm_portfolio_management_service.resolve_cio_model_change_affected_cohort(
-                model_portfolio_id=model_portfolio_id,
-                request=request,
-            )
-        )
-
-    async def resolve_dpm_portfolio_universe_candidates(
-        self,
-        request: DpmPortfolioUniverseCandidateRequest,
-    ) -> DpmPortfolioUniverseCandidateResponse:
-        return (
-            await self._dpm_portfolio_management_service.resolve_dpm_portfolio_universe_candidates(
-                request=request,
-            )
         )
 
     async def resolve_discretionary_mandate_binding(

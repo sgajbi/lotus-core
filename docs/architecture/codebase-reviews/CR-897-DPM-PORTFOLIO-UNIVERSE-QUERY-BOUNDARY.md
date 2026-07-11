@@ -58,3 +58,10 @@ covered by reference data repository SQL-shape unit tests.
 
 No wiki source update is required. This is an internal repository helper refactor and does not
 change an operator-facing contract, API contract, or runbook.
+
+## Current Ownership
+
+CR-1540 replaced this transitional delegation with the typed
+`SqlAlchemyDpmPortfolioPopulationReader` QCP adapter and retired `reference_dpm_queries.py`. This
+record remains historical evidence for the cursor and ranking behavior that the QCP adapter
+preserves.

@@ -25,6 +25,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from src.services.query_control_plane_service.app.application.dpm_portfolio_population import (
+    DpmPortfolioPopulationService,
+)
 from src.services.query_control_plane_service.app.application.external_hedge_posture import (
     ExternalHedgePostureService,
 )
@@ -55,6 +58,10 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
     CoreSnapshotMode,
     CoreSnapshotRequest,
     CoreSnapshotSection,
+)
+from src.services.query_control_plane_service.app.contracts.dpm_portfolio_population import (
+    CioModelChangeAffectedCohortRequest,
+    DpmPortfolioUniverseCandidateRequest,
 )
 from src.services.query_control_plane_service.app.contracts.external_hedge_posture import (
     ExternalCurrencyExposureRequest,
@@ -137,11 +144,9 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkDefinitionRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
-    CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
-    DpmPortfolioUniverseCandidateRequest,
     DpmSourceReadinessRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
@@ -859,8 +864,8 @@ async def test_resolve_portfolio_manager_book_membership_maps_empty_book_to_404(
 
 @pytest.mark.asyncio
 async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_cio_model_change_cohort = AsyncMock(
         return_value={
             "product_name": "CioModelChangeAffectedCohort",
             "product_version": "v1",
@@ -902,12 +907,12 @@ async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
     response = await resolve_cio_model_change_affected_cohort(
         model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
         request=request,
-        integration_service=mock_service,
+        dpm_portfolio_population_service=mock_service,
     )
 
     assert response["product_name"] == "CioModelChangeAffectedCohort"
     assert response["affected_mandates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
-    mock_service.resolve_cio_model_change_affected_cohort.assert_awaited_once_with(
+    mock_service.resolve_cio_model_change_cohort.assert_awaited_once_with(
         model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
         request=request,
     )
@@ -915,14 +920,14 @@ async def test_resolve_cio_model_change_affected_cohort_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(return_value=None)
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_cio_model_change_cohort = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_cio_model_change_affected_cohort(
             model_portfolio_id="MODEL_MISSING",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
-            integration_service=mock_service,
+            dpm_portfolio_population_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -940,8 +945,8 @@ async def test_resolve_cio_model_change_affected_cohort_maps_missing_model_to_40
 
 @pytest.mark.asyncio
 async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_cio_model_change_affected_cohort = AsyncMock(
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_cio_model_change_cohort = AsyncMock(
         return_value=MagicMock(affected_mandates=[])
     )
 
@@ -949,7 +954,7 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
         await resolve_cio_model_change_affected_cohort(
             model_portfolio_id="MODEL_EMPTY",
             request=CioModelChangeAffectedCohortRequest(as_of_date="2026-05-03"),
-            integration_service=mock_service,
+            dpm_portfolio_population_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -967,8 +972,8 @@ async def test_resolve_cio_model_change_affected_cohort_maps_empty_cohort_to_404
 
 @pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_universe_candidates = AsyncMock(
         return_value={
             "product_name": "DpmPortfolioUniverseCandidate",
             "product_version": "v1",
@@ -1028,28 +1033,28 @@ async def test_resolve_dpm_portfolio_universe_candidates_success_path() -> None:
 
     response = await resolve_dpm_portfolio_universe_candidates(
         request=request,
-        integration_service=mock_service,
+        dpm_portfolio_population_service=mock_service,
     )
 
     assert response["product_name"] == "DpmPortfolioUniverseCandidate"
     assert response["candidates"][0]["portfolio_id"] == "PB_SG_GLOBAL_BAL_001"
     assert response["selection_basis"]["basis_type"] == ("EFFECTIVE_DISCRETIONARY_MANDATE_BINDING")
-    mock_service.resolve_dpm_portfolio_universe_candidates.assert_awaited_once_with(
+    mock_service.resolve_universe_candidates.assert_awaited_once_with(
         request=request,
     )
 
 
 @pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_universe_candidates = AsyncMock(
         return_value=MagicMock(candidates=[])
     )
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
             request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
-            integration_service=mock_service,
+            dpm_portfolio_population_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1066,15 +1071,15 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_empty_universe_to_
 
 @pytest.mark.asyncio
 async def test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+    mock_service = MagicMock(spec=DpmPortfolioPopulationService)
+    mock_service.resolve_universe_candidates = AsyncMock(
         side_effect=ValueError("DPM portfolio-universe page token does not match request scope.")
     )
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_dpm_portfolio_universe_candidates(
             request=DpmPortfolioUniverseCandidateRequest(as_of_date="2026-05-03"),
-            integration_service=mock_service,
+            dpm_portfolio_population_service=mock_service,
         )
 
     assert_query_control_plane_problem(

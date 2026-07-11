@@ -10,6 +10,7 @@ import pytest
 from portfolio_common.event_publisher import KafkaEventPublisher
 from portfolio_common.events import TransactionEvent
 from portfolio_common.logging_utils import correlation_id_var
+from portfolio_common.reference_data_paging import ReferencePageMetadata
 from pydantic import BaseModel, ValidationError
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
@@ -24,7 +25,6 @@ from src.services.persistence_service.app.adapters.persistence_event_adapter imp
     decode_persistence_message_payload,
     validate_persistence_event_payload,
 )
-from src.services.query_service.app.dtos.reference_integration_dto import ReferencePageMetadata
 from src.services.query_service.app.dtos.reference_integration_portfolio_tax_lot_dto import (
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,

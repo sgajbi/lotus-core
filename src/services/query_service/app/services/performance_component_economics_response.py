@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
 from ..dtos.reference_integration_dto import (
@@ -7,7 +8,6 @@ from ..dtos.reference_integration_dto import (
     PerformanceComponentEconomicsResponse,
     PerformanceComponentEconomicsRow,
     PerformanceComponentEconomicsSupportability,
-    ReferencePageMetadata,
 )
 from ..read_models import PerformanceEconomicsTransactionReadRecord
 from .performance_component_economics_policy import (

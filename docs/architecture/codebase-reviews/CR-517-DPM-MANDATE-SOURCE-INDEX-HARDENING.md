@@ -62,3 +62,9 @@ Status: Hardened.
 
 No API route shape or platform contract change was required. This is a storage-contract hardening
 change for existing DPM source-data evidence queries.
+
+## Current Ownership
+
+CR-1540 moved both indexed reads to `SqlAlchemyDpmPortfolioPopulationReader` in Query Control
+Plane. The index rationale and migration evidence remain valid; the Query Service repository
+methods no longer exist.

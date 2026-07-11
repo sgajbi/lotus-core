@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
 from ..dtos.reference_integration_dto import (
-    ReferencePageMetadata,
     TransactionCostCurvePoint,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,

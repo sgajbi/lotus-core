@@ -68,6 +68,10 @@ Move CIO model-change affected cohorts and DPM portfolio-universe candidates as 
 mixed DPM facade. Continue QCP reference ownership under #715 before splitting the integration
 router under #471.
 
+CR-1540 completed the `dpm_portfolio_population` move and removed the mixed DPM facade and
+transitional DTO definitions. Remaining #715 work is DPM readiness, transaction economics,
+benchmark/market reference, operations/support, advisory compatibility, and image proof.
+
 ## Documentation Decision
 
 Updated repository context, the current-state architecture map, historical records that named the
