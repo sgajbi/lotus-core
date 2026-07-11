@@ -8,9 +8,7 @@ from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_definition_response,
     benchmark_market_series_point,
     benchmark_return_series_point,
-    cio_model_change_affected_mandate,
     classification_taxonomy_entry,
-    dpm_portfolio_universe_candidate,
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
@@ -94,7 +92,7 @@ def test_index_definition_response_maps_reference_catalog_row() -> None:
     assert response.classification_labels == {"asset_class": "equity", "region": "global"}
 
 
-def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
+def test_dpm_source_entries_map_model_target_rows() -> None:
     target = model_portfolio_target_row(
         SimpleNamespace(
             instrument_id="EQ_US_AAPL",
@@ -106,50 +104,9 @@ def test_dpm_source_entries_map_model_and_mandate_rows() -> None:
             source_record_id="target-1",
         )
     )
-    affected_mandate = cio_model_change_affected_mandate(
-        SimpleNamespace(
-            portfolio_id="PB_SG_GLOBAL_BAL_001",
-            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-            client_id="CIF_SG_GLOBAL_BAL_001",
-            booking_center_code="Singapore",
-            jurisdiction_code="SG",
-            discretionary_authority_status="active",
-            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
-            policy_pack_id="POLICY_PACK_BALANCED",
-            risk_profile="balanced",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            binding_version="6",
-            source_record_id="mandate-1",
-        )
-    )
-    candidate = dpm_portfolio_universe_candidate(
-        SimpleNamespace(
-            portfolio_id="PB_SG_GLOBAL_BAL_001",
-            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-            client_id="CIF_SG_GLOBAL_BAL_001",
-            booking_center_code="Singapore",
-            jurisdiction_code="SG",
-            discretionary_authority_status="active",
-            model_portfolio_id="MODEL_PB_SG_GLOBAL_BAL_DPM",
-            policy_pack_id="POLICY_PACK_BALANCED",
-            mandate_objective="balanced_growth_income",
-            risk_profile="balanced",
-            investment_horizon="medium_term",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            binding_version="7",
-            source_record_id="candidate-1",
-        )
-    )
-
     assert target.target_weight == Decimal("0.1200000000")
     assert target.min_weight == Decimal("0.0800000000")
     assert target.max_weight is None
-    assert affected_mandate.binding_version == 6
-    assert affected_mandate.policy_pack_id == "POLICY_PACK_BALANCED"
-    assert candidate.binding_version == 7
-    assert candidate.mandate_objective == "balanced_growth_income"
 
 
 def test_dpm_target_entry_treats_blank_optional_bands_as_absent() -> None:

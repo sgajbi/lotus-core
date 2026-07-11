@@ -188,9 +188,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_return_points": (
         "BenchmarkReturnSeries",
     ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_dpm_portfolio_universe_candidates": (
-        "PortfolioMandateBinding",
-    ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_index_definitions": (
         "IndexDefinition",
     ),
@@ -214,9 +211,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_latest_market_prices": (
         "MarketPrice",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_model_portfolio_affected_mandates": (
-        "PortfolioMandateBinding",
     ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_model_portfolio_targets": (
         "ModelPortfolioTarget",

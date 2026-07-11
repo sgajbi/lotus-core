@@ -18,16 +18,12 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
-    CioModelChangeAffectedCohortRequest,
-    CioModelChangeAffectedCohortResponse,
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
-    DpmPortfolioUniverseCandidateRequest,
-    DpmPortfolioUniverseCandidateResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
     IndexCatalogRequest,
@@ -66,6 +62,7 @@ from ..application.core_snapshot.service import (
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
 from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
@@ -88,6 +85,12 @@ from ..contracts.core_snapshot import (
     CoreSnapshotRequest,
     CoreSnapshotResponse,
     CoreSnapshotSection,
+)
+from ..contracts.dpm_portfolio_population import (
+    CioModelChangeAffectedCohortRequest,
+    CioModelChangeAffectedCohortResponse,
+    DpmPortfolioUniverseCandidateRequest,
+    DpmPortfolioUniverseCandidateResponse,
 )
 from ..contracts.external_hedge_posture import (
     ExternalCurrencyExposureRequest,
@@ -122,6 +125,7 @@ from ..dependencies import (
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
+    get_dpm_portfolio_population_service,
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
@@ -1278,9 +1282,11 @@ async def resolve_cio_model_change_affected_cohort(
         description="Approved model portfolio identifier whose affected mandate cohort is needed.",
         examples=["MODEL_PB_SG_GLOBAL_BAL_DPM"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_portfolio_population_service: DpmPortfolioPopulationService = Depends(
+        get_dpm_portfolio_population_service
+    ),
 ) -> CioModelChangeAffectedCohortResponse:
-    response = await integration_service.resolve_cio_model_change_affected_cohort(
+    response = await dpm_portfolio_population_service.resolve_cio_model_change_cohort(
         model_portfolio_id=model_portfolio_id,
         request=request,
     )
@@ -1336,10 +1342,12 @@ async def resolve_cio_model_change_affected_cohort(
 )
 async def resolve_dpm_portfolio_universe_candidates(
     request: DpmPortfolioUniverseCandidateRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_portfolio_population_service: DpmPortfolioPopulationService = Depends(
+        get_dpm_portfolio_population_service
+    ),
 ) -> DpmPortfolioUniverseCandidateResponse:
     try:
-        response = await integration_service.resolve_dpm_portfolio_universe_candidates(
+        response = await dpm_portfolio_population_service.resolve_universe_candidates(
             request=request,
         )
     except ValueError as exc:

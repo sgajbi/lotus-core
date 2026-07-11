@@ -24,6 +24,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
+    get_dpm_portfolio_population_service,
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
@@ -529,6 +530,9 @@ async def async_test_client():
     )
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
+    app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
+        mock_integration_service
+    )
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
@@ -547,6 +551,7 @@ async def async_test_client():
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
+    app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
@@ -1146,7 +1151,7 @@ async def test_mandate_binding_not_found_maps_to_404(async_test_client):
 
 async def test_dpm_portfolio_universe_bad_request_maps_to_problem_details(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.resolve_dpm_portfolio_universe_candidates = AsyncMock(
+    mock_integration_service.resolve_universe_candidates = AsyncMock(
         side_effect=ValueError("DPM portfolio-universe page token does not match request scope.")
     )
 

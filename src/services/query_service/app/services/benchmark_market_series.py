@@ -7,13 +7,13 @@ from decimal import Decimal
 from typing import Any, cast
 
 from portfolio_common.market_reference_quality import quality_status_summary_key
+from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
 from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     IntegrationWindow,
-    ReferencePageMetadata,
 )
 from .integration_value_normalization import as_decimal
 from .reference_data_helpers import (

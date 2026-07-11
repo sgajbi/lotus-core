@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, Mapping
 
+from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
 from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
-    ReferencePageMetadata,
 )
 from ..ports.source_data_repository_ports import PortfolioTaxLotReader
 from ..read_models import PortfolioTaxLotReadRecord
