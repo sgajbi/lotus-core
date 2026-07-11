@@ -1,7 +1,7 @@
 """Source-read ports for DPM readiness evidence."""
 
 from datetime import date
-from typing import Protocol
+from typing import Any, Protocol
 
 from ..domain.dpm_source_readiness import (
     DiscretionaryMandateBindingEvidence,
@@ -84,3 +84,11 @@ class DpmPortfolioStateReader(Protocol):
     ) -> list[PortfolioTaxLotEvidence]: ...
 
     async def list_known_instrument_security_ids(self, security_ids: list[str]) -> set[str]: ...
+
+
+class DpmTaxLotPageTokenCodec(Protocol):
+    """Encode and decode opaque continuation state for tax-lot windows."""
+
+    def encode(self, payload: dict[str, Any]) -> str: ...
+
+    def decode(self, token: str | None) -> dict[str, Any]: ...
