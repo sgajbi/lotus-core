@@ -11,8 +11,10 @@ from src.services.query_control_plane_service.app.contracts.client_restriction_p
     ClientRestrictionProfileRequest,
 )
 from src.services.query_control_plane_service.app.domain.client_restriction_profile import (
-    ClientRestrictionMandateBinding,
     ClientRestrictionSourceRecord,
+)
+from src.services.query_control_plane_service.app.domain.effective_mandate import (
+    EffectiveMandateBinding,
 )
 
 
@@ -25,7 +27,7 @@ class _Reader:
     def __init__(
         self,
         *,
-        binding: ClientRestrictionMandateBinding | None,
+        binding: EffectiveMandateBinding | None,
         restrictions: list[ClientRestrictionSourceRecord],
     ) -> None:
         self.binding = binding
@@ -41,8 +43,8 @@ class _Reader:
         return self.restrictions
 
 
-def _binding() -> ClientRestrictionMandateBinding:
-    return ClientRestrictionMandateBinding(
+def _binding() -> EffectiveMandateBinding:
+    return EffectiveMandateBinding(
         client_id="CIF_SG_000184",
         mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
         observed_at=datetime(2026, 5, 3, 8, tzinfo=UTC),

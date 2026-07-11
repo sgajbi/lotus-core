@@ -2143,6 +2143,13 @@ Most relevant current governance:
      `lotus-manage` owns DPM interpretation, enforcement, workflow, and user-facing conclusions.
      Preserve the public route and response contract while moving the remaining reference families
      through complete vertical slices.
+163. `SustainabilityPreferenceProfile:v1` is also QCP-owned end to end. Client-profile products
+     share `EffectiveMandateBinding` resolution, typed evidence timestamp policy, and deterministic
+     effective-row query helpers, but retain product-specific contracts, domain records, source
+     ports, SQL adapters, supportability reasons, and field mapping. Do not restore sustainability
+     DTOs, mapper, repository method, application service, or facade methods under Query Service.
+     Core owns captured sustainability preference evidence; `lotus-manage` owns construction and
+     rebalance interpretation and must not infer unstated preferences.
 
 ## Context Maintenance Rule
 

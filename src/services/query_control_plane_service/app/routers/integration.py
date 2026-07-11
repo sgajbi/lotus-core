@@ -71,8 +71,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    SustainabilityPreferenceProfileRequest,
-    SustainabilityPreferenceProfileResponse,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
@@ -90,6 +88,7 @@ from ..application.core_snapshot.service import (
     CoreSnapshotUnavailableSectionError,
 )
 from ..application.integration_policy import IntegrationPolicyService
+from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..contracts.client_restriction_profile import (
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
@@ -104,11 +103,16 @@ from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkResponse,
 )
 from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
+from ..contracts.sustainability_preference_profile import (
+    SustainabilityPreferenceProfileRequest,
+    SustainabilityPreferenceProfileResponse,
+)
 from ..dependencies import (
     get_client_restriction_profile_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
+    get_sustainability_preference_profile_service,
 )
 from .response_helpers import (
     problem_example,
@@ -1605,14 +1609,13 @@ async def get_sustainability_preference_profile(
         description="Portfolio identifier whose sustainability preference profile is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    sustainability_service: SustainabilityPreferenceProfileService = Depends(
+        get_sustainability_preference_profile_service
+    ),
 ) -> SustainabilityPreferenceProfileResponse:
-    response = cast(
-        SustainabilityPreferenceProfileResponse | None,
-        await integration_service.get_sustainability_preference_profile(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await sustainability_service.get_sustainability_preference_profile(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(

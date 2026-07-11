@@ -377,7 +377,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   tilts, version, lineage, and quality status. The table is a source-owner contract and does not
   perform suitability adjudication or rebalance decisioning.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/sustainability_preference_profile_sources.py`, `src/services/query_control_plane_service/app/application/sustainability_preference_profile.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
 - **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
   as-of date; active preferences are returned by default and deterministic latest-version
   selection is applied by framework and preference code.

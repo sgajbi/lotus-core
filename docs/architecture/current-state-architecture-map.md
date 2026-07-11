@@ -125,7 +125,7 @@ Rules:
 | `portfolio_aggregation_service` | `src/services/portfolio_aggregation_service` | Portfolio-timeseries aggregation, aggregation jobs, completion publication | Position valuation, report composition, downstream performance analytics |
 | `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Stage-gate orchestration, readiness events, control-stage status, quiescence | Business calculations, source write ingestion, direct API serving |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
-| `query_control_plane_service` | `src/services/query_control_plane_service` | Core snapshot application/contracts/source adapter, analytics input contracts, client-restriction source product, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation |
+| `query_control_plane_service` | `src/services/query_control_plane_service` | Core snapshot application/contracts/source adapter, analytics input contracts, client restriction and sustainability preference source products, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation |
 
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.

@@ -3,6 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.services.query_control_plane_service.app.application import (
+    sustainability_preference_profile as preference_application,
+)
 from src.services.query_control_plane_service.app.application.client_restriction_profile import (
     ClientRestrictionProfileService,
 )
@@ -15,6 +18,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
 )
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
+)
+from src.services.query_control_plane_service.app.contracts import (
+    sustainability_preference_profile as preference_contracts,
 )
 from src.services.query_control_plane_service.app.contracts.client_restriction_profile import (
     ClientRestrictionProfileRequest,
@@ -36,6 +42,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
+    get_sustainability_preference_profile_service,
 )
 from src.services.query_control_plane_service.app.routers.integration import (
     create_core_snapshot,
@@ -116,10 +123,14 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
-    SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
+
+SustainabilityPreferenceProfileService = (
+    preference_application.SustainabilityPreferenceProfileService
+)
+SustainabilityPreferenceProfileRequest = preference_contracts.SustainabilityPreferenceProfileRequest
 
 
 def assert_query_control_plane_problem(
@@ -188,6 +199,11 @@ def test_get_core_snapshot_service_factory_returns_service() -> None:
 def test_get_client_restriction_profile_service_factory_returns_service() -> None:
     service = get_client_restriction_profile_service(db=MagicMock())
     assert isinstance(service, ClientRestrictionProfileService)
+
+
+def test_get_sustainability_preference_profile_service_factory_returns_service() -> None:
+    service = get_sustainability_preference_profile_service(db=MagicMock())
+    assert isinstance(service, SustainabilityPreferenceProfileService)
 
 
 @pytest.mark.asyncio
@@ -1734,7 +1750,7 @@ async def test_client_restriction_profile_maps_missing_binding_to_problem_detail
 
 @pytest.mark.asyncio
 async def test_get_sustainability_preference_profile_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=SustainabilityPreferenceProfileService)
     mock_service.get_sustainability_preference_profile = AsyncMock(
         return_value={
             "product_name": "SustainabilityPreferenceProfile",
@@ -1778,13 +1794,38 @@ async def test_get_sustainability_preference_profile_router_function() -> None:
     response = await get_sustainability_preference_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        sustainability_service=mock_service,
     )
 
     assert response["product_name"] == "SustainabilityPreferenceProfile"
     mock_service.get_sustainability_preference_profile.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_sustainability_preference_maps_missing_binding_to_problem_details() -> None:
+    mock_service = MagicMock(spec=SustainabilityPreferenceProfileService)
+    mock_service.get_sustainability_preference_profile = AsyncMock(return_value=None)
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_sustainability_preference_profile(
+            portfolio_id="PB_MISSING",
+            request=SustainabilityPreferenceProfileRequest(as_of_date="2026-05-03"),
+            sustainability_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": "SustainabilityPreferenceProfile",
+            "portfolio_id": "PB_MISSING",
+            "reason": "not_found",
+        },
     )
 
 
@@ -2015,12 +2056,6 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
 @pytest.mark.parametrize(
     ("route_handler", "service_method", "route_request", "source_product"),
     [
-        (
-            get_sustainability_preference_profile,
-            "get_sustainability_preference_profile",
-            SustainabilityPreferenceProfileRequest(as_of_date="2026-05-03"),
-            "SustainabilityPreferenceProfile",
-        ),
         (
             get_client_tax_profile,
             "get_client_tax_profile",

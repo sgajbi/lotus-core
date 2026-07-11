@@ -4,9 +4,9 @@ from datetime import date
 from typing import Protocol
 
 from ..domain.client_restriction_profile import (
-    ClientRestrictionMandateBinding,
     ClientRestrictionSourceRecord,
 )
+from ..domain.effective_mandate import EffectiveMandateBinding
 
 
 class ClientRestrictionProfileSourceReader(Protocol):
@@ -18,7 +18,7 @@ class ClientRestrictionProfileSourceReader(Protocol):
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,
-    ) -> ClientRestrictionMandateBinding | None: ...
+    ) -> EffectiveMandateBinding | None: ...
 
     async def list_restrictions(
         self,
