@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 Issue: #468
-Status: Implemented locally; aggregate runtime validation pending
+Status: Fixed locally; release validation pending on reconciled history
 
 ## Objective
 
@@ -70,8 +70,9 @@ The position, cashflow, and cost calculator source roots are now absent. Current
 database schema ownership paths, test manifests, pytest paths, and capacity scripts were scanned for
 stale ownership. Historical CR evidence retains historical paths by design.
 
-## Follow-Up
+## Aggregate Validation Status
 
-Run the complete target unit cohort, PostgreSQL transaction-processing contract, capacity profiles,
-image import, strict architecture, and deployment/cutover guards. Keep #468 open until that evidence
-is recorded.
+The source branch recorded complete deployment, image, and capacity evidence. The reconciled
+history has rerun the target-owned unit/domain and PostgreSQL transaction contract, but has not
+rerun the release cohorts. CR-1526 records the #468 acceptance matrix, current reconciliation
+proof, and remaining release work.

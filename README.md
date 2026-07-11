@@ -128,8 +128,8 @@ Current repo truth:
 12. App-local Compose and every Compose-backed CI runtime lane use one
     `portfolio_transaction_processing_service` for atomic cost, cashflow, and position processing.
     The internal modules remain separate, valuation remains independently deployable, and the
-    Kubernetes source plus CI release renderer use the target digest. Registry/cluster proof and
-    legacy package removal are still governed follow-up work.
+    Kubernetes source plus CI release renderer use the target digest. Legacy transaction-calculator
+    packages are removed locally; registry/cluster proof remains governed release work.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use
@@ -214,7 +214,7 @@ Primary architecture references:
 | `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
 | `src/services/persistence_service/` | Persistence orchestration. |
 | `src/services/portfolio_transaction_processing_service/` | Active app-local/CI combined cost, cashflow, and position runtime with layered delivery, application, domain/ports, infrastructure, and runtime packages. |
-| `src/services/calculators/` | Transitional internal cost, cashflow, and position modules imported by the combined runtime, plus independently deployable valuation. Move the first three behind target-owned package names before deleting legacy shells. |
+| `src/services/calculators/` | Independently deployable position valuation only. Cost, cashflow, and position transaction processing are target-owned modules in `portfolio_transaction_processing_service`. |
 | `src/services/timeseries_generator_service/` | Position and portfolio time-series generation. |
 | `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
 | `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
