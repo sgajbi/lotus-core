@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 Issue: #468 same-pattern architecture scan
-Status: Implemented locally; service-owned repository split pending
+Status: Implemented locally; aggregation queue split completed by CR-1519
 
 ## Objective
 
@@ -29,11 +29,10 @@ Production usage showed only two shared read methods: instrument batch lookup an
 
 ## Boundary Decision
 
-The shared adapter is truthful transitional infrastructure, not the target repository design. The
-next slice should give each service its own persistence adapter and retain only genuinely shared,
-stateless market/reference query helpers where reuse remains valuable. Aggregation job claims,
-stale reset, dispatch recovery, and queue diagnostics belong to portfolio aggregation; position
-snapshot/cashflow reads and position-timeseries writes belong to timeseries generation.
+The shared adapter is truthful transitional infrastructure, not the target repository design.
+CR-1519 moved aggregation job claims, stale reset, dispatch recovery, and queue diagnostics to
+portfolio aggregation. Remaining timeseries data reads/writes still need service ownership, with
+only genuinely shared stateless market/reference query helpers retained where reuse remains useful.
 
 ## Compatibility
 
@@ -52,6 +51,5 @@ imports and class names remain stable.
 
 ## Follow-Up
 
-Split the concrete adapter by service ownership with characterization tests for the method surface.
-Run the full PostgreSQL claim/upsert/as-of/recovery suite and concurrent `SKIP LOCKED` proof before
-deleting the transitional shared class.
+Complete the remaining generator and aggregation data-access split described by CR-1519, then
+delete the transitional shared class after PostgreSQL upsert and as-of proof.

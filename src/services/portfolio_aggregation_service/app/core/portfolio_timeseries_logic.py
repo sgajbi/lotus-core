@@ -12,7 +12,7 @@ from portfolio_common.database_models import (
 from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 
-from ..repositories.timeseries_repository import TimeseriesRepository
+from ..infrastructure.portfolio_aggregation_repository import PortfolioAggregationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class PortfolioTimeseriesLogic:
         a_date: date,
         epoch: int,
         position_timeseries_list: List[PositionTimeseries],
-        repo: TimeseriesRepository,
+        repo: PortfolioAggregationRepository,
     ) -> PortfolioTimeseries:
         """
         Calculates a single, complete portfolio time series record for a given day and epoch.
@@ -97,7 +97,7 @@ class PortfolioTimeseriesLogic:
 
     @staticmethod
     async def _resolve_fx_rate(
-        repo: TimeseriesRepository,
+        repo: PortfolioAggregationRepository,
         instrument_currency: str,
         portfolio_currency: str,
         valuation_date: date,

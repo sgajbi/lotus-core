@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, update
 
 from ..core.portfolio_timeseries_logic import PortfolioTimeseriesLogic
-from ..repositories.timeseries_repository import TimeseriesRepository
+from ..infrastructure.portfolio_aggregation_repository import PortfolioAggregationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
         try:
             async for db in get_async_db_session():
                 async with db.begin():
-                    repo = TimeseriesRepository(db)
+                    repo = PortfolioAggregationRepository(db)
 
                     portfolio = await repo.get_portfolio(portfolio_id)
                     if not portfolio:

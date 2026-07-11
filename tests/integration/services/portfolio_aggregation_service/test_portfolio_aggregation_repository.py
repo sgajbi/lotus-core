@@ -1,3 +1,5 @@
+"""Prove portfolio aggregation job recovery and concurrent claim behavior."""
+
 import asyncio
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -14,9 +16,11 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
-from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_aggregation_repository,
 )
+
+PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -126,7 +130,7 @@ async def test_find_and_reset_stale_aggregation_jobs(
     THEN it should only reset the single stale 'PROCESSING' job to 'PENDING'.
     """
     # ARRANGE
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
 
     # ACT
     reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
@@ -151,7 +155,7 @@ async def test_find_and_reset_stale_aggregation_jobs(
 async def test_find_and_reset_stale_aggregation_jobs_marks_over_limit_rows_failed(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
 
     reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
     await async_db_session.commit()
@@ -179,7 +183,7 @@ async def test_find_and_reset_stale_aggregation_jobs_does_not_overwrite_complete
         .one()
     )
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     original_execute = async_db_session.execute
     execute_count = 0
 
@@ -276,7 +280,7 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
 
     async def claim_one():
         async with session_factory() as session:
-            repo = TimeseriesRepository(session)
+            repo = PortfolioAggregationRepository(session)
             claimed = await repo.find_and_claim_eligible_jobs(batch_size=1)
             await session.commit()
             return claimed

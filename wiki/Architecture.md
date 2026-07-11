@@ -122,6 +122,10 @@ namespace or behind misleading `Base` names. The current timeseries persistence 
 transitional shared implementation; timeseries generation and portfolio aggregation remain
 separate modules, and their repository responsibilities will be split without adding a runtime.
 
+Portfolio aggregation owns job claiming, dispatch recovery, stale retry/failure, and queue
+diagnostics through `PortfolioAggregationRepository`. Timeseries generation must not acquire these
+queue responsibilities; the remaining shared data-access methods are transitional cleanup scope.
+
 After transaction-processing source consolidation is complete, the next governed boundary review
 covers timeseries generation, valuation orchestration/execution, pipeline orchestration, and
 portfolio aggregation. That review must classify each runtime as keep, merge into explicit

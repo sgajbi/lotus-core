@@ -1,13 +1,12 @@
 """SQLAlchemy persistence shared by timeseries generation and portfolio aggregation."""
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from typing import Any, List, Optional, cast
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
@@ -16,7 +15,6 @@ from portfolio_common.database_models import (
     FxRate,
     Instrument,
     Portfolio,
-    PortfolioAggregationJob,
     PortfolioTimeseries,
     PositionState,
     PositionTimeseries,
@@ -29,71 +27,6 @@ logger = logging.getLogger(__name__)
 POSITION_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "security_id", "date", "epoch")
 PORTFOLIO_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "date", "epoch")
 TIMESERIES_AUDIT_COLUMNS = ("created_at", "updated_at")
-
-
-def _authoritative_snapshot_scope(
-    job_model: type[PortfolioAggregationJob],
-    snapshot_model: type[DailyPositionSnapshot],
-):
-    newer_snapshot = aliased(DailyPositionSnapshot)
-    newer_asof_snapshot_exists = (
-        select(1)
-        .where(
-            newer_snapshot.portfolio_id == job_model.portfolio_id,
-            newer_snapshot.security_id == snapshot_model.security_id,
-            newer_snapshot.date <= job_model.aggregation_date,
-            or_(
-                newer_snapshot.date > snapshot_model.date,
-                and_(
-                    newer_snapshot.date == snapshot_model.date,
-                    newer_snapshot.epoch > snapshot_model.epoch,
-                ),
-            ),
-        )
-        .correlate(job_model, snapshot_model)
-        .exists()
-    )
-    return (
-        snapshot_model.portfolio_id == job_model.portfolio_id,
-        snapshot_model.date <= job_model.aggregation_date,
-        ~newer_asof_snapshot_exists,
-    )
-
-
-def _authoritative_snapshot_exists(
-    job_model: type[PortfolioAggregationJob],
-    snapshot_model: type[DailyPositionSnapshot],
-    authoritative_snapshot_scope,
-):
-    return select(1).where(*authoritative_snapshot_scope).correlate(job_model).exists()
-
-
-def _missing_position_timeseries_exists(
-    job_model: type[PortfolioAggregationJob],
-    snapshot_model: type[DailyPositionSnapshot],
-    position_timeseries_model: type[PositionTimeseries],
-    authoritative_snapshot_scope,
-):
-    matching_position_timeseries_exists = (
-        select(1)
-        .where(
-            position_timeseries_model.portfolio_id == job_model.portfolio_id,
-            position_timeseries_model.security_id == snapshot_model.security_id,
-            position_timeseries_model.date == snapshot_model.date,
-            position_timeseries_model.epoch == snapshot_model.epoch,
-        )
-        .correlate(job_model, snapshot_model)
-        .exists()
-    )
-    return (
-        select(1)
-        .where(
-            *authoritative_snapshot_scope,
-            ~matching_position_timeseries_exists,
-        )
-        .correlate(job_model)
-        .exists()
-    )
 
 
 class SharedTimeseriesRepository:
@@ -149,92 +82,6 @@ class SharedTimeseriesRepository:
         except Exception as exc:
             logger.error("Failed to stage upsert for portfolio time series: %s", exc, exc_info=True)
             raise
-
-    @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioAggregationJob]:
-        p1 = PortfolioAggregationJob
-        dps = DailyPositionSnapshot
-        position_ts = PositionTimeseries
-
-        authoritative_snapshot_scope = _authoritative_snapshot_scope(p1, dps)
-        completeness_ready_subq = _authoritative_snapshot_exists(
-            p1, dps, authoritative_snapshot_scope
-        ) & ~_missing_position_timeseries_exists(p1, dps, position_ts, authoritative_snapshot_scope)
-
-        eligibility_query = (
-            select(p1.id)
-            .where(
-                p1.status == "PENDING",
-                completeness_ready_subq,
-            )
-            .order_by(p1.portfolio_id, p1.aggregation_date, p1.id)
-            .limit(batch_size)
-            .with_for_update(skip_locked=True)
-        )
-
-        result_proxy = await self.db.execute(eligibility_query)
-        eligible_ids = [row[0] for row in result_proxy.fetchall()]
-        if not eligible_ids:
-            return []
-
-        update_query = (
-            update(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.id.in_(eligible_ids))
-            .values(
-                status="PROCESSING",
-                updated_at=func.now(),
-                attempt_count=PortfolioAggregationJob.attempt_count + 1,
-            )
-            .returning(PortfolioAggregationJob)
-        )
-
-        result = await self.db.execute(update_query)
-        claimed_jobs = sorted(
-            result.scalars().all(),
-            key=lambda job: (job.portfolio_id, job.aggregation_date, job.id),
-        )
-        if claimed_jobs:
-            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_jobs))
-        return claimed_jobs
-
-    @async_timed(repository="TimeseriesRepository", method="recover_dispatch_failed_jobs")
-    async def recover_dispatch_failed_jobs(
-        self,
-        job_ids: list[int],
-        *,
-        max_attempts: int,
-        failure_reason: str,
-    ) -> dict[str, int]:
-        if not job_ids:
-            return {"pending_count": 0, "failed_count": 0}
-
-        failed_result = await self.db.execute(
-            _dispatch_failed_aggregation_jobs_update_stmt(
-                job_ids=job_ids,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
-            )
-        )
-        pending_result = await self.db.execute(
-            _dispatch_retryable_aggregation_jobs_update_stmt(
-                job_ids=job_ids,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
-            )
-        )
-        failed_count = int(failed_result.rowcount or 0)
-        pending_count = int(pending_result.rowcount or 0)
-        if failed_count or pending_count:
-            logger.warning(
-                "Recovered aggregation scheduler dispatch failure.",
-                extra={
-                    "job_ids": job_ids,
-                    "pending_count": pending_count,
-                    "failed_count": failed_count,
-                    "max_attempts": max_attempts,
-                },
-            )
-        return {"pending_count": pending_count, "failed_count": failed_count}
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
@@ -437,79 +284,6 @@ class SharedTimeseriesRepository:
         result = await self.db.execute(stmt)
         return cast(List[DailyPositionSnapshot], result.scalars().all())
 
-    @async_timed(repository="TimeseriesRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(
-        self, timeout_minutes: int = 15, max_attempts: int = 3
-    ) -> int:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_rows = await self._find_stale_aggregation_job_rows(stale_threshold)
-        if not stale_rows:
-            return 0
-
-        failed_job_ids = _over_limit_stale_aggregation_job_ids(stale_rows, max_attempts)
-        reset_job_ids = _resettable_stale_aggregation_job_ids(stale_rows, max_attempts)
-
-        await self._mark_over_limit_stale_aggregation_jobs_failed(
-            failed_job_ids,
-            stale_threshold,
-            max_attempts,
-        )
-        return await self._reset_retryable_stale_aggregation_jobs(reset_job_ids, stale_threshold)
-
-    async def _find_stale_aggregation_job_rows(self, stale_threshold: datetime) -> list[Any]:
-        result = await self.db.execute(_stale_aggregation_jobs_stmt(stale_threshold))
-        return cast(list[Any], result.all())
-
-    async def _mark_over_limit_stale_aggregation_jobs_failed(
-        self,
-        failed_job_ids: list[int],
-        stale_threshold: datetime,
-        max_attempts: int,
-    ) -> None:
-        if not failed_job_ids:
-            return
-        await self.db.execute(
-            _failed_stale_aggregation_jobs_update_stmt(failed_job_ids, stale_threshold)
-        )
-        logger.warning(
-            "Marked stale aggregation jobs as FAILED after max attempts.",
-            extra={"job_ids": failed_job_ids, "max_attempts": max_attempts},
-        )
-
-    async def _reset_retryable_stale_aggregation_jobs(
-        self,
-        reset_job_ids: list[int],
-        stale_threshold: datetime,
-    ) -> int:
-        if not reset_job_ids:
-            return 0
-        result = await self.db.execute(
-            _reset_stale_aggregation_jobs_update_stmt(reset_job_ids, stale_threshold)
-        )
-        reset_count = int(result.rowcount or 0)
-        if reset_count > 0:
-            logger.warning(
-                "Reset %s stale aggregation jobs from 'PROCESSING' to 'PENDING'.",
-                reset_count,
-            )
-        return reset_count
-
-    @async_timed(repository="TimeseriesRepository", method="get_job_queue_stats")
-    async def get_job_queue_stats(self) -> dict:
-        stmt = select(
-            func.count().filter(PortfolioAggregationJob.status == "PENDING").label("pending_count"),
-            func.count().filter(PortfolioAggregationJob.status == "FAILED").label("failed_count"),
-            func.min(PortfolioAggregationJob.created_at)
-            .filter(PortfolioAggregationJob.status == "PENDING")
-            .label("oldest_pending_created_at"),
-        )
-        row = (await self.db.execute(stmt)).one()
-        return {
-            "pending_count": int(row.pending_count or 0),
-            "failed_count": int(row.failed_count or 0),
-            "oldest_pending_created_at": row.oldest_pending_created_at,
-        }
-
     @async_timed(repository="TimeseriesRepository", method="get_last_snapshot_before")
     async def get_last_snapshot_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
@@ -615,92 +389,6 @@ class SharedTimeseriesRepository:
         for cashflow in result.scalars().all():
             grouped.setdefault(cashflow.cashflow_date, []).append(cashflow)
         return grouped
-
-
-def _over_limit_stale_aggregation_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
-    return [row.id for row in stale_rows if row.attempt_count >= max_attempts]
-
-
-def _resettable_stale_aggregation_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
-    return [row.id for row in stale_rows if row.attempt_count < max_attempts]
-
-
-def _stale_aggregation_jobs_stmt(stale_threshold: datetime):
-    return select(
-        PortfolioAggregationJob.id,
-        PortfolioAggregationJob.attempt_count,
-    ).where(
-        PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.updated_at < stale_threshold,
-    )
-
-
-def _failed_stale_aggregation_jobs_update_stmt(
-    failed_job_ids: list[int],
-    stale_threshold: datetime,
-):
-    return (
-        _stale_aggregation_jobs_update_stmt(failed_job_ids, stale_threshold)
-        .values(
-            status="FAILED",
-            failure_reason="Stale processing timeout exceeded max attempts",
-            updated_at=func.now(),
-        )
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _reset_stale_aggregation_jobs_update_stmt(
-    reset_job_ids: list[int],
-    stale_threshold: datetime,
-):
-    return _stale_aggregation_jobs_update_stmt(reset_job_ids, stale_threshold).values(
-        status="PENDING",
-        updated_at=func.now(),
-    )
-
-
-def _stale_aggregation_jobs_update_stmt(job_ids: list[int], stale_threshold: datetime):
-    return update(PortfolioAggregationJob).where(
-        PortfolioAggregationJob.id.in_(job_ids),
-        PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.updated_at < stale_threshold,
-    )
-
-
-def _dispatch_failed_aggregation_jobs_update_stmt(
-    *,
-    job_ids: list[int],
-    max_attempts: int,
-    failure_reason: str,
-):
-    return (
-        _dispatch_recovery_aggregation_jobs_update_stmt(job_ids)
-        .where(PortfolioAggregationJob.attempt_count >= max_attempts)
-        .values(status="FAILED", failure_reason=failure_reason, updated_at=func.now())
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _dispatch_retryable_aggregation_jobs_update_stmt(
-    *,
-    job_ids: list[int],
-    max_attempts: int,
-    failure_reason: str,
-):
-    return (
-        _dispatch_recovery_aggregation_jobs_update_stmt(job_ids)
-        .where(PortfolioAggregationJob.attempt_count < max_attempts)
-        .values(status="PENDING", failure_reason=failure_reason, updated_at=func.now())
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _dispatch_recovery_aggregation_jobs_update_stmt(job_ids: list[int]):
-    return update(PortfolioAggregationJob).where(
-        PortfolioAggregationJob.id.in_(job_ids),
-        PortfolioAggregationJob.status == "PROCESSING",
-    )
 
 
 def _position_timeseries_upsert_stmt(timeseries_record: PositionTimeseries):

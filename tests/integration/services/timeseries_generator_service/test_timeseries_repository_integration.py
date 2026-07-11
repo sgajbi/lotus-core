@@ -16,9 +16,14 @@ from portfolio_common.database_models import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_aggregation_repository,
+)
 from src.services.timeseries_generator_service.app.repositories.timeseries_repository import (
     TimeseriesRepository,
 )
+
+PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -181,7 +186,7 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     async_db_session: AsyncSession,
     db_engine,
 ):
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     portfolio_id = setup_sequential_jobs_with_snapshot_completeness["portfolio_id"]
     day1 = setup_sequential_jobs_with_snapshot_completeness["day1"]
     day2 = setup_sequential_jobs_with_snapshot_completeness["day2"]
@@ -254,7 +259,7 @@ async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_h
         session.commit()
     await async_db_session.rollback()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
 
@@ -344,7 +349,7 @@ async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_secu
         )
         session.commit()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
 
@@ -425,7 +430,7 @@ async def test_find_and_claim_eligible_jobs_claims_all_complete_days_without_his
         )
         session.commit()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
 
@@ -515,7 +520,7 @@ async def test_find_and_claim_eligible_jobs_does_not_need_prior_day_when_current
         )
         session.commit()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
     claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
     await async_db_session.commit()
 
@@ -643,7 +648,7 @@ async def test_get_all_position_timeseries_for_date_returns_one_authoritative_as
         session.commit()
     await async_db_session.rollback()
 
-    repo = TimeseriesRepository(async_db_session)
+    repo = PortfolioAggregationRepository(async_db_session)
 
     rows = await repo.get_all_position_timeseries_for_date(portfolio_id, target_date, 4)
 
