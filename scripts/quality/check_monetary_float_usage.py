@@ -1,4 +1,7 @@
+"""Reject binary floating-point usage for monetary domain values."""
+
 import argparse
+import ast
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -19,8 +22,7 @@ KEYWORDS = (
 )
 IGNORE_DIRS = {"tests", ".venv", "venv", "docs", "rfcs", "output", "build", "dist", "__pycache__"}
 
-FLOAT_ANNOTATION = re.compile(r"\bfloat\b")
-FLOAT_PARAMETER = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*float\b")
+FLOAT_CONVERSION = re.compile(r"\bfloat\s*\(")
 IDENTIFIER = re.compile(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b")
 NON_DOMAIN_TOKENS = {"return", "float"}
 
@@ -38,31 +40,85 @@ def scan_repo(repo_root: Path) -> list[str]:
         if not is_candidate(file_path.relative_to(repo_root)):
             continue
         rel = file_path.relative_to(repo_root).as_posix()
-        for line_no, line in enumerate(file_path.read_text(encoding="utf-8").splitlines(), start=1):
+        source = file_path.read_text(encoding="utf-8")
+        source_lines = source.splitlines()
+        for line_no, line in enumerate(source_lines, start=1):
             lowered = line.lower()
             if not _contains_monetary_keyword(lowered):
                 continue
-            if not FLOAT_ANNOTATION.search(lowered):
-                continue
-            if _only_non_monetary_float_dimensions(lowered):
+            if not FLOAT_CONVERSION.search(lowered):
                 continue
             if "# monetary-float-allow" in lowered:
                 continue
             finding = f"{rel}:{line_no}:{line.strip()}"
             findings.append(finding)
+        findings.extend(_monetary_annotation_findings(rel, source, source_lines))
     return sorted(set(findings))
+
+
+def _monetary_annotation_findings(
+    relative_path: str, source: str, source_lines: list[str]
+) -> list[str]:
+    tree = ast.parse(source, filename=relative_path)
+    findings: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            function_arguments = (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)
+            if node.args.vararg is not None:
+                function_arguments += (node.args.vararg,)
+            if node.args.kwarg is not None:
+                function_arguments += (node.args.kwarg,)
+            for argument in function_arguments:
+                if (
+                    _annotation_contains_float(argument.annotation)
+                    and _contains_monetary_keyword(argument.arg)
+                    and not _line_allows_float(argument.lineno, source_lines)
+                ):
+                    findings.append(_format_finding(relative_path, argument.lineno, source_lines))
+            if (
+                _annotation_contains_float(node.returns)
+                and _contains_monetary_keyword(node.name)
+                and not _line_allows_float(node.returns.lineno, source_lines)
+            ):
+                findings.append(_format_finding(relative_path, node.returns.lineno, source_lines))
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and _annotation_contains_float(node.annotation)
+            and _contains_monetary_keyword(_assignment_target_name(node.target))
+            and not _line_allows_float(node.lineno, source_lines)
+        ):
+            findings.append(_format_finding(relative_path, node.lineno, source_lines))
+
+    return findings
+
+
+def _annotation_contains_float(annotation: ast.expr | None) -> bool:
+    return annotation is not None and any(
+        isinstance(node, ast.Name) and node.id == "float" for node in ast.walk(annotation)
+    )
+
+
+def _assignment_target_name(target: ast.expr) -> str:
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    return ""
+
+
+def _format_finding(relative_path: str, line_number: int, source_lines: list[str]) -> str:
+    line = source_lines[line_number - 1]
+    return f"{relative_path}:{line_number}:{line.strip()}"
+
+
+def _line_allows_float(line_number: int, source_lines: list[str]) -> bool:
+    return "# monetary-float-allow" in source_lines[line_number - 1].lower()
 
 
 def _contains_monetary_keyword(line: str) -> bool:
     tokens = set(_identifier_tokens(line))
     return any(keyword in tokens for keyword in KEYWORDS)
-
-
-def _only_non_monetary_float_dimensions(line: str) -> bool:
-    parameters = FLOAT_PARAMETER.findall(line)
-    return bool(parameters) and all(
-        parameter == "seconds" or parameter.endswith("_seconds") for parameter in parameters
-    )
 
 
 def _identifier_tokens(line: str) -> list[str]:
