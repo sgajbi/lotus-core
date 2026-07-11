@@ -1,13 +1,14 @@
-# tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py
+"""Test cost-basis timeline application orchestration."""
+
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.services.calculators.cost_calculator_service.app.transaction_processor import (
-    TransactionProcessor,
-    build_transaction_processor,
+from src.services.portfolio_transaction_processing_service.app.application import (
+    CostBasisTimelineProcessor,
+    build_cost_basis_timeline_processor,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
@@ -62,8 +63,8 @@ def _raw_transaction(
 
 
 @pytest.fixture
-def transaction_processor() -> TransactionProcessor:
-    """Provides a fully wired instance of the TransactionProcessor with real components."""
+def cost_basis_timeline_processor() -> CostBasisTimelineProcessor:
+    """Provide a fully wired timeline processor with real domain components."""
     error_reporter = CostCalculationErrorCollector()
     parser = CostTransactionParser(error_reporter=error_reporter)
     sorter = CostTransactionSorter()
@@ -72,7 +73,7 @@ def transaction_processor() -> TransactionProcessor:
     cost_calculator = CostBasisCalculator(
         disposition_engine=disposition_engine, error_reporter=error_reporter
     )
-    return TransactionProcessor(
+    return CostBasisTimelineProcessor(
         parser=parser,
         sorter=sorter,
         disposition_engine=disposition_engine,
@@ -81,8 +82,8 @@ def transaction_processor() -> TransactionProcessor:
     )
 
 
-def test_transaction_processor_handles_backdated_insert(
-    transaction_processor: TransactionProcessor,
+def test_cost_basis_timeline_processor_handles_backdated_insert(
+    cost_basis_timeline_processor: CostBasisTimelineProcessor,
 ):
     """
     GIVEN an existing BUY and SELL, and a new back-dated BUY transaction
@@ -146,9 +147,11 @@ def test_transaction_processor_handles_backdated_insert(
 
     # ACT
     # The engine processes the full list and is responsible for sorting and calculating
-    processed_txns, errored_txns, open_lot_states = transaction_processor.process_transactions(
-        existing_transactions_raw=[],  # Simulating a full recalculation call
-        new_transactions_raw=all_transactions_raw,
+    processed_txns, errored_txns, open_lot_states = (
+        cost_basis_timeline_processor.process_transactions(
+            existing_transactions_raw=[],  # Simulating a full recalculation call
+            new_transactions_raw=all_transactions_raw,
+        )
     )
 
     # ASSERT
@@ -192,7 +195,7 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
         _raw_transaction("SELL-1", "2026-01-03T10:00:00+00:00", "SELL", "5", "75"),
     ]
     appended_sell = _raw_transaction("SELL-2", "2026-01-04T10:00:00+00:00", "SELL", "10", "160")
-    prefix_processed, prefix_errors, prefix_states = build_transaction_processor(
+    prefix_processed, prefix_errors, prefix_states = build_cost_basis_timeline_processor(
         cost_basis_method
     ).process_transactions([], prefix)
     assert prefix_errors == []
@@ -207,13 +210,13 @@ def test_increment_from_open_lot_checkpoint_matches_full_history(
         source["net_cost"] = state.cost_base
         checkpoint.append(source)
 
-    incremental_processed, incremental_errors, incremental_states = build_transaction_processor(
-        cost_basis_method
-    ).process_increment(
-        initial_open_lots_raw=list(reversed(checkpoint)),
-        new_transactions_raw=[appended_sell],
+    incremental_processed, incremental_errors, incremental_states = (
+        build_cost_basis_timeline_processor(cost_basis_method).process_increment(
+            initial_open_lots_raw=list(reversed(checkpoint)),
+            new_transactions_raw=[appended_sell],
+        )
     )
-    full_processed, full_errors, full_states = build_transaction_processor(
+    full_processed, full_errors, full_states = build_cost_basis_timeline_processor(
         cost_basis_method
     ).process_transactions([], [*prefix, appended_sell])
 
@@ -260,7 +263,7 @@ def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_l
     }
     sell = _raw_transaction("SELL-1", "2026-01-02T10:00:00+00:00", "SELL", "1", "30")
 
-    processed, errors, states = build_transaction_processor("FIFO").process_increment(
+    processed, errors, states = build_cost_basis_timeline_processor("FIFO").process_increment(
         initial_open_lots_raw=[smaller_original_lot, larger_original_lot],
         new_transactions_raw=[sell],
     )
@@ -271,21 +274,17 @@ def test_increment_preserves_original_quantity_tiebreak_for_partially_consumed_l
     assert states["BUY-SMALL"].quantity == Decimal("5")
 
 
-@patch(
-    "src.services.calculators.cost_calculator_service.app.transaction_processor.RECALCULATION_DURATION_SECONDS"
-)
-@patch(
-    "src.services.calculators.cost_calculator_service.app.transaction_processor.RECALCULATION_DEPTH"
-)
-def test_transaction_processor_records_metrics(
-    mock_depth_metric, mock_duration_metric, transaction_processor: TransactionProcessor
-):
+def test_cost_basis_timeline_processor_records_observation_depth() -> None:
     """
     GIVEN a set of transactions
     WHEN process_transactions is called
     THEN it should observe the correct depth and duration values in the Prometheus metrics.
     """
-    # ARRANGE
+    observation = MagicMock()
+    observation.__enter__.return_value = observation
+    observer = MagicMock()
+    observer.observe_recalculation.return_value = observation
+    timeline_processor = build_cost_basis_timeline_processor("FIFO", observer=observer)
     transactions_raw = [
         {
             "transaction_id": "BUY_1",
@@ -315,19 +314,16 @@ def test_transaction_processor_records_metrics(
         },
     ]
 
-    # ACT
-    transaction_processor.process_transactions(
+    timeline_processor.process_transactions(
         existing_transactions_raw=[], new_transactions_raw=transactions_raw
     )
 
-    # ASSERT
-    # The depth is the total number of transactions processed (2 in this case)
-    mock_depth_metric.observe.assert_called_once_with(2)
-    # The duration metric should have been observed exactly once.
-    mock_duration_metric.observe.assert_called_once()
+    observer.observe_recalculation.assert_called_once_with()
+    observation.record_depth.assert_called_once_with(2)
+    observation.__exit__.assert_called_once()
 
 
-def test_transaction_processor_reports_unexpected_calculator_errors():
+def test_cost_basis_timeline_processor_reports_unexpected_calculator_errors():
     """
     GIVEN parser output with two valid new transactions
     WHEN the calculator raises for one transaction
@@ -364,7 +360,7 @@ def test_transaction_processor_reports_unexpected_calculator_errors():
             }
 
     error_reporter = CostCalculationErrorCollector()
-    processor = TransactionProcessor(
+    processor = CostBasisTimelineProcessor(
         parser=_Parser(),
         sorter=_Sorter(),
         disposition_engine=_DispositionEngine(),

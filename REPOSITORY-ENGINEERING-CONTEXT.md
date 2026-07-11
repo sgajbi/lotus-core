@@ -2006,6 +2006,14 @@ Most relevant current governance:
      deployed storage as an incidental source move. A schema rename requires a separate migration,
      rollback, reader/writer inventory, and deployment proof. Keep Prometheus metrics, clocks,
      sessions, and SQL records outside checkpoint and calculation policy.
+151. Cost timeline parsing, ordering, and calculation coordination is target application behavior
+     owned by `portfolio_transaction_processing_service.app.application.CostBasisTimelineProcessor`.
+     Depend on the framework-neutral `CostBasisCalculationObserver` port; only target
+     infrastructure may adapt it to Prometheus and a wall clock. Preserve existing metric names
+     through composition, isolate telemetry failure from financial processing, and do not recreate
+     the legacy `transaction_processor.py` path or generic aliases. Workflow, SQL repository, and
+     compatibility delivery remain separate migration slices with their own ports and transaction
+     boundary proof.
 
 ## Context Maintenance Rule
 

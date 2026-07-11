@@ -45,6 +45,10 @@ from portfolio_common.transaction_domain import (
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    CostBasisTimelineProcessor,
+    build_cost_basis_timeline_processor,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
@@ -56,10 +60,12 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisCalculationObserver,
+)
 
 from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
-from .transaction_processor import TransactionProcessor, build_transaction_processor
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -195,10 +201,19 @@ class CostCalculationWorkflow:
     workflow.
     """
 
-    def _get_transaction_processor(
+    _cost_basis_observer: CostBasisCalculationObserver | None = None
+
+    def configure_cost_basis_observer(self, observer: CostBasisCalculationObserver) -> None:
+        """Attach infrastructure observability without changing legacy delivery construction."""
+        self._cost_basis_observer = observer
+
+    def _get_cost_basis_timeline_processor(
         self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
-    ) -> TransactionProcessor:
-        return build_transaction_processor(cost_basis_method)
+    ) -> CostBasisTimelineProcessor:
+        return build_cost_basis_timeline_processor(
+            cost_basis_method,
+            observer=self._cost_basis_observer,
+        )
 
     async def build_average_cost_pool_rebuild_plan(
         self,
@@ -234,7 +249,7 @@ class CostCalculationWorkflow:
             portfolio_base_currency=portfolio.base_currency,
             repo=repo,
         )
-        processed, errored, source_states = self._get_transaction_processor(
+        processed, errored, source_states = self._get_cost_basis_timeline_processor(
             CostBasisMethod.AVCO
         ).process_transactions(existing_transactions_raw=[], new_transactions_raw=enriched_history)
         self._raise_for_transaction_engine_errors(errored=errored)
@@ -537,7 +552,7 @@ class CostCalculationWorkflow:
                     COST_PROCESSING_OPEN_LOTS_RESTORED.labels(
                         cost_basis_method=cost_basis_method.value
                     ).observe(len(initial_open_lots_raw))
-                processed, errored, open_lot_states = self._get_transaction_processor(
+                processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
                     cost_basis_method
                 ).process_increment(
                     initial_open_lots_raw=initial_open_lots_raw,
@@ -587,7 +602,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
         )
-        processed, errored, open_lot_states = self._get_transaction_processor(
+        processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
             cost_basis_method
         ).process_transactions(
             existing_transactions_raw=[],

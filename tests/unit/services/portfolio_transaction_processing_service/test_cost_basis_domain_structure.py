@@ -48,6 +48,10 @@ def test_legacy_cost_checkpoint_modules_are_retired() -> None:
     assert not (LEGACY_COST_APPLICATION_ROOT / "cost_processing_checkpoint.py").exists()
 
 
+def test_legacy_cost_transaction_processor_is_retired() -> None:
+    assert not (LEGACY_COST_APPLICATION_ROOT / "transaction_processor.py").exists()
+
+
 def test_cost_basis_calculation_modules_use_domain_specific_names() -> None:
     calculation_modules = {
         path.name for path in (COST_BASIS_DOMAIN_ROOT / "calculation").glob("*.py")

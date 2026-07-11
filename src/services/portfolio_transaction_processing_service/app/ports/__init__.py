@@ -1,6 +1,10 @@
 """Framework-neutral transaction processing capability ports."""
 
 from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
+from .cost_basis_observability import (
+    CostBasisCalculationObservation,
+    CostBasisCalculationObserver,
+)
 from .processing_observability import (
     TransactionProcessingObservation,
     TransactionProcessingObserver,
@@ -27,6 +31,8 @@ __all__ = [
     "CashflowProcessingPort",
     "BookedTransactionReplayPort",
     "CashflowProcessingResult",
+    "CostBasisCalculationObservation",
+    "CostBasisCalculationObserver",
     "CostProcessingPort",
     "CostProcessingResult",
     "PipelineStageProcessingPort",
