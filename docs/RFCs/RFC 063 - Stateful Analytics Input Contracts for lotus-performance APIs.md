@@ -178,7 +178,7 @@ The contract is now explicit about:
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Portfolio timeseries input endpoint | Implemented | `src/services/query_control_plane_service/app/routers/analytics_inputs.py`; `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py` |
+| Portfolio timeseries input endpoint | Implemented | `src/services/query_control_plane_service/app/routers/analytics_inputs.py`; `tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py` |
 | Position timeseries input endpoint | Implemented | same router/service path |
 | Analytics reference metadata endpoint | Implemented | `analytics_inputs.py` |
 | Async export create/status/result endpoints | Implemented | `analytics_inputs.py` (`/exports/analytics-timeseries/jobs*`) |
@@ -209,8 +209,8 @@ The contract is now explicit about:
 
 ## Test and Validation Evidence
 1. `src/services/query_control_plane_service/app/routers/analytics_inputs.py`
-2. `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py`
-3. `src/services/query_service/app/services/analytics_timeseries_service.py`
+2. `tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py`
+3. `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`
 
 ## Original Acceptance Criteria Alignment
 1. New timeseries contracts present and usable: aligned.

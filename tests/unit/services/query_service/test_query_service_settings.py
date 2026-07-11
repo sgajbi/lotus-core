@@ -34,13 +34,11 @@ def test_query_service_settings_parse_enterprise_defaults(monkeypatch) -> None:
         "ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS",
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         "ENTERPRISE_CAPABILITY_RULES_JSON",
-        "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
     settings = load_query_service_settings()
 
-    assert settings.analytics_export_execution_timeout_seconds == 300
     assert settings.enterprise_policy_version == "1.0.0"
     assert settings.enterprise_enforce_authz is False
     assert settings.enterprise_enforce_read_authz is False
@@ -108,7 +106,6 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
     monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
     monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS", "120")
-    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "query-page-token-secret")
     monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "query-page-token-key-2026-07")
     monkeypatch.setenv(
@@ -138,7 +135,6 @@ def test_query_service_settings_parse_enterprise_governed_values(monkeypatch) ->
     assert settings.enterprise_max_write_payload_bytes == 2048
     assert settings.enterprise_auth_context_hmac_secret == "auth-context-secret"
     assert settings.enterprise_auth_context_max_age_seconds == 120
-    assert settings.analytics_export_execution_timeout_seconds == 45
     assert settings.enterprise_feature_flags == {
         "query.advanced": {"tenant-a": {"ops": True, "*": False}}
     }
@@ -180,18 +176,6 @@ def test_query_service_settings_helpers_fail_closed_for_invalid_values(monkeypat
     assert env_bool("QUERY_BOOL", False) is False
     assert env_int("QUERY_INT", 11) == 11
     assert env_json_map("QUERY_JSON") == {}
-
-
-def test_query_service_settings_strict_rejects_invalid_integer(monkeypatch) -> None:
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    _set_non_default_page_token_material(monkeypatch)
-    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "not-an-int")
-
-    with pytest.raises(
-        QueryServiceConfigurationError,
-        match="LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
-    ):
-        load_query_service_settings()
 
 
 def test_query_service_settings_strict_rejects_out_of_range_payload_size(monkeypatch) -> None:

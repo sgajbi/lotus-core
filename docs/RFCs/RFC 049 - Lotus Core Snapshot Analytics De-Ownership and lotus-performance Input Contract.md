@@ -42,9 +42,9 @@ Superseded details from original text:
 Evidence:
 - `src/services/query_service/app/dtos/core_snapshot_dto.py`
 - `src/services/query_control_plane_service/app/routers/analytics_inputs.py`
-- `src/services/query_service/app/dtos/analytics_input_dto.py`
-- `src/services/query_service/app/services/analytics_timeseries_service.py`
-- `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py`
+- `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`
+- `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`
+- `tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -83,10 +83,10 @@ No blocking delta remains after this contract mapping rebaseline.
 ## Test and Validation Evidence
 
 1. Integration dependency tests:
-   - `tests/integration/services/query_service/test_analytics_inputs_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_analytics_inputs_router_dependency.py`
 2. Analytics input DTO and service implementation:
-   - `src/services/query_service/app/dtos/analytics_input_dto.py`
-   - `src/services/query_service/app/services/analytics_timeseries_service.py`
+   - `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`
+   - `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`
 
 ## Original Acceptance Criteria Alignment
 

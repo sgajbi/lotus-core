@@ -4,8 +4,13 @@ import pytest
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reconciliation_quality import COMPLETE, UNKNOWN
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
+from portfolio_common.source_data_product_metadata import (
+    SOURCE_METADATA_UNAVAILABLE_HASH,
+    source_data_product_runtime_metadata,
+    stable_content_hash,
+)
 
-from src.services.query_service.app.dtos.analytics_input_dto import (
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
     PortfolioAnalyticsTimeseriesResponse,
     PositionAnalyticsTimeseriesResponse,
 )
@@ -23,11 +28,6 @@ from src.services.query_service.app.dtos.position_dto import (
 )
 from src.services.query_service.app.dtos.reporting_dto import (
     CashBalancesResponse,
-)
-from portfolio_common.source_data_product_metadata import (
-    SOURCE_METADATA_UNAVAILABLE_HASH,
-    source_data_product_runtime_metadata,
-    stable_content_hash,
 )
 from src.services.query_service.app.dtos.transaction_dto import (
     PaginatedTransactionResponse,

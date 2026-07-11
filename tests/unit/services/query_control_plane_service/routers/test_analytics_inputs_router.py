@@ -9,6 +9,16 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
+from src.services.query_control_plane_service.app.application.analytics.analytics_timeseries_service import (  # noqa: E501
+    AnalyticsInputError,
+)
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
+    AnalyticsExportCreateRequest,
+    AnalyticsWindow,
+    PortfolioAnalyticsReferenceRequest,
+    PortfolioAnalyticsTimeseriesRequest,
+    PositionAnalyticsTimeseriesRequest,
+)
 from src.services.query_control_plane_service.app.dependencies import (
     get_analytics_timeseries_service,
 )
@@ -24,14 +34,6 @@ from src.services.query_control_plane_service.app.routers.analytics_inputs impor
 from src.services.query_control_plane_service.app.routers.response_helpers import (
     QueryControlPlaneProblem,
 )
-from src.services.query_service.app.dtos.analytics_input_dto import (
-    AnalyticsExportCreateRequest,
-    AnalyticsWindow,
-    PortfolioAnalyticsReferenceRequest,
-    PortfolioAnalyticsTimeseriesRequest,
-    PositionAnalyticsTimeseriesRequest,
-)
-from src.services.query_service.app.services.analytics_timeseries_service import AnalyticsInputError
 
 
 def assert_query_control_plane_problem(

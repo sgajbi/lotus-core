@@ -6,7 +6,11 @@ from fastapi import APIRouter, Depends, Path, Query, status
 from fastapi.responses import Response
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from src.services.query_service.app.dtos.analytics_input_dto import (
+from ..application.analytics.analytics_timeseries_service import (
+    AnalyticsInputError,
+    AnalyticsTimeseriesService,
+)
+from ..contracts.analytics_inputs import (
     AnalyticsExportCreateRequest,
     AnalyticsExportJobResponse,
     AnalyticsExportJsonResultResponse,
@@ -17,11 +21,6 @@ from src.services.query_service.app.dtos.analytics_input_dto import (
     PositionAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesResponse,
 )
-from src.services.query_service.app.services.analytics_timeseries_service import (
-    AnalyticsInputError,
-    AnalyticsTimeseriesService,
-)
-
 from ..dependencies import get_analytics_timeseries_service
 from .response_helpers import (
     problem_example,

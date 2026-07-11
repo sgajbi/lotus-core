@@ -23,7 +23,9 @@ from portfolio_common.source_data_products import (
     validate_source_data_product_catalog,
 )
 
-from src.services.query_service.app.dtos.analytics_input_dto import CashFlowObservation
+from src.services.query_control_plane_service.app.contracts.analytics_inputs import (
+    CashFlowObservation,
+)
 
 LOTUS_PERFORMANCE = "lotus-performance"
 LOTUS_RISK = "lotus-risk"

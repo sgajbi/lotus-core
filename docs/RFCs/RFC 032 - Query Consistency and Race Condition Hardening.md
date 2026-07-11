@@ -41,10 +41,10 @@ Implemented:
 
 Evidence:
 - `src/services/query_service/app/repositories/position_repository.py`
-- `src/services/query_service/app/repositories/analytics_timeseries_repository.py`
+- `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`
 - `tests/unit/services/query_service/repositories/test_unit_query_position_repo.py`
-- `src/services/query_service/app/services/analytics_timeseries_service.py`
-- `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
+- `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`
+- `tests/unit/services/query_control_plane_service/application/analytics/test_analytics_timeseries_service.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -81,7 +81,7 @@ No blocking correctness gaps remain under RFC-032 scope.
 1. Position repository query-shape regression tests:
    - `tests/unit/services/query_service/repositories/test_unit_query_position_repo.py`
 2. Analytics timeseries deterministic ranking implementation:
-   - `src/services/query_service/app/repositories/analytics_timeseries_repository.py`
+   - `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`
 
 ## Original Acceptance Criteria Alignment
 

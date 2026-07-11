@@ -9,13 +9,13 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
+from src.services.query_control_plane_service.app.application.analytics.analytics_timeseries_service import (  # noqa: E501
+    AnalyticsInputError,
+)
 from src.services.query_control_plane_service.app.dependencies import (
     get_analytics_timeseries_service,
 )
 from src.services.query_control_plane_service.app.main import app
-from src.services.query_service.app.services.analytics_timeseries_service import (
-    AnalyticsInputError,
-)
 
 pytestmark = pytest.mark.asyncio
 

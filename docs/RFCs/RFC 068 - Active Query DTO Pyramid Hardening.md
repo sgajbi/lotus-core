@@ -32,7 +32,7 @@ for active query-service contracts and the required unit-level contract checks.
 
 ## Required Evidence and Tests
 1. `tests/unit/services/query_service/dtos/test_core_snapshot_dto.py`
-2. `tests/unit/services/query_service/dtos/test_analytics_input_dto.py`
+2. `tests/unit/services/query_control_plane_service/contracts/test_analytics_inputs.py`
 3. `tests/unit/services/query_service/dtos/test_lookup_dto.py`
 4. `tests/unit/services/query_service/dtos/test_reporting_dto.py`
 5. `tests/unit/services/query_service/services/test_integration_service.py`

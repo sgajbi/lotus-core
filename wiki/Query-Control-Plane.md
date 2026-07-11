@@ -42,7 +42,9 @@ The service groups several related surfaces:
    policy-aware core snapshots, enrichment/reference contracts, benchmark and market/reference
    source-data products
 3. `analytics_inputs`
-   canonical portfolio and position analytics timeseries plus reference metadata and export jobs
+   canonical portfolio and position analytics timeseries plus reference metadata and export jobs;
+   QCP owns the public contracts, application workflow/policies, ports, immutable portfolio/export
+   records, SQL adapters, unit of work, runtime limits, and tests
 4. `capabilities`
    tenant- and consumer-aware discovery of supported integration workflows
 5. `simulation`
@@ -183,6 +185,8 @@ router inside the operational read plane.
 - generic simulation must not import advisory suitability, recommendation, proposal approval, or
   workflow-gate implementations; the advisory simulation route is a quarantined compatibility
   contract while those downstream-owned decisions migrate to `lotus-advise`
+- analytics input/export code must remain QCP package-owned; do not restore Query Service DTO,
+  workflow, repository, or runtime-setting imports for this route family
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 

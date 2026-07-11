@@ -38,7 +38,7 @@ Not aligned to original listed scope:
 2. No dedicated wave-4 module matching the original exact target set exists because ownership and API set changed.
 
 Evidence:
-- `tests/unit/services/query_service/dtos/test_analytics_input_dto.py`
+- `tests/unit/services/query_control_plane_service/contracts/test_analytics_inputs.py`
 - `tests/unit/services/query_service/dtos/test_core_snapshot_dto.py`
 - `tests/unit/services/query_service/dtos/test_lookup_dto.py`
 - `src/services/query_service/app/dtos` current inventory
@@ -77,7 +77,7 @@ Remaining delta:
 
 ## Test and Validation Evidence
 
-1. `tests/unit/services/query_service/dtos/test_analytics_input_dto.py`
+1. `tests/unit/services/query_control_plane_service/contracts/test_analytics_inputs.py`
 2. `tests/unit/services/query_service/dtos/test_core_snapshot_dto.py`
 3. `tests/unit/services/query_service/dtos/test_lookup_dto.py`
 

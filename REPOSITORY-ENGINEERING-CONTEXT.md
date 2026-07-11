@@ -2114,6 +2114,14 @@ Most relevant current governance:
      product identity field helpers, deterministic content hash, lineage normalization, and
      freshness builder. Do not recreate service-local metadata helpers or use this shared boundary
      for service-owned API DTOs, workflows, repositories, settings, or SQL adapters.
+161. Analytics input and export ownership belongs to `query_control_plane_service`: public DTOs
+     under `app/contracts/analytics_inputs.py`, orchestration/policy under
+     `app/application/analytics`, immutable portfolio/export records under `app/domain`, reader,
+     export-store, and unit-of-work contracts under `app/ports/analytics.py`, and SQLAlchemy
+     adapters under `app/infrastructure`. Do not restore Query Service analytics contracts,
+     workflow, repositories, or export settings; Query Service operations may read export-job
+     support state only until the operations family moves. The moved helpers still require typed
+     immutable position/cashflow/page records before analytics type closure can be claimed.
 
 ## Context Maintenance Rule
 

@@ -60,8 +60,6 @@ class QueryServiceSettings:
     page_token_key_id: str
     page_token_previous_keys: dict[str, str]
     page_token_ttl_seconds: int
-    analytics_export_stale_timeout_minutes: int
-    analytics_export_execution_timeout_seconds: int
     has_database_url: bool
     enterprise_policy_version: str
     enterprise_enforce_authz: bool
@@ -90,12 +88,6 @@ def load_query_service_settings() -> QueryServiceSettings:
         page_token_key_id=_page_token_key_id(),
         page_token_previous_keys=_page_token_previous_keys(),
         page_token_ttl_seconds=env_int("LOTUS_CORE_PAGE_TOKEN_TTL_SECONDS", 900, minimum=60),
-        analytics_export_stale_timeout_minutes=env_int(
-            "LOTUS_CORE_ANALYTICS_EXPORT_STALE_TIMEOUT_MINUTES", 15, minimum=1
-        ),
-        analytics_export_execution_timeout_seconds=env_int(
-            "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", 300, minimum=1
-        ),
         has_database_url=bool(os.getenv("HOST_DATABASE_URL") or os.getenv("DATABASE_URL")),
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
         enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", production_security_profile),
