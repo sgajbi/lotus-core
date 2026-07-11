@@ -2193,6 +2193,18 @@ Most relevant current governance:
      Core publishes observed cost and transaction component evidence only; market-impact prediction,
      execution quality, best execution, contribution/attribution calculation, performance returns,
      and tax advice remain explicit non-claims.
+169. `DpmModelPortfolioTarget:v1`, `DiscretionaryMandateBinding:v1`,
+     `InstrumentEligibilityProfile:v1`, `PortfolioTaxLotWindow:v1`,
+     `MarketDataCoverageWindow:v1`, and `DpmSourceReadiness:v1` form one QCP-owned
+     `dpm_source_readiness` capability. Keep public contracts, constituent and aggregate policies,
+     immutable source evidence, source ports, deterministic effective-date/latest-observation/
+     keyset SQL, continuation-token scope, and dependency composition under QCP. Do not restore
+     Query Service DTOs, mappers, read records, repository methods, facade methods, or policy
+     modules. Runtime metadata uses an injected UTC clock and deterministic SHA-256 source proof;
+     aggregate `CURRENT` requires all five source families to be `READY` and durable constituent
+     evidence time. Preserve fail-closed precedence and keep mandate approval, suitability,
+     valuation, tax advice, liquidity analysis, execution quality, best execution, and OMS
+     acknowledgement outside this readiness product.
 
 ## Context Maintenance Rule
 

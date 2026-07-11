@@ -18,30 +18,16 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    DiscretionaryMandateBindingRequest,
-    DiscretionaryMandateBindingResponse,
-    DpmSourceReadinessRequest,
-    DpmSourceReadinessResponse,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
-    InstrumentEligibilityBulkRequest,
-    InstrumentEligibilityBulkResponse,
-    MarketDataCoverageRequest,
-    MarketDataCoverageWindowResponse,
-    ModelPortfolioTargetRequest,
-    ModelPortfolioTargetResponse,
-    PortfolioTaxLotWindowRequest,
-    PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
-from ..repositories.buy_state_repository import BuyStateRepository
 from ..repositories.reference_data_repository import ReferenceDataRepository
 from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
-from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +35,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class IntegrationServiceDependencies:
     reference_repository: ReferenceDataRepository
-    buy_state_repository: BuyStateRepository
     page_token_codec: PageTokenCodec
 
     @classmethod
@@ -57,7 +42,6 @@ class IntegrationServiceDependencies:
         settings = load_query_service_settings()
         return cls(
             reference_repository=ReferenceDataRepository(db),
-            buy_state_repository=BuyStateRepository(db),
             page_token_codec=PageTokenCodec(
                 secret=settings.page_token_secret,
                 active_kid=settings.page_token_key_id,
@@ -80,14 +64,7 @@ class IntegrationService:
             dependencies = IntegrationServiceDependencies.from_session(db)
         self.db = db
         self._reference_repository = dependencies.reference_repository
-        self._buy_state_repository = dependencies.buy_state_repository
         self._page_token_codec = dependencies.page_token_codec
-        self._dpm_readiness_service = DpmReadinessIntegrationService.from_facade(
-            reference_repository_provider=lambda: self._reference_repository,
-            buy_state_repository_provider=lambda: self._buy_state_repository,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
-        )
         self._benchmark_reference_service = BenchmarkReferenceIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
             decode_page_token=self._decode_page_token,
@@ -106,60 +83,6 @@ class IntegrationService:
         return await self._benchmark_reference_service.resolve_benchmark_assignment(
             portfolio_id=portfolio_id,
             as_of_date=as_of_date,
-        )
-
-    async def resolve_model_portfolio_targets(
-        self,
-        model_portfolio_id: str,
-        request: ModelPortfolioTargetRequest,
-    ) -> ModelPortfolioTargetResponse | None:
-        return await self._dpm_readiness_service.resolve_model_portfolio_targets(
-            model_portfolio_id=model_portfolio_id,
-            request=request,
-        )
-
-    async def resolve_discretionary_mandate_binding(
-        self,
-        portfolio_id: str,
-        request: DiscretionaryMandateBindingRequest,
-    ) -> DiscretionaryMandateBindingResponse | None:
-        return await self._dpm_readiness_service.resolve_discretionary_mandate_binding(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def resolve_instrument_eligibility_bulk(
-        self,
-        request: InstrumentEligibilityBulkRequest,
-    ) -> InstrumentEligibilityBulkResponse:
-        return await self._dpm_readiness_service.resolve_instrument_eligibility_bulk(request)
-
-    async def get_portfolio_tax_lot_window(
-        self,
-        *,
-        portfolio_id: str,
-        request: PortfolioTaxLotWindowRequest,
-    ) -> PortfolioTaxLotWindowResponse:
-        return await self._dpm_readiness_service.get_portfolio_tax_lot_window(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_market_data_coverage(
-        self,
-        request: MarketDataCoverageRequest,
-    ) -> MarketDataCoverageWindowResponse:
-        return await self._dpm_readiness_service.get_market_data_coverage(request)
-
-    async def get_dpm_source_readiness(
-        self,
-        *,
-        portfolio_id: str,
-        request: DpmSourceReadinessRequest,
-    ) -> DpmSourceReadinessResponse:
-        return await self._dpm_readiness_service.get_source_readiness(
-            portfolio_id=portfolio_id,
-            request=request,
         )
 
     async def get_benchmark_definition(

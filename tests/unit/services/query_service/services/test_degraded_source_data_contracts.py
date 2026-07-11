@@ -1,6 +1,5 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL
@@ -10,6 +9,21 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
+from src.services.query_control_plane_service.app.application.dpm_source_readiness import (
+    instrument_eligibility,
+    market_data_coverage,
+)
+from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
+    InstrumentEligibilityBulkRequest,
+)
+from src.services.query_control_plane_service.app.contracts.market_data_coverage import (
+    MarketDataCoverageRequest,
+    MarketDataCurrencyPair,
+)
+from src.services.query_control_plane_service.app.domain.dpm_source_readiness import (
+    InstrumentEligibilityEvidence,
+    MarketPriceEvidence,
+)
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionResponse,
 )
@@ -18,19 +32,7 @@ from src.services.query_service.app.dtos.operations_dto import (
     ReconciliationFindingRecord,
 )
 from src.services.query_service.app.dtos.position_dto import Position
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    InstrumentEligibilityBulkRequest,
-    MarketDataCoverageRequest,
-    MarketDataCurrencyPair,
-)
 from src.services.query_service.app.dtos.valuation_dto import ValuationData
-from src.services.query_service.app.services.instrument_eligibility import (
-    build_instrument_eligibility_bulk_response,
-)
-from src.services.query_service.app.services.market_data_coverage import (
-    build_market_data_coverage_response,
-    market_data_coverage_read_scope,
-)
 from src.services.query_service.app.services.position_holdings import (
     portfolio_positions_response_data,
 )
@@ -123,19 +125,21 @@ def test_market_data_contract_reports_stale_and_missing_observations() -> None:
         max_staleness_days=5,
     )
     response = _with_correlation(
-        lambda: build_market_data_coverage_response(
+        lambda: market_data_coverage.build_market_data_coverage_response(
             request=request,
-            read_scope=market_data_coverage_read_scope(request),
-            price_rows=[
-                SimpleNamespace(
+            scope=market_data_coverage.market_data_coverage_scope(request),
+            prices=[
+                MarketPriceEvidence(
                     security_id="EQ_US_AAPL",
                     price_date=date(2026, 4, 1),
                     price=Decimal("187.12"),
                     currency="USD",
+                    created_at=datetime(2026, 4, 1, 8, tzinfo=UTC),
                     updated_at=datetime(2026, 4, 1, 8, tzinfo=UTC),
                 )
             ],
-            fx_rows=[],
+            fx_rates=[],
+            generated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
         )
     )
 
@@ -151,19 +155,19 @@ def test_market_data_contract_reports_stale_and_missing_observations() -> None:
 
 def test_instrument_reference_contract_reports_missing_profiles() -> None:
     response = _with_correlation(
-        lambda: build_instrument_eligibility_bulk_response(
+        lambda: instrument_eligibility.build_instrument_eligibility_response(
             request=InstrumentEligibilityBulkRequest(
                 security_ids=["UNKNOWN_SEC", "EQ_US_AAPL"],
                 as_of_date=date(2026, 4, 10),
             ),
-            rows=[
-                SimpleNamespace(
+            evidence=[
+                InstrumentEligibilityEvidence(
                     security_id="EQ_US_AAPL",
                     eligibility_status="APPROVED",
                     product_shelf_status="APPROVED",
                     buy_allowed=True,
                     sell_allowed=True,
-                    restriction_reason_codes=[],
+                    restriction_reason_codes=(),
                     settlement_days=2,
                     settlement_calendar_id="NYSE",
                     liquidity_tier="T1",
@@ -175,11 +179,16 @@ def test_instrument_reference_contract_reports_missing_profiles() -> None:
                     country_of_risk="US",
                     effective_from=date(2026, 1, 1),
                     effective_to=None,
+                    eligibility_version=1,
+                    source_system="eligibility_master",
                     quality_status="accepted",
                     source_record_id="eligibility:EQ_US_AAPL",
-                    source_timestamp=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    observed_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    created_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
+                    updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
                 )
             ],
+            generated_at=datetime(2026, 4, 10, 10, tzinfo=UTC),
         )
     )
 

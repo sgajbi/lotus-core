@@ -38,8 +38,9 @@ best-execution certification, venue-routing model, or OMS acknowledgement.
 
 ## Source Tables And Products
 
-`DpmSourceReadiness:v1` does not read private tables directly. It delegates to source products and
-preserves their supportability:
+`DpmSourceReadiness:v1` composes QCP-owned constituent application use cases and preserves their
+supportability. Each constituent reads source tables only through a typed port and deterministic
+SQL adapter; the aggregate does not bypass those application boundaries:
 
 | Family | Source product | Readiness contribution |
 | --- | --- | --- |
@@ -138,6 +139,14 @@ Overall state precedence is fail-closed:
 
 Response `data_quality_status` is `COMPLETE` only when the overall supportability state is `READY`;
 otherwise it is `PARTIAL`.
+
+Runtime evidence metadata is source-owned. Each constituent hashes stable response evidence with
+SHA-256 and publishes the same value as `content_hash`, `source_digest`, and
+`source_batch_fingerprint`; `generated_at` is excluded from that hash. Aggregate
+`latest_evidence_timestamp` is the maximum durable constituent evidence timestamp. Aggregate
+`source_evidence_current=true` and `freshness_status=CURRENT` require all five families to be
+`READY` and at least one durable constituent evidence timestamp. Any non-ready family forces
+`source_evidence_current=false` and `freshness_status=PARTIAL`.
 
 ## Output Contract Mapping
 

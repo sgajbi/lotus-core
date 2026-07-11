@@ -2,7 +2,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_definition_response,
@@ -12,14 +11,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     index_definition_response,
     index_price_series_point,
     index_return_series_point,
-    instrument_eligibility_record,
-    market_data_fx_coverage_record,
-    market_data_price_coverage_record,
-    missing_instrument_eligibility_record,
-    missing_market_data_fx_coverage_record,
-    missing_market_data_price_coverage_record,
-    model_portfolio_target_row,
-    portfolio_tax_lot_record,
     risk_free_series_point,
 )
 
@@ -90,159 +81,6 @@ def test_index_definition_response_maps_reference_catalog_row() -> None:
     assert response.index_id == "IDX_MSCI_WORLD_TR"
     assert response.index_provider == "MSCI"
     assert response.classification_labels == {"asset_class": "equity", "region": "global"}
-
-
-def test_dpm_source_entries_map_model_target_rows() -> None:
-    target = model_portfolio_target_row(
-        SimpleNamespace(
-            instrument_id="EQ_US_AAPL",
-            target_weight="0.1200000000",
-            min_weight="0.0800000000",
-            max_weight=None,
-            target_status="active",
-            quality_status="accepted",
-            source_record_id="target-1",
-        )
-    )
-    assert target.target_weight == Decimal("0.1200000000")
-    assert target.min_weight == Decimal("0.0800000000")
-    assert target.max_weight is None
-
-
-def test_dpm_target_entry_treats_blank_optional_bands_as_absent() -> None:
-    target = model_portfolio_target_row(
-        SimpleNamespace(
-            instrument_id="EQ_US_AAPL",
-            target_weight="0.1200000000",
-            min_weight=" ",
-            max_weight="",
-            target_status="active",
-            quality_status="accepted",
-            source_record_id="target-1",
-        )
-    )
-
-    assert target.target_weight == Decimal("0.1200000000")
-    assert target.min_weight is None
-    assert target.max_weight is None
-
-
-def test_instrument_eligibility_records_map_found_and_missing_rows() -> None:
-    found = instrument_eligibility_record(
-        SimpleNamespace(
-            security_id=" eq_us_aapl ",
-            eligibility_status=" approved ",
-            product_shelf_status="approved",
-            buy_allowed=1,
-            sell_allowed=0,
-            restriction_reason_codes=["DPM_ALLOWED"],
-            settlement_days="2",
-            settlement_calendar_id="NYSE",
-            liquidity_tier="T1",
-            issuer_id="ISSUER_AAPL",
-            issuer_name="Apple Inc.",
-            ultimate_parent_issuer_id="ISSUER_AAPL",
-            ultimate_parent_issuer_name="Apple Inc.",
-            asset_class="equity",
-            country_of_risk="US",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            quality_status="accepted",
-            source_record_id="eligibility-1",
-        )
-    )
-    missing = missing_instrument_eligibility_record(" bond_private_credit_001 ")
-
-    assert found.security_id == "eq_us_aapl"
-    assert found.eligibility_status == "APPROVED"
-    assert found.product_shelf_status == "APPROVED"
-    assert found.buy_allowed is True
-    assert found.sell_allowed is False
-    assert found.settlement_days == 2
-    assert found.quality_status == "ACCEPTED"
-    assert missing.security_id == "bond_private_credit_001"
-    assert missing.found is False
-    assert missing.restriction_reason_codes == ["ELIGIBILITY_PROFILE_MISSING"]
-    assert missing.quality_status == "MISSING"
-
-
-def test_portfolio_tax_lot_record_maps_lot_state_row() -> None:
-    lot = portfolio_tax_lot_record(
-        PortfolioTaxLotReadRecord(
-            portfolio_id="PB_SG_GLOBAL_BAL_001",
-            security_id=" eq_us_aapl ",
-            instrument_id=" EQ_US_AAPL ",
-            lot_id="LOT-TXN-BUY-AAPL-001",
-            open_quantity="100.0000000000",
-            original_quantity="150.0000000000",
-            acquisition_date=date(2026, 3, 25),
-            lot_cost_base="15005.5000000000",
-            lot_cost_local="15005.5000000000",
-            source_transaction_id="TXN-BUY-AAPL-001",
-            source_system=None,
-            calculation_policy_id="BUY_DEFAULT_POLICY",
-            calculation_policy_version=None,
-            local_currency="USD",
-            updated_at=datetime(2026, 4, 10, 9, tzinfo=UTC),
-        )
-    )
-
-    assert lot.security_id == "eq_us_aapl"
-    assert lot.instrument_id == "EQ_US_AAPL"
-    assert lot.open_quantity == Decimal("100.0000000000")
-    assert lot.original_quantity == Decimal("150.0000000000")
-    assert lot.cost_basis_base == Decimal("15005.5000000000")
-    assert lot.tax_lot_status == "OPEN"
-    assert lot.local_currency == "USD"
-    assert lot.source_lineage == {
-        "source_system": "position_lot_state",
-        "source_transaction_id": "TXN-BUY-AAPL-001",
-        "calculation_policy_id": "BUY_DEFAULT_POLICY",
-        "calculation_policy_version": "UNKNOWN",
-    }
-
-
-def test_market_data_coverage_records_map_found_missing_and_stale_rows() -> None:
-    as_of_date = date(2026, 5, 31)
-    price = market_data_price_coverage_record(
-        SimpleNamespace(
-            price_date=date(2026, 5, 20),
-            price="195.2500000000",
-            currency="USD",
-        ),
-        instrument_id=" EQ_US_AAPL ",
-        as_of_date=as_of_date,
-        max_staleness_days=5,
-    )
-    missing_price = missing_market_data_price_coverage_record(" BOND_PRIVATE_CREDIT_001 ")
-    fx = market_data_fx_coverage_record(
-        SimpleNamespace(
-            rate_date=date(2026, 5, 31),
-            rate="1.3456000000",
-        ),
-        from_currency="USD",
-        to_currency="SGD",
-        as_of_date=as_of_date,
-        max_staleness_days=5,
-    )
-    missing_fx = missing_market_data_fx_coverage_record(
-        from_currency="EUR",
-        to_currency="SGD",
-    )
-
-    assert price.instrument_id == "EQ_US_AAPL"
-    assert price.price == Decimal("195.2500000000")
-    assert price.age_days == 11
-    assert price.quality_status == "STALE"
-    assert missing_price.instrument_id == "BOND_PRIVATE_CREDIT_001"
-    assert missing_price.found is False
-    assert missing_price.quality_status == "MISSING"
-    assert fx.rate == Decimal("1.3456000000")
-    assert fx.age_days == 0
-    assert fx.quality_status == "READY"
-    assert missing_fx.from_currency == "EUR"
-    assert missing_fx.to_currency == "SGD"
-    assert missing_fx.quality_status == "MISSING"
 
 
 def test_market_reference_series_points_map_provider_rows() -> None:

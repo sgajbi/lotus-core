@@ -12,20 +12,11 @@ from ..dtos.reference_integration_dto import (
     IndexDefinitionResponse,
     IndexPriceSeriesPoint,
     IndexReturnSeriesPoint,
-    InstrumentEligibilityRecord,
-    MarketDataFxCoverageRecord,
-    MarketDataPriceCoverageRecord,
-    ModelPortfolioTargetRow,
-    PortfolioTaxLotRecord,
     RiskFreeSeriesPoint,
     SeriesPoint,
 )
-from ..read_models import PortfolioTaxLotReadRecord
-from ..repositories.identifier_normalization import normalize_security_id
 from .integration_value_normalization import (
     as_decimal,
-    as_optional_decimal,
-    control_code,
 )
 
 
@@ -83,156 +74,6 @@ def index_definition_response(row: Any) -> IndexDefinitionResponse:
         source_timestamp=row.source_timestamp,
         source_vendor=row.source_vendor,
         source_record_id=row.source_record_id,
-    )
-
-
-def model_portfolio_target_row(row: Any) -> ModelPortfolioTargetRow:
-    return ModelPortfolioTargetRow(
-        instrument_id=row.instrument_id,
-        target_weight=as_decimal(row.target_weight),
-        min_weight=as_optional_decimal(row.min_weight),
-        max_weight=as_optional_decimal(row.max_weight),
-        target_status=row.target_status,
-        quality_status=row.quality_status,
-        source_record_id=row.source_record_id,
-    )
-
-
-def missing_instrument_eligibility_record(security_id: str) -> InstrumentEligibilityRecord:
-    return InstrumentEligibilityRecord(
-        security_id=normalize_security_id(security_id),
-        found=False,
-        eligibility_status="UNKNOWN",
-        product_shelf_status="UNKNOWN",
-        buy_allowed=False,
-        sell_allowed=False,
-        restriction_reason_codes=["ELIGIBILITY_PROFILE_MISSING"],
-        settlement_days=None,
-        settlement_calendar_id=None,
-        liquidity_tier=None,
-        issuer_id=None,
-        issuer_name=None,
-        ultimate_parent_issuer_id=None,
-        ultimate_parent_issuer_name=None,
-        asset_class=None,
-        country_of_risk=None,
-        effective_from=None,
-        effective_to=None,
-        quality_status="MISSING",
-        source_record_id=None,
-    )
-
-
-def instrument_eligibility_record(row: Any) -> InstrumentEligibilityRecord:
-    return InstrumentEligibilityRecord(
-        security_id=normalize_security_id(row.security_id),
-        found=True,
-        eligibility_status=control_code(row.eligibility_status, default="UNKNOWN"),
-        product_shelf_status=control_code(row.product_shelf_status, default="UNKNOWN"),
-        buy_allowed=bool(row.buy_allowed),
-        sell_allowed=bool(row.sell_allowed),
-        restriction_reason_codes=list(row.restriction_reason_codes or []),
-        settlement_days=int(row.settlement_days),
-        settlement_calendar_id=row.settlement_calendar_id,
-        liquidity_tier=row.liquidity_tier,
-        issuer_id=row.issuer_id,
-        issuer_name=row.issuer_name,
-        ultimate_parent_issuer_id=row.ultimate_parent_issuer_id,
-        ultimate_parent_issuer_name=row.ultimate_parent_issuer_name,
-        asset_class=row.asset_class,
-        country_of_risk=row.country_of_risk,
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        quality_status=control_code(row.quality_status, default="UNKNOWN"),
-        source_record_id=row.source_record_id,
-    )
-
-
-def portfolio_tax_lot_record(row: PortfolioTaxLotReadRecord) -> PortfolioTaxLotRecord:
-    open_quantity = as_decimal(row.open_quantity)
-    return PortfolioTaxLotRecord(
-        portfolio_id=row.portfolio_id,
-        security_id=normalize_security_id(row.security_id),
-        instrument_id=normalize_security_id(row.instrument_id),
-        lot_id=row.lot_id,
-        open_quantity=open_quantity,
-        original_quantity=as_decimal(row.original_quantity),
-        acquisition_date=row.acquisition_date,
-        cost_basis_base=as_decimal(row.lot_cost_base),
-        cost_basis_local=as_decimal(row.lot_cost_local),
-        local_currency=row.local_currency,
-        tax_lot_status="OPEN" if open_quantity > Decimal("0") else "CLOSED",
-        source_transaction_id=row.source_transaction_id,
-        source_lineage={
-            "source_system": row.source_system or "position_lot_state",
-            "source_transaction_id": row.source_transaction_id,
-            "calculation_policy_id": row.calculation_policy_id or "UNKNOWN",
-            "calculation_policy_version": row.calculation_policy_version or "UNKNOWN",
-        },
-    )
-
-
-def missing_market_data_price_coverage_record(
-    instrument_id: str,
-) -> MarketDataPriceCoverageRecord:
-    return MarketDataPriceCoverageRecord(
-        instrument_id=normalize_security_id(instrument_id),
-        found=False,
-        quality_status="MISSING",
-    )
-
-
-def market_data_price_coverage_record(
-    row: Any,
-    *,
-    instrument_id: str,
-    as_of_date: Any,
-    max_staleness_days: int,
-) -> MarketDataPriceCoverageRecord:
-    age_days = (as_of_date - row.price_date).days
-    quality_status = "STALE" if age_days > max_staleness_days else "READY"
-    return MarketDataPriceCoverageRecord(
-        instrument_id=normalize_security_id(instrument_id),
-        found=True,
-        price_date=row.price_date,
-        price=as_decimal(row.price),
-        currency=row.currency,
-        age_days=age_days,
-        quality_status=quality_status,
-    )
-
-
-def missing_market_data_fx_coverage_record(
-    *,
-    from_currency: str,
-    to_currency: str,
-) -> MarketDataFxCoverageRecord:
-    return MarketDataFxCoverageRecord(
-        from_currency=from_currency,
-        to_currency=to_currency,
-        found=False,
-        quality_status="MISSING",
-    )
-
-
-def market_data_fx_coverage_record(
-    row: Any,
-    *,
-    from_currency: str,
-    to_currency: str,
-    as_of_date: Any,
-    max_staleness_days: int,
-) -> MarketDataFxCoverageRecord:
-    age_days = (as_of_date - row.rate_date).days
-    quality_status = "STALE" if age_days > max_staleness_days else "READY"
-    return MarketDataFxCoverageRecord(
-        from_currency=from_currency,
-        to_currency=to_currency,
-        found=True,
-        rate_date=row.rate_date,
-        rate=as_decimal(row.rate),
-        age_days=age_days,
-        quality_status=quality_status,
     )
 
 

@@ -9,13 +9,23 @@ from src.services.query_control_plane_service.app.contracts.dpm_portfolio_popula
     DpmPortfolioUniverseCandidateResponse,
     DpmPortfolioUniverseCandidateSelectionBasis,
 )
+from src.services.query_control_plane_service.app.contracts.dpm_source_readiness import (
+    DpmSourceReadinessRequest,
+)
+from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
+    InstrumentEligibilityBulkRequest,
+)
 from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkResponse,
 )
-from src.services.query_service.app.dtos import reference_integration_dto
-from src.services.query_service.app.dtos.reference_integration_dpm_source_readiness_dto import (
-    DpmSourceReadinessRequest,
+from src.services.query_control_plane_service.app.contracts.market_data_coverage import (
+    MarketDataCoverageRequest,
+    MarketDataCurrencyPair,
 )
+from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
+    PortfolioTaxLotWindowRequest,
+)
+from src.services.query_service.app.dtos import reference_integration_dto
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCompositionWindowResponse,
@@ -26,15 +36,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IntegrationWindow,
-    PortfolioTaxLotWindowRequest,
     RiskFreeSeriesResponse,
-)
-from src.services.query_service.app.dtos.reference_integration_instrument_eligibility_dto import (
-    InstrumentEligibilityBulkRequest,
-)
-from src.services.query_service.app.dtos.reference_integration_market_data_coverage_dto import (
-    MarketDataCoverageRequest,
-    MarketDataCurrencyPair,
 )
 
 
