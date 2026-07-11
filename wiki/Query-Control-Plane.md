@@ -118,6 +118,8 @@ Important current rule:
 
 - policy and capability discovery routes use canonical snake_case query parameters such as
   `consumer_system` and `tenant_id`
+- capability contracts, policy resolution, settings, and application tests are QCP-owned; do not
+  place new capability implementation under `query_service`
 - camelCase aliases such as `consumerSystem` and `tenantId` are not supported
 
 Examples:

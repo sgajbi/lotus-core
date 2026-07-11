@@ -33,7 +33,7 @@ already strong but nested components are still thin.
 
 ## Evidence
 
-- `src/services/query_service/app/dtos/capabilities_dto.py`
+- `src/services/query_control_plane_service/app/contracts/capabilities.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
 - `python scripts/quality/openapi_quality_gate.py`
 - `python scripts/quality/api_vocabulary_inventory.py --validate-only`

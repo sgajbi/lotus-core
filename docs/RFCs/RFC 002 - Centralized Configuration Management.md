@@ -48,9 +48,10 @@ The original RFC requested:
    - `src/services/ingestion_service/app/ops_controls.py`
    - `src/services/ingestion_service/app/services/ingestion_job_service.py`
    - `src/services/ingestion_service/app/settings.py`
-5. Query-service control modules now consume centralized typed settings:
+5. Query and query-control-plane modules now consume centralized typed settings:
    - `src/services/query_service/app/settings.py`
-   - `src/services/query_service/app/services/capabilities_service.py`
+   - `src/services/query_control_plane_service/app/settings.py`
+   - `src/services/query_control_plane_service/app/application/capabilities_service.py`
    - `src/services/query_service/app/services/integration_service.py`
    - `src/services/query_service/app/services/analytics_timeseries_service.py`
    - `src/services/query_service/app/enterprise_readiness.py`
@@ -138,7 +139,7 @@ Current evidence supporting partial completion:
 7. Query-service typed settings migration:
    - `src/services/query_service/app/settings.py`
    - `tests/unit/services/query_service/test_enterprise_readiness.py`
-   - `tests/unit/services/query_service/services/test_capabilities_service.py`
+   - `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
    - `tests/unit/services/query_service/services/test_integration_service.py`
    - `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
 8. Valuation-service typed settings migration:

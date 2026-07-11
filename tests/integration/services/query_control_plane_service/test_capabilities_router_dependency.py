@@ -5,11 +5,13 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from src.services.query_control_plane_service.app.application.capabilities_service import (
+    CapabilitiesService,
+)
 from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.capabilities import (
     get_capabilities_service,
 )
-from src.services.query_service.app.services.capabilities_service import CapabilitiesService
 
 pytestmark = pytest.mark.asyncio
 

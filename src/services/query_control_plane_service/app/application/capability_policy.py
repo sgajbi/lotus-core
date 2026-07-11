@@ -1,3 +1,5 @@
+"""Resolve integration capability policy for query-control-plane consumers."""
+
 from __future__ import annotations
 
 import json
@@ -6,13 +8,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol, cast
 
-from ..dtos.capabilities_dto import (
+from ..contracts.capabilities import (
     ConsumerSystem,
     FeatureCapability,
     IntegrationCapabilitiesResponse,
     WorkflowCapability,
 )
-from ..settings import env_bool, load_query_service_settings
+from ..settings import env_bool, load_query_control_plane_settings
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +169,7 @@ class EnvironmentCapabilityPolicySource:
         self._catalog = catalog or CapabilityCatalog()
 
     def load_policy_inputs(self) -> CapabilityPolicyInputs:
-        settings = load_query_service_settings()
+        settings = load_query_control_plane_settings()
         return CapabilityPolicyInputs(
             feature_states=self._default_feature_states(),
             policy_version=settings.lotus_core_policy_version,

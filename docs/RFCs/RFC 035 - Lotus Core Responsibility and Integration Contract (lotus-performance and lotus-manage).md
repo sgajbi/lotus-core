@@ -50,9 +50,9 @@ Evidence:
 - `src/services/ingestion_service/app/adapter_mode.py`
 - `src/services/query_control_plane_service/app/routers/integration.py`
 - `src/services/query_control_plane_service/app/routers/capabilities.py`
-- `src/services/query_service/app/services/capabilities_service.py`
+- `src/services/query_control_plane_service/app/application/capabilities_service.py`
 - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
-- `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+- `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 - `tests/unit/services/query_service/services/test_integration_service.py`
 
 ## Requirement-to-Implementation Traceability
@@ -95,7 +95,7 @@ Remaining deltas:
 1. Bundle/upload adapter integration tests:
    - `tests/integration/services/ingestion_service/test_ingestion_routers.py`
 2. Capabilities contract integration tests:
-   - `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 3. Integration service policy behavior unit tests:
    - `tests/unit/services/query_service/services/test_integration_service.py`
 

@@ -1,3 +1,5 @@
+"""Serve policy-resolved integration capabilities from the control plane."""
+
 from __future__ import annotations
 
 import logging
@@ -8,11 +10,11 @@ from portfolio_common.database_models import BusinessDate
 from portfolio_common.db import SessionLocal
 from sqlalchemy import func, select
 
-from ..dtos.capabilities_dto import (
+from ..contracts.capabilities import (
     ConsumerSystem,
     IntegrationCapabilitiesResponse,
 )
-from ..settings import load_query_service_settings
+from ..settings import load_query_control_plane_settings
 from .capability_policy import (
     CapabilitiesResponseAssembler,
     CapabilityCatalog,
@@ -40,7 +42,7 @@ class CapabilitiesService:
 
     @staticmethod
     def _resolve_as_of_date() -> date:
-        if not load_query_service_settings().has_database_url:
+        if not load_query_control_plane_settings().has_database_url:
             return datetime.now(UTC).date()
         try:
             with SessionLocal() as db:
