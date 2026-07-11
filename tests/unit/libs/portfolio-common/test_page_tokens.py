@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.services.query_service.app.services.page_token_codec import PageTokenCodec
+from portfolio_common.page_tokens import PageTokenCodec
 
 
 def test_page_token_codec_round_trips_signed_payload():

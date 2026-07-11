@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 from ..dtos.reference_integration_dto import (
@@ -9,7 +10,6 @@ from ..dtos.reference_integration_dto import (
     ExternalHedgeExecutionReadinessResponse,
     ExternalHedgeExecutionReadinessSupportability,
 )
-from .request_fingerprint import request_fingerprint
 
 EXTERNAL_HEDGE_EXECUTION_MISSING_FAMILIES = [
     "external_currency_exposure",

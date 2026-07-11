@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, STALE, UNRECONCILED
+from portfolio_common.request_fingerprints import request_fingerprint
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
@@ -68,7 +69,6 @@ from src.services.query_service.app.services.reference_data_helpers import (
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
 )
-from src.services.query_service.app.services.request_fingerprint import request_fingerprint
 from src.services.query_service.app.services.transaction_cost_curve import (
     has_observed_transaction_cost_evidence,
     transaction_cost_curve_key,

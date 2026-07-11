@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from portfolio_common.request_fingerprints import request_fingerprint
+
 from ..dtos.reference_integration_dto import ClassificationTaxonomyResponse
 from .reference_data_helpers import (
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
 )
 from .reference_data_mappers import classification_taxonomy_entry
-from .request_fingerprint import request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 

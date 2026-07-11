@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from portfolio_common.request_fingerprints import series_request_fingerprint
+
 from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     BenchmarkReturnSeriesResponse,
     IntegrationWindow,
 )
 from .reference_data_mappers import benchmark_return_series_point
-from .request_fingerprint import series_request_fingerprint
 
 
 async def resolve_benchmark_return_series_response(

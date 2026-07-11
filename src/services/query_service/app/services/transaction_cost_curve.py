@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
+
 from ..dtos.reference_integration_dto import (
     ReferencePageMetadata,
     TransactionCostCurvePoint,
@@ -16,7 +18,6 @@ from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from .decimal_amounts import decimal_or_zero
 from .reference_data_helpers import latest_reference_evidence_timestamp
-from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 

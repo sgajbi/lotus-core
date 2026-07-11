@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .page_token_codec import PageTokenCodec
+from portfolio_common.page_tokens import PageTokenCodec
 
 
 class AnalyticsPageTokenError(ValueError):

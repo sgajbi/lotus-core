@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
+
 from ..dtos.reference_integration_dto import (
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
@@ -18,7 +20,6 @@ from .performance_component_economics_policy import (
     performance_component_economics_supportability_reason,
     performance_component_economics_supportability_state,
 )
-from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
