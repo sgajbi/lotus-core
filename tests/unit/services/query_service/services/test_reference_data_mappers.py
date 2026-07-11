@@ -7,8 +7,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_market_series_point,
     benchmark_return_series_point,
     classification_taxonomy_entry,
-    index_price_series_point,
-    index_return_series_point,
     risk_free_series_point,
 )
 
@@ -16,25 +14,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
 def test_market_reference_series_points_map_provider_rows() -> None:
     series_date = date(2026, 1, 2)
 
-    price = index_price_series_point(
-        SimpleNamespace(
-            series_date=series_date,
-            index_price="4567.1234000000",
-            series_currency="USD",
-            value_convention="close_price",
-            quality_status="accepted",
-        )
-    )
-    index_return = index_return_series_point(
-        SimpleNamespace(
-            series_date=series_date,
-            index_return="0.0023000000",
-            return_period="1d",
-            return_convention="total_return_index",
-            series_currency="USD",
-            quality_status="accepted",
-        )
-    )
     benchmark_return = benchmark_return_series_point(
         SimpleNamespace(
             series_date=series_date,
@@ -69,8 +48,6 @@ def test_market_reference_series_points_map_provider_rows() -> None:
         )
     )
 
-    assert price.index_price == Decimal("4567.1234000000")
-    assert index_return.index_return == Decimal("0.0023000000")
     assert benchmark_return.benchmark_return == Decimal("0.0019000000")
     assert risk_free.value == Decimal("0.0350000000")
     assert risk_free.day_count_convention == "act_360"

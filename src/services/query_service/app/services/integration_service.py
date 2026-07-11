@@ -13,9 +13,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    IndexPriceSeriesResponse,
-    IndexReturnSeriesResponse,
-    IndexSeriesRequest,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -78,22 +75,6 @@ class IntegrationService:
     ) -> BenchmarkMarketSeriesResponse:
         return await self._benchmark_reference_service.get_benchmark_market_series(
             benchmark_id=benchmark_id,
-            request=request,
-        )
-
-    async def get_index_price_series(
-        self, index_id: str, request: IndexSeriesRequest
-    ) -> IndexPriceSeriesResponse:
-        return await self._benchmark_reference_service.get_index_price_series(
-            index_id=index_id,
-            request=request,
-        )
-
-    async def get_index_return_series(
-        self, index_id: str, request: IndexSeriesRequest
-    ) -> IndexReturnSeriesResponse:
-        return await self._benchmark_reference_service.get_index_return_series(
-            index_id=index_id,
             request=request,
         )
 

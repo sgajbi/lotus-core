@@ -320,29 +320,6 @@ async def test_reference_contract_methods() -> None:
             ]
         ),
         get_fx_rates=AsyncMock(return_value={date(2026, 1, 1): Decimal("1.1")}),
-        list_index_price_series=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    index_price=Decimal("100"),
-                    series_currency="USD",
-                    value_convention="close_price",
-                    quality_status="accepted",
-                )
-            ]
-        ),
-        list_index_return_series=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    series_date=date(2026, 1, 1),
-                    index_return=Decimal("0.01"),
-                    return_period="1d",
-                    return_convention="total_return_index",
-                    series_currency="USD",
-                    quality_status="accepted",
-                )
-            ]
-        ),
         list_risk_free_series=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -420,30 +397,6 @@ async def test_reference_contract_methods() -> None:
     assert market_series.as_of_date == date(2026, 1, 1)
     assert market_series.reconciliation_status == "UNKNOWN"
     assert market_series.data_quality_status == COMPLETE
-
-    index_price = await service.get_index_price_series(
-        index_id="IDX1",
-        request=SimpleNamespace(
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
-            frequency="daily",
-        ),
-    )
-    assert index_price.points
-    assert index_price.product_name == "IndexSeriesWindow"
-    assert index_price.as_of_date == date(2026, 1, 2)
-
-    index_return = await service.get_index_return_series(
-        index_id="IDX1",
-        request=SimpleNamespace(
-            as_of_date=date(2026, 1, 1),
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2)),
-            frequency="daily",
-        ),
-    )
-    assert index_return.points
-    assert index_return.as_of_date == date(2026, 1, 1)
-    assert index_return.request_fingerprint
-    assert index_return.product_name == "IndexSeriesWindow"
 
     benchmark_return = await service.get_benchmark_return_series(
         benchmark_id="B1",
@@ -544,50 +497,6 @@ async def test_risk_free_products_normalize_currency_before_repository_lookup() 
 
 
 @pytest.mark.asyncio
-async def test_market_reference_products_expose_row_backed_quality_and_evidence_timestamp() -> None:
-    service = make_service()
-    older_source_timestamp = datetime(2026, 1, 2, 9, 0, tzinfo=UTC)
-    latest_source_timestamp = datetime(2026, 1, 3, 11, 15, tzinfo=UTC)
-    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        list_index_price_series=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    series_date=date(2026, 1, 2),
-                    index_price=Decimal("100"),
-                    series_currency="USD",
-                    value_convention="close_price",
-                    quality_status="accepted",
-                    source_timestamp=older_source_timestamp,
-                ),
-                SimpleNamespace(
-                    series_date=date(2026, 1, 3),
-                    index_price=Decimal("101"),
-                    series_currency="USD",
-                    value_convention="close_price",
-                    quality_status="estimated",
-                    source_timestamp=latest_source_timestamp,
-                ),
-            ]
-        )
-    )
-
-    response = await service.get_index_price_series(
-        index_id="IDX1",
-        request=SimpleNamespace(
-            as_of_date=date(2026, 1, 3),
-            window=SimpleNamespace(start_date=date(2026, 1, 2), end_date=date(2026, 1, 3)),
-            frequency="daily",
-        ),
-    )
-
-    assert response.product_name == "IndexSeriesWindow"
-    assert response.data_quality_status == PARTIAL
-    assert response.latest_evidence_timestamp == latest_source_timestamp
-    assert response.source_batch_fingerprint is None
-    assert response.snapshot_id is None
-
-
-@pytest.mark.asyncio
 async def test_reference_contract_none_and_fx_branches() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
@@ -629,8 +538,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),
         get_fx_rates=AsyncMock(return_value={}),
-        list_index_price_series=AsyncMock(return_value=[]),
-        list_index_return_series=AsyncMock(return_value=[]),
         list_risk_free_series=AsyncMock(return_value=[]),
         get_benchmark_coverage=AsyncMock(
             return_value={

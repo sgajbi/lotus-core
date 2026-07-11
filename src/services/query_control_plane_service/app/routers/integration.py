@@ -14,9 +14,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
-    IndexPriceSeriesResponse,
-    IndexReturnSeriesResponse,
-    IndexSeriesRequest,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -44,6 +41,7 @@ from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
 from ..application.dpm_source_readiness.readiness import DpmSourceReadinessService
 from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.index_catalog import IndexCatalogService
+from ..application.index_series import IndexSeriesService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
@@ -109,6 +107,11 @@ from ..contracts.external_hedge_posture import (
     ExternalOrderExecutionAcknowledgementResponse,
 )
 from ..contracts.index_catalog import IndexCatalogRequest, IndexCatalogResponse
+from ..contracts.index_series import (
+    IndexPriceSeriesResponse,
+    IndexReturnSeriesResponse,
+    IndexSeriesRequest,
+)
 from ..contracts.instrument_eligibility import (
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
@@ -160,6 +163,7 @@ from ..dependencies import (
     get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
     get_index_catalog_service,
+    get_index_series_service,
     get_integration_policy_service,
     get_integration_service,
     get_portfolio_manager_book_service,
@@ -2388,12 +2392,9 @@ async def fetch_index_price_series(
         description="Index identifier for the requested raw price series.",
         examples=["IDX-SP500"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    index_series_service: IndexSeriesService = Depends(get_index_series_service),
 ) -> IndexPriceSeriesResponse:
-    return cast(
-        IndexPriceSeriesResponse,
-        await integration_service.get_index_price_series(index_id=index_id, request=request),
-    )
+    return await index_series_service.get_prices(index_id=index_id, request=request)
 
 
 @router.post(
@@ -2417,12 +2418,9 @@ async def fetch_index_return_series(
         description="Index identifier for the requested raw return series.",
         examples=["IDX-SP500"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    index_series_service: IndexSeriesService = Depends(get_index_series_service),
 ) -> IndexReturnSeriesResponse:
-    return cast(
-        IndexReturnSeriesResponse,
-        await integration_service.get_index_return_series(index_id=index_id, request=request),
-    )
+    return await index_series_service.get_returns(index_id=index_id, request=request)
 
 
 @router.post(

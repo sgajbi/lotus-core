@@ -48,6 +48,7 @@ from src.services.query_control_plane_service.app.application.external_hedge_pos
 from src.services.query_control_plane_service.app.application.index_catalog import (
     IndexCatalogService,
 )
+from src.services.query_control_plane_service.app.application.index_series import IndexSeriesService
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
 )
@@ -110,6 +111,12 @@ from src.services.query_control_plane_service.app.contracts.external_hedge_postu
     ExternalOrderExecutionAcknowledgementRequest,
 )
 from src.services.query_control_plane_service.app.contracts.index_catalog import IndexCatalogRequest
+from src.services.query_control_plane_service.app.contracts.index_series import (
+    IndexSeriesRequest,
+)
+from src.services.query_control_plane_service.app.contracts.index_series import (
+    IntegrationWindow as IndexIntegrationWindow,
+)
 from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
     InstrumentEligibilityBulkRequest,
 )
@@ -200,7 +207,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
-    IndexSeriesRequest,
     IntegrationWindow,
     RiskFreeSeriesRequest,
 )
@@ -2747,6 +2753,7 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
+    index_series_service = MagicMock(spec=IndexSeriesService)
     composition_service = MagicMock(spec=BenchmarkCompositionService)
     composition_service.resolve = AsyncMock(
         return_value={
@@ -2784,22 +2791,27 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_index_price_series = AsyncMock(
+    index_series_service.get_prices = AsyncMock(
         return_value={
             "index_id": "IDX1",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-index-price-1",
+            "record_count": 0,
+            "completeness_status": "EMPTY",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_index_return_series = AsyncMock(
+    index_series_service.get_returns = AsyncMock(
         return_value={
             "index_id": "IDX1",
             "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-index-return-1",
+            "record_count": 0,
+            "completeness_status": "EMPTY",
             "points": [],
             "lineage": {"contract_version": "rfc_062_v1"},
         }
@@ -2850,6 +2862,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     )
 
     request_window = IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
+    index_request_window = IndexIntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
     benchmark_market_response = await fetch_benchmark_market_series(
         benchmark_id="B1",
         request=BenchmarkMarketSeriesRequest(
@@ -2881,31 +2894,31 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     index_price_response = await fetch_index_price_series(
         index_id="IDX1",
         request=IndexSeriesRequest(
-            as_of_date="2026-01-31", window=request_window, frequency="daily"
+            as_of_date="2026-01-31", window=index_request_window, frequency="daily"
         ),
-        integration_service=mock_service,
+        index_series_service=index_series_service,
     )
     assert index_price_response["index_id"] == "IDX1"
-    mock_service.get_index_price_series.assert_awaited_once_with(
+    index_series_service.get_prices.assert_awaited_once_with(
         index_id="IDX1",
         request=IndexSeriesRequest(
-            as_of_date="2026-01-31", window=request_window, frequency="daily"
+            as_of_date="2026-01-31", window=index_request_window, frequency="daily"
         ),
     )
 
     index_return_response = await fetch_index_return_series(
         index_id="IDX1",
         request=IndexSeriesRequest(
-            as_of_date="2026-01-31", window=request_window, frequency="daily"
+            as_of_date="2026-01-31", window=index_request_window, frequency="daily"
         ),
-        integration_service=mock_service,
+        index_series_service=index_series_service,
     )
     assert index_return_response["index_id"] == "IDX1"
     assert index_return_response["request_fingerprint"] == "fp-index-return-1"
-    mock_service.get_index_return_series.assert_awaited_once_with(
+    index_series_service.get_returns.assert_awaited_once_with(
         index_id="IDX1",
         request=IndexSeriesRequest(
-            as_of_date="2026-01-31", window=request_window, frequency="daily"
+            as_of_date="2026-01-31", window=index_request_window, frequency="daily"
         ),
     )
 

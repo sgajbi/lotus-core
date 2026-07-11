@@ -32,6 +32,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
     get_index_catalog_service,
+    get_index_series_service,
     get_integration_policy_service,
     get_integration_service,
     get_sustainability_preference_profile_service,
@@ -537,11 +538,14 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_index_price_series = AsyncMock(
+    mock_integration_service.get_prices = AsyncMock(
         return_value={
             "index_id": "IDX_MSCI_WORLD_TR",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
+            "request_fingerprint": "fp-index-price-1",
+            "record_count": 1,
+            "completeness_status": "PARTIAL",
             "points": [
                 {
                     "series_date": "2026-01-02",
@@ -561,13 +565,15 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_index_return_series = AsyncMock(
+    mock_integration_service.get_returns = AsyncMock(
         return_value={
             "index_id": "IDX_MSCI_WORLD_TR",
             "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-index-return-1",
+            "record_count": 1,
+            "completeness_status": "PARTIAL",
             "points": [
                 {
                     "series_date": "2026-01-02",
@@ -629,6 +635,7 @@ async def async_test_client():
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
     app.dependency_overrides[get_index_catalog_service] = lambda: mock_index_catalog_service
+    app.dependency_overrides[get_index_series_service] = lambda: mock_integration_service
     app.dependency_overrides[get_transaction_economics_service] = lambda: mock_integration_service
     app.dependency_overrides[get_client_restriction_profile_service] = lambda: (
         mock_integration_service
@@ -655,6 +662,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
     app.dependency_overrides.pop(get_index_catalog_service, None)
+    app.dependency_overrides.pop(get_index_series_service, None)
     app.dependency_overrides.pop(get_transaction_economics_service, None)
     app.dependency_overrides.pop(get_client_restriction_profile_service, None)
     app.dependency_overrides.pop(get_client_liquidity_evidence_service, None)
@@ -1596,8 +1604,8 @@ async def test_index_price_series_success(async_test_client):
     assert body["points"][0]["index_price"] == "100.2500000000"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_index_price_series.assert_awaited_once()
-    index_price_call = mock_integration_service.get_index_price_series.await_args.kwargs
+    mock_integration_service.get_prices.assert_awaited_once()
+    index_price_call = mock_integration_service.get_prices.await_args.kwargs
     assert index_price_call["index_id"] == "IDX_MSCI_WORLD_TR"
     assert index_price_call["request"].as_of_date == date(2026, 1, 31)
     assert index_price_call["request"].window.start_date == date(2026, 1, 1)
@@ -1627,8 +1635,8 @@ async def test_index_return_series_success(async_test_client):
     assert body["points"][0]["index_return"] == "0.0025000000"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_index_return_series.assert_awaited_once()
-    index_return_call = mock_integration_service.get_index_return_series.await_args.kwargs
+    mock_integration_service.get_returns.assert_awaited_once()
+    index_return_call = mock_integration_service.get_returns.await_args.kwargs
     assert index_return_call["index_id"] == "IDX_MSCI_WORLD_TR"
     assert index_return_call["request"].as_of_date == date(2026, 1, 31)
     assert index_return_call["request"].window.start_date == date(2026, 1, 1)
