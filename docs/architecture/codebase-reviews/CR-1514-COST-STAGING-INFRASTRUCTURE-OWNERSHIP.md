@@ -55,9 +55,10 @@ scope, retry/DLQ classification, or downstream contract changed.
 The target `app/application` and `app/use_cases` packages contain no SQLAlchemy, concrete outbox,
 or concrete idempotency imports. A repository-wide processor-name/dependency scan identified
 `position_valuation_calculator/app/valuation_processor.py` as the closest remaining sibling pattern:
-it combines application sequencing with a concrete session dependency factory. Review that module
-as the next bounded slice; do not bulk-move generic query services merely because their filenames
-contain `service`.
+it combined application sequencing with a concrete session dependency factory. CR-1516 moved
+construction to explicit infrastructure composition and kept the still-transitional processor out
+of a false application package. Do not bulk-move generic query services merely because their
+filenames contain `service`.
 
 ## Follow-Up
 

@@ -32,6 +32,13 @@ For an eligible portfolio-security-day valuation job, the service:
 This is one of the key points where market/reference completeness directly affects downstream
 readiness.
 
+`ValuationJobProcessor` receives its database session provider and dependency factory explicitly.
+Production `ValuationRepository`, idempotency, and outbox construction lives in
+`app/infrastructure`; tests and alternate entry points inject that boundary rather than patching
+processor globals. The processor remains transitional until persistence records, metrics,
+publication, and transaction ownership are behind framework-neutral ports, so it must not be moved
+into an `application` package based on its name alone.
+
 ## Data it owns
 
 Primary durable outputs include:
