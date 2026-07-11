@@ -20,6 +20,7 @@ KEYWORDS = (
 IGNORE_DIRS = {"tests", ".venv", "venv", "docs", "rfcs", "output", "build", "dist", "__pycache__"}
 
 FLOAT_ANNOTATION = re.compile(r"\bfloat\b")
+FLOAT_PARAMETER = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*float\b")
 IDENTIFIER = re.compile(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b")
 NON_DOMAIN_TOKENS = {"return", "float"}
 
@@ -43,6 +44,8 @@ def scan_repo(repo_root: Path) -> list[str]:
                 continue
             if not FLOAT_ANNOTATION.search(lowered):
                 continue
+            if _only_non_monetary_float_dimensions(lowered):
+                continue
             if "# monetary-float-allow" in lowered:
                 continue
             finding = f"{rel}:{line_no}:{line.strip()}"
@@ -53,6 +56,13 @@ def scan_repo(repo_root: Path) -> list[str]:
 def _contains_monetary_keyword(line: str) -> bool:
     tokens = set(_identifier_tokens(line))
     return any(keyword in tokens for keyword in KEYWORDS)
+
+
+def _only_non_monetary_float_dimensions(line: str) -> bool:
+    parameters = FLOAT_PARAMETER.findall(line)
+    return bool(parameters) and all(
+        parameter == "seconds" or parameter.endswith("_seconds") for parameter in parameters
+    )
 
 
 def _identifier_tokens(line: str) -> list[str]:
