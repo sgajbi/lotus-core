@@ -1,5 +1,16 @@
 # CR-1401 Cost Calculation Event Processor
 
+Status: Superseded by CR-1514 on 2026-07-11
+
+## Current State
+
+The processor and dependency factory described below were an intermediate issue #550 boundary and
+have been removed. `ProcessTransactionUseCase` is the active application coordinator;
+`CostProcessingCompatibilityAdapter` owns transitional SQL/outbox staging, while the quarantined
+legacy consumer alone retains its physical idempotency claim. Do not recreate
+`cost_calculation_processor.py`; see
+[CR-1514](./CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md).
+
 ## Objective
 
 Fix GitHub issue #550 by extracting valid cost-calculation event orchestration out of the Kafka

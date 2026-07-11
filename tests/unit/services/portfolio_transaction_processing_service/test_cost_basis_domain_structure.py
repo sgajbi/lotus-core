@@ -50,6 +50,7 @@ def test_legacy_cost_checkpoint_modules_are_retired() -> None:
 
 def test_legacy_cost_transaction_processor_is_retired() -> None:
     assert not (LEGACY_COST_APPLICATION_ROOT / "transaction_processor.py").exists()
+    assert not (LEGACY_COST_APPLICATION_ROOT / "cost_calculation_processor.py").exists()
 
 
 def test_cost_basis_calculation_modules_use_domain_specific_names() -> None:

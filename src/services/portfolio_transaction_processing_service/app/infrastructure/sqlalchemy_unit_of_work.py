@@ -15,9 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from src.services.calculators.cashflow_calculator_service.app.repositories import (
     cashflow_repository,
 )
-from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
-    CostCalculationWorkflowPort,
-)
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
@@ -40,7 +37,7 @@ from .cashflow_processing_adapter import (
     CashflowProcessingCompatibilityAdapter,
     CashflowStagingWorkflow,
 )
-from .cost_processing_adapter import CostProcessingCompatibilityAdapter
+from .cost_processing_adapter import CostProcessingCompatibilityAdapter, CostStagingWorkflow
 from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
 from .position_repository import PositionRepository
@@ -94,7 +91,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self,
         *,
         session_factory: Callable[[], AsyncSession],
-        cost_workflow: CostCalculationWorkflowPort,
+        cost_workflow: CostStagingWorkflow,
         cashflow_workflow: CashflowStagingWorkflow,
     ) -> None:
         self._session_factory = session_factory

@@ -12,14 +12,14 @@ from portfolio_common.transaction_domain import BUY_DEFAULT_POLICY_ID, BUY_DEFAU
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
-    CostCalculationEventProcessor,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostProcessingCompatibilityAdapter,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -87,11 +87,13 @@ async def _stage_cost_calculation(
     repository_factory,
 ) -> None:
     async with session_factory() as session, session.begin():
-        await CostCalculationEventProcessor(CostCalculationWorkflow()).stage_valid_event(
+        await CostProcessingCompatibilityAdapter(
+            workflow=CostCalculationWorkflow(),
+            repository=repository_factory(session),
+            outbox_repository=AsyncMock(spec=OutboxRepository),
+        ).stage_event(
             event=event,
             correlation_id=f"corr-{event.transaction_id}",
-            repo=repository_factory(session),
-            outbox_repo=AsyncMock(spec=OutboxRepository),
         )
 
 

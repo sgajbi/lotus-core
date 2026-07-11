@@ -12,9 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
     CashflowCalculationWorkflow,
 )
-from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
-    CostCalculationWorkflowPort,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
@@ -29,6 +26,7 @@ from .average_cost_pool_reconciliation_adapter import (
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from .cashflow_processing_adapter import CashflowStagingWorkflow
+from .cost_processing_adapter import CostStagingWorkflow
 from .prometheus_cost_basis_observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
 )
@@ -43,7 +41,7 @@ from .transaction_replay_adapter import (
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
     session_factory: Callable[[], AsyncSession]
-    cost_workflow: CostCalculationWorkflowPort
+    cost_workflow: CostStagingWorkflow
     cashflow_workflow: CashflowStagingWorkflow
 
     def __call__(self) -> TransactionProcessingUnitOfWork:
