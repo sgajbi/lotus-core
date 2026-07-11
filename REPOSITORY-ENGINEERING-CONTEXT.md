@@ -1998,6 +1998,14 @@ Most relevant current governance:
      reconciliation, never silent migration coercion. Keep cost components, lot lineage,
      incremental checkpoints, and AVCO aggregates separate until cardinality, lifecycle,
      query-plan, and write-amplification evidence supports a different table boundary.
+150. Incremental and average-cost checkpoint policies are owned by
+     `portfolio_transaction_processing_service.app.domain.cost_basis` and imported through its
+     public API. Domain code uses `calculation_state_version`; the compatible persistence column
+     remains `engine_state_version` and must be mapped explicitly by the repository. Do not restore
+     legacy checkpoint modules, reflect domain dataclasses directly into SQL payloads, or rename
+     deployed storage as an incidental source move. A schema rename requires a separate migration,
+     rollback, reader/writer inventory, and deployment proof. Keep Prometheus metrics, clocks,
+     sessions, and SQL records outside checkpoint and calculation policy.
 
 ## Context Maintenance Rule
 

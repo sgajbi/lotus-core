@@ -2,7 +2,7 @@
 import hashlib
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from time import monotonic
@@ -34,19 +34,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    EffectiveFxRate,
-    OpenLotState,
-)
-
-from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
+    CostBasisProcessingCheckpoint,
+    EffectiveFxRate,
+    OpenLotState,
 )
-from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -415,13 +412,25 @@ class CostCalculatorRepository:
             latest_target_instrument_id=row.latest_target_instrument_id,
             latest_quantity=row.latest_quantity,
             latest_transaction_id=row.latest_transaction_id,
-            engine_state_version=row.engine_state_version,
+            calculation_state_version=row.engine_state_version,
         )
 
     async def upsert_cost_basis_processing_checkpoint(
         self, checkpoint: CostBasisProcessingCheckpoint
     ) -> None:
-        payload = {field.name: getattr(checkpoint, field.name) for field in fields(checkpoint)}
+        payload = {
+            "portfolio_id": checkpoint.portfolio_id,
+            "security_id": checkpoint.security_id,
+            "cost_basis_method": checkpoint.cost_basis_method,
+            "latest_transaction_date": checkpoint.latest_transaction_date,
+            "latest_dependency_rank": checkpoint.latest_dependency_rank,
+            "latest_cash_dependency_rank": checkpoint.latest_cash_dependency_rank,
+            "latest_child_sequence": checkpoint.latest_child_sequence,
+            "latest_target_instrument_id": checkpoint.latest_target_instrument_id,
+            "latest_quantity": checkpoint.latest_quantity,
+            "latest_transaction_id": checkpoint.latest_transaction_id,
+            "engine_state_version": checkpoint.calculation_state_version,
+        }
         stmt = pg_insert(CostBasisProcessingState).values(**payload)
         await self.db.execute(
             stmt.on_conflict_do_update(

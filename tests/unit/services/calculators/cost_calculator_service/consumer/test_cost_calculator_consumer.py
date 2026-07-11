@@ -28,10 +28,6 @@ from portfolio_common.transaction_domain import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
-    AverageCostPoolCheckpoint,
-    AverageCostPoolTransition,
-)
 from src.services.calculators.cost_calculator_service.app.consumer import (
     CostCalculationWorkflow,
     CostCalculatorConsumer,
@@ -45,13 +41,15 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
     CostCalculationProcessorDependencies,
 )
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    AverageCostPoolCheckpoint,
+    AverageCostPoolTransition,
     CostCalculationError,
     EffectiveFxRate,
     OpenLotState,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 

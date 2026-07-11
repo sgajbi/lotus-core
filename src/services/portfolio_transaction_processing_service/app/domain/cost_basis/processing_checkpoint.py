@@ -1,3 +1,5 @@
+"""Define the durable ordering checkpoint for incremental cost-basis processing."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,13 +8,10 @@ from decimal import Decimal
 
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction,
-    TransactionOrderKey,
-    transaction_order_key,
-)
+from .calculation.transaction_ordering import TransactionOrderKey, transaction_order_key
+from .models.cost_basis_transaction import CostBasisTransaction
 
-COST_ENGINE_STATE_VERSION = "open-lot-v1"
+COST_BASIS_STATE_VERSION = "open-lot-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +26,7 @@ class CostBasisProcessingCheckpoint:
     latest_target_instrument_id: str
     latest_quantity: Decimal
     latest_transaction_id: str
-    engine_state_version: str = COST_ENGINE_STATE_VERSION
+    calculation_state_version: str = COST_BASIS_STATE_VERSION
 
     @classmethod
     def from_transaction(
@@ -77,7 +76,7 @@ class CostBasisProcessingCheckpoint:
         cost_basis_method: str | CostBasisMethod,
     ) -> bool:
         return (
-            self.engine_state_version == COST_ENGINE_STATE_VERSION
+            self.calculation_state_version == COST_BASIS_STATE_VERSION
             and self.cost_basis_method == normalize_cost_basis_method(cost_basis_method).value
             and transaction.portfolio_id == self.portfolio_id
             and transaction.security_id == self.security_id

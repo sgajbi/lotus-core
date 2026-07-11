@@ -46,19 +46,17 @@ from portfolio_common.transaction_fee_components import resolve_transaction_trad
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    OpenLotState,
-    transaction_order_key,
-)
-
-from .average_cost_pool_checkpoint import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
+    CostBasisProcessingCheckpoint,
+    OpenLotState,
+    transaction_order_key,
 )
-from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+
 from .monitoring import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 from .transaction_processor import TransactionProcessor, build_transaction_processor

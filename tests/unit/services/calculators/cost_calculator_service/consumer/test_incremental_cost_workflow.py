@@ -7,22 +7,20 @@ from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
-from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
-    AverageCostPoolCheckpoint,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
-)
-from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
-    CostBasisProcessingCheckpoint,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     AverageCostPoolCheckpointRecord,
     CostCalculatorRepository,
     OpenLotCheckpointRecord,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AverageCostPoolCheckpoint,
+    CostBasisProcessingCheckpoint,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 
