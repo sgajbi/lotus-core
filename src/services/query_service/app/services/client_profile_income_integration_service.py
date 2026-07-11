@@ -15,8 +15,6 @@ from ..dtos.reference_integration_dto import (
     LiquidityReserveRequirementResponse,
     PlannedWithdrawalScheduleRequest,
     PlannedWithdrawalScheduleResponse,
-    SustainabilityPreferenceProfileRequest,
-    SustainabilityPreferenceProfileResponse,
 )
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
 from .client_tax_profile import resolve_client_tax_profile_response
@@ -25,9 +23,6 @@ from .liquidity_reserve_requirement import (
     resolve_liquidity_reserve_requirement_response,
 )
 from .planned_withdrawal_schedule import resolve_planned_withdrawal_schedule_response
-from .sustainability_preference_profile import (
-    resolve_sustainability_preference_profile_response,
-)
 
 
 @dataclass(frozen=True)
@@ -35,17 +30,6 @@ class ClientProfileIncomeIntegrationService:
     """Contract-family service for client profile, suitability, tax, and income products."""
 
     reference_repository_provider: Callable[[], Any]
-
-    async def get_sustainability_preference_profile(
-        self,
-        portfolio_id: str,
-        request: SustainabilityPreferenceProfileRequest,
-    ) -> SustainabilityPreferenceProfileResponse | None:
-        return await resolve_sustainability_preference_profile_response(
-            repository=self.reference_repository_provider(),
-            portfolio_id=portfolio_id,
-            request=request,
-        )
 
     async def get_client_tax_profile(
         self,

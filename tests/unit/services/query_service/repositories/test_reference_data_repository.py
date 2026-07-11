@@ -439,47 +439,6 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
-async def test_reference_data_repository_lists_latest_sustainability_preferences() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(
-                preference_framework="LOTUS_SUSTAINABILITY_V1",
-                preference_code="MIN_SUSTAINABLE_ALLOCATION",
-                preference_version=2,
-            ),
-            SimpleNamespace(
-                preference_framework="LOTUS_SUSTAINABILITY_V1",
-                preference_code="THERMAL_COAL_EXCLUSION",
-                preference_version=1,
-            ),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_sustainability_preference_profiles(
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        as_of_date=date(2026, 5, 3),
-    )
-
-    assert [row.preference_code for row in rows] == [
-        "MIN_SUSTAINABLE_ALLOCATION",
-        "THERMAL_COAL_EXCLUSION",
-    ]
-    assert rows[0].preference_version == 2
-    db.execute.assert_awaited_once()
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert (
-        "row_number() OVER (PARTITION BY "
-        "sustainability_preference_profiles.preference_framework, "
-        "sustainability_preference_profiles.preference_code"
-    ) in compiled
-    assert "anon_1.rn = 1" in compiled
-
-
-@pytest.mark.asyncio
 async def test_reference_data_repository_lists_latest_client_tax_profiles() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
@@ -1005,7 +964,7 @@ async def test_resolve_discretionary_mandate_binding_uses_effective_filters() ->
 @pytest.mark.asyncio
 async def test_client_source_data_filters_use_normalized_active_statuses() -> None:
     db = AsyncMock(spec=AsyncSession)
-    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(6)]
+    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(5)]
     repo = ReferenceDataRepository(db)
 
     common_kwargs = {
@@ -1015,7 +974,6 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
     }
 
-    await repo.list_sustainability_preference_profiles(**common_kwargs)
     await repo.list_client_tax_profiles(**common_kwargs)
     await repo.list_client_tax_rule_sets(**common_kwargs)
     await repo.list_client_income_needs_schedules(**common_kwargs)
@@ -1027,26 +985,19 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         for call in db.execute.await_args_list
     ]
 
+    assert "client_tax_profiles.profile_status = 'active'" in compiled_statements[0]
+    assert "lower(trim(client_tax_profiles.profile_status))" not in compiled_statements[0]
+    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[1]
+    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[1]
+    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[2]
+    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[2]
+    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[3]
     assert (
-        "sustainability_preference_profiles.preference_status = 'active'" in compiled_statements[0]
+        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[3]
     )
+    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[4]
     assert (
-        "lower(trim(sustainability_preference_profiles.preference_status))"
-        not in compiled_statements[0]
-    )
-    assert "client_tax_profiles.profile_status = 'active'" in compiled_statements[1]
-    assert "lower(trim(client_tax_profiles.profile_status))" not in compiled_statements[1]
-    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[2]
-    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[2]
-    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[3]
-    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[3]
-    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[4]
-    assert (
-        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[4]
-    )
-    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[5]
-    assert (
-        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[5]
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[4]
     )
 
 

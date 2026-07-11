@@ -242,9 +242,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/reference_data_repository.py:list_risk_free_series": (
         "RiskFreeSeries",
     ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_sustainability_preference_profiles": (
-        "SustainabilityPreferenceProfile",
-    ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_taxonomy": (
         "ClassificationTaxonomy",
     ),

@@ -31,7 +31,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     PlannedWithdrawalScheduleRequest,
     PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
-    SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
@@ -756,76 +755,6 @@ async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_in
     assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
     assert response.candidates == []
     assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_sustainability_preference_profile_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_sustainability_preference_profiles.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            preference_framework="LOTUS_SUSTAINABILITY_V1",
-            preference_code="MIN_SUSTAINABLE_ALLOCATION",
-            preference_status="active",
-            preference_source="client_mandate",
-            minimum_allocation=Decimal("0.2000000000"),
-            maximum_allocation=None,
-            applies_to_asset_classes=["equity", "fixed_income"],
-            exclusion_codes=["THERMAL_COAL"],
-            positive_tilt_codes=["LOW_CARBON_TRANSITION"],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            preference_version=1,
-            source_record_id="sustainability:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_sustainability_preference_profile(
-        "PB_SG_GLOBAL_BAL_001",
-        SustainabilityPreferenceProfileRequest(
-            as_of_date=as_of_date,
-            tenant_id="default",
-            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        ),
-    )
-
-    assert response is not None
-    assert response.product_name == "SustainabilityPreferenceProfile"
-    assert response.supportability.state == "READY"
-    assert response.supportability.preference_count == 1
-    assert response.preferences[0].minimum_allocation == Decimal("0.2000000000")
-    assert response.preferences[0].exclusion_codes == ["THERMAL_COAL"]
-    assert response.lineage["source_table"] == (
-        "sustainability_preference_profiles,portfolio_mandate_bindings"
-    )
-    service._reference_repository.list_sustainability_preference_profiles.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_preferences=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_sustainability_preference_profile_returns_none_without_binding():
-    service = make_service()
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = None  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_sustainability_preference_profile(
-        "PB_MISSING",
-        SustainabilityPreferenceProfileRequest(as_of_date=date(2026, 5, 3)),
-    )
-
-    assert response is None
-    service._reference_repository.list_sustainability_preference_profiles.assert_not_awaited()  # type: ignore[attr-defined] # pylint: disable=line-too-long
 
 
 @pytest.mark.asyncio

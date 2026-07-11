@@ -66,8 +66,6 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
-    SustainabilityPreferenceProfileRequest,
-    SustainabilityPreferenceProfileResponse,
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
@@ -223,16 +221,6 @@ class IntegrationService:
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
         return await self._dpm_readiness_service.resolve_discretionary_mandate_binding(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_sustainability_preference_profile(
-        self,
-        portfolio_id: str,
-        request: SustainabilityPreferenceProfileRequest,
-    ) -> SustainabilityPreferenceProfileResponse | None:
-        return await self._client_profile_income_service.get_sustainability_preference_profile(
             portfolio_id=portfolio_id,
             request=request,
         )

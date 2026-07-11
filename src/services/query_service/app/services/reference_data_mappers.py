@@ -27,7 +27,6 @@ from ..dtos.reference_integration_dto import (
     PortfolioTaxLotRecord,
     RiskFreeSeriesPoint,
     SeriesPoint,
-    SustainabilityPreferenceProfileEntry,
 )
 from ..read_models import PortfolioTaxLotReadRecord
 from ..repositories.identifier_normalization import normalize_security_id
@@ -506,24 +505,6 @@ def liquidity_reserve_requirement_entry(row: Any) -> LiquidityReserveRequirement
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         requirement_version=int(row.requirement_version),
-        source_record_id=row.source_record_id,
-    )
-
-
-def sustainability_preference_profile_entry(row: Any) -> SustainabilityPreferenceProfileEntry:
-    return SustainabilityPreferenceProfileEntry(
-        preference_framework=row.preference_framework,
-        preference_code=row.preference_code,
-        preference_status=row.preference_status,
-        preference_source=row.preference_source,
-        minimum_allocation=as_optional_decimal(row.minimum_allocation),
-        maximum_allocation=as_optional_decimal(row.maximum_allocation),
-        applies_to_asset_classes=string_list(row.applies_to_asset_classes),
-        exclusion_codes=string_list(row.exclusion_codes),
-        positive_tilt_codes=string_list(row.positive_tilt_codes),
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        preference_version=int(row.preference_version),
         source_record_id=row.source_record_id,
     )
 

@@ -29,7 +29,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     portfolio_manager_book_member,
     portfolio_tax_lot_record,
     risk_free_series_point,
-    sustainability_preference_profile_entry,
 )
 
 
@@ -623,51 +622,3 @@ def test_client_liquidity_entries_map_source_data_rows() -> None:
     assert reserve.requirement_version == 4
     assert withdrawal.amount == Decimal("25000.0000")
     assert withdrawal.purpose_code == "education"
-
-
-def test_sustainability_preference_entry_maps_source_data_row() -> None:
-    preference = sustainability_preference_profile_entry(
-        SimpleNamespace(
-            preference_framework="LOTUS_SUSTAINABILITY_V1",
-            preference_code="MIN_SUSTAINABLE_ALLOCATION",
-            preference_status="active",
-            preference_source="client_suitability",
-            minimum_allocation="0.2000000000",
-            maximum_allocation=None,
-            applies_to_asset_classes=["equity", ""],
-            exclusion_codes=["THERMAL_COAL"],
-            positive_tilt_codes=["GREEN_REVENUE"],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            preference_version="3",
-            source_record_id="preference-1",
-        )
-    )
-
-    assert preference.minimum_allocation == Decimal("0.2000000000")
-    assert preference.maximum_allocation is None
-    assert preference.applies_to_asset_classes == ["equity"]
-    assert preference.preference_version == 3
-
-
-def test_client_governance_entry_treats_blank_optional_allocations_as_absent() -> None:
-    preference = sustainability_preference_profile_entry(
-        SimpleNamespace(
-            preference_framework="LOTUS_SUSTAINABILITY_V1",
-            preference_code="MIN_SUSTAINABLE_ALLOCATION",
-            preference_status="active",
-            preference_source="client_suitability",
-            minimum_allocation=" ",
-            maximum_allocation="",
-            applies_to_asset_classes=[],
-            exclusion_codes=[],
-            positive_tilt_codes=[],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            preference_version="3",
-            source_record_id="preference-1",
-        )
-    )
-
-    assert preference.minimum_allocation is None
-    assert preference.maximum_allocation is None

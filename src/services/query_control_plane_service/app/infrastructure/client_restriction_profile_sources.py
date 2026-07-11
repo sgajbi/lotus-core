@@ -3,18 +3,19 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.database_models import ClientRestrictionProfile, PortfolioMandateBinding
+from portfolio_common.database_models import ClientRestrictionProfile
 from portfolio_common.source_lifecycle_predicates import (
     CLIENT_RESTRICTION_ACTIVE,
-    DISCRETIONARY_MANDATE_TYPE,
 )
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.client_restriction_profile import (
-    ClientRestrictionMandateBinding,
     ClientRestrictionSourceRecord,
 )
+from ..domain.effective_mandate import EffectiveMandateBinding
+from .effective_mandate_sources import resolve_effective_mandate_binding
+from .effective_profile_queries import effective_on, ranked_latest_ids
 
 
 class SqlAlchemyClientRestrictionProfileSourceReader:
@@ -29,31 +30,13 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
         portfolio_id: str,
         as_of_date: date,
         mandate_id: str | None,
-    ) -> ClientRestrictionMandateBinding | None:
-        statement = (
-            select(PortfolioMandateBinding)
-            .where(
-                PortfolioMandateBinding.portfolio_id == portfolio_id,
-                PortfolioMandateBinding.mandate_type == DISCRETIONARY_MANDATE_TYPE,
-                _effective_on(
-                    PortfolioMandateBinding.effective_from,
-                    PortfolioMandateBinding.effective_to,
-                    as_of_date,
-                ),
-            )
-            .order_by(
-                PortfolioMandateBinding.effective_from.desc(),
-                PortfolioMandateBinding.observed_at.desc().nulls_last(),
-                PortfolioMandateBinding.binding_version.desc(),
-                PortfolioMandateBinding.updated_at.desc(),
-            )
-            .limit(1)
+    ) -> EffectiveMandateBinding | None:
+        return await resolve_effective_mandate_binding(
+            self._session,
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            mandate_id=mandate_id,
         )
-        if mandate_id:
-            statement = statement.where(PortfolioMandateBinding.mandate_id == mandate_id)
-        result = await self._session.execute(statement)
-        row = result.scalars().first()
-        return _mandate_binding(row) if row is not None else None
 
     async def list_restrictions(
         self,
@@ -67,7 +50,7 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
         predicates = [
             ClientRestrictionProfile.portfolio_id == portfolio_id,
             ClientRestrictionProfile.client_id == client_id,
-            _effective_on(
+            effective_on(
                 ClientRestrictionProfile.effective_from,
                 ClientRestrictionProfile.effective_to,
                 as_of_date,
@@ -87,30 +70,19 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
                 )
             )
 
-        ranked = (
-            select(
-                ClientRestrictionProfile.id.label("id"),
-                ClientRestrictionProfile.restriction_scope.label("restriction_scope"),
-                ClientRestrictionProfile.restriction_code.label("restriction_code"),
-                func.row_number()
-                .over(
-                    partition_by=(
-                        ClientRestrictionProfile.restriction_scope,
-                        ClientRestrictionProfile.restriction_code,
-                    ),
-                    order_by=(
-                        ClientRestrictionProfile.effective_from.desc(),
-                        ClientRestrictionProfile.observed_at.desc().nullslast(),
-                        ClientRestrictionProfile.restriction_version.desc(),
-                        ClientRestrictionProfile.updated_at.desc(),
-                        ClientRestrictionProfile.created_at.desc(),
-                        ClientRestrictionProfile.id.desc(),
-                    ),
-                )
-                .label("rn"),
-            )
-            .where(*predicates)
-            .subquery()
+        ranked = ranked_latest_ids(
+            ClientRestrictionProfile,
+            ClientRestrictionProfile.restriction_scope,
+            ClientRestrictionProfile.restriction_code,
+            predicates=predicates,
+            order_by=(
+                ClientRestrictionProfile.effective_from.desc(),
+                ClientRestrictionProfile.observed_at.desc().nullslast(),
+                ClientRestrictionProfile.restriction_version.desc(),
+                ClientRestrictionProfile.updated_at.desc(),
+                ClientRestrictionProfile.created_at.desc(),
+                ClientRestrictionProfile.id.desc(),
+            ),
         )
         statement = (
             select(ClientRestrictionProfile)
@@ -123,23 +95,6 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
         )
         result = await self._session.execute(statement)
         return [_restriction_record(row) for row in result.scalars().all()]
-
-
-def _effective_on(effective_from: Any, effective_to: Any, as_of_date: date) -> Any:
-    return and_(
-        effective_from <= as_of_date,
-        or_(effective_to.is_(None), effective_to >= as_of_date),
-    )
-
-
-def _mandate_binding(row: Any) -> ClientRestrictionMandateBinding:
-    return ClientRestrictionMandateBinding(
-        client_id=row.client_id,
-        mandate_id=row.mandate_id,
-        observed_at=row.observed_at,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
 
 
 def _restriction_record(row: Any) -> ClientRestrictionSourceRecord:

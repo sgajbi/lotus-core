@@ -26,7 +26,6 @@ from portfolio_common.database_models import (
     PortfolioBenchmarkAssignment,
     PortfolioMandateBinding,
     RiskFreeSeries,
-    SustainabilityPreferenceProfile,
 )
 from portfolio_common.source_lifecycle_predicates import (
     CLIENT_INCOME_NEEDS_ACTIVE,
@@ -37,7 +36,6 @@ from portfolio_common.source_lifecycle_predicates import (
     LIQUIDITY_RESERVE_ACTIVE,
     MODEL_PORTFOLIO_TARGET_ACTIVE,
     PLANNED_WITHDRAWAL_ACTIVE,
-    SUSTAINABILITY_PREFERENCE_ACTIVE,
 )
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -239,64 +237,6 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
-
-    async def list_sustainability_preference_profiles(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_preferences: bool = False,
-    ) -> list[SustainabilityPreferenceProfile]:
-        predicates = [
-            SustainabilityPreferenceProfile.portfolio_id == portfolio_id,
-            SustainabilityPreferenceProfile.client_id == client_id,
-            effective_filter(
-                SustainabilityPreferenceProfile.effective_from,
-                SustainabilityPreferenceProfile.effective_to,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    SustainabilityPreferenceProfile.mandate_id.is_(None),
-                    SustainabilityPreferenceProfile.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_preferences:
-            predicates.append(
-                SUSTAINABILITY_PREFERENCE_ACTIVE.sqlalchemy_filter(
-                    SustainabilityPreferenceProfile.preference_status
-                )
-            )
-
-        ranked = ranked_latest_effective_ids(
-            SustainabilityPreferenceProfile,
-            SustainabilityPreferenceProfile.preference_framework,
-            SustainabilityPreferenceProfile.preference_code,
-            predicates=predicates,
-            order_by=(
-                SustainabilityPreferenceProfile.effective_from.desc(),
-                SustainabilityPreferenceProfile.observed_at.desc().nullslast(),
-                SustainabilityPreferenceProfile.preference_version.desc(),
-                SustainabilityPreferenceProfile.updated_at.desc(),
-                SustainabilityPreferenceProfile.created_at.desc(),
-                SustainabilityPreferenceProfile.id.desc(),
-            ),
-        )
-        stmt = (
-            select(SustainabilityPreferenceProfile)
-            .join(ranked, SustainabilityPreferenceProfile.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                SustainabilityPreferenceProfile.preference_framework.asc(),
-                SustainabilityPreferenceProfile.preference_code.asc(),
-            )
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
 
     async def list_client_tax_profiles(
         self,

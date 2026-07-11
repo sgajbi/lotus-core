@@ -1,6 +1,5 @@
 """Application use case for the effective client restriction source product."""
 
-from datetime import datetime
 from typing import Literal
 
 from portfolio_common.request_fingerprints import request_fingerprint
@@ -14,10 +13,11 @@ from ..contracts.client_restriction_profile import (
     ClientRestrictionProfileSupportability,
 )
 from ..domain.client_restriction_profile import (
-    ClientRestrictionMandateBinding,
     ClientRestrictionSourceRecord,
 )
+from ..domain.effective_mandate import EffectiveMandateBinding
 from ..ports.client_restriction_profile import ClientRestrictionProfileSourceReader
+from .source_evidence import latest_evidence_timestamp
 
 
 class ClientRestrictionProfileService:
@@ -59,7 +59,7 @@ class ClientRestrictionProfileService:
         self,
         *,
         portfolio_id: str,
-        binding: ClientRestrictionMandateBinding,
+        binding: EffectiveMandateBinding,
         request: ClientRestrictionProfileRequest,
         restrictions: list[ClientRestrictionSourceRecord],
     ) -> ClientRestrictionProfileResponse:
@@ -93,7 +93,7 @@ class ClientRestrictionProfileService:
                 generated_at=self._clock.utc_now(),
                 tenant_id=request.tenant_id,
                 data_quality_status=("ACCEPTED" if restrictions else "MISSING"),
-                latest_evidence_timestamp=_latest_evidence_timestamp(binding, restrictions),
+                latest_evidence_timestamp=latest_evidence_timestamp([binding], restrictions),
                 source_batch_fingerprint=None,
                 snapshot_id=(
                     "client_restriction_profile:"
@@ -126,23 +126,3 @@ def _restriction_entry(record: ClientRestrictionSourceRecord) -> ClientRestricti
         restriction_version=record.restriction_version,
         source_record_id=record.source_record_id,
     )
-
-
-def _latest_evidence_timestamp(
-    binding: ClientRestrictionMandateBinding,
-    restrictions: list[ClientRestrictionSourceRecord],
-) -> datetime | None:
-    timestamps = _record_timestamps(binding)
-    for restriction in restrictions:
-        timestamps.extend(_record_timestamps(restriction))
-    return max(timestamps) if timestamps else None
-
-
-def _record_timestamps(
-    record: ClientRestrictionMandateBinding | ClientRestrictionSourceRecord,
-) -> list[datetime]:
-    return [
-        timestamp
-        for timestamp in (record.observed_at, record.updated_at, record.created_at)
-        if timestamp is not None
-    ]

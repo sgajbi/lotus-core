@@ -5,17 +5,6 @@ from datetime import date, datetime
 
 
 @dataclass(frozen=True, slots=True)
-class ClientRestrictionMandateBinding:
-    """Minimal effective mandate identity used by restriction resolution."""
-
-    client_id: str
-    mandate_id: str
-    observed_at: datetime | None
-    created_at: datetime | None
-    updated_at: datetime | None
-
-
-@dataclass(frozen=True, slots=True)
 class ClientRestrictionSourceRecord:
     """Persistence-independent restriction evidence selected for the response."""
 

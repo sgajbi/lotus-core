@@ -26,6 +26,7 @@ from .application.integration_policy import (
     IntegrationPolicyService,
 )
 from .application.simulation import SimulationService
+from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
@@ -38,6 +39,9 @@ from .infrastructure.simulation_store import (
     SqlAlchemySimulationStore,
 )
 from .infrastructure.simulation_unit_of_work import SqlAlchemySimulationUnitOfWork
+from .infrastructure.sustainability_preference_profile_sources import (
+    SqlAlchemySustainabilityPreferenceProfileSourceReader,
+)
 from .settings import load_query_control_plane_settings
 
 
@@ -113,4 +117,13 @@ def get_simulation_service(
         unit_of_work=SqlAlchemySimulationUnitOfWork(db),
         clock=SystemClock(),
         id_generator=UuidIdGenerator(),
+    )
+
+
+def get_sustainability_preference_profile_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> SustainabilityPreferenceProfileService:
+    return SustainabilityPreferenceProfileService(
+        reader=SqlAlchemySustainabilityPreferenceProfileSourceReader(db),
+        clock=SystemClock(),
     )
