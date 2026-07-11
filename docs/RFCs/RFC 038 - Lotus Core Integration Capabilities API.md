@@ -5,13 +5,13 @@
 | Status | Implemented |
 | Created | 2026-02-23 |
 | Last Updated | 2026-03-04 |
-| Owners | `query-service` integration contracts |
+| Owners | `query-control-plane-service` integration contracts |
 | Depends On | ADR 003, RFC 035 integration patterns, RFC 042 policy overrides |
 | Scope | Backend capability negotiation API for downstream consumers |
 
 ## Executive Summary
 
-RFC 038 is implemented in query-service:
+RFC 038 is implemented in query control plane:
 1. `GET /integration/capabilities` exists with consumer + tenant context.
 2. Response includes contract metadata, input-mode support, feature flags, and workflow flags.
 3. Tenant-aware policy overrides and policy-version provenance are supported.
@@ -41,10 +41,11 @@ Implemented:
 
 Evidence:
 - `src/services/query_control_plane_service/app/routers/capabilities.py`
-- `src/services/query_service/app/services/capabilities_service.py`
-- `src/services/query_service/app/dtos/capabilities_dto.py`
-- `tests/unit/services/query_service/services/test_capabilities_service.py`
-- `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+- `src/services/query_control_plane_service/app/application/capabilities_service.py`
+- `src/services/query_control_plane_service/app/application/capability_policy.py`
+- `src/services/query_control_plane_service/app/contracts/capabilities.py`
+- `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
+- `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 - `docs/architecture/adr_003_integration_capabilities_api.md`
 
 ## Requirement-to-Implementation Traceability
@@ -84,9 +85,9 @@ Centralized policy control-plane migration is valid future architecture work but
 ## Test and Validation Evidence
 
 1. Capabilities service unit tests:
-   - `tests/unit/services/query_service/services/test_capabilities_service.py`
+   - `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
 2. Router dependency integration tests:
-   - `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+   - `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 
 ## Original Acceptance Criteria Alignment
 

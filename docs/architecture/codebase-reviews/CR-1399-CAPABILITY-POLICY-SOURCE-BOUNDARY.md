@@ -19,7 +19,8 @@ boundaries.
 
 ## Scope
 
-- Added `query_service.app.services.capability_policy` with:
+- Added the capability policy boundary, now owned by
+  `query_control_plane_service.app.application.capability_policy`, with:
   - `CapabilityCatalog`
   - `CapabilityPolicyInputs`
   - `EnvironmentCapabilityPolicySource`
@@ -38,9 +39,9 @@ Existing capability endpoint output remains compatible.
 
 ## Validation Evidence
 
-- `python -m pytest tests\unit\services\query_service\services\test_capabilities_service.py -q`
+- `python -m pytest tests\unit\services\query_control_plane_service\application\test_capabilities_service.py -q`
   - `14 passed`
-- `python -m ruff check src\services\query_service\app\services\capability_policy.py src\services\query_service\app\services\capabilities_service.py tests\unit\services\query_service\services\test_capabilities_service.py`
+- `python -m ruff check src\services\query_control_plane_service\app\application tests\unit\services\query_control_plane_service\application\test_capabilities_service.py`
   - passed
 
 Final lint, documentation, and diff checks are recorded in the issue comment before commit.

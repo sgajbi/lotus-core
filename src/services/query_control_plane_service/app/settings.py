@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.runtime_settings import (
     RuntimeConfigurationError,
@@ -16,7 +17,10 @@ QUERY_CONTROL_PLANE_SERVICE_NAME = "query control plane service"
 
 
 def env_bool(name: str, default: bool) -> bool:
-    return shared_env_bool(name, default, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME)
+    return cast(
+        bool,
+        shared_env_bool(name, default, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME),
+    )
 
 
 def env_int(
@@ -26,25 +30,34 @@ def env_int(
     minimum: int | None = None,
     maximum: int | None = None,
 ) -> int:
-    return shared_env_int(
-        name,
-        default,
-        service_name=QUERY_CONTROL_PLANE_SERVICE_NAME,
-        minimum=minimum,
-        maximum=maximum,
+    return cast(
+        int,
+        shared_env_int(
+            name,
+            default,
+            service_name=QUERY_CONTROL_PLANE_SERVICE_NAME,
+            minimum=minimum,
+            maximum=maximum,
+        ),
     )
 
 
 def env_str(name: str, default: str) -> str:
-    return shared_env_str(name, default)
+    return cast(str, shared_env_str(name, default))
 
 
 def env_json_map(name: str) -> dict[str, Any]:
-    return shared_env_json_map(name, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME)
+    return cast(
+        dict[str, Any],
+        shared_env_json_map(name, service_name=QUERY_CONTROL_PLANE_SERVICE_NAME),
+    )
 
 
 @dataclass(frozen=True, slots=True)
 class QueryControlPlaneSettings:
+    lotus_core_policy_version: str
+    capability_tenant_overrides_json: str
+    has_database_url: bool
     enterprise_policy_version: str
     enterprise_enforce_authz: bool
     enterprise_enforce_read_authz: bool
@@ -65,6 +78,9 @@ def load_query_control_plane_settings() -> QueryControlPlaneSettings:
         service_name=QUERY_CONTROL_PLANE_SERVICE_NAME
     )
     return QueryControlPlaneSettings(
+        lotus_core_policy_version=env_str("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
+        capability_tenant_overrides_json=env_str("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", ""),
+        has_database_url=bool(os.getenv("HOST_DATABASE_URL") or os.getenv("DATABASE_URL")),
         enterprise_policy_version=env_str("ENTERPRISE_POLICY_VERSION", "1.0.0"),
         enterprise_enforce_authz=env_bool("ENTERPRISE_ENFORCE_AUTHZ", production_security_profile),
         enterprise_enforce_read_authz=env_bool(

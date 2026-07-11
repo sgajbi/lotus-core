@@ -1,17 +1,34 @@
+"""Tests for query-control-plane capability policy and application behavior."""
+
 import importlib
+from pathlib import Path
 
 import portfolio_common.db as db_module
 import sqlalchemy
 import sqlalchemy.ext.asyncio as sa_async
 
-import src.services.query_service.app.services.capabilities_service as capabilities_module
-from src.services.query_service.app.services.capabilities_service import CapabilitiesService
-from src.services.query_service.app.services.capability_policy import (
+from src.services.query_control_plane_service.app.application import (
+    capabilities_service as capabilities_module,
+)
+from src.services.query_control_plane_service.app.application.capabilities_service import (
+    CapabilitiesService,
+)
+from src.services.query_control_plane_service.app.application.capability_policy import (
     CapabilityPolicyInputs,
     CapabilityPolicyResolver,
     decode_tenant_overrides_payload,
     normalize_tenant_overrides,
 )
+
+
+def test_capabilities_family_is_not_owned_by_query_service() -> None:
+    retired_paths = (
+        Path("src/services/query_service/app/dtos/capabilities_dto.py"),
+        Path("src/services/query_service/app/services/capabilities_service.py"),
+        Path("src/services/query_service/app/services/capability_policy.py"),
+    )
+
+    assert not any(path.exists() for path in retired_paths)
 
 
 def test_capabilities_default_flags(monkeypatch):
@@ -258,7 +275,7 @@ def test_resolve_as_of_date_uses_latest_business_date_from_db(monkeypatch):
 
     monkeypatch.setenv("DATABASE_URL", "postgresql://dummy")
     monkeypatch.setattr(
-        "src.services.query_service.app.services.capabilities_service.SessionLocal",
+        "src.services.query_control_plane_service.app.application.capabilities_service.SessionLocal",
         lambda: _MockSession(),
     )
 
@@ -275,7 +292,7 @@ def test_resolve_as_of_date_falls_back_when_db_access_fails(monkeypatch):
 
     monkeypatch.setenv("DATABASE_URL", "postgresql://dummy")
     monkeypatch.setattr(
-        "src.services.query_service.app.services.capabilities_service.SessionLocal",
+        "src.services.query_control_plane_service.app.application.capabilities_service.SessionLocal",
         lambda: _FailSession(),
     )
 

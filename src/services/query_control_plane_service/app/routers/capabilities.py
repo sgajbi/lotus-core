@@ -2,11 +2,11 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, Query
 
-from src.services.query_service.app.dtos.capabilities_dto import (
+from ..application.capabilities_service import CapabilitiesService
+from ..contracts.capabilities import (
     ConsumerSystem,
     IntegrationCapabilitiesResponse,
 )
-from src.services.query_service.app.services.capabilities_service import CapabilitiesService
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 

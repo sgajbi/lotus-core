@@ -61,7 +61,7 @@ The implementation is substantially complete and aligned with the target role of
 
 ## Test and Validation Evidence
 1. `tests/integration/services/query_service/test_main_app.py`
-2. `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+2. `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 3. `tests/integration/services/query_service/test_simulation_router_dependency.py`
 4. `tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py`
 5. `src/services/ingestion_service/app/adapter_mode.py`

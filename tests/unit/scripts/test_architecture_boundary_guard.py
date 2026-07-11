@@ -215,6 +215,34 @@ def test_advisory_compatibility_route_can_use_quarantined_simulation_service(
     assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == []
 
 
+def test_query_control_plane_capabilities_reject_query_service_import(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "query_control_plane_service"
+        / "app"
+        / "application"
+        / "capabilities_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.query_service.app.settings import load_query_service_settings\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES)
+
+    assert findings == [
+        "src/services/query_control_plane_service/app/application/capabilities_service.py:1: "
+        "query-control-plane capabilities must remain control-plane owned: disallowed direct "
+        "import 'services.query_service.app.settings'"
+    ]
+
+
 def test_direct_import_boundary_ignores_allowed_dto_import(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path
     router = (

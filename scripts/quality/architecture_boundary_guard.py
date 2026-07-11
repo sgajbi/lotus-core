@@ -173,6 +173,16 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
             "services.query_service.app.services.advisory_simulation_service",
         ),
     ),
+    DirectImportBoundaryRule(
+        name="query-control-plane capabilities must remain control-plane owned",
+        source_path_prefixes=(
+            "src/services/query_control_plane_service/app/application/capabilities_service.py",
+            "src/services/query_control_plane_service/app/application/capability_policy.py",
+            "src/services/query_control_plane_service/app/contracts/capabilities.py",
+            "src/services/query_control_plane_service/app/routers/capabilities.py",
+        ),
+        forbidden_module_prefixes=("services.query_service",),
+    ),
 )
 
 

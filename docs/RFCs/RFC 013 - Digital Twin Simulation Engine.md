@@ -5,7 +5,7 @@
 | Status | Partially Implemented |
 | Created | 2025-08-30 |
 | Last Updated | 2026-03-04 |
-| Owners | lotus-core query-service simulation capability |
+| Owners | lotus-core query-control-plane simulation capability |
 | Depends On | RFC 057, RFC 046A, RFC 058 (evolution path) |
 | Related Standards | `docs/standards/data-model-ownership.md` |
 | Scope | In repo (`lotus-core`) |

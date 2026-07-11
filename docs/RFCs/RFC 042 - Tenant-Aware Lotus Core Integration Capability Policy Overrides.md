@@ -5,7 +5,7 @@
 | Status | Implemented |
 | Created | 2026-02-24 |
 | Last Updated | 2026-03-04 |
-| Owners | `query-service` |
+| Owners | `query-control-plane-service` |
 | Depends On | RFC 038 |
 | Scope | Tenant-level overrides for `/integration/capabilities` policy resolution |
 
@@ -39,11 +39,12 @@ Implemented:
 4. Unit and integration tests cover default, overridden, and invalid override scenarios.
 
 Evidence:
-- `src/services/query_service/app/services/capabilities_service.py`
+- `src/services/query_control_plane_service/app/application/capabilities_service.py`
+- `src/services/query_control_plane_service/app/application/capability_policy.py`
 - `src/services/query_control_plane_service/app/routers/capabilities.py`
-- `src/services/query_service/app/dtos/capabilities_dto.py`
-- `tests/unit/services/query_service/services/test_capabilities_service.py`
-- `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+- `src/services/query_control_plane_service/app/contracts/capabilities.py`
+- `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
+- `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -76,8 +77,8 @@ No high-value implementation gap for RFC 042 scope.
 
 ## Test and Validation Evidence
 
-1. `tests/unit/services/query_service/services/test_capabilities_service.py`
-2. `tests/integration/services/query_service/test_capabilities_router_dependency.py`
+1. `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
+2. `tests/integration/services/query_control_plane_service/test_capabilities_router_dependency.py`
 
 ## Original Acceptance Criteria Alignment
 
