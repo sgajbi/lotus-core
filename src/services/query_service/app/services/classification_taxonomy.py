@@ -5,12 +5,14 @@ from typing import Any
 
 from portfolio_common.request_fingerprints import request_fingerprint
 
-from ..dtos.reference_integration_dto import ClassificationTaxonomyResponse
+from ..dtos.reference_integration_dto import (
+    ClassificationTaxonomyEntry,
+    ClassificationTaxonomyResponse,
+)
 from .reference_data_helpers import (
     latest_reference_evidence_timestamp,
     market_reference_data_quality_status,
 )
-from .reference_data_mappers import classification_taxonomy_entry
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 
@@ -46,7 +48,7 @@ def build_classification_taxonomy_response(
     )
     return ClassificationTaxonomyResponse(
         as_of_date=as_of_date,
-        records=[classification_taxonomy_entry(row) for row in rows],
+        records=[_classification_taxonomy_entry(row) for row in rows],
         request_fingerprint=taxonomy_request_fingerprint,
         **source_product_runtime_metadata_without_as_of_date(
             as_of_date,
@@ -56,4 +58,17 @@ def build_classification_taxonomy_response(
             ),
             latest_evidence_timestamp=latest_reference_evidence_timestamp(rows),
         ),
+    )
+
+
+def _classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:
+    return ClassificationTaxonomyEntry(
+        classification_set_id=row.classification_set_id,
+        taxonomy_scope=row.taxonomy_scope,
+        dimension_name=row.dimension_name,
+        dimension_value=row.dimension_value,
+        dimension_description=row.dimension_description,
+        effective_from=row.effective_from,
+        effective_to=row.effective_to,
+        quality_status=row.quality_status,
     )

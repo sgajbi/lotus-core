@@ -50,6 +50,7 @@ from .application.integration_policy import (
     IntegrationPolicyService,
 )
 from .application.portfolio_manager_book import PortfolioManagerBookService
+from .application.reference_coverage import ReferenceCoverageService
 from .application.risk_free_series import RiskFreeSeriesService
 from .application.simulation import SimulationService
 from .application.sustainability_preference_profile import SustainabilityPreferenceProfileService
@@ -240,6 +241,20 @@ def get_risk_free_series_service(
 
     return RiskFreeSeriesService(
         reader=SqlAlchemyRiskFreeSeriesReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_reference_coverage_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ReferenceCoverageService:
+    """Compose QCP-owned benchmark and risk-free coverage diagnostics."""
+
+    return ReferenceCoverageService(
+        benchmark_reader=SqlAlchemyBenchmarkDefinitionReader(db),
+        index_series_reader=SqlAlchemyIndexSeriesReader(db),
+        benchmark_return_reader=SqlAlchemyBenchmarkReturnSeriesReader(db),
+        risk_free_reader=SqlAlchemyRiskFreeSeriesReader(db),
         clock=SystemClock().utc_now,
     )
 

@@ -8,8 +8,6 @@ from portfolio_common.source_data_products import source_data_product_openapi_ex
 from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyRequest,
     ClassificationTaxonomyResponse,
-    CoverageRequest,
-    CoverageResponse,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -40,6 +38,7 @@ from ..application.index_catalog import IndexCatalogService
 from ..application.index_series import IndexSeriesService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
+from ..application.reference_coverage import ReferenceCoverageService
 from ..application.risk_free_series import RiskFreeSeriesService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..application.transaction_economics.service import TransactionEconomicsService
@@ -146,6 +145,7 @@ from ..contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
 )
+from ..contracts.reference_coverage import CoverageRequest, CoverageResponse
 from ..contracts.risk_free_series import RiskFreeSeriesRequest, RiskFreeSeriesResponse
 from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileRequest,
@@ -175,6 +175,7 @@ from ..dependencies import (
     get_integration_policy_service,
     get_integration_service,
     get_portfolio_manager_book_service,
+    get_reference_coverage_service,
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
@@ -2533,15 +2534,13 @@ async def get_benchmark_coverage(
         description="Benchmark identifier for the requested coverage diagnostics.",
         examples=["BENCH-SP500-TR"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    reference_coverage_service: ReferenceCoverageService = Depends(
+        get_reference_coverage_service
+    ),
 ) -> CoverageResponse:
-    return cast(
-        CoverageResponse,
-        await integration_service.get_benchmark_coverage(
-            benchmark_id=benchmark_id,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        ),
+    return await reference_coverage_service.get_benchmark(
+        benchmark_id=benchmark_id,
+        request=request,
     )
 
 
@@ -2563,13 +2562,11 @@ async def get_benchmark_coverage(
 async def get_risk_free_coverage(
     currency: str = Query(..., description="Risk-free series currency.", examples=["USD"]),
     request: CoverageRequest = Body(...),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    reference_coverage_service: ReferenceCoverageService = Depends(
+        get_reference_coverage_service
+    ),
 ) -> CoverageResponse:
-    return cast(
-        CoverageResponse,
-        await integration_service.get_risk_free_coverage(
-            currency=currency,
-            start_date=request.window.start_date,
-            end_date=request.window.end_date,
-        ),
+    return await reference_coverage_service.get_risk_free(
+        currency=currency,
+        request=request,
     )
