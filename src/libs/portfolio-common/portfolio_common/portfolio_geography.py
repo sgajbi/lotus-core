@@ -1,3 +1,5 @@
+"""Canonical country-to-region classification for portfolio allocation views."""
+
 from __future__ import annotations
 
 COUNTRY_TO_REGION = {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from portfolio_common.portfolio_allocation import AllocationDimension
 
 from src.services.query_service.app.advisory_simulation.allocation_contract import (
     ADVISORY_PROPOSAL_ALLOCATION_DIMENSIONS,
@@ -10,7 +11,6 @@ from src.services.query_service.app.advisory_simulation.allocation_contract impo
     advisory_proposal_allocation_lens_contract,
     validate_advisory_proposal_allocation_lens_contract,
 )
-from src.services.query_service.app.dtos.reporting_dto import AllocationDimension
 
 
 def test_advisory_proposal_allocation_contract_classifies_every_live_dimension() -> None:

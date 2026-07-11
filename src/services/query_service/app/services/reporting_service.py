@@ -7,6 +7,10 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
+from portfolio_common.portfolio_allocation import (
+    AllocationInputRow,
+    calculate_allocation_views,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import (
@@ -31,7 +35,6 @@ from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,
     ReportingRepository,
 )
-from .allocation_calculator import AllocationInputRow, calculate_allocation_views
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
 from .decimal_amounts import decimal_or_none, decimal_or_zero
