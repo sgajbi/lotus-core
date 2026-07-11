@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 for source_root in (
     REPO_ROOT,
     REPO_ROOT / "src" / "libs" / "portfolio-common",
-    REPO_ROOT / "src" / "services" / "calculators" / "cost_calculator_service",
+    REPO_ROOT / "src" / "services" / "portfolio_transaction_processing_service",
 ):
     sys.path.insert(0, str(source_root))
 
@@ -24,8 +24,8 @@ from scripts.operations.cost_history_capacity_profile import (  # noqa: E402
     SUPPORTED_METHODS,
     build_capacity_timeline,
 )
-from src.services.calculators.cost_calculator_service.app.transaction_processor import (  # noqa: E402
-    build_transaction_processor,
+from src.services.portfolio_transaction_processing_service.app.application import (  # noqa: E402
+    build_cost_basis_timeline_processor,
 )
 
 SCHEMA_VERSION = "lotus-core.cost-processing-mode-capacity-profile.v3"
@@ -52,9 +52,9 @@ def _open_lot_checkpoint(
     *,
     cost_basis_method: str,
 ) -> tuple[list[dict[str, object]], int]:
-    processed, errors, states = build_transaction_processor(cost_basis_method).process_transactions(
-        [], timeline
-    )
+    processed, errors, states = build_cost_basis_timeline_processor(
+        cost_basis_method
+    ).process_transactions([], timeline)
     if errors or len(processed) != len(timeline):
         raise RuntimeError("Capacity profile prefix failed financial validation")
 
@@ -180,7 +180,7 @@ def run_processing_mode_profile(
             opening_error_count = prefix_error_count
             opening_states = {}
             for _ in range(append_iterations):
-                processed, errors, opening_states = build_transaction_processor(
+                processed, errors, opening_states = build_cost_basis_timeline_processor(
                     method
                 ).process_increment(
                     initial_open_lots_raw=[],
@@ -208,7 +208,7 @@ def run_processing_mode_profile(
             append_error_count = prefix_error_count
             append_states = {}
             for _ in range(append_iterations):
-                processed, errors, append_states = build_transaction_processor(
+                processed, errors, append_states = build_cost_basis_timeline_processor(
                     method
                 ).process_increment(
                     initial_open_lots_raw=disposal_checkpoint,
@@ -233,7 +233,7 @@ def run_processing_mode_profile(
             )
 
             backdated_started = clock()
-            processed, errors, backdated_states = build_transaction_processor(
+            processed, errors, backdated_states = build_cost_basis_timeline_processor(
                 method
             ).process_transactions([], [*timeline, _backdated_buy(timeline)])
             backdated_duration = max(clock() - backdated_started, 0.0)

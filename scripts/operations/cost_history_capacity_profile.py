@@ -15,12 +15,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 for source_root in (
     REPO_ROOT,
     REPO_ROOT / "src" / "libs" / "portfolio-common",
-    REPO_ROOT / "src" / "services" / "calculators" / "cost_calculator_service",
+    REPO_ROOT / "src" / "services" / "portfolio_transaction_processing_service",
 ):
     sys.path.insert(0, str(source_root))
 
-from src.services.calculators.cost_calculator_service.app.transaction_processor import (  # noqa: E402
-    build_transaction_processor,
+from src.services.portfolio_transaction_processing_service.app.application import (  # noqa: E402
+    build_cost_basis_timeline_processor,
 )
 
 SCHEMA_VERSION = "lotus-core.cost-history-capacity-profile.v1"
@@ -91,7 +91,7 @@ def run_capacity_profile(
     for method in methods:
         for transaction_count in counts:
             timeline = build_capacity_timeline(transaction_count)
-            processor = build_transaction_processor(method)
+            processor = build_cost_basis_timeline_processor(method)
             started = clock()
             processed, errors, open_lot_states = processor.process_transactions([], timeline)
             duration_seconds = max(clock() - started, 0.0)

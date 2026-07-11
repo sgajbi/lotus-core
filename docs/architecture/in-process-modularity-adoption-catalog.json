@@ -55,7 +55,7 @@
     {
       "serviceId": "portfolio_transaction_processing_service",
       "servicePath": "src/services/portfolio_transaction_processing_service",
-      "status": "representative-adopted-with-legacy-folders",
+      "status": "representative-adopted",
       "requiredPackagePaths": [
         "src/services/portfolio_transaction_processing_service/app/application",
         "src/services/portfolio_transaction_processing_service/app/domain",
@@ -71,16 +71,12 @@
       "deliveryPackagePaths": [
         "src/services/portfolio_transaction_processing_service/app/delivery"
       ],
-      "legacyFolders": [
-        {
-          "path": "src/services/calculators/cost_calculator_service",
-          "migrationGuidance": "All active cost policy, workflow, SQL repository, metrics, and compatibility staging are target-owned and absent from the image's legacy source closure. Separate retained workflow coverage from obsolete standalone consumer delivery tests, then delete this test-only root."
-        }
-      ],
+      "legacyFolders": [],
       "retiredLegacyFolders": [
         "src/services/calculators/position_calculator",
         "src/services/calculators/cost_calculator_service/app/cost_engine",
-        "src/services/calculators/cashflow_calculator_service"
+        "src/services/calculators/cashflow_calculator_service",
+        "src/services/calculators/cost_calculator_service"
       ],
       "evidence": [
         "docs/standards/application-command-result-standard.md",
@@ -94,9 +90,10 @@
         "docs/architecture/codebase-reviews/CR-1513-COST-TIMELINE-APPLICATION-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1523-CASHFLOW-TARGET-OWNERSHIP.md",
-        "docs/architecture/codebase-reviews/CR-1524-COST-RUNTIME-SOURCE-OWNERSHIP.md"
+        "docs/architecture/codebase-reviews/CR-1524-COST-RUNTIME-SOURCE-OWNERSHIP.md",
+        "docs/architecture/codebase-reviews/CR-1525-CALCULATOR-SOURCE-ROOT-RETIREMENT.md"
       ],
-      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. All active position, cashflow, and cost source ownership is target-owned and the installed image has no legacy calculator source closure. The remaining cost root is a non-deployed test-only consumer shell; its test decomposition plus registry/Kubernetes rollout remain governed follow-up work."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position, cashflow, and cost source and test ownership is target-owned, all three legacy calculator roots are retired, and the installed image has no legacy calculator source closure. Registry/Kubernetes rollout and canonical runtime validation remain governed follow-up work."
     }
   ]
 }
