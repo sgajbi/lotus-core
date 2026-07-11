@@ -2134,6 +2134,15 @@ Most relevant current governance:
      workflow, repositories, or export settings; Query Service operations may read export-job
      support state only until the operations family moves. The moved helpers still require typed
      immutable position/cashflow/page records before analytics type closure can be claimed.
+162. `ClientRestrictionProfile:v1` is the first reference integration source product owned end to
+     end by `query_control_plane_service`: public DTOs under `app/contracts`, selection and
+     supportability policy under `app/application`, immutable mandate/restriction records under
+     `app/domain`, the source reader under `app/ports`, and deterministic effective-dated SQL under
+     `app/infrastructure`. Do not restore its Query Service DTO, mapper, repository method,
+     application module, or broad integration-facade method. Core owns source restriction evidence;
+     `lotus-manage` owns DPM interpretation, enforcement, workflow, and user-facing conclusions.
+     Preserve the public route and response contract while moving the remaining reference families
+     through complete vertical slices.
 
 ## Context Maintenance Rule
 

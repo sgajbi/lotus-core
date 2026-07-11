@@ -7,8 +7,6 @@ from typing import Any
 from ..dtos.reference_integration_dto import (
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientRestrictionProfileRequest,
-    ClientRestrictionProfileResponse,
     ClientTaxProfileRequest,
     ClientTaxProfileResponse,
     ClientTaxRuleSetRequest,
@@ -21,7 +19,6 @@ from ..dtos.reference_integration_dto import (
     SustainabilityPreferenceProfileResponse,
 )
 from .client_income_needs_schedule import resolve_client_income_needs_schedule_response
-from .client_restriction_profile import resolve_client_restriction_profile_response
 from .client_tax_profile import resolve_client_tax_profile_response
 from .client_tax_rule_set import resolve_client_tax_rule_set_response
 from .liquidity_reserve_requirement import (
@@ -38,17 +35,6 @@ class ClientProfileIncomeIntegrationService:
     """Contract-family service for client profile, suitability, tax, and income products."""
 
     reference_repository_provider: Callable[[], Any]
-
-    async def get_client_restriction_profile(
-        self,
-        portfolio_id: str,
-        request: ClientRestrictionProfileRequest,
-    ) -> ClientRestrictionProfileResponse | None:
-        return await resolve_client_restriction_profile_response(
-            repository=self.reference_repository_provider(),
-            portfolio_id=portfolio_id,
-            request=request,
-        )
 
     async def get_sustainability_preference_profile(
         self,

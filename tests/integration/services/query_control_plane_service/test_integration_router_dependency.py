@@ -19,6 +19,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     PolicyProvenanceMetadata,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_client_restriction_profile_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -525,12 +526,16 @@ async def async_test_client():
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_client_restriction_profile_service] = lambda: (
+        mock_integration_service
+    )
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
+    app.dependency_overrides.pop(get_client_restriction_profile_service, None)
 
 
 def _assert_problem_details(

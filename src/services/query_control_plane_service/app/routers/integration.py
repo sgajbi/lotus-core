@@ -24,8 +24,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientRestrictionProfileRequest,
-    ClientRestrictionProfileResponse,
     ClientTaxProfileRequest,
     ClientTaxProfileResponse,
     ClientTaxRuleSetRequest,
@@ -80,6 +78,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
+from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.core_snapshot.governance import (
     SnapshotGovernanceContext,
 )
@@ -91,6 +90,10 @@ from ..application.core_snapshot.service import (
     CoreSnapshotUnavailableSectionError,
 )
 from ..application.integration_policy import IntegrationPolicyService
+from ..contracts.client_restriction_profile import (
+    ClientRestrictionProfileRequest,
+    ClientRestrictionProfileResponse,
+)
 from ..contracts.core_snapshot import (
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -102,6 +105,7 @@ from ..contracts.instrument_enrichment import (
 )
 from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
 from ..dependencies import (
+    get_client_restriction_profile_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -1556,14 +1560,13 @@ async def get_client_restriction_profile(
         description="Portfolio identifier whose client restriction profile is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    restriction_profile_service: ClientRestrictionProfileService = Depends(
+        get_client_restriction_profile_service
+    ),
 ) -> ClientRestrictionProfileResponse:
-    response = cast(
-        ClientRestrictionProfileResponse | None,
-        await integration_service.get_client_restriction_profile(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await restriction_profile_service.get_client_restriction_profile(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
