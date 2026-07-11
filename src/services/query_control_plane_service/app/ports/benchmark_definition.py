@@ -19,3 +19,11 @@ class BenchmarkDefinitionReader(Protocol):
     async def list_components(
         self, *, benchmark_id: str, as_of_date: date
     ) -> list[BenchmarkComponentEvidence]: ...
+
+    async def list_definitions_overlapping_window(
+        self, *, benchmark_id: str, start_date: date, end_date: date
+    ) -> list[BenchmarkDefinitionEvidence]: ...
+
+    async def list_components_overlapping_window(
+        self, *, benchmark_id: str, start_date: date, end_date: date
+    ) -> list[BenchmarkComponentEvidence]: ...

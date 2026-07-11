@@ -8,9 +8,6 @@ import pytest
 from portfolio_common.reconciliation_quality import BLOCKED, COMPLETE, PARTIAL, STALE, UNRECONCILED
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkCompositionWindowRequest,
-)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -412,18 +409,6 @@ async def test_reference_contract_methods() -> None:
         ),
     )
 
-    composition_window = await service.get_benchmark_composition_window(
-        "B1",
-        SimpleNamespace(
-            window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 3, 31))
-        ),
-    )
-    assert composition_window is not None
-    assert composition_window.benchmark_currency == "USD"
-    assert composition_window.segments[0].index_id == "IDX1"
-    assert composition_window.product_name == "BenchmarkConstituentWindow"
-    assert composition_window.as_of_date == date(2026, 3, 31)
-
     benchmark_catalog = await service.list_benchmark_catalog(date(2026, 1, 1), None, None, None)
     assert benchmark_catalog.records == []
 
@@ -694,16 +679,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_taxonomy=AsyncMock(return_value=[]),
     )
 
-    assert (
-        await service.get_benchmark_composition_window(
-            "B1",
-            SimpleNamespace(
-                window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 2))
-            ),
-        )
-        is None
-    )
-
     benchmark_catalog = await service.list_benchmark_catalog(
         date(2026, 1, 1), "single_index", "EUR", "active"
     )
@@ -738,36 +713,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
     )
     assert benchmark_market_series.fx_context_source_currency == "EUR"
     assert benchmark_market_series.fx_context_target_currency == "USD"
-
-
-@pytest.mark.asyncio
-async def test_benchmark_composition_window_rejects_currency_changes_within_window() -> None:
-    service = make_service()
-    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        list_benchmark_definitions_overlapping_window=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_currency="USD",
-                    effective_from=date(2026, 1, 1),
-                ),
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_currency="EUR",
-                    effective_from=date(2026, 1, 2),
-                ),
-            ]
-        ),
-        list_benchmark_components_overlapping_window=AsyncMock(return_value=[]),
-    )
-
-    with pytest.raises(ValueError, match="currency changed within requested composition window"):
-        await service.get_benchmark_composition_window(
-            "B1",
-            SimpleNamespace(
-                window=SimpleNamespace(start_date=date(2026, 1, 1), end_date=date(2026, 1, 31))
-            ),
-        )
 
 
 @pytest.mark.asyncio
@@ -834,80 +779,6 @@ async def test_benchmark_catalog_uses_repository_ranked_current_rows() -> None:
         benchmark_currency=None,
         benchmark_status=None,
     )
-
-
-@pytest.mark.asyncio
-async def test_benchmark_composition_window_resolves_superseded_component_rows() -> None:
-    service = make_service()
-    service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        list_benchmark_definitions_overlapping_window=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_currency="USD",
-                    effective_from=date(2025, 3, 27),
-                    effective_to=None,
-                    quality_status="accepted",
-                ),
-                SimpleNamespace(
-                    benchmark_id="B1",
-                    benchmark_currency="USD",
-                    effective_from=date(2023, 3, 28),
-                    effective_to=None,
-                    quality_status="accepted",
-                ),
-            ]
-        ),
-        list_benchmark_components_overlapping_window=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    index_id="IDX_BOND",
-                    composition_weight=Decimal("0.4"),
-                    composition_effective_from=date(2023, 3, 28),
-                    composition_effective_to=None,
-                    rebalance_event_id="old",
-                    quality_status="accepted",
-                ),
-                SimpleNamespace(
-                    index_id="IDX_BOND",
-                    composition_weight=Decimal("0.4"),
-                    composition_effective_from=date(2025, 3, 27),
-                    composition_effective_to=None,
-                    rebalance_event_id="new",
-                    quality_status="accepted",
-                ),
-                SimpleNamespace(
-                    index_id="IDX_EQ",
-                    composition_weight=Decimal("0.6"),
-                    composition_effective_from=date(2023, 3, 28),
-                    composition_effective_to=None,
-                    rebalance_event_id="old",
-                    quality_status="accepted",
-                ),
-                SimpleNamespace(
-                    index_id="IDX_EQ",
-                    composition_weight=Decimal("0.6"),
-                    composition_effective_from=date(2025, 3, 27),
-                    composition_effective_to=None,
-                    rebalance_event_id="new",
-                    quality_status="accepted",
-                ),
-            ]
-        ),
-    )
-
-    response = await service.get_benchmark_composition_window(
-        "B1",
-        BenchmarkCompositionWindowRequest(
-            window={"start_date": date(2026, 1, 1), "end_date": date(2026, 3, 27)}
-        ),
-    )
-
-    assert response is not None
-    assert [
-        (segment.index_id, segment.composition_effective_from) for segment in response.segments
-    ] == [("IDX_BOND", date(2025, 3, 27)), ("IDX_EQ", date(2025, 3, 27))]
-    assert response.data_quality_status == "COMPLETE"
 
 
 @pytest.mark.asyncio

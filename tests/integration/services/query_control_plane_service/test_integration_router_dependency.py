@@ -20,6 +20,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_composition_service,
     get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
@@ -404,8 +405,11 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_benchmark_composition_window = AsyncMock(
+    mock_benchmark_composition_service = MagicMock()
+    mock_benchmark_composition_service.resolve = AsyncMock(
         return_value={
+            "product_name": "BenchmarkConstituentWindow",
+            "product_version": "v1",
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "benchmark_currency": "USD",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-03-31"},
@@ -416,8 +420,18 @@ async def async_test_client():
                     "composition_effective_from": "2026-01-01",
                     "composition_effective_to": "2026-03-31",
                     "rebalance_event_id": "rebalance_2026q1",
-                }
+                },
+                {
+                    "index_id": "IDX_GLOBAL_BOND_TR",
+                    "composition_weight": "0.4000000000",
+                    "composition_effective_from": "2026-01-01",
+                    "composition_effective_to": "2026-03-31",
+                    "rebalance_event_id": "rebalance_2026q1",
+                },
             ],
+            "completeness_status": "COMPLETE",
+            "completeness_reason": "BENCHMARK_COMPOSITION_WINDOW_COMPLETE",
+            "incomplete_period_starts": [],
             "lineage": {
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core",
@@ -426,9 +440,14 @@ async def async_test_client():
             **source_data_product_runtime_metadata(
                 as_of_date=date(2026, 3, 31),
                 generated_at=datetime(2026, 3, 31, 10, 0, 0, tzinfo=UTC),
+                data_quality_status="COMPLETE",
+                latest_evidence_timestamp=datetime(2026, 3, 31, 9, 0, 0, tzinfo=UTC),
+                content_hash="sha256:benchmark-composition",
+                use_content_hash_as_source_batch_fingerprint=True,
             ),
         }
     )
+    mock_integration_service.benchmark_composition_service = mock_benchmark_composition_service
     mock_integration_service.get_benchmark_market_series = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -557,6 +576,9 @@ async def async_test_client():
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_benchmark_assignment_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_benchmark_composition_service] = lambda: (
+        mock_benchmark_composition_service
+    )
     app.dependency_overrides[get_benchmark_definition_service] = lambda: (
         mock_benchmark_definition_service
     )
@@ -584,6 +606,7 @@ async def async_test_client():
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
+    app.dependency_overrides.pop(get_benchmark_composition_service, None)
     app.dependency_overrides.pop(get_benchmark_definition_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
@@ -1369,9 +1392,10 @@ async def test_benchmark_composition_window_success(async_test_client):
     assert body["benchmark_currency"] == "USD"
     assert body["segments"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
     assert body["reconciliation_status"] == "UNKNOWN"
-    assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_benchmark_composition_window.assert_awaited_once()
-    composition_call = mock_integration_service.get_benchmark_composition_window.await_args.kwargs
+    assert body["data_quality_status"] == "COMPLETE"
+    service = mock_integration_service.benchmark_composition_service
+    service.resolve.assert_awaited_once()
+    composition_call = service.resolve.await_args.kwargs
     assert composition_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert composition_call["request"].window.start_date == date(2026, 1, 1)
     assert composition_call["request"].window.end_date == date(2026, 3, 31)
@@ -1379,7 +1403,7 @@ async def test_benchmark_composition_window_success(async_test_client):
 
 async def test_benchmark_composition_window_not_found_maps_to_404(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.get_benchmark_composition_window = AsyncMock(return_value=None)
+    mock_integration_service.benchmark_composition_service.resolve = AsyncMock(return_value=None)
 
     response = await client.post(
         "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/composition-window",
@@ -1401,7 +1425,7 @@ async def test_benchmark_composition_window_not_found_maps_to_404(async_test_cli
 
 async def test_benchmark_composition_window_conflict_maps_to_problem_details(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.get_benchmark_composition_window = AsyncMock(
+    mock_integration_service.benchmark_composition_service.resolve = AsyncMock(
         side_effect=ValueError(
             "Benchmark definition currency changed within requested composition window."
         )

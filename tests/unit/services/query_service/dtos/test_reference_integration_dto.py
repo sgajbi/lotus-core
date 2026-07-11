@@ -27,7 +27,6 @@ from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots i
 )
 from src.services.query_service.app.dtos import reference_integration_dto
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkCompositionWindowResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
@@ -169,7 +168,6 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
 @pytest.mark.parametrize(
     ("response_model", "product_name"),
     [
-        (BenchmarkCompositionWindowResponse, "BenchmarkConstituentWindow"),
         (BenchmarkMarketSeriesResponse, "MarketDataWindow"),
         (IndexPriceSeriesResponse, "IndexSeriesWindow"),
         (IndexReturnSeriesResponse, "IndexSeriesWindow"),

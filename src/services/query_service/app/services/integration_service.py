@@ -8,8 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reference_integration_dto import (
     BenchmarkCatalogResponse,
-    BenchmarkCompositionWindowRequest,
-    BenchmarkCompositionWindowResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -74,16 +72,6 @@ class IntegrationService:
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
         return cast(dict[str, Any], self._page_token_codec.decode(token))
-
-    async def get_benchmark_composition_window(
-        self,
-        benchmark_id: str,
-        request: BenchmarkCompositionWindowRequest,
-    ) -> BenchmarkCompositionWindowResponse | None:
-        return await self._benchmark_reference_service.get_benchmark_composition_window(
-            benchmark_id=benchmark_id,
-            request=request,
-        )
 
     async def list_benchmark_catalog(
         self,

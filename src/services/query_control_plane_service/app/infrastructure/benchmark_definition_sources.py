@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import BenchmarkCompositionSeries, BenchmarkDefinition
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.benchmark_definition import (
@@ -75,6 +75,51 @@ class SqlAlchemyBenchmarkDefinitionReader:
             .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
             .where(ranked.c.rn == 1)
             .order_by(BenchmarkCompositionSeries.index_id.asc())
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        return [_component_evidence(row) for row in rows]
+
+    async def list_definitions_overlapping_window(
+        self, *, benchmark_id: str, start_date: date, end_date: date
+    ) -> list[BenchmarkDefinitionEvidence]:
+        statement = (
+            select(BenchmarkDefinition)
+            .where(
+                BenchmarkDefinition.benchmark_id == benchmark_id,
+                BenchmarkDefinition.effective_from <= end_date,
+                or_(
+                    BenchmarkDefinition.effective_to.is_(None),
+                    BenchmarkDefinition.effective_to >= start_date,
+                ),
+            )
+            .order_by(
+                BenchmarkDefinition.effective_from.asc(),
+                BenchmarkDefinition.source_timestamp.asc().nulls_last(),
+                BenchmarkDefinition.id.asc(),
+            )
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        return [_definition_evidence(row) for row in rows]
+
+    async def list_components_overlapping_window(
+        self, *, benchmark_id: str, start_date: date, end_date: date
+    ) -> list[BenchmarkComponentEvidence]:
+        statement = (
+            select(BenchmarkCompositionSeries)
+            .where(
+                BenchmarkCompositionSeries.benchmark_id == benchmark_id,
+                BenchmarkCompositionSeries.composition_effective_from <= end_date,
+                or_(
+                    BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                    BenchmarkCompositionSeries.composition_effective_to >= start_date,
+                ),
+            )
+            .order_by(
+                BenchmarkCompositionSeries.index_id.asc(),
+                BenchmarkCompositionSeries.composition_effective_from.asc(),
+                BenchmarkCompositionSeries.source_timestamp.asc().nulls_last(),
+                BenchmarkCompositionSeries.id.asc(),
+            )
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [_component_evidence(row) for row in rows]

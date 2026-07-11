@@ -7,8 +7,6 @@ from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
     BenchmarkCatalogResponse,
-    BenchmarkCompositionWindowRequest,
-    BenchmarkCompositionWindowResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -23,7 +21,6 @@ from ..dtos.reference_integration_dto import (
     RiskFreeSeriesResponse,
 )
 from .benchmark_catalog import resolve_benchmark_catalog_response
-from .benchmark_composition import resolve_benchmark_composition_window_response
 from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import resolve_benchmark_market_series_response
 from .benchmark_return_series import resolve_benchmark_return_series_response
@@ -42,20 +39,6 @@ class BenchmarkReferenceIntegrationService:
     reference_repository_provider: Callable[[], Any]
     decode_page_token: Callable[[str | None], dict[str, Any]]
     encode_page_token: Callable[[dict[str, Any]], str]
-
-    async def get_benchmark_composition_window(
-        self,
-        benchmark_id: str,
-        request: BenchmarkCompositionWindowRequest,
-    ) -> BenchmarkCompositionWindowResponse | None:
-        return cast(
-            BenchmarkCompositionWindowResponse | None,
-            await resolve_benchmark_composition_window_response(
-                repository=self.reference_repository_provider(),
-                benchmark_id=benchmark_id,
-                request=request,
-            ),
-        )
 
     async def list_benchmark_catalog(
         self,

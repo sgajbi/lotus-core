@@ -9,6 +9,9 @@ from src.services.query_control_plane_service.app.application import (
 from src.services.query_control_plane_service.app.application.benchmark_assignment import (
     BenchmarkAssignmentService,
 )
+from src.services.query_control_plane_service.app.application.benchmark_composition import (
+    BenchmarkCompositionService,
+)
 from src.services.query_control_plane_service.app.application.benchmark_definition import (
     BenchmarkDefinitionService,
 )
@@ -54,6 +57,9 @@ from src.services.query_control_plane_service.app.contracts import (
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_composition import (
+    BenchmarkCompositionWindowRequest,
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
@@ -182,7 +188,6 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCatalogRequest,
-    BenchmarkCompositionWindowRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
@@ -2621,8 +2626,8 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_composition_window_router_functions() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_composition_window = AsyncMock(
+    mock_service = MagicMock(spec=BenchmarkCompositionService)
+    mock_service.resolve = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "benchmark_currency": "USD",
@@ -2643,9 +2648,9 @@ async def test_fetch_benchmark_composition_window_router_functions() -> None:
     response = await fetch_benchmark_composition_window(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
         request=BenchmarkCompositionWindowRequest(
-            window=IntegrationWindow(start_date="2026-01-01", end_date="2026-03-31")
+            window={"start_date": "2026-01-01", "end_date": "2026-03-31"}
         ),
-        integration_service=mock_service,
+        benchmark_composition_service=mock_service,
     )
 
     assert response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
@@ -2654,16 +2659,16 @@ async def test_fetch_benchmark_composition_window_router_functions() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_composition_window_maps_not_found_to_problem_details() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_composition_window = AsyncMock(return_value=None)
+    mock_service = MagicMock(spec=BenchmarkCompositionService)
+    mock_service.resolve = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_composition_window(
             benchmark_id="BMK_MISSING",
             request=BenchmarkCompositionWindowRequest(
-                window=IntegrationWindow(start_date="2026-01-01", end_date="2026-03-31")
+                window={"start_date": "2026-01-01", "end_date": "2026-03-31"}
             ),
-            integration_service=mock_service,
+            benchmark_composition_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -2683,8 +2688,8 @@ async def test_fetch_benchmark_composition_window_maps_not_found_to_problem_deta
 async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_problem_details() -> (
     None
 ):
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_composition_window = AsyncMock(
+    mock_service = MagicMock(spec=BenchmarkCompositionService)
+    mock_service.resolve = AsyncMock(
         side_effect=ValueError(
             "Benchmark definition currency changed within requested composition window."
         )
@@ -2694,9 +2699,9 @@ async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_prob
         await fetch_benchmark_composition_window(
             benchmark_id="BMK_CONFLICT",
             request=BenchmarkCompositionWindowRequest(
-                window=IntegrationWindow(start_date="2026-01-01", end_date="2026-03-31")
+                window={"start_date": "2026-01-01", "end_date": "2026-03-31"}
             ),
-            integration_service=mock_service,
+            benchmark_composition_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -2743,7 +2748,8 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_composition_window = AsyncMock(
+    composition_service = MagicMock(spec=BenchmarkCompositionService)
+    composition_service.resolve = AsyncMock(
         return_value={
             "benchmark_id": "B1",
             "benchmark_currency": "USD",
@@ -2865,11 +2871,13 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
 
     benchmark_composition_response = await fetch_benchmark_composition_window(
         benchmark_id="B1",
-        request=BenchmarkCompositionWindowRequest(window=request_window),
-        integration_service=mock_service,
+        request=BenchmarkCompositionWindowRequest(
+            window={"start_date": "2026-01-01", "end_date": "2026-01-31"}
+        ),
+        benchmark_composition_service=composition_service,
     )
     assert benchmark_composition_response["benchmark_currency"] == "USD"
-    mock_service.get_benchmark_composition_window.assert_awaited_once()
+    composition_service.resolve.assert_awaited_once()
 
     index_price_response = await fetch_index_price_series(
         index_id="IDX1",
