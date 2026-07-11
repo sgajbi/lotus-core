@@ -77,7 +77,17 @@ REQUIRED_SNIPPETS = {
         "portfolio_day_controls_evaluated_message",
         "transaction_processing_completed_message",
     ),
-    Path("src/services/query_service/app/read_models.py"): ("class PortfolioTaxLotReadRecord",),
+    Path("src/services/query_control_plane_service/app/domain/dpm_source_readiness.py"): (
+        "class PortfolioTaxLotEvidence",
+    ),
+    Path(
+        "src/services/query_control_plane_service/app/infrastructure/"
+        "dpm_portfolio_state_sources.py"
+    ): ("def _tax_lot_evidence",),
+    Path(
+        "src/services/query_control_plane_service/app/application/dpm_source_readiness/"
+        "portfolio_tax_lots.py"
+    ): ("def portfolio_tax_lot_record",),
     Path("src/services/query_control_plane_service/app/domain/transaction_economics.py"): (
         "class BookedTransactionEconomics",
         "class TransactionCashflowEvidence",

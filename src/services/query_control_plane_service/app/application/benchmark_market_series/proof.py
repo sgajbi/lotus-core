@@ -1,7 +1,7 @@
 """Quality, freshness, lineage, and deterministic proof for benchmark market windows."""
 
 from dataclasses import asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import cast
 
 from portfolio_common.source_data_product_metadata import stable_content_hash
@@ -98,7 +98,8 @@ def latest_evidence_timestamp(
             for timestamp in (row.updated_at, row.created_at)
             if timestamp is not None
         )
-    return max(timestamps) if timestamps else None
+    normalized = [_as_utc(timestamp) for timestamp in timestamps]
+    return max(normalized) if normalized else None
 
 
 def content_hash(
@@ -221,3 +222,9 @@ def _sorted_prices(rows: list[IndexPriceEvidence]) -> list[IndexPriceEvidence]:
 
 def _sorted_index_returns(rows: list[IndexReturnEvidence]) -> list[IndexReturnEvidence]:
     return sorted(rows, key=lambda row: (row.index_id, row.series_date, row.series_id))
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

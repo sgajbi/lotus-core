@@ -26,7 +26,8 @@ Use these output shapes:
 
 ## Current Typed Precedents
 
-- `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord`.
+- `PortfolioTaxLotWindow:v1` uses QCP-owned `PortfolioTaxLotEvidence`, mapped inside the SQLAlchemy
+  adapter before application policy or response mapping.
 - `PerformanceComponentEconomics:v1` uses `PerformanceEconomicsTransactionReadRecord`,
   `PerformanceEconomicsCashflowReadRecord`, and `PerformanceEconomicsCostReadRecord`.
 

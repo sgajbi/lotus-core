@@ -21,6 +21,7 @@ from .application.benchmark_assignment import BenchmarkAssignmentService
 from .application.benchmark_catalog import BenchmarkCatalogService
 from .application.benchmark_composition import BenchmarkCompositionService
 from .application.benchmark_definition import BenchmarkDefinitionService
+from .application.benchmark_market_series.service import BenchmarkMarketSeriesService
 from .application.benchmark_return_series import BenchmarkReturnSeriesService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
@@ -82,8 +83,10 @@ from .infrastructure.dpm_reference_data_sources import SqlAlchemyDpmReferenceDat
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
 from .infrastructure.index_definition_sources import SqlAlchemyIndexDefinitionReader
 from .infrastructure.index_series_sources import SqlAlchemyIndexSeriesReader
+from .infrastructure.market_fx_sources import SqlAlchemyMarketFxRateReader
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.risk_free_series_sources import SqlAlchemyRiskFreeSeriesReader
+from .infrastructure.scoped_page_tokens import RouteScopedPageTokenCodec
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
     SqlAlchemySimulationStore,
@@ -180,6 +183,30 @@ def get_benchmark_return_series_service(
 
     return BenchmarkReturnSeriesService(
         reader=SqlAlchemyBenchmarkReturnSeriesReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_benchmark_market_series_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> BenchmarkMarketSeriesService:
+    """Compose the QCP-owned benchmark component market-series use case."""
+
+    settings = load_query_control_plane_settings()
+    return BenchmarkMarketSeriesService(
+        benchmark_reader=SqlAlchemyBenchmarkDefinitionReader(db),
+        index_series_reader=SqlAlchemyIndexSeriesReader(db),
+        benchmark_return_reader=SqlAlchemyBenchmarkReturnSeriesReader(db),
+        fx_rate_reader=SqlAlchemyMarketFxRateReader(db),
+        page_tokens=RouteScopedPageTokenCodec(
+            codec=PageTokenCodec(
+                secret=settings.page_token_secret,
+                active_kid=settings.page_token_key_id,
+                previous_secrets=settings.page_token_previous_keys,
+                ttl_seconds=settings.page_token_ttl_seconds,
+            ),
+            route="integration.benchmark_market_series",
+        ),
         clock=SystemClock().utc_now,
     )
 

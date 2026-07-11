@@ -93,6 +93,7 @@ Primary contract areas include:
 - `PortfolioTimeseriesInput`
 - `PositionTimeseriesInput`
 - `PortfolioAnalyticsReference`
+- `MarketDataWindow`
 - `ClientRestrictionProfile`
 - `SustainabilityPreferenceProfile`
 - `ClientTaxProfile`
@@ -196,6 +197,10 @@ router inside the operational read plane.
   contract while those downstream-owned decisions migrate to `lotus-advise`
 - analytics input/export code must remain QCP package-owned; do not restore Query Service DTO,
   workflow, repository, or runtime-setting imports for this route family
+- benchmark `MarketDataWindow` contracts, request/paging policy, point and proof assembly, source
+  ports, SQL adapters, signed route-scoped continuation tokens, dependency composition, and route
+  handling must remain QCP-owned; do not restore the obsolete Query Service market-series facade
+  or derive source hashes/freshness in downstream consumers
 - client-restriction contracts, application policy, immutable records, source port, and SQL adapter
   must remain QCP package-owned; Core publishes effective restriction evidence while
   `lotus-manage` owns DPM interpretation, enforcement, workflow, and client-facing conclusions
