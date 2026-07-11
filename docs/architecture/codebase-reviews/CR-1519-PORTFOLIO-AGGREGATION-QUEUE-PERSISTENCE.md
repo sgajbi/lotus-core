@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 Issue: #468 same-pattern architecture scan
-Status: Implemented locally; shared timeseries data-access split pending
+Status: Implemented locally; data-access split completed by CR-1520
 
 ## Objective
 
@@ -48,7 +48,6 @@ runtime topology, or downstream contract changed. Only internal class/import/tes
 
 ## Follow-Up
 
-Move the remaining generator snapshot/cashflow/position-timeseries methods into generator
-infrastructure. Move aggregation portfolio/position-timeseries data methods into the aggregation
-adapter. Retain only the genuinely shared instrument-batch and FX lookup behavior, preferably as a
-small stateless reader rather than another broad inherited repository.
+CR-1520 completed the remaining data-access split and removed the shared repository. Gather
+runtime-level load, fan-in, backfill, failure-isolation, and rollback evidence before deciding
+whether generator and aggregation deployables should merge.

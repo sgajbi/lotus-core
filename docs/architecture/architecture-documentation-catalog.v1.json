@@ -81,6 +81,17 @@
       "summary": "Current target architecture for portfolio, booking, account, holding, and transaction authority."
     },
     {
+      "path": "docs/architecture/lotus-core-end-state-runtime-vision.md",
+      "type": "target-runtime-vision",
+      "topics": ["runtime-boundaries", "service-consolidation", "target-state", "data-flow"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-11",
+      "related": {"issues": [468], "rfcs": [81, 82, 83], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Evidence-gated 9-to-10 deployable end-state hypothesis, capability map, data flow, and runtime decision criteria."
+    },
+    {
       "path": "docs/architecture/QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md",
       "type": "boundary",
       "topics": ["query-service", "query-control-plane", "ownership"],

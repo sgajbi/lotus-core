@@ -87,6 +87,7 @@ Control execution and reconciliation run contracts.
 
 - [Architecture Index](../docs/architecture/README.md)
 - [Current-State Architecture Map](../docs/architecture/current-state-architecture-map.md)
+- [End-State Runtime Vision](../docs/architecture/lotus-core-end-state-runtime-vision.md)
 - [Architecture Documentation Catalog](../docs/architecture/architecture-documentation-catalog.v1.json)
 - [Target Architecture](../docs/architecture/lotus-core-target-architecture.md)
 - [Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)
@@ -124,7 +125,12 @@ separate modules, and their repository responsibilities will be split without ad
 
 Portfolio aggregation owns job claiming, dispatch recovery, stale retry/failure, and queue
 diagnostics through `PortfolioAggregationRepository`. Timeseries generation must not acquire these
-queue responsibilities; the remaining shared data-access methods are transitional cleanup scope.
+queue responsibilities. Generator and aggregation persistence are now service-owned; only typed
+instrument/FX reads and stateless upsert construction remain shared.
+
+The governed end-state hypothesis is nine deployables, or ten if valuation scheduling and compute
+still require independent isolation. This is not an approved count until each keep/merge/retire
+decision has load, failure, security, SLO, migration, rollback, release, and canonical QA evidence.
 
 After transaction-processing source consolidation is complete, the next governed boundary review
 covers timeseries generation, valuation orchestration/execution, pipeline orchestration, and
