@@ -53,7 +53,7 @@ async def test_price_query_ranks_one_canonical_row_per_business_date() -> None:
     assert "row_number() OVER" in sql
     assert "PARTITION BY index_price_series.index_id, index_price_series.series_date" in sql
     assert "index_price_series.source_timestamp DESC NULLS LAST" in sql
-    assert "ORDER BY index_price_series.series_date ASC" in sql
+    assert "ORDER BY index_price_series.index_id ASC, index_price_series.series_date ASC" in sql
 
 
 @pytest.mark.asyncio
@@ -77,4 +77,46 @@ async def test_return_query_ranks_one_canonical_row_per_business_date() -> None:
     sql = str(session.execute.await_args.args[0])
     assert "PARTITION BY index_return_series.index_id, index_return_series.series_date" in sql
     assert "index_return_series.source_timestamp DESC NULLS LAST" in sql
-    assert "ORDER BY index_return_series.series_date ASC" in sql
+    assert "ORDER BY index_return_series.index_id ASC, index_return_series.series_date ASC" in sql
+
+
+@pytest.mark.asyncio
+async def test_bulk_price_query_normalizes_ids_and_uses_one_ordered_query() -> None:
+    row = SimpleNamespace(
+        **_common_row(), index_price=Decimal("123.45"), value_convention="close_price"
+    )
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=_result(row))
+
+    records = await SqlAlchemyIndexSeriesReader(session).list_prices_for_indices(
+        index_ids=[" IDX_A ", "IDX_B", "IDX_A", " "],
+        start_date=date(2026, 4, 1),
+        end_date=date(2026, 4, 10),
+    )
+
+    assert len(records) == 1
+    sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "index_price_series.index_id IN ('IDX_A', 'IDX_B')" in sql
+    assert "ORDER BY index_price_series.index_id ASC, index_price_series.series_date ASC" in sql
+    session.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_empty_bulk_index_scope_avoids_database_io() -> None:
+    session = MagicMock()
+    session.execute = AsyncMock()
+    reader = SqlAlchemyIndexSeriesReader(session)
+
+    assert (
+        await reader.list_prices_for_indices(
+            index_ids=[], start_date=date(2026, 4, 1), end_date=date(2026, 4, 10)
+        )
+        == []
+    )
+    assert (
+        await reader.list_returns_for_indices(
+            index_ids=[" "], start_date=date(2026, 4, 1), end_date=date(2026, 4, 10)
+        )
+        == []
+    )
+    session.execute.assert_not_awaited()

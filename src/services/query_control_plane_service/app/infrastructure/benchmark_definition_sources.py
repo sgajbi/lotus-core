@@ -125,6 +125,68 @@ class SqlAlchemyBenchmarkDefinitionReader:
         rows = (await self._session.execute(statement)).scalars().all()
         return [_component_evidence(row) for row in rows]
 
+    async def list_component_index_ids_page(
+        self,
+        *,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        after_index_id: str | None,
+        limit: int,
+    ) -> list[str]:
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id == benchmark_id.strip(),
+            BenchmarkCompositionSeries.composition_effective_from <= end_date,
+            or_(
+                BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                BenchmarkCompositionSeries.composition_effective_to >= start_date,
+            ),
+        ]
+        if after_index_id:
+            predicates.append(BenchmarkCompositionSeries.index_id > after_index_id.strip())
+        statement = (
+            select(BenchmarkCompositionSeries.index_id)
+            .where(*predicates)
+            .distinct()
+            .order_by(BenchmarkCompositionSeries.index_id.asc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(statement)).scalars().all())
+
+    async def list_components_for_indices_overlapping_window(
+        self,
+        *,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        index_ids: list[str],
+    ) -> list[BenchmarkComponentEvidence]:
+        canonical_ids = list(
+            dict.fromkeys(index_id.strip() for index_id in index_ids if index_id.strip())
+        )
+        if not canonical_ids:
+            return []
+        statement = (
+            select(BenchmarkCompositionSeries)
+            .where(
+                BenchmarkCompositionSeries.benchmark_id == benchmark_id.strip(),
+                BenchmarkCompositionSeries.index_id.in_(canonical_ids),
+                BenchmarkCompositionSeries.composition_effective_from <= end_date,
+                or_(
+                    BenchmarkCompositionSeries.composition_effective_to.is_(None),
+                    BenchmarkCompositionSeries.composition_effective_to >= start_date,
+                ),
+            )
+            .order_by(
+                BenchmarkCompositionSeries.index_id.asc(),
+                BenchmarkCompositionSeries.composition_effective_from.asc(),
+                BenchmarkCompositionSeries.source_timestamp.asc().nulls_last(),
+                BenchmarkCompositionSeries.id.asc(),
+            )
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        return [_component_evidence(row) for row in rows]
+
     async def list_definitions(
         self,
         *,

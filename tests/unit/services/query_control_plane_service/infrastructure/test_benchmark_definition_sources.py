@@ -225,3 +225,69 @@ async def test_catalog_component_query_groups_current_rows_by_benchmark() -> Non
     assert "row_number() OVER" in sql
     assert "benchmark_composition_series.benchmark_id IN" in sql
     assert "benchmark_composition_series.index_id ASC" in sql
+
+
+@pytest.mark.asyncio
+async def test_component_index_page_uses_stable_cursor_and_limit() -> None:
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = ["IDX_B", "IDX_C"]
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=result)
+
+    index_ids = await benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(
+        session
+    ).list_component_index_ids_page(
+        benchmark_id=" BMK_1 ",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        after_index_id=" IDX_A ",
+        limit=3,
+    )
+
+    assert index_ids == ["IDX_B", "IDX_C"]
+    sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "SELECT DISTINCT benchmark_composition_series.index_id" in sql
+    assert "benchmark_composition_series.benchmark_id = 'BMK_1'" in sql
+    assert "benchmark_composition_series.index_id > 'IDX_A'" in sql
+    assert "ORDER BY benchmark_composition_series.index_id ASC" in sql
+    assert "LIMIT 3" in sql
+
+
+@pytest.mark.asyncio
+async def test_component_window_filters_page_indices_and_skips_empty_scope() -> None:
+    row = SimpleNamespace(
+        benchmark_id="BMK_1",
+        index_id="IDX_A",
+        composition_effective_from=date(2026, 1, 1),
+        composition_effective_to=None,
+        composition_weight="0.6000000000",
+        rebalance_event_id="rebalance_1",
+        source_vendor="provider",
+        source_record_id="component:1",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    session = _session_returning(row)
+    reader = benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(session)
+
+    records = await reader.list_components_for_indices_overlapping_window(
+        benchmark_id="BMK_1",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 3, 31),
+        index_ids=[" IDX_A ", "IDX_B", "IDX_A"],
+    )
+
+    assert records[0].index_id == "IDX_A"
+    sql = str(session.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "benchmark_composition_series.index_id IN ('IDX_A', 'IDX_B')" in sql
+    session.execute.reset_mock()
+    assert (
+        await reader.list_components_for_indices_overlapping_window(
+            benchmark_id="BMK_1",
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 3, 31),
+            index_ids=[],
+        )
+        == []
+    )
+    session.execute.assert_not_awaited()

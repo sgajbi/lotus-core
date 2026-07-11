@@ -16,3 +16,11 @@ class IndexSeriesReader(Protocol):
     async def list_returns(
         self, *, index_id: str, start_date: date, end_date: date
     ) -> list[IndexReturnEvidence]: ...
+
+    async def list_prices_for_indices(
+        self, *, index_ids: list[str], start_date: date, end_date: date
+    ) -> list[IndexPriceEvidence]: ...
+
+    async def list_returns_for_indices(
+        self, *, index_ids: list[str], start_date: date, end_date: date
+    ) -> list[IndexReturnEvidence]: ...

@@ -20,9 +20,18 @@ class SqlAlchemyIndexSeriesReader:
     async def list_prices(
         self, *, index_id: str, start_date: date, end_date: date
     ) -> list[IndexPriceEvidence]:
-        canonical_id = index_id.strip()
+        return await self.list_prices_for_indices(
+            index_ids=[index_id], start_date=start_date, end_date=end_date
+        )
+
+    async def list_prices_for_indices(
+        self, *, index_ids: list[str], start_date: date, end_date: date
+    ) -> list[IndexPriceEvidence]:
+        canonical_ids = _canonical_index_ids(index_ids)
+        if not canonical_ids:
+            return []
         predicates = (
-            IndexPriceSeries.index_id == canonical_id,
+            IndexPriceSeries.index_id.in_(canonical_ids),
             IndexPriceSeries.series_date >= start_date,
             IndexPriceSeries.series_date <= end_date,
         )
@@ -36,7 +45,7 @@ class SqlAlchemyIndexSeriesReader:
             select(IndexPriceSeries)
             .join(ranked, IndexPriceSeries.id == ranked.c.id)
             .where(ranked.c.rn == 1)
-            .order_by(IndexPriceSeries.series_date.asc())
+            .order_by(IndexPriceSeries.index_id.asc(), IndexPriceSeries.series_date.asc())
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [_price_evidence(row) for row in rows]
@@ -44,9 +53,18 @@ class SqlAlchemyIndexSeriesReader:
     async def list_returns(
         self, *, index_id: str, start_date: date, end_date: date
     ) -> list[IndexReturnEvidence]:
-        canonical_id = index_id.strip()
+        return await self.list_returns_for_indices(
+            index_ids=[index_id], start_date=start_date, end_date=end_date
+        )
+
+    async def list_returns_for_indices(
+        self, *, index_ids: list[str], start_date: date, end_date: date
+    ) -> list[IndexReturnEvidence]:
+        canonical_ids = _canonical_index_ids(index_ids)
+        if not canonical_ids:
+            return []
         predicates = (
-            IndexReturnSeries.index_id == canonical_id,
+            IndexReturnSeries.index_id.in_(canonical_ids),
             IndexReturnSeries.series_date >= start_date,
             IndexReturnSeries.series_date <= end_date,
         )
@@ -60,10 +78,14 @@ class SqlAlchemyIndexSeriesReader:
             select(IndexReturnSeries)
             .join(ranked, IndexReturnSeries.id == ranked.c.id)
             .where(ranked.c.rn == 1)
-            .order_by(IndexReturnSeries.series_date.asc())
+            .order_by(IndexReturnSeries.index_id.asc(), IndexReturnSeries.series_date.asc())
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [_return_evidence(row) for row in rows]
+
+
+def _canonical_index_ids(index_ids: list[str]) -> list[str]:
+    return list(dict.fromkeys(index_id.strip() for index_id in index_ids if index_id.strip()))
 
 
 def _price_evidence(row: Any) -> IndexPriceEvidence:

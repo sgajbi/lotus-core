@@ -28,6 +28,25 @@ class BenchmarkDefinitionReader(Protocol):
         self, *, benchmark_id: str, start_date: date, end_date: date
     ) -> list[BenchmarkComponentEvidence]: ...
 
+    async def list_component_index_ids_page(
+        self,
+        *,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        after_index_id: str | None,
+        limit: int,
+    ) -> list[str]: ...
+
+    async def list_components_for_indices_overlapping_window(
+        self,
+        *,
+        benchmark_id: str,
+        start_date: date,
+        end_date: date,
+        index_ids: list[str],
+    ) -> list[BenchmarkComponentEvidence]: ...
+
     async def list_definitions(
         self,
         *,
