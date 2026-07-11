@@ -9,13 +9,13 @@ from .ca_bundle_a_ordering import (
     ca_bundle_a_dependency_rank,
     ca_bundle_a_target_order_key,
 )
-from .control_code_normalization import (
-    normalize_optional_transaction_control_code,
-    normalize_transaction_control_code,
-)
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 from .currency_codes import normalize_currency_code, normalize_optional_currency_code
 from .decimal_amounts import decimal_or_none
+from .domain.transaction_control_codes import (
+    normalize_optional_transaction_control_code,
+    normalize_transaction_control_code,
+)
 from .transaction_fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
     resolve_transaction_trade_fee,

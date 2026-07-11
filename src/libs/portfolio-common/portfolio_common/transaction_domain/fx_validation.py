@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
-from .control_code_normalization import normalize_transaction_control_code
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from .fx_models import (
     FX_BUSINESS_TRANSACTION_TYPES,
     FX_CASH_LEG_ROLES,

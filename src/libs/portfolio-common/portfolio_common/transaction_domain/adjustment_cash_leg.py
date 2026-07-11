@@ -2,11 +2,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Callable, cast
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
-from .control_code_normalization import normalize_transaction_control_code
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 

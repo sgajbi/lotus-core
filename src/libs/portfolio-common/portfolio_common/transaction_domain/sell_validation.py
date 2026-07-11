@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from .control_code_normalization import normalize_transaction_control_code
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from .sell_models import SellCanonicalTransaction
 from .sell_reason_codes import SellValidationReasonCode
 

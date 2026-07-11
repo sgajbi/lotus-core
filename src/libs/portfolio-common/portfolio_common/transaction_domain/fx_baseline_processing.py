@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain.control_code_normalization import (
+from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
+from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_domain.fx_models import FxCanonicalTransaction
 from portfolio_common.transaction_domain.fx_validation import validate_fx_transaction
 

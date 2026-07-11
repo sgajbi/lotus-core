@@ -69,7 +69,7 @@ flowchart TB
     Domain["Domain/models/policies/value objects<br/>business rules and deterministic decisions"]
     Ports["Ports/interfaces<br/>repositories, publishers, clocks, ids, proof stores"]
     Infrastructure["Infrastructure/adapters/repositories/clients<br/>SQLAlchemy, Kafka, HTTP, filesystem"]
-    Shared["portfolio_common<br/>shared contracts, event envelope, runtime ports, guards"]
+    Shared["portfolio_common<br/>domain policy, shared contracts, runtime ports, adapters"]
 
     API --> Application
     Application --> Domain
@@ -89,6 +89,9 @@ Rules:
    sessions or transport clients.
 4. New runtime boundaries require `docs/standards/runtime-boundary-decision-standard.md` evidence
    before deployable expansion.
+5. `portfolio_common` is a distribution boundary. Framework-independent shared policy belongs in
+   `portfolio_common.domain`; infrastructure and service-owned orchestration do not become domain
+   code because multiple modules import them.
 
 ## Bounded Contexts
 

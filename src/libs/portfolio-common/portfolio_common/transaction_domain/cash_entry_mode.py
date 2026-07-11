@@ -1,4 +1,4 @@
-from .control_code_normalization import normalize_transaction_control_code
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
 AUTO_GENERATE_CASH_ENTRY_MODE = "AUTO_GENERATE"
 UPSTREAM_PROVIDED_CASH_ENTRY_MODE = "UPSTREAM_PROVIDED"
