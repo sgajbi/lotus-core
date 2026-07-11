@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkAssignmentRequest,
-    BenchmarkAssignmentResponse,
     BenchmarkCatalogRequest,
     BenchmarkCatalogResponse,
     BenchmarkCompositionWindowRequest,
@@ -32,6 +30,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
+from ..application.benchmark_assignment import BenchmarkAssignmentService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
@@ -53,6 +52,10 @@ from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..application.transaction_economics.service import TransactionEconomicsService
+from ..contracts.benchmark_assignment import (
+    BenchmarkAssignmentRequest,
+    BenchmarkAssignmentResponse,
+)
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
@@ -138,6 +141,7 @@ from ..contracts.transaction_cost_curve import (
     TransactionCostCurveResponse,
 )
 from ..dependencies import (
+    get_benchmark_assignment_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -1459,14 +1463,13 @@ async def resolve_portfolio_benchmark_assignment(
         description="Portfolio identifier whose effective benchmark assignment is requested.",
         examples=["PORT-INT-001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_assignment_service: BenchmarkAssignmentService = Depends(
+        get_benchmark_assignment_service
+    ),
 ) -> BenchmarkAssignmentResponse:
-    response = cast(
-        BenchmarkAssignmentResponse | None,
-        await integration_service.resolve_benchmark_assignment(
-            portfolio_id=portfolio_id,
-            as_of_date=request.as_of_date,
-        ),
+    response = await benchmark_assignment_service.resolve(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_integration_source_not_found(

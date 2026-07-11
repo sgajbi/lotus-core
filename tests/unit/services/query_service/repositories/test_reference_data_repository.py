@@ -77,7 +77,6 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
 async def test_reference_data_repository_methods_cover_query_contracts() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [
-        _FakeExecuteResult([SimpleNamespace(portfolio_id="P1", benchmark_id="B1")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1", benchmark_currency="USD")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
@@ -178,7 +177,6 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
 
     repo = ReferenceDataRepository(db)
 
-    assert await repo.resolve_benchmark_assignment("P1", date(2026, 1, 1)) is not None
     assert await repo.get_benchmark_definition("B1", date(2026, 1, 1)) is not None
     assert await repo.list_benchmark_definitions_overlapping_window(
         "B1", date(2026, 1, 1), date(2026, 1, 2)
@@ -187,7 +185,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert await repo.list_index_definitions(date(2026, 1, 1), None, "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
     benchmark_component_sql = str(
-        db.execute.await_args_list[5].args[0].compile(compile_kwargs={"literal_binds": True})
+        db.execute.await_args_list[4].args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert (
         "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
@@ -211,7 +209,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         as_of_date=date(2026, 1, 1),
     )
     assert grouped_components["B1"][0].index_id == "IDX_1"
-    benchmark_components_stmt = db.execute.await_args_list[14].args[0]
+    benchmark_components_stmt = db.execute.await_args_list[13].args[0]
     benchmark_components_sql = str(
         benchmark_components_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -256,7 +254,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert date(2026, 1, 2) not in fx_rates
     assert date(2026, 1, 3) not in fx_rates
     assert fx_rates[date(2026, 1, 4)] == Decimal("1.4")
-    fx_stmt = db.execute.await_args_list[19].args[0]
+    fx_stmt = db.execute.await_args_list[18].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql

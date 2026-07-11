@@ -11,9 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCompositionWindowRequest,
 )
-from src.services.query_service.app.services.benchmark_reference_integration_service import (
-    BenchmarkReferenceIntegrationService,
-)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -216,55 +213,9 @@ def test_latest_reference_evidence_timestamp_uses_durable_reference_timestamps()
 
 
 @pytest.mark.asyncio
-async def test_benchmark_reference_family_service_runs_without_full_integration_facade() -> None:
-    repository = SimpleNamespace(
-        resolve_benchmark_assignment=AsyncMock(
-            return_value=SimpleNamespace(
-                portfolio_id="P1",
-                benchmark_id="B1",
-                effective_from=date(2026, 1, 1),
-                effective_to=None,
-                assignment_source="policy",
-                assignment_status="active",
-                policy_pack_id="pack",
-                source_system="lotus-manage",
-                assignment_recorded_at=date(2026, 1, 1),
-                assignment_version=1,
-            )
-        )
-    )
-    service = BenchmarkReferenceIntegrationService(
-        reference_repository_provider=lambda: repository,
-        decode_page_token=lambda token: {"token": token} if token else {},
-        encode_page_token=lambda payload: f"token:{payload['scope_fingerprint']}",
-    )
-
-    response = await service.resolve_benchmark_assignment("P1", date(2026, 1, 1))
-
-    assert response is not None
-    assert response.product_name == "BenchmarkAssignment"
-    assert response.benchmark_id == "B1"
-    repository.resolve_benchmark_assignment.assert_awaited_once_with("P1", date(2026, 1, 1))
-
-
-@pytest.mark.asyncio
 async def test_reference_contract_methods() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        resolve_benchmark_assignment=AsyncMock(
-            return_value=SimpleNamespace(
-                portfolio_id="P1",
-                benchmark_id="B1",
-                effective_from=date(2026, 1, 1),
-                effective_to=None,
-                assignment_source="policy",
-                assignment_status="active",
-                policy_pack_id="pack",
-                source_system="lotus-manage",
-                assignment_recorded_at=date(2026, 1, 1),
-                assignment_version=1,
-            )
-        ),
         get_benchmark_definition=AsyncMock(
             return_value=SimpleNamespace(
                 benchmark_id="B1",
@@ -460,15 +411,6 @@ async def test_reference_contract_methods() -> None:
             ]
         ),
     )
-
-    assignment = await service.resolve_benchmark_assignment("P1", date(2026, 1, 1))
-    assert assignment is not None
-    assert assignment.benchmark_id == "B1"
-    assert assignment.product_name == "BenchmarkAssignment"
-    assert assignment.generated_at.tzinfo is not None
-    assert assignment.restatement_version == "current"
-    assert assignment.reconciliation_status == "UNKNOWN"
-    assert assignment.data_quality_status == "COMPLETE"
 
     definition = await service.get_benchmark_definition("B1", date(2026, 1, 1))
     assert definition is not None
@@ -695,7 +637,6 @@ async def test_market_reference_products_expose_row_backed_quality_and_evidence_
 async def test_reference_contract_none_and_fx_branches() -> None:
     service = make_service()
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
-        resolve_benchmark_assignment=AsyncMock(return_value=None),
         get_benchmark_definition=AsyncMock(
             side_effect=[
                 None,
@@ -758,7 +699,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_taxonomy=AsyncMock(return_value=[]),
     )
 
-    assert await service.resolve_benchmark_assignment("P1", date(2026, 1, 1)) is None
     assert await service.get_benchmark_definition("B1", date(2026, 1, 1)) is None
     assert (
         await service.get_benchmark_composition_window(
