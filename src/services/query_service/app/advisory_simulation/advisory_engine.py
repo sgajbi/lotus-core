@@ -1,6 +1,6 @@
 from copy import deepcopy
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from .advisory.funding import (
     build_auto_funding_plan,
@@ -54,6 +54,8 @@ from .models import (
     ValuationMode,
 )
 from .valuation import build_simulated_state
+
+ProposalSimulationStatus = Literal["READY", "BLOCKED", "PENDING_REVIEW"]
 
 
 def run_proposal_simulation(
@@ -450,7 +452,7 @@ def _append_proposal_guard_rules(
 
 def _reconcile_proposal_status(
     *,
-    final_status: str,
+    final_status: ProposalSimulationStatus,
     before: Any,
     after: Any,
     portfolio: PortfolioSnapshot,
@@ -458,7 +460,7 @@ def _reconcile_proposal_status(
     cash_flows: list[ProposedCashFlow],
     rule_results: list[RuleResult],
     diagnostics: Any,
-) -> tuple[str, Any]:
+) -> tuple[ProposalSimulationStatus, Any]:
     expected_delta_base = expected_cash_delta_base(
         portfolio=portfolio,
         market_data=market_data,
@@ -541,7 +543,7 @@ def _compute_optional_suitability(
 
 def _compute_optional_gate_decision(
     *,
-    final_status: str,
+    final_status: ProposalSimulationStatus,
     rule_results: list[RuleResult],
     suitability: SuitabilityResult | None,
     diagnostics: Any,

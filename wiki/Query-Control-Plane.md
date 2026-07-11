@@ -175,6 +175,11 @@ router inside the operational read plane.
 - the service may expose supportability and policy evidence, but it does not own business
   calculations that belong to calculators or downstream analytics services
 - simulation routes must stay deterministic and source-owned, not recommendation-bearing
+- generic simulation must not import advisory suitability, recommendation, proposal approval, or
+  workflow-gate implementations; the advisory simulation route is a quarantined compatibility
+  contract while those downstream-owned decisions migrate to `lotus-advise`
+- `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
+  conclusions remain owned by `lotus-risk`
 
 ## Operational hints
 

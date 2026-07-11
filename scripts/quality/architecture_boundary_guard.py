@@ -158,6 +158,21 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         ),
         forbidden_module_prefixes=("time", "uuid"),
     ),
+    DirectImportBoundaryRule(
+        name="generic simulation must not import advisory decisioning",
+        source_path_prefixes=(
+            "src/services/query_control_plane_service/app/routers/simulation.py",
+            "src/services/query_service/app/dtos/simulation_dto.py",
+            "src/services/query_service/app/repositories/simulation_repository.py",
+            "src/services/query_service/app/services/simulation_service.py",
+        ),
+        forbidden_module_prefixes=(
+            "advisory_simulation",
+            "advisory_simulation_service",
+            "services.query_service.app.advisory_simulation",
+            "services.query_service.app.services.advisory_simulation_service",
+        ),
+    ),
 )
 
 
@@ -198,8 +213,6 @@ def _imported_modules(file_path: Path) -> list[tuple[int, str]]:
                 (node.lineno, _normalized_import_name(alias.name)) for alias in node.names
             )
         elif isinstance(node, ast.ImportFrom) and node.module:
-            if node.level:
-                continue
             imports.append((node.lineno, _normalized_import_name(node.module)))
     return imports
 

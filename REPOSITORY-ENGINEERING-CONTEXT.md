@@ -462,6 +462,25 @@ Current repository posture:
     instrument routing, and no-cashflow-rule exceptions from the registry while preserving
     migration-only `OTHER` coverage and explicit fallback exceptions.
 
+## Defect Tracking During Refactoring
+
+Do not leave actionable defects, architecture gaps, correctness risks, or deferred cleanup only in
+chat, local notes, or commit messages. When a refactor or GitHub issue fix exposes work that will not
+be completed in the current slice:
+
+1. search open and closed GitHub issues using both the broad failure pattern and concrete symbols,
+   routes, tables, services, or files;
+2. reuse and update the existing issue when it owns the root cause;
+3. otherwise raise one focused issue with current evidence, expected standard, impact, owner
+   boundary, acceptance criteria, evaluation condition, non-goals, related work, and recheck trigger;
+4. link child issues to the active parent/refactor issue and update the issue-discovery ledger;
+5. keep speculative, stale, or not-yet-actionable observations in the codebase review ledger until
+   they have enough evidence to become useful issues.
+
+Issue labels and chat summaries are visibility aids, not closure proof. An issue is locally fixed
+only when implementation, meaningful tests, contract/docs/context truth, same-pattern review, and
+focused validation evidence are committed. Close only after merge to `main` and post-merge QA.
+
 ## Architecture And Module Map
 
 Primary areas:
