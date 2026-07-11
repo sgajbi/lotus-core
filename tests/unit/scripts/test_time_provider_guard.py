@@ -15,9 +15,10 @@ def test_reconciliation_service_uses_provider_ports_for_time_and_ids() -> None:
 
 def test_core_snapshot_service_keeps_system_time_behind_clock_provider() -> None:
     service_text = (
-        REPO_ROOT / "src/services/query_service/app/services/core_snapshot_service.py"
+        REPO_ROOT
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py"
     ).read_text(encoding="utf-8")
 
     assert "datetime.now(UTC)" not in service_text
-    assert "self._clock = clock or SystemClock()" in service_text
+    assert "self._clock = dependencies.clock" in service_text
     assert "generated_at = self._clock.utc_now()" in service_text

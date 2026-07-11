@@ -39,8 +39,9 @@ The service groups several related surfaces:
 1. `operations`
    support overviews, readiness, lineage, reconciliation evidence, reprocessing and job-state views
 2. `integration`
-   policy-aware core snapshots, enrichment/reference contracts, benchmark and market/reference
-   source-data products
+   policy-aware core snapshots through QCP-owned contracts, application policies, source/simulation
+   ports, immutable records, and SQL adapter; enrichment/reference contracts plus benchmark and
+   market/reference source-data products
 3. `analytics_inputs`
    canonical portfolio and position analytics timeseries plus reference metadata and export jobs;
    QCP owns the public contracts, application workflow/policies, ports, immutable portfolio/export
@@ -180,8 +181,9 @@ router inside the operational read plane.
 - the service may expose supportability and policy evidence, but it does not own business
   calculations that belong to calculators or downstream analytics services
 - simulation routes must stay deterministic and source-owned, not recommendation-bearing
-- generic simulation must remain QCP package-owned and must not import query-service repositories;
-  the temporary QS simulation-state reader exists only for the not-yet-moved Core snapshot family
+- generic simulation and Core snapshot assembly must remain QCP package-owned and must not import
+  query-service repositories; snapshot source reads use `CoreSnapshotSourceReader`, and proposed
+  changes use the QCP-owned `SimulationStore`
 - generic simulation must not import advisory suitability, recommendation, proposal approval, or
   workflow-gate implementations; the advisory simulation route is a quarantined compatibility
   contract while those downstream-owned decisions migrate to `lotus-advise`

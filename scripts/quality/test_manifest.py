@@ -122,7 +122,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py",
         "tests/unit/services/portfolio_transaction_processing_service/test_cashflow_processing_adapter.py",
         "tests/unit/services/query_service/services/test_position_flow_effects.py",
-        "tests/unit/services/query_service/services/test_core_snapshot_service.py",
+        "tests/unit/services/query_control_plane_service/application/core_snapshot/test_core_snapshot_service.py",
         "tests/unit/services/query_control_plane_service/application/test_simulation.py",
     ],
     "transaction-processing-contract": [

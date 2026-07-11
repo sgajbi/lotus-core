@@ -1134,7 +1134,8 @@ Most relevant current governance:
     lives in `src/services/query_service/app/application/lookup_catalog.py`; `LookupCatalogService`
     now returns lookup application results while the lookup router maps them to `LookupResponse`.
     Core snapshot request fingerprinting now uses a canonical identity command from
-    `src/services/query_service/app/application/core_snapshot.py` instead of API DTO JSON
+    `src/services/query_control_plane_service/app/application/core_snapshot/identity_command.py`
+    instead of API DTO JSON
     serialization side effects.
     `make architecture-guard` now runs `scripts/quality/application_command_result_guard.py` so the
     migrated representative services cannot reintroduce API DTO imports or response DTO return
@@ -1587,35 +1588,40 @@ Most relevant current governance:
      stale-reset, dispatch, publisher, or repository construction policy into the loop.
 123. Core snapshot HTTP dependency factories belong in the query-control-plane dependency module,
      not in `CoreSnapshotService`. Keep `CoreSnapshotService` free of FastAPI dependency imports;
-     bounded snapshot composition collaborators should remain delivery-framework agnostic.
-     Core snapshot governance mapping belongs in `core_snapshot_governance.py`; do not re-add
+     bounded snapshot composition collaborators should remain delivery-framework agnostic. The
+     complete snapshot application is owned by
+     `query_control_plane_service/app/application/core_snapshot`; do not recreate snapshot DTOs,
+     use cases, policies, or repository orchestration under `query_service`.
+     Core snapshot governance mapping belongs in `core_snapshot/governance.py`; do not re-add
      request policy provenance, applied/dropped section, or inline-default governance mapping to the
      broad service.
      Core snapshot request identity and fingerprint construction belongs in
-     `core_snapshot_identity.py`; do not re-add canonical request payload or governance-sensitive
+     `core_snapshot/identity.py`; do not re-add canonical request payload or governance-sensitive
      fingerprint payload assembly to the broad service.
      Core snapshot freshness-to-data-quality classification belongs in
-     `core_snapshot_quality.py`; do not re-add `COMPLETE`/`PARTIAL`/`UNKNOWN` policy mapping to the
+     `core_snapshot/quality.py`; do not re-add `COMPLETE`/`PARTIAL`/`UNKNOWN` policy mapping to the
      broad service.
-     Core snapshot response section assembly belongs in `core_snapshot_sections.py`; do not re-add
+     Core snapshot response section assembly belongs in `core_snapshot/sections.py`; do not re-add
      requested-section branching, projected/delta/totals population, or snapshot enrichment field
      mapping to the broad service.
-     Core snapshot projected valuation belongs in `core_snapshot_projected_valuation.py`; do not
+     Core snapshot projected valuation belongs in `core_snapshot/projected_valuation.py`; do not
      re-add simulation change normalization, new-security instrument seeding, price lookup,
      market-to-portfolio FX selection, or projected market-value calculation to the broad service.
-     Shared FX lookup and decimal validation belong in `core_snapshot_market_data.py` rather than
+     Shared FX lookup and decimal validation belong in `core_snapshot/market_data.py` rather than
      service-private helpers.
      Core snapshot simulation option/session validation belongs in
-     `core_snapshot_simulation_validation.py`; do not re-add simulation option checks, session
+     `core_snapshot/simulation_validation.py`; do not re-add simulation option checks, session
      lookup, portfolio ownership validation, expected-version validation, or baseline-mode
      projected/delta section rejection to the broad service. Core snapshot exception classes belong
-     in `core_snapshot_errors.py`; `core_snapshot_service.py` may re-export them only for
+     in `core_snapshot/errors.py`; `core_snapshot/service.py` may re-export them only for
      compatibility with existing routers/tests.
      Repository-backed Core snapshot instrument enrichment belongs in
-     `core_snapshot_instrument_enrichment_reader.py`; do not re-add security-id normalization,
-     empty-request rejection, instrument repository lookup, or enrichment DTO assembly delegation to
-     the broad service. Pure enrichment record mapping remains in
-     `core_snapshot_instrument_enrichment.py`.
+     `core_snapshot/instrument_enrichment_reader.py`; do not re-add security-id normalization,
+     empty-request rejection, source lookup, or enrichment contract assembly delegation to the
+     broad service. Pure enrichment record mapping remains in
+     `core_snapshot/instrument_enrichment.py`. Application code consumes immutable records through
+     `CoreSnapshotSourceReader` and `SimulationStore`; SQLAlchemy models, sessions, and concrete
+     repositories remain in QCP infrastructure and dependency composition.
 124. Reference integration DTO metadata must remain domain-neutral and source-authority oriented.
      Do not justify defaults or examples by naming a downstream Lotus application unless the field
      is explicitly a consumer-policy contract. Use neutral source-system examples, mandate-policy
