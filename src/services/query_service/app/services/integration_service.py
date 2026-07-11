@@ -7,7 +7,6 @@ from portfolio_common.page_tokens import PageTokenCodec
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkCatalogResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -72,20 +71,6 @@ class IntegrationService:
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
         return cast(dict[str, Any], self._page_token_codec.decode(token))
-
-    async def list_benchmark_catalog(
-        self,
-        as_of_date: date,
-        benchmark_type: str | None,
-        benchmark_currency: str | None,
-        benchmark_status: str | None,
-    ) -> BenchmarkCatalogResponse:
-        return await self._benchmark_reference_service.list_benchmark_catalog(
-            as_of_date=as_of_date,
-            benchmark_type=benchmark_type,
-            benchmark_currency=benchmark_currency,
-            benchmark_status=benchmark_status,
-        )
 
     async def list_index_catalog(
         self,

@@ -9,6 +9,9 @@ from src.services.query_control_plane_service.app.application import (
 from src.services.query_control_plane_service.app.application.benchmark_assignment import (
     BenchmarkAssignmentService,
 )
+from src.services.query_control_plane_service.app.application.benchmark_catalog import (
+    BenchmarkCatalogService,
+)
 from src.services.query_control_plane_service.app.application.benchmark_composition import (
     BenchmarkCompositionService,
 )
@@ -57,6 +60,9 @@ from src.services.query_control_plane_service.app.contracts import (
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_catalog import (
+    BenchmarkCatalogRequest,
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_composition import (
     BenchmarkCompositionWindowRequest,
@@ -187,7 +193,6 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
     QueryControlPlaneProblem,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkCatalogRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
@@ -2535,16 +2540,15 @@ async def test_get_external_fx_forward_curve_router_function() -> None:
 @pytest.mark.asyncio
 async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
     mock_service = MagicMock(spec=IntegrationService)
-    mock_service.list_benchmark_catalog = AsyncMock(
-        return_value={"as_of_date": "2026-01-31", "records": []}
-    )
+    benchmark_service = MagicMock(spec=BenchmarkCatalogService)
+    benchmark_service.list = AsyncMock(return_value={"as_of_date": "2026-01-31", "records": []})
     mock_service.list_index_catalog = AsyncMock(
         return_value={"as_of_date": "2026-01-31", "records": []}
     )
 
     benchmark_response = await fetch_benchmark_catalog(
         request=BenchmarkCatalogRequest(as_of_date="2026-01-31"),
-        integration_service=mock_service,
+        benchmark_catalog_service=benchmark_service,
     )
     index_response = await fetch_index_catalog(
         request=IndexCatalogRequest(

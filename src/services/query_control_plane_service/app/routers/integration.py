@@ -6,8 +6,6 @@ from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkCatalogRequest,
-    BenchmarkCatalogResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -27,6 +25,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 from ..application.benchmark_assignment import BenchmarkAssignmentService
+from ..application.benchmark_catalog import BenchmarkCatalogService
 from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
@@ -54,6 +53,7 @@ from ..contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
 )
+from ..contracts.benchmark_catalog import BenchmarkCatalogRequest, BenchmarkCatalogResponse
 from ..contracts.benchmark_composition import (
     BenchmarkCompositionWindowRequest,
     BenchmarkCompositionWindowResponse,
@@ -148,6 +148,7 @@ from ..contracts.transaction_cost_curve import (
 )
 from ..dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
@@ -2285,20 +2286,13 @@ async def fetch_benchmark_definition(
         "benchmark assignment, definition, market-series, or benchmark-return retrieval. "
         "Prefer the targeted routes once a concrete benchmark identifier is known."
     ),
+    openapi_extra=source_data_product_openapi_extra("BenchmarkDefinition"),
 )
 async def fetch_benchmark_catalog(
     request: BenchmarkCatalogRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_catalog_service: BenchmarkCatalogService = Depends(get_benchmark_catalog_service),
 ) -> BenchmarkCatalogResponse:
-    return cast(
-        BenchmarkCatalogResponse,
-        await integration_service.list_benchmark_catalog(
-            as_of_date=request.as_of_date,
-            benchmark_type=request.benchmark_type,
-            benchmark_currency=request.benchmark_currency,
-            benchmark_status=request.benchmark_status,
-        ),
-    )
+    return await benchmark_catalog_service.list(request=request)
 
 
 @router.post(

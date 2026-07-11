@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import BenchmarkCompositionSeries, BenchmarkDefinition
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,6 +124,94 @@ class SqlAlchemyBenchmarkDefinitionReader:
         )
         rows = (await self._session.execute(statement)).scalars().all()
         return [_component_evidence(row) for row in rows]
+
+    async def list_definitions(
+        self,
+        *,
+        as_of_date: date,
+        benchmark_type: str | None,
+        benchmark_currency: str | None,
+        benchmark_status: str | None,
+    ) -> list[BenchmarkDefinitionEvidence]:
+        predicates = [
+            effective_on(
+                BenchmarkDefinition.effective_from,
+                BenchmarkDefinition.effective_to,
+                as_of_date,
+            )
+        ]
+        if benchmark_type:
+            predicates.append(BenchmarkDefinition.benchmark_type == benchmark_type.strip().lower())
+        if benchmark_currency:
+            predicates.append(
+                BenchmarkDefinition.benchmark_currency
+                == normalize_currency_code(benchmark_currency)
+            )
+        if benchmark_status:
+            predicates.append(
+                BenchmarkDefinition.benchmark_status == benchmark_status.strip().lower()
+            )
+        ranked = ranked_latest_ids(
+            BenchmarkDefinition,
+            BenchmarkDefinition.benchmark_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkDefinition.effective_from.desc(),
+                BenchmarkDefinition.source_timestamp.desc().nulls_last(),
+                BenchmarkDefinition.updated_at.desc(),
+                BenchmarkDefinition.created_at.desc(),
+                BenchmarkDefinition.id.desc(),
+            ),
+        )
+        statement = (
+            select(BenchmarkDefinition)
+            .join(ranked, BenchmarkDefinition.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(BenchmarkDefinition.benchmark_id.asc())
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        return [_definition_evidence(row) for row in rows]
+
+    async def list_components_for_benchmarks(
+        self, *, benchmark_ids: list[str], as_of_date: date
+    ) -> dict[str, list[BenchmarkComponentEvidence]]:
+        if not benchmark_ids:
+            return {}
+        predicates = [
+            BenchmarkCompositionSeries.benchmark_id.in_(benchmark_ids),
+            effective_on(
+                BenchmarkCompositionSeries.composition_effective_from,
+                BenchmarkCompositionSeries.composition_effective_to,
+                as_of_date,
+            ),
+        ]
+        ranked = ranked_latest_ids(
+            BenchmarkCompositionSeries,
+            BenchmarkCompositionSeries.benchmark_id,
+            BenchmarkCompositionSeries.index_id,
+            predicates=predicates,
+            order_by=(
+                BenchmarkCompositionSeries.composition_effective_from.desc(),
+                BenchmarkCompositionSeries.source_timestamp.desc().nulls_last(),
+                BenchmarkCompositionSeries.updated_at.desc(),
+                BenchmarkCompositionSeries.created_at.desc(),
+                BenchmarkCompositionSeries.id.desc(),
+            ),
+        )
+        statement = (
+            select(BenchmarkCompositionSeries)
+            .join(ranked, BenchmarkCompositionSeries.id == ranked.c.id)
+            .where(ranked.c.rn == 1)
+            .order_by(
+                BenchmarkCompositionSeries.benchmark_id.asc(),
+                BenchmarkCompositionSeries.index_id.asc(),
+            )
+        )
+        rows = (await self._session.execute(statement)).scalars().all()
+        grouped: dict[str, list[BenchmarkComponentEvidence]] = {}
+        for row in rows:
+            grouped.setdefault(row.benchmark_id, []).append(_component_evidence(row))
+        return grouped
 
 
 def _definition_evidence(row: Any) -> BenchmarkDefinitionEvidence:

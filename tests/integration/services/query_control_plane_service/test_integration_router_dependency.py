@@ -20,6 +20,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
@@ -286,9 +287,11 @@ async def async_test_client():
         }
     )
     mock_integration_service.benchmark_definition_service = mock_benchmark_definition_service
-    mock_integration_service.list_benchmark_catalog = AsyncMock(
+    mock_benchmark_catalog_service = MagicMock()
+    mock_benchmark_catalog_service.list = AsyncMock(
         return_value={
-            "as_of_date": "2026-01-31",
+            "product_name": "BenchmarkDefinition",
+            "product_version": "v1",
             "records": [
                 {
                     "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -305,15 +308,37 @@ async def async_test_client():
                     "effective_from": "2025-01-01",
                     "effective_to": None,
                     "quality_status": "accepted",
-                    "observed_at": "2026-01-31T08:00:00Z",
+                    "source_timestamp": "2026-01-31T08:00:00Z",
                     "source_vendor": "MSCI",
                     "source_record_id": "bmk_60_40_v20260131",
-                    "components": [],
+                    "components": [
+                        {
+                            "index_id": "IDX_MSCI_WORLD_TR",
+                            "composition_weight": "1.0000000000",
+                            "composition_effective_from": "2025-01-01",
+                            "composition_effective_to": None,
+                            "rebalance_event_id": "rebalance_2025q1",
+                        }
+                    ],
+                    "completeness_status": "COMPLETE",
+                    "completeness_reason": "BENCHMARK_DEFINITION_COMPLETE",
+                    "total_component_weight": "1.0000000000",
                     "contract_version": "rfc_062_v1",
                 }
             ],
+            "record_count": 1,
+            "completeness_status": "COMPLETE",
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+                data_quality_status="COMPLETE",
+                latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
+                content_hash="sha256:benchmark-catalog",
+                use_content_hash_as_source_batch_fingerprint=True,
+            ),
         }
     )
+    mock_integration_service.benchmark_catalog_service = mock_benchmark_catalog_service
     mock_integration_service.list_index_catalog = AsyncMock(
         return_value={
             "as_of_date": "2026-01-31",
@@ -576,6 +601,7 @@ async def async_test_client():
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_benchmark_assignment_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_benchmark_catalog_service] = lambda: mock_benchmark_catalog_service
     app.dependency_overrides[get_benchmark_composition_service] = lambda: (
         mock_benchmark_composition_service
     )
@@ -606,6 +632,7 @@ async def async_test_client():
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
+    app.dependency_overrides.pop(get_benchmark_catalog_service, None)
     app.dependency_overrides.pop(get_benchmark_composition_service, None)
     app.dependency_overrides.pop(get_benchmark_definition_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
@@ -1292,12 +1319,13 @@ async def test_benchmark_catalog_success(async_test_client):
     assert body["as_of_date"] == "2026-01-31"
     assert body["records"][0]["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert body["records"][0]["benchmark_type"] == "composite"
-    mock_integration_service.list_benchmark_catalog.assert_awaited_once_with(
-        as_of_date=date(2026, 1, 31),
-        benchmark_type="composite",
-        benchmark_currency="USD",
-        benchmark_status="active",
-    )
+    service = mock_integration_service.benchmark_catalog_service
+    service.list.assert_awaited_once()
+    request = service.list.await_args.kwargs["request"]
+    assert request.as_of_date == date(2026, 1, 31)
+    assert request.benchmark_type == "composite"
+    assert request.benchmark_currency == "USD"
+    assert request.benchmark_status == "active"
 
 
 async def test_index_catalog_success(async_test_client):

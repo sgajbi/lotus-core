@@ -18,6 +18,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsTimeseriesService,
 )
 from .application.benchmark_assignment import BenchmarkAssignmentService
+from .application.benchmark_catalog import BenchmarkCatalogService
 from .application.benchmark_composition import BenchmarkCompositionService
 from .application.benchmark_definition import BenchmarkDefinitionService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
@@ -146,6 +147,17 @@ def get_benchmark_composition_service(
     """Compose the QCP-owned benchmark composition-window use case."""
 
     return BenchmarkCompositionService(
+        reader=SqlAlchemyBenchmarkDefinitionReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_benchmark_catalog_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> BenchmarkCatalogService:
+    """Compose the QCP-owned benchmark catalog use case."""
+
+    return BenchmarkCatalogService(
         reader=SqlAlchemyBenchmarkDefinitionReader(db),
         clock=SystemClock().utc_now,
     )
