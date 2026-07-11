@@ -199,7 +199,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./src/services/query_control_plane_service/app:/app/app
-      - ./src/services/query_service/app:/app/src/services/query_service/app
       - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
     command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --no-access-log
     restart: unless-stopped

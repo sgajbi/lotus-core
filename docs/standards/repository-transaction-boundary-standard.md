@@ -25,16 +25,17 @@ not commit, rollback, generate identifiers, or read clocks.
 
 ## Transitional Exceptions
 
-`src/services/query_service/app/repositories/operations_repository.py` remains a transitional
+`src/services/query_control_plane_service/app/infrastructure/operations/repository.py` remains a
+transitional
 standalone repository transaction exception for operator control-plane status updates. Remove the
 exception when those updates move behind an explicit unit-of-work boundary.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/quality/repository_transaction_boundary_guard.py`. The guard scans
-repository modules for direct `commit()` or `rollback()` calls and fails unless the file is listed
-as a transitional exception. It also fails stale exceptions after a repository no longer owns direct
-transaction completion.
+`make architecture-guard` runs `scripts/quality/repository_transaction_boundary_guard.py`. The guard
+scans legacy repository modules and repository adapters under `app/infrastructure/` for direct
+`commit()` or `rollback()` calls and fails unless the file is listed as a transitional exception. It
+also fails stale exceptions after a repository no longer owns direct transaction completion.
 
 Generated `build/lib` copies are intentionally excluded from this guard as disposable local build
 artifacts. They are not authored source truth and should remain untracked under the generated

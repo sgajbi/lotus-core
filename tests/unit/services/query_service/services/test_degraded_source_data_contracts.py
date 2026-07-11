@@ -27,7 +27,7 @@ from src.services.query_control_plane_service.app.domain.dpm_source_readiness im
 from src.services.query_service.app.dtos.cashflow_projection_dto import (
     CashflowProjectionResponse,
 )
-from src.services.query_service.app.dtos.operations_dto import (
+from src.services.query_control_plane_service.app.contracts.operations import (
     ReconciliationFindingListResponse,
     ReconciliationFindingRecord,
 )

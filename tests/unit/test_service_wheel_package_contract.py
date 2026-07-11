@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import ast
 import fnmatch
 import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVICES_ROOT = REPO_ROOT / "src" / "services"
+QCP_ROOT = SERVICES_ROOT / "query_control_plane_service"
 
 
 def _service_projects() -> list[Path]:
@@ -35,3 +37,31 @@ def test_service_wheels_include_the_runtime_app_namespace() -> None:
         "service wheels must discover the runtime app namespace from the service root: "
         + ", ".join(failures)
     )
+
+
+def test_query_control_plane_has_no_query_service_implementation_imports() -> None:
+    offenders: list[str] = []
+    for path in sorted((QCP_ROOT / "app").rglob("*.py")):
+        module = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(module):
+            if isinstance(node, ast.Import):
+                imported_modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                imported_modules = [node.module or ""]
+            else:
+                continue
+            if any(
+                imported.startswith("src.services.query_service") for imported in imported_modules
+            ):
+                offenders.append(path.relative_to(REPO_ROOT).as_posix())
+
+    assert offenders == [], (
+        "query-control-plane must own or port every runtime dependency: "
+        + ", ".join(sorted(set(offenders)))
+    )
+
+
+def test_query_control_plane_compose_does_not_mount_query_service_source() -> None:
+    compose_source = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "/app/src/services/query_service" not in compose_source

@@ -363,6 +363,9 @@ Important current core truths:
    `lotus-platform`
 6. production-like environments use the shared production security profile for service-local
    enterprise auth/audit defaults; local/dev/test environments remain opt-in
+7. the query-control-plane wheel and image are package-independent from Query Service implementation
+   source; QCP runtime composition uses QCP-owned ports/adapters and Compose must not mask missing
+   dependencies with cross-service source mounts
 
 Copy-paste route examples and family groupings live in [wiki/API-Surface.md](wiki/API-Surface.md).
 
