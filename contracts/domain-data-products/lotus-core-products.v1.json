@@ -1002,6 +1002,135 @@
       "temporal_semantics_ref": "as_of_date"
     },
     {
+      "product_name": "BenchmarkDefinition",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "benchmark",
+        "supports_bulk": true
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "observed_at",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "content_hash",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/benchmarks/{benchmark_id}/definition",
+        "/integration/benchmarks/catalog"
+      ],
+      "freshness_policy": {
+        "freshness_class": "daily",
+        "max_allowed_age_description": "Effective benchmark master and constituent evidence."
+      },
+      "completeness_policy": {
+        "default_status": "complete",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": false,
+        "evidence_access_class_ref": "customer_consumable"
+      },
+      "security_profile_ref": "system_access:reference_internal:retain_for_source_audit:audit_system_access",
+      "approved_consumers": [
+        "lotus-performance",
+        "lotus-risk"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "benchmark_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
+      "product_name": "IndexDefinition",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "benchmark",
+        "supports_bulk": true
+      },
+      "temporal_scope": {
+        "primary_time_field": "as_of_date",
+        "freshness_basis": "observed_at",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "content_hash",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/indices/catalog"
+      ],
+      "freshness_policy": {
+        "freshness_class": "daily",
+        "max_allowed_age_description": "Effective canonical index masters and classifications."
+      },
+      "completeness_policy": {
+        "default_status": "complete",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": false,
+        "evidence_access_class_ref": "customer_consumable"
+      },
+      "security_profile_ref": "system_access:reference_internal:retain_for_source_audit:audit_system_access",
+      "approved_consumers": [
+        "lotus-performance",
+        "lotus-risk"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "index_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "as_of_date"
+    },
+    {
       "product_name": "IndexSeriesWindow",
       "product_version": "v1",
       "owner_repository": "lotus-core",
@@ -1062,6 +1191,70 @@
       },
       "identifier_refs": [
         "index_id",
+        "tenant_id"
+      ],
+      "temporal_semantics_ref": "valuation_date"
+    },
+    {
+      "product_name": "BenchmarkReturnSeriesWindow",
+      "product_version": "v1",
+      "owner_repository": "lotus-core",
+      "product_family": "analytics_input",
+      "authoritative_domain": "portfolio_state",
+      "lifecycle_status": "active",
+      "request_scope": {
+        "scope_level": "benchmark",
+        "supports_bulk": false
+      },
+      "temporal_scope": {
+        "primary_time_field": "valuation_date",
+        "freshness_basis": "observed_at",
+        "supports_restatement": true
+      },
+      "required_trust_metadata": [
+        "product_name",
+        "product_version",
+        "tenant_id",
+        "generated_at",
+        "as_of_date",
+        "restatement_version",
+        "reconciliation_status",
+        "data_quality_status",
+        "latest_evidence_timestamp",
+        "source_batch_fingerprint",
+        "snapshot_id",
+        "content_hash",
+        "policy_version",
+        "correlation_id"
+      ],
+      "serving_plane": "query_control_plane_service",
+      "current_routes": [
+        "/integration/benchmarks/{benchmark_id}/return-series"
+      ],
+      "freshness_policy": {
+        "freshness_class": "daily",
+        "max_allowed_age_description": "Canonical source-supplied benchmark return series for governed override modes."
+      },
+      "completeness_policy": {
+        "default_status": "complete",
+        "partial_allowed": true
+      },
+      "lineage_policy": {
+        "lineage_required": true,
+        "evidence_bundle_required": false,
+        "evidence_access_class_ref": "customer_consumable"
+      },
+      "security_profile_ref": "system_access:reference_internal:retain_for_source_audit:audit_system_access",
+      "approved_consumers": [
+        "lotus-performance",
+        "lotus-risk"
+      ],
+      "deprecation_policy": {
+        "state": "not_deprecated",
+        "successor_product": null
+      },
+      "identifier_refs": [
+        "benchmark_id",
         "tenant_id"
       ],
       "temporal_semantics_ref": "valuation_date"

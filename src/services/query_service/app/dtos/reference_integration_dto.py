@@ -51,10 +51,6 @@ from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, 
 )
 
 
-class BenchmarkReturnSeriesRequest(SeriesRequest):
-    model_config = ConfigDict()
-
-
 class RiskFreeSeriesRequest(SeriesRequest):
     currency: str = Field(
         ...,
@@ -65,50 +61,6 @@ class RiskFreeSeriesRequest(SeriesRequest):
         ...,
         description="Risk-free series mode requested by the integration client.",
         examples=["annualized_rate_series"],
-    )
-
-    model_config = ConfigDict()
-
-
-class BenchmarkReturnSeriesPoint(BaseModel):
-    series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    benchmark_return: Decimal = Field(
-        ..., description="Benchmark return value.", examples=["0.0019000000"]
-    )
-    return_period: str = Field(..., description="Return period label.", examples=["1d"])
-    return_convention: str = Field(
-        ..., description="Return convention label.", examples=["total_return_index"]
-    )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
-    model_config = ConfigDict()
-
-
-class BenchmarkReturnSeriesResponse(BaseModel):
-    benchmark_id: str = Field(
-        ..., description="Benchmark identifier.", examples=["BMK_GLOBAL_BALANCED_60_40"]
-    )
-    as_of_date: date = Field(
-        ...,
-        description="As-of date used for deterministic contract resolution.",
-        examples=["2026-01-31"],
-    )
-    resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
-    frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    request_fingerprint: str = Field(
-        ...,
-        description="Deterministic request fingerprint for the raw benchmark return series scope.",
-        examples=["f4ea7426d13c0b95bbfd8d7d9dfb29af"],
-    )
-    points: list[BenchmarkReturnSeriesPoint] = Field(
-        default_factory=list,
-        description="Raw benchmark return points from upstream provider.",
-    )
-    lineage: dict[str, str] = Field(
-        default_factory=dict,
-        description="Lineage metadata for deterministic replay.",
-        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
     )
 
     model_config = ConfigDict()

@@ -363,6 +363,7 @@
         "BenchmarkAssignment:v1",
         "BenchmarkConstituentWindow:v1",
         "IndexSeriesWindow:v1",
+        "BenchmarkReturnSeriesWindow:v1",
         "RiskFreeSeriesWindow:v1",
         "MarketDataCoverageWindow:v1",
         "DataQualityCoverageReport:v1"

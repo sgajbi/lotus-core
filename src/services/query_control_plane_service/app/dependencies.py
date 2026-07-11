@@ -21,6 +21,7 @@ from .application.benchmark_assignment import BenchmarkAssignmentService
 from .application.benchmark_catalog import BenchmarkCatalogService
 from .application.benchmark_composition import BenchmarkCompositionService
 from .application.benchmark_definition import BenchmarkDefinitionService
+from .application.benchmark_return_series import BenchmarkReturnSeriesService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
@@ -59,6 +60,9 @@ from .infrastructure.benchmark_assignment_sources import (
 )
 from .infrastructure.benchmark_definition_sources import (
     SqlAlchemyBenchmarkDefinitionReader,
+)
+from .infrastructure.benchmark_return_series_sources import (
+    SqlAlchemyBenchmarkReturnSeriesReader,
 )
 from .infrastructure.client_liquidity_evidence_sources import (
     SqlAlchemyClientLiquidityEvidenceReader,
@@ -163,6 +167,17 @@ def get_benchmark_catalog_service(
 
     return BenchmarkCatalogService(
         reader=SqlAlchemyBenchmarkDefinitionReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_benchmark_return_series_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> BenchmarkReturnSeriesService:
+    """Compose the QCP-owned benchmark return series use case."""
+
+    return BenchmarkReturnSeriesService(
+        reader=SqlAlchemyBenchmarkReturnSeriesReader(db),
         clock=SystemClock().utc_now,
     )
 

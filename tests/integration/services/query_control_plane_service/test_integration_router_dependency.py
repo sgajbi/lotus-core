@@ -23,6 +23,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
+    get_benchmark_return_series_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -594,13 +595,15 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_benchmark_return_series = AsyncMock(
+    mock_integration_service.get = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "as_of_date": "2026-01-31",
             "resolved_window": {"start_date": "2026-01-01", "end_date": "2026-01-31"},
             "frequency": "daily",
             "request_fingerprint": "fp-benchmark-return-1",
+            "record_count": 1,
+            "completeness_status": "PARTIAL",
             "points": [
                 {
                     "series_date": "2026-01-02",
@@ -615,6 +618,10 @@ async def async_test_client():
                 "contract_version": "rfc_062_v1",
                 "source_system": "lotus-core",
             },
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+            ),
         }
     )
 
@@ -627,6 +634,7 @@ async def async_test_client():
     app.dependency_overrides[get_benchmark_definition_service] = lambda: (
         mock_benchmark_definition_service
     )
+    app.dependency_overrides[get_benchmark_return_series_service] = lambda: mock_integration_service
     app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
         mock_integration_service
     )
@@ -656,6 +664,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_benchmark_catalog_service, None)
     app.dependency_overrides.pop(get_benchmark_composition_service, None)
     app.dependency_overrides.pop(get_benchmark_definition_service, None)
+    app.dependency_overrides.pop(get_benchmark_return_series_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
@@ -1661,8 +1670,8 @@ async def test_benchmark_return_series_success(async_test_client):
     assert body["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert body["request_fingerprint"] == "fp-benchmark-return-1"
     assert body["points"][0]["benchmark_return"] == "0.0021000000"
-    mock_integration_service.get_benchmark_return_series.assert_awaited_once()
-    benchmark_return_call = mock_integration_service.get_benchmark_return_series.await_args.kwargs
+    mock_integration_service.get.assert_awaited_once()
+    benchmark_return_call = mock_integration_service.get.await_args.kwargs
     assert benchmark_return_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert benchmark_return_call["request"].as_of_date == date(2026, 1, 31)
     assert benchmark_return_call["request"].window.start_date == date(2026, 1, 1)

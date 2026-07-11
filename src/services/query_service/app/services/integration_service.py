@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
-    BenchmarkReturnSeriesRequest,
-    BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
     RiskFreeSeriesRequest,
@@ -74,14 +72,6 @@ class IntegrationService:
         request: BenchmarkMarketSeriesRequest,
     ) -> BenchmarkMarketSeriesResponse:
         return await self._benchmark_reference_service.get_benchmark_market_series(
-            benchmark_id=benchmark_id,
-            request=request,
-        )
-
-    async def get_benchmark_return_series(
-        self, benchmark_id: str, request: BenchmarkReturnSeriesRequest
-    ) -> BenchmarkReturnSeriesResponse:
-        return await self._benchmark_reference_service.get_benchmark_return_series(
             benchmark_id=benchmark_id,
             request=request,
         )

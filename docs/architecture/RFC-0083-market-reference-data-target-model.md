@@ -43,6 +43,7 @@ When both values are supplied, `ingested_at` must be on or after the resolved so
 | Benchmark composition | `BenchmarkConstituentWindow` | effective component window, rebalance event id, component source lineage, completeness status |
 | Index definition | `IndexDefinition` | effective master version, provider identity, governed classifications, source lineage |
 | Index series | `IndexSeriesWindow` | deterministic series ordering, observed-at mapping, quality status summary, export posture |
+| Benchmark return series | `BenchmarkReturnSeriesWindow` | deterministic source-supplied return ordering, observed-at mapping, completeness, override lineage |
 | Risk-free series | `RiskFreeSeriesWindow` | currency, series mode, convention metadata, observed-at mapping, coverage status |
 | Data-quality diagnostics | `DataQualityCoverageReport` | required/observed/stale/blocking counts and target status vocabulary |
 
