@@ -119,6 +119,9 @@ That is why the replay service is a distinct control plane inside core rather th
 - canonical write ingress remains in `ingestion_service`
 - event replay owns replay, DLQ, backlog, ops-mode, and ingestion-health control APIs
 - replay routes must preserve idempotency semantics and durable audit evidence
+- transaction replay identity covers immutable booking inputs; processor-owned cost/P&L outputs and
+  exact Core-generated linkage/policy defaults must not turn an unchanged persisted replay into a
+  semantic conflict, while custom linkage and policy values remain material
 - this service supports operators and automation; it does not replace calculator or persistence
   ownership
 

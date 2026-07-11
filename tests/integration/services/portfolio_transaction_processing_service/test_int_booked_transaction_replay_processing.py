@@ -415,5 +415,69 @@ async def test_concurrent_missing_cashflow_repairs_converge_on_one_row(
         )
 
 
+async def test_replay_after_processing_ignores_processor_owned_transaction_outputs(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-REPLAY-05"
+    transaction_id = "BUY-COMBINED-REPLAY-05"
+    correlation_id = "corr-combined-replay-05"
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id="SEC-COMBINED-REPLAY-05",
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="10",
+        price="25",
+        gross_amount="250",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id),
+            instrument_record(
+                "SEC-COMBINED-REPLAY-05",
+                name="Combined replay identity security",
+                isin="SG0000000005",
+                currency="USD",
+            ),
+            canonical_transaction_record(event),
+        ]
+    )
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+
+    first_processing = await process_booked_transaction(
+        context=context,
+        event=event,
+        event_id="transactions.persisted-0-9501",
+        correlation_id=correlation_id,
+    )
+    producer = CapturingReplayProducer()
+    replay_use_case = build_replay_booked_transaction_use_case(
+        session_factory=context.session_factory,
+        kafka_producer=producer,
+    )
+    replay_result = await replay_use_case.execute(
+        ReplayBookedTransactionCommand(
+            transaction_id=transaction_id,
+            correlation_id=correlation_id,
+        )
+    )
+    replay_event = TransactionEvent.model_validate(producer.messages[0]["value"])
+    duplicate_processing = await process_booked_transaction(
+        context=context,
+        event=replay_event,
+        event_id="transactions.persisted-0-9502",
+        correlation_id=correlation_id,
+    )
+
+    assert first_processing.status is TransactionProcessingStatus.PROCESSED
+    assert replay_result.status is BookedTransactionReplayStatus.REPLAYED
+    assert replay_event.net_cost is not None
+    assert replay_event.calculation_policy_id == "BUY_DEFAULT_POLICY"
+    assert duplicate_processing.status is TransactionProcessingStatus.DUPLICATE
+
+
 async def _row_count(session: AsyncSession, statement) -> int:
     return int(await session.scalar(statement) or 0)
