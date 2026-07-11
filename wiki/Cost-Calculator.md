@@ -37,6 +37,8 @@ into governed cost-aware state inside the same unit of work as cashflow and posi
 Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash economics,
 incremental and average-cost checkpoint state, and calculation diagnostics live in the
 target-owned `app/domain/cost_basis` package behind one public domain API. The transitional
+timeline coordinator is target-owned application behavior behind a framework-neutral observation
+port; Prometheus duration/depth recording is a target infrastructure adapter. The transitional
 application workflow is
 `cost_calculator_service/app/cost_calculation_workflow.py`, imported by target infrastructure until
 its application and persistence ports are extracted. The repository explicitly maps the domain's

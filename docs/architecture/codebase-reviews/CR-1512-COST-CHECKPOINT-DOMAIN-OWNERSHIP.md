@@ -49,7 +49,6 @@ the anti-corruption boundary between storage vocabulary and the clearer domain n
 
 ## Follow-Up
 
-Extract transaction processing orchestration behind an application observer port before moving it;
-Prometheus timing is infrastructure behavior and must not enter the domain. Then extract workflow
+Transaction timeline orchestration and its observer port moved in CR-1513. Next extract workflow
 and repository ownership incrementally, preserving the explicit checkpoint mapper and compatibility
 schema until a separately evidenced database migration is justified.

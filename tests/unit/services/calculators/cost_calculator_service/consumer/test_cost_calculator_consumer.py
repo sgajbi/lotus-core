@@ -467,7 +467,7 @@ async def test_consumer_integration_with_engine(
 ):
     """
     GIVEN a new SELL transaction message
-    WHEN the consumer processes it, using the real TransactionProcessor
+    WHEN the consumer processes it through the real cost-basis timeline processor
     THEN it should fetch history, calculate the realized P&L, and update the database.
     """
     # ARRANGE
@@ -727,7 +727,7 @@ async def test_consumer_processes_fx_contract_event_without_generic_engine(
     mock_idempotency_repo.claim_event_processing.return_value = True
 
     with patch.object(
-        cost_calculator_consumer, "_get_transaction_processor"
+        cost_calculator_consumer, "_get_cost_basis_timeline_processor"
     ) as mock_processor_factory:
         await cost_calculator_consumer.process_message(mock_msg)
 
@@ -1081,10 +1081,10 @@ async def test_consumer_selects_avco_strategy_for_portfolio(
     # We patch the strategy classes to act as spies, checking if they were instantiated.
     with (
         patch(
-            "src.services.calculators.cost_calculator_service.app.transaction_processor.FIFOBasisStrategy"
+            "src.services.portfolio_transaction_processing_service.app.application.cost_basis_timeline.FIFOBasisStrategy"
         ) as mock_fifo,
         patch(
-            "src.services.calculators.cost_calculator_service.app.transaction_processor.AverageCostBasisStrategy"
+            "src.services.portfolio_transaction_processing_service.app.application.cost_basis_timeline.AverageCostBasisStrategy"
         ) as mock_avco,
     ):
         # ACT

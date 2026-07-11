@@ -14,6 +14,10 @@ from .composition import (
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
 from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
+from .prometheus_cost_basis_observability import (
+    PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PrometheusCostBasisCalculationObserver,
+)
 from .prometheus_observability import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     PrometheusTransactionProcessingObserver,
@@ -35,8 +39,10 @@ __all__ = [
     "CostProcessingCompatibilityAdapter",
     "PositionProcessingCompatibilityAdapter",
     "PipelineStageProcessingCompatibilityAdapter",
+    "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
+    "PrometheusCostBasisCalculationObserver",
     "SqlAlchemyAverageCostPoolReconciliationAdapter",
     "SqlAlchemyBookedTransactionReplayAdapter",
     "SqlAlchemyTransactionIdempotencyAdapter",

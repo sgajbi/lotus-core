@@ -74,7 +74,7 @@
       "legacyFolders": [
         {
           "path": "src/services/calculators/cost_calculator_service",
-          "migrationGuidance": "Cost-basis policy and checkpoint state are target-owned. Extract processor observability plus workflow and repository adapters behind target application/infrastructure ports, migrate delivery tests, then delete the remaining legacy root after release/Kubernetes/canonical-QA parity."
+          "migrationGuidance": "Cost-basis policy, checkpoint state, and timeline orchestration are target-owned. Extract workflow use cases and repository/publication adapters behind target ports, migrate delivery tests, then delete the remaining legacy root after release/Kubernetes/canonical-QA parity."
         },
         {
           "path": "src/services/calculators/cashflow_calculator_service",
@@ -93,9 +93,10 @@
         "docs/architecture/codebase-reviews/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md",
         "docs/architecture/codebase-reviews/CR-1509-POSITION-MODULE-TARGET-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1510-COST-BASIS-DOMAIN-TARGET-OWNERSHIP.md",
-        "docs/architecture/codebase-reviews/CR-1512-COST-CHECKPOINT-DOMAIN-OWNERSHIP.md"
+        "docs/architecture/codebase-reviews/CR-1512-COST-CHECKPOINT-DOMAIN-OWNERSHIP.md",
+        "docs/architecture/codebase-reviews/CR-1513-COST-TIMELINE-APPLICATION-OWNERSHIP.md"
       ],
-      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position plus cost-basis policy and checkpoint source are target-owned; registry/Kubernetes rollout and remaining cost processor/workflow/repository plus cashflow package removal remain governed follow-up work."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position plus cost-basis policy, checkpoint, and timeline source are target-owned; registry/Kubernetes rollout and remaining cost workflow/repository plus cashflow package removal remain governed follow-up work."
     }
   ]
 }

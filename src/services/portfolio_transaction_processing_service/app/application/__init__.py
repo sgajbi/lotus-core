@@ -5,6 +5,10 @@ from .commands import (
     TransactionEventMetadata,
     TransactionProcessingIntent,
 )
+from .cost_basis_timeline import (
+    CostBasisTimelineProcessor,
+    build_cost_basis_timeline_processor,
+)
 from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .process_transaction import ProcessTransactionUseCase
 from .reconcile_average_cost_pools import (
@@ -37,6 +41,8 @@ __all__ = [
     "ReplayBookedTransactionUseCase",
     "TransactionEventMetadata",
     "TransactionProcessingIntent",
+    "CostBasisTimelineProcessor",
+    "build_cost_basis_timeline_processor",
     "TransactionProcessingError",
     "TransactionProcessingRejected",
     "TransactionProcessingStatus",

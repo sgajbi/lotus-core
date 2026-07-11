@@ -1,12 +1,14 @@
+"""Orchestrate deterministic cost-basis calculation over transaction timelines."""
+
 from __future__ import annotations
 
 import logging
-import time
+from types import TracebackType
 from typing import Any
 
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+from ..domain.cost_basis import (
     AverageCostBasisStrategy,
     CostBasisCalculator,
     CostBasisStrategy,
@@ -19,16 +21,17 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     LotDispositionEngine,
     OpenLotState,
 )
-
-from .monitoring import RECALCULATION_DEPTH, RECALCULATION_DURATION_SECONDS
+from ..ports import CostBasisCalculationObservation, CostBasisCalculationObserver
 
 logger = logging.getLogger(__name__)
 
 
-def build_transaction_processor(
+def build_cost_basis_timeline_processor(
     cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO,
-) -> TransactionProcessor:
-    """Build the production cost engine for the governed cost-basis method."""
+    *,
+    observer: CostBasisCalculationObserver | None = None,
+) -> CostBasisTimelineProcessor:
+    """Build a cost-basis timeline processor for the governed calculation method."""
     error_reporter = CostCalculationErrorCollector()
     resolved_method = normalize_cost_basis_method(cost_basis_method)
     strategy: CostBasisStrategy
@@ -40,7 +43,7 @@ def build_transaction_processor(
         logger.debug("Using FIFO strategy for cost basis calculation.")
 
     disposition_engine = LotDispositionEngine(cost_basis_strategy=strategy)
-    return TransactionProcessor(
+    return CostBasisTimelineProcessor(
         parser=CostTransactionParser(error_reporter=error_reporter),
         sorter=CostTransactionSorter(),
         disposition_engine=disposition_engine,
@@ -49,15 +52,12 @@ def build_transaction_processor(
             error_reporter=error_reporter,
         ),
         error_reporter=error_reporter,
+        observer=observer,
     )
 
 
-class TransactionProcessor:
-    """
-    Orchestrates end-to-end transaction recalculation for the cost calculator service.
-
-    This layer orchestrates the service-owned cost-basis engine.
-    """
+class CostBasisTimelineProcessor:
+    """Coordinate parsing, ordering, cost calculation, and resulting open-lot state."""
 
     def __init__(
         self,
@@ -66,20 +66,21 @@ class TransactionProcessor:
         disposition_engine: LotDispositionEngine,
         cost_calculator: CostBasisCalculator,
         error_reporter: CostCalculationErrorCollector,
-    ):
+        observer: CostBasisCalculationObserver | None = None,
+    ) -> None:
         self._parser = parser
         self._sorter = sorter
         self._disposition_engine = disposition_engine
         self._cost_calculator = cost_calculator
         self._error_reporter = error_reporter
+        self._observer = observer or _NullCostBasisCalculationObserver()
 
     def process_transactions(
         self,
         existing_transactions_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
     ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
-        start_time = time.monotonic()
-        try:
+        with self._observer.observe_recalculation() as observation:
             self._error_reporter.clear()
 
             parsed_existing = self._parser.parse_transactions(existing_transactions_raw)
@@ -87,7 +88,7 @@ class TransactionProcessor:
             new_transaction_ids = self._valid_transaction_ids(parsed_new)
             all_valid_transactions = self._valid_transactions(parsed_existing, parsed_new)
 
-            RECALCULATION_DEPTH.observe(len(all_valid_transactions))
+            observation.record_depth(len(all_valid_transactions))
             sorted_timeline = self._sorter.sort_transactions([], all_valid_transactions)
             processed_timeline = self._process_sorted_timeline(sorted_timeline)
             final_processed_new = self._filter_processed_new_transactions(
@@ -100,9 +101,6 @@ class TransactionProcessor:
                 self._error_reporter.get_errors(),
                 self._disposition_engine.get_open_lot_states(),
             )
-        finally:
-            duration = time.monotonic() - start_time
-            RECALCULATION_DURATION_SECONDS.observe(duration)
 
     def process_increment(
         self,
@@ -111,15 +109,14 @@ class TransactionProcessor:
         new_transactions_raw: list[dict[str, Any]],
     ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
         """Calculate an ordered append from a previously validated open-lot checkpoint."""
-        start_time = time.monotonic()
-        try:
+        with self._observer.observe_recalculation() as observation:
             self._error_reporter.clear()
             parsed_initial_lots = self._parser.parse_transactions(initial_open_lots_raw)
             parsed_new = self._parser.parse_transactions(new_transactions_raw)
             valid_initial_lots = [txn for txn in parsed_initial_lots if not txn.error_reason]
             valid_new = [txn for txn in parsed_new if not txn.error_reason]
 
-            RECALCULATION_DEPTH.observe(len(valid_new))
+            observation.record_depth(len(valid_new))
             sorted_initial_lots = self._sorter.sort_transactions([], valid_initial_lots)
             self._disposition_engine.restore_open_lots(sorted_initial_lots)
             sorted_new = self._sorter.sort_transactions([], valid_new)
@@ -129,9 +126,6 @@ class TransactionProcessor:
                 self._error_reporter.get_errors(),
                 self._disposition_engine.get_open_lot_states(),
             )
-        finally:
-            duration = time.monotonic() - start_time
-            RECALCULATION_DURATION_SECONDS.observe(duration)
 
     @staticmethod
     def _valid_transaction_ids(transactions: list[CostBasisTransaction]) -> set[str]:
@@ -179,3 +173,24 @@ class TransactionProcessor:
             exc_info=True,
         )
         self._error_reporter.add_error(transaction.transaction_id, f"Unexpected error: {str(exc)}")
+
+
+class _NullCostBasisCalculationObservation(CostBasisCalculationObservation):
+    def record_depth(self, transaction_count: int) -> None:
+        del transaction_count
+
+    def __enter__(self) -> _NullCostBasisCalculationObservation:
+        return self
+
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        return None
+
+
+class _NullCostBasisCalculationObserver(CostBasisCalculationObserver):
+    def observe_recalculation(self) -> CostBasisCalculationObservation:
+        return _NullCostBasisCalculationObservation()

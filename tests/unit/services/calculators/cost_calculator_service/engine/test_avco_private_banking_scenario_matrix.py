@@ -6,8 +6,8 @@ from decimal import Decimal
 import pytest
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
-from src.services.calculators.cost_calculator_service.app.transaction_processor import (
-    build_transaction_processor,
+from src.services.portfolio_transaction_processing_service.app.application import (
+    build_cost_basis_timeline_processor,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostBasisStrategy,
@@ -89,7 +89,7 @@ def _seed_buy() -> dict[str, str]:
 
 
 def _process(*transactions: dict[str, str]):
-    return build_transaction_processor("AVCO").process_transactions([], list(transactions))
+    return build_cost_basis_timeline_processor("AVCO").process_transactions([], list(transactions))
 
 
 def _source_values(states):

@@ -29,6 +29,9 @@ from .average_cost_pool_reconciliation_adapter import (
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from .cashflow_processing_adapter import CashflowStagingWorkflow
+from .prometheus_cost_basis_observability import (
+    PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+)
 from .prometheus_observability import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
 from .transaction_replay_adapter import (
@@ -71,9 +74,11 @@ def build_process_transaction_use_case(
     observer: TransactionProcessingObserver | None = None,
 ) -> ProcessTransactionUseCase:
     resolved_session_factory = session_factory or get_async_session_factory()
+    cost_workflow = CostCalculationWorkflow()
+    cost_workflow.configure_cost_basis_observer(PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER)
     unit_of_work_factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=resolved_session_factory,
-        cost_workflow=CostCalculationWorkflow(),
+        cost_workflow=cost_workflow,
         cashflow_workflow=CashflowCalculationWorkflow(),
     )
     return ProcessTransactionUseCase(
@@ -106,8 +111,10 @@ def build_reconcile_average_cost_pools_use_case(
     *,
     session_factory: Callable[[], AsyncSession] | None = None,
 ) -> ReconcileAverageCostPoolsUseCase:
+    cost_workflow = CostCalculationWorkflow()
+    cost_workflow.configure_cost_basis_observer(PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER)
     reconciliation = SqlAlchemyAverageCostPoolReconciliationAdapter(
         session_factory=session_factory or get_async_session_factory(),
-        workflow=CostCalculationWorkflow(),
+        workflow=cost_workflow,
     )
     return ReconcileAverageCostPoolsUseCase(reconciliation)

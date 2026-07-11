@@ -18,7 +18,7 @@ def test_transitional_calculator_imports_are_confined_to_infrastructure_adapters
             "app/infrastructure/cashflow_processing_adapter.py",
             "app/infrastructure/composition.py",
             "app/infrastructure/cost_processing_adapter.py",
-            "app/infrastructure/position_processing_adapter.py",
+            "app/infrastructure/prometheus_cost_basis_observability.py",
             "app/infrastructure/sqlalchemy_unit_of_work.py",
         ]
     )
