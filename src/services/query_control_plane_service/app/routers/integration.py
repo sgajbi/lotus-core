@@ -17,6 +17,7 @@ from ..application.benchmark_assignment import BenchmarkAssignmentService
 from ..application.benchmark_catalog import BenchmarkCatalogService
 from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
+from ..application.benchmark_market_series.service import BenchmarkMarketSeriesService
 from ..application.benchmark_return_series import BenchmarkReturnSeriesService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
@@ -159,6 +160,7 @@ from ..dependencies import (
     get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
+    get_benchmark_market_series_service,
     get_benchmark_return_series_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
@@ -2360,14 +2362,14 @@ async def fetch_benchmark_market_series(
         description="Benchmark identifier for the requested market series input contract.",
         examples=["BENCH-SP500-TR"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_market_series_service: BenchmarkMarketSeriesService = Depends(
+        get_benchmark_market_series_service
+    ),
 ) -> BenchmarkMarketSeriesResponse:
     try:
-        return cast(
-            BenchmarkMarketSeriesResponse,
-            await integration_service.get_benchmark_market_series(
-                benchmark_id=benchmark_id, request=request
-            ),
+        return await benchmark_market_series_service.get(
+            benchmark_id=benchmark_id,
+            request=request,
         )
     except ValueError as exc:
         _raise_integration_source_bad_request(

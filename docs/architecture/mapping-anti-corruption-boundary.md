@@ -36,7 +36,9 @@ adapter rule and transitional exception register.
 
 Current typed read-record precedent:
 
-- `PortfolioTaxLotWindow:v1` uses `PortfolioTaxLotReadRecord` from `query_service.app.read_models`.
+- `PortfolioTaxLotWindow:v1` maps SQLAlchemy lot/currency rows to QCP-owned
+  `PortfolioTaxLotEvidence` in `dpm_portfolio_state_sources`, then maps that evidence to the public
+  record through `portfolio_tax_lot_record`; Query Service read models are not part of this path.
   `BuyStateRepository` converts SQLAlchemy `PositionLotState` rows and transaction trade-currency
   joins into that record before the source-data service or mapper sees the data.
 - `PerformanceComponentEconomics:v1` uses `PerformanceEconomicsTransactionReadRecord`,

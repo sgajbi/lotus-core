@@ -228,13 +228,16 @@ Reason:
 
 #### `POST /integration/benchmarks/{benchmark_id}/market-series`
 
-Call: **Correct but high-risk**
+Call: **Correct and QCP-owned; retain strict boundary enforcement**
 
 Reason:
 
 - this is a strong downstream contract with paging, quality, and lineage semantics
 - that makes control-plane ownership reasonable
-- but it is close enough to raw reference/query behavior that future expansion should be watched carefully
+- QCP owns its contract, application policies, typed source ports, SQL adapters, route-scoped page
+  tokens, deterministic source proof, dependency composition, and route handling
+- raw operational market lookups remain Query Service concerns; do not recreate a Query Service
+  facade for this analytics-input product
 
 #### `POST /integration/benchmarks/{benchmark_id}/coverage`
 

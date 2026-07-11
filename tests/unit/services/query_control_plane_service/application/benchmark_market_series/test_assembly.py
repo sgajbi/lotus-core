@@ -1,5 +1,6 @@
 """Tests for benchmark market-series response assembly and source proof."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -182,6 +183,20 @@ def test_non_terminal_page_is_truthfully_partial() -> None:
     assert response.source_evidence_current is False
     assert response.freshness_status == "PARTIAL"
     assert response.page.next_page_token == "next"
+
+
+def test_latest_evidence_normalizes_legacy_naive_utc_timestamp() -> None:
+    legacy_timestamp = datetime(2026, 1, 31, 10, 0)
+    price = replace(
+        _price(),
+        observed_at=legacy_timestamp,
+        created_at=None,
+        updated_at=None,
+    )
+
+    response = _response(prices=[price])
+
+    assert response.latest_evidence_timestamp == legacy_timestamp.replace(tzinfo=UTC)
 
 
 def test_missing_requested_fx_evidence_is_partial() -> None:

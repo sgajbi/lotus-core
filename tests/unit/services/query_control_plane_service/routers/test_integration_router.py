@@ -17,6 +17,9 @@ from src.services.query_control_plane_service.app.application.benchmark_composit
 from src.services.query_control_plane_service.app.application.benchmark_definition import (
     BenchmarkDefinitionService,
 )
+from src.services.query_control_plane_service.app.application.benchmark_market_series import (
+    BenchmarkMarketSeriesService,
+)
 from src.services.query_control_plane_service.app.application.benchmark_return_series import (
     BenchmarkReturnSeriesService,
 )
@@ -164,6 +167,7 @@ from src.services.query_control_plane_service.app.contracts.transaction_cost_cur
     TransactionCostCurveRequest,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_benchmark_market_series_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -287,6 +291,11 @@ async def test_get_effective_integration_policy_router_function() -> None:
 def test_get_integration_service_factory_returns_service() -> None:
     service = get_integration_service(db=MagicMock())
     assert isinstance(service, IntegrationService)
+
+
+def test_get_benchmark_market_series_service_factory_returns_narrow_service() -> None:
+    service = get_benchmark_market_series_service(db=MagicMock())
+    assert isinstance(service, BenchmarkMarketSeriesService)
 
 
 def test_get_transaction_economics_service_factory_returns_narrow_service() -> None:
@@ -2769,6 +2778,7 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
+    benchmark_market_series_service = MagicMock(spec=BenchmarkMarketSeriesService)
     benchmark_return_series_service = MagicMock(spec=BenchmarkReturnSeriesService)
     index_series_service = MagicMock(spec=IndexSeriesService)
     risk_free_series_service = MagicMock(spec=RiskFreeSeriesService)
@@ -2782,7 +2792,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "lineage": {"contract_version": "rfc_062_v1"},
         }
     )
-    mock_service.get_benchmark_market_series = AsyncMock(
+    benchmark_market_series_service.get = AsyncMock(
         return_value={
             "benchmark_id": "B1",
             "as_of_date": "2026-01-31",
@@ -2898,14 +2908,14 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             target_currency="USD",
             series_fields=["index_price"],
         ),
-        integration_service=mock_service,
+        benchmark_market_series_service=benchmark_market_series_service,
     )
     assert benchmark_market_response["benchmark_id"] == "B1"
     assert benchmark_market_response["benchmark_currency"] == "USD"
     assert benchmark_market_response["page"]["page_size"] == 250
     assert benchmark_market_response["page"]["returned_component_count"] == 0
     assert benchmark_market_response["page"]["request_scope_fingerprint"] == "fp1"
-    mock_service.get_benchmark_market_series.assert_awaited_once()
+    benchmark_market_series_service.get.assert_awaited_once()
 
     benchmark_composition_response = await fetch_benchmark_composition_window(
         benchmark_id="B1",
@@ -3002,10 +3012,8 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_market_series = AsyncMock(
-        side_effect=ValueError("Malformed page token.")
-    )
+    benchmark_market_series_service = MagicMock(spec=BenchmarkMarketSeriesService)
+    benchmark_market_series_service.get = AsyncMock(side_effect=ValueError("Malformed page token."))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_market_series(
@@ -3017,7 +3025,7 @@ async def test_fetch_benchmark_market_series_maps_invalid_page_token_to_400() ->
                 target_currency="USD",
                 series_fields=["index_price"],
             ),
-            integration_service=mock_service,
+            benchmark_market_series_service=benchmark_market_series_service,
         )
 
     assert_query_control_plane_problem(

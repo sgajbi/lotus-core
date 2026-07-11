@@ -1304,6 +1304,10 @@ Most relevant current governance:
     downstream performance, risk, and idea proof generation. `AnalyticsTimeseriesService` routes
     those responses through a guarded metadata helper and has canonical
     `PB_SG_GLOBAL_BAL_001` regression tests for the issue #705 proof path.
+    `MarketDataWindow:v1` is QCP-owned through contract, request/paging policy, typed evidence
+    assembly, proof policy, ports, SQL adapters, route-scoped signed tokens, composition, and route.
+    Keep raw operational reads in Query Service, and do not restore its obsolete market-series
+    facade or delegate source hash/freshness authority to consumers.
 89. Resilience-critical runtime settings should use `portfolio_common.runtime_settings` so invalid
     values fail fast in strict or non-local profiles while local fallback remains explicit and
     logged. Current migrated families include ingestion, query service, query-control-plane,

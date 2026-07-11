@@ -112,18 +112,18 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
-      "capability_id": "query.portfolio-tax-lot-reader",
+      "capability_id": "qcp.portfolio-tax-lot-reader",
       "capability_family": "repository-reader",
-      "owner_service": "query_service",
-      "port_module": "src/services/query_service/app/ports/source_data_repository_ports.py",
+      "owner_service": "query_control_plane_service",
+      "port_module": "src/services/query_control_plane_service/app/ports/dpm_source_readiness.py",
       "port_symbols": [
-        "PortfolioTaxLotReader"
+        "DpmPortfolioStateReader"
       ],
       "adapter_modules": [
-        "src/services/query_service/app/repositories/reference_data_repository.py"
+        "src/services/query_control_plane_service/app/infrastructure/dpm_portfolio_state_sources.py"
       ],
       "consumer_modules": [
-        "src/services/query_service/app/services/portfolio_tax_lot_window.py"
+        "src/services/query_control_plane_service/app/application/dpm_source_readiness/portfolio_tax_lots.py"
       ],
       "guard_scripts": [
         "scripts/quality/repository_port_guard.py"

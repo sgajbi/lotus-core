@@ -23,6 +23,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_catalog_service,
     get_benchmark_composition_service,
     get_benchmark_definition_service,
+    get_benchmark_market_series_service,
     get_benchmark_return_series_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
@@ -493,7 +494,8 @@ async def async_test_client():
         }
     )
     mock_integration_service.benchmark_composition_service = mock_benchmark_composition_service
-    mock_integration_service.get_benchmark_market_series = AsyncMock(
+    mock_benchmark_market_series_service = MagicMock()
+    mock_benchmark_market_series_service.get = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "as_of_date": "2026-01-31",
@@ -543,6 +545,9 @@ async def async_test_client():
                 generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
             ),
         }
+    )
+    mock_integration_service.benchmark_market_series_service = (
+        mock_benchmark_market_series_service
     )
     mock_integration_service.get_prices = AsyncMock(
         return_value={
@@ -639,6 +644,9 @@ async def async_test_client():
     app.dependency_overrides[get_benchmark_definition_service] = lambda: (
         mock_benchmark_definition_service
     )
+    app.dependency_overrides[get_benchmark_market_series_service] = lambda: (
+        mock_benchmark_market_series_service
+    )
     app.dependency_overrides[get_benchmark_return_series_service] = lambda: mock_integration_service
     app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
         mock_integration_service
@@ -670,6 +678,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_benchmark_catalog_service, None)
     app.dependency_overrides.pop(get_benchmark_composition_service, None)
     app.dependency_overrides.pop(get_benchmark_definition_service, None)
+    app.dependency_overrides.pop(get_benchmark_market_series_service, None)
     app.dependency_overrides.pop(get_benchmark_return_series_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
@@ -1522,6 +1531,7 @@ async def test_benchmark_composition_window_conflict_maps_to_problem_details(asy
 
 async def test_benchmark_market_series_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    market_series_service = mock_integration_service.benchmark_market_series_service
 
     response = await client.post(
         "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/market-series",
@@ -1552,8 +1562,8 @@ async def test_benchmark_market_series_success(async_test_client):
     assert body["component_series"][0]["points"][0]["fx_rate"] == "0.9200000000"
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_benchmark_market_series.assert_awaited_once()
-    market_call = mock_integration_service.get_benchmark_market_series.await_args.kwargs
+    market_series_service.get.assert_awaited_once()
+    market_call = market_series_service.get.await_args.kwargs
     assert market_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
     assert market_call["request"].as_of_date == date(2026, 1, 31)
     assert market_call["request"].window.start_date == date(2026, 1, 1)
@@ -1570,7 +1580,8 @@ async def test_benchmark_market_series_success(async_test_client):
 
 async def test_benchmark_market_series_invalid_page_token_maps_to_400(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.get_benchmark_market_series = AsyncMock(
+    market_series_service = mock_integration_service.benchmark_market_series_service
+    market_series_service.get = AsyncMock(
         side_effect=ValueError("Invalid benchmark market series page_token.")
     )
 

@@ -95,8 +95,20 @@ def _write_required_artifacts(root: Path) -> None:
         "transaction_processing_completed_message\n",
     )
     _write(
-        root / "src/services/query_service/app/read_models.py",
-        "class PortfolioTaxLotReadRecord: pass\n",
+        root / "src/services/query_control_plane_service/app/domain/dpm_source_readiness.py",
+        "class PortfolioTaxLotEvidence: pass\n",
+    )
+    _write(
+        root
+        / "src/services/query_control_plane_service/app/infrastructure/"
+        "dpm_portfolio_state_sources.py",
+        "def _tax_lot_evidence(): pass\n",
+    )
+    _write(
+        root
+        / "src/services/query_control_plane_service/app/application/dpm_source_readiness/"
+        "portfolio_tax_lots.py",
+        "def portfolio_tax_lot_record(): pass\n",
     )
     _write(
         root / "src/services/query_control_plane_service/app/domain/transaction_economics.py",
