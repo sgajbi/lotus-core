@@ -4,8 +4,8 @@ from decimal import Decimal
 from typing import Any, cast
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkComponentResponse,
-    BenchmarkDefinitionResponse,
+    BenchmarkCatalogRecord,
+    BenchmarkConstituentSegmentResponse,
     BenchmarkReturnSeriesPoint,
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
@@ -20,8 +20,8 @@ from .integration_value_normalization import (
 )
 
 
-def benchmark_component_response(row: Any) -> BenchmarkComponentResponse:
-    return BenchmarkComponentResponse(
+def benchmark_constituent_segment_response(row: Any) -> BenchmarkConstituentSegmentResponse:
+    return BenchmarkConstituentSegmentResponse(
         index_id=row.index_id,
         composition_weight=as_decimal(row.composition_weight),
         composition_effective_from=row.composition_effective_from,
@@ -30,12 +30,12 @@ def benchmark_component_response(row: Any) -> BenchmarkComponentResponse:
     )
 
 
-def benchmark_definition_response(
+def benchmark_catalog_record(
     row: Any,
     *,
     components: list[Any] | None = None,
-) -> BenchmarkDefinitionResponse:
-    return BenchmarkDefinitionResponse(
+) -> BenchmarkCatalogRecord:
+    return BenchmarkCatalogRecord(
         benchmark_id=row.benchmark_id,
         benchmark_name=row.benchmark_name,
         benchmark_type=row.benchmark_type,
@@ -53,7 +53,9 @@ def benchmark_definition_response(
         source_timestamp=row.source_timestamp,
         source_vendor=row.source_vendor,
         source_record_id=row.source_record_id,
-        components=[benchmark_component_response(component) for component in components or []],
+        components=[
+            benchmark_constituent_segment_response(component) for component in components or []
+        ],
     )
 
 

@@ -243,6 +243,18 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Effective benchmark assignment for a portfolio and as-of date.",
     ),
     SourceDataProductDefinition(
+        product_name="BenchmarkDefinition",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-performance", "lotus-risk"),
+        current_routes=("/integration/benchmarks/{benchmark_id}/definition",),
+        notes=(
+            "Effective benchmark master and unit-weight constituent evidence for an as-of date."
+        ),
+    ),
+    SourceDataProductDefinition(
         product_name="BenchmarkConstituentWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,
@@ -727,7 +739,7 @@ def source_data_product_openapi_extra(product_name: str) -> dict[str, dict[str, 
     from portfolio_common.source_data_security import source_data_security_openapi_extra
 
     product = get_source_data_product(product_name)
-    extra = {
+    extra: dict[str, dict[str, object]] = {
         "x-lotus-source-data-product": {
             "product_name": product.product_name,
             "product_version": product.product_version,

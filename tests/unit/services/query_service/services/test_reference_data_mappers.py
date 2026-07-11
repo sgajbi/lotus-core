@@ -3,8 +3,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from src.services.query_service.app.services.reference_data_mappers import (
+    benchmark_catalog_record,
     benchmark_component_series_response,
-    benchmark_definition_response,
     benchmark_market_series_point,
     benchmark_return_series_point,
     classification_taxonomy_entry,
@@ -15,10 +15,10 @@ from src.services.query_service.app.services.reference_data_mappers import (
 )
 
 
-def test_benchmark_definition_response_maps_catalog_row_and_components() -> None:
+def test_benchmark_catalog_record_maps_master_row_and_components() -> None:
     source_timestamp = datetime(2026, 1, 31, 8, tzinfo=UTC)
 
-    response = benchmark_definition_response(
+    response = benchmark_catalog_record(
         SimpleNamespace(
             benchmark_id="BMK_GLOBAL_BALANCED_60_40",
             benchmark_name="Global Balanced 60/40",

@@ -39,6 +39,7 @@ When both values are supplied, `ingested_at` must be on or after the resolved so
 | Instrument master and taxonomy | `InstrumentReferenceBundle` | effective dating, source vendor, source record id, quality status, observed-at mapping |
 | Market prices and FX rates | `MarketDataWindow` | price/rate business date, observed-at mapping, ingested-at lineage, freshness and completeness status |
 | Benchmark assignment | `BenchmarkAssignment` | assignment version, policy pack, source system, effective date, product version |
+| Benchmark definition | `BenchmarkDefinition` | effective master version, unit-weight constituents, completeness, freshness, source lineage |
 | Benchmark composition | `BenchmarkConstituentWindow` | effective component window, rebalance event id, component source lineage, completeness status |
 | Index series | `IndexSeriesWindow` | deterministic series ordering, observed-at mapping, quality status summary, export posture |
 | Risk-free series | `RiskFreeSeriesWindow` | currency, series mode, convention metadata, observed-at mapping, coverage status |

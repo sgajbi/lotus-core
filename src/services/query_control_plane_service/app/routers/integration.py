@@ -10,8 +10,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCatalogResponse,
     BenchmarkCompositionWindowRequest,
     BenchmarkCompositionWindowResponse,
-    BenchmarkDefinitionRequest,
-    BenchmarkDefinitionResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -31,6 +29,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 from ..application.benchmark_assignment import BenchmarkAssignmentService
+from ..application.benchmark_definition import BenchmarkDefinitionService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
@@ -55,6 +54,10 @@ from ..application.transaction_economics.service import TransactionEconomicsServ
 from ..contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
+)
+from ..contracts.benchmark_definition import (
+    BenchmarkDefinitionRequest,
+    BenchmarkDefinitionResponse,
 )
 from ..contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -142,6 +145,7 @@ from ..contracts.transaction_cost_curve import (
 )
 from ..dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -1480,7 +1484,7 @@ async def resolve_portfolio_benchmark_assignment(
                 "reason": "not_found",
             },
         )
-    return response
+    return cast(BenchmarkAssignmentResponse, response)
 
 
 @router.post(
@@ -2240,6 +2244,7 @@ async def fetch_benchmark_composition_window(
         "This is point-in-time reference context, not the strategic cross-window benchmark "
         "calculation contract."
     ),
+    openapi_extra=source_data_product_openapi_extra("BenchmarkDefinition"),
 )
 async def fetch_benchmark_definition(
     request: BenchmarkDefinitionRequest,
@@ -2248,11 +2253,13 @@ async def fetch_benchmark_definition(
         description="Benchmark identifier for the requested benchmark definition.",
         examples=["BENCH-SP500-TR"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_definition_service: BenchmarkDefinitionService = Depends(
+        get_benchmark_definition_service
+    ),
 ) -> BenchmarkDefinitionResponse:
-    response = cast(
-        BenchmarkDefinitionResponse | None,
-        await integration_service.get_benchmark_definition(benchmark_id, request.as_of_date),
+    response = await benchmark_definition_service.resolve(
+        benchmark_id=benchmark_id,
+        request=request,
     )
     if response is None:
         _raise_integration_source_not_found(

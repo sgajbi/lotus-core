@@ -135,6 +135,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "MarketDataWindow",
         "InstrumentReferenceBundle",
         "BenchmarkAssignment",
+        "BenchmarkDefinition",
         "BenchmarkConstituentWindow",
         "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",

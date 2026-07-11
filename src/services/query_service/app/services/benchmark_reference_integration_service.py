@@ -9,7 +9,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkCatalogResponse,
     BenchmarkCompositionWindowRequest,
     BenchmarkCompositionWindowResponse,
-    BenchmarkDefinitionResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -32,7 +31,6 @@ from .classification_taxonomy import resolve_classification_taxonomy_response
 from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
 from .index_return_series import resolve_index_return_series_response
-from .reference_data_mappers import benchmark_definition_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
 from .risk_free_series import resolve_risk_free_series_response
 
@@ -44,24 +42,6 @@ class BenchmarkReferenceIntegrationService:
     reference_repository_provider: Callable[[], Any]
     decode_page_token: Callable[[str | None], dict[str, Any]]
     encode_page_token: Callable[[dict[str, Any]], str]
-
-    async def get_benchmark_definition(
-        self,
-        benchmark_id: str,
-        as_of_date: date,
-    ) -> BenchmarkDefinitionResponse | None:
-        repository = self.reference_repository_provider()
-        row = await repository.get_benchmark_definition(benchmark_id, as_of_date)
-        if row is None:
-            return None
-        components = await repository.list_benchmark_components(
-            benchmark_id,
-            as_of_date,
-        )
-        return cast(
-            BenchmarkDefinitionResponse,
-            benchmark_definition_response(row, components=components),
-        )
 
     async def get_benchmark_composition_window(
         self,

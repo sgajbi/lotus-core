@@ -20,6 +20,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
 )
 from src.services.query_control_plane_service.app.dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
@@ -231,8 +232,11 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_benchmark_definition = AsyncMock(
+    mock_benchmark_definition_service = MagicMock()
+    mock_benchmark_definition_service.resolve = AsyncMock(
         return_value={
+            "product_name": "BenchmarkDefinition",
+            "product_version": "v1",
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "benchmark_name": "Global Balanced 60/40 (TR)",
             "benchmark_type": "composite",
@@ -247,7 +251,7 @@ async def async_test_client():
             "effective_from": "2025-01-01",
             "effective_to": None,
             "quality_status": "accepted",
-            "observed_at": "2026-01-31T08:00:00Z",
+            "source_timestamp": "2026-01-31T08:00:00Z",
             "source_vendor": "MSCI",
             "source_record_id": "bmk_60_40_v20260131",
             "components": [
@@ -257,11 +261,30 @@ async def async_test_client():
                     "composition_effective_from": "2025-01-01",
                     "composition_effective_to": None,
                     "rebalance_event_id": "rebalance_2026q1",
-                }
+                },
+                {
+                    "index_id": "IDX_GLOBAL_BOND_TR",
+                    "composition_weight": "0.4000000000",
+                    "composition_effective_from": "2025-01-01",
+                    "composition_effective_to": None,
+                    "rebalance_event_id": "rebalance_2026q1",
+                },
             ],
+            "completeness_status": "COMPLETE",
+            "completeness_reason": "BENCHMARK_DEFINITION_COMPLETE",
+            "total_component_weight": "1.0000000000",
             "contract_version": "rfc_062_v1",
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+                data_quality_status="COMPLETE",
+                latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
+                content_hash="sha256:benchmark-definition",
+                use_content_hash_as_source_batch_fingerprint=True,
+            ),
         }
     )
+    mock_integration_service.benchmark_definition_service = mock_benchmark_definition_service
     mock_integration_service.list_benchmark_catalog = AsyncMock(
         return_value={
             "as_of_date": "2026-01-31",
@@ -534,6 +557,9 @@ async def async_test_client():
 
     app.dependency_overrides[get_core_snapshot_service] = lambda: mock_core_snapshot_service
     app.dependency_overrides[get_benchmark_assignment_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_benchmark_definition_service] = lambda: (
+        mock_benchmark_definition_service
+    )
     app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
         mock_integration_service
     )
@@ -558,6 +584,7 @@ async def async_test_client():
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_benchmark_assignment_service, None)
+    app.dependency_overrides.pop(get_benchmark_definition_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
     app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
@@ -1196,15 +1223,15 @@ async def test_benchmark_definition_success(async_test_client):
     assert body["benchmark_name"] == "Global Balanced 60/40 (TR)"
     assert body["benchmark_type"] == "composite"
     assert body["components"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
-    mock_integration_service.get_benchmark_definition.assert_awaited_once_with(
-        "BMK_GLOBAL_BALANCED_60_40",
-        date(2026, 1, 31),
-    )
+    service = mock_integration_service.benchmark_definition_service
+    service.resolve.assert_awaited_once()
+    assert service.resolve.await_args.kwargs["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert service.resolve.await_args.kwargs["request"].as_of_date == date(2026, 1, 31)
 
 
 async def test_benchmark_definition_not_found_maps_to_404(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
-    mock_integration_service.get_benchmark_definition = AsyncMock(return_value=None)
+    mock_integration_service.benchmark_definition_service.resolve = AsyncMock(return_value=None)
 
     response = await client.post(
         "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/definition",
