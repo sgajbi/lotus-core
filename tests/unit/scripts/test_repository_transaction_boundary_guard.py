@@ -20,7 +20,8 @@ def test_repository_transaction_boundary_guard_allows_staged_repository(
         "        self.db.add(object())\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/repositories/operations_repository.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
         "class OperationsRepository:\n"
         "    async def update_status(self):\n"
         "        await self.db.commit()\n",
@@ -41,7 +42,8 @@ def test_repository_transaction_boundary_guard_rejects_unclassified_transactions
         "        await self.db.rollback()\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/repositories/operations_repository.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
         "class OperationsRepository:\n"
         "    async def update_status(self):\n"
         "        await self.db.commit()\n",
@@ -65,7 +67,8 @@ def test_repository_transaction_boundary_guard_rejects_stale_exception(
     tmp_path: Path,
 ) -> None:
     _write(
-        tmp_path / "src/services/query_service/app/repositories/operations_repository.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
         "class OperationsRepository:\n"
         "    async def update_status(self):\n"
         "        self.db.add(object())\n",
@@ -74,7 +77,7 @@ def test_repository_transaction_boundary_guard_rejects_stale_exception(
     findings = find_repository_transaction_boundary_findings(tmp_path)
 
     assert findings[0].path == (
-        "src/services/query_service/app/repositories/operations_repository.py"
+        "src/services/query_control_plane_service/app/infrastructure/operations/repository.py"
     )
     assert findings[0].token == "<stale-exception>"
 
@@ -89,7 +92,8 @@ def test_repository_transaction_boundary_guard_ignores_generated_build_copies(
         "        await self.db.commit()\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/repositories/operations_repository.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/infrastructure/operations/repository.py",
         "class OperationsRepository:\n"
         "    async def update_status(self):\n"
         "        await self.db.commit()\n",

@@ -234,8 +234,22 @@ router inside the operational read plane.
 - transaction-economics runtime evidence must expose deterministic SHA-256 content hash/digest,
   source-batch fingerprint, source reference, lineage, current freshness, and injected UTC
   generation time; volatile generation time must not change the evidence hash
+- operational support contracts, policies, immutable evidence, ports, SQL adapters, composition,
+  routes, and tests must remain QCP-owned; application code must not construct SQLAlchemy sessions
+  or repositories, and persistence rows must be mapped before crossing the adapter boundary
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
+
+## Package independence
+
+The QCP distribution contains its complete runtime dependency closure. Production modules do not
+import Query Service implementation paths, and local Compose does not mount Query Service source
+into the QCP container. The package contract test scans imports and Compose configuration; the
+clean-image proof builds the committed Dockerfile, imports `app.main` from installed wheels, checks
+that no repository-root `src` package is present, and probes liveness, `/version`, and OpenAPI.
+
+Dependency-aware readiness can return `503` during an isolated image proof when PostgreSQL is not
+provided. That is expected fail-closed behavior; liveness and application startup must still pass.
 
 ## Operational hints
 

@@ -5,7 +5,17 @@ from typing import Awaitable, Optional, TypeVar
 from fastapi import APIRouter, Body, Depends, Path, Query, status
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from src.services.query_service.app.dtos.operations_dto import (
+from ..application.operations.errors import OutboxRecoveryRejected
+from ..application.operations.policy import (
+    DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
+    DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
+)
+from ..application.operations.service import OperationsService
+from ..contracts.operations import (
+    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
+    CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
+    SUPPORT_FAILED_WINDOW_DESCRIPTION,
+    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
     AnalyticsExportJobListResponse,
     CalculatorSloResponse,
     FailedOutboxEventListResponse,
@@ -24,17 +34,6 @@ from src.services.query_service.app.dtos.operations_dto import (
     SupportJobListResponse,
     SupportOverviewResponse,
 )
-from src.services.query_service.app.operations_errors import OutboxRecoveryRejected
-from src.services.query_service.app.services.operations_service import OperationsService
-from src.services.query_service.app.support_policy import (
-    CALCULATOR_SLO_FAILED_WINDOW_DESCRIPTION,
-    CALCULATOR_SLO_STALE_THRESHOLD_DESCRIPTION,
-    DEFAULT_SUPPORT_FAILED_WINDOW_HOURS,
-    DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
-    SUPPORT_FAILED_WINDOW_DESCRIPTION,
-    SUPPORT_STALE_THRESHOLD_DESCRIPTION,
-)
-
 from ..dependencies import get_operations_service
 from .response_helpers import problem_example, problem_response, raise_problem
 

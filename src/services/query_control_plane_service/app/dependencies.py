@@ -4,11 +4,6 @@ from portfolio_common.page_tokens import PageTokenCodec
 from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.services.operations_service import (
-    OperationsService,
-    OperationsServiceDependencies,
-)
-
 from .application.analytics.analytics_timeseries_service import (
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
@@ -46,6 +41,7 @@ from .application.integration_policy import (
     IntegrationPolicyConfiguration,
     IntegrationPolicyService,
 )
+from .application.operations.service import OperationsService
 from .application.portfolio_manager_book import PortfolioManagerBookService
 from .application.reference_coverage import ReferenceCoverageService
 from .application.risk_free_series import RiskFreeSeriesService
@@ -85,6 +81,7 @@ from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandate
 from .infrastructure.index_definition_sources import SqlAlchemyIndexDefinitionReader
 from .infrastructure.index_series_sources import SqlAlchemyIndexSeriesReader
 from .infrastructure.market_fx_sources import SqlAlchemyMarketFxRateReader
+from .infrastructure.operations.repository import OperationsRepository
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.risk_free_series_sources import SqlAlchemyRiskFreeSeriesReader
 from .infrastructure.scoped_page_tokens import RouteScopedPageTokenCodec
@@ -421,7 +418,7 @@ def get_advisory_simulation_id_generator() -> UuidIdGenerator:
 def get_operations_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> OperationsService:
-    return OperationsService(dependencies=OperationsServiceDependencies.from_session(db))
+    return OperationsService(OperationsRepository(db))
 
 
 def get_simulation_service(

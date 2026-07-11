@@ -1102,8 +1102,11 @@ Most relevant current governance:
     no direct transaction completion. `make architecture-guard` now runs
     `scripts/quality/repository_transaction_boundary_guard.py`; direct repository `commit()` or
     `rollback()` calls are blocked unless explicitly registered as transitional. The current
-    transitional exception is `query_service/app/repositories/operations_repository.py` for
-    operator control-plane status updates.
+    transitional exception is
+    `query_control_plane_service/app/infrastructure/operations/repository.py` for operator
+    control-plane status updates. The guard covers both legacy `app/repositories/` modules and
+    modern repository adapters under `app/infrastructure/` so ownership moves cannot evade the
+    transaction boundary.
 71. Application command workflows should model idempotency, audit, correlation, command identity,
     and recovery evidence as reusable application policies instead of repeated local parameter
     plumbing. `docs/standards/application-workflow-policy-standard.md` defines the repo-local rule.
@@ -1312,8 +1315,12 @@ Most relevant current governance:
     `InstrumentReferenceBundle:v1` are also QCP-owned through public contracts, application
     policy, immutable evidence, typed source ports, deterministic SQL adapters, source proof,
     composition, and routes. Do not restore Query Service coverage/taxonomy DTOs, helpers,
-    repository methods, tests, or facade paths. QCP operations and advisory-simulation package
-    imports remain separate migration scope under issue #465 and must not be represented as closed.
+    repository methods, tests, or facade paths. Operations support and advisory simulation are now
+    QCP-owned through contracts, application policies/use cases, immutable evidence, ports,
+    infrastructure adapters, dependency composition, routes, and colocated tests. QCP production
+    code has no Query Service implementation imports, its wheel and clean image import `app.main`,
+    and Compose no longer mounts Query Service source into the QCP container. Preserve that package
+    closure through `tests/unit/test_service_wheel_package_contract.py` and issue #715 evidence.
 89. Resilience-critical runtime settings should use `portfolio_common.runtime_settings` so invalid
     values fail fast in strict or non-local profiles while local fallback remains explicit and
     logged. Current migrated families include ingestion, query service, query-control-plane,

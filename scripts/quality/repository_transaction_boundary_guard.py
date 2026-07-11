@@ -4,11 +4,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPOSITORY_ROOT = Path("src/services")
-REPOSITORY_PATH_PART = "/app/repositories/"
+LEGACY_REPOSITORY_PATH_PART = "/app/repositories/"
+INFRASTRUCTURE_PATH_PART = "/app/infrastructure/"
 EXCLUDED_PATH_PARTS = ("/build/lib/",)
 TRANSACTION_TOKENS = ("commit(", "rollback(")
 TRANSITIONAL_TRANSACTION_EXCEPTIONS = {
-    Path("src/services/query_service/app/repositories/operations_repository.py"): (
+    Path(
+        "src/services/query_control_plane_service/app/infrastructure/operations/repository.py"
+    ): (
         "operator control-plane maintenance repository still owns standalone status updates; "
         "migrate behind an explicit unit-of-work slice before removing this exception"
     ),
@@ -29,7 +32,13 @@ def _repository_paths(root: Path) -> list[Path]:
     return [
         path
         for path in service_root.rglob("*.py")
-        if REPOSITORY_PATH_PART in path.relative_to(root).as_posix()
+        if (
+            LEGACY_REPOSITORY_PATH_PART in path.relative_to(root).as_posix()
+            or (
+                INFRASTRUCTURE_PATH_PART in path.relative_to(root).as_posix()
+                and "repository" in path.stem
+            )
+        )
         and not any(
             excluded_part in path.relative_to(root).as_posix()
             for excluded_part in EXCLUDED_PATH_PARTS
