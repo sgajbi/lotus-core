@@ -35,10 +35,13 @@ REQUIRED_LOGIC_SNIPPETS = (
     "plan_backdated_replay",
     "PositionBalanceState",
     "EpochFencer",
-    "OutboxRepository",
     "REPROCESSING_EPOCH_BUMPED_TOTAL",
 )
 FORBIDDEN_LOGIC_SNIPPETS = {
+    "OutboxRepository": "position orchestration must not depend on the retired replay outbox",
+    "ReprocessTransactionReplay": "retired position replay events must not be reintroduced",
+    "def _queue_backdated_replay": "backdated position recovery must rebuild inline",
+    "def _publish_backdated_replay_events": "backdated position recovery must rebuild inline",
     "CASH_POSITION_DELTA_TRANSACTION_TYPES": (
         "position transaction type policy belongs in position_reducer.py"
     ),

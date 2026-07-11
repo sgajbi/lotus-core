@@ -25,7 +25,6 @@ def _write_required_boundary(root: Path) -> None:
         "plan_backdated_replay\n"
         "PositionBalanceState\n"
         "EpochFencer\n"
-        "OutboxRepository\n"
         "REPROCESSING_EPOCH_BUMPED_TOTAL\n",
     )
 
@@ -88,6 +87,9 @@ def test_position_reducer_boundary_guard_rejects_legacy_reducer_logic_in_orchest
         "PositionBalanceState\n"
         "EpochFencer\n"
         "OutboxRepository\n"
+        "ReprocessTransactionReplay\n"
+        "def _queue_backdated_replay(): pass\n"
+        "def _publish_backdated_replay_events(): pass\n"
         "REPROCESSING_EPOCH_BUMPED_TOTAL\n"
         "CASH_POSITION_DELTA_TRANSACTION_TYPES\n"
         "POSITION_TRANSFER_TRANSACTION_TYPES\n"
@@ -104,6 +106,10 @@ def test_position_reducer_boundary_guard_rejects_legacy_reducer_logic_in_orchest
     findings = find_position_reducer_boundary_findings(tmp_path)
 
     assert [finding.snippet for finding in findings] == [
+        "OutboxRepository",
+        "ReprocessTransactionReplay",
+        "def _queue_backdated_replay",
+        "def _publish_backdated_replay_events",
         "CASH_POSITION_DELTA_TRANSACTION_TYPES",
         "POSITION_TRANSFER_TRANSACTION_TYPES",
         "SAME_INSTRUMENT_CORPORATE_ACTION_TYPES",
