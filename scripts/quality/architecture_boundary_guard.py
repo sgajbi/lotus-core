@@ -184,6 +184,9 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         forbidden_module_prefixes=(
             "advisory_simulation",
             "advisory_simulation_service",
+            "services.query_control_plane_service.app.application.advisory_simulation",
+            "services.query_control_plane_service.app.contracts.advisory_decision_models",
+            "services.query_control_plane_service.app.contracts.advisory_simulation_models",
             "services.query_service.app.advisory_simulation",
             "services.query_service.app.services.advisory_simulation_service",
         ),
@@ -197,6 +200,23 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
             "src/services/query_control_plane_service/app/routers/capabilities.py",
         ),
         forbidden_module_prefixes=("services.query_service",),
+    ),
+    DirectImportBoundaryRule(
+        name="advisory simulation compatibility must remain control-plane owned",
+        source_path_prefixes=(
+            "src/services/query_control_plane_service/app/application/advisory_simulation/",
+            "src/services/query_control_plane_service/app/contracts/advisory_decision_models.py",
+            "src/services/query_control_plane_service/app/contracts/advisory_simulation_models.py",
+            "src/services/query_control_plane_service/app/routers/advisory_simulation.py",
+        ),
+        forbidden_module_prefixes=("services.query_service",),
+    ),
+    DirectImportBoundaryRule(
+        name="advisory simulation application must use runtime identity ports",
+        source_path_prefixes=(
+            "src/services/query_control_plane_service/app/application/advisory_simulation/",
+        ),
+        forbidden_module_prefixes=("uuid",),
     ),
 )
 
