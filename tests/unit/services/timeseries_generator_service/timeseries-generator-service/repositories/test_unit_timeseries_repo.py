@@ -177,41 +177,6 @@ async def test_upsert_portfolio_timeseries(
     assert "ON CONFLICT (portfolio_id, date, epoch) DO UPDATE" in compiled_stmt
 
 
-async def test_find_and_reset_stale_jobs(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    """Verifies the UPDATE statement for resetting stale jobs."""
-    stale_result = MagicMock()
-    stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
-    mock_db_session.execute.side_effect = [stale_result, mock_db_session.execute.return_value]
-
-    await repository.find_and_reset_stale_jobs()
-
-    executed_stmt = mock_db_session.execute.call_args_list[1][0][0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-
-    assert "UPDATE portfolio_aggregation_jobs" in compiled_query
-    assert "SET status='PENDING'" in compiled_query
-    assert "updated_at=now()" in compiled_query
-    assert "portfolio_aggregation_jobs.id IN" in compiled_query
-
-
-async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    stale_result = MagicMock()
-    stale_result.all.return_value = [MagicMock(id=1, attempt_count=3)]
-    failed_result = MagicMock()
-    mock_db_session.execute.side_effect = [stale_result, failed_result]
-
-    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
-
-    assert reset_count == 0
-    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    compiled_query = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "SET status='FAILED'" in compiled_query
-
-
 async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_within_target_epoch(
     repository: TimeseriesRepository, mock_db_session: AsyncMock
 ):
@@ -349,65 +314,3 @@ async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
     assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
     assert "daily_position_snapshots.date = anon_1.date" in compiled_query
     assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query
-
-
-async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
-
-    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    assert (
-        "portfolio_timeseries.date = portfolio_aggregation_jobs.aggregation_date"
-        not in compiled_query
-    )
-    assert "date < portfolio_aggregation_jobs.aggregation_date" not in compiled_query
-
-
-async def test_find_and_claim_eligible_jobs_increments_attempt_count(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
-
-    executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    assert "UPDATE portfolio_aggregation_jobs" in compiled_query
-    assert "SET status='PROCESSING'" in compiled_query
-    assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
-
-
-async def test_find_and_claim_eligible_jobs_has_no_legacy_first_day_gate(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
-
-    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    normalized_query = compiled_query.lower()
-    assert "portfolio_aggregation_jobs_1.portfolio_id" not in compiled_query
-    assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
-    assert "count(" not in normalized_query
-    assert "row_number() over" not in normalized_query
-
-
-async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
-):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
-
-    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    assert "FROM daily_position_snapshots, portfolio_aggregation_jobs" not in compiled_query

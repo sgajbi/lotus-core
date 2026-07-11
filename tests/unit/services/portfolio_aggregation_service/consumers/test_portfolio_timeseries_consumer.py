@@ -15,10 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer import (
     PortfolioTimeseriesConsumer,
 )
-from src.services.portfolio_aggregation_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_aggregation_repository,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
+
+PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.asyncio
@@ -58,7 +60,7 @@ def mock_kafka_message(mock_event: PortfolioAggregationRequiredEvent) -> MagicMo
 @pytest.fixture
 def mock_dependencies():
     """A fixture to patch all external dependencies for the consumer test."""
-    mock_repo = AsyncMock(spec=TimeseriesRepository)
+    mock_repo = AsyncMock(spec=PortfolioAggregationRepository)
     mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
@@ -75,7 +77,7 @@ def mock_dependencies():
             new=get_session_gen,
         ),
         patch(
-            "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer.TimeseriesRepository",
+            "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer.PortfolioAggregationRepository",
             new=mock_repo_class,
         ),
         patch(

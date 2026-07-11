@@ -14,7 +14,7 @@ from portfolio_common.monitoring import (
 from ..ports.aggregation_scheduler_ports import (
     AggregationSchedulerRepository,
 )
-from ..repositories.timeseries_repository import TimeseriesRepository
+from .portfolio_aggregation_repository import PortfolioAggregationRepository
 
 T = TypeVar("T")
 
@@ -26,7 +26,7 @@ class SqlAlchemyAggregationSchedulerRepositoryProvider:
     ) -> T:
         async for db in get_async_db_session():
             async with db.begin():
-                return await operation(TimeseriesRepository(db))
+                return await operation(PortfolioAggregationRepository(db))
         raise RuntimeError("No aggregation scheduler database session was provided.")
 
 

@@ -2054,6 +2054,14 @@ Most relevant current governance:
      recovery, queue, and portfolio-timeseries persistence with PostgreSQL locking/upsert/as-of
      proof before retiring the shared adapter. Never move aggregation queue state into the
      generator merely because historical integration tests live under its test directory.
+157. Portfolio aggregation job queue persistence is owned by
+     `portfolio_aggregation_service.app.infrastructure.PortfolioAggregationRepository`. Keep
+     eligible-job claiming, `FOR UPDATE SKIP LOCKED`, deterministic claim ordering, dispatch
+     recovery, stale retry/failure policy, and queue diagnostics out of `portfolio_common` and
+     timeseries-generator repositories. Aggregation-only tests belong under portfolio-aggregation
+     test paths. Do not restore the generic aggregation `TimeseriesRepository` wrapper or queue
+     methods on `SharedTimeseriesRepository`; preserve existing metric labels until an intentional
+     observability-contract migration is approved and tested.
 
 ## Context Maintenance Rule
 

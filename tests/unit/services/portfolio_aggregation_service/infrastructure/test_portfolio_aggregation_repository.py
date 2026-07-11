@@ -1,3 +1,5 @@
+"""Characterize portfolio aggregation persistence and queue SQL contracts."""
+
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
@@ -5,9 +7,11 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.portfolio_aggregation_service.app.repositories.timeseries_repository import (
-    TimeseriesRepository,
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_aggregation_repository,
 )
+
+PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -24,12 +28,12 @@ def mock_db_session() -> AsyncMock:
 
 
 @pytest.fixture
-def repository(mock_db_session: AsyncMock) -> TimeseriesRepository:
-    return TimeseriesRepository(mock_db_session)
+def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
+    return PortfolioAggregationRepository(mock_db_session)
 
 
 async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
 
@@ -47,7 +51,7 @@ async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day
 
 
 async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
 
@@ -64,8 +68,22 @@ async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
     )
 
 
+async def test_find_and_claim_eligible_jobs_has_no_legacy_count_window_gate(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    await repository.find_and_claim_eligible_jobs(batch_size=5)
+
+    executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
+    compiled_query = str(
+        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+    ).lower()
+
+    assert "count(" not in compiled_query
+    assert "row_number() over" not in compiled_query
+
+
 async def test_find_and_claim_eligible_jobs_uses_deterministic_claim_order(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     await repository.find_and_claim_eligible_jobs(batch_size=5)
 
@@ -82,7 +100,7 @@ async def test_find_and_claim_eligible_jobs_uses_deterministic_claim_order(
 
 
 async def test_find_and_reset_stale_jobs_refreshes_updated_at(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     stale_result = MagicMock()
     stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
@@ -100,7 +118,7 @@ async def test_find_and_reset_stale_jobs_refreshes_updated_at(
 
 
 async def test_find_and_claim_eligible_jobs_increments_attempt_count(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
     eligible_result.fetchall.return_value = [(1,)]
@@ -123,7 +141,7 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
 
 
 async def test_find_and_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
     eligible_result.fetchall.return_value = [(1,), (2,), (3,)]
@@ -145,7 +163,7 @@ async def test_find_and_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
 
 
 async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     stale_result = MagicMock()
     stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
@@ -161,8 +179,24 @@ async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
     assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
 
 
+async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    stale_result = MagicMock()
+    stale_result.all.return_value = [MagicMock(id=1, attempt_count=3)]
+    failed_result = MagicMock()
+    mock_db_session.execute.side_effect = [stale_result, failed_result]
+
+    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
+
+    assert reset_count == 0
+    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
+    compiled_query = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "SET status='FAILED'" in compiled_query
+
+
 async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhausted_rows(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     failed_result = MagicMock()
     failed_result.rowcount = 1
@@ -195,7 +229,7 @@ async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhaust
 
 
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     result = MagicMock()
     result.one.return_value = MagicMock(
@@ -215,7 +249,7 @@ async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
 
 
 async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_within_target_epoch(
-    repository: TimeseriesRepository, mock_db_session: AsyncMock
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     await repository.get_all_position_timeseries_for_date("P1", date(2025, 1, 10), 14)
 
