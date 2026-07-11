@@ -33,6 +33,9 @@ policy behavior, database lookup, or runtime topology.
 - Closed four `Any` leaks in QCP settings wrappers.
 - Added a structural guard against capability code importing QS internals and a no-return check for
   retired QS paths.
+- Added a QCP `BusinessDateProvider` port and SQLAlchemy infrastructure adapter after strict
+  architecture review found direct `SessionLocal` and SQLAlchemy usage in the application service.
+  Delivery composition now injects the adapter; application tests use an in-memory provider.
 
 ## Compatibility
 
@@ -42,10 +45,10 @@ or deployable topology changed.
 
 ## Validation
 
-- Full QCP unit/integration cohort: `300 passed`.
+- Full QCP unit/integration cohort: `303 passed`.
 - Focused capability/settings/architecture cohort: `50 passed`.
 - Installed-source QCP capability imports passed without the repository-root `src` package.
-- Scoped MyPy, Ruff lint/format, and strict architecture guard passed.
+- Changed-file MyPy, Ruff lint/format, and the complete strict architecture guard passed.
 - Reconciliation onto the post-PR-727 mainline reran focused capability, settings, architecture,
   MyPy, Ruff, OpenAPI, documentation, and diff checks; clean-image proof remains under #715.
 

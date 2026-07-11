@@ -7,12 +7,13 @@ from ..contracts.capabilities import (
     ConsumerSystem,
     IntegrationCapabilitiesResponse,
 )
+from ..infrastructure import SqlAlchemyBusinessDateProvider
 
 router = APIRouter(prefix="/integration", tags=["Integration Contracts"])
 
 
 def get_capabilities_service() -> CapabilitiesService:
-    return CapabilitiesService()
+    return CapabilitiesService(business_dates=SqlAlchemyBusinessDateProvider())
 
 
 @router.get(
