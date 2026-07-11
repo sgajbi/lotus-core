@@ -89,6 +89,25 @@ COPY --chown=appuser:appuser src/services/calculators/cashflow_calculator_servic
 COPY --chown=appuser:appuser src/services/calculators/position_calculator \
     /app/src/services/calculators/position_calculator
 
+# Bounded pipeline-readiness closure used by the combined unit of work.
+COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/__init__.py \
+    /app/src/services/pipeline_orchestrator_service/app/__init__.py
+COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/adapters/__init__.py \
+    src/services/pipeline_orchestrator_service/app/adapters/outbox_event_mapper.py \
+    src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py \
+    /app/src/services/pipeline_orchestrator_service/app/adapters/
+COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/domain/__init__.py \
+    src/services/pipeline_orchestrator_service/app/domain/pipeline_stage_state_machine.py \
+    /app/src/services/pipeline_orchestrator_service/app/domain/
+COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/repositories/__init__.py \
+    src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py \
+    /app/src/services/pipeline_orchestrator_service/app/repositories/
+COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app/services/__init__.py \
+    src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py \
+    /app/src/services/pipeline_orchestrator_service/app/services/
+
+RUN python -c "import app.main; import app.infrastructure.sqlalchemy_unit_of_work"
+
 USER appuser
 EXPOSE 8085
 CMD ["python", "-m", "app.main"]

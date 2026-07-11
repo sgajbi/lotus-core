@@ -622,10 +622,11 @@ class CostCalculationWorkflow:
         update_scope: OpenLotStateUpdateScope,
     ) -> None:
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
-        if lot_behavior not in LOT_STATE_MUTATING_BEHAVIORS:
-            return
-        if incremental and lot_behavior in LOT_OPENING_BEHAVIORS:
-            return
+        if incremental:
+            if lot_behavior not in LOT_STATE_MUTATING_BEHAVIORS:
+                return
+            if lot_behavior in LOT_OPENING_BEHAVIORS:
+                return
         update_lot_states = (
             repo.update_selected_open_lot_states
             if update_scope is OpenLotStateUpdateScope.SELECTED_LOTS

@@ -5,8 +5,10 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
+    Cashflow,
     CostBasisProcessingState,
     OutboxEvent,
+    PipelineStageState,
     PositionHistory,
     PositionLotState,
     PositionState,
@@ -92,6 +94,7 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
     assert later_result.status is TransactionProcessingStatus.PROCESSED
     assert earlier_result.status is TransactionProcessingStatus.PROCESSED
     assert earlier_result.replay_queued_count == 0
+    assert earlier_result.cashflow_record_count == 2
 
     async with context.session_factory() as verification_session:
         state = (
@@ -117,6 +120,21 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
             .scalars()
             .all()
         )
+        current_cashflows = (
+            (
+                await verification_session.execute(
+                    select(Cashflow)
+                    .where(
+                        Cashflow.portfolio_id == portfolio_id,
+                        Cashflow.security_id == security_id,
+                        Cashflow.epoch == state.epoch,
+                    )
+                    .order_by(Cashflow.cashflow_date, Cashflow.transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
         legacy_replay_event_count = int(
             await verification_session.scalar(
                 select(func.count())
@@ -127,6 +145,34 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
                 )
             )
             or 0
+        )
+        current_pipeline_stages = (
+            (
+                await verification_session.execute(
+                    select(PipelineStageState)
+                    .where(
+                        PipelineStageState.stage_name == "TRANSACTION_PROCESSING",
+                        PipelineStageState.portfolio_id == portfolio_id,
+                        PipelineStageState.security_id == security_id,
+                        PipelineStageState.epoch == state.epoch,
+                    )
+                    .order_by(PipelineStageState.business_date, PipelineStageState.transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        cashflow_signals = (
+            (
+                await verification_session.execute(
+                    select(OutboxEvent).where(
+                        OutboxEvent.aggregate_id == portfolio_id,
+                        OutboxEvent.event_type == "CashflowCalculated",
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
 
     assert state.epoch == 1
@@ -142,6 +188,25 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
         Decimal("400"),
         Decimal("1400"),
     ]
+    assert [cashflow.transaction_id for cashflow in current_cashflows] == [
+        "BUY-COMBINED-EARLIER-01",
+        "BUY-COMBINED-LATER-01",
+    ]
+    assert {cashflow.epoch for cashflow in current_cashflows} == {state.epoch}
+    assert [stage.transaction_id for stage in current_pipeline_stages] == [
+        "BUY-COMBINED-EARLIER-01",
+        "BUY-COMBINED-LATER-01",
+    ]
+    assert {stage.epoch for stage in current_pipeline_stages} == {state.epoch}
+    assert all(stage.cost_event_seen is True for stage in current_pipeline_stages)
+    current_cashflow_signal_ids = {
+        event.payload["transaction_id"]
+        for event in cashflow_signals
+        if event.payload.get("epoch", 0) == state.epoch
+    }
+    assert current_cashflow_signal_ids == {
+        stage.transaction_id for stage in current_pipeline_stages
+    }
     assert legacy_replay_event_count == 0
 
 
@@ -274,6 +339,34 @@ async def test_backdated_buy_corrects_later_disposal_without_duplicate_delivery(
                 )
             )
         ).scalar_one()
+        current_pipeline_stages = (
+            (
+                await verification_session.execute(
+                    select(PipelineStageState)
+                    .where(
+                        PipelineStageState.stage_name == "TRANSACTION_PROCESSING",
+                        PipelineStageState.portfolio_id == portfolio_id,
+                        PipelineStageState.security_id == security_id,
+                        PipelineStageState.epoch == state.epoch,
+                    )
+                    .order_by(PipelineStageState.business_date, PipelineStageState.transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        cashflow_signals = (
+            (
+                await verification_session.execute(
+                    select(OutboxEvent).where(
+                        OutboxEvent.aggregate_id == portfolio_id,
+                        OutboxEvent.event_type == "CashflowCalculated",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
     assert initial_sell_gain == Decimal("200")
     assert corrected_sell_gain == expected_corrected_gain
@@ -291,6 +384,21 @@ async def test_backdated_buy_corrects_later_disposal_without_duplicate_delivery(
     assert processed_event_count == 3
     assert cost_checkpoint.latest_transaction_id == later_sell.transaction_id
     assert cost_checkpoint.latest_transaction_date == later_sell.transaction_date
+    assert [stage.transaction_id for stage in current_pipeline_stages] == [
+        earlier_buy.transaction_id,
+        later_buy.transaction_id,
+        later_sell.transaction_id,
+    ]
+    assert {stage.epoch for stage in current_pipeline_stages} == {state.epoch}
+    assert all(stage.cost_event_seen is True for stage in current_pipeline_stages)
+    current_cashflow_signal_ids = {
+        event.payload["transaction_id"]
+        for event in cashflow_signals
+        if event.payload.get("epoch", 0) == state.epoch
+    }
+    assert current_cashflow_signal_ids == {
+        stage.transaction_id for stage in current_pipeline_stages
+    }
 
 
 async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(

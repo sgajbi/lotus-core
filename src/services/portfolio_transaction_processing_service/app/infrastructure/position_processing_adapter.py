@@ -12,7 +12,7 @@ from src.services.calculators.position_calculator.app.repositories import positi
 
 from ..domain import BookedTransaction
 from ..ports import PositionProcessingResult
-from .legacy_transaction_event_mapper import to_transaction_event
+from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
 
 
 class PositionStagingWorkflow(Protocol):
@@ -86,4 +86,7 @@ class PositionProcessingCompatibilityAdapter:
         return PositionProcessingResult(
             position_record_count=stage_result.position_record_count,
             replay_queued=stage_result.replay_queued,
+            cashflow_rebuild_transactions=tuple(
+                to_booked_transaction(event) for event in stage_result.rebuilt_events
+            ),
         )

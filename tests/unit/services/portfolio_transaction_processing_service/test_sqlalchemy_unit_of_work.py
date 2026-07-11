@@ -36,6 +36,7 @@ async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_on
         assert entered.cost is unit_of_work.cost
         assert entered.cashflow is unit_of_work.cashflow
         assert entered.position is unit_of_work.position
+        assert entered.pipeline is unit_of_work.pipeline
         await entered.commit()
 
     transaction.start.assert_awaited_once_with()

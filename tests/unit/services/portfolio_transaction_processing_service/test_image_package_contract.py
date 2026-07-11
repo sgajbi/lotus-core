@@ -38,6 +38,22 @@ def test_target_image_uses_bounded_source_closure_without_legacy_wheel_collision
     ):
         assert f"src/services/calculators/{module_root} " in dockerfile
         assert f"/app/src/services/calculators/{module_root}" in dockerfile
+    assert (
+        "COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app "
+        not in dockerfile
+    )
+    for pipeline_module in (
+        "adapters/outbox_event_mapper.py",
+        "adapters/pipeline_event_factory.py",
+        "domain/pipeline_stage_state_machine.py",
+        "repositories/pipeline_stage_repository.py",
+        "services/pipeline_orchestrator_service.py",
+    ):
+        assert f"src/services/pipeline_orchestrator_service/app/{pipeline_module}" in dockerfile
+    assert (
+        'RUN python -c "import app.main; import app.infrastructure.sqlalchemy_unit_of_work"'
+        in dockerfile
+    )
     install_command = (
         "pip install --no-index --find-links=/wheels portfolio-transaction-processing-service"
     )

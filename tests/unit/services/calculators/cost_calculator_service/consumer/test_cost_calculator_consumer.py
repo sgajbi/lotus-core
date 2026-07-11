@@ -1485,7 +1485,7 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
     repo.get_transaction_by_id.assert_not_awaited()
 
 
-async def test_update_open_lot_states_only_for_buy_sell(
+async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     cost_calculator_consumer: CostCalculatorConsumer,
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
@@ -1517,6 +1517,21 @@ async def test_update_open_lot_states_only_for_buy_sell(
         open_lot_states=open_lot_states,
         repo=repo,
         incremental=False,
+        update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
+    )
+    repo.update_open_lot_states.assert_awaited_once_with(
+        portfolio_id="PORT_COST_01",
+        security_id="DIV-SEC",
+        states_by_source_transaction_id=open_lot_states,
+    )
+
+    repo.reset_mock()
+    await cost_calculator_consumer._update_open_lot_states_if_required(
+        event=event,
+        event_transaction_type="DIVIDEND",
+        open_lot_states=open_lot_states,
+        repo=repo,
+        incremental=True,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
     )
     repo.update_open_lot_states.assert_not_awaited()

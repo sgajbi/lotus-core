@@ -19,10 +19,17 @@ from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
 from src.services.calculators.position_calculator.app.repositories import position_repository
+from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
+    PipelineStageRepository,
+)
+from src.services.pipeline_orchestrator_service.app.services.pipeline_orchestrator_service import (
+    PipelineOrchestratorService,
+)
 
 from ..ports import (
     CashflowProcessingPort,
     CostProcessingPort,
+    PipelineStageProcessingPort,
     PositionProcessingPort,
     TransactionIdempotencyPort,
 )
@@ -31,6 +38,7 @@ from .cashflow_processing_adapter import (
     CashflowStagingWorkflow,
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
+from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
 
 TRANSACTION_PROCESSING_SERVICE_NAME = "portfolio-transaction-processing"
@@ -76,6 +84,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self._cost: CostProcessingPort | None = None
         self._cashflow: CashflowProcessingPort | None = None
         self._position: PositionProcessingPort | None = None
+        self._pipeline: PipelineStageProcessingPort | None = None
 
     @property
     def idempotency(self) -> TransactionIdempotencyPort:
@@ -92,6 +101,10 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
     @property
     def position(self) -> PositionProcessingPort:
         return _required_adapter(self._position, "position")
+
+    @property
+    def pipeline(self) -> PipelineStageProcessingPort:
+        return _required_adapter(self._pipeline, "pipeline")
 
     async def __aenter__(self) -> SqlAlchemyTransactionProcessingUnitOfWork:
         if self._session is not None:
@@ -131,6 +144,12 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             repository=position_repository.PositionRepository(session),
             position_state_repository=PositionStateRepository(session),
             outbox_repository=outbox_repository,
+        )
+        self._pipeline = PipelineStageProcessingCompatibilityAdapter(
+            PipelineOrchestratorService(
+                PipelineStageRepository(session),
+                outbox_repository,
+            )
         )
 
     async def __aexit__(

@@ -1370,6 +1370,8 @@ Most relevant current governance:
      and emit bounded `cashflow_rule_cache_events_total` outcomes. Multi-process invalidation is
      source-owned through `cashflow_rules.updated_at`; do not add rule caches that lack source
      version/effective metadata, stale-read behavior, invalidation ownership, and cache metrics.
+     Every ORM, repository, raw SQL, migration, and migration-downgrade rule mutation must advance
+     `cashflow_rules.updated_at` explicitly; ORM `onupdate` does not apply to raw SQL.
 106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now
      exposes reusable `SourceDataDegradationSummary` / `SourceDataDegradationDetail` metadata for
      fallback, stale, partial, unavailable, and empty evidence, plus deterministic content hash,
@@ -1656,6 +1658,15 @@ Most relevant current governance:
      advance the compare-and-set epoch and rebuild ordered current-epoch history in the combined
      unit of work. Do not emit `ReprocessTransactionReplay` from the final two-consumer path because
      it intentionally has no `transactions.cost.processed` replay consumer.
+     In the combined use case, position processing must determine any inline recovery epoch before
+     cashflow staging. When position recovery returns rebuilt transactions, cashflow must stage the
+     deduplicated rebuilt timeline in the new epoch, including the later suffix; otherwise
+     current-epoch income and cashflow reads lose the rebuilt records.
+     The same rebuilt transaction set must register current-epoch cost-stage readiness through the
+     pipeline processing port before cashflow completion signals are staged. Keep that handoff in
+     the combined unit of work so rollback remains atomic. Do not broaden legacy cost-topic
+     publication to every recalculated suffix row: deployed compatibility consumers would treat
+     those rows as new position work and double-apply the inline rebuild.
      The target health contract is locked by
      `test_web_health_contract.py`: readiness requires database, Kafka, and worker runtime; a failed
      runtime task returns 503; and `/version` must equal readiness build metadata for commit, branch,
@@ -1670,7 +1681,11 @@ Most relevant current governance:
      overlapping top-level package names (`core`, `consumers`, and `repositories`) and can overwrite
      one another. Build one target wheel, install `portfolio-common`, and copy only the bounded
      calculator source closure under `src.services.calculators...`; never copy all Core services to
-     make imports pass. Keep `test_image_package_contract.py` and image provenance gates blocking.
+     make imports pass. The combined pipeline-stage adapter also requires the exact pipeline
+     readiness service, repository, domain-policy, and event-mapping source closure, while legacy
+     pipeline consumers and runtime modules remain excluded. The Docker build must import the real
+     target entrypoint and unit of work after copying that closure. Keep
+     `test_image_package_contract.py` and image provenance gates blocking.
      Combined-runtime business metrics must enter through the framework-neutral
      `TransactionProcessingObserver` port. Keep Prometheus and clocks in infrastructure; use only
      governed `stage` and `outcome` labels; never label by portfolio, transaction, event,
@@ -1711,7 +1726,10 @@ Most relevant current governance:
      portfolio/security identity, cost-basis method, registry lot behavior, and strict ordering all
      match. Missing, incompatible, same-order, backdated, or unsupported state must use deterministic
      full replay. Existing portfolios establish state through a full rebuild; never infer a current
-     checkpoint or hide a missing table. Persist checkpoint, affected cost suffix, lot state,
+     checkpoint or hide a missing table. Every full rebuild must persist the complete rebuilt lot
+     snapshot, including a rebuild triggered by a non-lot event, before establishing its checkpoint;
+     otherwise a later incremental disposal can restore stale quantity or cost. Persist checkpoint,
+     affected cost suffix, lot state,
      cashflow, position, idempotency, and outbox effects in the combined unit of work. Use
      `make profile-cost-processing-modes` to keep ordered opening, state-dependent disposal, and
      backdated rebuild evidence separate. Large open-lot restore depth remains a measured hotspot;

@@ -115,16 +115,23 @@ class _Cashflow:
         self.error = error
 
     async def process(self, transaction: BookedTransaction, **_kwargs) -> CashflowProcessingResult:
-        self.calls.append(f"cashflow:{transaction.transaction_id}")
+        self.calls.append(f"cashflow:{transaction.transaction_id}:{transaction.epoch or 0}")
         if self.error is not None:
             raise self.error
         return CashflowProcessingResult(cashflow_record_count=1)
 
 
 class _Position:
-    def __init__(self, calls: list[str], *, error_on: str | None = None) -> None:
+    def __init__(
+        self,
+        calls: list[str],
+        *,
+        error_on: str | None = None,
+        cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
+    ) -> None:
         self.calls = calls
         self.error_on = error_on
+        self.cashflow_rebuild_transactions_by_id = cashflow_rebuild_transactions_by_id or {}
 
     async def process(self, transaction: BookedTransaction, **_kwargs) -> PositionProcessingResult:
         self.calls.append(f"position:{transaction.transaction_id}")
@@ -133,7 +140,24 @@ class _Position:
         return PositionProcessingResult(
             position_record_count=1,
             replay_queued=transaction.transaction_id.endswith("-2"),
+            cashflow_rebuild_transactions=self.cashflow_rebuild_transactions_by_id.get(
+                transaction.transaction_id,
+                (),
+            ),
         )
+
+
+class _Pipeline:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    async def register_processed_transactions(
+        self,
+        transactions: tuple[BookedTransaction, ...],
+        **_kwargs,
+    ) -> None:
+        for transaction in transactions:
+            self.calls.append(f"pipeline:{transaction.transaction_id}:{transaction.epoch or 0}")
 
 
 class _UnitOfWork:
@@ -146,6 +170,7 @@ class _UnitOfWork:
         cost_error: Exception | None = None,
         cashflow_error: Exception | None = None,
         position_error_on: str | None = None,
+        cashflow_rebuild_transactions_by_id: dict[str, tuple[BookedTransaction, ...]] | None = None,
     ) -> None:
         self.calls = calls
         self.idempotency = _Idempotency(calls, claimed=claimed)
@@ -155,7 +180,12 @@ class _UnitOfWork:
             error=cost_error,
         )
         self.cashflow = _Cashflow(calls, error=cashflow_error)
-        self.position = _Position(calls, error_on=position_error_on)
+        self.position = _Position(
+            calls,
+            error_on=position_error_on,
+            cashflow_rebuild_transactions_by_id=cashflow_rebuild_transactions_by_id,
+        )
+        self.pipeline = _Pipeline(calls)
         self.committed = False
         self.rolled_back = False
 
@@ -201,10 +231,10 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
         "enter",
         "idempotency",
         "cost:TX-001",
-        "cashflow:TX-001-1",
-        "cashflow:TX-001-2",
         "position:TX-001-1",
         "position:TX-001-2",
+        "cashflow:TX-001-1:0",
+        "cashflow:TX-001-2:0",
         "commit",
     ]
     assert result.status is TransactionProcessingStatus.PROCESSED
@@ -220,6 +250,8 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
             TransactionProcessingOutcome.SUCCEEDED,
         ),
         (TransactionProcessingOperation.COST, TransactionProcessingOutcome.SUCCEEDED),
+        (TransactionProcessingOperation.POSITION, TransactionProcessingOutcome.SUCCEEDED),
+        (TransactionProcessingOperation.POSITION, TransactionProcessingOutcome.SUCCEEDED),
         (
             TransactionProcessingOperation.CASHFLOW,
             TransactionProcessingOutcome.SUCCEEDED,
@@ -228,14 +260,51 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
             TransactionProcessingOperation.CASHFLOW,
             TransactionProcessingOutcome.SUCCEEDED,
         ),
-        (TransactionProcessingOperation.POSITION, TransactionProcessingOutcome.SUCCEEDED),
-        (TransactionProcessingOperation.POSITION, TransactionProcessingOutcome.SUCCEEDED),
         (TransactionProcessingOperation.COMMIT, TransactionProcessingOutcome.SUCCEEDED),
         (
             TransactionProcessingOperation.TRANSACTION,
             TransactionProcessingOutcome.PROCESSED,
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() -> None:
+    calls: list[str] = []
+    incoming = _transaction("TX-BACKDATED")
+    rebuilt_incoming = replace(incoming, epoch=3)
+    rebuilt_suffix = replace(
+        _transaction("TX-LATER"),
+        transaction_date=datetime(2026, 4, 12, 9, 30, tzinfo=timezone.utc),
+        epoch=3,
+    )
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        cost_result=CostProcessingResult(processed_transactions=(incoming,)),
+        cashflow_rebuild_transactions_by_id={
+            incoming.transaction_id: (rebuilt_incoming, rebuilt_suffix),
+        },
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(_command())
+
+    assert calls == [
+        "enter",
+        "idempotency",
+        "cost:TX-001",
+        "position:TX-BACKDATED",
+        "pipeline:TX-BACKDATED:3",
+        "pipeline:TX-LATER:3",
+        "cashflow:TX-BACKDATED:3",
+        "cashflow:TX-LATER:3",
+        "commit",
+    ]
+    assert result.processed_transaction_ids == ("TX-BACKDATED",)
+    assert result.cashflow_record_count == 2
+    assert result.position_record_count == 1
 
 
 @pytest.mark.asyncio
@@ -272,7 +341,8 @@ async def test_use_case_suppresses_duplicate_without_running_modules_or_commit()
                 "enter",
                 "idempotency",
                 "cost:TX-001",
-                "cashflow:TX-001",
+                "position:TX-001",
+                "cashflow:TX-001:0",
                 "rollback",
             ],
         ),
@@ -282,7 +352,6 @@ async def test_use_case_suppresses_duplicate_without_running_modules_or_commit()
                 "enter",
                 "idempotency",
                 "cost:TX-001",
-                "cashflow:TX-001",
                 "position:TX-001",
                 "rollback",
             ],

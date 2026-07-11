@@ -34,6 +34,8 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 - Multi-process deployments must propagate source-owned invalidation by updating
   `cashflow_rules.updated_at`; workers detect the changed source version before serving cached
   rules.
+- Raw SQL migrations and their downgrades must set `updated_at = now()` explicitly because ORM
+  `onupdate` behavior does not run for those statements.
 
 ## Tests Added
 

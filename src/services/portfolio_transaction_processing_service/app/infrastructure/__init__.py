@@ -8,6 +8,7 @@ from .composition import (
     build_replay_booked_transaction_use_case,
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
+from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
 from .prometheus_observability import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
@@ -29,6 +30,7 @@ __all__ = [
     "CashflowProcessingCompatibilityAdapter",
     "CostProcessingCompatibilityAdapter",
     "PositionProcessingCompatibilityAdapter",
+    "PipelineStageProcessingCompatibilityAdapter",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
     "SqlAlchemyBookedTransactionReplayAdapter",

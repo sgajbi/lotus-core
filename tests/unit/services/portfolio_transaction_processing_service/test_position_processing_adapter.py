@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock
@@ -18,6 +19,7 @@ from src.services.calculators.position_calculator.app.repositories.position_repo
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PositionProcessingCompatibilityAdapter,
+    legacy_transaction_event_mapper,
 )
 
 
@@ -37,9 +39,17 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
         currency="SGD",
     )
     workflow = AsyncMock()
+    rebuilt_transaction = replace(transaction, transaction_id="TX-REBUILT", epoch=4)
     workflow.calculate.return_value = PositionCalculationResult(
         position_record_count=2,
         replay_queued=True,
+        rebuilt_events=(
+            legacy_transaction_event_mapper.to_transaction_event(
+                rebuilt_transaction,
+                correlation_id="corr-001",
+                traceparent="trace-001",
+            ),
+        ),
     )
     adapter = PositionProcessingCompatibilityAdapter(
         db_session=AsyncMock(spec=AsyncSession),
@@ -57,6 +67,7 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
 
     assert result.position_record_count == 2
     assert result.replay_queued is True
+    assert result.cashflow_rebuild_transactions == (rebuilt_transaction,)
     event = workflow.calculate.await_args.kwargs["event"]
     assert event.transaction_id == "TX-001"
     assert event.correlation_id == "corr-001"

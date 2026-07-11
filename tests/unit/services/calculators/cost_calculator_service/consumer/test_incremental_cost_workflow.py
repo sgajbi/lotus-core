@@ -238,3 +238,48 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     ]
     repo.get_transaction_history.assert_awaited_once()
     execution_metric.labels.assert_called_once_with(mode="full_rebuild", cost_basis_method="FIFO")
+
+
+@pytest.mark.parametrize("cost_basis_method", [CostBasisMethod.FIFO, CostBasisMethod.AVCO])
+async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
+    cost_basis_method: CostBasisMethod,
+) -> None:
+    workflow = CostCalculationWorkflow()
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    dividend_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+    repo.get_cost_basis_processing_checkpoint.return_value = None
+    repo.get_transaction_history.return_value = [_persisted_buy("BUY-1", buy_date)]
+    dividend = _event(
+        transaction_id="DIVIDEND-1",
+        transaction_date=dividend_date,
+        transaction_type="DIVIDEND",
+        quantity="0",
+    )
+
+    calculation = await workflow._calculate_cost_engine(
+        event=dividend,
+        event_transaction_type="DIVIDEND",
+        portfolio_base_currency="USD",
+        instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
+        repo=repo,
+        cost_basis_method=cost_basis_method,
+    )
+    await workflow._update_open_lot_states_if_required(
+        event=dividend,
+        event_transaction_type="DIVIDEND",
+        open_lot_states=calculation.open_lot_states,
+        repo=repo,
+        incremental=calculation.incremental,
+        update_scope=calculation.open_lot_state_update_scope,
+    )
+
+    assert calculation.incremental is False
+    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
+    assert calculation.open_lot_states["BUY-1"].quantity == Decimal("10")
+    assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("100")
+    repo.update_open_lot_states.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+        states_by_source_transaction_id=calculation.open_lot_states,
+    )

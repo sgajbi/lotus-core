@@ -18,8 +18,11 @@ produce order-dependent imports even when the image build succeeds.
 The target image therefore:
 
 - builds one `portfolio-transaction-processing-service` wheel and `portfolio-common` wheel;
-- copies only the required cost, cashflow, and position module roots under their current
-  `src.services.calculators...` namespaces;
+- copies the required cost, cashflow, and position module roots plus the exact pipeline-readiness
+  service, repository, domain-policy, and event-mapping files under their current
+  `src.services...` namespaces;
+- imports the real target entrypoint and unit of work during the image build so an incomplete
+  bounded source closure fails before release;
 - does not install the three colliding legacy service wheels;
 - does not copy the entire Core `src` tree;
 - uses one pinned shared runtime lock and digest-pinned Python base;
@@ -64,6 +67,11 @@ that resolved digest to `/version`. No secret-like build ARG or ENV is present.
 - final image runs as UID/GID `1000` (`appuser`);
 - target manager imports and composes exactly the live and replay-request consumer groups/topics;
 - unrelated `query_service` source is absent;
+- the bounded source closure includes `pipeline_orchestrator_service` because the combined unit of
+  work marks rebuilt current-epoch pipeline readiness directly;
+- source-closure rebuild `lotus-core/portfolio-transaction-processing-service:pr722-source-closure`
+  passed and `python -c "import app.main; import src.services.pipeline_orchestrator_service..."`
+  succeeded inside the image;
 - OCI labels and runtime `build_metadata_payload()` match for commit, branch, timestamp, repo,
   version, digest slot, and run ID, including exact commit
   `7b44b10d9d96b972d5c701bd582c8c7aa0c94bcf`;

@@ -19,7 +19,8 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE cashflow_rules
-        SET classification = 'CORPORATE_ACTION_PROCEEDS'
+        SET classification = 'CORPORATE_ACTION_PROCEEDS',
+            updated_at = now()
         WHERE transaction_type = 'CASH_CONSIDERATION'
         """
     )
@@ -29,7 +30,8 @@ def downgrade() -> None:
     op.execute(
         """
         UPDATE cashflow_rules
-        SET classification = 'INCOME'
+        SET classification = 'INCOME',
+            updated_at = now()
         WHERE transaction_type = 'CASH_CONSIDERATION'
         """
     )
