@@ -51,16 +51,6 @@ from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, 
 )
 
 
-class IndexSeriesRequest(SeriesRequest):
-    target_currency: str | None = Field(
-        None,
-        description="Optional target currency context for price series responses.",
-        examples=["USD"],
-    )
-
-    model_config = ConfigDict()
-
-
 class BenchmarkReturnSeriesRequest(SeriesRequest):
     model_config = ConfigDict()
 
@@ -80,35 +70,6 @@ class RiskFreeSeriesRequest(SeriesRequest):
     model_config = ConfigDict()
 
 
-class IndexPriceSeriesPoint(BaseModel):
-    series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    index_price: Decimal = Field(
-        ..., description="Index price value.", examples=["4567.1234000000"]
-    )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    value_convention: str = Field(
-        ...,
-        description="Value convention label for price series.",
-        examples=["close_price"],
-    )
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
-    model_config = ConfigDict()
-
-
-class IndexReturnSeriesPoint(BaseModel):
-    series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
-    index_return: Decimal = Field(..., description="Index return value.", examples=["0.0023000000"])
-    return_period: str = Field(..., description="Return period label.", examples=["1d"])
-    return_convention: str = Field(
-        ..., description="Return convention label.", examples=["total_return_index"]
-    )
-    series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
-    quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
-    model_config = ConfigDict()
-
-
 class BenchmarkReturnSeriesPoint(BaseModel):
     series_date: date = Field(..., description="Series date.", examples=["2026-01-02"])
     benchmark_return: Decimal = Field(
@@ -120,52 +81,6 @@ class BenchmarkReturnSeriesPoint(BaseModel):
     )
     series_currency: str = Field(..., description="Series currency code.", examples=["USD"])
     quality_status: str = Field(..., description="Quality status.", examples=["accepted"])
-
-    model_config = ConfigDict()
-
-
-class IndexPriceSeriesResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
-    product_version: Literal["v1"] = product_version_field()
-    index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
-    resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
-    frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    points: list[IndexPriceSeriesPoint] = Field(
-        default_factory=list, description="Index price points."
-    )
-    lineage: dict[str, str] = Field(
-        default_factory=dict,
-        description="Lineage metadata for deterministic replay.",
-        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
-    )
-
-    model_config = ConfigDict()
-
-
-class IndexReturnSeriesResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["IndexSeriesWindow"] = product_name_field("IndexSeriesWindow")
-    product_version: Literal["v1"] = product_version_field()
-    index_id: str = Field(..., description="Index identifier.", examples=["IDX_MSCI_WORLD_TR"])
-    as_of_date: date = Field(
-        ...,
-        description="As-of date used for deterministic contract resolution.",
-        examples=["2026-01-31"],
-    )
-    resolved_window: IntegrationWindow = Field(..., description="Resolved date window.")
-    frequency: str = Field(..., description="Frequency label.", examples=["daily"])
-    request_fingerprint: str = Field(
-        ...,
-        description="Deterministic request fingerprint for the raw index return series scope.",
-        examples=["9ccdb0a1df40f0690241a5b52e9f1c1d"],
-    )
-    points: list[IndexReturnSeriesPoint] = Field(
-        default_factory=list, description="Index return points."
-    )
-    lineage: dict[str, str] = Field(
-        default_factory=dict,
-        description="Lineage metadata for deterministic replay.",
-        examples=[{"contract_version": "rfc_062_v1", "source_system": "lotus-core"}],
-    )
 
     model_config = ConfigDict()
 

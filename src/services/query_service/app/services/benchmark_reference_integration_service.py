@@ -12,9 +12,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    IndexPriceSeriesResponse,
-    IndexReturnSeriesResponse,
-    IndexSeriesRequest,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -22,8 +19,6 @@ from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import resolve_benchmark_market_series_response
 from .benchmark_return_series import resolve_benchmark_return_series_response
 from .classification_taxonomy import resolve_classification_taxonomy_response
-from .index_price_series import resolve_index_price_series_response
-from .index_return_series import resolve_index_return_series_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
 from .risk_free_series import resolve_risk_free_series_response
 
@@ -47,34 +42,6 @@ class BenchmarkReferenceIntegrationService:
             request=request,
             decode_page_token=self.decode_page_token,
             encode_page_token=self.encode_page_token,
-        )
-
-    async def get_index_price_series(
-        self,
-        index_id: str,
-        request: IndexSeriesRequest,
-    ) -> IndexPriceSeriesResponse:
-        return cast(
-            IndexPriceSeriesResponse,
-            await resolve_index_price_series_response(
-                repository=self.reference_repository_provider(),
-                index_id=index_id,
-                request=request,
-            ),
-        )
-
-    async def get_index_return_series(
-        self,
-        index_id: str,
-        request: IndexSeriesRequest,
-    ) -> IndexReturnSeriesResponse:
-        return cast(
-            IndexReturnSeriesResponse,
-            await resolve_index_return_series_response(
-                repository=self.reference_repository_provider(),
-                index_id=index_id,
-                request=request,
-            ),
         )
 
     async def get_benchmark_return_series(

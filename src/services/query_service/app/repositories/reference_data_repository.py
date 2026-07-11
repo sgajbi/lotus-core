@@ -339,52 +339,6 @@ class ReferenceDataRepository:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_index_price_series(
-        self, index_id: str, start_date: date, end_date: date
-    ) -> list[IndexPriceSeries]:
-        predicates = (
-            IndexPriceSeries.index_id == index_id,
-            IndexPriceSeries.series_date >= start_date,
-            IndexPriceSeries.series_date <= end_date,
-        )
-        ranked = canonical_series_ranked_subquery(
-            IndexPriceSeries,
-            IndexPriceSeries.index_id,
-            IndexPriceSeries.series_date,
-            predicates=predicates,
-        )
-        stmt = (
-            select(IndexPriceSeries)
-            .join(ranked, IndexPriceSeries.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(IndexPriceSeries.series_date.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_index_return_series(
-        self, index_id: str, start_date: date, end_date: date
-    ) -> list[IndexReturnSeries]:
-        predicates = (
-            IndexReturnSeries.index_id == index_id,
-            IndexReturnSeries.series_date >= start_date,
-            IndexReturnSeries.series_date <= end_date,
-        )
-        ranked = canonical_series_ranked_subquery(
-            IndexReturnSeries,
-            IndexReturnSeries.index_id,
-            IndexReturnSeries.series_date,
-            predicates=predicates,
-        )
-        stmt = (
-            select(IndexReturnSeries)
-            .join(ranked, IndexReturnSeries.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(IndexReturnSeries.series_date.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
     async def list_risk_free_series(
         self,
         currency: str,

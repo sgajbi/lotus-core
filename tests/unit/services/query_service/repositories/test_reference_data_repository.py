@@ -105,20 +105,6 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
             ]
         ),
         _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
-                )
-            ]
-        ),
-        _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    index_id="IDX_1", series_date=date(2026, 1, 1), quality_status="accepted"
-                )
-            ]
-        ),
-        _FakeExecuteResult(
             [SimpleNamespace(series_date=date(2026, 1, 1), quality_status="accepted")]
         ),
         _FakeExecuteResult([SimpleNamespace(taxonomy_scope="index")]),
@@ -187,8 +173,6 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert await repo.list_index_price_points([], date(2026, 1, 1), date(2026, 1, 2)) == []
     assert await repo.list_index_return_points([], date(2026, 1, 1), date(2026, 1, 2)) == []
     assert await repo.list_benchmark_return_points("B1", date(2026, 1, 1), date(2026, 1, 2))
-    assert await repo.list_index_price_series("IDX_1", date(2026, 1, 1), date(2026, 1, 2))
-    assert await repo.list_index_return_series("IDX_1", date(2026, 1, 1), date(2026, 1, 2))
     assert await repo.list_risk_free_series("USD", date(2026, 1, 1), date(2026, 1, 2))
     assert await repo.list_taxonomy(date(2026, 1, 1), taxonomy_scope="index")
     grouped_components = await repo.list_benchmark_components_for_benchmarks(
@@ -196,7 +180,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         as_of_date=date(2026, 1, 1),
     )
     assert grouped_components["B1"][0].index_id == "IDX_1"
-    benchmark_components_stmt = db.execute.await_args_list[12].args[0]
+    benchmark_components_stmt = db.execute.await_args_list[10].args[0]
     benchmark_components_sql = str(
         benchmark_components_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -241,7 +225,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert date(2026, 1, 2) not in fx_rates
     assert date(2026, 1, 3) not in fx_rates
     assert fx_rates[date(2026, 1, 4)] == Decimal("1.4")
-    fx_stmt = db.execute.await_args_list[17].args[0]
+    fx_stmt = db.execute.await_args_list[15].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
@@ -566,8 +550,6 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
         _FakeExecuteResult([accepted_row]),
         _FakeExecuteResult([accepted_row]),
         _FakeExecuteResult([accepted_row]),
-        _FakeExecuteResult([accepted_row]),
-        _FakeExecuteResult([accepted_row]),
     ]
 
     repo = ReferenceDataRepository(db)
@@ -579,20 +561,7 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
     benchmark_returns = await repo.list_benchmark_return_points(
         "B1", date(2026, 1, 1), date(2026, 1, 1)
     )
-    index_price_series = await repo.list_index_price_series(
-        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
-    )
-    index_return_series = await repo.list_index_return_series(
-        "IDX_A", date(2026, 1, 1), date(2026, 1, 1)
-    )
-
-    result_sets = [
-        index_prices,
-        index_returns,
-        benchmark_returns,
-        index_price_series,
-        index_return_series,
-    ]
+    result_sets = [index_prices, index_returns, benchmark_returns]
     assert all(len(rows) == 1 for rows in result_sets)
     assert all(rows[0].series_id == "front_office" for rows in result_sets)
 
@@ -607,10 +576,6 @@ async def test_market_reference_series_canonicalizes_duplicate_business_dates() 
     assert (
         "row_number() OVER (PARTITION BY benchmark_return_series.benchmark_id"
         in (compiled_statements[2])
-    )
-    assert "row_number() OVER (PARTITION BY index_price_series.index_id" in (compiled_statements[3])
-    assert (
-        "row_number() OVER (PARTITION BY index_return_series.index_id" in (compiled_statements[4])
     )
     for compiled in compiled_statements:
         assert "upper(trim(" in compiled
