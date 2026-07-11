@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal, Mapping
 
+from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
+
 from ..dtos.reference_integration_dto import (
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
@@ -16,7 +18,6 @@ from ..read_models import PortfolioTaxLotReadRecord
 from ..repositories.identifier_normalization import normalize_security_id
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .reference_data_mappers import portfolio_tax_lot_record
-from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 

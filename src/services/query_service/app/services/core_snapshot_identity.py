@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from portfolio_common.request_fingerprints import request_fingerprint
+
 from ..application.core_snapshot import (
     CoreSnapshotIdentityCommand,
     CoreSnapshotOptionsCommand,
@@ -9,7 +11,6 @@ from ..application.core_snapshot import (
 )
 from ..dtos.core_snapshot_dto import CoreSnapshotRequest
 from .core_snapshot_governance import CoreSnapshotGovernanceResolution
-from .request_fingerprint import request_fingerprint
 
 
 def core_snapshot_identity_command_from_request(

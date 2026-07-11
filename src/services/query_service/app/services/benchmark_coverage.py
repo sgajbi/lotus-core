@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
+
 from ..dtos.reference_integration_dto import CoverageResponse
 from .market_reference_coverage import market_reference_coverage_response
-from .request_fingerprint import request_fingerprint as build_request_fingerprint
 
 
 async def resolve_benchmark_coverage_response(

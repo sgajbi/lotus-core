@@ -1,3 +1,5 @@
+"""Signed, scoped continuation-token contracts shared by Lotus Core query planes."""
+
 import base64
 import binascii
 import hashlib

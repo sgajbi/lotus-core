@@ -1,7 +1,7 @@
 from datetime import date
 from types import SimpleNamespace
 
-from src.services.query_service.app.services.request_fingerprint import (
+from portfolio_common.request_fingerprints import (
     request_fingerprint,
     series_request_fingerprint,
 )

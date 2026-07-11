@@ -13,6 +13,7 @@ from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
     ANALYTICS_EXPORT_JOBS_TOTAL,
 )
+from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -119,7 +120,6 @@ from .analytics_quality import (
 )
 from .analytics_windows import AnalyticsWindowError, resolve_analytics_window
 from .decimal_amounts import decimal_or_zero
-from .request_fingerprint import request_fingerprint
 
 
 class AnalyticsInputError(RuntimeError):

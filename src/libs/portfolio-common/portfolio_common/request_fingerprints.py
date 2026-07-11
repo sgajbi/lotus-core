@@ -1,3 +1,5 @@
+"""Deterministic request fingerprint contracts shared by Lotus Core query planes."""
+
 import json
 from hashlib import sha256
 from typing import Any

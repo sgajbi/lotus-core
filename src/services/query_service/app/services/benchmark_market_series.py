@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, cast
 
 from portfolio_common.market_reference_quality import quality_status_summary_key
+from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint
 
 from ..dtos.reference_integration_dto import (
     BenchmarkMarketSeriesRequest,
@@ -24,7 +25,6 @@ from .reference_data_mappers import (
     benchmark_component_series_response,
     benchmark_market_series_point,
 )
-from .request_fingerprint import request_fingerprint as build_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from portfolio_common.request_fingerprints import series_request_fingerprint
+
 from ..dtos.reference_integration_dto import (
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
@@ -12,7 +14,6 @@ from .reference_data_helpers import (
     market_reference_data_quality_status,
 )
 from .reference_data_mappers import index_return_series_point
-from .request_fingerprint import series_request_fingerprint
 from .source_data_runtime import source_product_runtime_metadata_without_as_of_date
 
 

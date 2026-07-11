@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 
+from portfolio_common.request_fingerprints import request_fingerprint
+
 from ..dtos.analytics_input_dto import (
     AnalyticsWindow,
     PortfolioAnalyticsTimeseriesRequest,
@@ -12,7 +14,6 @@ from ..dtos.analytics_input_dto import (
     QualityDiagnostics,
 )
 from ..repositories.identifier_normalization import normalize_security_id
-from .request_fingerprint import request_fingerprint
 
 
 class AnalyticsPaginationError(RuntimeError):

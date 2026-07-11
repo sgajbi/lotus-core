@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, cast
 
+from portfolio_common.page_tokens import PageTokenCodec
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
@@ -86,7 +87,6 @@ from .dpm_portfolio_management_integration_service import (
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_hedge_integration_service import ExternalHedgeIntegrationService
 from .integration_policy import resolve_effective_policy_response
-from .page_token_codec import PageTokenCodec
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)

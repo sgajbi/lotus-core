@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 from ..dtos.reference_integration_dto import (
@@ -15,7 +16,6 @@ from ..dtos.reference_integration_dto import (
 )
 from .reference_data_helpers import latest_reference_evidence_timestamp
 from .reference_data_mappers import dpm_portfolio_universe_candidate
-from .request_fingerprint import request_fingerprint
 
 
 @dataclass(frozen=True)
