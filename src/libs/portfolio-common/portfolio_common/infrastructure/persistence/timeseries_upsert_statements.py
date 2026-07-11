@@ -12,7 +12,7 @@ PORTFOLIO_TIMESERIES_IDENTITY_COLUMNS = ("portfolio_id", "date", "epoch")
 TIMESERIES_AUDIT_COLUMNS = ("created_at", "updated_at")
 
 
-def build_position_timeseries_upsert_statement(record: PositionTimeseries):
+def build_position_timeseries_upsert_statement(record: Any):
     """Build the idempotent position-timeseries upsert statement."""
     return _timeseries_upsert_statement(
         PositionTimeseries,
@@ -21,7 +21,7 @@ def build_position_timeseries_upsert_statement(record: PositionTimeseries):
     )
 
 
-def build_portfolio_timeseries_upsert_statement(record: PortfolioTimeseries):
+def build_portfolio_timeseries_upsert_statement(record: Any):
     """Build the idempotent portfolio-timeseries upsert statement."""
     return _timeseries_upsert_statement(
         PortfolioTimeseries,
@@ -37,7 +37,7 @@ def _timeseries_upsert_statement(
 ):
     insert_values = {
         column.name: getattr(record, column.name)
-        for column in record.__table__.columns
+        for column in model.__table__.columns
         if column.name not in TIMESERIES_AUDIT_COLUMNS
     }
     update_values = {

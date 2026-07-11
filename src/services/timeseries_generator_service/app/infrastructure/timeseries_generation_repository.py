@@ -2,12 +2,12 @@
 
 import logging
 from datetime import date
-from typing import List, Optional, cast
+from decimal import Decimal
+from typing import cast
 
 from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
-    Instrument,
     PositionTimeseries,
 )
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -18,7 +18,13 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
     build_position_timeseries_upsert_statement,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
+
+from ..domain.timeseries_records import (
+    PositionCashflowRecord,
+    PositionSnapshotRecord,
+    PositionTimeseriesRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +39,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         security_id: str,
         a_date: date,
         epoch: int,
-    ) -> PositionTimeseries | None:
+    ) -> PositionTimeseriesRecord | None:
         result = await self.db.execute(
             select(PositionTimeseries).filter_by(
                 portfolio_id=portfolio_id,
@@ -42,7 +48,8 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
                 epoch=epoch,
             )
         )
-        return result.scalars().first()
+        row = result.scalars().first()
+        return _position_timeseries_record(row) if row is not None else None
 
     @async_timed(repository="TimeseriesRepository", method="get_position_timeseries_for_dates")
     async def get_position_timeseries_for_dates(
@@ -51,7 +58,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         security_id: str,
         dates: list[date],
         epoch: int,
-    ) -> dict[date, PositionTimeseries]:
+    ) -> dict[date, PositionTimeseriesRecord]:
         if not dates:
             return {}
         result = await self.db.execute(
@@ -63,22 +70,11 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             )
         )
         rows = cast(list[PositionTimeseries], result.scalars().all())
-        return {row.date: row for row in rows}
-
-    @async_timed(repository="TimeseriesRepository", method="get_all_snapshots_for_date")
-    async def get_all_snapshots_for_date(
-        self, portfolio_id: str, a_date: date
-    ) -> List[DailyPositionSnapshot]:
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        stmt = select(DailyPositionSnapshot).where(
-            func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
-            DailyPositionSnapshot.date == a_date,
-        )
-        result = await self.db.execute(stmt)
-        return cast(List[DailyPositionSnapshot], result.scalars().all())
+        records = (_position_timeseries_record(row) for row in rows)
+        return {record.date: record for record in records}
 
     @async_timed(repository="TimeseriesRepository", method="upsert_position_timeseries")
-    async def upsert_position_timeseries(self, timeseries_record: PositionTimeseries):
+    async def upsert_position_timeseries(self, timeseries_record: PositionTimeseriesRecord) -> None:
         try:
             await self.db.execute(build_position_timeseries_upsert_statement(timeseries_record))
             logger.info(
@@ -90,18 +86,10 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             logger.error("Failed to stage upsert for position time series: %s", exc, exc_info=True)
             raise
 
-    @async_timed(repository="TimeseriesRepository", method="get_instrument")
-    async def get_instrument(self, security_id: str) -> Optional[Instrument]:
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        result = await self.db.execute(
-            select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
-        )
-        return result.scalars().first()
-
     @async_timed(repository="TimeseriesRepository", method="get_all_cashflows_for_security_date")
     async def get_all_cashflows_for_security_date(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
-    ) -> List[Cashflow]:
+    ) -> list[PositionCashflowRecord]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         ranked_cashflows = (
@@ -129,66 +117,13 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .order_by(Cashflow.timing.asc(), Cashflow.transaction_id.asc())
         )
         result = await self.db.execute(stmt)
-        return cast(List[Cashflow], result.scalars().all())
-
-    @async_timed(repository="TimeseriesRepository", method="get_latest_snapshots_for_date")
-    async def get_latest_snapshots_for_date(
-        self, portfolio_id: str, a_date: date
-    ) -> List[DailyPositionSnapshot]:
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        snapshot_security_id = func.trim(DailyPositionSnapshot.security_id)
-        latest_snapshot_epochs = (
-            select(
-                snapshot_security_id.label("security_id"),
-                DailyPositionSnapshot.date.label("date"),
-                func.max(DailyPositionSnapshot.epoch).label("epoch"),
-            )
-            .where(
-                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
-                DailyPositionSnapshot.date <= a_date,
-            )
-            .group_by(snapshot_security_id, DailyPositionSnapshot.date)
-            .subquery()
-        )
-
-        ranked_snapshots = select(
-            latest_snapshot_epochs.c.security_id,
-            latest_snapshot_epochs.c.date,
-            latest_snapshot_epochs.c.epoch,
-            func.row_number()
-            .over(
-                partition_by=latest_snapshot_epochs.c.security_id,
-                order_by=(
-                    latest_snapshot_epochs.c.date.desc(),
-                    latest_snapshot_epochs.c.epoch.desc(),
-                ),
-            )
-            .label("rn"),
-        ).subquery()
-
-        stmt = (
-            select(DailyPositionSnapshot)
-            .join(
-                ranked_snapshots,
-                and_(
-                    func.trim(DailyPositionSnapshot.security_id) == ranked_snapshots.c.security_id,
-                    DailyPositionSnapshot.date == ranked_snapshots.c.date,
-                    DailyPositionSnapshot.epoch == ranked_snapshots.c.epoch,
-                ),
-            )
-            .where(
-                func.trim(DailyPositionSnapshot.portfolio_id) == normalized_portfolio_id,
-                ranked_snapshots.c.rn == 1,
-            )
-            .order_by(DailyPositionSnapshot.security_id)
-        )
-        result = await self.db.execute(stmt)
-        return cast(List[DailyPositionSnapshot], result.scalars().all())
+        rows = cast(list[Cashflow], result.scalars().all())
+        return [_position_cashflow_record(row) for row in rows]
 
     @async_timed(repository="TimeseriesRepository", method="get_last_snapshot_before")
     async def get_last_snapshot_before(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
-    ) -> Optional[DailyPositionSnapshot]:
+    ) -> PositionSnapshotRecord | None:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         stmt = (
@@ -203,7 +138,8 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .limit(1)
         )
         result = await self.db.execute(stmt)
-        return result.scalars().first()
+        row = result.scalars().first()
+        return to_position_snapshot_record(row) if row is not None else None
 
     @async_timed(repository="TimeseriesRepository", method="get_next_snapshots_after")
     async def get_next_snapshots_after(
@@ -213,7 +149,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         a_date: date,
         epoch: int,
         max_rows: int,
-    ) -> List[DailyPositionSnapshot]:
+    ) -> list[PositionSnapshotRecord]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         ranked_future_snapshots = (
@@ -242,16 +178,17 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .limit(max_rows)
         )
         result = await self.db.execute(stmt)
-        return cast(List[DailyPositionSnapshot], result.scalars().all())
+        rows = cast(list[DailyPositionSnapshot], result.scalars().all())
+        return [to_position_snapshot_record(row) for row in rows]
 
     @async_timed(repository="TimeseriesRepository", method="get_cashflows_for_security_dates")
     async def get_cashflows_for_security_dates(
         self,
         portfolio_id: str,
         security_id: str,
-        dates: List[date],
+        dates: list[date],
         epoch: int,
-    ) -> dict[date, List[Cashflow]]:
+    ) -> dict[date, list[PositionCashflowRecord]]:
         if not dates:
             return {}
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
@@ -286,7 +223,59 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             )
         )
         result = await self.db.execute(stmt)
-        grouped: dict[date, List[Cashflow]] = {cashflow_date: [] for cashflow_date in dates}
-        for cashflow in result.scalars().all():
+        grouped: dict[date, list[PositionCashflowRecord]] = {
+            cashflow_date: [] for cashflow_date in dates
+        }
+        for row in cast(list[Cashflow], result.scalars().all()):
+            cashflow = _position_cashflow_record(row)
             grouped.setdefault(cashflow.cashflow_date, []).append(cashflow)
         return grouped
+
+
+def to_position_snapshot_record(
+    row: DailyPositionSnapshot,
+    *,
+    fallback_epoch: int = 0,
+) -> PositionSnapshotRecord:
+    """Detach valued fields used by timeseries calculation from an ORM snapshot."""
+
+    return PositionSnapshotRecord(
+        portfolio_id=str(row.portfolio_id),
+        security_id=str(row.security_id),
+        date=cast(date, row.date),
+        epoch=int(row.epoch if row.epoch is not None else fallback_epoch),
+        quantity=cast(Decimal, row.quantity),
+        cost_basis_local=cast(Decimal | None, row.cost_basis_local),
+        market_value_local=cast(Decimal | None, row.market_value_local),
+    )
+
+
+def _position_cashflow_record(row: Cashflow) -> PositionCashflowRecord:
+    return PositionCashflowRecord(
+        transaction_id=str(row.transaction_id),
+        cashflow_date=cast(date, row.cashflow_date),
+        epoch=int(row.epoch),
+        amount=cast(Decimal, row.amount),
+        classification=str(row.classification),
+        timing=str(row.timing),
+        is_position_flow=bool(row.is_position_flow),
+        is_portfolio_flow=bool(row.is_portfolio_flow),
+    )
+
+
+def _position_timeseries_record(row: PositionTimeseries) -> PositionTimeseriesRecord:
+    return PositionTimeseriesRecord(
+        portfolio_id=str(row.portfolio_id),
+        security_id=str(row.security_id),
+        date=cast(date, row.date),
+        epoch=int(row.epoch),
+        bod_market_value=cast(Decimal, row.bod_market_value),
+        bod_cashflow_position=cast(Decimal, row.bod_cashflow_position),
+        eod_cashflow_position=cast(Decimal, row.eod_cashflow_position),
+        bod_cashflow_portfolio=cast(Decimal, row.bod_cashflow_portfolio),
+        eod_cashflow_portfolio=cast(Decimal, row.eod_cashflow_portfolio),
+        eod_market_value=cast(Decimal, row.eod_market_value),
+        fees=cast(Decimal, row.fees),
+        quantity=cast(Decimal, row.quantity),
+        cost=cast(Decimal, row.cost),
+    )

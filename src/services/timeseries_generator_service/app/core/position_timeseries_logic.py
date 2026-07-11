@@ -1,17 +1,17 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import List
 
 from portfolio_common.analytics_cashflow_semantics import (
     normalize_cashflow_timing,
     normalize_position_flow_amount,
 )
-from portfolio_common.database_models import (
-    Cashflow,
-    DailyPositionSnapshot,
-    PositionTimeseries,
-)
 from portfolio_common.decimal_amounts import decimal_or_none
+
+from ..domain.timeseries_records import (
+    PositionCashflowRecord,
+    PositionSnapshotRecord,
+    PositionTimeseriesRecord,
+)
 
 # src/services/timeseries_generator_service/app/core/position_timeseries_logic.py
 
@@ -23,7 +23,7 @@ def _decimal_or_zero(value: object) -> Decimal:
     return amount if amount is not None else ZERO
 
 
-def _beginning_market_value(previous_snapshot: DailyPositionSnapshot | None) -> Decimal:
+def _beginning_market_value(previous_snapshot: PositionSnapshotRecord | None) -> Decimal:
     if previous_snapshot and previous_snapshot.market_value_local is not None:
         return _decimal_or_zero(previous_snapshot.market_value_local)
     return ZERO
@@ -33,7 +33,7 @@ def _average_cost(*, cost_basis: Decimal, quantity: Decimal) -> Decimal:
     return (cost_basis / quantity) if quantity else ZERO
 
 
-def _is_expense_cashflow(cashflow: Cashflow) -> bool:
+def _is_expense_cashflow(cashflow: PositionCashflowRecord) -> bool:
     return str(cashflow.classification or "").strip().upper() == "EXPENSE"
 
 
@@ -45,7 +45,7 @@ class _CashflowBuckets:
     eod_portfolio: Decimal = ZERO
     fees: Decimal = ZERO
 
-    def add(self, cashflow: Cashflow) -> None:
+    def add(self, cashflow: PositionCashflowRecord) -> None:
         cashflow_amount = _decimal_or_zero(cashflow.amount)
         timing = normalize_cashflow_timing(cashflow.timing)
         if cashflow.is_position_flow:
@@ -55,7 +55,9 @@ class _CashflowBuckets:
         if _is_expense_cashflow(cashflow):
             self.fees += abs(cashflow_amount)
 
-    def _add_position_flow(self, cashflow: Cashflow, amount: Decimal, timing: str) -> None:
+    def _add_position_flow(
+        self, cashflow: PositionCashflowRecord, amount: Decimal, timing: str
+    ) -> None:
         normalized_position_amount = normalize_position_flow_amount(
             amount=amount,
             classification=str(cashflow.classification),
@@ -72,7 +74,7 @@ class _CashflowBuckets:
             self.eod_portfolio += amount
 
 
-def _cashflow_buckets(cashflows: List[Cashflow]) -> _CashflowBuckets:
+def _cashflow_buckets(cashflows: list[PositionCashflowRecord]) -> _CashflowBuckets:
     buckets = _CashflowBuckets()
     for cashflow in cashflows:
         buckets.add(cashflow)
@@ -86,11 +88,11 @@ class PositionTimeseriesLogic:
 
     @staticmethod
     def calculate_daily_record(
-        current_snapshot: DailyPositionSnapshot,
-        previous_snapshot: DailyPositionSnapshot | None,
-        cashflows: List[Cashflow],
+        current_snapshot: PositionSnapshotRecord,
+        previous_snapshot: PositionSnapshotRecord | None,
+        cashflows: list[PositionCashflowRecord],
         epoch: int,
-    ) -> PositionTimeseries:
+    ) -> PositionTimeseriesRecord:
         """
         Calculates a single, complete position time series record for a given day.
         """
@@ -101,7 +103,7 @@ class PositionTimeseriesLogic:
         eod_avg_cost = _average_cost(cost_basis=eod_cost_basis, quantity=eod_quantity)
         cashflow_buckets = _cashflow_buckets(cashflows)
 
-        return PositionTimeseries(
+        return PositionTimeseriesRecord(
             portfolio_id=current_snapshot.portfolio_id,
             security_id=current_snapshot.security_id,
             date=current_snapshot.date,
