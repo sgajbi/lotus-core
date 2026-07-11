@@ -2,21 +2,17 @@ from datetime import datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from cost_engine.domain.enums.transaction_type import (
-    TransactionType,
-)
-from cost_engine.domain.models.transaction import (
-    Transaction as EngineTransaction,
-)
-from cost_engine.processing.cost_calculator import (
-    CostCalculator,
-)
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
-)
 from portfolio_common.database_models import Transaction as DBTransaction
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisCalculator,
+    CostCalculationErrorCollector,
+    TransactionType,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 
 
@@ -97,8 +93,8 @@ def test_fx_transaction_types_are_registered_and_engine_uses_baseline_processing
     assert TransactionType.is_valid("FX_FORWARD")
     assert TransactionType.is_valid("FX_SWAP")
 
-    error_reporter = ErrorReporter()
-    calculator = CostCalculator(
+    error_reporter = CostCalculationErrorCollector()
+    calculator = CostBasisCalculator(
         disposition_engine=MagicMock(),
         error_reporter=error_reporter,
     )

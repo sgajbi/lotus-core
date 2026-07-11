@@ -6,11 +6,6 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
-from cost_engine.domain.models.error import ErroredTransaction
-from cost_engine.domain.models.transaction import (
-    Transaction as EngineTransaction,
-)
-from cost_engine.processing.cost_objects import OpenLotState
 from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Portfolio
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -49,10 +44,15 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
     CostCalculationEventProcessor,
     CostCalculationProcessorDependencies,
 )
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.effective_fx_rate import (  # noqa: E501
-    EffectiveFxRate,
-)
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostCalculationError,
+    EffectiveFxRate,
+    OpenLotState,
+)
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
 pytestmark = pytest.mark.asyncio
@@ -82,7 +82,7 @@ async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None
     assert not hasattr(workflow, "_consumer_config")
 
 
-async def test_cost_engine_acquires_key_lock_before_reading_processing_state() -> None:
+async def test_cost_basis_acquires_key_lock_before_reading_processing_state() -> None:
     event = TransactionEvent(
         transaction_id="BUY-LOCK-01",
         portfolio_id="PORT_COST_01",
@@ -106,12 +106,12 @@ async def test_cost_engine_acquires_key_lock_before_reading_processing_state() -
         open_lot_state_update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         average_cost_pool_transition=None,
     )
-    workflow._calculate_cost_engine = AsyncMock(return_value=calculation)
+    workflow._calculate_cost_basis = AsyncMock(return_value=calculation)
     workflow._persist_affected_processed_transactions = AsyncMock(return_value=[])
     workflow._update_open_lot_states_if_required = AsyncMock()
     workflow._persist_cost_basis_processing_checkpoint = AsyncMock()
 
-    await workflow._build_cost_engine_events_to_publish(
+    await workflow._build_cost_basis_events_to_publish(
         event=event,
         event_transaction_type="BUY",
         portfolio=MagicMock(base_currency="USD"),
@@ -522,7 +522,7 @@ async def test_consumer_integration_with_engine(
     mock_idempotency_repo.claim_event_processing.assert_called_once()
     mock_repo.get_transaction_history.assert_called_once()
     updated_transaction_arg = mock_repo.update_transaction_costs.call_args[0][0]
-    assert updated_transaction_arg.__class__.__name__ == "Transaction"
+    assert updated_transaction_arg.__class__.__name__ == "CostBasisTransaction"
     assert updated_transaction_arg.transaction_id == "SELL01"
     assert updated_transaction_arg.realized_gain_loss == Decimal("250.0")
     assert updated_transaction_arg.economic_event_id == "EVT-SELL-PORT_COST_01-SELL01"
@@ -629,11 +629,11 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
 async def test_recalculation_rejects_historical_engine_error_before_suffix_write() -> None:
     with pytest.raises(
         ValueError,
-        match="Transaction engine failed for SELL-LATER: insufficient open quantity",
+        match="Cost-basis calculation failed for SELL-LATER: insufficient open quantity",
     ):
         CostCalculationWorkflow._raise_for_transaction_engine_errors(
             errored=[
-                ErroredTransaction(
+                CostCalculationError(
                     transaction_id="SELL-LATER",
                     error_reason="insufficient open quantity",
                 )

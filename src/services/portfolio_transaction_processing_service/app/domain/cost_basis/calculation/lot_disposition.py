@@ -1,20 +1,22 @@
+"""Coordinate opening-lot restoration, acquisition, and disposition."""
+
 import logging
 from decimal import Decimal
 
 from portfolio_common.decimal_amounts import required_decimal
 
-from ..domain.models.transaction import Transaction
+from ..models.cost_basis_transaction import CostBasisTransaction
 from .cost_basis_strategies import CostBasisStrategy
-from .cost_objects import OpenLotState
+from .lot_state import OpenLotState
 
 logger = logging.getLogger(__name__)
 
 
-def _is_buy_transaction(transaction: Transaction) -> bool:
+def _is_buy_transaction(transaction: CostBasisTransaction) -> bool:
     return str(transaction.transaction_type or "").strip().upper() == "BUY"
 
 
-class DispositionEngine:
+class LotDispositionEngine:
     """
     Manages 'cost lots', delegating calculation logic to a specific strategy.
     """
@@ -22,7 +24,7 @@ class DispositionEngine:
     def __init__(self, cost_basis_strategy: CostBasisStrategy):
         self._cost_basis_strategy = cost_basis_strategy
 
-    def add_buy_lot(self, transaction: Transaction):
+    def add_buy_lot(self, transaction: CostBasisTransaction):
         if transaction.quantity > Decimal(0):
             self._cost_basis_strategy.add_buy_lot(transaction)
 
@@ -30,7 +32,7 @@ class DispositionEngine:
         return self._cost_basis_strategy.get_available_quantity(portfolio_id, instrument_id)
 
     def consume_sell_quantity(
-        self, transaction: Transaction
+        self, transaction: CostBasisTransaction
     ) -> tuple[Decimal, Decimal, Decimal, str | None]:
         sell_quantity = required_decimal(transaction.quantity, field_name="quantity")
         return self._cost_basis_strategy.consume_sell_quantity(
@@ -39,7 +41,7 @@ class DispositionEngine:
 
     def transfer_basis_out(
         self,
-        transaction: Transaction,
+        transaction: CostBasisTransaction,
         *,
         cost_base: Decimal,
         cost_local: Decimal,
@@ -51,13 +53,13 @@ class DispositionEngine:
             cost_local,
         )
 
-    def set_initial_lots(self, transactions: list[Transaction]):
+    def set_initial_lots(self, transactions: list[CostBasisTransaction]):
         filtered_buys = [
             txn for txn in transactions if _is_buy_transaction(txn) and txn.quantity > Decimal(0)
         ]
         self._cost_basis_strategy.set_initial_lots(filtered_buys)
 
-    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+    def restore_open_lots(self, transactions: list[CostBasisTransaction]) -> None:
         self._cost_basis_strategy.restore_open_lots(transactions)
 
     def get_open_lot_states(self) -> dict[str, OpenLotState]:

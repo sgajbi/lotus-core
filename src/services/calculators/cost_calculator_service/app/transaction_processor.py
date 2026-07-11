@@ -6,19 +6,20 @@ from typing import Any
 
 from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
 
-from .cost_engine.domain.models.error import ErroredTransaction
-from .cost_engine.domain.models.transaction import Transaction
-from .cost_engine.processing.cost_basis_strategies import (
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostBasisStrategy,
+    CostBasisCalculator,
     CostBasisStrategy,
+    CostBasisTransaction,
+    CostCalculationError,
+    CostCalculationErrorCollector,
+    CostTransactionParser,
+    CostTransactionSorter,
     FIFOBasisStrategy,
+    LotDispositionEngine,
+    OpenLotState,
 )
-from .cost_engine.processing.cost_calculator import CostCalculator
-from .cost_engine.processing.cost_objects import OpenLotState
-from .cost_engine.processing.disposition_engine import DispositionEngine
-from .cost_engine.processing.error_reporter import ErrorReporter
-from .cost_engine.processing.parser import TransactionParser
-from .cost_engine.processing.sorter import TransactionSorter
+
 from .monitoring import RECALCULATION_DEPTH, RECALCULATION_DURATION_SECONDS
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ def build_transaction_processor(
     cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO,
 ) -> TransactionProcessor:
     """Build the production cost engine for the governed cost-basis method."""
-    error_reporter = ErrorReporter()
+    error_reporter = CostCalculationErrorCollector()
     resolved_method = normalize_cost_basis_method(cost_basis_method)
     strategy: CostBasisStrategy
     if resolved_method is CostBasisMethod.AVCO:
@@ -38,12 +39,12 @@ def build_transaction_processor(
         strategy = FIFOBasisStrategy()
         logger.debug("Using FIFO strategy for cost basis calculation.")
 
-    disposition_engine = DispositionEngine(cost_basis_strategy=strategy)
+    disposition_engine = LotDispositionEngine(cost_basis_strategy=strategy)
     return TransactionProcessor(
-        parser=TransactionParser(error_reporter=error_reporter),
-        sorter=TransactionSorter(),
+        parser=CostTransactionParser(error_reporter=error_reporter),
+        sorter=CostTransactionSorter(),
         disposition_engine=disposition_engine,
-        cost_calculator=CostCalculator(
+        cost_calculator=CostBasisCalculator(
             disposition_engine=disposition_engine,
             error_reporter=error_reporter,
         ),
@@ -60,11 +61,11 @@ class TransactionProcessor:
 
     def __init__(
         self,
-        parser: TransactionParser,
-        sorter: TransactionSorter,
-        disposition_engine: DispositionEngine,
-        cost_calculator: CostCalculator,
-        error_reporter: ErrorReporter,
+        parser: CostTransactionParser,
+        sorter: CostTransactionSorter,
+        disposition_engine: LotDispositionEngine,
+        cost_calculator: CostBasisCalculator,
+        error_reporter: CostCalculationErrorCollector,
     ):
         self._parser = parser
         self._sorter = sorter
@@ -76,7 +77,7 @@ class TransactionProcessor:
         self,
         existing_transactions_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, OpenLotState]]:
+    ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
         start_time = time.monotonic()
         try:
             self._error_reporter.clear()
@@ -108,7 +109,7 @@ class TransactionProcessor:
         *,
         initial_open_lots_raw: list[dict[str, Any]],
         new_transactions_raw: list[dict[str, Any]],
-    ) -> tuple[list[Transaction], list[ErroredTransaction], dict[str, OpenLotState]]:
+    ) -> tuple[list[CostBasisTransaction], list[CostCalculationError], dict[str, OpenLotState]]:
         """Calculate an ordered append from a previously validated open-lot checkpoint."""
         start_time = time.monotonic()
         try:
@@ -133,32 +134,34 @@ class TransactionProcessor:
             RECALCULATION_DURATION_SECONDS.observe(duration)
 
     @staticmethod
-    def _valid_transaction_ids(transactions: list[Transaction]) -> set[str]:
+    def _valid_transaction_ids(transactions: list[CostBasisTransaction]) -> set[str]:
         return {txn.transaction_id for txn in transactions if not txn.error_reason}
 
     @staticmethod
     def _valid_transactions(
-        parsed_existing: list[Transaction],
-        parsed_new: list[Transaction],
-    ) -> list[Transaction]:
+        parsed_existing: list[CostBasisTransaction],
+        parsed_new: list[CostBasisTransaction],
+    ) -> list[CostBasisTransaction]:
         return [txn for txn in [*parsed_existing, *parsed_new] if not txn.error_reason]
 
     @staticmethod
     def _filter_processed_new_transactions(
         *,
-        processed_timeline: list[Transaction],
+        processed_timeline: list[CostBasisTransaction],
         new_transaction_ids: set[str],
-    ) -> list[Transaction]:
+    ) -> list[CostBasisTransaction]:
         return [txn for txn in processed_timeline if txn.transaction_id in new_transaction_ids]
 
-    def _process_sorted_timeline(self, sorted_timeline: list[Transaction]) -> list[Transaction]:
-        processed_timeline: list[Transaction] = []
+    def _process_sorted_timeline(
+        self, sorted_timeline: list[CostBasisTransaction]
+    ) -> list[CostBasisTransaction]:
+        processed_timeline: list[CostBasisTransaction] = []
         for transaction in sorted_timeline:
             if self._calculate_transaction_costs(transaction):
                 processed_timeline.append(transaction)
         return processed_timeline
 
-    def _calculate_transaction_costs(self, transaction: Transaction) -> bool:
+    def _calculate_transaction_costs(self, transaction: CostBasisTransaction) -> bool:
         try:
             self._cost_calculator.calculate_transaction_costs(transaction)
         except Exception as exc:
@@ -166,7 +169,9 @@ class TransactionProcessor:
             return False
         return not self._error_reporter.has_errors_for(transaction.transaction_id)
 
-    def _record_unexpected_processing_error(self, transaction: Transaction, exc: Exception) -> None:
+    def _record_unexpected_processing_error(
+        self, transaction: CostBasisTransaction, exc: Exception
+    ) -> None:
         logger.error(
             "Unexpected error for transaction %s: %s",
             transaction.transaction_id,

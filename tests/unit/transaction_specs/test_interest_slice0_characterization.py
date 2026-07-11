@@ -2,18 +2,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from cost_engine.domain.enums.transaction_type import (
-    TransactionType,
-)
-from cost_engine.domain.models.transaction import (
-    Transaction as EngineTransaction,
-)
-from cost_engine.processing.cost_calculator import (
-    CostCalculator,
-)
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
-)
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
@@ -28,6 +16,14 @@ from src.services.calculators.cashflow_calculator_service.app.core.enums import 
 )
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisCalculator,
+    CostCalculationErrorCollector,
+    TransactionType,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState as PositionStateDTO,
@@ -84,8 +80,8 @@ def test_interest_fee_transformation_to_engine_fees_structure() -> None:
 
 def test_interest_cost_calculation_current_behavior_zero_cost_and_no_realized_pnl() -> None:
     mock_disposition_engine = MagicMock()
-    error_reporter = ErrorReporter()
-    calculator = CostCalculator(
+    error_reporter = CostCalculationErrorCollector()
+    calculator = CostBasisCalculator(
         disposition_engine=mock_disposition_engine, error_reporter=error_reporter
     )
     interest_transaction = EngineTransaction(

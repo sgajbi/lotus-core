@@ -53,7 +53,6 @@ pythonpath = [
     "src/services/calculators/cashflow_calculator_service",
     "src/services/calculators/cost_calculator_service",
     "src/services/calculators/cost_calculator_service/app",
-    "src/services/calculators/position_calculator",
     "src/services/calculators/position_valuation_calculator",
     "src/services/timeseries_generator_service",
     "src/services/pipeline_orchestrator_service",

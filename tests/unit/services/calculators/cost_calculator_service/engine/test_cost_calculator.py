@@ -3,43 +3,36 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-from cost_engine.domain.enums.transaction_type import (
+from portfolio_common.transaction_type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
+
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisCalculator,
+    CostBasisTransaction,
+    CostCalculationErrorCollector,
+    Fees,
+    FIFOBasisStrategy,
+    LotDispositionEngine,
     TransactionType,
 )
-from cost_engine.domain.models.transaction import (
-    Fees,
-    Transaction,
-)
-from cost_engine.processing.cost_basis_strategies import (
-    FIFOBasisStrategy,
-)
-from cost_engine.processing.cost_calculator import (
-    CostCalculator,
-)
-from cost_engine.processing.disposition_engine import (
-    DispositionEngine,
-)
-from cost_engine.processing.error_reporter import (
-    ErrorReporter,
-)
-from portfolio_common.transaction_type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
 
 
 @pytest.fixture
 def mock_disposition_engine():
-    mock = MagicMock(spec=DispositionEngine)
+    mock = MagicMock(spec=LotDispositionEngine)
     mock.get_available_quantity.return_value = Decimal("1000000")
     return mock
 
 
 @pytest.fixture
 def error_reporter():
-    return ErrorReporter()
+    return CostCalculationErrorCollector()
 
 
 @pytest.fixture
 def cost_calculator(mock_disposition_engine, error_reporter):
-    return CostCalculator(disposition_engine=mock_disposition_engine, error_reporter=error_reporter)
+    return CostBasisCalculator(
+        disposition_engine=mock_disposition_engine, error_reporter=error_reporter
+    )
 
 
 class _StringCountedAmount:
@@ -59,7 +52,7 @@ def _canonical_fx_transaction(
     component_type: str = "FX_CONTRACT_CLOSE",
     fx_realized_pnl_mode: str = "NONE",
     **updates,
-) -> Transaction:
+) -> CostBasisTransaction:
     data = {
         "transaction_id": transaction_id,
         "portfolio_id": "PORT-FX",
@@ -92,12 +85,12 @@ def _canonical_fx_transaction(
         "fx_realized_pnl_mode": fx_realized_pnl_mode,
     }
     data.update(updates)
-    return Transaction(**data)
+    return CostBasisTransaction(**data)
 
 
 @pytest.fixture
 def buy_transaction():
-    return Transaction(
+    return CostBasisTransaction(
         transaction_id="BUY001",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -117,7 +110,7 @@ def buy_transaction():
 
 @pytest.fixture
 def sell_transaction():
-    return Transaction(
+    return CostBasisTransaction(
         transaction_id="SELL001",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -145,7 +138,7 @@ def test_buy_strategy(cost_calculator, mock_disposition_engine, buy_transaction)
 
 
 def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
-    dual_currency_buy = Transaction(
+    dual_currency_buy = CostBasisTransaction(
         transaction_id="DC_BUY_01",
         portfolio_id="P_USD",
         instrument_id="AIR.lotus-performance",
@@ -171,7 +164,7 @@ def test_buy_strategy_dual_currency(cost_calculator, mock_disposition_engine):
 def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
     cost_calculator, mock_disposition_engine
 ):
-    same_currency_buy = Transaction(
+    same_currency_buy = CostBasisTransaction(
         transaction_id="BUY_SAME_CCY_NORMALIZE_01",
         portfolio_id="P_USD",
         instrument_id="CASH_USD",
@@ -197,7 +190,7 @@ def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
 def test_cost_calculator_rejects_non_positive_same_currency_fx_rate(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    same_currency_buy = Transaction(
+    same_currency_buy = CostBasisTransaction(
         transaction_id="BUY_SAME_CCY_NEGATIVE_FX_01",
         portfolio_id="P_USD",
         instrument_id="CASH_USD",
@@ -222,7 +215,7 @@ def test_cost_calculator_rejects_non_positive_same_currency_fx_rate(
 def test_cost_calculator_reports_invalid_fx_rate_text(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    same_currency_buy = Transaction(
+    same_currency_buy = CostBasisTransaction(
         transaction_id="BUY_INVALID_FX_TEXT_01",
         portfolio_id="P_USD",
         instrument_id="CASH_USD",
@@ -247,7 +240,7 @@ def test_cost_calculator_reports_invalid_fx_rate_text(
 def test_cost_calculator_normalizes_transaction_type_before_strategy_resolution(
     cost_calculator, mock_disposition_engine
 ):
-    lowercase_buy = Transaction(
+    lowercase_buy = CostBasisTransaction(
         transaction_id="BUY_LOWERCASE_TYPE_01",
         portfolio_id="P_USD",
         instrument_id="CASH_USD",
@@ -281,7 +274,7 @@ def test_cost_calculator_has_explicit_strategies_for_production_booking_enum_typ
     assert TransactionType.OTHER not in cost_calculator._strategies
 
 
-def _cash_consideration(**overrides: object) -> Transaction:
+def _cash_consideration(**overrides: object) -> CostBasisTransaction:
     values = {
         "transaction_id": "CA-CASH-CONSIDERATION-001",
         "portfolio_id": "P1",
@@ -299,10 +292,10 @@ def _cash_consideration(**overrides: object) -> Transaction:
         "allocated_cost_basis_base": Decimal("50"),
     }
     values.update(overrides)
-    return Transaction(**values)
+    return CostBasisTransaction(**values)
 
 
-def _cash_in_lieu(**overrides: object) -> Transaction:
+def _cash_in_lieu(**overrides: object) -> CostBasisTransaction:
     values = {
         "transaction_id": "CA-CASH-IN-LIEU-001",
         "portfolio_id": "P1",
@@ -324,7 +317,7 @@ def _cash_in_lieu(**overrides: object) -> Transaction:
         "realized_fx_pnl_base": Decimal("3.5"),
     }
     values.update(overrides)
-    return Transaction(**values)
+    return CostBasisTransaction(**values)
 
 
 def test_cash_in_lieu_reconciles_fractional_basis_and_cross_currency_pnl_components(
@@ -415,7 +408,7 @@ def test_cross_currency_adjustment_uses_direction_aware_cash_basis(
     expected_local: Decimal,
     expected_base: Decimal,
 ) -> None:
-    transaction = Transaction(
+    transaction = CostBasisTransaction(
         transaction_id=f"ADJUSTMENT-{movement_direction}-01",
         portfolio_id="P1",
         instrument_id="CASH_EUR",
@@ -641,7 +634,7 @@ def test_fx_strategy_rejects_unsupported_cash_lot_realized_pnl_mode(
 def test_cost_calculator_rejects_other_before_default_costing(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    migration_only_transaction = Transaction(
+    migration_only_transaction = CostBasisTransaction(
         transaction_id="OTHER_MIGRATION_ONLY_01",
         portfolio_id="P1",
         instrument_id="LEGACY",
@@ -671,7 +664,7 @@ def test_cost_calculator_rejects_other_before_default_costing(
 def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
     cost_calculator, mock_disposition_engine
 ):
-    bond_buy = Transaction(
+    bond_buy = CostBasisTransaction(
         transaction_id="BOND_BUY_01",
         portfolio_id="P_USD",
         instrument_id="UST5Y",
@@ -699,7 +692,7 @@ def test_buy_strategy_supports_policy_hook_for_accrued_interest_exclusion(
 def test_buy_strategy_normalizes_policy_hook_for_accrued_interest_exclusion(
     cost_calculator, mock_disposition_engine
 ):
-    bond_buy = Transaction(
+    bond_buy = CostBasisTransaction(
         transaction_id="BOND_BUY_PADDED_POLICY_01",
         portfolio_id="P_USD",
         instrument_id="UST5Y",
@@ -726,7 +719,7 @@ def test_buy_strategy_normalizes_policy_hook_for_accrued_interest_exclusion(
 def test_buy_strategy_rejects_zero_quantity_with_invariant_error(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_buy = Transaction(
+    invalid_buy = CostBasisTransaction(
         transaction_id="BUY_ZERO_QTY",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -759,7 +752,7 @@ def test_sell_strategy_gain(cost_calculator, mock_disposition_engine, sell_trans
 
 
 def test_sell_strategy_dual_currency(cost_calculator, mock_disposition_engine):
-    dual_currency_sell = Transaction(
+    dual_currency_sell = CostBasisTransaction(
         transaction_id="DC_SELL_01",
         portfolio_id="P_USD",
         instrument_id="AIR.lotus-performance",
@@ -789,7 +782,7 @@ def test_sell_strategy_dual_currency(cost_calculator, mock_disposition_engine):
 def test_sell_strategy_rejects_negative_net_proceeds(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_sell = Transaction(
+    invalid_sell = CostBasisTransaction(
         transaction_id="SELL_NEG_PROCEEDS",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -875,13 +868,13 @@ def test_sell_strategy_normalizes_oversold_policy(
 
 
 def test_sell_strategy_multi_lot_fifo():
-    error_reporter = ErrorReporter()
+    error_reporter = CostCalculationErrorCollector()
     fifo_strategy = FIFOBasisStrategy()
-    disposition_engine = DispositionEngine(cost_basis_strategy=fifo_strategy)
-    cost_calculator = CostCalculator(
+    disposition_engine = LotDispositionEngine(cost_basis_strategy=fifo_strategy)
+    cost_calculator = CostBasisCalculator(
         disposition_engine=disposition_engine, error_reporter=error_reporter
     )
-    buy_txn_1 = Transaction(
+    buy_txn_1 = CostBasisTransaction(
         transaction_id="BUY001",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -897,7 +890,7 @@ def test_sell_strategy_multi_lot_fifo():
         transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(buy_txn_1)
-    buy_txn_2 = Transaction(
+    buy_txn_2 = CostBasisTransaction(
         transaction_id="BUY002",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -913,7 +906,7 @@ def test_sell_strategy_multi_lot_fifo():
         transaction_fx_rate=Decimal("1.0"),
     )
     cost_calculator.calculate_transaction_costs(buy_txn_2)
-    sell_txn = Transaction(
+    sell_txn = CostBasisTransaction(
         transaction_id="SELL001",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -933,7 +926,7 @@ def test_sell_strategy_multi_lot_fifo():
 
 
 def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
-    deposit_transaction = Transaction(
+    deposit_transaction = CostBasisTransaction(
         transaction_id="DEPOSIT001",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -957,7 +950,7 @@ def test_deposit_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
 def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
     cost_calculator, mock_disposition_engine
 ):
-    deposit_transaction = Transaction(
+    deposit_transaction = CostBasisTransaction(
         transaction_id="DEPOSIT_QTY_AMOUNT_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -985,7 +978,7 @@ def test_deposit_strategy_uses_quantity_when_gross_amount_is_zero(
 def test_deposit_strategy_normalizes_blank_gross_amount_to_quantity_once(
     cost_calculator, mock_disposition_engine
 ):
-    deposit_transaction = Transaction(
+    deposit_transaction = CostBasisTransaction(
         transaction_id="DEPOSIT_BLANK_GROSS_AMOUNT_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1016,7 +1009,7 @@ def test_deposit_strategy_normalizes_blank_gross_amount_to_quantity_once(
 def test_deposit_strategy_uses_magnitude_for_signed_legacy_cash_amount(
     cost_calculator, mock_disposition_engine
 ):
-    deposit_transaction = Transaction(
+    deposit_transaction = CostBasisTransaction(
         transaction_id="DEPOSIT_SIGNED_LEGACY_AMOUNT_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1042,7 +1035,7 @@ def test_deposit_strategy_uses_magnitude_for_signed_legacy_cash_amount(
 
 
 def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_engine):
-    dividend_transaction = Transaction(
+    dividend_transaction = CostBasisTransaction(
         transaction_id="DIV001",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1066,7 +1059,7 @@ def test_dividend_transaction_has_zero_cost(cost_calculator, mock_disposition_en
 def test_dividend_strategy_accepts_string_zero_price(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    dividend_transaction = Transaction(
+    dividend_transaction = CostBasisTransaction(
         transaction_id="DIV_STR_PRICE_0",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1089,7 +1082,7 @@ def test_dividend_strategy_accepts_string_zero_price(
 def test_dividend_strategy_rejects_non_zero_quantity(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_dividend = Transaction(
+    invalid_dividend = CostBasisTransaction(
         transaction_id="DIV_BAD_QTY",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1112,7 +1105,7 @@ def test_dividend_strategy_rejects_non_zero_quantity(
 def test_dividend_strategy_rejects_non_zero_price(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_dividend = Transaction(
+    invalid_dividend = CostBasisTransaction(
         transaction_id="DIV_BAD_PRICE",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1135,7 +1128,7 @@ def test_dividend_strategy_rejects_non_zero_price(
 def test_dividend_strategy_rejects_non_positive_gross_amount(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_dividend = Transaction(
+    invalid_dividend = CostBasisTransaction(
         transaction_id="DIV_BAD_GROSS",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1158,7 +1151,7 @@ def test_dividend_strategy_rejects_non_positive_gross_amount(
 def test_interest_transaction_has_zero_cost_and_explicit_zero_realized_pnl(
     cost_calculator, mock_disposition_engine
 ):
-    interest_transaction = Transaction(
+    interest_transaction = CostBasisTransaction(
         transaction_id="INT001",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1182,7 +1175,7 @@ def test_interest_transaction_has_zero_cost_and_explicit_zero_realized_pnl(
 def test_interest_strategy_rejects_non_zero_quantity(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_interest = Transaction(
+    invalid_interest = CostBasisTransaction(
         transaction_id="INT_BAD_QTY",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1205,7 +1198,7 @@ def test_interest_strategy_rejects_non_zero_quantity(
 def test_interest_strategy_rejects_non_zero_price(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_interest = Transaction(
+    invalid_interest = CostBasisTransaction(
         transaction_id="INT_BAD_PRICE",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1228,7 +1221,7 @@ def test_interest_strategy_rejects_non_zero_price(
 def test_interest_strategy_rejects_non_positive_gross_amount(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    invalid_interest = Transaction(
+    invalid_interest = CostBasisTransaction(
         transaction_id="INT_BAD_GROSS",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1251,7 +1244,7 @@ def test_interest_strategy_rejects_non_positive_gross_amount(
 def test_interest_strategy_allows_expense_direction_baseline(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    expense_interest = Transaction(
+    expense_interest = CostBasisTransaction(
         transaction_id="INT_EXPENSE_OK",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1274,7 +1267,7 @@ def test_interest_strategy_allows_expense_direction_baseline(
 
 
 def test_interest_strategy_normalizes_direction(cost_calculator, error_reporter):
-    expense_interest = Transaction(
+    expense_interest = CostBasisTransaction(
         transaction_id="INT_EXPENSE_PADDED_OK",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1297,7 +1290,7 @@ def test_interest_strategy_normalizes_direction(cost_calculator, error_reporter)
 
 
 def test_interest_strategy_rejects_unknown_direction(cost_calculator, error_reporter):
-    invalid_direction = Transaction(
+    invalid_direction = CostBasisTransaction(
         transaction_id="INT_BAD_DIR",
         portfolio_id="P1",
         instrument_id="BOND_USD",
@@ -1318,7 +1311,7 @@ def test_interest_strategy_rejects_unknown_direction(cost_calculator, error_repo
 
 
 def test_transfer_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
-    transfer_in_transaction = Transaction(
+    transfer_in_transaction = CostBasisTransaction(
         transaction_id="TRANSFER_IN_01",
         portfolio_id="P1",
         instrument_id="IBM",
@@ -1345,7 +1338,7 @@ def test_transfer_out_strategy_consumes_lot_without_pnl(cost_calculator, mock_di
     Tests that a TRANSFER_OUT transaction consumes a cost lot but does not generate P&L.
     """
     # Arrange
-    transfer_out_transaction = Transaction(
+    transfer_out_transaction = CostBasisTransaction(
         transaction_id="TRANSFER_OUT_01",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1386,7 +1379,7 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
     This will fail with the current DefaultStrategy mapping.
     """
     # Arrange
-    withdrawal_transaction = Transaction(
+    withdrawal_transaction = CostBasisTransaction(
         transaction_id="WITHDRAWAL_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1423,7 +1416,7 @@ def test_withdrawal_strategy_consumes_lot_without_pnl(cost_calculator, mock_disp
 def test_withdrawal_strategy_uses_quantity_when_gross_amount_is_zero(
     cost_calculator, mock_disposition_engine
 ):
-    withdrawal_transaction = Transaction(
+    withdrawal_transaction = CostBasisTransaction(
         transaction_id="WITHDRAWAL_QTY_AMOUNT_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1451,7 +1444,7 @@ def test_withdrawal_strategy_uses_quantity_when_gross_amount_is_zero(
 def test_withdrawal_strategy_uses_magnitude_for_signed_legacy_cash_amount(
     cost_calculator, mock_disposition_engine
 ):
-    withdrawal_transaction = Transaction(
+    withdrawal_transaction = CostBasisTransaction(
         transaction_id="WITHDRAWAL_SIGNED_LEGACY_AMOUNT_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1480,7 +1473,7 @@ def test_withdrawal_strategy_uses_magnitude_for_signed_legacy_cash_amount(
 def test_cash_withdrawal_detection_normalizes_source_vocabulary(
     cost_calculator, mock_disposition_engine
 ):
-    withdrawal_transaction = Transaction(
+    withdrawal_transaction = CostBasisTransaction(
         transaction_id="WITHDRAWAL_PADDED_CASH_01",
         portfolio_id="P1",
         instrument_id=" cash_usd ",
@@ -1513,7 +1506,7 @@ def test_cash_withdrawal_detection_normalizes_source_vocabulary(
 def test_cash_expense_flows_use_cash_outflow_strategy(
     cost_calculator, mock_disposition_engine, transaction_type
 ):
-    expense_transaction = Transaction(
+    expense_transaction = CostBasisTransaction(
         transaction_id=f"{transaction_type}_CASH_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1539,7 +1532,7 @@ def test_cash_expense_flows_use_cash_outflow_strategy(
 
 
 def test_cash_fee_outflow_includes_fee_components(cost_calculator, mock_disposition_engine):
-    fee_transaction = Transaction(
+    fee_transaction = CostBasisTransaction(
         transaction_id="FEE_CASH_COMPONENTS_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1568,7 +1561,7 @@ def test_cash_fee_outflow_includes_fee_components(cost_calculator, mock_disposit
 def test_non_cash_tax_is_rejected_without_positive_default_cost(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    tax_transaction = Transaction(
+    tax_transaction = CostBasisTransaction(
         transaction_id="TAX_NON_CASH_01",
         portfolio_id="P1",
         instrument_id="AAPL",
@@ -1597,7 +1590,7 @@ def test_non_cash_tax_is_rejected_without_positive_default_cost(
 def test_cash_sell_strategy_avoids_strict_oversell_for_cash_instrument(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
-    cash_sell = Transaction(
+    cash_sell = CostBasisTransaction(
         transaction_id="CASH_SELL_01",
         portfolio_id="P1",
         instrument_id="CASH_USD",
@@ -1628,7 +1621,7 @@ def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
     cost_calculator, mock_disposition_engine
 ):
     mock_disposition_engine.transfer_basis_out.return_value = None
-    spin_off_transaction = Transaction(
+    spin_off_transaction = CostBasisTransaction(
         transaction_id="SPIN_OFF_01",
         portfolio_id="P1",
         instrument_id="SRC_SEC",
@@ -1657,7 +1650,7 @@ def test_spin_off_basis_only_strategy_reduces_cost_without_lot_consumption(
 
 
 def test_spin_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_engine):
-    spin_in_transaction = Transaction(
+    spin_in_transaction = CostBasisTransaction(
         transaction_id="SPIN_IN_01",
         portfolio_id="P1",
         instrument_id="NEW_SEC",
@@ -1691,7 +1684,7 @@ def test_spin_in_strategy_creates_cost_lot(cost_calculator, mock_disposition_eng
 def test_same_instrument_ca_restatement_types_preserve_total_basis(
     cost_calculator, mock_disposition_engine, transaction_type
 ):
-    txn = Transaction(
+    txn = CostBasisTransaction(
         transaction_id=f"{transaction_type}_01",
         portfolio_id="P1",
         instrument_id="EQ1",
@@ -1719,7 +1712,7 @@ def test_same_instrument_ca_restatement_types_preserve_total_basis(
 
 def test_rights_delivery_and_allocate_use_inflow_strategy(cost_calculator, mock_disposition_engine):
     for tx_type in ("RIGHTS_ALLOCATE", "RIGHTS_SHARE_DELIVERY"):
-        txn = Transaction(
+        txn = CostBasisTransaction(
             transaction_id=f"{tx_type}_01",
             portfolio_id="P1",
             instrument_id="RIGHTS_SEC",
@@ -1747,7 +1740,7 @@ def test_rights_outflow_types_consume_lots_without_realized_pnl(
         None,
     )
     for tx_type in ("RIGHTS_SUBSCRIBE", "RIGHTS_OVERSUBSCRIBE", "RIGHTS_SELL", "RIGHTS_EXPIRE"):
-        txn = Transaction(
+        txn = CostBasisTransaction(
             transaction_id=f"{tx_type}_01",
             portfolio_id="P1",
             instrument_id="RIGHTS_SEC",

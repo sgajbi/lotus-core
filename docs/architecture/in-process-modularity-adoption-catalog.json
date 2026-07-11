@@ -74,16 +74,16 @@
       "legacyFolders": [
         {
           "path": "src/services/calculators/cost_calculator_service",
-          "migrationGuidance": "Cost policy runs behind the target CostProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
+          "migrationGuidance": "Cost-basis policy is target-owned. Move workflow, checkpoint, and repository adapters behind target application/infrastructure ports, migrate delivery tests, then delete the remaining legacy root after release/Kubernetes/canonical-QA parity."
         },
         {
           "path": "src/services/calculators/cashflow_calculator_service",
           "migrationGuidance": "Cashflow policy runs behind the target CashflowProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
-        },
-        {
-          "path": "src/services/calculators/position_calculator",
-          "migrationGuidance": "Position reduction and replay run behind the target PositionProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
         }
+      ],
+      "retiredLegacyFolders": [
+        "src/services/calculators/position_calculator",
+        "src/services/calculators/cost_calculator_service/app/cost_engine"
       ],
       "evidence": [
         "docs/standards/application-command-result-standard.md",
@@ -91,9 +91,10 @@
         "docs/architecture/calculator-runtime-consolidation-decision.md",
         "docs/architecture/codebase-reviews/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md",
         "docs/architecture/codebase-reviews/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md",
-        "docs/architecture/codebase-reviews/CR-1509-POSITION-MODULE-TARGET-OWNERSHIP.md"
+        "docs/architecture/codebase-reviews/CR-1509-POSITION-MODULE-TARGET-OWNERSHIP.md",
+        "docs/architecture/codebase-reviews/CR-1510-COST-BASIS-DOMAIN-TARGET-OWNERSHIP.md"
       ],
-      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Registry/Kubernetes rollout and legacy package removal remain governed follow-up work."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position and cost-basis domain source are target-owned; registry/Kubernetes rollout and remaining cost workflow/repository plus cashflow package removal remain governed follow-up work."
     }
   ]
 }

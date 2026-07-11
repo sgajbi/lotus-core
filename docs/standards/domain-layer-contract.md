@@ -54,5 +54,5 @@ Current pure-domain examples include:
 1. ingestion job lifecycle policy;
 2. financial reconciliation run lifecycle policy;
 3. financial reconciliation position-valuation policy and domain finding objects;
-4. cost-engine transaction, fee, and error domain models;
+4. cost-basis transaction, fee, and calculation-error domain models;
 5. shared value objects in `portfolio_common.domain_value_objects`.

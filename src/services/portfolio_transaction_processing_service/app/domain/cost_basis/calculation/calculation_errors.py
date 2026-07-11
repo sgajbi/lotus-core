@@ -1,13 +1,15 @@
-from ..domain.models.error import ErroredTransaction
+"""Collect deterministic cost-calculation validation errors by transaction."""
+
+from ..models.calculation_error import CostCalculationError
 
 
-class ErrorReporter:
+class CostCalculationErrorCollector:
     """
     Manages the collection and reporting of processing errors for transactions.
     """
 
     def __init__(self):
-        self._errored_transactions: dict[str, ErroredTransaction] = {}
+        self._errored_transactions: dict[str, CostCalculationError] = {}
 
     def add_error(self, transaction_id: str, error_reason: str):
         if transaction_id in self._errored_transactions:
@@ -15,11 +17,11 @@ class ErrorReporter:
             if error_reason not in existing_reason:
                 self._errored_transactions[transaction_id].error_reason += f"; {error_reason}"
         else:
-            self._errored_transactions[transaction_id] = ErroredTransaction(
+            self._errored_transactions[transaction_id] = CostCalculationError(
                 transaction_id=transaction_id, error_reason=error_reason
             )
 
-    def get_errors(self) -> list[ErroredTransaction]:
+    def get_errors(self) -> list[CostCalculationError]:
         return list(self._errored_transactions.values())
 
     def has_errors(self) -> bool:

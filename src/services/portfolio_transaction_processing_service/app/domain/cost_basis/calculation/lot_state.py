@@ -1,3 +1,5 @@
+"""Define immutable and mutable state used during lot calculations."""
+
 from dataclasses import dataclass
 from decimal import Decimal
 

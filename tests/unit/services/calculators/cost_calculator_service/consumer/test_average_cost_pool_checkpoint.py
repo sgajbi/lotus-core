@@ -1,12 +1,14 @@
 from decimal import Decimal
 
 import pytest
-from cost_engine.processing.cost_objects import OpenLotState
 
 from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
     AVERAGE_COST_POOL_STATE_VERSION,
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    OpenLotState,
 )
 
 

@@ -7,8 +7,13 @@ from typing import Mapping
 
 from portfolio_common.cost_basis import CostBasisMethod
 
-from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
-from .cost_engine.processing.cost_objects import OpenLotState
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    OpenLotState,
+)
+
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
 
 AVERAGE_COST_POOL_STATE_VERSION = "avco-pool-v1"

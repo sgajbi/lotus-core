@@ -1,4 +1,4 @@
-"""Profile cost-engine scaling over deterministic long transaction histories."""
+"""Profile cost-basis scaling over deterministic long transaction histories."""
 
 from __future__ import annotations
 

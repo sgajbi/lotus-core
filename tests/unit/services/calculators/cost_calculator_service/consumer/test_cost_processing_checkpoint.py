@@ -2,17 +2,17 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
-    Transaction,
-)
 from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
     COST_ENGINE_STATE_VERSION,
     CostBasisProcessingCheckpoint,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostBasisTransaction,
+)
 
 
-def _transaction(transaction_id: str, transaction_date: datetime) -> Transaction:
-    return Transaction(
+def _transaction(transaction_id: str, transaction_date: datetime) -> CostBasisTransaction:
+    return CostBasisTransaction(
         transaction_id=transaction_id,
         portfolio_id="P1",
         instrument_id="I1",

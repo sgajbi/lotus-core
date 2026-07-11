@@ -18,15 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
-from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.transaction import (  # noqa: E501
-    Transaction as EngineTransaction,
-)
 from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
     CostBasisProcessingCheckpoint,
 )
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostBasisTransaction as EngineTransaction,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,

@@ -2,10 +2,12 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from cost_engine.domain.models.transaction import Transaction
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction,
+)
 
 
-def _transaction(**overrides) -> Transaction:
+def _transaction(**overrides) -> CostBasisTransaction:
     payload = {
         "transaction_id": "TXN-001",
         "portfolio_id": "P1",
@@ -20,7 +22,7 @@ def _transaction(**overrides) -> Transaction:
         "portfolio_base_currency": "USD",
     }
     payload.update(overrides)
-    return Transaction(**payload)
+    return CostBasisTransaction(**payload)
 
 
 def test_transaction_datetime_z_suffix_becomes_utc_aware() -> None:
@@ -77,16 +79,16 @@ def test_transaction_dump_serializes_new_calculated_extension_field() -> None:
     assert transaction.model_dump()["realized_total_pnl_base"] == Decimal("125.50")
 
 
-def test_cost_engine_domain_models_do_not_import_pydantic() -> None:
+def test_cost_basis_domain_models_do_not_import_pydantic() -> None:
     domain_root = (
         Path(__file__).resolve().parents[6]
         / "src"
         / "services"
-        / "calculators"
-        / "cost_calculator_service"
+        / "portfolio_transaction_processing_service"
         / "app"
-        / "cost_engine"
         / "domain"
+        / "cost_basis"
+        / "models"
     )
 
     offenders = [

@@ -4,12 +4,14 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from cost_engine.domain.models.transaction import Transaction
-from cost_engine.processing.cost_basis_strategies import AverageCostBasisStrategy
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from src.services.calculators.cost_calculator_service.app.transaction_processor import (
     build_transaction_processor,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    AverageCostBasisStrategy,
+    CostBasisTransaction,
 )
 
 AVCO_LOT_INFLOW_TYPES = {
@@ -290,7 +292,7 @@ def test_avco_fee_inclusive_cross_currency_sources_reconcile_local_and_base_cost
         ("EUR-FEE-BUY-2", "50", "605", "696"),
     ):
         strategy.add_buy_lot(
-            Transaction(
+            CostBasisTransaction(
                 transaction_id=transaction_id,
                 portfolio_id="P-SGD",
                 instrument_id="EUR-FUND",
@@ -337,7 +339,7 @@ def test_avco_source_allocation_is_isolated_by_portfolio_and_instrument() -> Non
         ("P2", "EQUITY-A", "P2-A-BUY", "1500"),
     ):
         strategy.add_buy_lot(
-            Transaction(
+            CostBasisTransaction(
                 transaction_id=transaction_id,
                 portfolio_id=portfolio_id,
                 instrument_id=instrument_id,

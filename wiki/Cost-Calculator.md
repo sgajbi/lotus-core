@@ -1,8 +1,8 @@
-# Cost Calculator
+# Cost Processing
 
 ## Purpose
 
-The cost module is the transaction-enrichment and cost-basis authority inside the combined
+The cost module is the transaction-enrichment and cost-basis authority inside the unified
 `portfolio_transaction_processing_service` runtime.
 
 It takes persisted transaction events, applies the portfolio's governed cost-basis policy, and
@@ -29,16 +29,19 @@ into governed cost-aware state inside the same unit of work as cashflow and posi
 
 ## Runtime role
 
-The active application workflow is `app/cost_calculation_workflow.py`, imported directly by target
-infrastructure. `app/consumer.py` is a quarantined compatibility shell for legacy delivery tests and
-must not be imported by the combined runtime.
+Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash economics, and
+calculation diagnostics live in the target-owned `app/domain/cost_basis` package behind one public
+domain API. The transitional application workflow is
+`cost_calculator_service/app/cost_calculation_workflow.py`, imported by target infrastructure until
+its ports and checkpoint policy are extracted. `app/consumer.py` is a quarantined compatibility
+shell for legacy delivery tests and must not be imported by the unified runtime.
 
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness
 2. acquires the transaction-scoped cost-basis lock for the normalized portfolio-security key
 3. reads the versioned canonical cost-processing checkpoint for that key
-4. normalizes the event into the cost engine's processing shape
+4. normalizes the event into the cost-basis domain transaction model
 5. uses durable open-lot state for a strictly ordered, compatible append, or loads full history for
    a backdated, same-order, unsupported, missing-checkpoint, or incompatible event
 6. enriches the applicable rows with portfolio policy and FX context where required
@@ -184,7 +187,7 @@ domain behavior, not as downstream interpretation.
 
 - persisted transaction facts are upstream input
 - portfolio-level cost-basis method selection is governed inside core
-- cost calculator owns processed transaction enrichment and lot-state authority
+- unified cost processing owns processed transaction enrichment and lot-state authority
 - downstream analytics services may consume realized and cost-aware state, but they do not redefine
   it
 

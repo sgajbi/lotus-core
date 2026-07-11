@@ -1,3 +1,5 @@
+"""Implement FIFO and average-cost lot allocation strategies."""
+
 import logging
 from collections import defaultdict, deque
 from decimal import Decimal
@@ -5,21 +7,21 @@ from typing import Protocol
 
 from portfolio_common.decimal_amounts import required_decimal
 
-from ..domain.models.transaction import Transaction
+from ..models.cost_basis_transaction import CostBasisTransaction
 from .average_cost_source_allocation import (
     AverageCostPool,
     AverageCostSourceAllocation,
 )
-from .cost_objects import CostLot, OpenLotState
+from .lot_state import CostLot, OpenLotState
 
 logger = logging.getLogger(__name__)
 
 
-def _is_buy_transaction(transaction: Transaction) -> bool:
+def _is_buy_transaction(transaction: CostBasisTransaction) -> bool:
     return str(transaction.transaction_type or "").strip().upper() == "BUY"
 
 
-def _require_buy_lot_cost_basis(transaction: Transaction) -> None:
+def _require_buy_lot_cost_basis(transaction: CostBasisTransaction) -> None:
     if transaction.net_cost is not None and transaction.net_cost_local is not None:
         return
     raise ValueError(
@@ -29,7 +31,9 @@ def _require_buy_lot_cost_basis(transaction: Transaction) -> None:
     )
 
 
-def _normalized_buy_lot_amounts(transaction: Transaction) -> tuple[Decimal, Decimal, Decimal]:
+def _normalized_buy_lot_amounts(
+    transaction: CostBasisTransaction,
+) -> tuple[Decimal, Decimal, Decimal]:
     return (
         required_decimal(transaction.quantity, field_name="quantity"),
         required_decimal(transaction.net_cost, field_name="net_cost"),
@@ -44,7 +48,7 @@ def _is_zero_quantity_zero_cost_lot(
 
 
 def _should_skip_empty_buy_lot(
-    transaction: Transaction, quantity: Decimal, net_cost: Decimal, net_cost_local: Decimal
+    transaction: CostBasisTransaction, quantity: Decimal, net_cost: Decimal, net_cost_local: Decimal
 ) -> bool:
     if quantity > Decimal(0):
         return False
@@ -56,7 +60,7 @@ def _should_skip_empty_buy_lot(
 
 
 def _validate_non_negative_buy_lot_cost_basis(
-    transaction: Transaction, net_cost: Decimal, net_cost_local: Decimal
+    transaction: CostBasisTransaction, net_cost: Decimal, net_cost_local: Decimal
 ) -> None:
     if net_cost >= Decimal(0) and net_cost_local >= Decimal(0):
         return
@@ -65,7 +69,9 @@ def _validate_non_negative_buy_lot_cost_basis(
     )
 
 
-def _validated_buy_lot_inputs(transaction: Transaction) -> tuple[Decimal, Decimal, Decimal] | None:
+def _validated_buy_lot_inputs(
+    transaction: CostBasisTransaction,
+) -> tuple[Decimal, Decimal, Decimal] | None:
     _require_buy_lot_cost_basis(transaction)
     quantity, net_cost, net_cost_local = _normalized_buy_lot_amounts(transaction)
     if _should_skip_empty_buy_lot(transaction, quantity, net_cost, net_cost_local):
@@ -102,7 +108,7 @@ def _consume_next_fifo_lot(
 
 
 class CostBasisStrategy(Protocol):
-    def add_buy_lot(self, transaction: Transaction) -> None: ...
+    def add_buy_lot(self, transaction: CostBasisTransaction) -> None: ...
     def consume_sell_quantity(
         self, portfolio_id: str, instrument_id: str, sell_quantity: Decimal
     ) -> tuple[Decimal, Decimal, Decimal, str | None]: ...
@@ -114,8 +120,8 @@ class CostBasisStrategy(Protocol):
         cost_base: Decimal,
         cost_local: Decimal,
     ) -> str | None: ...
-    def set_initial_lots(self, transactions: list[Transaction]) -> None: ...
-    def restore_open_lots(self, transactions: list[Transaction]) -> None: ...
+    def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None: ...
+    def restore_open_lots(self, transactions: list[CostBasisTransaction]) -> None: ...
     def get_open_lot_states(self) -> dict[str, OpenLotState]: ...
 
 
@@ -130,7 +136,7 @@ class FIFOBasisStrategy:
         self._available_quantities: dict[tuple[str, str], Decimal] = defaultdict(lambda: Decimal(0))
         logger.debug("FIFOBasisStrategy initialized.")
 
-    def add_buy_lot(self, transaction: Transaction) -> None:
+    def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
         validated_inputs = _validated_buy_lot_inputs(transaction)
         if validated_inputs is None:
             return
@@ -205,12 +211,12 @@ class FIFOBasisStrategy:
         _allocate_fifo_basis_transfer(lots, cost_base=cost_base, cost_local=cost_local)
         return None
 
-    def set_initial_lots(self, transactions: list[Transaction]) -> None:
+    def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
-    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+    def restore_open_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for transaction in transactions:
             self.add_buy_lot(transaction)
 
@@ -232,7 +238,7 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         self._source_allocation = AverageCostSourceAllocation()
         logger.debug("AverageCostBasisStrategy initialized.")
 
-    def add_buy_lot(self, transaction: Transaction) -> None:
+    def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
         validated_inputs = _validated_buy_lot_inputs(transaction)
         if validated_inputs is None:
             return
@@ -322,12 +328,12 @@ class AverageCostBasisStrategy(CostBasisStrategy):
         )
         return None
 
-    def set_initial_lots(self, transactions: list[Transaction]) -> None:
+    def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for txn in transactions:
             if _is_buy_transaction(txn):
                 self.add_buy_lot(txn)
 
-    def restore_open_lots(self, transactions: list[Transaction]) -> None:
+    def restore_open_lots(self, transactions: list[CostBasisTransaction]) -> None:
         for transaction in transactions:
             self.add_buy_lot(transaction)
 
