@@ -14,8 +14,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
-    IndexCatalogRequest,
-    IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
@@ -45,6 +43,7 @@ from ..application.core_snapshot.service import (
 from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
 from ..application.dpm_source_readiness.readiness import DpmSourceReadinessService
 from ..application.external_hedge_posture import ExternalHedgePostureService
+from ..application.index_catalog import IndexCatalogService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
@@ -109,6 +108,7 @@ from ..contracts.external_hedge_posture import (
     ExternalOrderExecutionAcknowledgementRequest,
     ExternalOrderExecutionAcknowledgementResponse,
 )
+from ..contracts.index_catalog import IndexCatalogRequest, IndexCatalogResponse
 from ..contracts.instrument_eligibility import (
     InstrumentEligibilityBulkRequest,
     InstrumentEligibilityBulkResponse,
@@ -159,6 +159,7 @@ from ..dependencies import (
     get_dpm_portfolio_population_service,
     get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
+    get_index_catalog_service,
     get_integration_policy_service,
     get_integration_service,
     get_portfolio_manager_book_service,
@@ -2310,21 +2311,13 @@ async def fetch_benchmark_catalog(
         "downstream caller already knows the benchmark component universe, prefer `index_ids` "
         "to avoid full-catalog scans."
     ),
+    openapi_extra=source_data_product_openapi_extra("IndexDefinition"),
 )
 async def fetch_index_catalog(
     request: IndexCatalogRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    index_catalog_service: IndexCatalogService = Depends(get_index_catalog_service),
 ) -> IndexCatalogResponse:
-    return cast(
-        IndexCatalogResponse,
-        await integration_service.list_index_catalog(
-            as_of_date=request.as_of_date,
-            index_ids=request.index_ids,
-            index_currency=request.index_currency,
-            index_type=request.index_type,
-            index_status=request.index_status,
-        ),
-    )
+    return await index_catalog_service.list(request=request)
 
 
 @router.post(

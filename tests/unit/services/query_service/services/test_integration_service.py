@@ -285,27 +285,6 @@ async def test_reference_contract_methods() -> None:
             }
         ),
         list_benchmark_definitions=AsyncMock(return_value=[]),
-        list_index_definitions=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    index_id="IDX1",
-                    index_name="Index 1",
-                    index_currency="USD",
-                    index_type="equity",
-                    index_status="active",
-                    index_provider="provider",
-                    index_market="global",
-                    classification_set_id="set1",
-                    classification_labels={"sector": "technology"},
-                    effective_from=date(2026, 1, 1),
-                    effective_to=None,
-                    quality_status="accepted",
-                    source_timestamp=None,
-                    source_vendor="vendor",
-                    source_record_id="idx-src",
-                )
-            ]
-        ),
         list_index_price_points=AsyncMock(
             return_value=[
                 SimpleNamespace(
@@ -408,9 +387,6 @@ async def test_reference_contract_methods() -> None:
             ]
         ),
     )
-
-    index_catalog = await service.list_index_catalog(date(2026, 1, 1), [], None, None, None)
-    assert index_catalog.records[0].index_id == "IDX1"
 
     market_series = await service.get_benchmark_market_series(
         benchmark_id="B1",
@@ -649,7 +625,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
                 )
             ]
         ),
-        list_index_definitions=AsyncMock(return_value=[]),
         list_index_price_points=AsyncMock(return_value=[]),
         list_index_return_points=AsyncMock(return_value=[]),
         list_benchmark_return_points=AsyncMock(return_value=[]),

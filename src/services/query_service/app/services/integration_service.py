@@ -13,7 +13,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
@@ -71,22 +70,6 @@ class IntegrationService:
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
         return cast(dict[str, Any], self._page_token_codec.decode(token))
-
-    async def list_index_catalog(
-        self,
-        as_of_date: date,
-        index_ids: list[str],
-        index_currency: str | None,
-        index_type: str | None,
-        index_status: str | None,
-    ) -> IndexCatalogResponse:
-        return await self._benchmark_reference_service.list_index_catalog(
-            as_of_date=as_of_date,
-            index_ids=index_ids,
-            index_currency=index_currency,
-            index_type=index_type,
-            index_status=index_status,
-        )
 
     async def get_benchmark_market_series(
         self,

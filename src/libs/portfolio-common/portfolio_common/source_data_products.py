@@ -270,6 +270,16 @@ SOURCE_DATA_PRODUCT_CATALOG: tuple[SourceDataProductDefinition, ...] = (
         notes="Effective benchmark constituent and weight segments across a requested window.",
     ),
     SourceDataProductDefinition(
+        product_name="IndexDefinition",
+        product_version="v1",
+        route_family=ANALYTICS_INPUT,
+        serving_plane=QUERY_CONTROL_PLANE_SERVICE,
+        owner="lotus-core",
+        consumers=("lotus-performance", "lotus-risk"),
+        current_routes=("/integration/indices/catalog",),
+        notes="Effective canonical index masters and governed classification labels.",
+    ),
+    SourceDataProductDefinition(
         product_name="IndexSeriesWindow",
         product_version="v1",
         route_family=ANALYTICS_INPUT,

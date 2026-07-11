@@ -41,6 +41,7 @@ from .application.dpm_source_readiness.model_portfolio_targets import ModelPortf
 from .application.dpm_source_readiness.portfolio_tax_lots import PortfolioTaxLotService
 from .application.dpm_source_readiness.readiness import DpmSourceReadinessService
 from .application.external_hedge_posture import ExternalHedgePostureService
+from .application.index_catalog import IndexCatalogService
 from .application.integration_policy import (
     IntegrationPolicyConfiguration,
     IntegrationPolicyService,
@@ -73,6 +74,7 @@ from .infrastructure.dpm_portfolio_population_sources import (
 from .infrastructure.dpm_portfolio_state_sources import SqlAlchemyDpmPortfolioStateReader
 from .infrastructure.dpm_reference_data_sources import SqlAlchemyDpmReferenceDataReader
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
+from .infrastructure.index_definition_sources import SqlAlchemyIndexDefinitionReader
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
@@ -159,6 +161,17 @@ def get_benchmark_catalog_service(
 
     return BenchmarkCatalogService(
         reader=SqlAlchemyBenchmarkDefinitionReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_index_catalog_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> IndexCatalogService:
+    """Compose the QCP-owned index catalog use case."""
+
+    return IndexCatalogService(
+        reader=SqlAlchemyIndexDefinitionReader(db),
         clock=SystemClock().utc_now,
     )
 

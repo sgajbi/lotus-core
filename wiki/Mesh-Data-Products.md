@@ -16,6 +16,21 @@ The shared source-product catalog and runtime metadata contract are owned by
 Serving applications own their route DTOs and workflows; they must not duplicate hashing,
 lineage, freshness, or product-identity semantics in service-local helper modules.
 
+## Market Reference Source Products
+
+The query control plane publishes effective benchmark and index reference evidence for
+performance and risk consumers. Core owns source selection, effective dating, completeness,
+freshness, and lineage; downstream analytics applications continue to own benchmark mathematics,
+performance methodology, and risk methodology.
+
+| Product | Route | Purpose | Current proof |
+| --- | --- | --- | --- |
+| `BenchmarkAssignment:v1` | `/integration/portfolios/{portfolio_id}/benchmark-assignment` | Effective portfolio-to-benchmark identity with assignment version, policy source, deterministic content fingerprint, and source lineage. | QCP-owned layered implementation and focused local tests are complete under issue `#460`; PR/mainline and live downstream revalidation remain pending. |
+| `BenchmarkDefinition:v1` | `/integration/benchmarks/{benchmark_id}/definition`, `/integration/benchmarks/catalog` | Effective benchmark masters and constituents with unit-weight completeness, deterministic selection, source quality, and collection evidence. | QCP-owned layered implementation and focused local tests are complete under issue `#460`; catalog pagination and final image proof remain pending. |
+| `BenchmarkConstituentWindow:v1` | `/integration/benchmarks/{benchmark_id}/composition-window` | Cross-rebalance constituent segments with inferred supersession boundaries and unit-weight validation at every composition boundary. | QCP-owned layered implementation and focused local tests are complete under issue `#460`; PR/mainline and live downstream revalidation remain pending. |
+| `IndexDefinition:v1` | `/integration/indices/catalog` | Effective canonical index masters, provider identity, and governed classification labels with deterministic source evidence. | QCP-owned layered implementation and focused local tests are complete under issue `#460`; PR/mainline and live downstream revalidation remain pending. |
+| `IndexSeriesWindow:v1` and `RiskFreeSeriesWindow:v1` | `/integration/indices/{index_id}/price-series`, `/integration/indices/{index_id}/return-series`, `/integration/reference/risk-free-series` | Raw governed market-reference series used by performance and risk sourcing. | Existing contracts remain supported; final QCP package-ownership, freshness, pagination, and lineage migration is still in progress under issue `#460`. |
+
 ## Active DPM Source Products
 
 RFC-087 Slices 4 through 9 and the RFC41-WTBD-001/RFC41-WTBD-002 source-owner foundations promote the first DPM
