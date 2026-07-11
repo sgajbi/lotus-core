@@ -14,6 +14,10 @@ portfolio-manager book membership evidence. After portfolio status predicates mo
 stored values, the repository still retained a private `_portfolio_status_expr(...)` helper that
 returned the input column unchanged.
 
+Current ownership: CR-1521 moved membership selection to
+`SqlAlchemyPortfolioManagerBookReader.list_members(...)` in Query Control Plane. The removed helper
+remains historical evidence; the query-service repository method no longer exists.
+
 The helper no longer encoded normalization or query behavior, but it preserved stale guidance that
 portfolio master status reads might still require a repository-local expression layer.
 

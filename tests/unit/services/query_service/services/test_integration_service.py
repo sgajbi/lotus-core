@@ -18,16 +18,12 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     InstrumentEligibilityBulkRequest,
     MarketDataCoverageRequest,
     ModelPortfolioTargetRequest,
-    PortfolioManagerBookMembershipRequest,
     PortfolioTaxLotWindowRequest,
     TransactionCostCurveRequest,
 )
 from src.services.query_service.app.read_models import PortfolioTaxLotReadRecord
 from src.services.query_service.app.services.benchmark_reference_integration_service import (
     BenchmarkReferenceIntegrationService,
-)
-from src.services.query_service.app.services.dpm_portfolio_management_integration_service import (
-    DpmPortfolioManagementIntegrationService,
 )
 from src.services.query_service.app.services.dpm_readiness_integration_service import (
     DpmReadinessIntegrationService,
@@ -59,7 +55,6 @@ def make_service() -> IntegrationService:
 def test_integration_service_accepts_explicit_dependencies_without_session() -> None:
     reference_repository = AsyncMock()
     buy_state_repository = AsyncMock()
-    portfolio_repository = AsyncMock()
     transaction_repository = AsyncMock()
     page_token_codec = SimpleNamespace(
         encode=lambda payload: f"encoded:{payload['scope']}",
@@ -70,7 +65,6 @@ def test_integration_service_accepts_explicit_dependencies_without_session() -> 
         dependencies=IntegrationServiceDependencies(
             reference_repository=reference_repository,
             buy_state_repository=buy_state_repository,
-            portfolio_repository=portfolio_repository,
             transaction_repository=transaction_repository,
             page_token_codec=page_token_codec,
         )
@@ -79,7 +73,6 @@ def test_integration_service_accepts_explicit_dependencies_without_session() -> 
     assert service.db is None
     assert service._reference_repository is reference_repository  # pylint: disable=protected-access
     assert service._buy_state_repository is buy_state_repository  # pylint: disable=protected-access
-    assert service._portfolio_repository is portfolio_repository  # pylint: disable=protected-access
     assert service._transaction_repository is transaction_repository  # pylint: disable=protected-access
     assert service._encode_page_token({"scope": "benchmark"}) == "encoded:benchmark"
     assert service._decode_page_token("token-1") == {"token": "token-1"}
@@ -231,13 +224,6 @@ def mandate_binding_request(as_of_date: date) -> DiscretionaryMandateBindingRequ
     return DiscretionaryMandateBindingRequest(as_of_date=as_of_date)
 
 
-def portfolio_manager_book_request(as_of_date: date) -> PortfolioManagerBookMembershipRequest:
-    return PortfolioManagerBookMembershipRequest(
-        as_of_date=as_of_date,
-        booking_center_code="Singapore",
-    )
-
-
 def cio_model_change_request(as_of_date: date) -> CioModelChangeAffectedCohortRequest:
     return CioModelChangeAffectedCohortRequest(
         as_of_date=as_of_date,
@@ -317,65 +303,6 @@ def test_to_coverage_response_streams_missing_date_sample_for_broad_windows() ->
         date(2026, 1, 10),
         date(2026, 1, 11),
     ]
-
-
-@pytest.mark.asyncio
-async def test_resolve_portfolio_manager_book_membership_returns_source_owned_members():
-    service = make_service()
-    service._portfolio_repository = AsyncMock()  # pylint: disable=protected-access
-    service._portfolio_repository.list_portfolio_manager_book_members.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            portfolio_id="PB_SG_GLOBAL_BAL_001",
-            client_id="CIF_SG_GLOBAL_BAL_001",
-            booking_center_code="Singapore",
-            portfolio_type="DISCRETIONARY",
-            status="ACTIVE",
-            open_date=date(2025, 3, 31),
-            close_date=None,
-            base_currency="USD",
-            created_at=datetime(2026, 5, 3, 1, 0, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 1, 5, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.resolve_portfolio_manager_book_membership(
-        "PM_SG_DPM_001",
-        portfolio_manager_book_request(date(2026, 5, 3)),
-    )
-
-    service._portfolio_repository.list_portfolio_manager_book_members.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=protected-access
-        portfolio_manager_id="PM_SG_DPM_001",
-        as_of_date=date(2026, 5, 3),
-        booking_center_code="Singapore",
-        portfolio_types=["DISCRETIONARY"],
-        include_inactive=False,
-    )
-    assert response.product_name == "PortfolioManagerBookMembership"
-    assert response.portfolio_manager_id == "PM_SG_DPM_001"
-    assert response.supportability.state == "READY"
-    assert response.supportability.returned_portfolio_count == 1
-    assert response.members[0].portfolio_id == "PB_SG_GLOBAL_BAL_001"
-    assert response.members[0].source_record_id == "portfolio:PB_SG_GLOBAL_BAL_001"
-    assert response.lineage["source_field"] == "advisor_id"
-    assert response.snapshot_id is not None
-    assert response.snapshot_id.startswith("pm_book_membership:")
-
-
-@pytest.mark.asyncio
-async def test_resolve_portfolio_manager_book_membership_marks_empty_book_incomplete():
-    service = make_service()
-    service._portfolio_repository = AsyncMock()  # pylint: disable=protected-access
-    service._portfolio_repository.list_portfolio_manager_book_members.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.resolve_portfolio_manager_book_membership(
-        "PM_EMPTY",
-        portfolio_manager_book_request(date(2026, 5, 3)),
-    )
-
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "PM_BOOK_MEMBERSHIP_EMPTY"
-    assert response.members == []
-    assert response.data_quality_status == "MISSING"
 
 
 @pytest.mark.asyncio
@@ -1415,35 +1342,6 @@ async def test_benchmark_reference_family_service_runs_without_full_integration_
     assert response.product_name == "BenchmarkAssignment"
     assert response.benchmark_id == "B1"
     repository.resolve_benchmark_assignment.assert_awaited_once_with("P1", date(2026, 1, 1))
-
-
-@pytest.mark.asyncio
-async def test_dpm_portfolio_management_family_service_runs_without_full_facade() -> None:
-    portfolio_repository = SimpleNamespace(
-        list_portfolio_manager_book_members=AsyncMock(return_value=[]),
-    )
-    service = DpmPortfolioManagementIntegrationService(
-        reference_repository_provider=lambda: SimpleNamespace(),
-        portfolio_repository_provider=lambda: portfolio_repository,
-        decode_page_token=lambda token: {"token": token} if token else {},
-        encode_page_token=lambda payload: f"token:{payload['scope_fingerprint']}",
-    )
-
-    response = await service.resolve_portfolio_manager_book_membership(
-        "PM_SG_DPM_001",
-        portfolio_manager_book_request(date(2026, 1, 1)),
-    )
-
-    assert response.product_name == "PortfolioManagerBookMembership"
-    assert response.portfolio_manager_id == "PM_SG_DPM_001"
-    assert response.supportability.state == "INCOMPLETE"
-    portfolio_repository.list_portfolio_manager_book_members.assert_awaited_once_with(
-        portfolio_manager_id="PM_SG_DPM_001",
-        as_of_date=date(2026, 1, 1),
-        booking_center_code="Singapore",
-        portfolio_types=["DISCRETIONARY"],
-        include_inactive=False,
-    )
 
 
 @pytest.mark.asyncio

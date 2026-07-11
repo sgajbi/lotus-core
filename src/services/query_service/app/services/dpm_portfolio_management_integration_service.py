@@ -9,15 +9,10 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortResponse,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
-    PortfolioManagerBookMembershipRequest,
-    PortfolioManagerBookMembershipResponse,
 )
 from .cio_model_change_cohort import resolve_cio_model_change_affected_cohort_response
 from .dpm_portfolio_universe import (
     resolve_dpm_portfolio_universe_candidate_response,
-)
-from .portfolio_manager_book_membership import (
-    resolve_portfolio_manager_book_membership_response,
 )
 
 
@@ -26,20 +21,8 @@ class DpmPortfolioManagementIntegrationService:
     """Contract-family service for DPM portfolio-management reference products."""
 
     reference_repository_provider: Callable[[], Any]
-    portfolio_repository_provider: Callable[[], Any]
     decode_page_token: Callable[[str | None], dict[str, Any]]
     encode_page_token: Callable[[dict[str, str]], str]
-
-    async def resolve_portfolio_manager_book_membership(
-        self,
-        portfolio_manager_id: str,
-        request: PortfolioManagerBookMembershipRequest,
-    ) -> PortfolioManagerBookMembershipResponse:
-        return await resolve_portfolio_manager_book_membership_response(
-            repository=self.portfolio_repository_provider(),
-            portfolio_manager_id=portfolio_manager_id,
-            request=request,
-        )
 
     async def resolve_cio_model_change_affected_cohort(
         self,

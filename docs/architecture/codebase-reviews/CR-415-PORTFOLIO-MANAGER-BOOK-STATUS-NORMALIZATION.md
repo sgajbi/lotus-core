@@ -14,6 +14,10 @@ drift in portfolio master status could exclude a valid active discretionary mand
 portfolio manager book, which would weaken downstream DPM source-data products and private-banking
 operator views that depend on Core as the authoritative portfolio membership source.
 
+Current ownership: CR-1521 moved this query to
+`SqlAlchemyPortfolioManagerBookReader.list_members(...)` in Query Control Plane. The historical
+predicate finding remains valid; the query-service repository method no longer exists.
+
 ## Change
 
 Added a repository-level portfolio status expression using `upper(trim(status))` and reused it for
