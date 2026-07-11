@@ -13,6 +13,7 @@ from .transaction_semantic_identity import (
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
+from .transaction_stage import TransactionStageRecord
 
 __all__ = [
     "AverageCostPoolKey",
@@ -22,6 +23,7 @@ __all__ = [
     "TRANSACTION_CORRECTION_IDENTITY_VERSION",
     "TRANSACTION_SEMANTIC_IDENTITY_VERSION",
     "TransactionSemanticIdentity",
+    "TransactionStageRecord",
     "build_transaction_correction_identity",
     "build_transaction_semantic_identity",
 ]

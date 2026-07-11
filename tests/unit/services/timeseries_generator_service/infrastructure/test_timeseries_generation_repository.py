@@ -48,16 +48,6 @@ def repository(mock_db_session: AsyncMock) -> TimeseriesGenerationRepository:
     return TimeseriesGenerationRepository(mock_db_session)
 
 
-async def test_get_instrument_trims_security_id(
-    repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
-):
-    await repository.get_instrument(" S1 ")
-    compiled_query = str(
-        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert "WHERE trim(instruments.security_id) = 'S1'" in compiled_query
-
-
 async def test_get_instruments_by_ids_trims_security_ids(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
@@ -67,18 +57,6 @@ async def test_get_instruments_by_ids_trims_security_ids(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "trim(instruments.security_id) IN ('S1', 'S2')" in compiled_query
-
-
-async def test_get_all_snapshots_for_date_trims_portfolio_id(
-    repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
-):
-    await repository.get_all_snapshots_for_date(" P1 ", date(2025, 1, 10))
-
-    compiled_query = str(
-        mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
-    )
-    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
-    assert "daily_position_snapshots.date = '2025-01-10'" in compiled_query
 
 
 async def test_get_instruments_by_ids_skips_empty_security_ids(
@@ -93,8 +71,21 @@ async def test_get_instruments_by_ids_skips_empty_security_ids(
 async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
-    dated_row = MagicMock()
-    dated_row.date = date(2025, 1, 10)
+    dated_row = MagicMock(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 10),
+        epoch=14,
+        bod_market_value=Decimal("100"),
+        bod_cashflow_position=Decimal("1"),
+        eod_cashflow_position=Decimal("2"),
+        bod_cashflow_portfolio=Decimal("3"),
+        eod_cashflow_portfolio=Decimal("4"),
+        eod_market_value=Decimal("110"),
+        fees=Decimal("5"),
+        quantity=Decimal("10"),
+        cost=Decimal("9"),
+    )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
 
     await repository.get_position_timeseries_for_dates(
@@ -113,6 +104,35 @@ async def test_get_position_timeseries_for_dates_filters_exact_dates_and_epoch(
     assert "position_timeseries.security_id = 'S1'" in compiled_query
     assert "position_timeseries.date IN ('2025-01-10', '2025-01-11')" in compiled_query
     assert "position_timeseries.epoch = 14" in compiled_query
+
+
+async def test_get_position_timeseries_for_dates_returns_immutable_records(
+    repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
+):
+    row = MagicMock(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 10),
+        epoch=14,
+        bod_market_value=Decimal("100"),
+        bod_cashflow_position=Decimal("1"),
+        eod_cashflow_position=Decimal("2"),
+        bod_cashflow_portfolio=Decimal("3"),
+        eod_cashflow_portfolio=Decimal("4"),
+        eod_market_value=Decimal("110"),
+        fees=Decimal("5"),
+        quantity=Decimal("10"),
+        cost=Decimal("9"),
+    )
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [row]
+
+    records = await repository.get_position_timeseries_for_dates(
+        "P1", "S1", [date(2025, 1, 10)], 14
+    )
+
+    assert records[date(2025, 1, 10)].portfolio_id == "P1"
+    assert records[date(2025, 1, 10)].eod_market_value == Decimal("110")
+    assert records[date(2025, 1, 10)] is not row
 
 
 async def test_get_fx_rate_uses_normalized_functional_index_predicates(
@@ -174,8 +194,16 @@ async def test_get_all_cashflows_for_security_date_uses_latest_cashflow_epoch_wi
 async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
-    dated_row = MagicMock()
-    dated_row.cashflow_date = date(2025, 1, 10)
+    dated_row = MagicMock(
+        transaction_id="TX1",
+        cashflow_date=date(2025, 1, 10),
+        epoch=14,
+        amount=Decimal("25"),
+        classification="INCOME",
+        timing="EOD",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
     mock_db_session.execute.return_value.scalars.return_value.all.return_value = [dated_row]
 
     result = await repository.get_cashflows_for_security_dates(
@@ -194,13 +222,23 @@ async def test_get_cashflows_for_security_dates_filters_exact_dates_and_epoch(
     assert "trim(cashflows.security_id) = 'S1'" in compiled_query
     assert "cashflows.cashflow_date IN ('2025-01-10', '2025-01-11')" in compiled_query
     assert "cashflows.epoch <= 14" in compiled_query
-    assert result[date(2025, 1, 10)] == [dated_row]
+    assert result[date(2025, 1, 10)][0].transaction_id == "TX1"
+    assert result[date(2025, 1, 10)][0] is not dated_row
     assert result[date(2025, 1, 11)] == []
 
 
 async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_target_epoch(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
+    mock_db_session.execute.return_value.scalars.return_value.first.return_value = MagicMock(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 9),
+        epoch=13,
+        quantity=Decimal("10"),
+        cost_basis_local=Decimal("90"),
+        market_value_local=Decimal("100"),
+    )
     await repository.get_last_snapshot_before("P1", "S1", date(2025, 1, 10), 14)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -220,6 +258,7 @@ async def test_get_last_snapshot_before_uses_latest_snapshot_not_exceeding_targe
 async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
 ):
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = []
     await repository.get_next_snapshots_after("P1", "S1", date(2025, 1, 10), 14, 25)
 
     executed_stmt = mock_db_session.execute.call_args[0][0]
@@ -238,28 +277,3 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     assert "anon_1.rn = 1" in compiled_query
     assert "ORDER BY daily_position_snapshots.date ASC" in compiled_query
     assert "LIMIT 25" in compiled_query
-
-
-async def test_get_latest_snapshots_for_date_uses_latest_epoch_per_security(
-    repository: TimeseriesGenerationRepository, mock_db_session: AsyncMock
-):
-    await repository.get_latest_snapshots_for_date("P1", date(2025, 1, 10))
-
-    executed_stmt = mock_db_session.execute.call_args[0][0]
-    compiled_query = str(
-        executed_stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
-    )
-
-    assert "daily_position_snapshots.date <= '2025-01-10'" in compiled_query
-    assert (
-        "GROUP BY trim(daily_position_snapshots.security_id), daily_position_snapshots.date"
-        in compiled_query
-    )
-    assert (
-        "row_number() OVER (PARTITION BY anon_2.security_id "
-        "ORDER BY anon_2.date DESC, anon_2.epoch DESC)" in compiled_query
-    )
-    assert "trim(daily_position_snapshots.security_id) = anon_1.security_id" in compiled_query
-    assert "trim(daily_position_snapshots.portfolio_id) = 'P1'" in compiled_query
-    assert "daily_position_snapshots.date = anon_1.date" in compiled_query
-    assert "daily_position_snapshots.epoch = anon_1.epoch" in compiled_query

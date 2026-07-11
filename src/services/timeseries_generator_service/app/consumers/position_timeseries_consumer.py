@@ -1,14 +1,12 @@
 import json
 import logging
 from datetime import date
-from typing import Final
+from typing import Final, cast
 
 from confluent_kafka import Message
 from portfolio_common.database_models import (
-    Cashflow,
     DailyPositionSnapshot,
     PortfolioAggregationJob,
-    PositionTimeseries,
 )
 from portfolio_common.db import get_async_db_session
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
@@ -28,7 +26,15 @@ from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from ..core.position_timeseries_logic import PositionTimeseriesLogic
-from ..infrastructure.timeseries_generation_repository import TimeseriesGenerationRepository
+from ..domain.timeseries_records import (
+    PositionCashflowRecord,
+    PositionSnapshotRecord,
+    PositionTimeseriesRecord,
+)
+from ..infrastructure.timeseries_generation_repository import (
+    TimeseriesGenerationRepository,
+    to_position_snapshot_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +175,12 @@ class PositionTimeseriesConsumer(BaseConsumer):
         self,
         repo: TimeseriesGenerationRepository,
         *,
-        current_snapshot: DailyPositionSnapshot,
-        previous_snapshot: DailyPositionSnapshot | None,
+        current_snapshot: PositionSnapshotRecord,
+        previous_snapshot: PositionSnapshotRecord | None,
         epoch: int,
         require_existing: bool = False,
-        existing_timeseries: PositionTimeseries | None | object = _UNSET_PRELOAD,
-        cashflows: list[Cashflow] | object = _UNSET_PRELOAD,
+        existing_timeseries: PositionTimeseriesRecord | None | object = _UNSET_PRELOAD,
+        cashflows: list[PositionCashflowRecord] | object = _UNSET_PRELOAD,
     ) -> tuple[bool, object]:
         if existing_timeseries is _UNSET_PRELOAD:
             existing_timeseries = await repo.get_position_timeseries(
@@ -196,7 +202,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
         new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
             current_snapshot=current_snapshot,
             previous_snapshot=previous_snapshot,
-            cashflows=cashflows,
+            cashflows=cast(list[PositionCashflowRecord], cashflows),
             epoch=epoch,
         )
         if not self._has_material_change(existing_timeseries, new_timeseries_record):
@@ -210,7 +216,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
         db_session,
         repo: TimeseriesGenerationRepository,
         *,
-        current_snapshot: DailyPositionSnapshot,
+        current_snapshot: PositionSnapshotRecord,
         epoch: int,
         correlation_id: str,
     ) -> None:
@@ -309,6 +315,10 @@ class PositionTimeseriesConsumer(BaseConsumer):
                             )
                             return
 
+                        current_snapshot_record = to_position_snapshot_record(
+                            current_snapshot,
+                            fallback_epoch=event.epoch,
+                        )
                         previous_snapshot = await repo.get_last_snapshot_before(
                             portfolio_id=event.portfolio_id,
                             security_id=event.security_id,
@@ -318,7 +328,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
 
                         changed, _ = await self._materialize_position_timeseries(
                             repo,
-                            current_snapshot=current_snapshot,
+                            current_snapshot=current_snapshot_record,
                             previous_snapshot=previous_snapshot,
                             epoch=event.epoch,
                         )
@@ -340,7 +350,7 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         await self._propagate_dependent_position_timeseries(
                             db,
                             repo,
-                            current_snapshot=current_snapshot,
+                            current_snapshot=current_snapshot_record,
                             epoch=event.epoch,
                             correlation_id=correlation_id,
                         )

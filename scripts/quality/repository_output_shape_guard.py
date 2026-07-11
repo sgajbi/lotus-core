@@ -316,33 +316,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_portfolio": (
         "Portfolio",
     ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_all_cashflows_for_security_date": (
-        "Cashflow",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_all_snapshots_for_date": (
-        "DailyPositionSnapshot",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_cashflows_for_security_dates": (
-        "Cashflow",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_instrument": (
-        "Instrument",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_last_snapshot_before": (
-        "DailyPositionSnapshot",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_latest_snapshots_for_date": (
-        "DailyPositionSnapshot",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_next_snapshots_after": (
-        "DailyPositionSnapshot",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_position_timeseries": (
-        "PositionTimeseries",
-    ),
-    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_position_timeseries_for_dates": (
-        "PositionTimeseries",
-    ),
     "src/services/valuation_orchestrator_service/app/repositories/valuation_repository.py:claim_instrument_reprocessing_triggers": (
         "InstrumentReprocessingState",
     ),

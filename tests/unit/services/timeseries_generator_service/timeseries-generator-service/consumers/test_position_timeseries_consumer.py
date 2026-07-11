@@ -134,7 +134,6 @@ async def test_process_message_success(
     )
     mock_repo.get_position_timeseries_for_dates.assert_not_awaited()
     mock_repo.get_cashflows_for_security_dates.assert_not_awaited()
-    mock_repo.get_instrument.assert_not_called()
     mock_repo.upsert_position_timeseries.assert_awaited_once()
     assert mock_db_session.execute.await_count == 1
     created_record = mock_repo.upsert_position_timeseries.call_args[0][0]
@@ -155,7 +154,7 @@ async def test_process_message_sends_unsupported_event_shape_to_dlq(
 
     await consumer._process_message_with_retry(msg)
 
-    mock_repo.get_instrument.assert_not_called()
+    mock_repo.get_position_timeseries.assert_not_called()
     mock_repo.upsert_position_timeseries.assert_not_called()
     consumer._send_to_dlq_async.assert_awaited_once()
 

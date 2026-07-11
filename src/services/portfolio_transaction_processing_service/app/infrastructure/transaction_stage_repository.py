@@ -11,6 +11,8 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain import TransactionStageRecord
+
 
 class SqlAlchemyTransactionStageRepository:
     """Store transaction stage state using epoch-fenced PostgreSQL operations."""
@@ -57,7 +59,7 @@ class SqlAlchemyTransactionStageRepository:
         security_id: str | None,
         business_date: date,
         epoch: int,
-    ) -> PipelineStageState:
+    ) -> TransactionStageRecord:
         """Record processing completion without allowing a stage key to change owner."""
         statement = (
             pg_insert(PipelineStageState)
@@ -94,15 +96,15 @@ class SqlAlchemyTransactionStageRepository:
                 f"{stage_name}/{transaction_id}/{epoch} "
                 f"existing={stage.portfolio_id} incoming={portfolio_id}"
             )
-        return stage
+        return _to_transaction_stage_record(stage)
 
-    async def claim_completion(self, stage: PipelineStageState) -> bool:
+    async def claim_completion(self, stage: TransactionStageRecord) -> bool:
         """Atomically claim emission for a pending, processed transaction stage."""
         statement = (
             update(PipelineStageState)
             .where(
                 and_(
-                    PipelineStageState.id == stage.id,
+                    PipelineStageState.id == stage.stage_id,
                     PipelineStageState.status == "PENDING",
                     PipelineStageState.cost_event_seen.is_(True),
                 )
@@ -111,6 +113,18 @@ class SqlAlchemyTransactionStageRepository:
         )
         result = cast(CursorResult[tuple[object, ...]], await self._db_session.execute(statement))
         claimed = cast(int, result.rowcount) == 1
-        if claimed:
-            stage.status = "COMPLETED"
         return claimed
+
+
+def _to_transaction_stage_record(stage: PipelineStageState) -> TransactionStageRecord:
+    """Map persistence state to the transaction capability's domain record."""
+    return TransactionStageRecord(
+        stage_id=stage.id,
+        transaction_id=stage.transaction_id,
+        portfolio_id=stage.portfolio_id,
+        security_id=stage.security_id,
+        business_date=stage.business_date,
+        epoch=stage.epoch,
+        status=stage.status,
+        cost_event_seen=stage.cost_event_seen,
+    )
