@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
+from portfolio_common.portfolio_allocation import AllocationDimension
 from portfolio_common.source_data_product_metadata import (
     SourceDataProductRuntimeMetadata,
     product_name_field,
@@ -13,21 +14,6 @@ from pydantic import BaseModel, Field, model_validator
 
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]
-AllocationDimension = Literal[
-    "asset_class",
-    "currency",
-    "sector",
-    "country",
-    "region",
-    "product_type",
-    "rating",
-    "issuer_id",
-    "issuer_name",
-    "ultimate_parent_issuer_id",
-    "ultimate_parent_issuer_name",
-]
-
-
 class ReportingScope(BaseModel):
     portfolio_id: str | None = Field(
         None,
