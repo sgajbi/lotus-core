@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_control_plane_service.app.infrastructure import (
     client_restriction_profile_sources,
+    effective_mandate_sources,
 )
 
 SqlAlchemyClientRestrictionProfileSourceReader = (
     client_restriction_profile_sources.SqlAlchemyClientRestrictionProfileSourceReader
 )
+SqlAlchemyEffectiveMandateReader = effective_mandate_sources.SqlAlchemyEffectiveMandateReader
 
 
 class _Result:
@@ -63,12 +65,12 @@ def _restriction_row() -> SimpleNamespace:
 
 
 @pytest.mark.asyncio
-async def test_resolves_effective_discretionary_binding_and_maps_record() -> None:
+async def test_effective_mandate_reader_resolves_and_maps_binding() -> None:
     session = AsyncMock(spec=AsyncSession)
     session.execute.return_value = _Result([_binding_row()])
-    reader = SqlAlchemyClientRestrictionProfileSourceReader(session)
+    reader = SqlAlchemyEffectiveMandateReader(session)
 
-    binding = await reader.resolve_mandate_binding(
+    binding = await reader.resolve(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         as_of_date=date(2026, 5, 3),
         mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",

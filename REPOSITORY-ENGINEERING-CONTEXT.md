@@ -2150,6 +2150,12 @@ Most relevant current governance:
      DTOs, mapper, repository method, application service, or facade methods under Query Service.
      Core owns captured sustainability preference evidence; `lotus-manage` owns construction and
      rebalance interpretation and must not infer unstated preferences.
+164. `ClientTaxProfile:v1` is QCP-owned end to end and composes the shared effective-mandate,
+     evidence-timestamp, effective-window, and deterministic-ranking boundaries. Keep its contract,
+     application service, immutable records, source port, and SQL adapter out of Query Service.
+     Core publishes bounded tax-reference evidence only; do not add tax advice, after-tax
+     optimization, tax-loss-harvesting suitability, client approval, or jurisdiction-specific
+     recommendations to this source product.
 
 ## Context Maintenance Rule
 

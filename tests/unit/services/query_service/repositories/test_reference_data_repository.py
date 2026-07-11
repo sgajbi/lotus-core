@@ -439,35 +439,6 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
-async def test_reference_data_repository_lists_latest_client_tax_profiles() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(tax_profile_id="TAX_PROFILE_SG_001", profile_version=2),
-            SimpleNamespace(tax_profile_id="TAX_PROFILE_US_001", profile_version=1),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_client_tax_profiles(
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        as_of_date=date(2026, 5, 3),
-    )
-
-    assert [row.tax_profile_id for row in rows] == [
-        "TAX_PROFILE_SG_001",
-        "TAX_PROFILE_US_001",
-    ]
-    assert rows[0].profile_version == 2
-    db.execute.assert_awaited_once()
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "row_number() OVER (PARTITION BY client_tax_profiles.tax_profile_id" in compiled
-    assert "anon_1.rn = 1" in compiled
-
-
-@pytest.mark.asyncio
 async def test_reference_data_repository_lists_latest_client_tax_rule_sets() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.return_value = _FakeExecuteResult(
@@ -964,7 +935,7 @@ async def test_resolve_discretionary_mandate_binding_uses_effective_filters() ->
 @pytest.mark.asyncio
 async def test_client_source_data_filters_use_normalized_active_statuses() -> None:
     db = AsyncMock(spec=AsyncSession)
-    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(5)]
+    db.execute.side_effect = [_FakeExecuteResult([]) for _ in range(4)]
     repo = ReferenceDataRepository(db)
 
     common_kwargs = {
@@ -974,7 +945,6 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         "mandate_id": "MANDATE_PB_SG_GLOBAL_BAL_001",
     }
 
-    await repo.list_client_tax_profiles(**common_kwargs)
     await repo.list_client_tax_rule_sets(**common_kwargs)
     await repo.list_client_income_needs_schedules(**common_kwargs)
     await repo.list_liquidity_reserve_requirements(**common_kwargs)
@@ -985,19 +955,17 @@ async def test_client_source_data_filters_use_normalized_active_statuses() -> No
         for call in db.execute.await_args_list
     ]
 
-    assert "client_tax_profiles.profile_status = 'active'" in compiled_statements[0]
-    assert "lower(trim(client_tax_profiles.profile_status))" not in compiled_statements[0]
-    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[1]
-    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[1]
-    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[2]
-    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[2]
-    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[3]
+    assert "client_tax_rule_sets.rule_status = 'active'" in compiled_statements[0]
+    assert "lower(trim(client_tax_rule_sets.rule_status))" not in compiled_statements[0]
+    assert "client_income_needs_schedules.need_status = 'active'" in compiled_statements[1]
+    assert "lower(trim(client_income_needs_schedules.need_status))" not in compiled_statements[1]
+    assert "liquidity_reserve_requirements.reserve_status = 'active'" in compiled_statements[2]
     assert (
-        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[3]
+        "lower(trim(liquidity_reserve_requirements.reserve_status))" not in compiled_statements[2]
     )
-    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[4]
+    assert "planned_withdrawal_schedules.withdrawal_status = 'active'" in compiled_statements[3]
     assert (
-        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[4]
+        "lower(trim(planned_withdrawal_schedules.withdrawal_status))" not in compiled_statements[3]
     )
 
 

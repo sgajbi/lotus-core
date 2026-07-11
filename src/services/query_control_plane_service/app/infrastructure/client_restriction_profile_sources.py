@@ -13,8 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.client_restriction_profile import (
     ClientRestrictionSourceRecord,
 )
-from ..domain.effective_mandate import EffectiveMandateBinding
-from .effective_mandate_sources import resolve_effective_mandate_binding
 from .effective_profile_queries import effective_on, ranked_latest_ids
 
 
@@ -23,20 +21,6 @@ class SqlAlchemyClientRestrictionProfileSourceReader:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def resolve_mandate_binding(
-        self,
-        *,
-        portfolio_id: str,
-        as_of_date: date,
-        mandate_id: str | None,
-    ) -> EffectiveMandateBinding | None:
-        return await resolve_effective_mandate_binding(
-            self._session,
-            portfolio_id=portfolio_id,
-            as_of_date=as_of_date,
-            mandate_id=mandate_id,
-        )
 
     async def list_restrictions(
         self,

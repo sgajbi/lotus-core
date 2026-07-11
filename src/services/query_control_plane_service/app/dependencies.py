@@ -17,6 +17,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsTimeseriesService,
 )
 from .application.client_restriction_profile import ClientRestrictionProfileService
+from .application.client_tax_profile import ClientTaxProfileService
 from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
@@ -33,7 +34,9 @@ from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
 from .infrastructure.client_restriction_profile_sources import (
     SqlAlchemyClientRestrictionProfileSourceReader,
 )
+from .infrastructure.client_tax_profile_sources import SqlAlchemyClientTaxProfileSourceReader
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
+from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
     SqlAlchemySimulationStore,
@@ -80,7 +83,18 @@ def get_client_restriction_profile_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> ClientRestrictionProfileService:
     return ClientRestrictionProfileService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
         reader=SqlAlchemyClientRestrictionProfileSourceReader(db),
+        clock=SystemClock(),
+    )
+
+
+def get_client_tax_profile_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ClientTaxProfileService:
+    return ClientTaxProfileService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
+        reader=SqlAlchemyClientTaxProfileSourceReader(db),
         clock=SystemClock(),
     )
 
@@ -124,6 +138,7 @@ def get_sustainability_preference_profile_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> SustainabilityPreferenceProfileService:
     return SustainabilityPreferenceProfileService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
         reader=SqlAlchemySustainabilityPreferenceProfileSourceReader(db),
         clock=SystemClock(),
     )

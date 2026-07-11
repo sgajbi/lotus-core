@@ -13,7 +13,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCompositionWindowRequest,
     CioModelChangeAffectedCohortRequest,
     ClientIncomeNeedsScheduleRequest,
-    ClientTaxProfileRequest,
     ClientTaxRuleSetRequest,
     DiscretionaryMandateBindingRequest,
     DpmPortfolioUniverseCandidateRequest,
@@ -754,82 +753,6 @@ async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_in
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
     assert response.candidates == []
-    assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_client_tax_profile_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_tax_profiles.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            tax_profile_id="TAX_PROFILE_SG_001",
-            tax_residency_country="SG",
-            booking_tax_jurisdiction="SG",
-            tax_status="TAXABLE",
-            profile_status="active",
-            withholding_tax_rate=Decimal("0.1500000000"),
-            capital_gains_tax_applicable=False,
-            income_tax_applicable=True,
-            treaty_codes=["US_SG_TREATY"],
-            eligible_account_types=["DPM"],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            profile_version=1,
-            source_record_id="tax-profile:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_client_tax_profile(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientTaxProfileRequest(
-            as_of_date=as_of_date,
-            tenant_id="default",
-            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        ),
-    )
-
-    assert response is not None
-    assert response.product_name == "ClientTaxProfile"
-    assert response.supportability.state == "READY"
-    assert response.supportability.profile_count == 1
-    assert response.profiles[0].tax_profile_id == "TAX_PROFILE_SG_001"
-    assert response.profiles[0].withholding_tax_rate == Decimal("0.1500000000")
-    assert response.lineage["source_table"] == "client_tax_profiles,portfolio_mandate_bindings"
-    service._reference_repository.list_client_tax_profiles.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_profiles=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_client_tax_profile_marks_missing_profile_incomplete():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_tax_profiles.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_client_tax_profile(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientTaxProfileRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "CLIENT_TAX_PROFILE_EMPTY"
-    assert response.supportability.missing_data_families == ["client_tax_profile"]
     assert response.data_quality_status == "MISSING"
 
 

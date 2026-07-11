@@ -34,7 +34,7 @@ class _Reader:
         self.restrictions = restrictions
         self.calls: list[tuple[str, dict[str, object]]] = []
 
-    async def resolve_mandate_binding(self, **kwargs: object):
+    async def resolve(self, **kwargs: object):
         self.calls.append(("binding", kwargs))
         return self.binding
 
@@ -86,7 +86,9 @@ def _request() -> ClientRestrictionProfileRequest:
 @pytest.mark.asyncio
 async def test_resolves_ready_profile_through_typed_source_port() -> None:
     reader = _Reader(binding=_binding(), restrictions=[_restriction()])
-    service = ClientRestrictionProfileService(reader=reader, clock=_FixedClock())
+    service = ClientRestrictionProfileService(
+        mandate_reader=reader, reader=reader, clock=_FixedClock()
+    )
 
     response = await service.get_client_restriction_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -127,6 +129,7 @@ async def test_resolves_ready_profile_through_typed_source_port() -> None:
 @pytest.mark.asyncio
 async def test_marks_empty_profile_incomplete_without_hiding_binding_evidence() -> None:
     service = ClientRestrictionProfileService(
+        mandate_reader=_Reader(binding=_binding(), restrictions=[]),
         reader=_Reader(binding=_binding(), restrictions=[]),
         clock=_FixedClock(),
     )
@@ -148,7 +151,9 @@ async def test_marks_empty_profile_incomplete_without_hiding_binding_evidence() 
 @pytest.mark.asyncio
 async def test_returns_none_without_reading_restrictions_when_binding_is_missing() -> None:
     reader = _Reader(binding=None, restrictions=[_restriction()])
-    service = ClientRestrictionProfileService(reader=reader, clock=_FixedClock())
+    service = ClientRestrictionProfileService(
+        mandate_reader=reader, reader=reader, clock=_FixedClock()
+    )
 
     response = await service.get_client_restriction_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -162,6 +167,7 @@ async def test_returns_none_without_reading_restrictions_when_binding_is_missing
 @pytest.mark.asyncio
 async def test_snapshot_identity_is_deterministic_for_same_business_scope() -> None:
     service = ClientRestrictionProfileService(
+        mandate_reader=_Reader(binding=_binding(), restrictions=[_restriction()]),
         reader=_Reader(binding=_binding(), restrictions=[_restriction()]),
         clock=_FixedClock(),
     )
