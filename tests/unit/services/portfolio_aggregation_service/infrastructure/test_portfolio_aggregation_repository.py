@@ -1,6 +1,7 @@
 """Characterize portfolio aggregation persistence and queue SQL contracts."""
 
 from datetime import date
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -36,11 +37,28 @@ def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
 async def test_get_portfolio_trims_portfolio_id(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
+    row = MagicMock(portfolio_id="P1", base_currency="SGD")
+    mock_db_session.execute.return_value.scalars.return_value.first.return_value = row
+
     await repository.get_portfolio(" P1 ")
     compiled = str(
         mock_db_session.execute.call_args[0][0].compile(compile_kwargs={"literal_binds": True})
     )
     assert "WHERE trim(portfolios.portfolio_id) = 'P1'" in compiled
+
+
+async def test_get_portfolio_returns_immutable_aggregation_scope(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    row = MagicMock(portfolio_id="P1", base_currency="SGD")
+    mock_db_session.execute.return_value.scalars.return_value.first.return_value = row
+
+    portfolio = await repository.get_portfolio("P1")
+
+    assert portfolio is not None
+    assert portfolio.portfolio_id == "P1"
+    assert portfolio.base_currency == "SGD"
+    assert portfolio is not row
 
 
 async def test_get_current_epoch_for_portfolio_trims_portfolio_id(
@@ -65,20 +83,6 @@ async def test_upsert_portfolio_timeseries(
     )
     assert "INSERT INTO portfolio_timeseries" in compiled
     assert "ON CONFLICT (portfolio_id, date, epoch) DO UPDATE" in compiled
-
-
-async def test_get_last_portfolio_timeseries_before_uses_latest_prior_row(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    await repository.get_last_portfolio_timeseries_before(" P1 ", date(2025, 1, 10))
-    compiled = str(
-        mock_db_session.execute.call_args[0][0].compile(
-            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
-        )
-    )
-    assert "trim(portfolio_timeseries.portfolio_id) = 'P1'" in compiled
-    assert "portfolio_timeseries.date < '2025-01-10'" in compiled
-    assert "ORDER BY portfolio_timeseries.date DESC, portfolio_timeseries.epoch DESC" in compiled
 
 
 async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
@@ -317,3 +321,26 @@ async def test_get_all_position_timeseries_for_date_uses_latest_position_epoch_w
     assert "trim(position_timeseries.portfolio_id) = anon_1.portfolio_id" in compiled_query
     assert "trim(position_timeseries.security_id) = anon_1.security_id" in compiled_query
     assert "anon_1.rn = 1" in compiled_query
+
+
+async def test_get_all_position_timeseries_for_date_returns_immutable_records(
+    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
+):
+    row = MagicMock(
+        portfolio_id="P1",
+        security_id="S1",
+        date=date(2025, 1, 10),
+        epoch=14,
+        bod_market_value=Decimal("100"),
+        bod_cashflow_portfolio=Decimal("1"),
+        eod_cashflow_portfolio=Decimal("2"),
+        eod_market_value=Decimal("110"),
+        fees=Decimal("3"),
+    )
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [row]
+
+    records = await repository.get_all_position_timeseries_for_date("P1", date(2025, 1, 10), 14)
+
+    assert records[0].security_id == "S1"
+    assert records[0].eod_market_value == Decimal("110")
+    assert records[0] is not row

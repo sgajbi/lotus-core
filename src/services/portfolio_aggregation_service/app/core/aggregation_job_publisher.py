@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC
 from portfolio_common.event_publisher import (
@@ -18,6 +18,8 @@ from portfolio_common.scheduler_dispatch_recovery import (
     present_job_ids,
 )
 
+from ..domain.aggregation_records import AggregationJobRecord
+
 
 class AggregationJobPublisher(Protocol):
     def publish_job_requested(self, message: AggregationJobDispatchMessage) -> None: ...
@@ -27,7 +29,7 @@ class AggregationJobPublisher(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class AggregationJobDispatchMessage:
-    job: Any
+    job: AggregationJobRecord
     topic: str
     record_key: str
     value: dict[str, Any]
@@ -39,7 +41,7 @@ class AggregationJobDispatchPlan:
     messages: list[AggregationJobDispatchMessage]
 
     @property
-    def jobs(self) -> list[Any]:
+    def jobs(self) -> list[AggregationJobRecord]:
         return [message.job for message in self.messages]
 
     @property
@@ -65,37 +67,42 @@ class KafkaAggregationJobPublisher:
 
     def confirm_delivery(self, *, timeout_seconds: int) -> int:
         result = self.event_publisher.confirm_delivery(timeout_seconds=timeout_seconds)
-        return result.undelivered_count
+        return int(result.undelivered_count)
 
 
 def get_aggregation_job_publisher() -> AggregationJobPublisher:
     return KafkaAggregationJobPublisher(get_kafka_event_publisher())
 
 
-def aggregation_job_record_key(job: Any) -> str:
+def aggregation_job_record_key(job: AggregationJobRecord) -> str:
     return f"{job.portfolio_id}|{job.aggregation_date.isoformat()}"
 
 
-def aggregation_job_headers(job: Any) -> list[tuple[str, bytes]]:
+def aggregation_job_headers(job: AggregationJobRecord) -> list[tuple[str, bytes]]:
     if not job.correlation_id:
         return []
     return [("correlation_id", job.correlation_id.encode("utf-8"))]
 
 
-def aggregation_job_payload(job: Any) -> dict[str, Any]:
+def aggregation_job_payload(job: AggregationJobRecord) -> dict[str, Any]:
     event = PortfolioAggregationRequiredEvent(
         portfolio_id=job.portfolio_id,
         aggregation_date=job.aggregation_date,
         correlation_id=job.correlation_id,
     )
-    return event_business_payload(
-        event,
-        include_correlation_id=True,
-        mode="json",
+    return cast(
+        dict[str, Any],
+        event_business_payload(
+            event,
+            include_correlation_id=True,
+            mode="json",
+        ),
     )
 
 
-def plan_aggregation_job_dispatch(jobs: Sequence[Any]) -> AggregationJobDispatchPlan:
+def plan_aggregation_job_dispatch(
+    jobs: Sequence[AggregationJobRecord],
+) -> AggregationJobDispatchPlan:
     return AggregationJobDispatchPlan(
         messages=[
             AggregationJobDispatchMessage(
@@ -141,9 +148,9 @@ def publish_aggregation_dispatch_plan(
 def _raise_aggregation_dispatch_failure(
     *,
     queued_count: int,
-    published_jobs: list[Any],
+    published_jobs: list[AggregationJobRecord],
     published_record_keys: list[str],
-    remaining_jobs: list[Any],
+    remaining_jobs: list[AggregationJobRecord],
     remaining_record_keys: list[str],
     publisher: AggregationJobPublisher,
     cause: Exception,
@@ -177,7 +184,7 @@ def _raise_aggregation_dispatch_failure(
 
 def _confirm_aggregation_dispatch(
     *,
-    jobs: list[Any],
+    jobs: list[AggregationJobRecord],
     record_keys: list[str],
     publisher: AggregationJobPublisher,
 ) -> None:

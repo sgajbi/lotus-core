@@ -8,12 +8,14 @@ SERVICE_NAME = "portfolio aggregation service"
 
 
 def _env_positive_int(name: str, default: int) -> int:
-    return env_int(
-        name,
-        max(1, int(default)),
-        service_name=SERVICE_NAME,
-        minimum=1,
-        minimum_fallback=1,
+    return int(
+        env_int(
+            name,
+            max(1, int(default)),
+            service_name=SERVICE_NAME,
+            minimum=1,
+            minimum_fallback=1,
+        )
     )
 
 

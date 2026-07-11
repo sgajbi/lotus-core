@@ -304,18 +304,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/transaction_repository.py:list_transaction_cost_evidence": (
         "Transaction",
     ),
-    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:find_and_claim_eligible_jobs": (
-        "PortfolioAggregationJob",
-    ),
-    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_all_position_timeseries_for_date": (
-        "PositionTimeseries",
-    ),
-    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_last_portfolio_timeseries_before": (
-        "PortfolioTimeseries",
-    ),
-    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_portfolio": (
-        "Portfolio",
-    ),
     "src/services/valuation_orchestrator_service/app/repositories/valuation_repository.py:claim_instrument_reprocessing_triggers": (
         "InstrumentReprocessingState",
     ),

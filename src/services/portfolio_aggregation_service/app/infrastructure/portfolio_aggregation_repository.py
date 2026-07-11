@@ -2,13 +2,13 @@
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, cast
 
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     Portfolio,
     PortfolioAggregationJob,
-    PortfolioTimeseries,
     PositionState,
     PositionTimeseries,
 )
@@ -22,6 +22,13 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import aliased
+
+from ..domain.aggregation_records import (
+    AggregationJobRecord,
+    PortfolioAggregationScope,
+    PortfolioTimeseriesRecord,
+    PositionTimeseriesRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +47,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         return result.scalar_one_or_none() or 0
 
     @async_timed(repository="TimeseriesRepository", method="upsert_portfolio_timeseries")
-    async def upsert_portfolio_timeseries(self, record: PortfolioTimeseries) -> None:
+    async def upsert_portfolio_timeseries(self, record: PortfolioTimeseriesRecord) -> None:
         try:
             await self.db.execute(build_portfolio_timeseries_upsert_statement(record))
             logger.info(
@@ -53,12 +60,13 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             raise
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
-    async def get_portfolio(self, portfolio_id: str) -> Portfolio | None:
+    async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         result = await self.db.execute(
             select(Portfolio).where(func.trim(Portfolio.portfolio_id) == normalized_portfolio_id)
         )
-        return result.scalars().first()
+        row = result.scalars().first()
+        return _portfolio_aggregation_scope(row) if row is not None else None
 
     @async_timed(repository="TimeseriesRepository", method="get_all_position_timeseries_for_date")
     async def get_all_position_timeseries_for_date(
@@ -66,7 +74,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         portfolio_id: str,
         a_date: date,
         epoch: int,
-    ) -> list[PositionTimeseries]:
+    ) -> list[PositionTimeseriesRecord]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         security_id = func.trim(PositionTimeseries.security_id)
         ranked_rows = (
@@ -103,27 +111,11 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .where(ranked_rows.c.rn == 1)
             .order_by(PositionTimeseries.security_id)
         )
-        return cast(list[PositionTimeseries], result.scalars().all())
-
-    @async_timed(repository="TimeseriesRepository", method="get_last_portfolio_timeseries_before")
-    async def get_last_portfolio_timeseries_before(
-        self,
-        portfolio_id: str,
-        a_date: date,
-    ) -> PortfolioTimeseries | None:
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        result = await self.db.execute(
-            select(PortfolioTimeseries)
-            .where(
-                func.trim(PortfolioTimeseries.portfolio_id) == normalized_portfolio_id,
-                PortfolioTimeseries.date < a_date,
-            )
-            .order_by(PortfolioTimeseries.date.desc(), PortfolioTimeseries.epoch.desc())
-        )
-        return result.scalars().first()
+        rows = cast(list[PositionTimeseries], result.scalars().all())
+        return [_position_timeseries_record(row) for row in rows]
 
     @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[PortfolioAggregationJob]:
+    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[AggregationJobRecord]:
         job = PortfolioAggregationJob
         snapshot = DailyPositionSnapshot
         position_timeseries = PositionTimeseries
@@ -157,7 +149,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             )
             .returning(job)
         )
-        claimed_jobs = sorted(
+        claimed_rows = sorted(
             cast(list[PortfolioAggregationJob], result.scalars().all()),
             key=lambda claimed: (
                 claimed.portfolio_id,
@@ -165,9 +157,9 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 claimed.id,
             ),
         )
-        if claimed_jobs:
-            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_jobs))
-        return claimed_jobs
+        if claimed_rows:
+            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_rows))
+        return [_aggregation_job_record(row) for row in claimed_rows]
 
     @async_timed(repository="TimeseriesRepository", method="recover_dispatch_failed_jobs")
     async def recover_dispatch_failed_jobs(
@@ -277,6 +269,36 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             "failed_count": int(row.failed_count or 0),
             "oldest_pending_created_at": row.oldest_pending_created_at,
         }
+
+
+def _portfolio_aggregation_scope(row: Portfolio) -> PortfolioAggregationScope:
+    return PortfolioAggregationScope(
+        portfolio_id=str(row.portfolio_id),
+        base_currency=str(row.base_currency),
+    )
+
+
+def _position_timeseries_record(row: PositionTimeseries) -> PositionTimeseriesRecord:
+    return PositionTimeseriesRecord(
+        portfolio_id=str(row.portfolio_id),
+        security_id=str(row.security_id),
+        date=cast(date, row.date),
+        epoch=int(row.epoch),
+        bod_market_value=cast(Decimal, row.bod_market_value),
+        bod_cashflow_portfolio=cast(Decimal, row.bod_cashflow_portfolio),
+        eod_cashflow_portfolio=cast(Decimal, row.eod_cashflow_portfolio),
+        eod_market_value=cast(Decimal, row.eod_market_value),
+        fees=cast(Decimal, row.fees),
+    )
+
+
+def _aggregation_job_record(row: PortfolioAggregationJob) -> AggregationJobRecord:
+    return AggregationJobRecord(
+        id=int(row.id),
+        portfolio_id=str(row.portfolio_id),
+        aggregation_date=cast(date, row.aggregation_date),
+        correlation_id=str(row.correlation_id) if row.correlation_id is not None else None,
+    )
 
 
 def _authoritative_snapshot_scope(job_model, snapshot_model):
