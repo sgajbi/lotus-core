@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, Protocol, TypeVar
 
+from ..domain.aggregation_records import AggregationJobRecord
+
 T = TypeVar("T")
 
 
@@ -17,7 +19,7 @@ class AggregationSchedulerRepository(Protocol):
         max_attempts: int,
     ) -> int: ...
 
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[Any]: ...
+    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[AggregationJobRecord]: ...
 
     async def recover_dispatch_failed_jobs(
         self,

@@ -185,6 +185,11 @@ Current repository posture:
     `docs/architecture/repository-output-shape-standard.md`. It blocks new public repository methods
     from exposing SQLAlchemy ORM return annotations unless the method is explicitly registered as a
     transitional exception, and it fails stale exceptions after future typed-record conversions.
+    Timeseries generation and portfolio aggregation repositories now map persistence rows to
+    immutable service-owned domain records for snapshots, cashflows, position/portfolio timeseries,
+    portfolio scope, and claimed jobs. Their calculation and scheduler modules must not accept ORM
+    return contracts. Delete production-unused repository methods rather than adding exceptions or
+    keeping tests that falsely imply a supported persistence contract.
     API-router boundary governance now also has a documented contract in
     `docs/architecture/api-layer-router-boundary-contract.md`; `make architecture-guard` blocks new
     router-local database session dependencies, repository construction, SQLAlchemy operations,

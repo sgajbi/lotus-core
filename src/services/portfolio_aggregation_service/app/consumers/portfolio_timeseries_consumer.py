@@ -202,10 +202,10 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
 
         if db_session:
             result = await db_session.execute(update_stmt)
-            return result.rowcount == 1
+            return int(result.rowcount or 0) == 1
 
         async for db in get_async_db_session():
             async with db.begin():
                 result = await db.execute(update_stmt)
-                return result.rowcount == 1
+                return int(result.rowcount or 0) == 1
         return False

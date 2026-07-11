@@ -3,16 +3,16 @@
 import logging
 from datetime import date
 from decimal import Decimal
-from typing import List
 
-from portfolio_common.database_models import (
-    Portfolio,
-    PortfolioTimeseries,
-    PositionTimeseries,
-)
 from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.ports.timeseries_market_data import TimeseriesMarketDataPort
+
+from ..domain.aggregation_records import (
+    PortfolioAggregationScope,
+    PortfolioTimeseriesRecord,
+    PositionTimeseriesRecord,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,12 @@ class PortfolioTimeseriesLogic:
 
     @staticmethod
     async def calculate_daily_record(
-        portfolio: Portfolio,
+        portfolio: PortfolioAggregationScope,
         a_date: date,
         epoch: int,
-        position_timeseries_list: List[PositionTimeseries],
+        position_timeseries_list: list[PositionTimeseriesRecord],
         repo: TimeseriesMarketDataPort,
-    ) -> PortfolioTimeseries:
+    ) -> PortfolioTimeseriesRecord:
         """
         Calculates a single, complete portfolio time series record for a given day and epoch.
         """
@@ -80,7 +80,7 @@ class PortfolioTimeseriesLogic:
             total_eod_cf += decimal_or_zero(pos_ts.eod_cashflow_portfolio) * rate
             total_fees += decimal_or_zero(pos_ts.fees) * rate
 
-        return PortfolioTimeseries(
+        return PortfolioTimeseriesRecord(
             portfolio_id=portfolio.portfolio_id,
             date=a_date,
             epoch=epoch,
