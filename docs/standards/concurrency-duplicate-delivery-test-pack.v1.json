@@ -89,8 +89,8 @@
       "status": "implemented",
       "lane": "unit-and-integration-all",
       "evidence": [
-        "tests/integration/services/calculators/cost_calculator_service/test_int_cost_consumer_persistence.py",
-        "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py",
         "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py"
       ],
@@ -194,8 +194,8 @@
       "status": "representative_implemented",
       "lane": "unit-and-transaction-contract",
       "evidence": [
-        "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py",
-        "tests/unit/services/calculators/cost_calculator_service/consumer/test_transaction_processor.py",
+        "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py",
+        "tests/unit/services/portfolio_transaction_processing_service/test_transaction_processing_consumer.py",
         "tests/unit/transaction_specs/test_sell_slice0_characterization.py"
       ],
       "deterministic_primitives": [

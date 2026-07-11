@@ -2529,9 +2529,7 @@ async def get_benchmark_coverage(
         description="Benchmark identifier for the requested coverage diagnostics.",
         examples=["BENCH-SP500-TR"],
     ),
-    reference_coverage_service: ReferenceCoverageService = Depends(
-        get_reference_coverage_service
-    ),
+    reference_coverage_service: ReferenceCoverageService = Depends(get_reference_coverage_service),
 ) -> CoverageResponse:
     return await reference_coverage_service.get_benchmark(
         benchmark_id=benchmark_id,
@@ -2557,9 +2555,7 @@ async def get_benchmark_coverage(
 async def get_risk_free_coverage(
     currency: str = Query(..., description="Risk-free series currency.", examples=["USD"]),
     request: CoverageRequest = Body(...),
-    reference_coverage_service: ReferenceCoverageService = Depends(
-        get_reference_coverage_service
-    ),
+    reference_coverage_service: ReferenceCoverageService = Depends(get_reference_coverage_service),
 ) -> CoverageResponse:
     return await reference_coverage_service.get_risk_free(
         currency=currency,

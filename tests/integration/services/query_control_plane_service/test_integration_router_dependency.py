@@ -549,12 +549,8 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.classification_taxonomy_service = (
-        mock_classification_taxonomy_service
-    )
-    mock_integration_service.benchmark_market_series_service = (
-        mock_benchmark_market_series_service
-    )
+    mock_integration_service.classification_taxonomy_service = mock_classification_taxonomy_service
+    mock_integration_service.benchmark_market_series_service = mock_benchmark_market_series_service
     mock_integration_service.reference_coverage_service = mock_reference_coverage_service
     mock_integration_service.get_prices = AsyncMock(
         return_value={

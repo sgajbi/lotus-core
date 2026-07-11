@@ -65,9 +65,7 @@ def test_request_scope_rejects_cursor_from_another_request() -> None:
 
 
 def test_request_scope_rejects_page_size_change_between_pages() -> None:
-    first = resolve_request_scope(
-        benchmark_id="BMK_1", request=_request(page_size=2), cursor={}
-    )
+    first = resolve_request_scope(benchmark_id="BMK_1", request=_request(page_size=2), cursor={})
 
     with pytest.raises(ValueError, match="does not match request scope"):
         resolve_request_scope(

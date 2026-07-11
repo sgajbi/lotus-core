@@ -81,8 +81,7 @@ REQUIRED_SNIPPETS = {
         "class PortfolioTaxLotEvidence",
     ),
     Path(
-        "src/services/query_control_plane_service/app/infrastructure/"
-        "dpm_portfolio_state_sources.py"
+        "src/services/query_control_plane_service/app/infrastructure/dpm_portfolio_state_sources.py"
     ): ("def _tax_lot_evidence",),
     Path(
         "src/services/query_control_plane_service/app/application/dpm_source_readiness/"

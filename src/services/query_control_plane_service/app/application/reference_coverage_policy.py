@@ -105,11 +105,7 @@ def build_coverage_response(
         },
         source_evidence_current=current,
         freshness_status=(
-            "CURRENT"
-            if current
-            else "UNAVAILABLE"
-            if not observed_dates
-            else "PARTIAL"
+            "CURRENT" if current else "UNAVAILABLE" if not observed_dates else "PARTIAL"
         ),
         use_content_hash_as_source_batch_fingerprint=True,
     )

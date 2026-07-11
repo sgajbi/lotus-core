@@ -70,10 +70,12 @@
         "src/libs/portfolio-common/portfolio_common/cost_basis.py",
         "src/libs/portfolio-common/portfolio_common/fx_rates.py",
         "src/libs/portfolio-common/portfolio_common/valuation*.py",
-        "src/services/calculators/cost_calculator_service/app/**/*.py",
-        "src/services/calculators/cashflow_calculator_service/app/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cashflow/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cost*.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow*.py",
         "src/services/calculators/position_valuation_calculator/app/**/*.py",
-        "src/services/query_service/app/advisory_simulation/valuation.py",
+        "src/services/query_control_plane_service/app/application/advisory_simulation/valuation.py",
         "src/services/query_service/app/services/fx*.py",
         "src/services/query_service/app/services/price*.py",
         "src/services/query_service/app/services/cashflow*.py"
@@ -95,10 +97,10 @@
         "transaction-portfolio-flow-bundle-contract"
       ],
       "required_test_globs": [
-        "tests/unit/services/calculators/cost_calculator_service/**/*.py",
-        "tests/unit/services/calculators/cashflow_calculator_service/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/cost/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/cashflow/**/*.py",
         "tests/unit/services/calculators/position_valuation_calculator/**/*.py",
-        "tests/integration/services/calculators/**/*.py"
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_*.py"
       ]
     },
     {

@@ -259,9 +259,7 @@ def test_generic_simulation_rejects_relative_advisory_decisioning_import(
     ]
 
 
-def test_advisory_compatibility_route_rejects_query_service_import(
-    tmp_path, monkeypatch
-) -> None:
+def test_advisory_compatibility_route_rejects_query_service_import(tmp_path, monkeypatch) -> None:
     source = (
         tmp_path
         / "src"

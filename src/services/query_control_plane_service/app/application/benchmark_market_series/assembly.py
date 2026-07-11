@@ -119,11 +119,7 @@ def build_benchmark_market_series_response(
         },
         source_evidence_current=current,
         freshness_status=(
-            "CURRENT"
-            if current
-            else "UNAVAILABLE"
-            if resolved_quality == "EMPTY"
-            else "PARTIAL"
+            "CURRENT" if current else "UNAVAILABLE" if resolved_quality == "EMPTY" else "PARTIAL"
         ),
         use_content_hash_as_source_batch_fingerprint=True,
     )

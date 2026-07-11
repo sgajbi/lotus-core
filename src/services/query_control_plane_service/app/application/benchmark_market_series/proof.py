@@ -94,9 +94,7 @@ def latest_evidence_timestamp(
         )
     for row in fx_rates:
         timestamps.extend(
-            timestamp
-            for timestamp in (row.updated_at, row.created_at)
-            if timestamp is not None
+            timestamp for timestamp in (row.updated_at, row.created_at) if timestamp is not None
         )
     normalized = [_as_utc(timestamp) for timestamp in timestamps]
     return max(normalized) if normalized else None
@@ -140,9 +138,7 @@ def content_hash(
                 "definition": asdict(definition) if definition is not None else None,
                 "components": [asdict(row) for row in _sorted_components(components)],
                 "index_prices": [asdict(row) for row in _sorted_prices(index_prices)],
-                "index_returns": [
-                    asdict(row) for row in _sorted_index_returns(index_returns)
-                ],
+                "index_returns": [asdict(row) for row in _sorted_index_returns(index_returns)],
                 "benchmark_returns": [
                     asdict(row)
                     for row in sorted(benchmark_returns, key=lambda row: row.series_date)
@@ -173,8 +169,7 @@ def source_refs(
         f"lotus-core://source/MarketDataWindow/{benchmark_id}/{window}",
     }
     refs.update(
-        f"lotus-core://source/IndexSeriesWindow/{index_id}/{window}"
-        for index_id in index_ids
+        f"lotus-core://source/IndexSeriesWindow/{index_id}/{window}" for index_id in index_ids
     )
     if "benchmark_return" in request.series_fields:
         refs.add(f"lotus-core://source/BenchmarkReturnSeriesWindow/{benchmark_id}/{window}")

@@ -103,11 +103,25 @@
             "reason": "Classification taxonomy ingestion now exposes canonical observed_at through shared SourceObservationLineage while accepting legacy source_timestamp as an input alias and mapping to persistence columns."
         },
         {
-            "path": "src/services/query_service/app/dtos/reference_integration_dto.py",
+            "path": "src/services/query_control_plane_service/app/contracts/benchmark_catalog.py",
             "field": "source_timestamp",
-            "expectedCount": 2,
-            "ownerSlice": "Slice 7",
-            "reason": "Existing reference integration DTO fields. New source-observation fields must use observed_at."
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / QCP package independence",
+            "reason": "Existing benchmark catalog response compatibility field moved with QCP ownership. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/query_control_plane_service/app/contracts/benchmark_definition.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / QCP package independence",
+            "reason": "Existing benchmark definition response compatibility field moved with QCP ownership. New source-observation fields must use observed_at."
+        },
+        {
+            "path": "src/services/query_control_plane_service/app/contracts/index_catalog.py",
+            "field": "source_timestamp",
+            "expectedCount": 1,
+            "ownerSlice": "Slice 7 / QCP package independence",
+            "reason": "Existing index catalog response compatibility field moved with QCP ownership. New source-observation fields must use observed_at."
         }
     ]
 }

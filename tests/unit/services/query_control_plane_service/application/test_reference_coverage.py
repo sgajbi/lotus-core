@@ -85,9 +85,7 @@ def _service(
                     ]
                 ),
             ),
-            benchmark_return_reader=cast(
-                BenchmarkReturnSeriesReader, BenchmarkReturnReader()
-            ),
+            benchmark_return_reader=cast(BenchmarkReturnSeriesReader, BenchmarkReturnReader()),
             risk_free_reader=cast(RiskFreeSeriesReader, risk_free_reader),
             clock=lambda: generated_at,
         ),

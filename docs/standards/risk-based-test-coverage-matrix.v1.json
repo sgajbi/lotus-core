@@ -452,7 +452,7 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py",
+            "tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py",
             "tests/unit/libs/portfolio-common/test_analytics_cashflow_semantics.py"
           ]
         },
@@ -483,7 +483,7 @@
           "proof_family": "integration",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/integration/services/calculators/cashflow_calculator_service/test_cashflow_rule_contract.py",
+            "tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py",
             "tests/e2e/test_cashflow_pipeline.py"
           ]
         },
@@ -516,14 +516,14 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/libs/portfolio_common/test_cost_basis.py",
-            "tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py"
+            "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py"
           ]
         },
         {
           "proof_family": "application_use_case",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py"
+            "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py"
           ]
         },
         {
@@ -538,7 +538,7 @@
           "proof_family": "integration",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py"
+            "tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py"
           ]
         },
         {
@@ -773,7 +773,7 @@
           "proof_family": "application_use_case",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/query_service/services/test_operations_service.py",
+            "tests/unit/services/query_control_plane_service/application/test_operations_service.py",
             "tests/unit/services/event_replay_service/test_ingestion_operations_queries.py"
           ]
         },

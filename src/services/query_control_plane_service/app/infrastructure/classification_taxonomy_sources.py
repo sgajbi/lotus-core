@@ -28,9 +28,7 @@ class SqlAlchemyClassificationTaxonomyReader:
             )
         )
         if taxonomy_scope:
-            statement = statement.where(
-                ClassificationTaxonomy.taxonomy_scope == taxonomy_scope
-            )
+            statement = statement.where(ClassificationTaxonomy.taxonomy_scope == taxonomy_scope)
         statement = statement.order_by(
             ClassificationTaxonomy.taxonomy_scope.asc(),
             ClassificationTaxonomy.dimension_name.asc(),
