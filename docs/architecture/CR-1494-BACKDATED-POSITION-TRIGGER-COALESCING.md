@@ -59,9 +59,11 @@ migration rollout and downgrade support.
 - Position repository/model/workflow cohort: `79 passed`.
 - Position workflow and dashboard cohort: `56 passed`.
 - PostgreSQL concurrent backdated scenario: `1 passed in 28.07s`.
+- Repository-native transaction-processing contract: `32 passed in 126.98s`.
 - Alembic single head `c109b2c3d4ee`; migration SQL contract passed.
 - Ruff and MyPy passed for touched Python modules.
-- The repository-native transaction-processing contract remains the aggregate acceptance gate.
+- Wiki/docs, strict architecture, domain-layer, dependency-inversion, repository-transaction,
+  modularity, and in-process boundary gates passed.
 
 ## Remaining Deployment Evidence
 
