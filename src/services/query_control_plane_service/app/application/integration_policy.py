@@ -1,11 +1,17 @@
+"""Resolve QCP integration policy from injected configuration and runtime providers."""
+
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
-from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse, PolicyProvenanceMetadata
-from ..settings import load_query_service_settings
+from portfolio_common.runtime_providers import Clock
+
+from ..contracts.integration_policy import (
+    EffectiveIntegrationPolicyResponse,
+    PolicyProvenanceMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +22,7 @@ _CONSUMER_CANONICAL_MAP: dict[str, str] = {
 }
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class PolicyContext:
     policy_version: str
     policy_source: str
@@ -34,8 +40,44 @@ def canonical_consumer_system(value: str | None) -> str:
     return _CONSUMER_CANONICAL_MAP.get(key, raw.lower())
 
 
-def load_policy() -> dict[str, Any]:
-    raw = load_query_service_settings().integration_snapshot_policy_json
+@dataclass(frozen=True, slots=True)
+class IntegrationPolicyConfiguration:
+    """Runtime-owned policy inputs supplied at the QCP composition root."""
+
+    policy_version: str
+    policy_json: str
+
+
+class IntegrationPolicyService:
+    """Expose effective integration policy without environment or wall-clock coupling."""
+
+    def __init__(self, *, configuration: IntegrationPolicyConfiguration, clock: Clock) -> None:
+        self._configuration = configuration
+        self._clock = clock
+        self._policy = decode_policy(configuration.policy_json)
+
+    def get_effective_policy(
+        self,
+        *,
+        consumer_system: str,
+        tenant_id: str,
+        include_sections: list[str] | None,
+    ) -> EffectiveIntegrationPolicyResponse:
+        """Resolve the effective policy and source-owned generation timestamp."""
+
+        return build_effective_policy_response(
+            consumer_system=consumer_system,
+            tenant_id=tenant_id,
+            include_sections=include_sections,
+            generated_at=self._clock.utc_now(),
+            policy=self._policy,
+            policy_version=self._configuration.policy_version,
+        )
+
+
+def decode_policy(raw: str) -> dict[str, Any]:
+    """Decode the configured policy document, falling back safely to defaults."""
+
     if not raw:
         return {}
     try:
@@ -79,9 +121,9 @@ def resolve_consumer_sections(
     return None, None
 
 
-def _default_policy_context(policy: dict[str, Any]) -> PolicyContext:
+def _default_policy_context(policy: dict[str, Any], *, policy_version: str) -> PolicyContext:
     return PolicyContext(
-        policy_version=load_query_service_settings().lotus_core_policy_version,
+        policy_version=policy_version,
         policy_source="default",
         matched_rule_id="default",
         strict_mode=coerce_bool(policy.get("strict_mode"), default=False),
@@ -199,12 +241,17 @@ def _with_allowed_section_warning(context: PolicyContext) -> PolicyContext:
     )
 
 
-def resolve_policy_context(tenant_id: str, consumer_system: str) -> PolicyContext:
-    policy = load_policy()
+def resolve_policy_context(
+    tenant_id: str,
+    consumer_system: str,
+    *,
+    policy: dict[str, Any],
+    policy_version: str,
+) -> PolicyContext:
     context = _global_policy_context(
         policy=policy,
         consumer_system=consumer_system,
-        context=_default_policy_context(policy),
+        context=_default_policy_context(policy, policy_version=policy_version),
     )
     tenant_policy = _tenant_policy(policy, tenant_id)
     if tenant_policy is not None:
@@ -215,20 +262,6 @@ def resolve_policy_context(tenant_id: str, consumer_system: str) -> PolicyContex
             context=context,
         )
     return _with_allowed_section_warning(context)
-
-
-def resolve_effective_policy_response(
-    *,
-    consumer_system: str,
-    tenant_id: str,
-    include_sections: list[str] | None,
-) -> EffectiveIntegrationPolicyResponse:
-    return build_effective_policy_response(
-        consumer_system=consumer_system,
-        tenant_id=tenant_id,
-        include_sections=include_sections,
-        generated_at=datetime.now(UTC),
-    )
 
 
 def _effective_allowed_sections(
@@ -263,18 +296,22 @@ def build_effective_policy_response(
     consumer_system: str,
     tenant_id: str,
     include_sections: list[str] | None,
-    generated_at: datetime | None = None,
+    generated_at: datetime,
+    policy: dict[str, Any],
+    policy_version: str,
 ) -> EffectiveIntegrationPolicyResponse:
     normalized_consumer = canonical_consumer_system(consumer_system)
     policy_context = resolve_policy_context(
         tenant_id=tenant_id,
         consumer_system=normalized_consumer,
+        policy=policy,
+        policy_version=policy_version,
     )
 
     return EffectiveIntegrationPolicyResponse(
         consumer_system=normalized_consumer,
         tenant_id=tenant_id,
-        generated_at=generated_at or datetime.now(UTC),
+        generated_at=generated_at,
         policy_provenance=PolicyProvenanceMetadata(
             policy_version=policy_context.policy_version,
             policy_source=policy_context.policy_source,

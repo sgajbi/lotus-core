@@ -1527,7 +1527,13 @@ Most relevant current governance:
      in QCP infrastructure and injection at delivery composition; application modules must not
      import `SessionLocal`, SQLAlchemy, or ORM models,
      preserve public capability DTO compatibility unless a contract change is intentional,
-     documented, and tested.
+     documented, and tested. Effective snapshot policy is QCP-owned under
+     `query_control_plane_service.app.application.integration_policy` with its public contract in
+     `app.contracts.integration_policy`. QCP settings and clock construction belong in
+     `app.dependencies`; the policy application receives immutable configuration and `Clock`, and
+     must not read environment variables, construct wall-clock timestamps, or return through the
+     broad Query Service integration facade. Query Service must not recreate policy/version or
+     capability-override settings after those ownership moves.
 119. Broad query/control-plane services should expose repository and port dependencies through
      explicit dependency bundles or use-case ports, not only by constructing repositories from raw
      `AsyncSession` inside service constructors. `CoreSnapshotDependencies`,

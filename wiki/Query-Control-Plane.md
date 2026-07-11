@@ -184,6 +184,9 @@ router inside the operational read plane.
 - generic simulation and Core snapshot assembly must remain QCP package-owned and must not import
   query-service repositories; snapshot source reads use `CoreSnapshotSourceReader`, and proposed
   changes use the QCP-owned `SimulationStore`
+- effective integration policy contracts and resolution must remain QCP package-owned; environment
+  configuration and clock construction stay at dependency composition, while precedence,
+  section filtering, provenance, and warnings remain deterministic application policy
 - generic simulation must not import advisory suitability, recommendation, proposal approval, or
   workflow-gate implementations; the advisory simulation route is a quarantined compatibility
   contract while those downstream-owned decisions migrate to `lotus-advise`

@@ -1,3 +1,5 @@
+"""Public QCP contracts for effective integration policy diagnostics."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -5,9 +5,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from src.services.query_service.app.dtos.integration_dto import (
-    EffectiveIntegrationPolicyResponse,
-)
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
@@ -93,6 +90,7 @@ from ..application.core_snapshot.service import (
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from ..application.integration_policy import IntegrationPolicyService
 from ..contracts.core_snapshot import (
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -102,7 +100,12 @@ from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
     InstrumentEnrichmentBulkResponse,
 )
-from ..dependencies import get_core_snapshot_service, get_integration_service
+from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
+from ..dependencies import (
+    get_core_snapshot_service,
+    get_integration_policy_service,
+    get_integration_service,
+)
 from .response_helpers import (
     problem_example,
     problem_or_validation_response,
@@ -636,7 +639,7 @@ async def get_effective_integration_policy(
         description="Optional requested snapshot sections to evaluate against policy.",
         examples=["positions_baseline", "portfolio_totals"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> EffectiveIntegrationPolicyResponse:
     response = integration_service.get_effective_policy(
         consumer_system=consumer_system,
@@ -697,7 +700,7 @@ async def create_core_snapshot(
         examples=["PORT-INT-001"],
     ),
     service: CoreSnapshotService = Depends(get_core_snapshot_service),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    integration_service: IntegrationPolicyService = Depends(get_integration_policy_service),
 ) -> CoreSnapshotResponse | JSONResponse:
     effective_request, governance = _governed_core_snapshot_request(
         request=request,
@@ -731,7 +734,7 @@ def _lotus_idea_core_snapshot_payload(response: CoreSnapshotResponse | dict) -> 
 def _governed_core_snapshot_request(
     *,
     request: CoreSnapshotRequest,
-    integration_service: IntegrationService,
+    integration_service: IntegrationPolicyService,
 ) -> tuple[CoreSnapshotRequest, SnapshotGovernanceContext]:
     requested_sections = list(request.sections)
     policy = integration_service.get_effective_policy(

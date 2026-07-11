@@ -266,6 +266,7 @@
       "consumer_modules": [
         "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
         "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
+        "src/services/query_control_plane_service/app/application/integration_policy.py",
         "src/services/query_control_plane_service/app/application/simulation.py"
       ],
       "guard_scripts": [

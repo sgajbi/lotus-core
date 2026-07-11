@@ -10,6 +10,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from src.services.query_control_plane_service.app.application.integration_policy import (
+    IntegrationPolicyService,
+)
 from src.services.query_control_plane_service.app.contracts.core_snapshot import (
     CoreSnapshotMode,
     CoreSnapshotRequest,
@@ -18,8 +21,13 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
 from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
 )
+from src.services.query_control_plane_service.app.contracts.integration_policy import (
+    EffectiveIntegrationPolicyResponse,
+    PolicyProvenanceMetadata,
+)
 from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
+    get_integration_policy_service,
     get_integration_service,
 )
 from src.services.query_control_plane_service.app.routers.integration import (
@@ -66,10 +74,6 @@ from src.services.query_control_plane_service.app.routers.integration import (
 )
 from src.services.query_control_plane_service.app.routers.response_helpers import (
     QueryControlPlaneProblem,
-)
-from src.services.query_service.app.dtos.integration_dto import (
-    EffectiveIntegrationPolicyResponse,
-    PolicyProvenanceMetadata,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentRequest,
@@ -129,7 +133,7 @@ def assert_query_control_plane_problem(
 
 @pytest.mark.asyncio
 async def test_get_effective_integration_policy_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=IntegrationPolicyService)
     mock_service.get_effective_policy.return_value = {
         "contract_version": "v1",
         "source_service": "lotus-core",
@@ -166,6 +170,10 @@ def test_get_integration_service_factory_returns_service() -> None:
     assert isinstance(service, IntegrationService)
 
 
+def test_get_integration_policy_service_factory_returns_service() -> None:
+    assert isinstance(get_integration_policy_service(), IntegrationPolicyService)
+
+
 def test_get_core_snapshot_service_factory_returns_service() -> None:
     service = get_core_snapshot_service(db=MagicMock())
     assert isinstance(service, CoreSnapshotService)
@@ -174,7 +182,7 @@ def test_get_core_snapshot_service_factory_returns_service() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_router_function() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -251,7 +259,7 @@ async def test_create_core_snapshot_router_function() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_not_found_to_404() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -293,7 +301,7 @@ async def test_create_core_snapshot_maps_not_found_to_404() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -335,7 +343,7 @@ async def test_create_core_snapshot_maps_bad_request_to_400() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_conflict_to_409() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -378,7 +386,7 @@ async def test_create_core_snapshot_maps_conflict_to_409() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -421,7 +429,7 @@ async def test_create_core_snapshot_maps_unavailable_section_to_422() -> None:
 @pytest.mark.asyncio
 async def test_create_core_snapshot_maps_policy_block_to_403() -> None:
     mock_service = MagicMock(spec=CoreSnapshotService)
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",
@@ -499,7 +507,7 @@ async def test_create_core_snapshot_filters_sections_in_non_strict_mode() -> Non
         "sections": {"positions_baseline": []},
     }
 
-    mock_integration_service = MagicMock(spec=IntegrationService)
+    mock_integration_service = MagicMock(spec=IntegrationPolicyService)
     mock_integration_service.get_effective_policy.return_value = EffectiveIntegrationPolicyResponse(
         consumer_system="lotus-performance",
         tenant_id="default",

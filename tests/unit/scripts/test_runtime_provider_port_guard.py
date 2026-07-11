@@ -32,6 +32,11 @@ def _write_required_artifacts(root: Path) -> None:
         "generated_at = self._clock.utc_now()\n",
     )
     _write(
+        root / "src/services/query_control_plane_service/app/application/integration_policy.py",
+        "from portfolio_common.runtime_providers import Clock\n"
+        "generated_at = self._clock.utc_now()\n",
+    )
+    _write(
         root / "src/services/query_control_plane_service/app/application/simulation.py",
         "from portfolio_common.runtime_providers import Clock, IdGenerator\n"
         "now = self._clock.utc_now()\n"

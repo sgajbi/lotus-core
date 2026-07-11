@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.runtime_settings import (
     RuntimeConfigurationError,
@@ -22,7 +22,7 @@ DEFAULT_PAGE_TOKEN_KEY_ID = "local-dev"  # nosec B105
 
 
 def env_bool(name: str, default: bool) -> bool:
-    return shared_env_bool(name, default, service_name=QUERY_SERVICE_NAME)
+    return cast(bool, shared_env_bool(name, default, service_name=QUERY_SERVICE_NAME))
 
 
 def env_int(
@@ -33,29 +33,29 @@ def env_int(
     maximum: int | None = None,
     minimum_fallback: int | None = None,
 ) -> int:
-    return shared_env_int(
-        name,
-        default,
-        service_name=QUERY_SERVICE_NAME,
-        minimum=minimum,
-        maximum=maximum,
-        minimum_fallback=minimum_fallback,
+    return cast(
+        int,
+        shared_env_int(
+            name,
+            default,
+            service_name=QUERY_SERVICE_NAME,
+            minimum=minimum,
+            maximum=maximum,
+            minimum_fallback=minimum_fallback,
+        ),
     )
 
 
 def env_str(name: str, default: str) -> str:
-    return shared_env_str(name, default)
+    return cast(str, shared_env_str(name, default))
 
 
 def env_json_map(name: str) -> dict[str, Any]:
-    return shared_env_json_map(name, service_name=QUERY_SERVICE_NAME)
+    return cast(dict[str, Any], shared_env_json_map(name, service_name=QUERY_SERVICE_NAME))
 
 
 @dataclass(frozen=True, slots=True)
 class QueryServiceSettings:
-    lotus_core_policy_version: str
-    integration_snapshot_policy_json: str
-    capability_tenant_overrides_json: str
     page_token_secret: str
     page_token_key_id: str
     page_token_previous_keys: dict[str, str]
@@ -81,9 +81,6 @@ def load_query_service_settings() -> QueryServiceSettings:
         service_name=QUERY_SERVICE_NAME
     )
     return QueryServiceSettings(
-        lotus_core_policy_version=env_str("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
-        integration_snapshot_policy_json=env_str("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", ""),
-        capability_tenant_overrides_json=env_str("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", ""),
         page_token_secret=_page_token_secret(),
         page_token_key_id=_page_token_key_id(),
         page_token_previous_keys=_page_token_previous_keys(),

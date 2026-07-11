@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2026-02-24 |
-| Last Updated | 2026-03-05 |
-| Owners | `query-service` integration contracts |
+| Last Updated | 2026-07-11 |
+| Owners | `query-control-plane-service` integration policy contracts |
 | Depends On | RFC 043 |
 | Scope | Policy diagnostics endpoint and provenance metadata propagation |
 
@@ -38,19 +38,19 @@ Fully implemented:
 
 Evidence:
 - `src/services/query_control_plane_service/app/routers/integration.py`
-- `src/services/query_service/app/services/integration_service.py`
-- `src/services/query_service/app/dtos/integration_dto.py`
-- `src/services/query_service/app/dtos/core_snapshot_dto.py`
-- `tests/unit/services/query_service/services/test_integration_service.py`
-- `tests/unit/services/query_service/routers/test_integration_router.py`
+- `src/services/query_control_plane_service/app/application/integration_policy.py`
+- `src/services/query_control_plane_service/app/contracts/integration_policy.py`
+- `src/services/query_control_plane_service/app/contracts/core_snapshot.py`
+- `tests/unit/services/query_control_plane_service/application/test_integration_policy.py`
+- `tests/unit/services/query_control_plane_service/routers/test_integration_router.py`
 
 ## Requirement-to-Implementation Traceability
 
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
-| Effective policy diagnostics endpoint | Implemented | `integration.py` route + service |
-| Provenance metadata model | Implemented in policy endpoint response | `integration_dto.py` |
-| Provenance fields in core-snapshot response | Implemented in snapshot governance metadata | `core_snapshot_dto.py`; `integration.py`; `core_snapshot_service.py` |
+| Effective policy diagnostics endpoint | Implemented | QCP `integration.py` route + `IntegrationPolicyService` |
+| Provenance metadata model | Implemented in policy endpoint response | QCP `contracts/integration_policy.py` |
+| Provenance fields in core-snapshot response | Implemented in snapshot governance metadata | QCP `contracts/core_snapshot.py`; `routers/integration.py`; `application/core_snapshot/service.py` |
 
 ## Design Reasoning and Trade-offs
 
