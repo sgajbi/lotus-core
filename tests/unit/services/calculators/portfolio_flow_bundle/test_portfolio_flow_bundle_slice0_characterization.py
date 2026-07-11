@@ -6,15 +6,15 @@ import pytest
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
-    CashflowLogic,
-)
-from src.services.calculators.cashflow_calculator_service.app.core.enums import (
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CashflowCalculator,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
     PositionCalculationWorkflow,
@@ -112,7 +112,7 @@ def test_position_bundle_semantics(
     ],
 )
 @patch(
-    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
 def test_slice0_cashflow_characterization_locks_current_bundle_behavior(
     mock_metric,
@@ -130,7 +130,7 @@ def test_slice0_cashflow_characterization_locks_current_bundle_behavior(
         is_portfolio_flow=is_portfolio_flow,
     )
 
-    cashflow = CashflowLogic.calculate(txn, rule)
+    cashflow = CashflowCalculator.calculate(txn, rule)
 
     assert cashflow.amount == expected_amount
     assert cashflow.is_position_flow is True

@@ -6,15 +6,13 @@ from unittest.mock import MagicMock
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
-    CashflowCalculationWorkflow,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
+    CashflowCalculationWorkflow,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,

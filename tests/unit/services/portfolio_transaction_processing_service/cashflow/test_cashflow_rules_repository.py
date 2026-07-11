@@ -1,12 +1,13 @@
-# tests/unit/services/calculators/cashflow_calculator_service/unit/repositories/test_cashflow_rules_repository.py  # noqa: E501
+"""Tests for target-owned SQL cashflow rule access."""
+
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_rules_repository import (  # noqa: E501
-    CashflowRulesRepository,
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    SqlAlchemyCashflowRulesRepository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -23,13 +24,13 @@ def mock_db_session() -> AsyncMock:
 
 
 @pytest.fixture
-def repository(mock_db_session: AsyncMock) -> CashflowRulesRepository:
+def repository(mock_db_session: AsyncMock) -> SqlAlchemyCashflowRulesRepository:
     """Provides an instance of the repository with a mock session."""
-    return CashflowRulesRepository(mock_db_session)
+    return SqlAlchemyCashflowRulesRepository(mock_db_session)
 
 
 async def test_get_all_rules_constructs_correct_query(
-    repository: CashflowRulesRepository, mock_db_session: AsyncMock
+    repository: SqlAlchemyCashflowRulesRepository, mock_db_session: AsyncMock
 ):
     """
     GIVEN the repository
@@ -52,7 +53,7 @@ async def test_get_all_rules_constructs_correct_query(
 
 
 async def test_get_rule_set_version_returns_count_and_latest_update(
-    repository: CashflowRulesRepository,
+    repository: SqlAlchemyCashflowRulesRepository,
     mock_db_session: AsyncMock,
 ):
     latest_updated_at = datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc)

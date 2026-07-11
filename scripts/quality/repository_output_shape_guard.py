@@ -18,7 +18,7 @@ DATABASE_MODELS_PATH = (
 # Transitional register for public repository methods that still expose SQLAlchemy ORM rows.
 # New repository outputs should return explicit domain/read records instead of adding entries here.
 TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
-    "src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_rules_repository.py:get_all_rules": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_rules_repository.py:get_all_rules": (
         "CashflowRule",
     ),
     "src/services/calculators/cost_calculator_service/app/repository.py:create_or_update_transaction_event": (
@@ -304,10 +304,43 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/transaction_repository.py:list_transaction_cost_evidence": (
         "Transaction",
     ),
-    "src/services/timeseries_generator_service/app/repositories/timeseries_repository.py:get_position_timeseries": (
+    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:find_and_claim_eligible_jobs": (
+        "PortfolioAggregationJob",
+    ),
+    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_all_position_timeseries_for_date": (
         "PositionTimeseries",
     ),
-    "src/services/timeseries_generator_service/app/repositories/timeseries_repository.py:get_position_timeseries_for_dates": (
+    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_last_portfolio_timeseries_before": (
+        "PortfolioTimeseries",
+    ),
+    "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py:get_portfolio": (
+        "Portfolio",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_all_cashflows_for_security_date": (
+        "Cashflow",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_all_snapshots_for_date": (
+        "DailyPositionSnapshot",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_cashflows_for_security_dates": (
+        "Cashflow",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_instrument": (
+        "Instrument",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_last_snapshot_before": (
+        "DailyPositionSnapshot",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_latest_snapshots_for_date": (
+        "DailyPositionSnapshot",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_next_snapshots_after": (
+        "DailyPositionSnapshot",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_position_timeseries": (
+        "PositionTimeseries",
+    ),
+    "src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py:get_position_timeseries_for_dates": (
         "PositionTimeseries",
     ),
     "src/services/valuation_orchestrator_service/app/repositories/valuation_repository.py:claim_instrument_reprocessing_triggers": (

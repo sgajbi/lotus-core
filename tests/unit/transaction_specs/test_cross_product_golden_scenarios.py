@@ -13,15 +13,15 @@ from portfolio_common.transaction_type_registry import (
     get_transaction_type_definition,
 )
 
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
-    CashflowLogic,
-)
-from src.services.calculators.cashflow_calculator_service.app.core.enums import (
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CashflowCalculator,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
     PositionCalculationWorkflow,
@@ -90,7 +90,7 @@ def test_dividend_golden_cashflow_preserves_position_and_income_amount(monkeypat
     scenario = _scenario("equity_dividend_stock_split_return_of_capital_spin_off_merger_rights")
     dividend = scenario["input_events"][0]
     monkeypatch.setattr(
-        "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL",
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL",
         type(
             "Metric",
             (),
@@ -105,7 +105,7 @@ def test_dividend_golden_cashflow_preserves_position_and_income_amount(monkeypat
     )
     event = _event(dividend)
     next_state = PositionCalculationWorkflow.calculate_next_position(state, event)
-    cashflow = CashflowLogic.calculate(
+    cashflow = CashflowCalculator.calculate(
         event,
         CashflowRule(
             classification=CashflowClassification.INCOME,
@@ -144,7 +144,7 @@ def test_fund_golden_subscription_distribution_reinvestment_and_redemption(
     scenario = _scenario("fund_subscription_redemption_distribution_reinvestment")
     subscription, distribution, reinvestment, redemption = scenario["input_events"]
     monkeypatch.setattr(
-        "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL",
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL",
         type(
             "Metric",
             (),
@@ -162,7 +162,7 @@ def test_fund_golden_subscription_distribution_reinvestment_and_redemption(
     after_redemption = PositionCalculationWorkflow.calculate_next_position(
         after_reinvestment, _event(redemption)
     )
-    distribution_cashflow = CashflowLogic.calculate(
+    distribution_cashflow = CashflowCalculator.calculate(
         _event(distribution),
         CashflowRule(
             classification=CashflowClassification.INCOME,
@@ -189,7 +189,7 @@ def test_option_and_structured_product_golden_target_gap_and_coupon_cashflow(
     scenario = _scenario("option_exercise_expiry_structured_coupon_barrier_payoff")
     exercise_out, exercise_in, structured_coupon = scenario["input_events"]
     monkeypatch.setattr(
-        "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL",
+        "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL",
         type(
             "Metric",
             (),
@@ -203,7 +203,7 @@ def test_option_and_structured_product_golden_target_gap_and_coupon_cashflow(
         PositionStateDTO(quantity=Decimal("10"), cost_basis=Decimal("1000")),
         _event(structured_coupon),
     )
-    structured_coupon_cashflow = CashflowLogic.calculate(
+    structured_coupon_cashflow = CashflowCalculator.calculate(
         _event(structured_coupon),
         CashflowRule(
             classification=CashflowClassification.INCOME,

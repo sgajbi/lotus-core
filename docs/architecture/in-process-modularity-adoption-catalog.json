@@ -75,15 +75,12 @@
         {
           "path": "src/services/calculators/cost_calculator_service",
           "migrationGuidance": "Cost-basis policy, checkpoint state, timeline orchestration, and compatibility staging are target-owned. Extract workflow/publication ports and SQL adapter ownership, migrate delivery tests, then delete the remaining legacy root after release/Kubernetes/canonical-QA parity."
-        },
-        {
-          "path": "src/services/calculators/cashflow_calculator_service",
-          "migrationGuidance": "Cashflow policy runs behind the target CashflowProcessingPort. Move surviving packages to target-owned domain names, then delete the legacy root after release/Kubernetes/canonical-QA parity."
         }
       ],
       "retiredLegacyFolders": [
         "src/services/calculators/position_calculator",
-        "src/services/calculators/cost_calculator_service/app/cost_engine"
+        "src/services/calculators/cost_calculator_service/app/cost_engine",
+        "src/services/calculators/cashflow_calculator_service"
       ],
       "evidence": [
         "docs/standards/application-command-result-standard.md",
@@ -95,9 +92,10 @@
         "docs/architecture/codebase-reviews/CR-1510-COST-BASIS-DOMAIN-TARGET-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1512-COST-CHECKPOINT-DOMAIN-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1513-COST-TIMELINE-APPLICATION-OWNERSHIP.md",
-        "docs/architecture/codebase-reviews/CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md"
+        "docs/architecture/codebase-reviews/CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md",
+        "docs/architecture/codebase-reviews/CR-1523-CASHFLOW-TARGET-OWNERSHIP.md"
       ],
-      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position plus cost-basis policy, checkpoint, timeline, and compatibility staging source are target-owned; registry/Kubernetes rollout and remaining cost workflow/repository plus cashflow package removal remain governed follow-up work."
+      "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position and cashflow source ownership are target-owned. Cost-basis policy, checkpoint, timeline, and compatibility staging are target-owned; the remaining cost workflow/repository source root plus registry/Kubernetes rollout remain governed follow-up work."
     }
   ]
 }

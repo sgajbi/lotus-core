@@ -11,9 +11,6 @@ from portfolio_common.events import TransactionEvent
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.repositories import (
-    cashflow_repository,
-)
 from src.services.portfolio_transaction_processing_service.app.application import (
     BookedTransactionReplayStatus,
     ReplayBookedTransactionCommand,
@@ -23,6 +20,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
     build_replay_booked_transaction_use_case,
+    cashflow_repository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -377,7 +375,8 @@ async def test_concurrent_missing_cashflow_repairs_converge_on_one_row(
 
     async def repair(amount: Decimal) -> int:
         async with context.session_factory() as session, session.begin():
-            stored = await cashflow_repository.CashflowRepository(session).replace_cashflow(
+            repository = cashflow_repository.SqlAlchemyCashflowRepository(session)
+            stored = await repository.replace_cashflow(
                 Cashflow(
                     transaction_id=transaction_id,
                     portfolio_id=portfolio_id,

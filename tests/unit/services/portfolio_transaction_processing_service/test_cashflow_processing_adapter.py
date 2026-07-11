@@ -9,15 +9,6 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
-    CashflowProcessingOutcome,
-    CashflowStageResult,
-    LinkedCashLegError,
-    NoCashflowRuleError,
-)
-from src.services.calculators.cashflow_calculator_service.app.repositories import (
-    cashflow_repository,
-)
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
     TransactionProcessingRejected,
@@ -25,6 +16,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowProcessingCompatibilityAdapter,
+    CashflowProcessingOutcome,
+    CashflowStageResult,
+    LinkedCashLegError,
+    NoCashflowRuleError,
+    SqlAlchemyCashflowRepository,
 )
 
 
@@ -50,7 +46,7 @@ def _adapter(stage_result: CashflowStageResult):
     adapter = CashflowProcessingCompatibilityAdapter(
         workflow=workflow,
         db_session=AsyncMock(spec=AsyncSession),
-        repository=AsyncMock(spec=cashflow_repository.CashflowRepository),
+        repository=AsyncMock(spec=SqlAlchemyCashflowRepository),
         idempotency_repository=AsyncMock(spec=IdempotencyRepository),
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )

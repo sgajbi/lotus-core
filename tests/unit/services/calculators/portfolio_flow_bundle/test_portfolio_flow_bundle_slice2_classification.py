@@ -4,12 +4,12 @@ from decimal import Decimal
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 
-from src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic import (
-    CashflowLogic,
-)
-from src.services.calculators.cashflow_calculator_service.app.core.enums import (
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CashflowCalculator,
 )
 
 
@@ -36,7 +36,7 @@ def test_slice2_tax_rule_alignment_marks_portfolio_flow_true() -> None:
         is_portfolio_flow=True,
     )
 
-    cashflow = CashflowLogic.calculate(event, rule)
+    cashflow = CashflowCalculator.calculate(event, rule)
 
     assert cashflow.amount == Decimal("-10")
     assert cashflow.is_portfolio_flow is True
@@ -68,8 +68,8 @@ def test_ca_transfer_classification_signs_for_in_and_out() -> None:
         update={"transaction_id": "TXN-CA-OUT-01", "transaction_type": "MERGER_OUT"}
     )
 
-    in_cashflow = CashflowLogic.calculate(in_event, rule)
-    out_cashflow = CashflowLogic.calculate(out_event, rule)
+    in_cashflow = CashflowCalculator.calculate(in_event, rule)
+    out_cashflow = CashflowCalculator.calculate(out_event, rule)
 
     assert in_cashflow.amount == Decimal("100")
     assert out_cashflow.amount == Decimal("-100")

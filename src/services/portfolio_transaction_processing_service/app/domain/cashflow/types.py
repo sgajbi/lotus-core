@@ -1,4 +1,5 @@
-# src/services/calculators/cashflow_calculator_service/app/core/enums.py
+"""Cashflow classification, timing, and calculation type vocabulary."""
+
 from enum import Enum
 
 
