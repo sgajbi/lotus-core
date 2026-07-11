@@ -220,6 +220,15 @@ SOURCE_DATA_SECURITY_PROFILES: tuple[SourceDataSecurityProfile, ...] = (
         pii_fields=("portfolio_id",),
     ),
     SourceDataSecurityProfile(
+        product_name="BenchmarkDefinition",
+        tenant_required=True,
+        entitlement_required=True,
+        access_classification=SYSTEM_ACCESS,
+        sensitivity_classification=REFERENCE_INTERNAL,
+        retention_requirement=RETAIN_FOR_SOURCE_AUDIT,
+        audit_requirement=AUDIT_SYSTEM_ACCESS,
+    ),
+    SourceDataSecurityProfile(
         product_name="BenchmarkConstituentWindow",
         tenant_required=True,
         entitlement_required=True,

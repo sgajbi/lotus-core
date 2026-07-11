@@ -33,7 +33,7 @@ class BenchmarkCompositionWindowRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkComponentResponse(BaseModel):
+class BenchmarkConstituentSegmentResponse(BaseModel):
     index_id: str = Field(
         ...,
         description="Canonical index identifier used as a benchmark component.",
@@ -82,7 +82,7 @@ class BenchmarkCompositionWindowResponse(SourceDataProductRuntimeMetadata):
         ...,
         description="Resolved date window returned by the composition contract.",
     )
-    segments: list[BenchmarkComponentResponse] = Field(
+    segments: list[BenchmarkConstituentSegmentResponse] = Field(
         default_factory=list,
         description="Ordered benchmark composition segments overlapping the requested window.",
     )
@@ -101,7 +101,7 @@ class BenchmarkCompositionWindowResponse(SourceDataProductRuntimeMetadata):
     model_config = ConfigDict()
 
 
-class BenchmarkDefinitionResponse(BaseModel):
+class BenchmarkCatalogRecord(BaseModel):
     benchmark_id: str = Field(
         ...,
         description="Canonical benchmark identifier.",
@@ -189,7 +189,7 @@ class BenchmarkDefinitionResponse(BaseModel):
         description="Source vendor record identifier for deterministic replay.",
         examples=["bmk_60_40_v20260131"],
     )
-    components: list[BenchmarkComponentResponse] = Field(
+    components: list[BenchmarkConstituentSegmentResponse] = Field(
         default_factory=list,
         description="Effective benchmark component records for the requested as-of date.",
     )
@@ -233,7 +233,7 @@ class BenchmarkCatalogResponse(BaseModel):
         description="As-of date used for catalog resolution.",
         examples=["2026-01-31"],
     )
-    records: list[BenchmarkDefinitionResponse] = Field(
+    records: list[BenchmarkCatalogRecord] = Field(
         default_factory=list,
         description="Benchmark definition records effective for the requested date.",
         examples=[[{"benchmark_id": "BMK_GLOBAL_BALANCED_60_40", "benchmark_type": "composite"}]],

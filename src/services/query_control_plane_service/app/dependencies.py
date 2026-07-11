@@ -18,6 +18,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsTimeseriesService,
 )
 from .application.benchmark_assignment import BenchmarkAssignmentService
+from .application.benchmark_definition import BenchmarkDefinitionService
 from .application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
@@ -51,6 +52,9 @@ from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesR
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
 from .infrastructure.benchmark_assignment_sources import (
     SqlAlchemyBenchmarkAssignmentReader,
+)
+from .infrastructure.benchmark_definition_sources import (
+    SqlAlchemyBenchmarkDefinitionReader,
 )
 from .infrastructure.client_liquidity_evidence_sources import (
     SqlAlchemyClientLiquidityEvidenceReader,
@@ -120,6 +124,17 @@ def get_benchmark_assignment_service(
 
     return BenchmarkAssignmentService(
         reader=SqlAlchemyBenchmarkAssignmentReader(db),
+        clock=SystemClock().utc_now,
+    )
+
+
+def get_benchmark_definition_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> BenchmarkDefinitionService:
+    """Compose the QCP-owned benchmark definition use case."""
+
+    return BenchmarkDefinitionService(
+        reader=SqlAlchemyBenchmarkDefinitionReader(db),
         clock=SystemClock().utc_now,
     )
 

@@ -9,6 +9,9 @@ from src.services.query_control_plane_service.app.application import (
 from src.services.query_control_plane_service.app.application.benchmark_assignment import (
     BenchmarkAssignmentService,
 )
+from src.services.query_control_plane_service.app.application.benchmark_definition import (
+    BenchmarkDefinitionService,
+)
 from src.services.query_control_plane_service.app.application.client_liquidity_evidence import (
     ClientLiquidityEvidenceService,
 )
@@ -51,6 +54,9 @@ from src.services.query_control_plane_service.app.contracts import (
 )
 from src.services.query_control_plane_service.app.contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
+)
+from src.services.query_control_plane_service.app.contracts.benchmark_definition import (
+    BenchmarkDefinitionRequest,
 )
 from src.services.query_control_plane_service.app.contracts.client_liquidity_evidence import (
     ClientIncomeNeedsScheduleRequest,
@@ -177,7 +183,6 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCatalogRequest,
     BenchmarkCompositionWindowRequest,
-    BenchmarkDefinitionRequest,
     BenchmarkMarketSeriesRequest,
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
@@ -2557,8 +2562,9 @@ async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_definition_and_coverage_router_functions() -> None:
+    definition_service = MagicMock(spec=BenchmarkDefinitionService)
     mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_definition = AsyncMock(
+    definition_service.resolve = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
             "benchmark_name": "Global Balanced 60/40 (TR)",
@@ -2598,7 +2604,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     definition_response = await fetch_benchmark_definition(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
         request=BenchmarkDefinitionRequest(as_of_date="2026-01-31"),
-        integration_service=mock_service,
+        benchmark_definition_service=definition_service,
     )
     coverage_response = await get_benchmark_coverage(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
@@ -2711,14 +2717,14 @@ async def test_fetch_benchmark_composition_window_maps_currency_conflict_to_prob
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_benchmark_definition = AsyncMock(return_value=None)
+    mock_service = MagicMock(spec=BenchmarkDefinitionService)
+    mock_service.resolve = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await fetch_benchmark_definition(
             benchmark_id="BMK_MISSING",
             request=BenchmarkDefinitionRequest(as_of_date="2026-01-31"),
-            integration_service=mock_service,
+            benchmark_definition_service=mock_service,
         )
 
     assert_query_control_plane_problem(

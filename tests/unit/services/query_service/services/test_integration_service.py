@@ -412,10 +412,6 @@ async def test_reference_contract_methods() -> None:
         ),
     )
 
-    definition = await service.get_benchmark_definition("B1", date(2026, 1, 1))
-    assert definition is not None
-    assert definition.benchmark_id == "B1"
-
     composition_window = await service.get_benchmark_composition_window(
         "B1",
         SimpleNamespace(
@@ -639,7 +635,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
     service._reference_repository = SimpleNamespace(  # type: ignore[assignment]
         get_benchmark_definition=AsyncMock(
             side_effect=[
-                None,
                 SimpleNamespace(benchmark_currency="EUR"),
                 SimpleNamespace(benchmark_currency="EUR"),
             ]
@@ -699,7 +694,6 @@ async def test_reference_contract_none_and_fx_branches() -> None:
         list_taxonomy=AsyncMock(return_value=[]),
     )
 
-    assert await service.get_benchmark_definition("B1", date(2026, 1, 1)) is None
     assert (
         await service.get_benchmark_composition_window(
             "B1",
