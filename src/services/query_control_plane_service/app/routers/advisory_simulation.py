@@ -3,18 +3,14 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Response, status
+from fastapi import APIRouter, Depends, Header, Response, status
 from fastapi.responses import JSONResponse
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
+from portfolio_common.runtime_providers import IdGenerator
 
-from src.services.query_service.app.advisory_simulation.models import (
-    ProposalResult,
-    ProposalSimulateRequest,
-)
-from src.services.query_service.app.services.advisory_simulation_service import (
+from ..application.advisory_simulation.service import (
     execute_advisory_simulation,
 )
-
 from ..contracts import (
     ADVISORY_SIMULATION_CONTRACT_VERSION,
     ADVISORY_SIMULATION_CONTRACT_VERSION_HEADER,
@@ -22,6 +18,11 @@ from ..contracts import (
     CanonicalSimulationErrorCode,
     CanonicalSimulationProblemDetails,
 )
+from ..contracts.advisory_simulation_models import (
+    ProposalResult,
+    ProposalSimulateRequest,
+)
+from ..dependencies import get_advisory_simulation_id_generator
 
 router = APIRouter(prefix="/integration/advisory/proposals", tags=["Integration"])
 logger = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ async def simulate_advisory_execution(
             description="Optional caller correlation identifier propagated into the result.",
         ),
     ] = None,
+    id_generator: IdGenerator = Depends(get_advisory_simulation_id_generator),
 ) -> ProposalResult | JSONResponse:
     if contract_version is not None and contract_version != ADVISORY_SIMULATION_CONTRACT_VERSION:
         raise CanonicalSimulationContractError(
@@ -116,6 +118,7 @@ async def simulate_advisory_execution(
             idempotency_key=idempotency_key,
             correlation_id=x_correlation_id,
             simulation_contract_version=ADVISORY_SIMULATION_CONTRACT_VERSION,
+            id_generator=id_generator,
         )
     except Exception:
         logger.exception("Canonical simulation execution failed")

@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Iterable
 
-from src.services.query_service.app.advisory_simulation.models import (
+from src.services.query_control_plane_service.app.contracts.advisory_simulation_models import (
     CashBalance,
     FxRate,
     MarketDataSnapshot,

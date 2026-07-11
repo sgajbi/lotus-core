@@ -412,6 +412,12 @@ def get_classification_taxonomy_service(
     )
 
 
+def get_advisory_simulation_id_generator() -> UuidIdGenerator:
+    """Provide runtime identity generation at the advisory API composition boundary."""
+
+    return UuidIdGenerator()
+
+
 def get_operations_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> OperationsService:

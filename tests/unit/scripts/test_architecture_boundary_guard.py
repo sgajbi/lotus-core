@@ -216,7 +216,8 @@ def test_generic_simulation_rejects_absolute_advisory_decisioning_import(
     )
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from src.services.query_service.app.advisory_simulation.models import SuitabilityResult\n",
+        "from src.services.query_control_plane_service.app.contracts."
+        "advisory_simulation_models import SuitabilityResult\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
@@ -226,7 +227,7 @@ def test_generic_simulation_rejects_absolute_advisory_decisioning_import(
     assert findings == [
         "src/services/query_control_plane_service/app/application/simulation.py:1: "
         "generic simulation must not import advisory decisioning: disallowed direct import "
-        "'services.query_service.app.advisory_simulation.models'"
+        "'services.query_control_plane_service.app.contracts.advisory_simulation_models'"
     ]
 
 
@@ -258,7 +259,7 @@ def test_generic_simulation_rejects_relative_advisory_decisioning_import(
     ]
 
 
-def test_advisory_compatibility_route_can_use_quarantined_simulation_service(
+def test_advisory_compatibility_route_rejects_query_service_import(
     tmp_path, monkeypatch
 ) -> None:
     source = (
@@ -278,7 +279,33 @@ def test_advisory_compatibility_route_can_use_quarantined_simulation_service(
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
 
-    assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == []
+    assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == [
+        "src/services/query_control_plane_service/app/routers/advisory_simulation.py:1: "
+        "advisory simulation compatibility must remain control-plane owned: disallowed direct "
+        "import 'services.query_service.app.services.advisory_simulation_service'"
+    ]
+
+
+def test_advisory_application_rejects_direct_uuid_import(tmp_path, monkeypatch) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "query_control_plane_service"
+        / "app"
+        / "application"
+        / "advisory_simulation"
+        / "service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text("import uuid\n", encoding="utf-8")
+    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+
+    assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == [
+        "src/services/query_control_plane_service/app/application/advisory_simulation/"
+        "service.py:1: advisory simulation application must use runtime identity ports: "
+        "disallowed direct import 'uuid'"
+    ]
 
 
 def test_query_control_plane_capabilities_reject_query_service_import(
@@ -472,23 +499,27 @@ def test_service_runtime_import_guard_flags_own_repo_root_import(tmp_path, monke
         repo_root
         / "src"
         / "services"
-        / "query_service"
+        / "query_control_plane_service"
         / "app"
+        / "application"
         / "advisory_simulation"
         / "valuation.py"
     )
     service_module.parent.mkdir(parents=True)
     service_module.write_text(
-        "from src.services.query_service.app.advisory_simulation.models import "
+        "from src.services.query_control_plane_service.app.contracts.advisory_simulation_models "
+        "import "
         "ProposalSimulateRequest\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     assert _scan_for_service_runtime_imports([service_module]) == [
-        "src/services/query_service/app/advisory_simulation/valuation.py:1: "
+        "src/services/query_control_plane_service/app/application/advisory_simulation/"
+        "valuation.py:1: "
         "service runtime packages must not import their own app through repo-root module "
-        "path 'services.query_service.app.advisory_simulation.models'; use package-local "
+        "path 'services.query_control_plane_service.app.contracts.advisory_simulation_models'; "
+        "use package-local "
         "'app...' or relative imports"
     ]
 
@@ -499,14 +530,15 @@ def test_service_runtime_import_guard_allows_package_local_import(tmp_path, monk
         repo_root
         / "src"
         / "services"
-        / "query_service"
+        / "query_control_plane_service"
         / "app"
+        / "application"
         / "advisory_simulation"
         / "valuation.py"
     )
     service_module.parent.mkdir(parents=True)
     service_module.write_text(
-        "from app.advisory_simulation.models import ProposalSimulateRequest\n",
+        "from app.contracts.advisory_simulation_models import ProposalSimulateRequest\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
