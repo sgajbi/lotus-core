@@ -26,6 +26,9 @@ or claiming that local evidence is a production rollout.
 - One live consumer and one replay-request consumer invoke one combined use case and SQLAlchemy unit
   of work. Cost, cashflow, position, semantic idempotency, and compatibility outbox effects commit
   or roll back together.
+- Every transaction emitted by cost traverses position and cashflow exactly once before commit.
+  This includes generated settlement cash legs and rebuilt epochs; see CR-1545 for the focused
+  reconciliation decision and proof.
 - The three legacy calculator source roots, standalone consumers, packages, images, Compose
   services, CI service inventory, and Kubernetes scalers are retired locally.
 - Position valuation remains a separate job-driven runtime. Pipeline, valuation, timeseries, and
@@ -54,9 +57,9 @@ contract retirement is separately approved and evidenced.
 ## Documentation Decision
 
 README, architecture decision, boundary matrix, repository context, codebase review ledger, and
-authored wiki already describe the unified owner. This closure removes stale transitional-source
-language. No separate operator runbook change is required because cutover and rollback commands did
-not change.
+authored wiki describe the unified owner. CR-1545 additionally records the generated-leg traversal
+in repository context and the cashflow wiki. No separate operator runbook change is required because
+cutover and rollback commands did not change.
 
 ## Remaining Release Work
 
