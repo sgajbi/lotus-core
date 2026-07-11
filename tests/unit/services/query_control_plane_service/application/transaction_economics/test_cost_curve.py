@@ -1,12 +1,14 @@
+"""Application tests for QCP-owned transaction-cost curve evidence."""
+
 import asyncio
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    TransactionCostCurveRequest,
-)
-from src.services.query_service.app.services.transaction_cost_curve import (
+from portfolio_common.logging_utils import correlation_id_var
+
+from src.services.query_control_plane_service.app.application.transaction_economics.cost_curve import (  # noqa: E501
     build_transaction_cost_curve_page,
     build_transaction_cost_curve_point,
     build_transaction_cost_curve_points,
@@ -19,16 +21,13 @@ from src.services.query_service.app.services.transaction_cost_curve import (
     transaction_cost_curve_request_scope,
     transaction_fee_amount,
 )
-
-
-class _StringCountedValue:
-    def __init__(self, raw: str) -> None:
-        self.raw = raw
-        self.stringify_count = 0
-
-    def __str__(self) -> str:
-        self.stringify_count += 1
-        return self.raw
+from src.services.query_control_plane_service.app.contracts.transaction_cost_curve import (
+    TransactionCostCurveRequest,
+)
+from src.services.query_control_plane_service.app.domain.transaction_economics import (
+    BookedTransactionEconomics,
+    TransactionCostComponentEvidence,
+)
 
 
 def _transaction(
@@ -41,16 +40,42 @@ def _transaction(
     trade_fee: str | None = "20.0000",
     costs: list[SimpleNamespace] | None = None,
     transaction_date: datetime | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
+) -> BookedTransactionEconomics:
+    resolved_costs = tuple(
+        TransactionCostComponentEvidence(
+            fee_type=getattr(cost, "fee_type", None),
+            amount=Decimal(str(getattr(cost, "amount", "0")).strip() or "0"),
+            currency=getattr(cost, "currency", None),
+            updated_at=datetime(2026, 5, 1, 1, tzinfo=UTC),
+        )
+        for cost in costs or []
+    )
+    return BookedTransactionEconomics(
         transaction_id=transaction_id,
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
         security_id=security_id,
         transaction_type=transaction_type,
         currency=currency,
+        trade_currency=currency,
         gross_transaction_amount=Decimal(gross_transaction_amount),
+        allocated_cost_basis_local=None,
+        allocated_cost_basis_base=None,
         trade_fee=Decimal(trade_fee) if trade_fee is not None else None,
-        costs=costs,
+        withholding_tax_amount=None,
+        other_interest_deductions_amount=None,
+        net_interest_amount=None,
+        realized_capital_pnl_local=None,
+        realized_fx_pnl_local=None,
+        realized_total_pnl_local=None,
+        realized_capital_pnl_base=None,
+        realized_fx_pnl_base=None,
+        realized_total_pnl_base=None,
+        transaction_fx_rate=None,
+        fx_contract_id=None,
+        cashflow=None,
+        costs=resolved_costs,
         transaction_date=transaction_date or datetime(2026, 5, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 5, 1, 1, tzinfo=UTC),
     )
 
 
@@ -133,14 +158,12 @@ def test_transaction_cost_curve_points_group_and_filter_evidence() -> None:
     assert point.source_lineage["source_table"] == "transactions,transaction_costs"
 
 
-def test_transaction_cost_curve_points_reuse_observations_in_bulk_path() -> None:
-    gross_amount = _StringCountedValue("100000.0000")
+def test_transaction_cost_curve_points_reuse_typed_domain_amounts() -> None:
     transaction = _transaction(
         transaction_id="TXN-AAPL-001",
-        gross_transaction_amount="1.0000",
+        gross_transaction_amount="100000.0000",
         trade_fee="20.0000",
     )
-    transaction.gross_transaction_amount = gross_amount
 
     points = build_transaction_cost_curve_points(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
@@ -150,7 +173,7 @@ def test_transaction_cost_curve_points_reuse_observations_in_bulk_path() -> None
 
     assert len(points) == 1
     assert points[0].total_notional == Decimal("100000.0000")
-    assert gross_amount.stringify_count == 1
+    assert transaction.gross_transaction_amount == Decimal("100000.0000")
 
 
 def test_transaction_cost_curve_page_builds_only_requested_slice() -> None:
@@ -393,6 +416,7 @@ def test_resolve_transaction_cost_curve_response_orchestrates_repository_reads()
             ),
             decode_page_token=lambda _: {},
             encode_page_token=encode,
+            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
         return response, calls, encoded_payloads
 
@@ -483,6 +507,7 @@ def test_resolve_transaction_cost_curve_response_requires_existing_portfolio() -
             ),
             decode_page_token=lambda _: {},
             encode_page_token=lambda _: "token",
+            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
 
     try:
@@ -514,6 +539,7 @@ def test_resolve_transaction_cost_curve_response_skips_evidence_read_without_pag
             ),
             decode_page_token=lambda _: {},
             encode_page_token=lambda _: "token",
+            generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
         )
 
     response = asyncio.run(run_case())
@@ -536,8 +562,8 @@ def test_transaction_cost_curve_response_reports_page_scoped_supportability() ->
             transaction_date=datetime(2026, 4, 2, 10, tzinfo=UTC),
         ),
     ]
-    transactions[0].updated_at = datetime(2026, 4, 1, 10, tzinfo=UTC)
-    transactions[1].updated_at = datetime(2026, 4, 2, 10, tzinfo=UTC)
+    transactions[0] = replace(transactions[0], updated_at=datetime(2026, 4, 1, 10, tzinfo=UTC))
+    transactions[1] = replace(transactions[1], updated_at=datetime(2026, 4, 2, 10, tzinfo=UTC))
     curve_page = build_transaction_cost_curve_page(
         portfolio_id="PB1",
         transactions=transactions,
@@ -546,6 +572,7 @@ def test_transaction_cost_curve_response_reports_page_scoped_supportability() ->
         page_size=1,
     )
 
+    correlation_token = correlation_id_var.set("corr-transaction-cost-curve")
     response = build_transaction_cost_curve_response(
         portfolio_id="PB1",
         request=TransactionCostCurveRequest(
@@ -558,7 +585,9 @@ def test_transaction_cost_curve_response_reports_page_scoped_supportability() ->
         curve_page=curve_page,
         transactions=transactions,
         next_page_token="token-2",
+        generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
     )
+    correlation_id_var.reset(correlation_token)
 
     assert response.product_name == "TransactionCostCurve"
     assert response.page.next_page_token == "token-2"
@@ -568,6 +597,7 @@ def test_transaction_cost_curve_response_reports_page_scoped_supportability() ->
     assert response.supportability.missing_security_ids == []
     assert response.data_quality_status == "PARTIAL"
     assert response.latest_evidence_timestamp == datetime(2026, 4, 2, 10, tzinfo=UTC)
+    assert response.correlation_id == "corr-transaction-cost-curve"
     assert response.lineage == {
         "source_system": "transactions",
         "contract_version": "rfc_040_wtbd_007_v1",
@@ -595,6 +625,7 @@ def test_transaction_cost_curve_response_reports_missing_requested_security() ->
         curve_page=curve_page,
         transactions=transactions,
         next_page_token=None,
+        generated_at=datetime(2026, 4, 10, 15, tzinfo=UTC),
     )
 
     assert response.supportability.state == "INCOMPLETE"

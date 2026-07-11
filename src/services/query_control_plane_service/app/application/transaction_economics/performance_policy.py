@@ -1,16 +1,18 @@
+"""Supportability and aggregation policy for performance economics."""
+
 from __future__ import annotations
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Callable
+from typing import Callable, cast
 
-from ..dtos.reference_integration_dto import (
+from ...contracts.performance_component_economics import (
     SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
     PerformanceComponentEconomicsRow,
     PerformanceComponentEconomicsTotal,
 )
-from ..read_models import PerformanceEconomicsTransactionReadRecord
-from .reference_data_helpers import latest_reference_evidence_timestamp
+from ...domain.transaction_economics import BookedTransactionEconomics
+from .evidence import latest_evidence_timestamp
 
 SOURCE_CONTRACT_VERSION = "performance_component_economics_v1"
 SOURCE_LINEAGE = {
@@ -125,15 +127,9 @@ def build_performance_component_economics_totals(
 
 
 def latest_performance_evidence_timestamp(
-    transactions: list[PerformanceEconomicsTransactionReadRecord],
+    transactions: list[BookedTransactionEconomics],
 ):
-    evidence_rows: list[object] = []
-    for transaction in transactions:
-        evidence_rows.append(transaction)
-        if transaction.cashflow is not None:
-            evidence_rows.append(transaction.cashflow)
-        evidence_rows.extend(transaction.costs)
-    return latest_reference_evidence_timestamp(evidence_rows)
+    return latest_evidence_timestamp(transactions)
 
 
 def _append_total(
@@ -159,23 +155,23 @@ def _has_fee_component(row: PerformanceComponentEconomicsRow) -> bool:
 
 
 def _has_income_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return row.net_interest_amount != 0
+    return cast(bool, row.net_interest_amount != 0)
 
 
 def _has_tax_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return row.withholding_tax_amount != 0 or row.other_interest_deductions_amount != 0
+    return cast(bool, row.withholding_tax_amount != 0 or row.other_interest_deductions_amount != 0)
 
 
 def _has_realized_capital_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return row.realized_capital_pnl_local != 0 or row.realized_capital_pnl_base != 0
+    return cast(bool, row.realized_capital_pnl_local != 0 or row.realized_capital_pnl_base != 0)
 
 
 def _has_realized_fx_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return row.realized_fx_pnl_local != 0 or row.realized_fx_pnl_base != 0
+    return cast(bool, row.realized_fx_pnl_local != 0 or row.realized_fx_pnl_base != 0)
 
 
 def _has_realized_total_pnl_component(row: PerformanceComponentEconomicsRow) -> bool:
-    return row.realized_total_pnl_local != 0 or row.realized_total_pnl_base != 0
+    return cast(bool, row.realized_total_pnl_local != 0 or row.realized_total_pnl_base != 0)
 
 
 def _has_fx_context_component(row: PerformanceComponentEconomicsRow) -> bool:

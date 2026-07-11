@@ -25,17 +25,19 @@ from src.services.persistence_service.app.adapters.persistence_event_adapter imp
     decode_persistence_message_payload,
     validate_persistence_event_payload,
 )
+from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
+    build_performance_component_economics_rows,
+)
+from src.services.query_control_plane_service.app.domain.transaction_economics import (
+    BookedTransactionEconomics,
+    TransactionCostComponentEvidence,
+)
 from src.services.query_service.app.dtos.reference_integration_portfolio_tax_lot_dto import (
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
 )
 from src.services.query_service.app.read_models import (
-    PerformanceEconomicsCostReadRecord,
-    PerformanceEconomicsTransactionReadRecord,
     PortfolioTaxLotReadRecord,
-)
-from src.services.query_service.app.services.performance_component_economics import (
-    build_performance_component_economics_rows,
 )
 from src.services.query_service.app.services.reference_data_mappers import portfolio_tax_lot_record
 
@@ -306,10 +308,10 @@ def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -
     }
 
 
-def test_performance_economics_mapping_uses_typed_read_records_for_optional_joins() -> None:
+def test_performance_economics_mapping_uses_typed_domain_evidence_for_optional_joins() -> None:
     rows = build_performance_component_economics_rows(
         [
-            PerformanceEconomicsTransactionReadRecord(
+            BookedTransactionEconomics(
                 transaction_id="TXN-MAP-PERF-001",
                 portfolio_id="PB_SG_GLOBAL_BAL_001",
                 security_id=" EQ_US_AAPL ",
@@ -334,13 +336,13 @@ def test_performance_economics_mapping_uses_typed_read_records_for_optional_join
                 fx_contract_id="FXC-MAP-001",
                 cashflow=None,
                 costs=(
-                    PerformanceEconomicsCostReadRecord(
+                    TransactionCostComponentEvidence(
                         fee_type="brokerage",
                         amount=Decimal("1.2500000000"),
                         currency="usd",
                         updated_at=datetime(2026, 3, 25, 10, 0, tzinfo=UTC),
                     ),
-                    PerformanceEconomicsCostReadRecord(
+                    TransactionCostComponentEvidence(
                         fee_type="exchange_fee",
                         amount=Decimal("2.5000000000"),
                         currency="eur",

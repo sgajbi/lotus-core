@@ -1,4 +1,3 @@
-import importlib
 import inspect
 from datetime import date
 
@@ -27,12 +26,8 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IntegrationWindow,
-    PerformanceComponentEconomicsRequest,
-    PerformanceComponentEconomicsResponse,
     PortfolioTaxLotWindowRequest,
     RiskFreeSeriesResponse,
-    TransactionCostCurveRequest,
-    TransactionCostCurveResponse,
 )
 from src.services.query_service.app.dtos.reference_integration_instrument_eligibility_dto import (
     InstrumentEligibilityBulkRequest,
@@ -73,131 +68,6 @@ def test_benchmark_market_series_request_requires_target_currency_for_fx() -> No
             frequency="daily",
             series_fields=["fx_rate"],
         )
-
-
-@pytest.mark.parametrize(
-    ("payload", "message"),
-    [
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-04-30", "end_date": "2026-04-01"},
-            },
-            "window.end_date must be on or after window.start_date",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
-                "security_ids": ["EQ_US_AAPL", " "],
-            },
-            "security_ids must not contain blank identifiers",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
-                "security_ids": ["EQ_US_AAPL", "EQ_US_AAPL"],
-            },
-            "security_ids must not contain duplicates",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
-                "transaction_types": ["BUY", " "],
-            },
-            "transaction_types must not contain blank values",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-04-01", "end_date": "2026-04-30"},
-                "transaction_types": ["buy", "BUY"],
-            },
-            "transaction_types must not contain duplicates",
-        ),
-    ],
-)
-def test_transaction_cost_curve_request_rejects_invalid_scope(payload, message) -> None:
-    with pytest.raises(ValidationError, match=message):
-        TransactionCostCurveRequest(**payload)
-
-
-def test_transaction_cost_curve_request_normalizes_filters() -> None:
-    request = TransactionCostCurveRequest(
-        as_of_date="2026-05-03",
-        window={"start_date": "2026-04-01", "end_date": "2026-04-30"},
-        security_ids=[" EQ_US_AAPL "],
-        transaction_types=[" buy "],
-    )
-
-    assert request.security_ids == ["EQ_US_AAPL"]
-    assert request.transaction_types == ["BUY"]
-
-
-def test_performance_component_economics_request_rejects_unbounded_window() -> None:
-    with pytest.raises(
-        ValidationError,
-        match="performance component economics window must be 366 days or less",
-    ):
-        PerformanceComponentEconomicsRequest(
-            as_of_date="2026-12-31",
-            window={"start_date": "2025-12-30", "end_date": "2026-12-31"},
-        )
-
-
-@pytest.mark.parametrize(
-    ("payload", "message"),
-    [
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-05-03", "end_date": "2026-05-01"},
-            },
-            "window.end_date must be on or after window.start_date",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-05-01", "end_date": "2026-05-03"},
-                "security_ids": ["EQ_US_AAPL", ""],
-            },
-            "security_ids must not contain blank values",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-05-01", "end_date": "2026-05-03"},
-                "security_ids": ["EQ_US_AAPL", "EQ_US_AAPL"],
-            },
-            "security_ids must not contain duplicates",
-        ),
-        (
-            {
-                "as_of_date": "2026-05-03",
-                "window": {"start_date": "2026-05-01", "end_date": "2026-05-03"},
-                "transaction_types": ["BUY", " "],
-            },
-            "transaction_types must not contain blank values",
-        ),
-    ],
-)
-def test_performance_component_economics_request_rejects_invalid_scope(payload, message) -> None:
-    with pytest.raises(ValidationError, match=message):
-        PerformanceComponentEconomicsRequest(**payload)
-
-
-def test_performance_component_economics_request_normalizes_transaction_types() -> None:
-    request = PerformanceComponentEconomicsRequest(
-        as_of_date="2026-05-03",
-        window={"start_date": "2026-05-01", "end_date": "2026-05-03"},
-        security_ids=[" EQ_US_AAPL "],
-        transaction_types=[" buy "],
-    )
-
-    assert request.security_ids == ["EQ_US_AAPL"]
-    assert request.transaction_types == ["BUY"]
 
 
 @pytest.mark.parametrize(
@@ -295,14 +165,6 @@ def test_dpm_source_readiness_request_normalizes_valuation_currency() -> None:
     assert request.valuation_currency == "USD"
 
 
-def test_performance_component_economics_dto_imports_without_aggregate_cycle() -> None:
-    module = importlib.import_module(
-        "src.services.query_service.app.dtos.reference_integration_performance_component_economics_dto"
-    )
-
-    assert module.PerformanceComponentEconomicsRequest is PerformanceComponentEconomicsRequest
-
-
 @pytest.mark.parametrize(
     ("response_model", "product_name"),
     [
@@ -315,8 +177,6 @@ def test_performance_component_economics_dto_imports_without_aggregate_cycle() -
         (CoverageResponse, "DataQualityCoverageReport"),
         (ClassificationTaxonomyResponse, "InstrumentReferenceBundle"),
         (InstrumentEnrichmentBulkResponse, "InstrumentReferenceBundle"),
-        (TransactionCostCurveResponse, "TransactionCostCurve"),
-        (PerformanceComponentEconomicsResponse, "PerformanceComponentEconomics"),
         (DpmPortfolioUniverseCandidateResponse, "DpmPortfolioUniverseCandidate"),
     ],
 )

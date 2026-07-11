@@ -89,12 +89,15 @@ must not treat `MIXED` as an ISO currency.
 
 ## Field Provenance And Assembly Boundaries
 
-The implementation keeps the source-data anti-corruption boundary in three stages:
+The QCP implementation keeps the source-data anti-corruption boundary in four stages:
 
-1. typed read records from the repository,
-2. source-evidence policy over component families, supportability, data quality, totals, and
+1. `SqlAlchemyTransactionEconomicsReader` maps ORM rows into frozen
+   `BookedTransactionEconomics`, `TransactionCashflowEvidence`, and
+   `TransactionCostComponentEvidence` domain records,
+2. `TransactionEconomicsReader` defines the application-facing source port,
+3. source-evidence policy operates over component families, supportability, data quality, totals, and
    lineage,
-3. response-envelope assembly for product identity, page metadata, runtime metadata, and DTO
+4. response-envelope assembly produces product identity, page metadata, runtime metadata, and API
    construction.
 
 | Field family | Provenance |
@@ -105,7 +108,7 @@ The implementation keeps the source-data anti-corruption boundary in three stage
 | `rows[*].source_lineage` | Core source-data policy metadata for the row evidence contract. |
 | `component_totals` and `component_totals_scope` | Core response policy derived from the returned page only. |
 | `supportability` and `data_quality_status` | Core source-evidence policy derived from returned rows and paging state. |
-| `page`, `request_fingerprint`, runtime source-data metadata, and top-level `lineage` | Response-envelope metadata derived by Core assembly policy. |
+| `page`, `request_fingerprint`, runtime source-data metadata, and top-level `lineage` | QCP response-envelope metadata derived by Core assembly policy. `content_hash`, `source_digest`, and `source_batch_fingerprint` are the same deterministic SHA-256 value and exclude volatile `generated_at`. |
 
 ## Supportability
 

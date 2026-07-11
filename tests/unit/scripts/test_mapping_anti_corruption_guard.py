@@ -96,24 +96,28 @@ def _write_required_artifacts(root: Path) -> None:
     )
     _write(
         root / "src/services/query_service/app/read_models.py",
-        "class PortfolioTaxLotReadRecord: pass\n"
-        "class PerformanceEconomicsTransactionReadRecord: pass\n"
-        "class PerformanceEconomicsCashflowReadRecord: pass\n"
-        "class PerformanceEconomicsCostReadRecord: pass\n",
+        "class PortfolioTaxLotReadRecord: pass\n",
     )
     _write(
-        root / "src/services/query_service/app/services/performance_component_economics_rows.py",
-        "def build_performance_component_economics_rows(): pass\n"
-        "PerformanceEconomicsTransactionReadRecord\n",
+        root / "src/services/query_control_plane_service/app/domain/transaction_economics.py",
+        "class BookedTransactionEconomics: pass\n"
+        "class TransactionCashflowEvidence: pass\n"
+        "class TransactionCostComponentEvidence: pass\n",
     )
     _write(
-        root / "src/services/query_service/app/services/performance_component_economics_policy.py",
+        root / "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_rows.py",
+        "def build_performance_component_economics_rows(): pass\nBookedTransactionEconomics\n",
+    )
+    _write(
+        root / "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_policy.py",
         "performance_component_economics_source_lineage\n"
         "performance_component_economics_supportability_state\n",
     )
     _write(
-        root
-        / "src/services/query_service/app/services/performance_component_economics_response.py",
+        root / "src/services/query_control_plane_service/app/application/transaction_economics/"
+        "performance_response.py",
         "def build_performance_component_economics_response(): pass\n"
         "PerformanceComponentEconomicsResponse\n",
     )
@@ -122,7 +126,7 @@ def _write_required_artifacts(root: Path) -> None:
         "test_transaction_mapping_chain_preserves_event_and_record_invariants\n"
         "test_persistence_message_adapter_preserves_event_identity_and_lineage\n"
         "test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity\n"
-        "test_performance_economics_mapping_uses_typed_read_records_for_optional_joins\n",
+        "test_performance_economics_mapping_uses_typed_domain_evidence_for_optional_joins\n",
     )
 
 

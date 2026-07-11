@@ -1,3 +1,5 @@
+"""Public contracts for transaction performance-component economics."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -12,7 +14,7 @@ from portfolio_common.source_data_product_metadata import (
 )
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .reference_integration_common_dto import IntegrationWindow
+from .common import IntegrationWindow
 
 SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES = (
     "cashflow",

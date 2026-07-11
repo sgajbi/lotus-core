@@ -1,16 +1,10 @@
+"""Application tests for QCP-owned performance-component economics."""
+
 import asyncio
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from src.services.query_service.app.dtos.reference_integration_dto import (
-    PerformanceComponentEconomicsRequest,
-)
-from src.services.query_service.app.read_models import (
-    PerformanceEconomicsCashflowReadRecord,
-    PerformanceEconomicsCostReadRecord,
-    PerformanceEconomicsTransactionReadRecord,
-)
-from src.services.query_service.app.services.performance_component_economics import (
+from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
     build_performance_component_economics_rows,
     build_performance_component_economics_totals,
     performance_component_economics_next_page_token_payload,
@@ -18,7 +12,7 @@ from src.services.query_service.app.services.performance_component_economics imp
     performance_component_economics_page_token,
     resolve_performance_component_economics_response,
 )
-from src.services.query_service.app.services.performance_component_economics_policy import (
+from src.services.query_control_plane_service.app.application.transaction_economics.performance_policy import (  # noqa: E501
     missing_performance_component_families,
     observed_performance_component_families,
     performance_component_economics_data_quality_status,
@@ -26,8 +20,16 @@ from src.services.query_service.app.services.performance_component_economics_pol
     performance_component_economics_supportability_reason,
     performance_component_economics_supportability_state,
 )
-from src.services.query_service.app.services.performance_component_economics_response import (
+from src.services.query_control_plane_service.app.application.transaction_economics.performance_response import (  # noqa: E501
     build_performance_component_economics_response,
+)
+from src.services.query_control_plane_service.app.contracts.performance_component_economics import (
+    PerformanceComponentEconomicsRequest,
+)
+from src.services.query_control_plane_service.app.domain.transaction_economics import (
+    BookedTransactionEconomics,
+    TransactionCashflowEvidence,
+    TransactionCostComponentEvidence,
 )
 
 
@@ -43,8 +45,8 @@ def _transaction(
     allocated_cost_basis_local: str | None = None,
     allocated_cost_basis_base: str | None = None,
     trade_fee: str | None = "2.5000",
-    costs: list[PerformanceEconomicsCostReadRecord] | None = None,
-    cashflow: PerformanceEconomicsCashflowReadRecord | None = None,
+    costs: list[TransactionCostComponentEvidence] | None = None,
+    cashflow: TransactionCashflowEvidence | None = None,
     withholding_tax_amount: str | None = None,
     other_interest_deductions_amount: str | None = None,
     net_interest_amount: str | None = None,
@@ -54,8 +56,8 @@ def _transaction(
     transaction_fx_rate: str | None = None,
     fx_contract_id: str | None = None,
     updated_at: datetime | None = None,
-) -> PerformanceEconomicsTransactionReadRecord:
-    return PerformanceEconomicsTransactionReadRecord(
+) -> BookedTransactionEconomics:
+    return BookedTransactionEconomics(
         transaction_id=transaction_id,
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         security_id=security_id,
@@ -110,8 +112,8 @@ def _cost(
     currency: str,
     fee_type: str | None = None,
     updated_at: datetime | None = None,
-) -> PerformanceEconomicsCostReadRecord:
-    return PerformanceEconomicsCostReadRecord(
+) -> TransactionCostComponentEvidence:
+    return TransactionCostComponentEvidence(
         fee_type=fee_type,
         amount=Decimal(amount),
         currency=currency,
@@ -128,8 +130,8 @@ def _cashflow(
     is_position_flow: bool = True,
     is_portfolio_flow: bool = False,
     updated_at: datetime | None = None,
-) -> PerformanceEconomicsCashflowReadRecord:
-    return PerformanceEconomicsCashflowReadRecord(
+) -> TransactionCashflowEvidence:
+    return TransactionCashflowEvidence(
         amount=Decimal(amount),
         currency=currency,
         classification=classification,
@@ -276,6 +278,15 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
         rows=build_performance_component_economics_rows([transaction]),
         transactions=[transaction],
         portfolio_base_currency="USD",
+        generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
+    )
+    regenerated_response = build_performance_component_economics_response(
+        portfolio_id="PB_SG_GLOBAL_BAL_001",
+        request=request,
+        rows=build_performance_component_economics_rows([transaction]),
+        transactions=[transaction],
+        portfolio_base_currency="USD",
+        generated_at=datetime(2026, 5, 10, 16, tzinfo=UTC),
     )
 
     assert response.product_name == "PerformanceComponentEconomics"
@@ -300,6 +311,13 @@ def test_performance_component_economics_response_reports_coverage_and_lineage()
     assert response.tenant_id == "tenant-sg"
     assert response.latest_evidence_timestamp == datetime(2026, 5, 10, 17, tzinfo=UTC)
     assert response.lineage["source_table"] == "transactions,cashflows,transaction_costs"
+    assert response.content_hash.startswith("sha256:")
+    assert response.source_digest == response.content_hash
+    assert response.source_batch_fingerprint == response.content_hash
+    assert response.source_evidence_current is True
+    assert response.freshness_status == "CURRENT"
+    assert regenerated_response.generated_at != response.generated_at
+    assert regenerated_response.content_hash == response.content_hash
 
 
 def test_performance_component_economics_policy_classifies_source_evidence() -> None:
@@ -525,6 +543,7 @@ def test_performance_component_economics_empty_response_is_unavailable() -> None
         rows=[],
         transactions=[],
         portfolio_base_currency="USD",
+        generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
     )
 
     assert response.supportability.state == "UNAVAILABLE"
@@ -548,7 +567,7 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
 
             async def list_performance_component_economics_evidence(
                 self, **kwargs: object
-            ) -> list[PerformanceEconomicsTransactionReadRecord]:
+            ) -> list[BookedTransactionEconomics]:
                 calls.append(("performance_component_economics", kwargs))
                 return [
                     _transaction(transaction_id="TXN-DIV-001"),
@@ -573,6 +592,7 @@ def test_resolve_performance_component_economics_response_orchestrates_repositor
             ),
             decode_page_token=lambda _: {},
             encode_page_token=encode,
+            generated_at=datetime(2026, 5, 10, 15, tzinfo=UTC),
         )
         return response, calls, encoded_payloads
 

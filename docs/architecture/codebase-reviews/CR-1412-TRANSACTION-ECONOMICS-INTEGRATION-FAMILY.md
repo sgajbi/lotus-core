@@ -2,7 +2,8 @@
 
 ## Status
 
-In progress on 2026-07-06.
+Superseded by CR-1523 on 2026-07-11. The transitional Query Service family and compatibility
+delegates described below were removed after QCP assumed end-to-end ownership.
 
 ## Scope
 

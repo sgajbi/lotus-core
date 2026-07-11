@@ -859,28 +859,12 @@ from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, 
     ComponentSeriesResponse,
     SeriesPoint,
 )
-from .reference_integration_performance_component_economics_dto import (  # noqa: E402, F401
-    SUPPORTED_PERFORMANCE_ECONOMICS_COMPONENT_FAMILIES,
-    PerformanceComponentEconomicsFeeComponent,
-    PerformanceComponentEconomicsRequest,
-    PerformanceComponentEconomicsResponse,
-    PerformanceComponentEconomicsRow,
-    PerformanceComponentEconomicsSupportability,
-    PerformanceComponentEconomicsTotal,
-)
 from .reference_integration_portfolio_tax_lot_dto import (  # noqa: E402, F401
     PortfolioTaxLotPageRequest,
     PortfolioTaxLotRecord,
     PortfolioTaxLotWindowRequest,
     PortfolioTaxLotWindowResponse,
     PortfolioTaxLotWindowSupportability,
-)
-from .reference_integration_transaction_cost_dto import (  # noqa: E402, F401
-    TransactionCostCurvePageRequest,
-    TransactionCostCurvePoint,
-    TransactionCostCurveRequest,
-    TransactionCostCurveResponse,
-    TransactionCostCurveSupportability,
 )
 
 
