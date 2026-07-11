@@ -2045,6 +2045,15 @@ Most relevant current governance:
      stable event, identity, monetary, runtime-port, and supportability contracts when multiple
      deployables legitimately share them. Do not restore generic `portfolio_common.models`, root
      transaction control-code helpers, or duplicate compatibility facades.
+156. Shared SQLAlchemy adapters belong under `portfolio_common.infrastructure.persistence` only
+     while multiple deployables genuinely use the same persistence behavior. Do not name concrete
+     repositories `Base` or place them at the shared package root. The transitional
+     `SharedTimeseriesRepository` currently preserves timeseries-generator and portfolio-
+     aggregation behavior, but production usage overlaps only for instrument-batch and FX reads.
+     Split generator snapshot/cashflow/position-timeseries persistence from aggregation claim,
+     recovery, queue, and portfolio-timeseries persistence with PostgreSQL locking/upsert/as-of
+     proof before retiring the shared adapter. Never move aggregation queue state into the
+     generator merely because historical integration tests live under its test directory.
 
 ## Context Maintenance Rule
 

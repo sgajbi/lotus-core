@@ -1,12 +1,14 @@
 from datetime import date
 
 from portfolio_common.database_models import PositionTimeseries
-from portfolio_common.timeseries_repository_base import TimeseriesRepositoryBase
+from portfolio_common.infrastructure.persistence.timeseries_repository import (
+    SharedTimeseriesRepository,
+)
 from portfolio_common.utils import async_timed
 from sqlalchemy import select
 
 
-class TimeseriesRepository(TimeseriesRepositoryBase):
+class TimeseriesRepository(SharedTimeseriesRepository):
     @async_timed(repository="TimeseriesRepository", method="get_position_timeseries")
     async def get_position_timeseries(
         self, portfolio_id: str, security_id: str, a_date: date, epoch: int
