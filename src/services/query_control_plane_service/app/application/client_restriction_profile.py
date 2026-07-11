@@ -17,13 +17,21 @@ from ..domain.client_restriction_profile import (
 )
 from ..domain.effective_mandate import EffectiveMandateBinding
 from ..ports.client_restriction_profile import ClientRestrictionProfileSourceReader
+from ..ports.effective_mandate import EffectiveMandateReader
 from .source_evidence import latest_evidence_timestamp
 
 
 class ClientRestrictionProfileService:
     """Resolve one deterministic restriction profile through an explicit source port."""
 
-    def __init__(self, *, reader: ClientRestrictionProfileSourceReader, clock: Clock) -> None:
+    def __init__(
+        self,
+        *,
+        mandate_reader: EffectiveMandateReader,
+        reader: ClientRestrictionProfileSourceReader,
+        clock: Clock,
+    ) -> None:
+        self._mandate_reader = mandate_reader
         self._reader = reader
         self._clock = clock
 
@@ -33,7 +41,7 @@ class ClientRestrictionProfileService:
         portfolio_id: str,
         request: ClientRestrictionProfileRequest,
     ) -> ClientRestrictionProfileResponse | None:
-        binding = await self._reader.resolve_mandate_binding(
+        binding = await self._mandate_reader.resolve(
             portfolio_id=portfolio_id,
             as_of_date=request.as_of_date,
             mandate_id=request.mandate_id,

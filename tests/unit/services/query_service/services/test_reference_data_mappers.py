@@ -11,7 +11,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
     client_income_needs_schedule_entry,
-    client_tax_profile_entry,
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
@@ -475,25 +474,7 @@ def test_benchmark_market_series_point_uses_price_row_precedence_for_metadata() 
     assert point.quality_status == "accepted"
 
 
-def test_client_tax_entries_map_source_data_rows() -> None:
-    tax_profile = client_tax_profile_entry(
-        SimpleNamespace(
-            tax_profile_id="TAX_PROFILE_SG_001",
-            tax_residency_country="SG",
-            booking_tax_jurisdiction="SG",
-            tax_status="resident",
-            profile_status="active",
-            withholding_tax_rate="0.3000000000",
-            capital_gains_tax_applicable=False,
-            income_tax_applicable=True,
-            treaty_codes=["US_SG_DTA", ""],
-            eligible_account_types=["DPM", "ADVISORY"],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            profile_version="2",
-            source_record_id="tax-profile-1",
-        )
-    )
+def test_client_tax_rule_entry_maps_source_data_row() -> None:
     tax_rule = client_tax_rule_set_entry(
         SimpleNamespace(
             rule_set_id="TAX_RULES_SG_2026",
@@ -516,33 +497,12 @@ def test_client_tax_entries_map_source_data_rows() -> None:
         )
     )
 
-    assert tax_profile.withholding_tax_rate == Decimal("0.3000000000")
-    assert tax_profile.treaty_codes == ["US_SG_DTA"]
-    assert tax_profile.profile_version == 2
     assert tax_rule.tax_year == 2026
     assert tax_rule.rate == Decimal("0.3000000000")
     assert tax_rule.threshold_amount == Decimal("250000.0000")
 
 
-def test_client_tax_entries_treat_blank_optional_rates_as_absent() -> None:
-    tax_profile = client_tax_profile_entry(
-        SimpleNamespace(
-            tax_profile_id="TAX_PROFILE_SG_001",
-            tax_residency_country="SG",
-            booking_tax_jurisdiction="SG",
-            tax_status="resident",
-            profile_status="active",
-            withholding_tax_rate=" ",
-            capital_gains_tax_applicable=False,
-            income_tax_applicable=True,
-            treaty_codes=[],
-            eligible_account_types=[],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            profile_version="2",
-            source_record_id="tax-profile-1",
-        )
-    )
+def test_client_tax_rule_entry_treats_blank_optional_rates_as_absent() -> None:
     tax_rule = client_tax_rule_set_entry(
         SimpleNamespace(
             rule_set_id="TAX_RULES_SG_2026",
@@ -565,7 +525,6 @@ def test_client_tax_entries_treat_blank_optional_rates_as_absent() -> None:
         )
     )
 
-    assert tax_profile.withholding_tax_rate is None
     assert tax_rule.rate is None
     assert tax_rule.threshold_amount is None
 

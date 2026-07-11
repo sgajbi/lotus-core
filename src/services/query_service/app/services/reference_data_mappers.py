@@ -10,7 +10,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClientIncomeNeedsScheduleEntry,
-    ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
     ComponentSeriesResponse,
     DpmPortfolioUniverseCandidate,
@@ -432,25 +431,6 @@ def classification_taxonomy_entry(row: Any) -> ClassificationTaxonomyEntry:
         effective_from=row.effective_from,
         effective_to=row.effective_to,
         quality_status=row.quality_status,
-    )
-
-
-def client_tax_profile_entry(row: Any) -> ClientTaxProfileEntry:
-    return ClientTaxProfileEntry(
-        tax_profile_id=row.tax_profile_id,
-        tax_residency_country=row.tax_residency_country,
-        booking_tax_jurisdiction=row.booking_tax_jurisdiction,
-        tax_status=row.tax_status,
-        profile_status=row.profile_status,
-        withholding_tax_rate=as_optional_decimal(row.withholding_tax_rate),
-        capital_gains_tax_applicable=bool(row.capital_gains_tax_applicable),
-        income_tax_applicable=bool(row.income_tax_applicable),
-        treaty_codes=string_list(row.treaty_codes),
-        eligible_account_types=string_list(row.eligible_account_types),
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        profile_version=int(row.profile_version),
-        source_record_id=row.source_record_id,
     )
 
 

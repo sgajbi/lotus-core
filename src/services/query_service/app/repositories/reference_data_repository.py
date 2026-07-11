@@ -11,7 +11,6 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
     ClientIncomeNeedsSchedule,
-    ClientTaxProfile,
     ClientTaxRuleSet,
     FxRate,
     IndexDefinition,
@@ -29,7 +28,6 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.source_lifecycle_predicates import (
     CLIENT_INCOME_NEEDS_ACTIVE,
-    CLIENT_TAX_PROFILE_ACTIVE,
     CLIENT_TAX_RULE_SET_ACTIVE,
     DISCRETIONARY_MANDATE_TYPE,
     DPM_DISCRETIONARY_MANDATE_ACTIVE,
@@ -237,58 +235,6 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
-
-    async def list_client_tax_profiles(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_profiles: bool = False,
-    ) -> list[ClientTaxProfile]:
-        predicates = [
-            ClientTaxProfile.portfolio_id == portfolio_id,
-            ClientTaxProfile.client_id == client_id,
-            effective_filter(
-                ClientTaxProfile.effective_from,
-                ClientTaxProfile.effective_to,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    ClientTaxProfile.mandate_id.is_(None),
-                    ClientTaxProfile.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_profiles:
-            predicates.append(
-                CLIENT_TAX_PROFILE_ACTIVE.sqlalchemy_filter(ClientTaxProfile.profile_status)
-            )
-
-        ranked = ranked_latest_effective_ids(
-            ClientTaxProfile,
-            ClientTaxProfile.tax_profile_id,
-            predicates=predicates,
-            order_by=(
-                ClientTaxProfile.effective_from.desc(),
-                ClientTaxProfile.observed_at.desc().nullslast(),
-                ClientTaxProfile.profile_version.desc(),
-                ClientTaxProfile.updated_at.desc(),
-                ClientTaxProfile.created_at.desc(),
-                ClientTaxProfile.id.desc(),
-            ),
-        )
-        stmt = (
-            select(ClientTaxProfile)
-            .join(ranked, ClientTaxProfile.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(ClientTaxProfile.tax_profile_id.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
 
     async def list_client_tax_rule_sets(
         self,

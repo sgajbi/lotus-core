@@ -28,7 +28,7 @@ This makes it a contract and operations plane, not a generic duplicate of the re
 | --- | --- | --- |
 | Support and lineage | Portfolio readiness, support overview, control-stage evidence, replay evidence, reconciliation evidence, and lineage drill-through. | Performance, risk, or advisory business conclusions. |
 | Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
-| Integration contracts | Policy-aware snapshots, QCP-owned client-restriction and sustainability-preference evidence, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access, DPM decisioning, or unmanaged compatibility aliases. |
+| Integration contracts | Policy-aware snapshots, QCP-owned client-restriction, sustainability-preference, and client tax-reference evidence, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access, DPM or tax decisioning, or unmanaged compatibility aliases. |
 | Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
 | Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
 
@@ -95,6 +95,7 @@ Primary contract areas include:
 - `PortfolioAnalyticsReference`
 - `ClientRestrictionProfile`
 - `SustainabilityPreferenceProfile`
+- `ClientTaxProfile`
 - integration policy and capability diagnostics
 - supportability, lineage, reconciliation, and reprocessing evidence bundles
 - simulation session and projected-state contracts
@@ -199,6 +200,8 @@ router inside the operational read plane.
   `lotus-manage` owns DPM interpretation, enforcement, workflow, and client-facing conclusions
 - sustainability-preference contracts, policy, records, port, and adapter must remain QCP-owned;
   Core publishes captured preference evidence while `lotus-manage` owns DPM interpretation
+- client-tax-profile contracts and implementation must remain QCP-owned and bounded to reference
+  evidence; tax advice, optimization, suitability, and approval remain outside Core
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 

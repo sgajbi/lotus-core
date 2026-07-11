@@ -35,7 +35,7 @@ class _Reader:
         self.preferences = preferences
         self.calls: list[str] = []
 
-    async def resolve_mandate_binding(self, **_):
+    async def resolve(self, **_):
         self.calls.append("binding")
         return self.binding
 
@@ -86,7 +86,9 @@ def _request() -> SustainabilityPreferenceProfileRequest:
 @pytest.mark.asyncio
 async def test_resolves_ready_preference_profile() -> None:
     reader = _Reader(_binding(), [_preference()])
-    service = SustainabilityPreferenceProfileService(reader=reader, clock=_Clock())
+    service = SustainabilityPreferenceProfileService(
+        mandate_reader=reader, reader=reader, clock=_Clock()
+    )
 
     response = await service.get_sustainability_preference_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
@@ -104,7 +106,10 @@ async def test_resolves_ready_preference_profile() -> None:
 
 @pytest.mark.asyncio
 async def test_marks_empty_profile_incomplete() -> None:
-    service = SustainabilityPreferenceProfileService(reader=_Reader(_binding(), []), clock=_Clock())
+    reader = _Reader(_binding(), [])
+    service = SustainabilityPreferenceProfileService(
+        mandate_reader=reader, reader=reader, clock=_Clock()
+    )
 
     response = await service.get_sustainability_preference_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()
@@ -120,7 +125,9 @@ async def test_marks_empty_profile_incomplete() -> None:
 @pytest.mark.asyncio
 async def test_missing_binding_skips_preference_read() -> None:
     reader = _Reader(None, [_preference()])
-    service = SustainabilityPreferenceProfileService(reader=reader, clock=_Clock())
+    service = SustainabilityPreferenceProfileService(
+        mandate_reader=reader, reader=reader, clock=_Clock()
+    )
 
     response = await service.get_sustainability_preference_profile(
         portfolio_id="PB_MISSING", request=_request()
@@ -132,8 +139,9 @@ async def test_missing_binding_skips_preference_read() -> None:
 
 @pytest.mark.asyncio
 async def test_snapshot_identity_is_stable_for_same_scope() -> None:
+    reader = _Reader(_binding(), [_preference()])
     service = SustainabilityPreferenceProfileService(
-        reader=_Reader(_binding(), [_preference()]), clock=_Clock()
+        mandate_reader=reader, reader=reader, clock=_Clock()
     )
     first = await service.get_sustainability_preference_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001", request=_request()

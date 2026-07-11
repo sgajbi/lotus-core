@@ -14,6 +14,7 @@ from ..contracts.sustainability_preference_profile import (
 )
 from ..domain.effective_mandate import EffectiveMandateBinding
 from ..domain.sustainability_preference_profile import SustainabilityPreferenceSourceRecord
+from ..ports.effective_mandate import EffectiveMandateReader
 from ..ports.sustainability_preference_profile import SustainabilityPreferenceProfileSourceReader
 from .source_evidence import latest_evidence_timestamp
 
@@ -22,15 +23,20 @@ class SustainabilityPreferenceProfileService:
     """Resolve one deterministic sustainability preference profile."""
 
     def __init__(
-        self, *, reader: SustainabilityPreferenceProfileSourceReader, clock: Clock
+        self,
+        *,
+        mandate_reader: EffectiveMandateReader,
+        reader: SustainabilityPreferenceProfileSourceReader,
+        clock: Clock,
     ) -> None:
+        self._mandate_reader = mandate_reader
         self._reader = reader
         self._clock = clock
 
     async def get_sustainability_preference_profile(
         self, *, portfolio_id: str, request: SustainabilityPreferenceProfileRequest
     ) -> SustainabilityPreferenceProfileResponse | None:
-        binding = await self._reader.resolve_mandate_binding(
+        binding = await self._mandate_reader.resolve(
             portfolio_id=portfolio_id, as_of_date=request.as_of_date, mandate_id=request.mandate_id
         )
         if binding is None:

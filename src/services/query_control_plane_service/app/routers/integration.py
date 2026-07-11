@@ -24,8 +24,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientTaxProfileRequest,
-    ClientTaxProfileResponse,
     ClientTaxRuleSetRequest,
     ClientTaxRuleSetResponse,
     CoverageRequest,
@@ -77,6 +75,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 from ..application.client_restriction_profile import ClientRestrictionProfileService
+from ..application.client_tax_profile import ClientTaxProfileService
 from ..application.core_snapshot.governance import (
     SnapshotGovernanceContext,
 )
@@ -93,6 +92,7 @@ from ..contracts.client_restriction_profile import (
     ClientRestrictionProfileRequest,
     ClientRestrictionProfileResponse,
 )
+from ..contracts.client_tax_profile import ClientTaxProfileRequest, ClientTaxProfileResponse
 from ..contracts.core_snapshot import (
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -109,6 +109,7 @@ from ..contracts.sustainability_preference_profile import (
 )
 from ..dependencies import (
     get_client_restriction_profile_service,
+    get_client_tax_profile_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -1654,14 +1655,11 @@ async def get_client_tax_profile(
         description="Portfolio identifier whose client tax profile is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    tax_profile_service: ClientTaxProfileService = Depends(get_client_tax_profile_service),
 ) -> ClientTaxProfileResponse:
-    response = cast(
-        ClientTaxProfileResponse | None,
-        await integration_service.get_client_tax_profile(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await tax_profile_service.get_client_tax_profile(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(

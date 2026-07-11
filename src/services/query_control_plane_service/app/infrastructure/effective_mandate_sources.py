@@ -10,6 +10,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.effective_mandate import EffectiveMandateBinding
 
 
+class SqlAlchemyEffectiveMandateReader:
+    """Resolve effective mandate identity with deterministic SQL precedence."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def resolve(
+        self,
+        *,
+        portfolio_id: str,
+        as_of_date: date,
+        mandate_id: str | None,
+    ) -> EffectiveMandateBinding | None:
+        return await resolve_effective_mandate_binding(
+            self._session,
+            portfolio_id=portfolio_id,
+            as_of_date=as_of_date,
+            mandate_id=mandate_id,
+        )
+
+
 async def resolve_effective_mandate_binding(
     session: AsyncSession,
     *,
