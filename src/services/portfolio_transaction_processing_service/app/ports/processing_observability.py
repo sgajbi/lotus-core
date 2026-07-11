@@ -12,6 +12,7 @@ class TransactionProcessingOperation(StrEnum):
     COST = "cost"
     CASHFLOW = "cashflow"
     POSITION = "position"
+    PIPELINE = "pipeline"
     COMMIT = "commit"
     REPLAY = "replay"
 

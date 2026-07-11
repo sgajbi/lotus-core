@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from ..domain import BookedTransaction
 from ..ports import (
+    PositionProcessingResult,
     TransactionProcessingObservation,
     TransactionProcessingObserver,
     TransactionProcessingOperation,
@@ -10,6 +12,48 @@ from ..ports import (
 from .commands import ProcessTransactionCommand
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
+
+
+def _cashflow_stage_transactions(
+    processed_transactions: tuple[BookedTransaction, ...],
+    position_results: list[PositionProcessingResult],
+) -> tuple[BookedTransaction, ...]:
+    rebuilt_transactions = _rebuilt_position_transactions(position_results)
+    if not rebuilt_transactions:
+        return processed_transactions
+
+    rebuilt_transaction_keys = {
+        (transaction.portfolio_id, transaction.transaction_id)
+        for transaction in rebuilt_transactions
+    }
+    candidates = rebuilt_transactions + tuple(
+        transaction
+        for transaction in processed_transactions
+        if (transaction.portfolio_id, transaction.transaction_id) not in rebuilt_transaction_keys
+    )
+    seen: set[tuple[str, str, int]] = set()
+    unique_transactions = []
+    for transaction in candidates:
+        key = (
+            transaction.portfolio_id,
+            transaction.transaction_id,
+            transaction.epoch or 0,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_transactions.append(transaction)
+    return tuple(unique_transactions)
+
+
+def _rebuilt_position_transactions(
+    position_results: list[PositionProcessingResult],
+) -> tuple[BookedTransaction, ...]:
+    return tuple(
+        transaction
+        for position_result in position_results
+        for transaction in position_result.cashflow_rebuild_transactions
+    )
 
 
 class ProcessTransactionUseCase:
@@ -60,23 +104,34 @@ class ProcessTransactionUseCase:
                     correlation_id=metadata.correlation_id,
                     traceparent=metadata.traceparent,
                 )
-            cashflow_results = []
-            for processed_transaction in cost_result.processed_transactions:
-                with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
-                    cashflow_results.append(
-                        await unit_of_work.cashflow.process(
-                            processed_transaction,
-                            event_id=metadata.event_id,
-                            correlation_id=metadata.correlation_id,
-                            traceparent=metadata.traceparent,
-                        )
-                    )
             position_results = []
             for processed_transaction in cost_result.processed_transactions:
                 with self._observer.observe(TransactionProcessingOperation.POSITION):
                     position_results.append(
                         await unit_of_work.position.process(
                             processed_transaction,
+                            correlation_id=metadata.correlation_id,
+                            traceparent=metadata.traceparent,
+                        )
+                    )
+            rebuilt_transactions = _rebuilt_position_transactions(position_results)
+            if rebuilt_transactions:
+                with self._observer.observe(TransactionProcessingOperation.PIPELINE):
+                    await unit_of_work.pipeline.register_processed_transactions(
+                        rebuilt_transactions,
+                        correlation_id=metadata.correlation_id,
+                        traceparent=metadata.traceparent,
+                    )
+            cashflow_results = []
+            for cashflow_transaction in _cashflow_stage_transactions(
+                cost_result.processed_transactions,
+                position_results,
+            ):
+                with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
+                    cashflow_results.append(
+                        await unit_of_work.cashflow.process(
+                            cashflow_transaction,
+                            event_id=metadata.event_id,
                             correlation_id=metadata.correlation_id,
                             traceparent=metadata.traceparent,
                         )

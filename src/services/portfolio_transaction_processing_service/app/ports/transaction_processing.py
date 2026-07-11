@@ -23,6 +23,7 @@ class CashflowProcessingResult:
 class PositionProcessingResult:
     position_record_count: int = 0
     replay_queued: bool = False
+    cashflow_rebuild_transactions: tuple[BookedTransaction, ...] = ()
 
 
 class TransactionIdempotencyPort(Protocol):
@@ -66,6 +67,16 @@ class PositionProcessingPort(Protocol):
     ) -> PositionProcessingResult: ...
 
 
+class PipelineStageProcessingPort(Protocol):
+    async def register_processed_transactions(
+        self,
+        transactions: tuple[BookedTransaction, ...],
+        *,
+        correlation_id: str | None,
+        traceparent: str | None,
+    ) -> None: ...
+
+
 class TransactionProcessingUnitOfWork(Protocol):
     @property
     def idempotency(self) -> TransactionIdempotencyPort: ...
@@ -78,6 +89,9 @@ class TransactionProcessingUnitOfWork(Protocol):
 
     @property
     def position(self) -> PositionProcessingPort: ...
+
+    @property
+    def pipeline(self) -> PipelineStageProcessingPort: ...
 
     async def __aenter__(self) -> Self: ...
 

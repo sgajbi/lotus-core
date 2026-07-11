@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 class PositionCalculationResult:
     position_record_count: int = 0
     replay_queued: bool = False
+    rebuilt_events: tuple[TransactionEvent, ...] = ()
 
 
 class BackdatedPositionHandling(StrEnum):
@@ -221,7 +222,10 @@ class PositionCalculator:
                 "earliest_transaction_date": earliest_transaction_date.isoformat(),
             },
         )
-        return PositionCalculationResult(position_record_count=position_record_count)
+        return PositionCalculationResult(
+            position_record_count=position_record_count,
+            rebuilt_events=tuple(events_to_rebuild),
+        )
 
     @classmethod
     async def _advance_backdated_epoch(

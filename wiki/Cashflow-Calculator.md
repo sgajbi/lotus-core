@@ -31,7 +31,9 @@ For an eligible processed transaction event, the service:
 5. persists the resulting cashflow row and stages the completion event
 
 The service also keeps operational rule lookup supportable through cache refresh and invalidation
-behavior rather than requiring a restart for every rule update.
+behavior rather than requiring a restart for every rule update. Rule writes, including upgrade and
+downgrade migrations, advance `cashflow_rules.updated_at` so every worker observes the new rule-set
+version before serving another fresh cache hit.
 
 For mixed corporate actions, `CASH_CONSIDERATION` produces a positive position-level product flow
 classified as `CORPORATE_ACTION_PROCEEDS`; it is not income-since-inception. The real cash-account
@@ -71,6 +73,8 @@ That is why cashflow normalization is part of the core system-of-record contract
 - processed transaction events are upstream input
 - cashflow rule governance remains part of `lotus-core`
 - cashflow calculator owns normalized cashflow materialization inside core
+- combined transaction processing resolves position recovery epochs before cashflow staging; an
+  inline backdated rebuild rematerializes the deduplicated cashflow timeline in the new epoch
 - downstream performance and risk analytics may consume this state, but they do not redefine it
 - `PortfolioCashflowProjection:v1` has an implementation-backed methodology for daily operational
   net cashflow and cumulative cashflow across a bounded one-year operational horizon; it does not

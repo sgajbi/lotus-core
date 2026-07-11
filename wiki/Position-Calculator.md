@@ -45,8 +45,11 @@ The deployed compatibility worker advances the epoch and queues ordered replay e
 `transactions.cost.processed`. The locally implemented combined transaction-processing target uses
 the same detection, ordering, lock, epoch fence, and watermark rules, but rebuilds current-epoch
 position history inside the shared transaction. This avoids depending on a legacy replay topic that
-the final two-consumer deployable will not consume. The target remains inactive until its remaining
-load, backlog, observability, deployment, and rollback gates pass.
+the final two-consumer deployable will not consume. The combined path also registers cost-stage
+pipeline readiness for every rebuilt current-epoch transaction before staging matching cashflow
+completion signals. Legacy cost publication remains limited to the incoming transaction so the
+compatibility consumers cannot double-apply the rebuilt suffix. The target remains inactive until
+its remaining load, backlog, observability, deployment, and rollback gates pass.
 
 ## Data it owns
 

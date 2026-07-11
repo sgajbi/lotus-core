@@ -352,6 +352,61 @@ def test_average_cost_full_close_and_reopen_does_not_resurrect_prior_sources() -
     }
 
 
+def test_average_cost_basis_transfer_restarts_disposal_segment_after_partial_sale() -> None:
+    strategy = AverageCostBasisStrategy()
+    strategy.add_buy_lot(
+        Transaction(
+            transaction_id="AVCO-PARTIAL-BASIS-SOURCE",
+            portfolio_id="P-BASIS",
+            instrument_id="PARENT-SECURITY",
+            security_id="PARENT-SECURITY",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, 1),
+            quantity=Decimal("100"),
+            gross_transaction_amount=Decimal("1000"),
+            net_cost_local=Decimal("1000"),
+            net_cost=Decimal("1000"),
+            trade_currency="USD",
+            portfolio_base_currency="USD",
+        )
+    )
+
+    cogs_base, cogs_local, consumed_quantity, error = strategy.consume_sell_quantity(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("50"),
+    )
+    assert (cogs_base, cogs_local, consumed_quantity, error) == (
+        Decimal("500"),
+        Decimal("500"),
+        Decimal("50"),
+        None,
+    )
+
+    assert (
+        strategy.transfer_basis_out("P-BASIS", "PARENT-SECURITY", Decimal("200"), Decimal("200"))
+        is None
+    )
+    cogs_base, cogs_local, consumed_quantity, error = strategy.consume_sell_quantity(
+        "P-BASIS",
+        "PARENT-SECURITY",
+        Decimal("25"),
+    )
+
+    assert (cogs_base, cogs_local, consumed_quantity, error) == (
+        Decimal("150"),
+        Decimal("150"),
+        Decimal("25"),
+        None,
+    )
+    states = strategy.get_open_lot_states()
+    assert states["AVCO-PARTIAL-BASIS-SOURCE"] == OpenLotState(
+        quantity=Decimal("25"),
+        cost_local=Decimal("150"),
+        cost_base=Decimal("150"),
+    )
+
+
 @pytest.mark.parametrize("strategy_type", [FIFOBasisStrategy, AverageCostBasisStrategy])
 def test_basis_only_transfer_reduces_source_lot_cost_without_changing_quantity(
     strategy_type,

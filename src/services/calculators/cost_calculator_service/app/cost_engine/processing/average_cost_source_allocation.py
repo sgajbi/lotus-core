@@ -48,8 +48,9 @@ class AverageCostPool:
     def transfer_basis_out(self, *, cost_local: Decimal, cost_base: Decimal) -> None:
         self.cost_local -= cost_local
         self.cost_base -= cost_base
-        self.segment_start_cost_local -= cost_local
-        self.segment_start_cost_base -= cost_base
+        self.segment_start_quantity = self.quantity
+        self.segment_start_cost_local = self.cost_local
+        self.segment_start_cost_base = self.cost_base
 
 
 @dataclass(frozen=True, slots=True)

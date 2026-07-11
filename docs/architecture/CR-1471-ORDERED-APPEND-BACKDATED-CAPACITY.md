@@ -30,6 +30,10 @@ performs a full rebuild and atomically establishes a checkpoint. A failed calcul
 write, lot update, checkpoint update, cashflow, position update, or outbox write rolls back the
 combined unit of work.
 
+Every full rebuild persists its complete rebuilt open-lot snapshot before the checkpoint, even when
+the incoming event is non-lot-mutating, such as a dividend. The trigger type cannot suppress
+rebuilt quantity or local/base cost state that a later incremental FIFO or AVCO disposal restores.
+
 Ordered lot openings and non-lot events calculate only the incoming row. State-dependent disposal
 and basis-transfer events restore current positive open-lot state, calculate the incoming row, and
 reconcile changed lot state. Backdated events recalculate and persist the affected suffix while
