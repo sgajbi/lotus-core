@@ -24,6 +24,9 @@ RETIRED_COST_ENGINE_ROOT = (
     / "app"
     / "cost_engine"
 )
+LEGACY_COST_APPLICATION_ROOT = (
+    REPO_ROOT / "src" / "services" / "calculators" / "cost_calculator_service" / "app"
+)
 
 
 def test_cost_basis_domain_modules_have_responsibility_docstrings() -> None:
@@ -38,6 +41,11 @@ def test_cost_basis_domain_modules_have_responsibility_docstrings() -> None:
 
 def test_legacy_cost_engine_package_is_retired() -> None:
     assert not RETIRED_COST_ENGINE_ROOT.exists()
+
+
+def test_legacy_cost_checkpoint_modules_are_retired() -> None:
+    assert not (LEGACY_COST_APPLICATION_ROOT / "average_cost_pool_checkpoint.py").exists()
+    assert not (LEGACY_COST_APPLICATION_ROOT / "cost_processing_checkpoint.py").exists()
 
 
 def test_cost_basis_calculation_modules_use_domain_specific_names() -> None:
@@ -58,9 +66,7 @@ def test_cost_basis_calculation_modules_use_domain_specific_names() -> None:
 
 
 def test_source_consumers_use_public_cost_basis_domain_api() -> None:
-    private_prefix = (
-        "src.services.portfolio_transaction_processing_service.app.domain.cost_basis."
-    )
+    private_prefix = "src.services.portfolio_transaction_processing_service.app.domain.cost_basis."
     offenders = []
     for module_path in (REPO_ROOT / "src").rglob("*.py"):
         if module_path.is_relative_to(COST_BASIS_DOMAIN_ROOT):

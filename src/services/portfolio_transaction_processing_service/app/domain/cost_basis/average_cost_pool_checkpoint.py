@@ -1,3 +1,5 @@
+"""Define validated average-cost pool checkpoints and transitions."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,14 +9,9 @@ from typing import Mapping
 
 from portfolio_common.cost_basis import CostBasisMethod
 
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    OpenLotState,
-)
-
-from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+from .calculation.lot_state import OpenLotState
+from .models.cost_basis_transaction import CostBasisTransaction
+from .processing_checkpoint import CostBasisProcessingCheckpoint
 
 AVERAGE_COST_POOL_STATE_VERSION = "avco-pool-v1"
 
@@ -168,7 +165,7 @@ class AverageCostPoolTransition:
 class AverageCostPoolRebuildPlan:
     checkpoint: AverageCostPoolCheckpoint
     processing_checkpoint: CostBasisProcessingCheckpoint
-    source_transactions: tuple[EngineTransaction, ...]
+    source_transactions: tuple[CostBasisTransaction, ...]
     source_states: Mapping[str, OpenLotState]
 
     def __post_init__(self) -> None:

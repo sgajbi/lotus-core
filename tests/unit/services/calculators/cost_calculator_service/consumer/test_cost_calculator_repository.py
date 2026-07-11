@@ -13,24 +13,20 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.dialects import postgresql
 
-from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
-    AverageCostPoolCheckpoint,
-    AverageCostPoolRebuildPlan,
-    AverageCostPoolTransition,
-)
-from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
-    CostBasisProcessingCheckpoint,
-)
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
     _cost_basis_processing_lock_key,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
-    CostBasisTransaction as EngineTransaction,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
+    AverageCostPoolCheckpoint,
+    AverageCostPoolRebuildPlan,
+    AverageCostPoolTransition,
+    CostBasisProcessingCheckpoint,
     EffectiveFxRate,
     OpenLotState,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction as EngineTransaction,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -227,7 +223,7 @@ async def test_get_cost_basis_processing_checkpoint_maps_durable_ordering_state(
         latest_target_instrument_id="",
         latest_quantity=Decimal("10"),
         latest_transaction_id="BUY02",
-        engine_state_version="open-lot-v1",
+        calculation_state_version="open-lot-v1",
     )
 
 

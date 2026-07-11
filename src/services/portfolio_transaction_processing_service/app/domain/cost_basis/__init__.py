@@ -1,5 +1,11 @@
 """Public cost-basis domain models, policies, and deterministic calculations."""
 
+from .average_cost_pool_checkpoint import (
+    AVERAGE_COST_POOL_STATE_VERSION,
+    AverageCostPoolCheckpoint,
+    AverageCostPoolRebuildPlan,
+    AverageCostPoolTransition,
+)
 from .calculation.average_cost_source_allocation import (
     AverageCostPool,
     AverageCostSourceAllocation,
@@ -30,18 +36,28 @@ from .corporate_action_cash_economics import (
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
 from .models.effective_fx_rate import EffectiveFxRate
+from .processing_checkpoint import (
+    COST_BASIS_STATE_VERSION,
+    CostBasisProcessingCheckpoint,
+)
 from .transaction_type import TransactionType
 
 __all__ = [
     "AverageCostBasisStrategy",
     "AverageCostPool",
+    "AverageCostPoolCheckpoint",
+    "AverageCostPoolRebuildPlan",
     "AverageCostSourceAllocation",
     "AverageCostSourceContribution",
+    "AverageCostPoolTransition",
+    "AVERAGE_COST_POOL_STATE_VERSION",
     "CASH_INFLOW_TRANSACTION_TYPES",
     "CASH_OUTFLOW_TRANSACTION_TYPES",
     "CorporateActionCashEconomics",
     "CorporateActionCashEconomicsError",
     "CostBasisCalculator",
+    "COST_BASIS_STATE_VERSION",
+    "CostBasisProcessingCheckpoint",
     "CostBasisStrategy",
     "CostCalculationError",
     "CostCalculationErrorCollector",

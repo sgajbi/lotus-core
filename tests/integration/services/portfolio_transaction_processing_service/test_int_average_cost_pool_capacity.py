@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
 from portfolio_common.database_models import (
     AverageCostPoolState,
-    CostBasisProcessingState,
     PositionLotState,
 )
 from sqlalchemy import event as sqlalchemy_event
@@ -18,14 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
-from src.services.calculators.cost_calculator_service.app.cost_processing_checkpoint import (
-    CostBasisProcessingCheckpoint,
-)
 from src.services.calculators.cost_calculator_service.app.repository import CostCalculatorRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisProcessingCheckpoint,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 from tests.test_support.transaction_processing import (
@@ -232,7 +230,7 @@ async def _seed_ordered_avco_key(
     )
     latest_buy = buys[-1]
     checkpoint = _processing_checkpoint(latest_buy)
-    session.add(CostBasisProcessingState(**asdict(checkpoint)))
+    await CostCalculatorRepository(session).upsert_cost_basis_processing_checkpoint(checkpoint)
     session.add(
         AverageCostPoolState(
             portfolio_id=portfolio_id,

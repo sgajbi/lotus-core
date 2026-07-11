@@ -34,12 +34,15 @@ into governed cost-aware state inside the same unit of work as cashflow and posi
 
 ## Runtime role
 
-Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash economics, and
-calculation diagnostics live in the target-owned `app/domain/cost_basis` package behind one public
-domain API. The transitional application workflow is
+Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash economics,
+incremental and average-cost checkpoint state, and calculation diagnostics live in the
+target-owned `app/domain/cost_basis` package behind one public domain API. The transitional
+application workflow is
 `cost_calculator_service/app/cost_calculation_workflow.py`, imported by target infrastructure until
-its ports and checkpoint policy are extracted. `app/consumer.py` is a quarantined compatibility
-shell for legacy delivery tests and must not be imported by the unified runtime.
+its application and persistence ports are extracted. The repository explicitly maps the domain's
+`calculation_state_version` to the compatible `engine_state_version` database column;
+`app/consumer.py` is a quarantined compatibility shell for legacy delivery tests and must not be
+imported by the unified runtime.
 
 For an eligible persisted transaction event, the service:
 

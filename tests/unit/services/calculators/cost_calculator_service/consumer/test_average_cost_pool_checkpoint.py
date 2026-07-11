@@ -2,12 +2,10 @@ from decimal import Decimal
 
 import pytest
 
-from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AVERAGE_COST_POOL_STATE_VERSION,
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
-)
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     OpenLotState,
 )
 
