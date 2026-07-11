@@ -2660,9 +2660,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     )
     coverage_response = await get_benchmark_coverage(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
-        request=CoverageRequest(
-            window={"start_date": "2026-01-01", "end_date": "2026-01-31"}
-        ),
+        request=CoverageRequest(window={"start_date": "2026-01-01", "end_date": "2026-01-31"}),
         reference_coverage_service=coverage_service,
     )
 

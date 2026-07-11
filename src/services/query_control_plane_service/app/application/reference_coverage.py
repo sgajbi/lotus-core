@@ -98,9 +98,7 @@ class ReferenceCoverageService:
             generated_at=self._clock(),
         )
 
-    async def get_risk_free(
-        self, *, currency: str, request: CoverageRequest
-    ) -> CoverageResponse:
+    async def get_risk_free(self, *, currency: str, request: CoverageRequest) -> CoverageResponse:
         """Resolve canonical risk-free observation coverage for one currency."""
 
         normalized_currency = currency.strip().upper()

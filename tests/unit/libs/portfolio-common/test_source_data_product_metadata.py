@@ -14,7 +14,9 @@ from src.services.query_control_plane_service.app.contracts.analytics_inputs imp
     PortfolioAnalyticsTimeseriesResponse,
     PositionAnalyticsTimeseriesResponse,
 )
-from src.services.query_control_plane_service.app.contracts.core_snapshot import CoreSnapshotResponse
+from src.services.query_control_plane_service.app.contracts.core_snapshot import (
+    CoreSnapshotResponse,
+)
 from src.services.query_control_plane_service.app.contracts.operations import (
     LineageKeyListResponse,
     ReconciliationFindingListResponse,

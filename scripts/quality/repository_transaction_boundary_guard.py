@@ -9,9 +9,7 @@ INFRASTRUCTURE_PATH_PART = "/app/infrastructure/"
 EXCLUDED_PATH_PARTS = ("/build/lib/",)
 TRANSACTION_TOKENS = ("commit(", "rollback(")
 TRANSITIONAL_TRANSACTION_EXCEPTIONS = {
-    Path(
-        "src/services/query_control_plane_service/app/infrastructure/operations/repository.py"
-    ): (
+    Path("src/services/query_control_plane_service/app/infrastructure/operations/repository.py"): (
         "operator control-plane maintenance repository still owns standalone status updates; "
         "migrate behind an explicit unit-of-work slice before removing this exception"
     ),

@@ -119,49 +119,43 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/instrument_repository.py:get_instruments": (
         "Instrument",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_aggregation_jobs": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_aggregation_jobs": (
         "PortfolioAggregationJob",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_analytics_export_jobs": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_analytics_export_jobs": (
         "AnalyticsExportJob",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_failed_outbox_events": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_failed_outbox_events": (
         "OutboxEvent",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_latest_financial_reconciliation_control_stage": (
-        "PipelineStageState",
-    ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_latest_reconciliation_run_for_portfolio_day": (
-        "FinancialReconciliationRun",
-    ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_latest_valuation_job": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_latest_valuation_job": (
         "PortfolioValuationJob",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_outbox_recovery_audits": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_outbox_recovery_audits": (
         "OutboxRecoveryAudit",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_portfolio_control_stages": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_portfolio_control_stages": (
         "PipelineStageState",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_position_state": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_position_state": (
         "PositionState",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_reconciliation_findings": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_reconciliation_findings": (
         "FinancialReconciliationFinding",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_reconciliation_run": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_reconciliation_run": (
         "FinancialReconciliationRun",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_reconciliation_runs": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_reconciliation_runs": (
         "FinancialReconciliationRun",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_reprocessing_keys": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_reprocessing_keys": (
         "PositionState",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:get_valuation_jobs": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:get_valuation_jobs": (
         "PortfolioValuationJob",
     ),
-    "src/services/query_service/app/repositories/operations_repository.py:requeue_failed_outbox_event": (
+    "src/services/query_control_plane_service/app/infrastructure/operations/repository.py:requeue_failed_outbox_event": (
         "OutboxEvent",
         "OutboxRecoveryAudit",
     ),
@@ -170,57 +164,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
         "Portfolio",
     ),
     "src/services/query_service/app/repositories/price_repository.py:get_prices": ("MarketPrice",),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_components": (
-        "BenchmarkCompositionSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_components_for_benchmarks": (
-        "BenchmarkCompositionSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_components_overlapping_window": (
-        "BenchmarkCompositionSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_definitions": (
-        "BenchmarkDefinition",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_definitions_overlapping_window": (
-        "BenchmarkDefinition",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_benchmark_return_points": (
-        "BenchmarkReturnSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_index_definitions": (
-        "IndexDefinition",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_index_price_points": (
-        "IndexPriceSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_index_price_series": (
-        "IndexPriceSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_index_return_points": (
-        "IndexReturnSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_index_return_series": (
-        "IndexReturnSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_instrument_eligibility_profiles": (
-        "InstrumentEligibilityProfile",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_latest_fx_rates": (
-        "FxRate",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_latest_market_prices": (
-        "MarketPrice",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_model_portfolio_targets": (
-        "ModelPortfolioTarget",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_risk_free_series": (
-        "RiskFreeSeries",
-    ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_taxonomy": (
-        "ClassificationTaxonomy",
-    ),
     "src/services/query_service/app/repositories/reporting_repository.py:get_portfolio_by_id": (
         "Portfolio",
     ),
@@ -257,9 +200,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
         "Transaction",
     ),
     "src/services/query_service/app/repositories/transaction_repository.py:list_realized_tax_evidence_transactions": (
-        "Transaction",
-    ),
-    "src/services/query_service/app/repositories/transaction_repository.py:list_transaction_cost_evidence": (
         "Transaction",
     ),
     "src/services/valuation_orchestrator_service/app/repositories/valuation_repository.py:claim_instrument_reprocessing_triggers": (

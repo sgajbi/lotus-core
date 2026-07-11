@@ -132,9 +132,7 @@ def _universe_scope(request: DpmPortfolioUniverseCandidateRequest) -> DpmPortfol
     return DpmPortfolioUniverseScope(booking_center_code, model_ids, fingerprint)
 
 
-def _after_sort_key(
-    *, cursor: dict[str, Any], scope_fingerprint: str
-) -> tuple[str, str] | None:
+def _after_sort_key(*, cursor: dict[str, Any], scope_fingerprint: str) -> tuple[str, str] | None:
     token_scope = cursor.get("scope_fingerprint")
     if token_scope and token_scope != scope_fingerprint:
         raise ValueError("DPM portfolio-universe page token does not match request scope.")

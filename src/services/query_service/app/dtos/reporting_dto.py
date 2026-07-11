@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field, model_validator
 
 ReportingScopeType = Literal["portfolio", "portfolio_list", "business_unit"]
 LookThroughMode = Literal["direct_only", "prefer_look_through"]
+
+
 class ReportingScope(BaseModel):
     portfolio_id: str | None = Field(
         None,
