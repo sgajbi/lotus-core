@@ -25,6 +25,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from src.services.query_control_plane_service.app.application.external_hedge_posture import (
+    ExternalHedgePostureService,
+)
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
 )
@@ -50,6 +53,14 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
     CoreSnapshotRequest,
     CoreSnapshotSection,
 )
+from src.services.query_control_plane_service.app.contracts.external_hedge_posture import (
+    ExternalCurrencyExposureRequest,
+    ExternalEligibleHedgeInstrumentRequest,
+    ExternalFXForwardCurveRequest,
+    ExternalHedgeExecutionReadinessRequest,
+    ExternalHedgePolicyRequest,
+    ExternalOrderExecutionAcknowledgementRequest,
+)
 from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
 )
@@ -63,6 +74,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
+    get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
     get_sustainability_preference_profile_service,
@@ -125,12 +137,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DiscretionaryMandateBindingRequest,
     DpmPortfolioUniverseCandidateRequest,
     DpmSourceReadinessRequest,
-    ExternalCurrencyExposureRequest,
-    ExternalEligibleHedgeInstrumentRequest,
-    ExternalFXForwardCurveRequest,
-    ExternalHedgeExecutionReadinessRequest,
-    ExternalHedgePolicyRequest,
-    ExternalOrderExecutionAcknowledgementRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
     InstrumentEligibilityBulkRequest,
@@ -212,6 +218,11 @@ def test_get_integration_policy_service_factory_returns_service() -> None:
 def test_get_core_snapshot_service_factory_returns_service() -> None:
     service = get_core_snapshot_service(db=MagicMock())
     assert isinstance(service, CoreSnapshotService)
+
+
+def test_get_external_hedge_posture_service_factory_returns_service() -> None:
+    service = get_external_hedge_posture_service(db=MagicMock())
+    assert isinstance(service, ExternalHedgePostureService)
 
 
 def test_get_client_restriction_profile_service_factory_returns_service() -> None:
@@ -2093,7 +2104,7 @@ async def test_get_planned_withdrawal_schedule_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_external_hedge_execution_readiness_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     mock_service.get_external_hedge_execution_readiness = AsyncMock(
         return_value={
             "product_name": "ExternalHedgeExecutionReadiness",
@@ -2124,7 +2135,7 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
     response = await get_external_hedge_execution_readiness(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalHedgeExecutionReadiness"
@@ -2231,7 +2242,7 @@ async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_detai
     route_request,
     source_product: str,
 ) -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     service_call = AsyncMock(return_value=None)
     setattr(mock_service, service_method, service_call)
 
@@ -2239,7 +2250,7 @@ async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_detai
         await route_handler(
             portfolio_id="PB_MISSING",
             request=route_request,
-            integration_service=mock_service,
+            hedge_posture_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -2258,7 +2269,7 @@ async def test_mandate_scoped_source_routes_map_missing_binding_to_problem_detai
 
 @pytest.mark.asyncio
 async def test_get_external_order_execution_acknowledgement_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     mock_service.get_external_order_execution_acknowledgement = AsyncMock(
         return_value={
             "product_name": "ExternalOrderExecutionAcknowledgement",
@@ -2290,7 +2301,7 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
     response = await get_external_order_execution_acknowledgement(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalOrderExecutionAcknowledgement"
@@ -2302,7 +2313,7 @@ async def test_get_external_order_execution_acknowledgement_router_function() ->
 
 @pytest.mark.asyncio
 async def test_get_external_hedge_policy_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     mock_service.get_external_hedge_policy = AsyncMock(
         return_value={
             "product_name": "ExternalHedgePolicy",
@@ -2334,7 +2345,7 @@ async def test_get_external_hedge_policy_router_function() -> None:
     response = await get_external_hedge_policy(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalHedgePolicy"
@@ -2346,7 +2357,7 @@ async def test_get_external_hedge_policy_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_external_currency_exposure_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     mock_service.get_external_currency_exposure = AsyncMock(
         return_value={
             "product_name": "ExternalCurrencyExposure",
@@ -2378,7 +2389,7 @@ async def test_get_external_currency_exposure_router_function() -> None:
     response = await get_external_currency_exposure(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalCurrencyExposure"
@@ -2390,7 +2401,7 @@ async def test_get_external_currency_exposure_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_external_eligible_hedge_instruments_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
     mock_service.get_external_eligible_hedge_instruments = AsyncMock(
         return_value={
             "product_name": "ExternalEligibleHedgeInstrument",
@@ -2424,7 +2435,7 @@ async def test_get_external_eligible_hedge_instruments_router_function() -> None
     response = await get_external_eligible_hedge_instruments(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalEligibleHedgeInstrument"
@@ -2436,26 +2447,24 @@ async def test_get_external_eligible_hedge_instruments_router_function() -> None
 
 @pytest.mark.asyncio
 async def test_get_external_fx_forward_curve_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_external_fx_forward_curve = AsyncMock(
-        return_value={
-            "product_name": "ExternalFXForwardCurve",
-            "product_version": "v1",
-            "as_of_date": "2026-05-03",
-            "reporting_currency": "USD",
-            "currency_pairs": ["EUR/USD", "USD/JPY"],
-            "tenors": ["1M", "3M"],
-            "curve_points": [],
-            "supportability": {
-                "state": "UNAVAILABLE",
-                "reason": "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED",
-                "curve_point_count": 0,
-                "missing_data_families": ["external_fx_forward_curve"],
-                "blocked_capabilities": ["forward_pricing", "oms_acknowledgement"],
-            },
-            "lineage": {"contract_version": "rfc_039_external_fx_forward_curve_v1"},
-        }
-    )
+    mock_service = MagicMock(spec=ExternalHedgePostureService)
+    mock_service.get_external_fx_forward_curve.return_value = {
+        "product_name": "ExternalFXForwardCurve",
+        "product_version": "v1",
+        "as_of_date": "2026-05-03",
+        "reporting_currency": "USD",
+        "currency_pairs": ["EUR/USD", "USD/JPY"],
+        "tenors": ["1M", "3M"],
+        "curve_points": [],
+        "supportability": {
+            "state": "UNAVAILABLE",
+            "reason": "EXTERNAL_TREASURY_SOURCE_NOT_INGESTED",
+            "curve_point_count": 0,
+            "missing_data_families": ["external_fx_forward_curve"],
+            "blocked_capabilities": ["forward_pricing", "oms_acknowledgement"],
+        },
+        "lineage": {"contract_version": "rfc_039_external_fx_forward_curve_v1"},
+    }
     request = ExternalFXForwardCurveRequest(
         as_of_date="2026-05-03",
         tenant_id="default",
@@ -2466,11 +2475,11 @@ async def test_get_external_fx_forward_curve_router_function() -> None:
 
     response = await get_external_fx_forward_curve(
         request=request,
-        integration_service=mock_service,
+        hedge_posture_service=mock_service,
     )
 
     assert response["product_name"] == "ExternalFXForwardCurve"
-    mock_service.get_external_fx_forward_curve.assert_awaited_once_with(request=request)
+    mock_service.get_external_fx_forward_curve.assert_called_once_with(request=request)
 
 
 @pytest.mark.asyncio

@@ -30,18 +30,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     DpmPortfolioUniverseCandidateResponse,
     DpmSourceReadinessRequest,
     DpmSourceReadinessResponse,
-    ExternalCurrencyExposureRequest,
-    ExternalCurrencyExposureResponse,
-    ExternalEligibleHedgeInstrumentRequest,
-    ExternalEligibleHedgeInstrumentResponse,
-    ExternalFXForwardCurveRequest,
-    ExternalFXForwardCurveResponse,
-    ExternalHedgeExecutionReadinessRequest,
-    ExternalHedgeExecutionReadinessResponse,
-    ExternalHedgePolicyRequest,
-    ExternalHedgePolicyResponse,
-    ExternalOrderExecutionAcknowledgementRequest,
-    ExternalOrderExecutionAcknowledgementResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
@@ -80,6 +68,7 @@ from ..application.core_snapshot.service import (
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
+from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.sustainability_preference_profile import SustainabilityPreferenceProfileService
 from ..contracts.client_liquidity_evidence import (
@@ -101,6 +90,20 @@ from ..contracts.core_snapshot import (
     CoreSnapshotResponse,
     CoreSnapshotSection,
 )
+from ..contracts.external_hedge_posture import (
+    ExternalCurrencyExposureRequest,
+    ExternalCurrencyExposureResponse,
+    ExternalEligibleHedgeInstrumentRequest,
+    ExternalEligibleHedgeInstrumentResponse,
+    ExternalFXForwardCurveRequest,
+    ExternalFXForwardCurveResponse,
+    ExternalHedgeExecutionReadinessRequest,
+    ExternalHedgeExecutionReadinessResponse,
+    ExternalHedgePolicyRequest,
+    ExternalHedgePolicyResponse,
+    ExternalOrderExecutionAcknowledgementRequest,
+    ExternalOrderExecutionAcknowledgementResponse,
+)
 from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
     InstrumentEnrichmentBulkResponse,
@@ -116,6 +119,7 @@ from ..dependencies import (
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
+    get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
     get_sustainability_preference_profile_service,
@@ -1884,14 +1888,13 @@ async def get_external_hedge_policy(
         description="Portfolio identifier whose external hedge policy is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalHedgePolicyResponse:
-    response = cast(
-        ExternalHedgePolicyResponse | None,
-        await integration_service.get_external_hedge_policy(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await hedge_posture_service.get_external_hedge_policy(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -1931,14 +1934,13 @@ async def get_external_hedge_execution_readiness(
         description="Portfolio identifier whose external treasury readiness is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalHedgeExecutionReadinessResponse:
-    response = cast(
-        ExternalHedgeExecutionReadinessResponse | None,
-        await integration_service.get_external_hedge_execution_readiness(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await hedge_posture_service.get_external_hedge_execution_readiness(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -1980,14 +1982,13 @@ async def get_external_order_execution_acknowledgement(
         ),
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalOrderExecutionAcknowledgementResponse:
-    response = cast(
-        ExternalOrderExecutionAcknowledgementResponse | None,
-        await integration_service.get_external_order_execution_acknowledgement(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await hedge_posture_service.get_external_order_execution_acknowledgement(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -2028,14 +2029,13 @@ async def get_external_currency_exposure(
         description="Portfolio identifier whose external currency exposure is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalCurrencyExposureResponse:
-    response = cast(
-        ExternalCurrencyExposureResponse | None,
-        await integration_service.get_external_currency_exposure(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await hedge_posture_service.get_external_currency_exposure(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -2078,14 +2078,13 @@ async def get_external_eligible_hedge_instruments(
         ),
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalEligibleHedgeInstrumentResponse:
-    response = cast(
-        ExternalEligibleHedgeInstrumentResponse | None,
-        await integration_service.get_external_eligible_hedge_instruments(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await hedge_posture_service.get_external_eligible_hedge_instruments(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(
@@ -2115,9 +2114,11 @@ async def get_external_eligible_hedge_instruments(
 )
 async def get_external_fx_forward_curve(
     request: ExternalFXForwardCurveRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    hedge_posture_service: ExternalHedgePostureService = Depends(
+        get_external_hedge_posture_service
+    ),
 ) -> ExternalFXForwardCurveResponse:
-    return await integration_service.get_external_fx_forward_curve(request=request)
+    return hedge_posture_service.get_external_fx_forward_curve(request=request)
 
 
 @router.post(

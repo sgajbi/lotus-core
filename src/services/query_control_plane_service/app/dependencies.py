@@ -24,6 +24,7 @@ from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
 )
+from .application.external_hedge_posture import ExternalHedgePostureService
 from .application.integration_policy import (
     IntegrationPolicyConfiguration,
     IntegrationPolicyService,
@@ -82,6 +83,15 @@ def get_core_snapshot_service(
             simulation_store=SqlAlchemySimulationStore(db),
             clock=SystemClock(),
         )
+    )
+
+
+def get_external_hedge_posture_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ExternalHedgePostureService:
+    return ExternalHedgePostureService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
+        clock=SystemClock(),
     )
 
 

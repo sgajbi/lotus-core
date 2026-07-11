@@ -2169,6 +2169,16 @@ Most relevant current governance:
      mappers, ORM repository methods, facade methods, or output-shape exceptions. Core owns captured
      source facts only; financial planning, suitability, funding recommendations, treasury
      instructions, OMS acknowledgement, and downstream DPM decisions remain outside Core.
+167. External currency exposure, hedge policy, eligible hedge instrument, FX forward curve, hedge
+     execution readiness, and OMS acknowledgement contracts form one QCP-owned
+     `external_hedge_posture` capability while their sources remain un-ingested. Keep each product's
+     request/response contract, missing families, blocked capabilities, source system, fingerprint,
+     lineage, and unavailable reason explicit. Use the effective-mandate port only for
+     portfolio-scoped identity and do not invent an external repository, client, adapter, domain
+     record, or deployment boundary before governed source ingestion exists. Do not restore the
+     deleted Query Service DTO/service/facade paths. Forward pricing, exposure calculation, hedge
+     advice or approval, suitability, counterparty selection, order generation/routing, best
+     execution, OMS acknowledgement, fills, settlement, and autonomous action remain non-claims.
 
 ## Context Maintenance Rule
 
