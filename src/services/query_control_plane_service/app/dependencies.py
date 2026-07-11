@@ -1,5 +1,6 @@
 from fastapi import Depends
 from portfolio_common.db import get_async_db_session
+from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.query_service.app.services.analytics_timeseries_service import (
@@ -17,7 +18,13 @@ from src.services.query_service.app.services.operations_service import (
     OperationsService,
     OperationsServiceDependencies,
 )
-from src.services.query_service.app.services.simulation_service import SimulationService
+
+from .application.simulation import SimulationService
+from .infrastructure.simulation_store import (
+    SqlAlchemySimulationBaselineReader,
+    SqlAlchemySimulationStore,
+)
+from .infrastructure.simulation_unit_of_work import SqlAlchemySimulationUnitOfWork
 
 
 def get_analytics_timeseries_service(
@@ -47,4 +54,10 @@ def get_operations_service(
 def get_simulation_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> SimulationService:
-    return SimulationService(db)
+    return SimulationService(
+        store=SqlAlchemySimulationStore(db),
+        baseline_reader=SqlAlchemySimulationBaselineReader(db),
+        unit_of_work=SqlAlchemySimulationUnitOfWork(db),
+        clock=SystemClock(),
+        id_generator=UuidIdGenerator(),
+    )

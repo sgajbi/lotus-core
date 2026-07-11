@@ -67,4 +67,3 @@ by #714 and must not be inferred from this design-boundary cleanup.
 
 Updated the repository output-shape standard, repository context, and review ledger. README, API,
 OpenAPI, operator runbooks, and wiki behavior did not change, so no additional update is required.
-

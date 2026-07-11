@@ -136,20 +136,25 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
-      "capability_id": "query.unit-of-work",
-      "capability_family": "unit-of-work",
-      "owner_service": "query_service",
-      "port_module": "src/services/query_service/app/ports/unit_of_work.py",
+      "capability_id": "query-control-plane.simulation-ports",
+      "capability_family": "repository-reader-writer",
+      "owner_service": "query_control_plane_service",
+      "port_module": "src/services/query_control_plane_service/app/ports/simulation.py",
       "port_symbols": [
-        "UnitOfWork"
+        "SimulationStore",
+        "SimulationBaselineReader",
+        "SimulationUnitOfWork"
       ],
       "adapter_modules": [
-        "src/services/query_service/app/infrastructure/unit_of_work.py"
+        "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
+        "src/services/query_control_plane_service/app/infrastructure/simulation_unit_of_work.py"
       ],
       "consumer_modules": [
-        "src/services/query_service/app/services/simulation_service.py"
+        "src/services/query_control_plane_service/app/application/simulation.py"
       ],
       "guard_scripts": [
+        "scripts/quality/architecture_boundary_guard.py",
+        "scripts/quality/runtime_provider_port_guard.py",
         "scripts/quality/repository_transaction_boundary_guard.py"
       ],
       "standards": [
@@ -205,7 +210,7 @@
       "consumer_modules": [
         "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
         "src/services/query_service/app/services/core_snapshot_service.py",
-        "src/services/query_service/app/services/simulation_service.py"
+        "src/services/query_control_plane_service/app/application/simulation.py"
       ],
       "guard_scripts": [
         "scripts/quality/runtime_provider_port_guard.py"

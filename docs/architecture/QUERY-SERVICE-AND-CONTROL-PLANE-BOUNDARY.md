@@ -35,6 +35,12 @@ That means:
   snapshot/simulation, analytics inputs, control-plane/policy, write ingress,
   or control execution
 
+Generic simulation now follows that ownership physically as well as logically: its API contracts,
+application workflow, domain records/effects, ports, and SQLAlchemy adapters are packaged under
+`query_control_plane_service`. Do not restore query-service workflow/repository imports into that
+family. The remaining QCP-to-QS implementation imports are tracked as package-closure migration
+under #715, not evidence that the logical ownership rule is optional.
+
 ## Why Both Services Exist
 
 We keep both services because they solve different problems.

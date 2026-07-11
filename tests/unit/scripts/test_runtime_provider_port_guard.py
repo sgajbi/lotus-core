@@ -32,9 +32,8 @@ def _write_required_artifacts(root: Path) -> None:
         "generated_at = self._clock.utc_now()\n",
     )
     _write(
-        root / "src/services/query_service/app/services/simulation_service.py",
-        "from portfolio_common.runtime_providers import Clock, IdGenerator, "
-        "SystemClock, UuidIdGenerator\n"
+        root / "src/services/query_control_plane_service/app/application/simulation.py",
+        "from portfolio_common.runtime_providers import Clock, IdGenerator\n"
         "now = self._clock.utc_now()\n"
         "session_id = self._id_generator.new_id()\n",
     )
@@ -63,9 +62,8 @@ def test_runtime_provider_port_guard_rejects_direct_datetime_call(tmp_path: Path
 def test_runtime_provider_port_guard_rejects_direct_uuid_call(tmp_path: Path) -> None:
     _write_required_artifacts(tmp_path)
     _write(
-        tmp_path / "src/services/query_service/app/services/simulation_service.py",
-        "from portfolio_common.runtime_providers import Clock, IdGenerator, "
-        "SystemClock, UuidIdGenerator\n"
+        tmp_path / "src/services/query_control_plane_service/app/application/simulation.py",
+        "from portfolio_common.runtime_providers import Clock, IdGenerator\n"
         "now = self._clock.utc_now()\n"
         "session_id = self._id_generator.new_id()\n"
         "fallback = uuid4()\n",
@@ -79,9 +77,8 @@ def test_runtime_provider_port_guard_rejects_direct_uuid_call(tmp_path: Path) ->
 def test_runtime_provider_port_guard_rejects_missing_provider_usage(tmp_path: Path) -> None:
     _write_required_artifacts(tmp_path)
     _write(
-        tmp_path / "src/services/query_service/app/services/simulation_service.py",
-        "from portfolio_common.runtime_providers import Clock, IdGenerator, "
-        "SystemClock, UuidIdGenerator\n"
+        tmp_path / "src/services/query_control_plane_service/app/application/simulation.py",
+        "from portfolio_common.runtime_providers import Clock, IdGenerator\n"
         "now = self._clock.utc_now()\n",
     )
 

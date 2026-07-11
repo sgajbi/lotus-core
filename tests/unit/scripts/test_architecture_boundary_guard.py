@@ -209,10 +209,10 @@ def test_generic_simulation_rejects_absolute_advisory_decisioning_import(
         tmp_path
         / "src"
         / "services"
-        / "query_service"
+        / "query_control_plane_service"
         / "app"
-        / "services"
-        / "simulation_service.py"
+        / "application"
+        / "simulation.py"
     )
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -224,7 +224,7 @@ def test_generic_simulation_rejects_absolute_advisory_decisioning_import(
     findings = _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES)
 
     assert findings == [
-        "src/services/query_service/app/services/simulation_service.py:1: "
+        "src/services/query_control_plane_service/app/application/simulation.py:1: "
         "generic simulation must not import advisory decisioning: disallowed direct import "
         "'services.query_service.app.advisory_simulation.models'"
     ]
@@ -237,10 +237,10 @@ def test_generic_simulation_rejects_relative_advisory_decisioning_import(
         tmp_path
         / "src"
         / "services"
-        / "query_service"
+        / "query_control_plane_service"
         / "app"
-        / "services"
-        / "simulation_service.py"
+        / "application"
+        / "simulation.py"
     )
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -252,7 +252,7 @@ def test_generic_simulation_rejects_relative_advisory_decisioning_import(
     findings = _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES)
 
     assert findings == [
-        "src/services/query_service/app/services/simulation_service.py:1: "
+        "src/services/query_control_plane_service/app/application/simulation.py:1: "
         "generic simulation must not import advisory decisioning: disallowed direct import "
         "'advisory_simulation_service'"
     ]
