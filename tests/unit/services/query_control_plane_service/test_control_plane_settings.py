@@ -11,6 +11,11 @@ from src.services.query_control_plane_service.app.settings import (
 )
 
 
+def _set_non_default_page_token_material(monkeypatch) -> None:
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "qcp-page-token-secret")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "qcp-page-token-key-2026-07")
+
+
 def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", raising=False)
@@ -29,6 +34,7 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
         "ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS",
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         "ENTERPRISE_CAPABILITY_RULES_JSON",
+        "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -47,11 +53,16 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     assert settings.enterprise_auth_context_max_age_seconds == 300
     assert settings.enterprise_feature_flags == {}
     assert settings.enterprise_capability_rules == {}
+    assert settings.analytics_export_execution_timeout_seconds == 300
+    assert settings.page_token_key_id == "local-dev"
+    assert settings.page_token_previous_keys == {}
+    assert settings.page_token_ttl_seconds == 900
 
 
 def test_control_plane_settings_enable_production_security_profile(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "uat")
     monkeypatch.delenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", raising=False)
+    _set_non_default_page_token_material(monkeypatch)
     for name in (
         "ENTERPRISE_ENFORCE_AUTHZ",
         "ENTERPRISE_ENFORCE_READ_AUTHZ",
@@ -73,6 +84,7 @@ def test_control_plane_settings_enable_production_security_profile(monkeypatch) 
 def test_control_plane_settings_allow_explicit_production_security_opt_out(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("LOTUS_CORE_PRODUCTION_SECURITY_PROFILE", "false")
+    _set_non_default_page_token_material(monkeypatch)
 
     settings = load_query_control_plane_settings()
 
@@ -96,6 +108,14 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
     monkeypatch.setenv("ENTERPRISE_MAX_WRITE_PAYLOAD_BYTES", "2048")
     monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_HMAC_SECRET", "auth-context-secret")
     monkeypatch.setenv("ENTERPRISE_AUTH_CONTEXT_MAX_AGE_SECONDS", "120")
+    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "qcp-page-token-secret")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "qcp-page-token-key-2026-07")
+    monkeypatch.setenv(
+        "LOTUS_CORE_PAGE_TOKEN_PREVIOUS_KEYS_JSON",
+        '{"qcp-page-token-key-2026-06":"previous-secret"}',
+    )
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_TTL_SECONDS", "1200")
     monkeypatch.setenv(
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         '{"risk_write":{"tenant-a":{"ops":true,"*":false}}}',
@@ -122,6 +142,29 @@ def test_control_plane_settings_parse_governed_values(monkeypatch) -> None:
         "risk_write": {"tenant-a": {"ops": True, "*": False}}
     }
     assert settings.enterprise_capability_rules == {"POST /integration": "risk.write"}
+    assert settings.analytics_export_execution_timeout_seconds == 45
+    assert settings.page_token_secret == "qcp-page-token-secret"
+    assert settings.page_token_key_id == "qcp-page-token-key-2026-07"
+    assert settings.page_token_previous_keys == {"qcp-page-token-key-2026-06": "previous-secret"}
+    assert settings.page_token_ttl_seconds == 1200
+
+
+def test_control_plane_settings_non_local_rejects_default_page_token_secret(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("LOTUS_CORE_PAGE_TOKEN_SECRET", raising=False)
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", "qcp-page-token-key-2026-07")
+
+    with pytest.raises(QueryControlPlaneConfigurationError, match="LOTUS_CORE_PAGE_TOKEN_SECRET"):
+        load_query_control_plane_settings()
+
+
+def test_control_plane_settings_non_local_rejects_default_page_token_key_id(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("LOTUS_CORE_PAGE_TOKEN_SECRET", "qcp-page-token-secret")
+    monkeypatch.delenv("LOTUS_CORE_PAGE_TOKEN_KEY_ID", raising=False)
+
+    with pytest.raises(QueryControlPlaneConfigurationError, match="LOTUS_CORE_PAGE_TOKEN_KEY_ID"):
+        load_query_control_plane_settings()
 
 
 def test_control_plane_settings_helpers_fail_closed_for_invalid_values(monkeypatch) -> None:
@@ -137,6 +180,7 @@ def test_control_plane_settings_helpers_fail_closed_for_invalid_values(monkeypat
 
 def test_control_plane_settings_strict_rejects_invalid_boolean(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("ENTERPRISE_ENFORCE_AUTHZ", "maybe")
 
     with pytest.raises(QueryControlPlaneConfigurationError, match="ENTERPRISE_ENFORCE_AUTHZ"):
@@ -145,6 +189,7 @@ def test_control_plane_settings_strict_rejects_invalid_boolean(monkeypatch) -> N
 
 def test_control_plane_settings_strict_rejects_out_of_range_rotation_days(monkeypatch) -> None:
     monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("ENTERPRISE_SECRET_ROTATION_DAYS", "0")
 
     with pytest.raises(
@@ -153,8 +198,21 @@ def test_control_plane_settings_strict_rejects_out_of_range_rotation_days(monkey
         load_query_control_plane_settings()
 
 
+def test_control_plane_settings_strict_rejects_invalid_analytics_timeout(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    _set_non_default_page_token_material(monkeypatch)
+    monkeypatch.setenv("LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS", "not-an-int")
+
+    with pytest.raises(
+        QueryControlPlaneConfigurationError,
+        match="LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
+    ):
+        load_query_control_plane_settings()
+
+
 def test_control_plane_settings_strict_rejects_invalid_json_map(monkeypatch) -> None:
     monkeypatch.setenv("LOTUS_CORE_STRICT_CONFIG_VALIDATION", "true")
+    _set_non_default_page_token_material(monkeypatch)
     monkeypatch.setenv("ENTERPRISE_CAPABILITY_RULES_JSON", "not-json")
 
     with pytest.raises(

@@ -1,0 +1,63 @@
+"""Ports required by the analytics input and export application capability."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from typing import Any, AsyncContextManager, Protocol
+
+from ..domain.analytics import AnalyticsExportJobRecord, PortfolioAnalyticsSource
+
+
+class AnalyticsTimeseriesReader(Protocol):
+    """Read source portfolio, timeseries, cashflow, calendar, and FX evidence."""
+
+    async def get_portfolio(self, portfolio_id: str) -> PortfolioAnalyticsSource | None: ...
+
+    async def get_latest_portfolio_timeseries_date(self, portfolio_id: str) -> date | None: ...
+
+    async def get_latest_position_timeseries_date(self, portfolio_id: str) -> date | None: ...
+
+    async def list_business_dates(self, *, start_date: date, end_date: date) -> list[date]: ...
+
+    async def list_position_timeseries_rows(self, **kwargs: Any) -> list[Any]: ...
+
+    async def list_position_timeseries_rows_unpaged(self, **kwargs: Any) -> list[Any]: ...
+
+    async def list_position_observation_dates(self, **kwargs: Any) -> list[date]: ...
+
+    async def list_latest_position_timeseries_before(self, **kwargs: Any) -> list[Any]: ...
+
+    async def list_position_cashflow_rows(self, **kwargs: Any) -> list[Any]: ...
+
+    async def list_portfolio_cashflow_rows(self, **kwargs: Any) -> list[Any]: ...
+
+    async def get_position_snapshot_epoch(self, **kwargs: Any) -> int: ...
+
+    async def get_fx_rates_map(self, **kwargs: Any) -> dict[date, Decimal]: ...
+
+
+class AnalyticsExportStore(Protocol):
+    """Persist and transition durable analytics export jobs."""
+
+    async def create_job(self, **kwargs: Any) -> AnalyticsExportJobRecord: ...
+
+    async def get_job(self, job_id: str) -> AnalyticsExportJobRecord | None: ...
+
+    async def get_latest_by_fingerprint(self, **kwargs: Any) -> AnalyticsExportJobRecord | None: ...
+
+    async def mark_running(self, row: AnalyticsExportJobRecord) -> AnalyticsExportJobRecord: ...
+
+    async def mark_completed(
+        self, row: AnalyticsExportJobRecord, **kwargs: Any
+    ) -> AnalyticsExportJobRecord: ...
+
+    async def mark_failed(
+        self, row: AnalyticsExportJobRecord, *, error_message: str
+    ) -> AnalyticsExportJobRecord: ...
+
+
+class AnalyticsUnitOfWork(Protocol):
+    """Own one atomic analytics export lifecycle transition."""
+
+    def transaction(self) -> AsyncContextManager[None]: ...

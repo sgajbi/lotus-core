@@ -96,18 +96,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py:upsert_stage_flags": (
         "PipelineStageState",
     ),
-    "src/services/query_service/app/repositories/analytics_export_repository.py:create_job": (
-        "AnalyticsExportJob",
-    ),
-    "src/services/query_service/app/repositories/analytics_export_repository.py:get_job": (
-        "AnalyticsExportJob",
-    ),
-    "src/services/query_service/app/repositories/analytics_export_repository.py:get_latest_by_fingerprint": (
-        "AnalyticsExportJob",
-    ),
-    "src/services/query_service/app/repositories/analytics_timeseries_repository.py:get_portfolio": (
-        "Portfolio",
-    ),
     "src/services/query_service/app/repositories/buy_state_repository.py:get_accrued_offsets": (
         "AccruedIncomeOffsetState",
     ),

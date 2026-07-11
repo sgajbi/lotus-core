@@ -30,9 +30,13 @@ ROUTER_ROOTS = {
     "query_service": REPO_ROOT / "src" / "services" / "query_service" / "app" / "routers",
 }
 
-DTO_ROOT = REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos"
+DTO_ROOTS = (
+    REPO_ROOT / "src" / "services" / "query_service" / "app" / "dtos",
+    REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "contracts",
+)
 SOURCE_DATA_PRODUCT_SERVICE_ROOTS = (
     REPO_ROOT / "src" / "services" / "query_service" / "app" / "services",
+    REPO_ROOT / "src" / "services" / "query_control_plane_service" / "app" / "application",
 )
 ROUTE_METHODS = {"delete", "get", "patch", "post", "put"}
 REQUEST_SCOPED_SOURCE_BATCH_NAMES = {
@@ -218,10 +222,11 @@ def _product_identity_field_value(node: ast.AST) -> str | None:
 
 
 def discover_response_model_product_identities(
-    dto_root: Path = DTO_ROOT,
+    dto_roots: tuple[Path, ...] = DTO_ROOTS,
 ) -> dict[str, tuple[str | None, str | None]]:
     identities: dict[str, tuple[str | None, str | None]] = {}
-    for dto_file in sorted(dto_root.glob("*.py")):
+    dto_files = (dto_file for dto_root in dto_roots for dto_file in dto_root.glob("*.py"))
+    for dto_file in sorted(dto_files):
         tree = ast.parse(dto_file.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ClassDef):

@@ -28,7 +28,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Master record for portfolios.
 - **Description**: Canonical portfolio identity and static attributes used across ingestion/query/calculators.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/query_service/app/routers/portfolios.py`, `src/services/ingestion_service/app/routers/portfolios.py`, `src/services/query_service/app/repositories/analytics_timeseries_repository.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/query_service/app/routers/portfolios.py`, `src/services/ingestion_service/app/routers/portfolios.py`, `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -139,7 +139,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Reference FX rates used by cost/valuation.
 - **Description**: Daily currency conversion rates for trade and valuation normalization.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/fx_rate_repository.py`, `src/services/query_service/app/services/fx_rate_service.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/persistence_service/app/repositories/fx_rate_repository.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/fx_rate_repository.py`, `src/services/query_service/app/services/fx_rate_service.py`, `src/services/ingestion_service/app/services/ingestion_service.py`, `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/persistence_service/app/repositories/fx_rate_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -1016,7 +1016,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Position-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per position and epoch for analytics inputs.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `security_id` -> `instruments.security_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -1040,7 +1040,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Portfolio-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per portfolio and epoch.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_timeseries_repository.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/services/portfolio_aggregation_service/app/repositories/timeseries_repository.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/portfolio_aggregation_service/app/repositories/timeseries_repository.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -1303,7 +1303,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Async export job lifecycle for analytics payloads.
 - **Description**: Tracks request fingerprint, execution state, and persisted export result payloads.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/analytics_export_repository.py`, `src/services/query_control_plane_service/app/routers/analytics_inputs.py`, `src/services/query_service/app/services/analytics_timeseries_service.py`, `src/services/query_service/app/dtos/analytics_input_dto.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_export_repository.py`, `src/services/query_control_plane_service/app/routers/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/libs/portfolio-common/portfolio_common/monitoring.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

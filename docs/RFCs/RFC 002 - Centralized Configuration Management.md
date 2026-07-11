@@ -53,7 +53,7 @@ The original RFC requested:
    - `src/services/query_control_plane_service/app/settings.py`
    - `src/services/query_control_plane_service/app/application/capabilities_service.py`
    - `src/services/query_service/app/services/integration_service.py`
-   - `src/services/query_service/app/services/analytics_timeseries_service.py`
+   - `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`
    - `src/services/query_service/app/enterprise_readiness.py`
 
 ### Why the implemented approach is better than the historical wording
@@ -141,7 +141,7 @@ Current evidence supporting partial completion:
    - `tests/unit/services/query_service/test_enterprise_readiness.py`
    - `tests/unit/services/query_control_plane_service/application/test_capabilities_service.py`
    - `tests/unit/services/query_service/services/test_integration_service.py`
-   - `tests/unit/services/query_service/services/test_analytics_timeseries_service.py`
+   - `tests/unit/services/query_control_plane_service/application/analytics/test_analytics_timeseries_service.py`
 8. Valuation-service typed settings migration:
    - `src/services/calculators/position_valuation_calculator/app/settings.py`
    - `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`
