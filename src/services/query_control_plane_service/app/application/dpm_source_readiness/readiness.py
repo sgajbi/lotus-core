@@ -62,6 +62,65 @@ class DpmSourceReadinessService:
     market_data: MarketDataCoverageService
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
 
+    async def resolve_model_portfolio_targets(
+        self,
+        *,
+        model_portfolio_id: str,
+        request: ModelPortfolioTargetRequest,
+    ) -> ModelPortfolioTargetResponse | None:
+        """Resolve the model-target constituent through the same capability boundary."""
+
+        return await self.model_targets.resolve(
+            model_portfolio_id=model_portfolio_id,
+            request=request,
+        )
+
+    async def resolve_discretionary_mandate_binding(
+        self,
+        *,
+        portfolio_id: str,
+        request: DiscretionaryMandateBindingRequest,
+    ) -> DiscretionaryMandateBindingResponse | None:
+        """Resolve the mandate-binding constituent through the capability boundary."""
+
+        return await self.mandates.resolve(portfolio_id=portfolio_id, request=request)
+
+    async def resolve_instrument_eligibility_bulk(
+        self,
+        request: InstrumentEligibilityBulkRequest,
+    ) -> InstrumentEligibilityBulkResponse:
+        """Resolve the eligibility constituent through the capability boundary."""
+
+        return await self.eligibility.resolve(request)
+
+    async def get_portfolio_tax_lot_window(
+        self,
+        *,
+        portfolio_id: str,
+        request: PortfolioTaxLotWindowRequest,
+    ) -> PortfolioTaxLotWindowResponse:
+        """Resolve the tax-lot constituent through the capability boundary."""
+
+        return await self.tax_lots.resolve(portfolio_id=portfolio_id, request=request)
+
+    async def get_market_data_coverage(
+        self,
+        request: MarketDataCoverageRequest,
+    ) -> MarketDataCoverageWindowResponse:
+        """Resolve the market-data constituent through the capability boundary."""
+
+        return await self.market_data.resolve(request)
+
+    async def get_source_readiness(
+        self,
+        *,
+        portfolio_id: str,
+        request: DpmSourceReadinessRequest,
+    ) -> DpmSourceReadinessResponse:
+        """Evaluate aggregate readiness through the capability boundary."""
+
+        return await self.resolve(portfolio_id=portfolio_id, request=request)
+
     async def resolve(
         self,
         *,

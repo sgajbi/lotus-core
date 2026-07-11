@@ -22,23 +22,11 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     CoverageRequest,
     CoverageResponse,
-    DiscretionaryMandateBindingRequest,
-    DiscretionaryMandateBindingResponse,
-    DpmSourceReadinessRequest,
-    DpmSourceReadinessResponse,
     IndexCatalogRequest,
     IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
-    InstrumentEligibilityBulkRequest,
-    InstrumentEligibilityBulkResponse,
-    MarketDataCoverageRequest,
-    MarketDataCoverageWindowResponse,
-    ModelPortfolioTargetRequest,
-    ModelPortfolioTargetResponse,
-    PortfolioTaxLotWindowRequest,
-    PortfolioTaxLotWindowResponse,
     RiskFreeSeriesRequest,
     RiskFreeSeriesResponse,
 )
@@ -59,6 +47,7 @@ from ..application.core_snapshot.service import (
     CoreSnapshotUnavailableSectionError,
 )
 from ..application.dpm_portfolio_population import DpmPortfolioPopulationService
+from ..application.dpm_source_readiness.readiness import DpmSourceReadinessService
 from ..application.external_hedge_posture import ExternalHedgePostureService
 from ..application.integration_policy import IntegrationPolicyService
 from ..application.portfolio_manager_book import PortfolioManagerBookService
@@ -83,11 +72,19 @@ from ..contracts.core_snapshot import (
     CoreSnapshotResponse,
     CoreSnapshotSection,
 )
+from ..contracts.discretionary_mandate_binding import (
+    DiscretionaryMandateBindingRequest,
+    DiscretionaryMandateBindingResponse,
+)
 from ..contracts.dpm_portfolio_population import (
     CioModelChangeAffectedCohortRequest,
     CioModelChangeAffectedCohortResponse,
     DpmPortfolioUniverseCandidateRequest,
     DpmPortfolioUniverseCandidateResponse,
+)
+from ..contracts.dpm_source_readiness import (
+    DpmSourceReadinessRequest,
+    DpmSourceReadinessResponse,
 )
 from ..contracts.external_hedge_posture import (
     ExternalCurrencyExposureRequest,
@@ -103,11 +100,23 @@ from ..contracts.external_hedge_posture import (
     ExternalOrderExecutionAcknowledgementRequest,
     ExternalOrderExecutionAcknowledgementResponse,
 )
+from ..contracts.instrument_eligibility import (
+    InstrumentEligibilityBulkRequest,
+    InstrumentEligibilityBulkResponse,
+)
 from ..contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
     InstrumentEnrichmentBulkResponse,
 )
 from ..contracts.integration_policy import EffectiveIntegrationPolicyResponse
+from ..contracts.market_data_coverage import (
+    MarketDataCoverageRequest,
+    MarketDataCoverageWindowResponse,
+)
+from ..contracts.model_portfolio_targets import (
+    ModelPortfolioTargetRequest,
+    ModelPortfolioTargetResponse,
+)
 from ..contracts.performance_component_economics import (
     PerformanceComponentEconomicsRequest,
     PerformanceComponentEconomicsResponse,
@@ -115,6 +124,10 @@ from ..contracts.performance_component_economics import (
 from ..contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipRequest,
     PortfolioManagerBookMembershipResponse,
+)
+from ..contracts.portfolio_tax_lots import (
+    PortfolioTaxLotWindowRequest,
+    PortfolioTaxLotWindowResponse,
 )
 from ..contracts.sustainability_preference_profile import (
     SustainabilityPreferenceProfileRequest,
@@ -131,6 +144,7 @@ from ..dependencies import (
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
     get_dpm_portfolio_population_service,
+    get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
@@ -990,9 +1004,9 @@ async def get_instrument_enrichment_bulk(
 )
 async def resolve_instrument_eligibility_bulk(
     request: InstrumentEligibilityBulkRequest,
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> InstrumentEligibilityBulkResponse:
-    return await integration_service.resolve_instrument_eligibility_bulk(request)
+    return await dpm_source_service.resolve_instrument_eligibility_bulk(request)
 
 
 @router.post(
@@ -1037,10 +1051,10 @@ async def get_portfolio_tax_lot_window(
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
     request: PortfolioTaxLotWindowRequest = Body(...),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> PortfolioTaxLotWindowResponse:
     try:
-        return await integration_service.get_portfolio_tax_lot_window(
+        return await dpm_source_service.get_portfolio_tax_lot_window(
             portfolio_id=portfolio_id,
             request=request,
         )
@@ -1203,9 +1217,9 @@ async def get_performance_component_economics(
 )
 async def get_market_data_coverage(
     request: MarketDataCoverageRequest = Body(...),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> MarketDataCoverageWindowResponse:
-    return await integration_service.get_market_data_coverage(request)
+    return await dpm_source_service.get_market_data_coverage(request)
 
 
 @router.post(
@@ -1408,9 +1422,9 @@ async def get_dpm_source_readiness(
         description="Portfolio identifier whose DPM source-family readiness is evaluated.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DpmSourceReadinessResponse:
-    return await integration_service.get_dpm_source_readiness(
+    return await dpm_source_service.get_source_readiness(
         portfolio_id=portfolio_id,
         request=request,
     )
@@ -1496,11 +1510,11 @@ async def resolve_model_portfolio_targets(
         description="Canonical model portfolio identifier whose targets are requested.",
         examples=["MODEL_SG_BALANCED_DPM"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> ModelPortfolioTargetResponse:
     response = cast(
         ModelPortfolioTargetResponse | None,
-        await integration_service.resolve_model_portfolio_targets(
+        await dpm_source_service.resolve_model_portfolio_targets(
             model_portfolio_id=model_portfolio_id,
             request=request,
         ),
@@ -1548,11 +1562,11 @@ async def resolve_discretionary_mandate_binding(
         description="Portfolio identifier whose discretionary mandate binding is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    dpm_source_service: DpmSourceReadinessService = Depends(get_dpm_source_readiness_service),
 ) -> DiscretionaryMandateBindingResponse:
     response = cast(
         DiscretionaryMandateBindingResponse | None,
-        await integration_service.resolve_discretionary_mandate_binding(
+        await dpm_source_service.resolve_discretionary_mandate_binding(
             portfolio_id=portfolio_id,
             request=request,
         ),

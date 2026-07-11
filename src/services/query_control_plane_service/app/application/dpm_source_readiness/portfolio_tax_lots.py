@@ -130,7 +130,7 @@ def build_portfolio_tax_lot_response(
 ) -> PortfolioTaxLotWindowResponse:
     """Map lot evidence and derive page-level source supportability."""
 
-    lots = [_tax_lot_record(row) for row in evidence]
+    lots = [portfolio_tax_lot_record(row) for row in evidence]
     missing_security_ids = _missing_requested_security_ids(
         request=request,
         lots=lots,
@@ -236,7 +236,9 @@ def _next_page_token(
     )
 
 
-def _tax_lot_record(evidence: PortfolioTaxLotEvidence) -> PortfolioTaxLotRecord:
+def portfolio_tax_lot_record(evidence: PortfolioTaxLotEvidence) -> PortfolioTaxLotRecord:
+    """Map immutable lot evidence into the public source-product record."""
+
     return PortfolioTaxLotRecord(
         portfolio_id=evidence.portfolio_id,
         security_id=evidence.security_id.strip(),

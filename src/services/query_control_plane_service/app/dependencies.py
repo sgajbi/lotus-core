@@ -26,6 +26,16 @@ from .application.core_snapshot.service import (
     CoreSnapshotService,
 )
 from .application.dpm_portfolio_population import DpmPortfolioPopulationService
+from .application.dpm_source_readiness.discretionary_mandate_binding import (
+    DiscretionaryMandateBindingService,
+)
+from .application.dpm_source_readiness.instrument_eligibility import (
+    InstrumentEligibilityService,
+)
+from .application.dpm_source_readiness.market_data_coverage import MarketDataCoverageService
+from .application.dpm_source_readiness.model_portfolio_targets import ModelPortfolioTargetService
+from .application.dpm_source_readiness.portfolio_tax_lots import PortfolioTaxLotService
+from .application.dpm_source_readiness.readiness import DpmSourceReadinessService
 from .application.external_hedge_posture import ExternalHedgePostureService
 from .application.integration_policy import (
     IntegrationPolicyConfiguration,
@@ -50,6 +60,8 @@ from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceRe
 from .infrastructure.dpm_portfolio_population_sources import (
     SqlAlchemyDpmPortfolioPopulationReader,
 )
+from .infrastructure.dpm_portfolio_state_sources import SqlAlchemyDpmPortfolioStateReader
+from .infrastructure.dpm_reference_data_sources import SqlAlchemyDpmReferenceDataReader
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
 from .infrastructure.portfolio_manager_book_sources import SqlAlchemyPortfolioManagerBookReader
 from .infrastructure.simulation_store import (
@@ -119,6 +131,47 @@ def get_dpm_portfolio_population_service(
             ttl_seconds=settings.page_token_ttl_seconds,
         ),
         clock=SystemClock(),
+    )
+
+
+def get_dpm_source_readiness_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> DpmSourceReadinessService:
+    """Compose the QCP-owned DPM source-readiness capability graph."""
+
+    settings = load_query_control_plane_settings()
+    clock = SystemClock()
+    reference_reader = SqlAlchemyDpmReferenceDataReader(db)
+    portfolio_reader = SqlAlchemyDpmPortfolioStateReader(db)
+    page_tokens = PageTokenCodec(
+        secret=settings.page_token_secret,
+        active_kid=settings.page_token_key_id,
+        previous_secrets=settings.page_token_previous_keys,
+        ttl_seconds=settings.page_token_ttl_seconds,
+    )
+    return DpmSourceReadinessService(
+        mandates=DiscretionaryMandateBindingService(
+            reader=reference_reader,
+            clock=clock.utc_now,
+        ),
+        model_targets=ModelPortfolioTargetService(
+            reader=reference_reader,
+            clock=clock.utc_now,
+        ),
+        eligibility=InstrumentEligibilityService(
+            reader=reference_reader,
+            clock=clock.utc_now,
+        ),
+        tax_lots=PortfolioTaxLotService(
+            reader=portfolio_reader,
+            page_tokens=page_tokens,
+            clock=clock.utc_now,
+        ),
+        market_data=MarketDataCoverageService(
+            reader=reference_reader,
+            clock=clock.utc_now,
+        ),
+        clock=clock.utc_now,
     )
 
 

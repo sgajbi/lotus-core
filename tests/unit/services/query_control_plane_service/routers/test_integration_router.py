@@ -28,6 +28,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
 from src.services.query_control_plane_service.app.application.dpm_portfolio_population import (
     DpmPortfolioPopulationService,
 )
+from src.services.query_control_plane_service.app.application.dpm_source_readiness import (
+    readiness as dpm_readiness_application,
+)
 from src.services.query_control_plane_service.app.application.external_hedge_posture import (
     ExternalHedgePostureService,
 )
@@ -62,9 +65,15 @@ from src.services.query_control_plane_service.app.contracts.core_snapshot import
     CoreSnapshotRequest,
     CoreSnapshotSection,
 )
+from src.services.query_control_plane_service.app.contracts.discretionary_mandate_binding import (
+    DiscretionaryMandateBindingRequest,
+)
 from src.services.query_control_plane_service.app.contracts.dpm_portfolio_population import (
     CioModelChangeAffectedCohortRequest,
     DpmPortfolioUniverseCandidateRequest,
+)
+from src.services.query_control_plane_service.app.contracts.dpm_source_readiness import (
+    DpmSourceReadinessRequest,
 )
 from src.services.query_control_plane_service.app.contracts.external_hedge_posture import (
     ExternalCurrencyExposureRequest,
@@ -74,6 +83,9 @@ from src.services.query_control_plane_service.app.contracts.external_hedge_postu
     ExternalHedgePolicyRequest,
     ExternalOrderExecutionAcknowledgementRequest,
 )
+from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
+    InstrumentEligibilityBulkRequest,
+)
 from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
     InstrumentEnrichmentBulkRequest,
 )
@@ -81,11 +93,20 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
 )
+from src.services.query_control_plane_service.app.contracts.market_data_coverage import (
+    MarketDataCoverageRequest,
+)
+from src.services.query_control_plane_service.app.contracts.model_portfolio_targets import (
+    ModelPortfolioTargetRequest,
+)
 from src.services.query_control_plane_service.app.contracts.performance_component_economics import (
     PerformanceComponentEconomicsRequest,
 )
 from src.services.query_control_plane_service.app.contracts.portfolio_manager_book import (
     PortfolioManagerBookMembershipRequest,
+)
+from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
+    PortfolioTaxLotWindowRequest,
 )
 from src.services.query_control_plane_service.app.contracts.transaction_cost_curve import (
     TransactionCostCurveRequest,
@@ -156,15 +177,9 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
-    DiscretionaryMandateBindingRequest,
-    DpmSourceReadinessRequest,
     IndexCatalogRequest,
     IndexSeriesRequest,
-    InstrumentEligibilityBulkRequest,
     IntegrationWindow,
-    MarketDataCoverageRequest,
-    ModelPortfolioTargetRequest,
-    PortfolioTaxLotWindowRequest,
     RiskFreeSeriesRequest,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
@@ -173,6 +188,7 @@ SustainabilityPreferenceProfileService = (
     preference_application.SustainabilityPreferenceProfileService
 )
 SustainabilityPreferenceProfileRequest = preference_contracts.SustainabilityPreferenceProfileRequest
+DpmSourceReadinessService = dpm_readiness_application.DpmSourceReadinessService
 
 
 def assert_query_control_plane_problem(
@@ -732,7 +748,7 @@ async def test_resolve_portfolio_benchmark_assignment_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_model_portfolio_targets_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.resolve_model_portfolio_targets = AsyncMock(
         return_value={
             "product_name": "DpmModelPortfolioTarget",
@@ -767,7 +783,7 @@ async def test_resolve_model_portfolio_targets_success_path() -> None:
     response = await resolve_model_portfolio_targets(
         model_portfolio_id="MODEL_SG_BALANCED_DPM",
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "DpmModelPortfolioTarget"
@@ -779,14 +795,14 @@ async def test_resolve_model_portfolio_targets_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_model_portfolio_targets_maps_not_found_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.resolve_model_portfolio_targets = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_model_portfolio_targets(
             model_portfolio_id="MODEL_MISSING",
             request=ModelPortfolioTargetRequest(as_of_date="2026-03-31"),
-            integration_service=mock_service,
+            dpm_source_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1107,7 +1123,7 @@ async def test_resolve_dpm_portfolio_universe_candidates_maps_bad_token_to_422()
 
 @pytest.mark.asyncio
 async def test_resolve_discretionary_mandate_binding_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.resolve_discretionary_mandate_binding = AsyncMock(
         return_value={
             "product_name": "DiscretionaryMandateBinding",
@@ -1153,7 +1169,7 @@ async def test_resolve_discretionary_mandate_binding_success_path() -> None:
     response = await resolve_discretionary_mandate_binding(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "DiscretionaryMandateBinding"
@@ -1166,14 +1182,14 @@ async def test_resolve_discretionary_mandate_binding_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.resolve_discretionary_mandate_binding = AsyncMock(return_value=None)
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await resolve_discretionary_mandate_binding(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=DiscretionaryMandateBindingRequest(as_of_date="2026-04-10"),
-            integration_service=mock_service,
+            dpm_source_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1191,7 +1207,7 @@ async def test_resolve_discretionary_mandate_binding_maps_not_found_to_404() -> 
 
 @pytest.mark.asyncio
 async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.resolve_instrument_eligibility_bulk = AsyncMock(
         return_value={
             "product_name": "InstrumentEligibilityProfile",
@@ -1247,7 +1263,7 @@ async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
 
     response = await resolve_instrument_eligibility_bulk(
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "InstrumentEligibilityProfile"
@@ -1256,7 +1272,7 @@ async def test_resolve_instrument_eligibility_bulk_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_get_portfolio_tax_lot_window_success_path() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.get_portfolio_tax_lot_window = AsyncMock(
         return_value={
             "product_name": "PortfolioTaxLotWindow",
@@ -1314,7 +1330,7 @@ async def test_get_portfolio_tax_lot_window_success_path() -> None:
     response = await get_portfolio_tax_lot_window(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "PortfolioTaxLotWindow"
@@ -1326,14 +1342,14 @@ async def test_get_portfolio_tax_lot_window_success_path() -> None:
 
 @pytest.mark.asyncio
 async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=LookupError("missing"))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_tax_lot_window(
             portfolio_id="P404",
             request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
-            integration_service=mock_service,
+            dpm_source_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1351,14 +1367,14 @@ async def test_get_portfolio_tax_lot_window_maps_not_found_to_404() -> None:
 
 @pytest.mark.asyncio
 async def test_get_portfolio_tax_lot_window_maps_bad_token_to_400() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.get_portfolio_tax_lot_window = AsyncMock(side_effect=ValueError("bad token"))
 
     with pytest.raises(QueryControlPlaneProblem) as exc_info:
         await get_portfolio_tax_lot_window(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             request=PortfolioTaxLotWindowRequest(as_of_date="2026-04-10"),
-            integration_service=mock_service,
+            dpm_source_service=mock_service,
         )
 
     assert_query_control_plane_problem(
@@ -1617,7 +1633,7 @@ async def test_get_transaction_cost_curve_maps_bad_token_to_400() -> None:
 
 @pytest.mark.asyncio
 async def test_get_market_data_coverage_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
     mock_service.get_market_data_coverage = AsyncMock(
         return_value={
             "product_name": "MarketDataCoverageWindow",
@@ -1670,7 +1686,7 @@ async def test_get_market_data_coverage_router_function() -> None:
 
     response = await get_market_data_coverage(
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "MarketDataCoverageWindow"
@@ -1679,8 +1695,8 @@ async def test_get_market_data_coverage_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_dpm_source_readiness_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
-    mock_service.get_dpm_source_readiness = AsyncMock(
+    mock_service = MagicMock(spec=DpmSourceReadinessService)
+    mock_service.get_source_readiness = AsyncMock(
         return_value={
             "product_name": "DpmSourceReadiness",
             "product_version": "v1",
@@ -1719,11 +1735,11 @@ async def test_get_dpm_source_readiness_router_function() -> None:
     response = await get_dpm_source_readiness(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        dpm_source_service=mock_service,
     )
 
     assert response["product_name"] == "DpmSourceReadiness"
-    mock_service.get_dpm_source_readiness.assert_awaited_once_with(
+    mock_service.get_source_readiness.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
     )

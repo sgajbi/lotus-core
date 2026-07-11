@@ -25,21 +25,23 @@ from src.services.persistence_service.app.adapters.persistence_event_adapter imp
     decode_persistence_message_payload,
     validate_persistence_event_payload,
 )
+from src.services.query_control_plane_service.app.application.dpm_source_readiness.portfolio_tax_lots import (  # noqa: E501
+    portfolio_tax_lot_record,
+)
 from src.services.query_control_plane_service.app.application.transaction_economics.performance import (  # noqa: E501
     build_performance_component_economics_rows,
+)
+from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
+    PortfolioTaxLotWindowResponse,
+    PortfolioTaxLotWindowSupportability,
+)
+from src.services.query_control_plane_service.app.domain.dpm_source_readiness import (
+    PortfolioTaxLotEvidence,
 )
 from src.services.query_control_plane_service.app.domain.transaction_economics import (
     BookedTransactionEconomics,
     TransactionCostComponentEvidence,
 )
-from src.services.query_service.app.dtos.reference_integration_portfolio_tax_lot_dto import (
-    PortfolioTaxLotWindowResponse,
-    PortfolioTaxLotWindowSupportability,
-)
-from src.services.query_service.app.read_models import (
-    PortfolioTaxLotReadRecord,
-)
-from src.services.query_service.app.services.reference_data_mappers import portfolio_tax_lot_record
 
 
 class _CapturingProducer:
@@ -243,16 +245,16 @@ def test_persistence_message_adapter_uses_event_id_for_non_transaction_events() 
 
 def test_source_data_tax_lot_mapping_preserves_lineage_and_envelope_identity() -> None:
     lot = portfolio_tax_lot_record(
-        PortfolioTaxLotReadRecord(
+        PortfolioTaxLotEvidence(
             portfolio_id="PB_SG_GLOBAL_BAL_001",
             security_id=" eq_us_aapl ",
             instrument_id=" EQ_US_AAPL ",
             lot_id="LOT-TXN-BUY-AAPL-001",
-            open_quantity="100.0000000000",
-            original_quantity="150.0000000000",
+            open_quantity=Decimal("100.0000000000"),
+            original_quantity=Decimal("150.0000000000"),
             acquisition_date=date(2026, 3, 25),
-            lot_cost_base="15005.5000000000",
-            lot_cost_local="15005.5000000000",
+            lot_cost_base=Decimal("15005.5000000000"),
+            lot_cost_local=Decimal("15005.5000000000"),
             source_transaction_id="TXN-MAP-001",
             source_system="OMS_PRIMARY",
             calculation_policy_id="BUY_DEFAULT_POLICY",

@@ -25,6 +25,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_client_tax_rule_set_service,
     get_core_snapshot_service,
     get_dpm_portfolio_population_service,
+    get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
@@ -534,6 +535,7 @@ async def async_test_client():
     app.dependency_overrides[get_dpm_portfolio_population_service] = lambda: (
         mock_integration_service
     )
+    app.dependency_overrides[get_dpm_source_readiness_service] = lambda: mock_integration_service
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
@@ -554,6 +556,7 @@ async def async_test_client():
         yield client, mock_core_snapshot_service, mock_integration_service
     app.dependency_overrides.pop(get_core_snapshot_service, None)
     app.dependency_overrides.pop(get_dpm_portfolio_population_service, None)
+    app.dependency_overrides.pop(get_dpm_source_readiness_service, None)
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)

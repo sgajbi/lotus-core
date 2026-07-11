@@ -122,6 +122,12 @@ produce `DPM_SOURCE_READINESS_READY`. This lets operations and downstream DPM se
 blockers without reconstructing mandate, eligibility, tax, market-data, valuation, suitability,
 liquidity, execution, or OMS truth.
 
+The capability is owned end to end by Query Control Plane: routes use product-scoped contracts,
+application policies consume immutable domain evidence through narrow ports, and QCP SQL adapters
+own effective-date, latest-observation, and tax-lot keyset reads. Source proof metadata is
+deterministic; aggregate `CURRENT` requires five ready families and durable constituent evidence.
+Query Service no longer contains a DPM compatibility facade or duplicate contracts/repositories.
+
 `PortfolioTaxLotWindow:v1` preserves source lot-state evidence from `position_lot_state`, reports
 requested securities with no matching lots separately from returned lots whose security ids do not
 resolve to governed instrument master data, and exposes bounded `reason_codes`,
