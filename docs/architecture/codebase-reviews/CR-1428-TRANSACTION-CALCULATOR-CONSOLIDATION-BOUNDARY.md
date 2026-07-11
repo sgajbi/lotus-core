@@ -2,7 +2,7 @@
 
 Date: 2026-07-10  
 Issue: #468  
-Status: In progress
+Status: Superseded by implemented closure candidate in CR-1526
 
 ## Objective
 
@@ -47,8 +47,8 @@ routes, and OpenAPI contracts remain unchanged.
 - Documentation catalog and wiki checks are required before commit.
 - `git diff --check` -> passed.
 
-## Remaining Work
+## Closure
 
-Issue #468 stays open until the shared runtime/package prerequisite, combined host, failure/replay
-proof, deployment switch, image proof, canonical QA, and removal of the three old deployables are
-complete. This entry does not overstate planned consolidation as runtime completion.
+CR-1526 records the implemented target, source retirement, acceptance matrix, reconciled focused
+evidence, and remaining aggregate and release work. Production rollout and post-merge certification
+remain distinct from fixed-local implementation status.

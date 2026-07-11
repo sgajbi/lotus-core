@@ -1,6 +1,6 @@
 # Calculator Runtime Consolidation Decision
 
-Status: App-local/CI and Kubernetes manifests cut over; position plus cost policy, checkpoints, and timeline orchestration moved; registry/cluster and remaining cost/cashflow source removal pending
+Status: Implemented locally; registry/cluster rollout and post-merge certification pending
 Date: 2026-07-10  
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
@@ -104,11 +104,11 @@ combined completion contract.
    workflow/domain/repository modules and remove the obsolete normal-path stage wait only after
    downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
-Steps 1 through 6, the position source move, cost-basis policy/checkpoint/timeline moves, and target
-compatibility staging ownership from step 7 are implemented locally. The mixed legacy cost event
-processor is removed. The branch must not claim full runtime consolidation complete before the
-remaining cost workflow/repository and cashflow source retirement and the release/deployment gates
-are validated.
+Steps 1 through 7 are implemented locally. Cost, cashflow, and position source ownership now lives
+under the target package; the three legacy source roots, standalone consumers, package/image
+inventories, Compose workers, and Kubernetes scalers are removed. Local implementation completion
+must not be confused with production rollout: registry publication, controlled cluster rollout,
+canonical platform QA, rollback, and post-merge release evidence remain mandatory.
 
 ## Rollback
 

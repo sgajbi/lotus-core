@@ -1870,8 +1870,9 @@ Most relevant current governance:
      persistence, committed live-group lag growth, exact domain/claim completion, live/replay lag
      return to baseline, and no incremental DLQ event; ingestion-job backlog is not a transaction
      recovery proxy and a timeout is never a passing result. Registry publication, controlled
-     cluster rollout, shutdown-under-load and pool-pressure evidence, canonical QA, and physical
-     legacy package removal remain required before claiming full consolidation. Kubernetes source
+     cluster rollout, shutdown-under-load and pool-pressure evidence, and canonical QA remain
+     required before claiming production consolidation. The physical legacy transaction-calculator
+     packages are removed locally and must not be restored. Kubernetes source
      must contain one
      digest-only `portfolio-transaction-processing` Deployment and one KEDA object with canonical
      live/replay groups; never restore the three legacy worker/scaler/image inventories. Render the

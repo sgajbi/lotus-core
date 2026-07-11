@@ -53,8 +53,8 @@ isolation, security, or SLO evidence proves a runtime boundary is needed.
 ## Runtime Split Rationale Matrix
 
 This table records current evidence. Cost, cashflow, and position are separately owned modules in
-one app-local/CI transaction-processing deployable; registry/Kubernetes rollout and physical legacy
-package removal still require explicit evidence.
+one app-local/CI transaction-processing deployable. Physical legacy packages are removed locally;
+registry/Kubernetes rollout still requires explicit release evidence.
 
 | Deployable | Scale Driver | Deployment Cadence Driver | Operations Owner Driver | Persistence Owner Driver | Failure Isolation Driver | Security Boundary Driver |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -106,9 +106,10 @@ transaction processing.
 | Timeseries and aggregation | `timeseries_generator_service`, `portfolio_aggregation_service` | valuation snapshots and aggregation jobs | `portfolio_day.aggregation.completed` | Upsert/job claim, epoch, stale reset, and completion outbox. | Position and portfolio timeseries. |
 | Financial controls | `financial_reconciliation_service`, `pipeline_orchestrator_service` | aggregation completion and reconciliation completion | reconciliation request and `portfolio_day.controls.evaluated` | Deterministic run key and monotonic control-stage status. | Reconciliation findings and publishability evidence. |
 
-Architecture CI blocks calculator imports of orchestrator/query internals and orchestrator imports
-of calculator/query internals. Event CI also requires every producer and consumer actor to resolve
-to the runtime-boundary catalog.
+Architecture CI blocks both retired calculator paths and the unified transaction-processing package
+from orchestrator/query internals. It also blocks orchestrators from calculator, unified transaction,
+and query internals. Event CI requires every producer and consumer actor to resolve to the
+runtime-boundary catalog.
 
 ## Service Responsibility Map
 

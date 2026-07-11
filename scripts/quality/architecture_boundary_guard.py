@@ -132,6 +132,16 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         ),
     ),
     DirectImportBoundaryRule(
+        name="transaction processing must not import orchestrator or query internals",
+        source_path_prefixes=("src/services/portfolio_transaction_processing_service/app/",),
+        forbidden_module_prefixes=(
+            "services.pipeline_orchestrator_service",
+            "services.query_control_plane_service",
+            "services.query_service",
+            "services.valuation_orchestrator_service",
+        ),
+    ),
+    DirectImportBoundaryRule(
         name="orchestrators must not import calculator or query internals",
         source_path_prefixes=(
             "src/services/pipeline_orchestrator_service/app/",
@@ -139,6 +149,7 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
         ),
         forbidden_module_prefixes=(
             "services.calculators",
+            "services.portfolio_transaction_processing_service",
             "services.query_control_plane_service",
             "services.query_service",
         ),

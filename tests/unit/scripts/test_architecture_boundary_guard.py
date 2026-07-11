@@ -76,6 +76,39 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
     ]
 
 
+def test_transaction_processing_boundary_rejects_orchestrator_internal_import(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "portfolio_transaction_processing_service"
+        / "app"
+        / "application"
+        / "process_transaction.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.pipeline_orchestrator_service.app.services "
+        "import pipeline_orchestrator_service\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports(
+        [source],
+        rules=DIRECT_IMPORT_BOUNDARY_RULES,
+    )
+
+    assert findings == [
+        "src/services/portfolio_transaction_processing_service/app/application/"
+        "process_transaction.py:1: transaction processing must not import orchestrator or query "
+        "internals: disallowed direct import "
+        "'services.pipeline_orchestrator_service.app.services'"
+    ]
+
+
 def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monkeypatch) -> None:
     source = (
         tmp_path
@@ -104,6 +137,39 @@ def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monk
         "pipeline_orchestrator_service.py:1: orchestrators must not import calculator or query "
         "internals: disallowed direct import "
         "'services.calculators.cost_calculator_service.app.consumer'"
+    ]
+
+
+def test_orchestrator_boundary_rejects_transaction_processing_internal_import(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "pipeline_orchestrator_service"
+        / "app"
+        / "services"
+        / "pipeline_orchestrator_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.portfolio_transaction_processing_service.app.application "
+        "import ProcessTransactionUseCase\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports(
+        [source],
+        rules=DIRECT_IMPORT_BOUNDARY_RULES,
+    )
+
+    assert findings == [
+        "src/services/pipeline_orchestrator_service/app/services/"
+        "pipeline_orchestrator_service.py:1: orchestrators must not import calculator or query "
+        "internals: disallowed direct import "
+        "'services.portfolio_transaction_processing_service.app.application'"
     ]
 
 
