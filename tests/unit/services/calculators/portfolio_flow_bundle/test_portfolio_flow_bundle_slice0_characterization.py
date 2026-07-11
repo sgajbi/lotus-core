@@ -13,9 +13,11 @@ from src.services.calculators.cashflow_calculator_service.app.core.enums import 
     CashflowClassification,
     CashflowTiming,
 )
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
-from src.services.calculators.position_calculator.app.core.position_models import (
-    PositionState as PositionStateDTO,
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+    PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationWorkflow,
 )
 
 
@@ -79,7 +81,7 @@ def test_position_bundle_semantics(
         net_cost_local=net_cost,
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, txn)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, txn)
 
     assert next_state.quantity == expected_qty
     assert next_state.cost_basis == expected_cost

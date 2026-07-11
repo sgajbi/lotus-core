@@ -1,4 +1,5 @@
-# services/calculators/position_calculator/app/repositories/position_repository.py
+"""Persist position history and replay state for unified transaction processing."""
+
 import hashlib
 import logging
 from collections.abc import Callable

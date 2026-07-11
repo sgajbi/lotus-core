@@ -32,7 +32,7 @@ caveats.
 | --- | --- | --- | --- |
 | Portfolio and account source of record | `supported` | `lotus-core` | Source truth only; downstream apps own analytics and product experience. |
 | Transaction and booking evidence | `supported` | `lotus-core` | Booking and ledger evidence only; tax advice, execution, and reporting interpretation are downstream-owned. |
-| Position, valuation, and cashflow calculators | `supported` | `lotus-core` | Source-data foundations only; performance, risk, advice, and liquidity conclusions are downstream-owned. |
+| Position, valuation, and cashflow processing | `supported` | `lotus-core` | Source-data foundations only; performance, risk, advice, and liquidity conclusions are downstream-owned. |
 | Operational read plane | `supported` | `lotus-core` | Operational reads must not drift into report composition, advice, risk, or performance ownership. |
 | Query control plane | `supported` | `lotus-core` | Source-data products and control-plane evidence only; consumer adoption proof remains downstream-owned. |
 | DPM source-data products | `supported_with_fail_closed_dependencies` | `lotus-core` | Core publishes source readiness and fail-closed external dependency posture; DPM decisions remain `lotus-manage` owned. |
@@ -48,7 +48,7 @@ Core support map:
 
 1. Portfolio and account source of record
 2. Transaction and booking evidence
-3. Position, valuation, and cashflow calculators
+3. Position, valuation, and cashflow processing
 4. Operational read plane
 5. Query control plane
 6. Performance and DPM source-data products

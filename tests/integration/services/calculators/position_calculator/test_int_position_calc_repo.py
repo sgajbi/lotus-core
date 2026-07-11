@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 # This now correctly imports the repository we want to test
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
     PositionRepository,
 )
 

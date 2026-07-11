@@ -150,6 +150,13 @@ def _validate_adoption(root: Path, adoption: object) -> list[InProcessModularity
     legacy_folders = adoption.get("legacyFolders")
     if status == "representative-adopted-with-legacy-folders":
         findings.extend(_validate_legacy_folders(root, service_path, legacy_folders))
+    findings.extend(
+        _validate_retired_legacy_folders(
+            root,
+            service_path,
+            adoption.get("retiredLegacyFolders"),
+        )
+    )
     return findings
 
 
@@ -194,6 +201,42 @@ def _validate_legacy_folders(
                     path=service_path,
                     rule="missing-legacy-folder-path",
                     detail=f"legacy folder path does not exist: {legacy_path}",
+                )
+            )
+    return findings
+
+
+def _validate_retired_legacy_folders(
+    root: Path,
+    service_path: str,
+    retired_folders: object,
+) -> list[InProcessModularityFinding]:
+    if retired_folders is None:
+        return []
+    if not isinstance(retired_folders, list) or not retired_folders:
+        return [
+            InProcessModularityFinding(
+                path=service_path,
+                rule="invalid-retired-legacy-folders",
+                detail="retiredLegacyFolders must be a non-empty path list when present",
+            )
+        ]
+    findings: list[InProcessModularityFinding] = []
+    for retired_path in retired_folders:
+        if not isinstance(retired_path, str) or not retired_path.strip():
+            findings.append(
+                InProcessModularityFinding(
+                    path=service_path,
+                    rule="invalid-retired-legacy-folder-path",
+                    detail="retired legacy folder paths must be non-empty strings",
+                )
+            )
+        elif (root / retired_path).exists():
+            findings.append(
+                InProcessModularityFinding(
+                    path=service_path,
+                    rule="retired-legacy-folder-restored",
+                    detail=f"retired legacy folder must stay absent: {retired_path}",
                 )
             )
     return findings

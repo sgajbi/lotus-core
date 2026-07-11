@@ -6,11 +6,9 @@ from portfolio_common.events import TransactionEvent
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.position_calculator.app.core import position_logic
-from src.services.calculators.position_calculator.app.repositories import position_repository
-
 from ..domain import BookedTransaction
 from ..ports import PositionProcessingResult
+from . import position_calculation_workflow, position_repository
 from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
 
 
@@ -22,7 +20,7 @@ class PositionStagingWorkflow(Protocol):
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
         rebuild_existing: bool = False,
-    ) -> position_logic.PositionCalculationResult: ...
+    ) -> position_calculation_workflow.PositionCalculationResult: ...
 
 
 class CombinedPositionCalculationWorkflow:
@@ -35,8 +33,8 @@ class CombinedPositionCalculationWorkflow:
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
         rebuild_existing: bool = False,
-    ) -> position_logic.PositionCalculationResult:
-        return await position_logic.PositionCalculator.calculate(
+    ) -> position_calculation_workflow.PositionCalculationResult:
+        return await position_calculation_workflow.PositionCalculationWorkflow.calculate(
             event=event,
             db_session=db_session,
             repo=repo,

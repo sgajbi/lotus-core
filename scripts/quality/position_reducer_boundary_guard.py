@@ -4,17 +4,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 POSITION_LOGIC_MODULE = Path(
-    "src/services/calculators/position_calculator/app/core/position_logic.py"
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+    "position_calculation_workflow.py"
 )
 POSITION_REDUCER_MODULE = Path(
-    "src/services/calculators/position_calculator/app/core/position_reducer.py"
+    "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py"
 )
 
 REQUIRED_REDUCER_SNIPPETS = (
     "class PositionBalanceState",
-    "class BackdatedReplayDecision",
+    "class BackdatedRecalculationDecision",
     "def calculate_next_position_state",
-    "def plan_backdated_replay",
+    "def plan_backdated_recalculation",
     "def cash_position_deltas",
 )
 FORBIDDEN_REDUCER_SNIPPETS = {
@@ -32,7 +33,7 @@ FORBIDDEN_REDUCER_SNIPPETS = {
 }
 REQUIRED_LOGIC_SNIPPETS = (
     "calculate_next_position_state",
-    "plan_backdated_replay",
+    "plan_backdated_recalculation",
     "PositionBalanceState",
     "EpochFencer",
     "REPROCESSING_EPOCH_BUMPED_TOTAL",

@@ -13,8 +13,7 @@ The current protected set covers:
 1. `src/services/**/app/domain/**/*.py`,
 2. `src/services/**/app/application/**/*.py`,
 3. `src/services/**/app/ports/**/*.py`,
-4. `src/services/**/app/policies/**/*.py`,
-5. `src/services/calculators/position_calculator/app/core/position_reducer.py`.
+4. `src/services/**/app/policies/**/*.py`.
 
 Add modules to this contract when a slice extracts business policy, application use cases, ports,
 or pure reducers from legacy service files.

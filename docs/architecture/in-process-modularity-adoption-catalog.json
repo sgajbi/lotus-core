@@ -90,7 +90,8 @@
         "docs/standards/in-process-boundary-contract-standard.md",
         "docs/architecture/calculator-runtime-consolidation-decision.md",
         "docs/architecture/codebase-reviews/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md",
-        "docs/architecture/codebase-reviews/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md"
+        "docs/architecture/codebase-reviews/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md",
+        "docs/architecture/codebase-reviews/CR-1509-POSITION-MODULE-TARGET-OWNERSHIP.md"
       ],
       "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Registry/Kubernetes rollout and legacy package removal remain governed follow-up work."
     }

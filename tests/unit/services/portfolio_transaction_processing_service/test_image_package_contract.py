@@ -34,10 +34,10 @@ def test_target_image_uses_bounded_source_closure_without_legacy_wheel_collision
     for module_root in (
         "cost_calculator_service",
         "cashflow_calculator_service",
-        "position_calculator",
     ):
         assert f"src/services/calculators/{module_root} " in dockerfile
         assert f"/app/src/services/calculators/{module_root}" in dockerfile
+    assert "src/services/calculators/position_calculator" not in dockerfile
     assert (
         "COPY --chown=appuser:appuser src/services/pipeline_orchestrator_service/app "
         not in dockerfile

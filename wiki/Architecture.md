@@ -75,8 +75,9 @@ Control execution and reconciliation run contracts.
 
 ### transaction processing and generators
 
-- one `portfolio_transaction_processing_service` deployable with separate cost, cashflow, and
-  position modules behind one atomic use case and database unit of work
+- one `portfolio_transaction_processing_service` deployable with target-owned position domain and
+  infrastructure modules plus transitional cost/cashflow modules behind one atomic use case and
+  database unit of work
 - one authoritative `transactions.cost.processed` completion input to pipeline readiness; the
   retained `cashflows.calculated` compatibility fact is not a second prerequisite
 - independently scalable position valuation worker
@@ -110,3 +111,8 @@ first prove the in-process package/use-case/port/adapter boundary is insufficien
 runtime-boundary decision evidence. Important modules default to `no split yet` until scale,
 deployment cadence, operations ownership, persistence ownership, failure isolation, security, or
 SLO evidence changes that decision.
+
+After transaction-processing source consolidation is complete, the next governed boundary review
+covers timeseries generation, valuation orchestration/execution, pipeline orchestration, and
+portfolio aggregation. That review must classify each runtime as keep, merge into explicit
+in-process modules, or retire; folder movement is not evidence of a correct runtime boundary.

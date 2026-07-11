@@ -106,7 +106,9 @@
       "title": "Position, cash ledger, and state-transition behavior",
       "risk": "Untested position or cash state transitions can create incorrect holdings, cash balances, and replay decisions.",
       "source_globs": [
-        "src/services/calculators/position_calculator/app/core/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_calculation_workflow.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py",
         "src/services/query_service/app/services/position*.py",
         "src/services/query_service/app/services/cash*.py",
         "src/services/query_service/app/repositories/position_repository.py",
@@ -139,8 +141,8 @@
       "risk": "Corporate-action handling needs explicit domain tests because it changes quantity, cash, and cost state through non-trade events.",
       "source_globs": [
         "src/libs/portfolio-common/portfolio_common/transaction_domain/ca_*.py",
-        "src/services/calculators/position_calculator/app/core/position_reducer.py",
-        "src/services/calculators/position_calculator/app/core/position_logic.py"
+        "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_calculation_workflow.py"
       ],
       "minimum_measured_line_coverage_percent": 90.0,
       "minimum_measured_branch_coverage_percent": 82.0,

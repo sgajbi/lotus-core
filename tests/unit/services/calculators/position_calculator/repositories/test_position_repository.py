@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
     PositionRepository,
     _position_history_replay_lock_key,
 )
@@ -38,7 +38,8 @@ async def test_acquire_position_history_replay_lock_uses_stable_normalized_key()
     repository = PositionRepository(db_session, clock=clock)
 
     with patch(
-        "src.services.calculators.position_calculator.app.repositories.position_repository."
+        "src.services.portfolio_transaction_processing_service.app.infrastructure."
+        "position_repository."
         "observe_position_history_replay_lock_wait"
     ) as observe_wait:
         await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
@@ -64,7 +65,8 @@ async def test_acquire_position_history_replay_lock_records_failure_without_swal
 
     with (
         patch(
-            "src.services.calculators.position_calculator.app.repositories.position_repository."
+            "src.services.portfolio_transaction_processing_service.app.infrastructure."
+            "position_repository."
             "observe_position_history_replay_lock_wait"
         ) as observe_wait,
         pytest.raises(RuntimeError, match="lock unavailable"),

@@ -1,6 +1,6 @@
 # Calculator Runtime Consolidation Decision
 
-Status: App-local/CI and Kubernetes manifests cut over; registry/cluster/legacy removal pending
+Status: App-local/CI and Kubernetes manifests cut over; position source moved; registry/cluster and cost/cashflow source removal pending
 Date: 2026-07-10  
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
@@ -35,6 +35,43 @@ Valuation is job-driven rather than transaction-event driven. It has different s
 market-data dependencies, latency/backfill behavior, failure recovery, and compute profile.
 Independent deployment and failure isolation therefore have current operational value.
 
+## Post-Unification Runtime Boundary Review
+
+After cost, cashflow, and position code has moved to target-owned packages and the combined runtime
+has production workload evidence, run a separate boundary review for:
+
+- `timeseries_generator_service`;
+- `valuation_orchestrator_service`;
+- `pipeline_orchestrator_service`;
+- `portfolio_aggregation_service`;
+- `position_valuation_calculator`.
+
+Do not assume that these five services should either remain separate or collapse into one runtime.
+Evaluate each capability by command/trigger model, source and derived state ownership, transaction
+boundary, ordering, scaling profile, backfill volume, failure isolation, deployment cadence,
+security boundary, SLO, and operational ownership. Prefer one deployable with explicit in-process
+modules when those dimensions are materially shared; retain a runtime boundary only when measured
+independent scaling, isolation, or ownership value exceeds its operational cost.
+
+The review must test these specific hypotheses:
+
+1. Unified transaction completion may make parts of `pipeline_orchestrator_service` redundant;
+   delete obsolete stage gates instead of merging a no-longer-needed orchestrator.
+2. Position valuation is market-data/job driven and currently has a different scale and failure
+   profile from booked-transaction processing, so it remains separate unless workload evidence
+   disproves that boundary.
+3. Valuation job orchestration and valuation execution may share one deployable while retaining
+   application/worker modules, but only if scheduling availability and compute saturation do not
+   require independent isolation.
+4. Security-level timeseries generation and portfolio aggregation form one derived-state pipeline
+   and may share a deployable, but only if dependency ordering, backfills, and portfolio fan-in can
+   be bounded without coupling their failure recovery.
+
+Required output is a before/after runtime and data-flow map, dependency and consumer inventory,
+load/backfill evidence, failure-mode analysis, database/table ownership decision, migration and
+rollback plan, and explicit keep/merge/retire decision for every runtime. Do not begin this phase by
+moving folders; complete the cost/cashflow target-ownership work first.
+
 ## Preserved Boundaries
 
 | Boundary | Required compatibility |
@@ -67,8 +104,9 @@ combined completion contract.
    workflow/domain/repository modules and remove the obsolete normal-path stage wait only after
    downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
-Steps 1 through 6 are implemented locally. The branch must not claim full runtime consolidation
-complete before step 7 and the remaining release/deployment gates are validated.
+Steps 1 through 6 and the position source move from step 7 are implemented locally. The branch
+must not claim full runtime consolidation complete before cost/cashflow source retirement and the
+remaining release/deployment gates are validated.
 
 ## Rollback
 

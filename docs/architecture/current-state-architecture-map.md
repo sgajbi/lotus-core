@@ -130,7 +130,7 @@ The deployable list is governed by `docs/architecture/runtime-boundary-decision-
 App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
 transaction processor; the three legacy worker shells are absent from those inventories. Registry
 publication, controlled cluster rollout, platform observability publication, canonical QA,
-downstream stage retirement, and physical legacy package removal remain governed prerequisites
+downstream stage retirement, and remaining cost/cashflow legacy package removal remain governed prerequisites
 before full production cutover is claimed.
 
 ## Transitional Internal Package Roots
@@ -143,7 +143,6 @@ manifests are deleted; do not recreate them:
 | --- | --- | --- | --- |
 | `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Cost workflow/domain/repository compatibility implementation behind target ports; old replay delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
 | `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow workflow/domain/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after canonical QA. |
-| `position_calculator_service` | `src/services/calculators/position_calculator` | Position domain/reducer/repository compatibility implementation behind target ports; old delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
 
 ## Database Ownership
 

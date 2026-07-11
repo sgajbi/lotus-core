@@ -1,9 +1,11 @@
+"""Apply pure position-state transitions for booked transaction economics."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from portfolio_common.decimal_amounts import required_decimal
 from portfolio_common.transaction_domain.control_code_normalization import (
@@ -70,36 +72,38 @@ class PositionBalanceState:
 
 
 @dataclass(frozen=True, slots=True)
-class BackdatedReplayDecision:
-    should_queue_replay: bool
+class BackdatedRecalculationDecision:
+    should_recalculate: bool
     effective_completed_date: date
-    replay_watermark_date: date | None
+    recalculation_watermark_date: date | None
     reason: str
 
 
 _PositionUpdateHandler = Callable[[PositionBalanceState, Any, str], PositionBalanceState]
 
 
-def plan_backdated_replay(
+def plan_backdated_recalculation(
     *,
     event_epoch: int | None,
     transaction_date: date,
     current_watermark_date: date,
     latest_position_history_date: date | None,
     latest_completed_snapshot_date: date | None,
-) -> BackdatedReplayDecision:
+) -> BackdatedRecalculationDecision:
     effective_completed_date = max(
         current_watermark_date,
         latest_position_history_date if latest_position_history_date else _POSITION_START_DATE,
         latest_completed_snapshot_date if latest_completed_snapshot_date else _POSITION_START_DATE,
     )
-    should_queue_replay = event_epoch is None and transaction_date < effective_completed_date
-    return BackdatedReplayDecision(
-        should_queue_replay=should_queue_replay,
+    should_recalculate = event_epoch is None and transaction_date < effective_completed_date
+    return BackdatedRecalculationDecision(
+        should_recalculate=should_recalculate,
         effective_completed_date=effective_completed_date,
-        replay_watermark_date=transaction_date - timedelta(days=1) if should_queue_replay else None,
+        recalculation_watermark_date=transaction_date - timedelta(days=1)
+        if should_recalculate
+        else None,
         reason="original_backdated_transaction"
-        if should_queue_replay
+        if should_recalculate
         else "current_or_replay_event",
     )
 
@@ -125,8 +129,11 @@ def _resolve_effective_processing_transaction_type(transaction: Any) -> str:
         getattr(transaction, "component_type", None)
     )
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
-        return component_type
-    return normalize_transaction_control_code(getattr(transaction, "transaction_type", None))
+        return cast(str, component_type)
+    return cast(
+        str,
+        normalize_transaction_control_code(getattr(transaction, "transaction_type", None)),
+    )
 
 
 def cash_position_deltas(transaction: Any, txn_type: str) -> tuple[Decimal, Decimal, Decimal]:

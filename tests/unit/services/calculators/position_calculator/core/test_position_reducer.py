@@ -4,11 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.services.calculators.position_calculator.app.core.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState,
     calculate_next_position_state,
     cash_position_deltas,
-    plan_backdated_replay,
+    plan_backdated_recalculation,
 )
 
 
@@ -251,8 +251,8 @@ def test_cash_position_deltas_normalize_booked_costs_once() -> None:
     assert net_cost_local.string_call_count == 1
 
 
-def test_plan_backdated_replay_queues_original_event_before_effective_completion() -> None:
-    decision = plan_backdated_replay(
+def test_plan_backdated_recalculation_rebuilds_original_event_before_effective_completion() -> None:
+    decision = plan_backdated_recalculation(
         event_epoch=None,
         transaction_date=date(2026, 3, 10),
         current_watermark_date=date(2026, 3, 31),
@@ -260,9 +260,9 @@ def test_plan_backdated_replay_queues_original_event_before_effective_completion
         latest_completed_snapshot_date=date(2026, 4, 1),
     )
 
-    assert decision.should_queue_replay is True
+    assert decision.should_recalculate is True
     assert decision.effective_completed_date == date(2026, 4, 1)
-    assert decision.replay_watermark_date == date(2026, 3, 9)
+    assert decision.recalculation_watermark_date == date(2026, 3, 9)
     assert decision.reason == "original_backdated_transaction"
 
 
@@ -273,11 +273,11 @@ def test_plan_backdated_replay_queues_original_event_before_effective_completion
         (None, date(2026, 4, 1)),
     ],
 )
-def test_plan_backdated_replay_skips_current_epoch_or_current_date_events(
+def test_plan_backdated_recalculation_skips_current_epoch_or_current_date_events(
     event_epoch: int | None,
     transaction_date: date,
 ) -> None:
-    decision = plan_backdated_replay(
+    decision = plan_backdated_recalculation(
         event_epoch=event_epoch,
         transaction_date=transaction_date,
         current_watermark_date=date(2026, 3, 31),
@@ -285,7 +285,7 @@ def test_plan_backdated_replay_skips_current_epoch_or_current_date_events(
         latest_completed_snapshot_date=date(2026, 4, 1),
     )
 
-    assert decision.should_queue_replay is False
+    assert decision.should_recalculate is False
     assert decision.effective_completed_date == date(2026, 4, 1)
-    assert decision.replay_watermark_date is None
+    assert decision.recalculation_watermark_date is None
     assert decision.reason == "current_or_replay_event"

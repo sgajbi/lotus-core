@@ -1,8 +1,8 @@
-# Position Calculator
+# Position Processing
 
 ## Purpose
 
-The position module maintains canonical position-history state inside the combined
+The position module maintains canonical position-history state inside the unified
 `portfolio_transaction_processing_service` runtime.
 
 It takes processed transaction events, recalculates the affected position path, and handles
@@ -13,7 +13,7 @@ inconsistent.
 
 The current app-local/CI runtime centers on:
 
-- consuming processed transaction events
+- accepting booked transactions through the unified application use case
 - recalculating next position state
 - updating durable position-history state
 - triggering atomic reprocessing flows for back-dated changes
@@ -29,7 +29,7 @@ For a processed transaction event, the service:
 2. determines whether the transaction can be applied incrementally or requires reprocessing
 3. calculates the next position state and related deltas
 4. persists updated position history and state
-5. emits or stages the downstream effects needed for valuation and later materialization
+5. stages supported compatibility effects needed by downstream materialization
 
 When a transaction is back-dated, the runtime can trigger a broader reprocessing path instead of
 pretending the new state can be patched in safely with a single forward update.
@@ -42,14 +42,16 @@ reconciles to original basis.
 
 ## Consolidated runtime
 
-The app-local/CI combined transaction processor uses the same detection, ordering, lock, epoch
+The app-local/CI unified transaction processor uses the same detection, ordering, lock, epoch
 fence, and watermark rules, but rebuilds current-epoch position history inside the shared
 transaction. This avoids depending on a legacy normal-path replay consumer. The combined path also
 registers cost-stage pipeline readiness for every rebuilt current-epoch transaction before staging
 matching cashflow completion signals. Legacy cost publication remains limited to the incoming
 transaction so compatibility consumers cannot double-apply the rebuilt suffix. Compatibility events
-remain for downstream stage orchestration while registry/Kubernetes cutover and legacy package
-removal are completed.
+remain for downstream stage orchestration while registry/Kubernetes cutover and remaining legacy
+package removal are completed. The pure reducer now lives in the target domain package;
+recalculation coordination and SQL persistence live in target infrastructure. The retired
+`position_calculator` source package is absent from the target image.
 
 ## Recalculation concurrency
 
@@ -68,7 +70,7 @@ backdated.
 
 Operators use the transaction-processing dashboard's position lock-wait p95, coordination rate,
 and recalculation-work p95 panels with database pool and consumer-lag signals. The work histogram
-distinguishes inline rebuild, compatibility replay, and coalesced zero-work decisions. Thresholds
+distinguishes inline rebuild and coalesced zero-work decisions. Thresholds
 require a deployed baseline.
 
 ## Data it owns
@@ -99,7 +101,7 @@ system-of-record contract.
 ## Boundary rules
 
 - processed transaction history is upstream input
-- position calculator owns canonical position-state transformation inside core
+- unified transaction processing owns canonical position-state transformation inside core
 - valuation and time-series materialization are downstream consumers of this state
 - downstream analytics conclusions still belong outside `lotus-core`
 

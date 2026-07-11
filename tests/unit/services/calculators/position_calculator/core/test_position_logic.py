@@ -10,17 +10,17 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from portfolio_common.position_state_repository import PositionStateRepository
 
-from src.services.calculators.position_calculator.app.core.position_logic import (
-    PositionCalculationResult,
-    PositionCalculator,
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+    PositionBalanceState as PositionStateDTO,
 )
-from src.services.calculators.position_calculator.app.core.position_models import (
-    PositionState as PositionStateDTO,
-)
-from src.services.calculators.position_calculator.app.core.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     cash_position_deltas,
 )
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationResult,
+    PositionCalculationWorkflow,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
     PositionRepository,
 )
 
@@ -77,7 +77,9 @@ def sample_event() -> TransactionEvent:
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_discards_stale_epoch_event(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -86,7 +88,7 @@ async def test_calculate_discards_stale_epoch_event(
 ):
     """
     GIVEN an event that the EpochFencer deems stale
-    WHEN PositionCalculator.calculate is called
+    WHEN PositionCalculationWorkflow.calculate is called
     THEN it should not perform any calculations or repository writes.
     """
     # ARRANGE
@@ -94,7 +96,7 @@ async def test_calculate_discards_stale_epoch_event(
     mock_fencer_instance.check = AsyncMock(return_value=False)
 
     # ACT
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo
     )
 
@@ -106,7 +108,9 @@ async def test_calculate_discards_stale_epoch_event(
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_normal_flow(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -115,7 +119,7 @@ async def test_calculate_normal_flow(
 ):
     """
     GIVEN a transaction that is NOT backdated
-    WHEN PositionCalculator.calculate runs
+    WHEN PositionCalculationWorkflow.calculate runs
     THEN it should proceed with the standard position calculation logic.
     """
     # ARRANGE
@@ -130,7 +134,7 @@ async def test_calculate_normal_flow(
     mock_repo.get_transactions_on_or_after.return_value = [sample_event]
 
     # ACT
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo
     )
 
@@ -167,7 +171,7 @@ async def test_recalculate_position_history_locks_key_before_delete(sample_event
     repo.get_last_position_before.return_value = None
     repo.get_transactions_on_or_after.return_value = [sample_event]
 
-    await PositionCalculator._recalculate_position_history(
+    await PositionCalculationWorkflow._recalculate_position_history(
         event=sample_event,
         repo=repo,
         position_state_repo=state_repo,
@@ -181,7 +185,9 @@ async def test_recalculate_position_history_locks_key_before_delete(sample_event
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_rearms_current_epoch_when_position_history_arrives_after_valuation(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -191,7 +197,7 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
     """
     GIVEN a replay/current-epoch event materializes position history for a date
     already covered by valuation snapshots
-    WHEN PositionCalculator persists the corrected history
+    WHEN PositionCalculationWorkflow persists the corrected history
     THEN the current epoch watermark is reset so valuation and timeseries jobs
     are regenerated instead of leaving stale snapshots marked current.
     """
@@ -208,7 +214,9 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
     mock_repo.get_transactions_on_or_after.return_value = [sample_event]
     mock_state_repo.update_watermarks_if_older.return_value = 1
 
-    await PositionCalculator.calculate(sample_event, AsyncMock(), mock_repo, mock_state_repo)
+    await PositionCalculationWorkflow.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo
+    )
 
     mock_state_repo.increment_epoch_and_reset_watermark.assert_not_called()
     mock_repo.save_positions.assert_awaited_once()
@@ -221,13 +229,15 @@ async def test_calculate_rearms_current_epoch_when_position_history_arrives_afte
 
 @pytest.mark.asyncio
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic."
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow."
     "POSITION_RECALCULATION_WORK_ITEMS"
 )
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic.REPROCESSING_EPOCH_BUMPED_TOTAL"
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox(
     mock_fencer_class: MagicMock,
     mock_metric: MagicMock,
@@ -262,7 +272,7 @@ async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox
         )
     ]
 
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event,
         AsyncMock(),
         mock_repo,
@@ -284,7 +294,9 @@ async def test_calculate_rebuilds_backdated_history_inline_without_replay_outbox
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_treats_existing_position_history_as_backdated_boundary(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -311,7 +323,7 @@ async def test_calculate_treats_existing_position_history_as_backdated_boundary(
     mock_state_repo.increment_epoch_and_reset_watermark.return_value = PositionState(epoch=1)
     mock_repo.get_all_transactions_for_security.return_value = []
 
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event, AsyncMock(), mock_repo, mock_state_repo
     )
 
@@ -323,14 +335,16 @@ async def test_calculate_treats_existing_position_history_as_backdated_boundary(
 
 @pytest.mark.asyncio
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic."
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow."
     "REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic."
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow."
     "POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     mock_fencer_class: MagicMock,
     mock_coordination_metric: MagicMock,
@@ -355,7 +369,9 @@ async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
     mock_repo.get_latest_position_history_date.return_value = None
     mock_state_repo.increment_epoch_and_reset_watermark.return_value = None
 
-    await PositionCalculator.calculate(sample_event, AsyncMock(), mock_repo, mock_state_repo)
+    await PositionCalculationWorkflow.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo
+    )
 
     mock_state_repo.increment_epoch_and_reset_watermark.assert_awaited_once_with(
         "P1", "S1", 0, date(2025, 8, 19)
@@ -371,14 +387,16 @@ async def test_calculate_skips_backdated_replay_when_epoch_bump_is_stale(
 
 @pytest.mark.asyncio
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic."
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow."
     "POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
 @patch(
-    "src.services.calculators.position_calculator.app.core.position_logic."
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow."
     "POSITION_RECALCULATION_WORK_ITEMS"
 )
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_coalesces_backdated_event_already_materialized_in_current_epoch(
     mock_fencer_class: MagicMock,
     mock_work_metric: MagicMock,
@@ -395,7 +413,7 @@ async def test_calculate_coalesces_backdated_event_already_materialized_in_curre
     mock_repo.get_latest_position_history_date.return_value = date(2025, 8, 25)
     mock_repo.is_transaction_materialized.return_value = True
 
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event,
         AsyncMock(),
         mock_repo,
@@ -416,8 +434,14 @@ async def test_calculate_coalesces_backdated_event_already_materialized_in_curre
 
 
 @pytest.mark.asyncio
-@patch.object(PositionCalculator, "_rebuild_backdated_position_history", new_callable=AsyncMock)
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch.object(
+    PositionCalculationWorkflow,
+    "_rebuild_backdated_position_history",
+    new_callable=AsyncMock,
+)
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_rebuilds_materialized_backdated_event_for_explicit_correction(
     mock_fencer_class: MagicMock,
     mock_rebuild: AsyncMock,
@@ -433,7 +457,7 @@ async def test_calculate_rebuilds_materialized_backdated_event_for_explicit_corr
     mock_repo.get_latest_position_history_date.return_value = date(2025, 8, 25)
     mock_repo.is_transaction_materialized.return_value = True
 
-    result = await PositionCalculator.calculate(
+    result = await PositionCalculationWorkflow.calculate(
         sample_event,
         AsyncMock(),
         mock_repo,
@@ -447,7 +471,9 @@ async def test_calculate_rebuilds_materialized_backdated_event_for_explicit_corr
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_backdated_replay_has_deterministic_tie_break_order(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -502,14 +528,18 @@ async def test_calculate_backdated_replay_has_deterministic_tie_break_order(
         ),
     ]
 
-    await PositionCalculator.calculate(sample_event, AsyncMock(), mock_repo, mock_state_repo)
+    await PositionCalculationWorkflow.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo
+    )
 
     positions = mock_repo.save_positions.await_args.args[0]
     assert [position.transaction_id for position in positions] == ["TXN_A", "TXN_B", "TXN_C"]
 
 
 @pytest.mark.asyncio
-@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+@patch(
+    "src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow.EpochFencer"
+)
 async def test_calculate_backdated_replay_deduplicates_triggering_transaction_if_already_persisted(
     mock_fencer_class: MagicMock,
     mock_repo: AsyncMock,
@@ -563,7 +593,9 @@ async def test_calculate_backdated_replay_deduplicates_triggering_transaction_if
         ),
     ]
 
-    await PositionCalculator.calculate(sample_event, AsyncMock(), mock_repo, mock_state_repo)
+    await PositionCalculationWorkflow.calculate(
+        sample_event, AsyncMock(), mock_repo, mock_state_repo
+    )
 
     positions = mock_repo.save_positions.await_args.args[0]
     assert [position.transaction_id for position in positions] == ["TXN_OLDER", "TXN_DUP"]
@@ -595,7 +627,7 @@ def test_calculate_next_position_for_sell_uses_net_cost():
     )
 
     # ACT
-    new_state = PositionCalculator.calculate_next_position(initial_state, sell_event)
+    new_state = PositionCalculationWorkflow.calculate_next_position(initial_state, sell_event)
 
     # ASSERT
     assert new_state.quantity == Decimal("50")
@@ -625,7 +657,7 @@ def test_calculate_next_position_normalizes_transaction_type_before_calculation(
         currency="USD",
     )
 
-    new_state = PositionCalculator.calculate_next_position(initial_state, buy_event)
+    new_state = PositionCalculationWorkflow.calculate_next_position(initial_state, buy_event)
 
     assert new_state.quantity == Decimal("15")
     assert new_state.cost_basis == Decimal("155")
@@ -662,8 +694,8 @@ def test_calculate_next_position_for_adjustment_uses_movement_direction():
         }
     )
 
-    mid_state = PositionCalculator.calculate_next_position(initial_state, inflow_event)
-    final_state = PositionCalculator.calculate_next_position(mid_state, outflow_event)
+    mid_state = PositionCalculationWorkflow.calculate_next_position(initial_state, inflow_event)
+    final_state = PositionCalculationWorkflow.calculate_next_position(mid_state, outflow_event)
 
     assert mid_state.quantity == Decimal("1050")
     assert mid_state.cost_basis == Decimal("1050")
@@ -694,7 +726,7 @@ def test_calculate_next_position_for_adjustment_normalizes_movement_direction():
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, outflow_event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, outflow_event)
 
     assert next_state.quantity == Decimal("980")
     assert next_state.cost_basis == Decimal("980")
@@ -722,7 +754,7 @@ def test_calculate_next_position_for_fx_cash_settlement_buy_updates_cash_positio
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == Decimal("2095")
     assert next_state.cost_basis == Decimal("2095")
@@ -756,8 +788,8 @@ def test_calculate_next_position_for_fx_contract_lifecycle_tracks_open_state() -
         }
     )
 
-    open_state = PositionCalculator.calculate_next_position(initial_state, open_event)
-    closed_state = PositionCalculator.calculate_next_position(open_state, close_event)
+    open_state = PositionCalculationWorkflow.calculate_next_position(initial_state, open_event)
+    closed_state = PositionCalculationWorkflow.calculate_next_position(open_state, close_event)
 
     assert open_state.quantity == Decimal("1")
     assert open_state.cost_basis == Decimal("0")
@@ -799,7 +831,7 @@ def test_calculate_next_position_for_cash_portfolio_flows_updates_cash_balance(
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
@@ -842,7 +874,7 @@ def test_cash_portfolio_flows_treat_zero_booked_cost_as_amount_fallback(
         net_cost_local=Decimal("0"),
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
@@ -871,7 +903,7 @@ def test_cash_fee_uses_fee_inclusive_booked_local_cost_for_quantity_delta() -> N
         net_cost_local=Decimal("-26.75"),
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == Decimal("73.25")
     assert next_state.cost_basis == Decimal("73.25")
@@ -912,7 +944,7 @@ def test_cash_portfolio_flows_fall_back_to_quantity_when_gross_amount_is_zero(
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
@@ -963,7 +995,7 @@ def test_foreign_currency_cash_flow_uses_booked_base_and_local_costs() -> None:
         net_cost_local=Decimal("-82552"),
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == Decimal("252448")
     assert next_state.cost_basis == Decimal("270659.568696")
@@ -988,7 +1020,7 @@ def test_foreign_currency_cash_deposit_preserves_base_fx_basis() -> None:
         net_cost_local=Decimal("335000"),
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
 
     assert next_state.quantity == Decimal("335000")
     assert next_state.cost_basis == Decimal("359349.475")
@@ -1038,7 +1070,7 @@ def test_calculate_next_position_for_ca_transfer_types(
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
     assert next_state.cost_basis_local == expected_cost
@@ -1079,7 +1111,7 @@ def test_calculate_next_position_for_ca_same_instrument_restatement_types(
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
     assert next_state.quantity == expected_quantity
     assert next_state.cost_basis == expected_cost
     assert next_state.cost_basis_local == expected_cost
@@ -1107,7 +1139,7 @@ def test_calculate_next_position_for_spin_off_basis_only_transfer() -> None:
         currency="USD",
     )
 
-    next_state = PositionCalculator.calculate_next_position(initial_state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, event)
     assert next_state.quantity == Decimal("100")
     assert next_state.cost_basis == Decimal("7500")
     assert next_state.cost_basis_local == Decimal("7500")

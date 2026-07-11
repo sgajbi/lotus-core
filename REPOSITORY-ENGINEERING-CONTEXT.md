@@ -1172,17 +1172,18 @@ Most relevant current governance:
 79. Position calculation rules are split from database sessions, concrete repositories, outbox
     staging, metrics, epoch fencing, and position-history persistence orchestration. The repo-local
     standard lives at `docs/standards/position-reducer-boundary-standard.md`.
-    `position_calculator.app.core.position_reducer` owns `PositionBalanceState`,
-    `BackdatedReplayDecision`, buy/sell transitions, cash movement deltas, transfer and
+    `portfolio_transaction_processing_service.app.domain.position_reducer` owns
+    `PositionBalanceState`, `BackdatedRecalculationDecision`, buy/sell transitions, cash movement
+    deltas, transfer and
     corporate-action quantity policy, FX contract/cash settlement behavior, flat-position cost
     zeroing, and deterministic backdated replay planning without SQLAlchemy, repositories, outbox,
     metrics, `EpochFencer`, persistence models, Pydantic DTOs, or correlation context.
-    `PositionCalculator` remains the application orchestrator and compatibility entry point: it
-    performs epoch-fencing checks, repository reads/writes, position-history persistence, outbox
-    staging, metric emission, replay event ordering, and DTO adaptation. `make architecture-guard`
+    `PositionCalculationWorkflow` remains infrastructure coordination because it performs epoch
+    fencing, repository reads/writes, position-history persistence, metric emission, deterministic
+    rebuild ordering, and persistence-model adaptation. `make architecture-guard`
     runs `scripts/quality/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
     helpers, buy/sell/transfer/corporate-action state helpers, and backdated replay decision
-    helpers do not drift back into `position_logic.py`.
+    helpers do not drift into `position_calculation_workflow.py`.
 80. Protected business logic modules must stay directly testable without FastAPI, real databases,
     Kafka, Redis, cloud SDKs, or downstream clients. The repo-local standard lives at
     `docs/standards/testability-architecture-standard.md`, and the machine-readable contract lives
@@ -1960,6 +1961,23 @@ Most relevant current governance:
      caller-owned units of work. Any change requires concurrent committed backdated-trigger proof,
      exact current-epoch quantities/cost, one-winner epoch evidence, zero active-runtime replay
      fan-out, bounded recalculation work-volume metrics, and migration/index validation.
+146. Position reduction is owned by `portfolio_transaction_processing_service/app/domain`, while
+     position recalculation coordination and SQL persistence are owned by that service's
+     `app/infrastructure`. Do not recreate `src/services/calculators/position_calculator`, copy it
+     into the target image, or place framework, session, repository, or telemetry concerns in the
+     reducer. Retire a legacy module only after production import inventory, installed-package
+     proof, focused domain and integration tests, downstream contract review, and a machine guard
+     that prevents the old path from returning. Apply this ownership-migration pattern to cost and
+     cashflow incrementally; do not move files merely to make the tree look layered.
+147. After cost, cashflow, and position target ownership and production evidence are complete,
+     review the runtime boundaries among timeseries generation, valuation orchestration, pipeline
+     orchestration, portfolio aggregation, and position valuation. Decide `keep`, `merge as
+     in-process modules`, or `retire` per capability using trigger, state ownership, atomicity,
+     ordering, scale and backfill, failure isolation, deployment cadence, SLO, security, and
+     operating ownership evidence. Treat redundant pipeline stage gates as deletion candidates,
+     not automatic merge candidates. Keep position valuation separate from transaction processing
+     unless measured market/job workload evidence invalidates its independent scaling and isolation
+     rationale.
 
 ## Context Maintenance Rule
 
