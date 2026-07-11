@@ -173,3 +173,75 @@ async def test_combined_buy_sell_preserves_lot_cashflow_and_position_results(
     assert cost_checkpoint.latest_transaction_date == sell_event.transaction_date
     assert cost_checkpoint.cost_basis_method == "FIFO"
     assert cost_checkpoint.engine_state_version == "open-lot-v1"
+
+
+async def test_auto_generated_buy_cash_leg_traverses_cashflow_and_position_stages(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-AUTO-CASH-01"
+    security_id = "FO_EQ_AUTO_CASH_01"
+    transaction_id = "BUY-COMBINED-AUTO-CASH-01"
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 3, 10, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="10",
+        price="100",
+        gross_amount="1000",
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-01",
+        settlement_cash_instrument_id="CASH-USD-01",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id),
+            instrument_record(
+                security_id,
+                name="Auto Cash Processing Equity",
+                isin="SG0000000003",
+                currency="USD",
+            ),
+        ]
+    )
+    context = transaction_processing_test_context(async_db_session)
+
+    result = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=event,
+        event_id="transactions.persisted-0-9301",
+        correlation_id="corr-combined-auto-cash-01",
+    )
+
+    cash_leg_id = f"{transaction_id}-CASHLEG"
+    async with context.session_factory() as verification_session:
+        cashflows = (
+            (
+                await verification_session.execute(
+                    select(Cashflow)
+                    .where(Cashflow.portfolio_id == portfolio_id)
+                    .order_by(Cashflow.transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert result.processed_transaction_ids == (transaction_id, cash_leg_id)
+    assert result.cashflow_record_count == 2
+    assert result.position_record_count == 2
+    assert [row.transaction_id for row in cashflows] == [transaction_id, cash_leg_id]
+    assert {row.economic_event_id for row in cashflows} == {
+        f"EVT-BUY-{portfolio_id}-{transaction_id}"
+    }
+    assert {row.linked_transaction_group_id for row in cashflows} == {
+        f"LTG-BUY-{portfolio_id}-{transaction_id}"
+    }
+    product_cashflow, settlement_cashflow = cashflows
+    assert product_cashflow.is_position_flow is True
+    assert settlement_cashflow.is_position_flow is False
+    assert settlement_cashflow.is_portfolio_flow is False

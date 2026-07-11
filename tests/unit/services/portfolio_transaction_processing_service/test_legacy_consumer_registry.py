@@ -74,11 +74,13 @@ def test_legacy_calculator_imports_are_confined_to_infrastructure_adapters() -> 
         if "src.services.calculators" in source.read_text(encoding="utf-8")
     ]
 
-    assert legacy_import_files == [
-        "app/infrastructure/cashflow_processing_adapter.py",
-        "app/infrastructure/composition.py",
-        "app/infrastructure/cost_processing_adapter.py",
-        "app/infrastructure/legacy_consumer_registry.py",
-        "app/infrastructure/position_processing_adapter.py",
-        "app/infrastructure/sqlalchemy_unit_of_work.py",
-    ]
+    assert sorted(legacy_import_files) == sorted(
+        [
+            "app/infrastructure/cashflow_processing_adapter.py",
+            "app/infrastructure/composition.py",
+            "app/infrastructure/cost_processing_adapter.py",
+            "app/infrastructure/legacy_consumer_registry.py",
+            "app/infrastructure/position_processing_adapter.py",
+            "app/infrastructure/sqlalchemy_unit_of_work.py",
+        ]
+    )

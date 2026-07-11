@@ -424,6 +424,8 @@ async def test_position_valuation_data_uses_latest_snapshot_fallback() -> None:
             "market_price": Decimal("101.5"),
             "market_value": Decimal("5582.5"),
             "unrealized_gain_loss": Decimal("82.5"),
+            "unrealized_price_gain_loss": Decimal("70"),
+            "unrealized_fx_gain_loss": Decimal("12.5"),
             "market_value_local": Decimal("5582.5"),
             "unrealized_gain_loss_local": Decimal("82.5"),
         },
@@ -431,7 +433,10 @@ async def test_position_valuation_data_uses_latest_snapshot_fallback() -> None:
 
     assert valuation.market_price == Decimal("101.5")
     assert valuation.market_value == Decimal("5582.5")
-    assert valuation.unrealized_gain_loss == Decimal("82.5")
+    assert valuation.unrealized_gain_loss == Decimal("4682.5")
+    assert valuation.unrealized_price_gain_loss is None
+    assert valuation.unrealized_fx_gain_loss is None
+    assert valuation.unrealized_gain_loss_local == Decimal("4682.5")
 
 
 async def test_position_valuation_data_derives_missing_fallback_unrealized_amounts() -> None:

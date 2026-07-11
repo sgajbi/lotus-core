@@ -201,7 +201,8 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
         "enter",
         "idempotency",
         "cost:TX-001",
-        "cashflow:TX-001",
+        "cashflow:TX-001-1",
+        "cashflow:TX-001-2",
         "position:TX-001-1",
         "position:TX-001-2",
         "commit",
@@ -209,7 +210,7 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
     assert result.status is TransactionProcessingStatus.PROCESSED
     assert result.processed_transaction_ids == ("TX-001-1", "TX-001-2")
     assert result.instrument_update_count == 2
-    assert result.cashflow_record_count == 1
+    assert result.cashflow_record_count == 2
     assert result.position_record_count == 2
     assert result.replay_queued_count == 1
     assert unit_of_work.rolled_back is False
@@ -219,6 +220,10 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
             TransactionProcessingOutcome.SUCCEEDED,
         ),
         (TransactionProcessingOperation.COST, TransactionProcessingOutcome.SUCCEEDED),
+        (
+            TransactionProcessingOperation.CASHFLOW,
+            TransactionProcessingOutcome.SUCCEEDED,
+        ),
         (
             TransactionProcessingOperation.CASHFLOW,
             TransactionProcessingOutcome.SUCCEEDED,

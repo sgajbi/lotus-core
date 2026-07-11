@@ -1676,6 +1676,8 @@ Most relevant current governance:
      governed `stage` and `outcome` labels; never label by portfolio, transaction, event,
      correlation, trace, exception, or error text. Preserve target attribution for live/replay,
      idempotency, cost, cashflow, each position leg, and commit after service consolidation.
+     Every transaction emitted by cost processing, including a generated settlement cash leg, must
+     traverse both cashflow and position processing inside the same unit of work.
      Deterministic full-history cost recalculation remains the fallback correctness baseline and is
      supported by the normalized portfolio/security/date/transaction index. Strictly ordered,
      version-compatible events may restore durable open-lot state and calculate only the incoming
