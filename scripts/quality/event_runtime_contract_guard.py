@@ -24,6 +24,9 @@ RUNTIME_BOUNDARY_CATALOG_PATH = (
     REPO_ROOT / "docs" / "architecture" / "runtime-boundary-decision-catalog.json"
 )
 TECHNICAL_EVENT_ACTORS = frozenset({"BaseConsumer"})
+EXCLUDED_SOURCE_DIRECTORY_NAMES = frozenset(
+    {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "build", "dist"}
+)
 
 
 @dataclass(frozen=True)
@@ -283,12 +286,22 @@ def _is_outbox_details_dict(node: ast.Dict) -> bool:
     return _dict_value(node, "event_type") is not None and _dict_value(node, "topic") is not None
 
 
+def _python_source_files(source_root: Path) -> tuple[Path, ...]:
+    return tuple(
+        source_file
+        for source_file in sorted(source_root.rglob("*.py"))
+        if not EXCLUDED_SOURCE_DIRECTORY_NAMES.intersection(
+            source_file.relative_to(source_root).parts
+        )
+    )
+
+
 def discover_outbox_event_emissions(
     source_root: Path = SOURCE_ROOT,
 ) -> tuple[OutboxEventEmission, ...]:
     emissions: list[OutboxEventEmission] = []
     consumer_class_names = _discover_consumer_class_names(source_root)
-    for source_file in sorted(source_root.rglob("*.py")):
+    for source_file in _python_source_files(source_root):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         source = _source_label(source_file, source_root)
         visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
@@ -304,7 +317,7 @@ def discover_direct_kafka_publishes(
 ) -> tuple[DirectKafkaPublish, ...]:
     publishes: list[DirectKafkaPublish] = []
     consumer_class_names = _discover_consumer_class_names(source_root)
-    for source_file in sorted(source_root.rglob("*.py")):
+    for source_file in _python_source_files(source_root):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         source = _source_label(source_file, source_root)
         visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
@@ -318,7 +331,7 @@ def discover_consumer_dlq_topic_wirings(
 ) -> tuple[ConsumerDlqTopicWiring, ...]:
     wirings: list[ConsumerDlqTopicWiring] = []
     consumer_class_names = _discover_consumer_class_names(source_root)
-    for source_file in sorted(source_root.rglob("*.py")):
+    for source_file in _python_source_files(source_root):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         source = _source_label(source_file, source_root)
         visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
@@ -334,7 +347,7 @@ def discover_consumer_dlq_topic_wirings(
 
 def _discover_consumer_class_names(source_root: Path = SOURCE_ROOT) -> set[str]:
     class_bases: dict[str, set[str]] = {}
-    for source_file in sorted(source_root.rglob("*.py")):
+    for source_file in _python_source_files(source_root):
         tree = ast.parse(source_file.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
