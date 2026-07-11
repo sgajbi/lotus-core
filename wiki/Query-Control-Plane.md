@@ -46,7 +46,8 @@ The service groups several related surfaces:
 4. `capabilities`
    tenant- and consumer-aware discovery of supported integration workflows
 5. `simulation`
-   deterministic what-if sessions and projected-state inspection
+   deterministic what-if sessions and projected-state inspection through QCP-owned API contracts,
+   application commands/results, domain records/policy, ports, and SQLAlchemy adapters
 6. `advisory_simulation`
    governed canonical simulation execution contract for core source effects
 
@@ -177,6 +178,8 @@ router inside the operational read plane.
 - the service may expose supportability and policy evidence, but it does not own business
   calculations that belong to calculators or downstream analytics services
 - simulation routes must stay deterministic and source-owned, not recommendation-bearing
+- generic simulation must remain QCP package-owned and must not import query-service repositories;
+  the temporary QS simulation-state reader exists only for the not-yet-moved Core snapshot family
 - generic simulation must not import advisory suitability, recommendation, proposal approval, or
   workflow-gate implementations; the advisory simulation route is a quarantined compatibility
   contract while those downstream-owned decisions migrate to `lotus-advise`

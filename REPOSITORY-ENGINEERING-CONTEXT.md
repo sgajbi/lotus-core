@@ -2098,6 +2098,17 @@ Most relevant current governance:
      not approve a runtime merge; use `lotus-core-end-state-runtime-vision.md` and measured load,
      backfill, fan-in, failure, SLO, and rollback evidence.
 
+159. Generic simulation is owned end to end by `query_control_plane_service`: API contracts under
+     `app/contracts`, commands/results and orchestration under `app/application`, immutable state
+     and transaction-effect policy under `app/domain`, dependency contracts under `app/ports`, and
+     SQLAlchemy mapping/query/UoW behavior under `app/infrastructure`. Routers map requests to
+     commands and results to response DTOs. Do not restore query-service simulation DTO/workflow or
+     generic UoW files, import query-service repositories from QCP, or mix advisory suitability and
+     recommendation logic into generic projection. The old QS `SimulationRepository` is temporary
+     Core-snapshot compatibility only and must retire with that ownership move. QCP `app.main`
+     remains package-closure incomplete until analytics, integration/Core snapshot,
+     operations/support, and advisory compatibility no longer import QS implementation modules.
+
 ## Context Maintenance Rule
 
 Update this document when:

@@ -54,7 +54,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Tracks sandbox simulation sessions.
 - **Description**: Session-level envelope for hypothetical changes against a base portfolio.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_control_plane_service/app/routers/simulation.py`, `src/services/query_service/app/dtos/simulation_dto.py`
+- **Usage (modules/features)**: QCP generic simulation via `app/infrastructure/simulation_store.py`, `app/application/simulation.py`, `app/contracts/simulation.py`, and `app/routers/simulation.py`; the QS `simulation_repository.py` remains a temporary Core-snapshot reader.
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -72,7 +72,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Stores hypothetical transactions within simulation sessions.
 - **Description**: Proposed what-if changes that are not posted to canonical ledger.
 - **Relationships**: `session_id` -> `simulation_sessions.session_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/simulation_repository.py`, `src/services/query_service/app/services/simulation_service.py`, `src/services/query_service/app/dtos/simulation_dto.py`, `src/services/query_control_plane_service/app/routers/simulation.py`
+- **Usage (modules/features)**: QCP generic simulation via `app/infrastructure/simulation_store.py`, `app/application/simulation.py`, `app/contracts/simulation.py`, and `app/routers/simulation.py`; the QS `simulation_repository.py` remains a temporary Core-snapshot reader.
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

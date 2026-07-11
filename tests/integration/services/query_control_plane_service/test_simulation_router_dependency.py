@@ -6,15 +6,15 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_control_plane_service.app.dependencies import get_simulation_service
-from src.services.query_control_plane_service.app.main import app
-from src.services.query_service.app.services.simulation_service import (
+from src.services.query_control_plane_service.app.application.simulation import (
     SimulationChangeNotFoundError,
     SimulationMutationInvalidError,
     SimulationPortfolioNotFoundError,
     SimulationService,
     SimulationSessionNotFoundError,
 )
+from src.services.query_control_plane_service.app.dependencies import get_simulation_service
+from src.services.query_control_plane_service.app.main import app
 
 pytestmark = pytest.mark.asyncio
 

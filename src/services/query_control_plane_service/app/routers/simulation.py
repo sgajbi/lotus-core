@@ -1,7 +1,17 @@
 # src/services/query_control_plane_service/app/routers/simulation.py
 from fastapi import APIRouter, Depends, Path, status
+from portfolio_common.decimal_amounts import decimal_or_none
 
-from src.services.query_service.app.dtos.simulation_dto import (
+from ..application.simulation import (
+    CreateSimulationSessionCommand,
+    SimulationChangeCommand,
+    SimulationChangeNotFoundError,
+    SimulationMutationInvalidError,
+    SimulationPortfolioNotFoundError,
+    SimulationService,
+    SimulationSessionNotFoundError,
+)
+from ..contracts.simulation import (
     ProjectedPositionsResponse,
     ProjectedSummaryResponse,
     SimulationChangesResponse,
@@ -9,14 +19,6 @@ from src.services.query_service.app.dtos.simulation_dto import (
     SimulationSessionCreateRequest,
     SimulationSessionResponse,
 )
-from src.services.query_service.app.services.simulation_service import (
-    SimulationChangeNotFoundError,
-    SimulationMutationInvalidError,
-    SimulationPortfolioNotFoundError,
-    SimulationService,
-    SimulationSessionNotFoundError,
-)
-
 from ..dependencies import get_simulation_service
 from .response_helpers import problem_example, problem_response, raise_problem
 
@@ -123,7 +125,14 @@ async def create_simulation_session(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.create_session(request)
+        result = await service.create_session(
+            CreateSimulationSessionCommand(
+                portfolio_id=request.portfolio_id,
+                created_by=request.created_by,
+                ttl_hours=request.ttl_hours,
+            )
+        )
+        return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationPortfolioNotFoundError as exc:
         raise_problem(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -162,7 +171,8 @@ async def get_simulation_session(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.get_session(session_id)
+        result = await service.get_session(session_id)
+        return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
@@ -190,7 +200,8 @@ async def close_simulation_session(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.close_session(session_id)
+        result = await service.close_session(session_id)
+        return SimulationSessionResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
@@ -223,8 +234,21 @@ async def add_simulation_changes(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        payload = [item.model_dump() for item in request.changes]
-        return await service.add_changes(session_id, payload)
+        changes = [
+            SimulationChangeCommand(
+                security_id=item.security_id,
+                transaction_type=item.transaction_type,
+                quantity=decimal_or_none(item.quantity),
+                price=decimal_or_none(item.price),
+                amount=decimal_or_none(item.amount),
+                currency=item.currency,
+                effective_date=item.effective_date,
+                metadata=item.metadata,
+            )
+            for item in request.changes
+        ]
+        result = await service.add_changes(session_id, changes)
+        return SimulationChangesResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_resource_not_found(exc)
     except SimulationMutationInvalidError as exc:
@@ -260,7 +284,8 @@ async def delete_simulation_change(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.delete_change(session_id, change_id)
+        result = await service.delete_change(session_id, change_id)
+        return SimulationChangesResponse.model_validate(result, from_attributes=True)
     except (SimulationSessionNotFoundError, SimulationChangeNotFoundError) as exc:
         _raise_simulation_resource_not_found(exc)
     except SimulationMutationInvalidError as exc:
@@ -291,7 +316,8 @@ async def get_projected_positions(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.get_projected_positions(session_id)
+        result = await service.get_projected_positions(session_id)
+        return ProjectedPositionsResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)
 
@@ -320,6 +346,7 @@ async def get_projected_summary(
     service: SimulationService = Depends(get_simulation_service),
 ):
     try:
-        return await service.get_projected_summary(session_id)
+        result = await service.get_projected_summary(session_id)
+        return ProjectedSummaryResponse.model_validate(result, from_attributes=True)
     except SimulationSessionNotFoundError as exc:
         _raise_simulation_not_found(exc)

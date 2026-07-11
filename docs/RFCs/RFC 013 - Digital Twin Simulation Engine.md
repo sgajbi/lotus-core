@@ -48,14 +48,14 @@ Not implemented as originally written:
 
 Evidence:
 - `src/services/query_control_plane_service/app/routers/simulation.py`
-- `src/services/query_service/app/services/simulation_service.py`
-- `src/services/query_service/app/repositories/simulation_repository.py`
-- `src/services/query_service/app/dtos/simulation_dto.py`
+- `src/services/query_control_plane_service/app/application/simulation.py`
+- `src/services/query_control_plane_service/app/infrastructure/simulation_store.py`
+- `src/services/query_control_plane_service/app/contracts/simulation.py`
 - `src/libs/portfolio-common/portfolio_common/database_models.py` (`SimulationSession`, `SimulationChange`)
 - `alembic/versions/e3f4a5b6c7d8_feat_add_simulation_sessions_and_changes_tables.py`
-- `tests/integration/services/query_service/test_simulation_router_dependency.py`
-- `tests/unit/services/query_service/services/test_simulation_service.py`
-- `tests/unit/services/query_service/repositories/test_simulation_repository.py`
+- `tests/integration/services/query_control_plane_service/test_simulation_router_dependency.py`
+- `tests/unit/services/query_control_plane_service/application/test_simulation.py`
+- `tests/unit/services/query_control_plane_service/infrastructure/test_simulation_store.py`
 
 ### Implemented Endpoint Contract (Current)
 

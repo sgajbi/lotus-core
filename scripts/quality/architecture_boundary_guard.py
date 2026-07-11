@@ -172,10 +172,14 @@ DIRECT_IMPORT_BOUNDARY_RULES = (
     DirectImportBoundaryRule(
         name="generic simulation must not import advisory decisioning",
         source_path_prefixes=(
+            "src/services/query_control_plane_service/app/application/simulation.py",
+            "src/services/query_control_plane_service/app/contracts/simulation.py",
+            "src/services/query_control_plane_service/app/domain/simulation.py",
+            "src/services/query_control_plane_service/app/domain/simulation_effects.py",
+            "src/services/query_control_plane_service/app/infrastructure/simulation_store.py",
+            "src/services/query_control_plane_service/app/ports/simulation.py",
             "src/services/query_control_plane_service/app/routers/simulation.py",
-            "src/services/query_service/app/dtos/simulation_dto.py",
             "src/services/query_service/app/repositories/simulation_repository.py",
-            "src/services/query_service/app/services/simulation_service.py",
         ),
         forbidden_module_prefixes=(
             "advisory_simulation",
