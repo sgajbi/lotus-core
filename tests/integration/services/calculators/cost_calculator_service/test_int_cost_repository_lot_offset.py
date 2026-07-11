@@ -12,6 +12,7 @@ from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.repository import (
@@ -26,6 +27,120 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _persist_cost_state_parent(
+    session: AsyncSession,
+    *,
+    suffix: str,
+) -> tuple[str, str]:
+    portfolio_id = f"PORT_COST_CONSTRAINT_{suffix}"
+    transaction_id = f"TXN_COST_CONSTRAINT_{suffix}"
+    session.add(
+        Portfolio(
+            portfolio_id=portfolio_id,
+            base_currency="USD",
+            open_date=date(2024, 1, 1),
+            risk_exposure="Medium",
+            investment_time_horizon="Long",
+            portfolio_type="Discretionary",
+            booking_center_code="SG",
+            client_id=f"CIF_COST_CONSTRAINT_{suffix}",
+            status="ACTIVE",
+        )
+    )
+    session.add(
+        DBTransaction(
+            transaction_id=transaction_id,
+            portfolio_id=portfolio_id,
+            instrument_id=f"BOND_{suffix}",
+            security_id=f"BOND_{suffix}",
+            transaction_type="BUY",
+            quantity=Decimal("1"),
+            price=Decimal("1"),
+            gross_transaction_amount=Decimal("1"),
+            trade_currency="USD",
+            currency="USD",
+            transaction_date=datetime(2026, 4, 10, 10, 0, 0),
+        )
+    )
+    await session.commit()
+    return portfolio_id, transaction_id
+
+
+@pytest.mark.parametrize(
+    ("overrides", "constraint_name"),
+    [
+        (
+            {"open_quantity": Decimal("-1")},
+            "ck_position_lot_open_quantity_nonnegative",
+        ),
+        (
+            {"original_quantity": Decimal("1"), "open_quantity": Decimal("2")},
+            "ck_position_lot_open_not_above_original",
+        ),
+        (
+            {"lot_cost_local": Decimal("-1")},
+            "ck_position_lot_local_cost_nonnegative",
+        ),
+        (
+            {"lot_cost_base": Decimal("-1")},
+            "ck_position_lot_base_cost_nonnegative",
+        ),
+    ],
+)
+async def test_position_lot_database_rejects_invalid_ledger_state(
+    clean_db,
+    async_db_session: AsyncSession,
+    overrides: dict[str, Decimal],
+    constraint_name: str,
+) -> None:
+    suffix = constraint_name.removeprefix("ck_position_lot_").upper()
+    portfolio_id, transaction_id = await _persist_cost_state_parent(
+        async_db_session,
+        suffix=suffix,
+    )
+    values = {
+        "lot_id": f"LOT-{transaction_id}",
+        "source_transaction_id": transaction_id,
+        "portfolio_id": portfolio_id,
+        "instrument_id": f"BOND_{suffix}",
+        "security_id": f"BOND_{suffix}",
+        "acquisition_date": date(2026, 4, 10),
+        "original_quantity": Decimal("1"),
+        "open_quantity": Decimal("1"),
+        "lot_cost_local": Decimal("1"),
+        "lot_cost_base": Decimal("1"),
+        "accrued_interest_paid_local": Decimal("0"),
+    }
+    values.update(overrides)
+    async_db_session.add(PositionLotState(**values))
+
+    with pytest.raises(IntegrityError, match=constraint_name):
+        await async_db_session.commit()
+    await async_db_session.rollback()
+
+
+async def test_transaction_cost_database_rejects_nonpositive_component(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    _, transaction_id = await _persist_cost_state_parent(
+        async_db_session,
+        suffix="NONPOSITIVE_FEE",
+    )
+    async_db_session.add(
+        TransactionCost(
+            transaction_id=transaction_id,
+            fee_type="broker_commission",
+            amount=Decimal("0"),
+            currency="USD",
+        )
+    )
+
+    with pytest.raises(IntegrityError, match="ck_transaction_costs_amount_positive"):
+        await async_db_session.commit()
+    await async_db_session.rollback()
 
 
 async def test_cost_repository_persists_buy_lot_and_offset_state(

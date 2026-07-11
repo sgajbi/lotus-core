@@ -24,6 +24,11 @@ basis, and portfolio-base cost basis. FIFO reflects actual lot consumption. AVCO
 remaining pooled quantity and cost pro rata across source contributions with exact aggregate
 reconciliation; AVCO source rows are supportability lineage, not disposal-order lot selection.
 
+PostgreSQL enforces the same ledger boundary: fee-component rows are positive, open lot quantity
+and local/base basis are nonnegative, and open quantity cannot exceed original acquisition
+quantity. Accrued-income signs remain methodology-owned because ex-coupon conventions require more
+specific evidence than a generic nonnegative rule.
+
 This makes the module more than a local calculation helper. It turns canonical transaction facts
 into governed cost-aware state inside the same unit of work as cashflow and position processing.
 
