@@ -2,7 +2,7 @@
 
 Date: 2026-07-11
 Issue: #468 same-pattern architecture scan
-Status: Implemented locally; aggregation queue split completed by CR-1519
+Status: Superseded by service-owned persistence in CR-1519 and CR-1520
 
 ## Objective
 
@@ -29,10 +29,9 @@ Production usage showed only two shared read methods: instrument batch lookup an
 
 ## Boundary Decision
 
-The shared adapter is truthful transitional infrastructure, not the target repository design.
-CR-1519 moved aggregation job claims, stale reset, dispatch recovery, and queue diagnostics to
-portfolio aggregation. Remaining timeseries data reads/writes still need service ownership, with
-only genuinely shared stateless market/reference query helpers retained where reuse remains useful.
+The shared adapter was transitional infrastructure, not the target repository design. CR-1519 moved
+aggregation queue behavior to portfolio aggregation, and CR-1520 completed service-owned data
+access while retaining only typed market/reference reads and stateless upsert builders.
 
 ## Compatibility
 
@@ -51,5 +50,5 @@ imports and class names remain stable.
 
 ## Follow-Up
 
-Complete the remaining generator and aggregation data-access split described by CR-1519, then
-delete the transitional shared class after PostgreSQL upsert and as-of proof.
+CR-1520 completed service-owned data access and deleted the transitional shared class. Runtime
+consolidation remains a separate evidence-gated decision.

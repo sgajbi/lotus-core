@@ -16,12 +16,13 @@ architecture `.md` or `.json` file lacks explicit metadata or an intentional cov
 Read these first:
 
 1. [Current-State Architecture Map](./current-state-architecture-map.md)
-2. [lotus-core target architecture](./lotus-core-target-architecture.md)
-3. [RFC-0082 contract family inventory](./RFC-0082-contract-family-inventory.md)
-4. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
-5. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
-6. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
-7. [Calculator Runtime Consolidation Decision](./calculator-runtime-consolidation-decision.md)
+2. [End-State Runtime Vision](./lotus-core-end-state-runtime-vision.md)
+3. [lotus-core target architecture](./lotus-core-target-architecture.md)
+4. [RFC-0082 contract family inventory](./RFC-0082-contract-family-inventory.md)
+5. [RFC-0083 target-state gap analysis](./RFC-0083-target-state-gap-analysis.md)
+6. [Query Service and Control Plane Boundary](./QUERY-SERVICE-AND-CONTROL-PLANE-BOUNDARY.md)
+7. [Microservice Boundaries and Trigger Matrix](./microservice-boundaries-and-trigger-matrix.md)
+8. [Calculator Runtime Consolidation Decision](./calculator-runtime-consolidation-decision.md)
 
 These documents establish the current bounded-context map, deployable ownership model, downstream
 contract posture, runtime boundary posture, and the main RFC-0083 implementation program.

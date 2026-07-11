@@ -2046,22 +2046,28 @@ Most relevant current governance:
      deployables legitimately share them. Do not restore generic `portfolio_common.models`, root
      transaction control-code helpers, or duplicate compatibility facades.
 156. Shared SQLAlchemy adapters belong under `portfolio_common.infrastructure.persistence` only
-     while multiple deployables genuinely use the same persistence behavior. Do not name concrete
-     repositories `Base` or place them at the shared package root. The transitional
-     `SharedTimeseriesRepository` currently preserves timeseries-generator and portfolio-
-     aggregation behavior, but production usage overlaps only for instrument-batch and FX reads.
-     Split generator snapshot/cashflow/position-timeseries persistence from aggregation claim,
-     recovery, queue, and portfolio-timeseries persistence with PostgreSQL locking/upsert/as-of
-     proof before retiring the shared adapter. Never move aggregation queue state into the
-     generator merely because historical integration tests live under its test directory.
+     while multiple deployables genuinely use the same behavior. Do not name concrete repositories
+     `Base` or place them at the shared package root. Timeseries persistence is now service-owned;
+     shared timeseries infrastructure is limited to typed instrument/FX reads and stateless upsert
+     statement construction. Never move aggregation state into the generator merely because
+     historical integration tests live under its test directory.
 157. Portfolio aggregation job queue persistence is owned by
      `portfolio_aggregation_service.app.infrastructure.PortfolioAggregationRepository`. Keep
      eligible-job claiming, `FOR UPDATE SKIP LOCKED`, deterministic claim ordering, dispatch
      recovery, stale retry/failure policy, and queue diagnostics out of `portfolio_common` and
      timeseries-generator repositories. Aggregation-only tests belong under portfolio-aggregation
      test paths. Do not restore the generic aggregation `TimeseriesRepository` wrapper or queue
-     methods on `SharedTimeseriesRepository`; preserve existing metric labels until an intentional
+     methods on a shared repository; preserve existing metric labels until an intentional
      observability-contract migration is approved and tested.
+158. Timeseries data persistence is service-owned. Use
+     `TimeseriesGenerationRepository` for generator snapshot/cashflow/position-timeseries access
+     and `PortfolioAggregationRepository` for aggregation queue/portfolio/as-of persistence. Shared
+     infrastructure is limited to `TimeseriesMarketDataReader`, immutable timeseries market-data
+     records, `TimeseriesMarketDataPort`, and stateless upsert statement builders. Do not restore
+     `SharedTimeseriesRepository`, either generic service `TimeseriesRepository` wrapper, or the
+     dead generator copy of portfolio aggregation logic. This ownership cleanup enables but does
+     not approve a runtime merge; use `lotus-core-end-state-runtime-vision.md` and measured load,
+     backfill, fan-in, failure, SLO, and rollback evidence.
 
 ## Context Maintenance Rule
 
