@@ -6,10 +6,11 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+
 from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
 from portfolio_common.reconciliation_quality import UNKNOWN
 from portfolio_common.reconstruction_identity import CURRENT_RESTATEMENT_VERSION
-from pydantic import BaseModel, Field
 
 SOURCE_METADATA_UNAVAILABLE_HASH = (
     "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
