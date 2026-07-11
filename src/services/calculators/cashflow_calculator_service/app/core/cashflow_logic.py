@@ -205,7 +205,7 @@ def _resolve_cashflow_level(
     transaction: TransactionEvent,
     rule: "CashflowRuleView",
 ) -> CashflowLevel:
-    if _is_linked_cash_account_settlement(transaction):
+    if _is_duplicate_corporate_action_cash_settlement(transaction):
         return CashflowLevel(is_position_flow=False, is_portfolio_flow=False)
     return CashflowLevel(
         is_position_flow=rule.is_position_flow,
@@ -213,11 +213,12 @@ def _resolve_cashflow_level(
     )
 
 
-def _is_linked_cash_account_settlement(transaction: TransactionEvent) -> bool:
+def _is_duplicate_corporate_action_cash_settlement(transaction: TransactionEvent) -> bool:
     return (
         _normalize_code(transaction.transaction_type) == "ADJUSTMENT"
         and bool((transaction.originating_transaction_id or "").strip())
-        and _normalize_code(transaction.link_type).endswith("_TO_CASH")
+        and _normalize_code(transaction.originating_transaction_type)
+        in {"CASH_CONSIDERATION", "CASH_IN_LIEU"}
     )
 
 
