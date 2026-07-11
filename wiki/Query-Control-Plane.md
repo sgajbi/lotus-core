@@ -96,6 +96,7 @@ Primary contract areas include:
 - `ClientRestrictionProfile`
 - `SustainabilityPreferenceProfile`
 - `ClientTaxProfile`
+- `ClientTaxRuleSet`
 - integration policy and capability diagnostics
 - supportability, lineage, reconciliation, and reprocessing evidence bundles
 - simulation session and projected-state contracts
@@ -202,6 +203,8 @@ router inside the operational read plane.
   Core publishes captured preference evidence while `lotus-manage` owns DPM interpretation
 - client-tax-profile contracts and implementation must remain QCP-owned and bounded to reference
   evidence; tax advice, optimization, suitability, and approval remain outside Core
+- client-tax-rule contracts and implementation must remain QCP-owned and bounded to source
+  references; tax policy decisions, approvals, and reporting certification remain outside Core
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 

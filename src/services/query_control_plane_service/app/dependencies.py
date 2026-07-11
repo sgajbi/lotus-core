@@ -18,6 +18,7 @@ from .application.analytics.analytics_timeseries_service import (
 )
 from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.client_tax_profile import ClientTaxProfileService
+from .application.client_tax_rule_set import ClientTaxRuleSetService
 from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
@@ -35,6 +36,7 @@ from .infrastructure.client_restriction_profile_sources import (
     SqlAlchemyClientRestrictionProfileSourceReader,
 )
 from .infrastructure.client_tax_profile_sources import SqlAlchemyClientTaxProfileSourceReader
+from .infrastructure.client_tax_rule_set_sources import SqlAlchemyClientTaxRuleSetSourceReader
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
 from .infrastructure.effective_mandate_sources import SqlAlchemyEffectiveMandateReader
 from .infrastructure.simulation_store import (
@@ -95,6 +97,16 @@ def get_client_tax_profile_service(
     return ClientTaxProfileService(
         mandate_reader=SqlAlchemyEffectiveMandateReader(db),
         reader=SqlAlchemyClientTaxProfileSourceReader(db),
+        clock=SystemClock(),
+    )
+
+
+def get_client_tax_rule_set_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ClientTaxRuleSetService:
+    return ClientTaxRuleSetService(
+        mandate_reader=SqlAlchemyEffectiveMandateReader(db),
+        reader=SqlAlchemyClientTaxRuleSetSourceReader(db),
         clock=SystemClock(),
     )
 

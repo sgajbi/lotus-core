@@ -24,8 +24,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientTaxRuleSetRequest,
-    ClientTaxRuleSetResponse,
     CoverageRequest,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
@@ -76,6 +74,7 @@ from src.services.query_service.app.services.integration_service import Integrat
 
 from ..application.client_restriction_profile import ClientRestrictionProfileService
 from ..application.client_tax_profile import ClientTaxProfileService
+from ..application.client_tax_rule_set import ClientTaxRuleSetService
 from ..application.core_snapshot.governance import (
     SnapshotGovernanceContext,
 )
@@ -93,6 +92,7 @@ from ..contracts.client_restriction_profile import (
     ClientRestrictionProfileResponse,
 )
 from ..contracts.client_tax_profile import ClientTaxProfileRequest, ClientTaxProfileResponse
+from ..contracts.client_tax_rule_set import ClientTaxRuleSetRequest, ClientTaxRuleSetResponse
 from ..contracts.core_snapshot import (
     CoreSnapshotRequest,
     CoreSnapshotResponse,
@@ -110,6 +110,7 @@ from ..contracts.sustainability_preference_profile import (
 from ..dependencies import (
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
+    get_client_tax_rule_set_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -1697,14 +1698,11 @@ async def get_client_tax_rule_set(
         description="Portfolio identifier whose client tax rule set is requested.",
         examples=["PB_SG_GLOBAL_BAL_001"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    tax_rule_service: ClientTaxRuleSetService = Depends(get_client_tax_rule_set_service),
 ) -> ClientTaxRuleSetResponse:
-    response = cast(
-        ClientTaxRuleSetResponse | None,
-        await integration_service.get_client_tax_rule_set(
-            portfolio_id=portfolio_id,
-            request=request,
-        ),
+    response = await tax_rule_service.get_client_tax_rule_set(
+        portfolio_id=portfolio_id,
+        request=request,
     )
     if response is None:
         _raise_mandate_scoped_source_not_found(

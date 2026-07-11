@@ -12,6 +12,9 @@ from src.services.query_control_plane_service.app.application.client_restriction
 from src.services.query_control_plane_service.app.application.client_tax_profile import (
     ClientTaxProfileService,
 )
+from src.services.query_control_plane_service.app.application.client_tax_rule_set import (
+    ClientTaxRuleSetService,
+)
 from src.services.query_control_plane_service.app.application.core_snapshot.service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
@@ -31,6 +34,9 @@ from src.services.query_control_plane_service.app.contracts.client_restriction_p
 from src.services.query_control_plane_service.app.contracts.client_tax_profile import (
     ClientTaxProfileRequest,
 )
+from src.services.query_control_plane_service.app.contracts.client_tax_rule_set import (
+    ClientTaxRuleSetRequest,
+)
 from src.services.query_control_plane_service.app.contracts.core_snapshot import (
     CoreSnapshotMode,
     CoreSnapshotRequest,
@@ -46,6 +52,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
 from src.services.query_control_plane_service.app.dependencies import (
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
+    get_client_tax_rule_set_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -106,7 +113,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
     ClientIncomeNeedsScheduleRequest,
-    ClientTaxRuleSetRequest,
     CoverageRequest,
     DiscretionaryMandateBindingRequest,
     DpmPortfolioUniverseCandidateRequest,
@@ -210,6 +216,11 @@ def test_get_client_restriction_profile_service_factory_returns_service() -> Non
 def test_get_client_tax_profile_service_factory_returns_service() -> None:
     service = get_client_tax_profile_service(db=MagicMock())
     assert isinstance(service, ClientTaxProfileService)
+
+
+def test_get_client_tax_rule_set_service_factory_returns_service() -> None:
+    service = get_client_tax_rule_set_service(db=MagicMock())
+    assert isinstance(service, ClientTaxRuleSetService)
 
 
 def test_get_sustainability_preference_profile_service_factory_returns_service() -> None:
@@ -1903,7 +1914,7 @@ async def test_client_tax_profile_maps_missing_binding_to_problem_details() -> N
 
 @pytest.mark.asyncio
 async def test_get_client_tax_rule_set_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ClientTaxRuleSetService)
     mock_service.get_client_tax_rule_set = AsyncMock(
         return_value={
             "product_name": "ClientTaxRuleSet",
@@ -1927,13 +1938,36 @@ async def test_get_client_tax_rule_set_router_function() -> None:
     response = await get_client_tax_rule_set(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        tax_rule_service=mock_service,
     )
 
     assert response["product_name"] == "ClientTaxRuleSet"
     mock_service.get_client_tax_rule_set.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_tax_rule_set_maps_missing_binding_to_problem_details() -> None:
+    mock_service = MagicMock(spec=ClientTaxRuleSetService)
+    mock_service.get_client_tax_rule_set = AsyncMock(return_value=None)
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_client_tax_rule_set(
+            portfolio_id="PB_MISSING",
+            request=ClientTaxRuleSetRequest(as_of_date="2026-05-03"),
+            tax_rule_service=mock_service,
+        )
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": "ClientTaxRuleSet",
+            "portfolio_id": "PB_MISSING",
+            "reason": "not_found",
+        },
     )
 
 
@@ -2092,12 +2126,6 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
 @pytest.mark.parametrize(
     ("route_handler", "service_method", "route_request", "source_product"),
     [
-        (
-            get_client_tax_rule_set,
-            "get_client_tax_rule_set",
-            ClientTaxRuleSetRequest(as_of_date="2026-05-03"),
-            "ClientTaxRuleSet",
-        ),
         (
             get_client_income_needs_schedule,
             "get_client_income_needs_schedule",

@@ -21,8 +21,6 @@ from ..dtos.reference_integration_dto import (
     ClassificationTaxonomyResponse,
     ClientIncomeNeedsScheduleRequest,
     ClientIncomeNeedsScheduleResponse,
-    ClientTaxRuleSetRequest,
-    ClientTaxRuleSetResponse,
     CoverageResponse,
     DiscretionaryMandateBindingRequest,
     DiscretionaryMandateBindingResponse,
@@ -219,16 +217,6 @@ class IntegrationService:
         request: DiscretionaryMandateBindingRequest,
     ) -> DiscretionaryMandateBindingResponse | None:
         return await self._dpm_readiness_service.resolve_discretionary_mandate_binding(
-            portfolio_id=portfolio_id,
-            request=request,
-        )
-
-    async def get_client_tax_rule_set(
-        self,
-        portfolio_id: str,
-        request: ClientTaxRuleSetRequest,
-    ) -> ClientTaxRuleSetResponse | None:
-        return await self._client_profile_income_service.get_client_tax_rule_set(
             portfolio_id=portfolio_id,
             request=request,
         )

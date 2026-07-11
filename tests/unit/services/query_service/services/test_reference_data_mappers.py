@@ -11,7 +11,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
     client_income_needs_schedule_entry,
-    client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
     index_definition_response,
     index_price_series_point,
@@ -472,61 +471,6 @@ def test_benchmark_market_series_point_uses_price_row_precedence_for_metadata() 
 
     assert point.series_currency == "USD"
     assert point.quality_status == "accepted"
-
-
-def test_client_tax_rule_entry_maps_source_data_row() -> None:
-    tax_rule = client_tax_rule_set_entry(
-        SimpleNamespace(
-            rule_set_id="TAX_RULES_SG_2026",
-            tax_year="2026",
-            jurisdiction_code="SG",
-            rule_code="US_DIVIDEND_WITHHOLDING",
-            rule_category="withholding",
-            rule_status="active",
-            rule_source="tax_policy",
-            applies_to_asset_classes=["equity"],
-            applies_to_security_ids=["EQ_US_AAPL"],
-            applies_to_income_types=["dividend"],
-            rate="0.3000000000",
-            threshold_amount="250000.0000",
-            threshold_currency="USD",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            rule_version="3",
-            source_record_id="tax-rule-1",
-        )
-    )
-
-    assert tax_rule.tax_year == 2026
-    assert tax_rule.rate == Decimal("0.3000000000")
-    assert tax_rule.threshold_amount == Decimal("250000.0000")
-
-
-def test_client_tax_rule_entry_treats_blank_optional_rates_as_absent() -> None:
-    tax_rule = client_tax_rule_set_entry(
-        SimpleNamespace(
-            rule_set_id="TAX_RULES_SG_2026",
-            tax_year="2026",
-            jurisdiction_code="SG",
-            rule_code="US_DIVIDEND_WITHHOLDING",
-            rule_category="withholding",
-            rule_status="active",
-            rule_source="tax_policy",
-            applies_to_asset_classes=[],
-            applies_to_security_ids=[],
-            applies_to_income_types=[],
-            rate="",
-            threshold_amount=" ",
-            threshold_currency="USD",
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            rule_version="3",
-            source_record_id="tax-rule-1",
-        )
-    )
-
-    assert tax_rule.rate is None
-    assert tax_rule.threshold_amount is None
 
 
 def test_client_liquidity_entries_map_source_data_rows() -> None:

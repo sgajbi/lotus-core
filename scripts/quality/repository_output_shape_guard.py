@@ -194,9 +194,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/query_service/app/repositories/reference_data_repository.py:list_client_income_needs_schedules": (
         "ClientIncomeNeedsSchedule",
     ),
-    "src/services/query_service/app/repositories/reference_data_repository.py:list_client_tax_rule_sets": (
-        "ClientTaxRuleSet",
-    ),
     "src/services/query_service/app/repositories/reference_data_repository.py:list_dpm_portfolio_universe_candidates": (
         "PortfolioMandateBinding",
     ),

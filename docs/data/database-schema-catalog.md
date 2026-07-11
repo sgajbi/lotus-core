@@ -456,7 +456,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   client-tax approval, jurisdiction-specific recommendations, tax-reporting certification, best
   execution, or OMS acknowledgement.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/client_tax_rule_set_sources.py`, `src/services/query_control_plane_service/app/application/client_tax_rule_set.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
 - **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
   as-of date; active rules are returned by default and deterministic latest-version selection is
   applied by rule set id, jurisdiction, and rule code.
