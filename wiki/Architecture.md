@@ -112,6 +112,11 @@ runtime-boundary decision evidence. Important modules default to `no split yet` 
 deployment cadence, operations ownership, persistence ownership, failure isolation, security, or
 SLO evidence changes that decision.
 
+`portfolio_common` is a shared distribution boundary, not a catch-all architecture layer. Put only
+framework-independent cross-service policy under `portfolio_common.domain`. Classify repositories,
+clients, runtime adapters, and orchestration by their actual service and transaction ownership
+before moving them; repeated imports alone do not justify shared ownership.
+
 After transaction-processing source consolidation is complete, the next governed boundary review
 covers timeseries generation, valuation orchestration/execution, pipeline orchestration, and
 portfolio aggregation. That review must classify each runtime as keep, merge into explicit

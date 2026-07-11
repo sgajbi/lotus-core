@@ -1,6 +1,5 @@
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
-
-from .control_code_normalization import normalize_transaction_control_code
 
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",

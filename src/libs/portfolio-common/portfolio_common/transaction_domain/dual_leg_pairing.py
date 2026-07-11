@@ -2,10 +2,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 
 from .cash_entry_mode import is_upstream_provided_cash_entry_mode
-from .control_code_normalization import normalize_transaction_control_code
 
 
 @dataclass(frozen=True)

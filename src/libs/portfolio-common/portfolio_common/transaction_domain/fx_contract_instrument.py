@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import InstrumentEvent, TransactionEvent
-
-from .control_code_normalization import normalize_transaction_control_code
 
 FX_CONTRACT_PRODUCT_TYPE = "FX_CONTRACT"
 FX_CONTRACT_ASSET_CLASS = "FX"

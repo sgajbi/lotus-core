@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import Any, Callable, cast
 
 from portfolio_common.decimal_amounts import required_decimal
-from portfolio_common.transaction_domain.control_code_normalization import (
+from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
 

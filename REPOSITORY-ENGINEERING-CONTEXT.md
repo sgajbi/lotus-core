@@ -2036,6 +2036,15 @@ Most relevant current governance:
      persistence records, metrics, publication, and transaction ownership are behind typed ports
      and a unit of work. Position valuation remains a separate deployable unless workload and
      failure-isolation evidence justifies a boundary change.
+155. `portfolio_common` is a shared distribution boundary, not an architecture layer or a default
+     home for reusable-looking code. Put framework-independent cross-service domain policy under
+     `portfolio_common.domain`; keep FastAPI, Pydantic, SQLAlchemy, Kafka, and HTTP dependencies out
+     of that namespace. Before adding or moving another shared module, inventory production
+     consumers and classify state ownership, transaction ownership, dependency type, and service
+     lifecycle. Move service-owned workflow/repository code to its owning service when safe; retain
+     stable event, identity, monetary, runtime-port, and supportability contracts when multiple
+     deployables legitimately share them. Do not restore generic `portfolio_common.models`, root
+     transaction control-code helpers, or duplicate compatibility facades.
 
 ## Context Maintenance Rule
 

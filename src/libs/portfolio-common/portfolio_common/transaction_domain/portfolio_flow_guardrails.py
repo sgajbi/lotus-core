@@ -1,10 +1,10 @@
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 from portfolio_common.transaction_type_registry import (
     production_transaction_types_for_lifecycle_families,
 )
 
 from .cash_entry_mode import AUTO_GENERATE_CASH_ENTRY_MODE, normalize_cash_entry_mode
-from .control_code_normalization import normalize_transaction_control_code
 
 PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES = (
     production_transaction_types_for_lifecycle_families("cash_movement", "expense", "transfer")

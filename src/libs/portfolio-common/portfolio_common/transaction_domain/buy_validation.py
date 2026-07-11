@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from typing import Iterable
 
+from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
+
 from .buy_models import BuyCanonicalTransaction
 from .buy_reason_codes import BuyValidationReasonCode
-from .control_code_normalization import normalize_transaction_control_code
 
 
 @dataclass(frozen=True)

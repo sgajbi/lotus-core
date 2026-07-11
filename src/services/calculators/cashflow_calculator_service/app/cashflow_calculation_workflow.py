@@ -12,6 +12,9 @@ from portfolio_common.config import (
 from portfolio_common.config import (
     KAFKA_CASHFLOWS_CALCULATED_TOPIC,
 )
+from portfolio_common.domain.transaction_control_codes import (
+    normalize_transaction_control_code,
+)
 from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.monitoring import observe_cashflow_rule_cache_event
@@ -24,9 +27,6 @@ from portfolio_common.transaction_domain import (
     normalize_cash_entry_mode,
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
-)
-from portfolio_common.transaction_domain.control_code_normalization import (
-    normalize_transaction_control_code,
 )
 
 from .core.cashflow_logic import CashflowLogic
