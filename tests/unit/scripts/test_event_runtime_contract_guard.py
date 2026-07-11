@@ -18,6 +18,31 @@ def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts(
     ) in emitted_contracts
 
 
+def test_event_discovery_ignores_generated_build_trees(tmp_path: Path) -> None:
+    authored_source = tmp_path / "service" / "producer.py"
+    generated_source = tmp_path / "service" / "build" / "lib" / "producer.py"
+    authored_source.parent.mkdir(parents=True)
+    generated_source.parent.mkdir(parents=True)
+    authored_source.write_text(
+        """
+def publish(repo):
+    repo.create_outbox_event(event_type="CashflowCalculated", topic="cashflows.calculated")
+""",
+        encoding="utf-8",
+    )
+    generated_source.write_text(
+        """
+def publish(repo):
+    repo.create_outbox_event(event_type="RetiredGeneratedEvent", topic="retired.topic")
+""",
+        encoding="utf-8",
+    )
+
+    emissions = guard.discover_outbox_event_emissions(source_root=tmp_path)
+
+    assert [emission.event_type for emission in emissions] == ["CashflowCalculated"]
+
+
 def test_current_runtime_uses_event_publisher_ports_instead_of_direct_kafka_publishes() -> None:
     publishes = guard.discover_direct_kafka_publishes()
 
