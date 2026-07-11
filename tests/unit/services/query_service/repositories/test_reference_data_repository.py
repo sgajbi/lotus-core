@@ -33,17 +33,12 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
     db.execute.side_effect = [
         _FakeExecuteResult([]),
         _FakeExecuteResult([]),
-        _FakeExecuteResult([]),
     ]
     repo = ReferenceDataRepository(db)
 
     await repo.list_benchmark_definitions(
         as_of_date=date(2026, 1, 31),
         benchmark_currency=" usd ",
-    )
-    await repo.list_index_definitions(
-        as_of_date=date(2026, 1, 31),
-        index_currency=" sgd ",
     )
     await repo.list_risk_free_series(
         currency=" eur ",
@@ -54,19 +49,13 @@ async def test_reference_data_repository_normalizes_market_reference_currency_fi
     benchmark_sql = str(
         db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    index_sql = str(
-        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
     risk_free_sql = str(
-        db.execute.await_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
+        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
     )
 
     assert "benchmark_definitions.benchmark_currency = 'USD'" in benchmark_sql
     assert "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id" in benchmark_sql
     assert "anon_1.rn = 1" in benchmark_sql
-    assert "index_definitions.index_currency = 'SGD'" in index_sql
-    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in index_sql
-    assert "anon_1.rn = 1" in index_sql
     assert "risk_free_series.series_currency = 'EUR'" in risk_free_sql
     assert "row_number() OVER (PARTITION BY risk_free_series.series_date" in risk_free_sql
     assert "upper(trim(risk_free_series.quality_status)) = 'ACCEPTED'" in risk_free_sql
@@ -80,7 +69,6 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1", benchmark_currency="USD")]),
         _FakeExecuteResult([SimpleNamespace(benchmark_id="B1")]),
-        _FakeExecuteResult([SimpleNamespace(index_id="IDX_1")]),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
@@ -182,10 +170,9 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         "B1", date(2026, 1, 1), date(2026, 1, 2)
     )
     assert await repo.list_benchmark_definitions(date(2026, 1, 1), "composite", "USD", "active")
-    assert await repo.list_index_definitions(date(2026, 1, 1), None, "USD", "equity", "active")
     assert await repo.list_benchmark_components("B1", date(2026, 1, 1))
     benchmark_component_sql = str(
-        db.execute.await_args_list[4].args[0].compile(compile_kwargs={"literal_binds": True})
+        db.execute.await_args_list[3].args[0].compile(compile_kwargs={"literal_binds": True})
     )
     assert (
         "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
@@ -209,7 +196,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
         as_of_date=date(2026, 1, 1),
     )
     assert grouped_components["B1"][0].index_id == "IDX_1"
-    benchmark_components_stmt = db.execute.await_args_list[13].args[0]
+    benchmark_components_stmt = db.execute.await_args_list[12].args[0]
     benchmark_components_sql = str(
         benchmark_components_stmt.compile(compile_kwargs={"literal_binds": True})
     )
@@ -254,7 +241,7 @@ async def test_reference_data_repository_methods_cover_query_contracts() -> None
     assert date(2026, 1, 2) not in fx_rates
     assert date(2026, 1, 3) not in fx_rates
     assert fx_rates[date(2026, 1, 4)] == Decimal("1.4")
-    fx_stmt = db.execute.await_args_list[18].args[0]
+    fx_stmt = db.execute.await_args_list[17].args[0]
     fx_sql = str(fx_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "upper(trim(fx_rates.from_currency)) = 'EUR'" in fx_sql
     assert "upper(trim(fx_rates.to_currency)) = 'USD'" in fx_sql
@@ -366,7 +353,7 @@ async def test_get_benchmark_coverage_uses_overlapping_composition_dates() -> No
 
 
 @pytest.mark.asyncio
-async def test_catalog_methods_return_latest_effective_row_per_business_key() -> None:
+async def test_benchmark_catalog_methods_return_latest_effective_row_per_business_key() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [
         _FakeExecuteResult(
@@ -380,26 +367,6 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
                     benchmark_id="B2",
                     effective_from=date(2025, 1, 1),
                     classification_labels={"strategy": "other"},
-                ),
-            ]
-        ),
-        _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    index_id="IDX_GLOBAL_BOND_TR",
-                    effective_from=date(2025, 1, 6),
-                    classification_labels={
-                        "asset_class": "fixed_income",
-                        "sector": "broad_market_fixed_income",
-                    },
-                ),
-                SimpleNamespace(
-                    index_id="IDX_GLOBAL_EQUITY_TR",
-                    effective_from=date(2025, 4, 15),
-                    classification_labels={
-                        "asset_class": "equity",
-                        "sector": "broad_market_equity",
-                    },
                 ),
             ]
         ),
@@ -423,19 +390,11 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
     repo = ReferenceDataRepository(db)
 
     benchmarks = await repo.list_benchmark_definitions(date(2026, 4, 10))
-    indices = await repo.list_index_definitions(date(2026, 4, 10))
     components = await repo.list_benchmark_components("B1", date(2026, 4, 10))
 
     assert [(row.benchmark_id, row.classification_labels) for row in benchmarks] == [
         ("B1", {"strategy": "current"}),
         ("B2", {"strategy": "other"}),
-    ]
-    assert [(row.index_id, row.classification_labels) for row in indices] == [
-        (
-            "IDX_GLOBAL_BOND_TR",
-            {"asset_class": "fixed_income", "sector": "broad_market_fixed_income"},
-        ),
-        ("IDX_GLOBAL_EQUITY_TR", {"asset_class": "equity", "sector": "broad_market_equity"}),
     ]
     assert [(row.index_id, row.composition_weight) for row in components] == [
         ("IDX_1", Decimal("0.55")),
@@ -449,41 +408,29 @@ async def test_catalog_methods_return_latest_effective_row_per_business_key() ->
         "row_number() OVER (PARTITION BY benchmark_definitions.benchmark_id"
         in compiled_statements[0]
     )
-    assert "row_number() OVER (PARTITION BY index_definitions.index_id" in compiled_statements[1]
     assert (
         "row_number() OVER (PARTITION BY benchmark_composition_series.benchmark_id, "
         "benchmark_composition_series.index_id"
-    ) in compiled_statements[2]
+    ) in compiled_statements[1]
     for compiled in compiled_statements:
         assert "anon_1.rn = 1" in compiled
 
 
 @pytest.mark.asyncio
-async def test_benchmark_and_index_status_filters_are_normalized() -> None:
+async def test_benchmark_status_filter_is_normalized() -> None:
     db = AsyncMock(spec=AsyncSession)
-    db.execute.side_effect = [_FakeExecuteResult([]), _FakeExecuteResult([])]
+    db.execute.return_value = _FakeExecuteResult([])
     repo = ReferenceDataRepository(db)
 
     await repo.list_benchmark_definitions(
         as_of_date=date(2026, 5, 3),
         benchmark_status=" Active ",
     )
-    await repo.list_index_definitions(
-        as_of_date=date(2026, 5, 3),
-        index_status=" Active ",
-    )
-
     benchmark_sql = str(
         db.execute.await_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
     )
-    index_sql = str(
-        db.execute.await_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
-    )
-
     assert "benchmark_definitions.benchmark_status = 'active'" in benchmark_sql
     assert "lower(trim(benchmark_definitions.benchmark_status))" not in benchmark_sql
-    assert "index_definitions.index_status = 'active'" in index_sql
-    assert "lower(trim(index_definitions.index_status))" not in index_sql
 
 
 @pytest.mark.asyncio
@@ -691,29 +638,3 @@ async def test_get_risk_free_coverage_normalizes_quality_status_counts() -> None
         "stale": 1,
         "unknown": 1,
     }
-
-
-@pytest.mark.asyncio
-async def test_list_index_definitions_filters_targeted_index_ids() -> None:
-    db = AsyncMock(spec=AsyncSession)
-    db.execute.return_value = _FakeExecuteResult(
-        [
-            SimpleNamespace(
-                index_id="IDX_KEEP",
-                effective_from=date(2026, 1, 1),
-                classification_labels={"asset_class": "equity"},
-            ),
-            SimpleNamespace(
-                index_id="IDX_SKIP",
-                effective_from=date(2026, 1, 1),
-                classification_labels={"asset_class": "fixed_income"},
-            ),
-        ]
-    )
-    repo = ReferenceDataRepository(db)
-
-    rows = await repo.list_index_definitions(date(2026, 1, 31), ["IDX_KEEP"])
-
-    assert [row.index_id for row in rows] == ["IDX_KEEP", "IDX_SKIP"]
-    compiled = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
-    assert "index_definitions.index_id IN ('IDX_KEEP')" in compiled

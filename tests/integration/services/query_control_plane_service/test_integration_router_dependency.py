@@ -31,6 +31,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_dpm_portfolio_population_service,
     get_dpm_source_readiness_service,
     get_external_hedge_posture_service,
+    get_index_catalog_service,
     get_integration_policy_service,
     get_integration_service,
     get_sustainability_preference_profile_service,
@@ -339,9 +340,11 @@ async def async_test_client():
         }
     )
     mock_integration_service.benchmark_catalog_service = mock_benchmark_catalog_service
-    mock_integration_service.list_index_catalog = AsyncMock(
+    mock_index_catalog_service = MagicMock()
+    mock_index_catalog_service.list = AsyncMock(
         return_value={
-            "as_of_date": "2026-01-31",
+            "product_name": "IndexDefinition",
+            "product_version": "v1",
             "records": [
                 {
                     "index_id": "IDX_MSCI_WORLD_TR",
@@ -360,14 +363,24 @@ async def async_test_client():
                     "effective_from": "2025-01-01",
                     "effective_to": None,
                     "quality_status": "accepted",
-                    "observed_at": "2026-01-31T08:00:00Z",
+                    "source_timestamp": "2026-01-31T08:00:00Z",
                     "source_vendor": "MSCI",
                     "source_record_id": "idx_world_tr_v20260131",
-                    "contract_version": "rfc_062_v1",
                 }
             ],
+            "record_count": 1,
+            "completeness_status": "COMPLETE",
+            **source_data_product_runtime_metadata(
+                as_of_date=date(2026, 1, 31),
+                generated_at=datetime(2026, 1, 31, 10, 0, 0, tzinfo=UTC),
+                data_quality_status="COMPLETE",
+                latest_evidence_timestamp=datetime(2026, 1, 31, 8, 0, 0, tzinfo=UTC),
+                content_hash="sha256:index-catalog",
+                use_content_hash_as_source_batch_fingerprint=True,
+            ),
         }
     )
+    mock_integration_service.index_catalog_service = mock_index_catalog_service
     mock_integration_service.get_risk_free_series = AsyncMock(
         return_value={
             "currency": "USD",
@@ -615,6 +628,7 @@ async def async_test_client():
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_index_catalog_service] = lambda: mock_index_catalog_service
     app.dependency_overrides[get_transaction_economics_service] = lambda: mock_integration_service
     app.dependency_overrides[get_client_restriction_profile_service] = lambda: (
         mock_integration_service
@@ -640,6 +654,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
+    app.dependency_overrides.pop(get_index_catalog_service, None)
     app.dependency_overrides.pop(get_transaction_economics_service, None)
     app.dependency_overrides.pop(get_client_restriction_profile_service, None)
     app.dependency_overrides.pop(get_client_liquidity_evidence_service, None)
@@ -1348,13 +1363,14 @@ async def test_index_catalog_success(async_test_client):
     assert body["records"][0]["index_id"] == "IDX_MSCI_WORLD_TR"
     assert body["records"][0]["index_type"] == "equity_index"
     assert body["records"][0]["classification_labels"]["sector"] == "broad_market"
-    mock_integration_service.list_index_catalog.assert_awaited_once_with(
-        as_of_date=date(2026, 1, 31),
-        index_ids=["IDX_MSCI_WORLD_TR"],
-        index_currency="USD",
-        index_type="equity_index",
-        index_status="active",
-    )
+    service = mock_integration_service.index_catalog_service
+    service.list.assert_awaited_once()
+    request = service.list.await_args.kwargs["request"]
+    assert request.as_of_date == date(2026, 1, 31)
+    assert request.index_ids == ["IDX_MSCI_WORLD_TR"]
+    assert request.index_currency == "USD"
+    assert request.index_type == "equity_index"
+    assert request.index_status == "active"
 
 
 async def test_instrument_enrichment_bulk_success(async_test_client):

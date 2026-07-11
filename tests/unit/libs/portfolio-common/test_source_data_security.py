@@ -137,6 +137,7 @@ def test_analytics_input_products_require_system_access_classification() -> None
         "BenchmarkAssignment",
         "BenchmarkDefinition",
         "BenchmarkConstituentWindow",
+        "IndexDefinition",
         "DpmModelPortfolioTarget",
         "DiscretionaryMandateBinding",
         "InstrumentEligibilityProfile",

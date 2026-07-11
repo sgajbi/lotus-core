@@ -12,7 +12,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
-    IndexCatalogResponse,
     IndexPriceSeriesResponse,
     IndexReturnSeriesResponse,
     IndexSeriesRequest,
@@ -23,7 +22,6 @@ from .benchmark_coverage import resolve_benchmark_coverage_response
 from .benchmark_market_series import resolve_benchmark_market_series_response
 from .benchmark_return_series import resolve_benchmark_return_series_response
 from .classification_taxonomy import resolve_classification_taxonomy_response
-from .index_catalog import resolve_index_catalog_response
 from .index_price_series import resolve_index_price_series_response
 from .index_return_series import resolve_index_return_series_response
 from .risk_free_coverage import resolve_risk_free_coverage_response
@@ -37,26 +35,6 @@ class BenchmarkReferenceIntegrationService:
     reference_repository_provider: Callable[[], Any]
     decode_page_token: Callable[[str | None], dict[str, Any]]
     encode_page_token: Callable[[dict[str, Any]], str]
-
-    async def list_index_catalog(
-        self,
-        as_of_date: date,
-        index_ids: list[str],
-        index_currency: str | None,
-        index_type: str | None,
-        index_status: str | None,
-    ) -> IndexCatalogResponse:
-        return cast(
-            IndexCatalogResponse,
-            await resolve_index_catalog_response(
-                repository=self.reference_repository_provider(),
-                as_of_date=as_of_date,
-                index_ids=index_ids,
-                index_currency=index_currency,
-                index_type=index_type,
-                index_status=index_status,
-            ),
-        )
 
     async def get_benchmark_market_series(
         self,

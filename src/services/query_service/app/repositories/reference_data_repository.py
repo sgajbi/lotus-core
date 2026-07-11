@@ -11,7 +11,6 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
     FxRate,
-    IndexDefinition,
     IndexPriceSeries,
     IndexReturnSeries,
     RiskFreeSeries,
@@ -119,55 +118,6 @@ class ReferenceDataRepository:
             .join(ranked, BenchmarkDefinition.id == ranked.c.id)
             .where(ranked.c.rn == 1)
             .order_by(BenchmarkDefinition.benchmark_id.asc())
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def list_index_definitions(
-        self,
-        as_of_date: date,
-        index_ids: list[str] | None = None,
-        index_currency: str | None = None,
-        index_type: str | None = None,
-        index_status: str | None = None,
-    ) -> list[IndexDefinition]:
-        predicates = [
-            effective_filter(
-                IndexDefinition.effective_from,
-                IndexDefinition.effective_to,
-                as_of_date,
-            )
-        ]
-        if index_ids:
-            predicates.append(IndexDefinition.index_id.in_(index_ids))
-        if index_currency:
-            predicates.append(
-                IndexDefinition.index_currency == normalize_currency_code(index_currency)
-            )
-        if index_type:
-            predicates.append(IndexDefinition.index_type == index_type)
-        if index_status:
-            predicates.append(
-                IndexDefinition.index_status == normalize_reference_status(index_status)
-            )
-
-        ranked = ranked_latest_effective_ids(
-            IndexDefinition,
-            IndexDefinition.index_id,
-            predicates=predicates,
-            order_by=(
-                IndexDefinition.effective_from.desc(),
-                IndexDefinition.source_timestamp.desc().nullslast(),
-                IndexDefinition.updated_at.desc(),
-                IndexDefinition.created_at.desc(),
-                IndexDefinition.id.desc(),
-            ),
-        )
-        stmt = (
-            select(IndexDefinition)
-            .join(ranked, IndexDefinition.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(IndexDefinition.index_id.asc())
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())

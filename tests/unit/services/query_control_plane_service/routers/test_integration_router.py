@@ -1,4 +1,3 @@
-from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -45,6 +44,9 @@ from src.services.query_control_plane_service.app.application.dpm_source_readine
 )
 from src.services.query_control_plane_service.app.application.external_hedge_posture import (
     ExternalHedgePostureService,
+)
+from src.services.query_control_plane_service.app.application.index_catalog import (
+    IndexCatalogService,
 )
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
@@ -107,6 +109,7 @@ from src.services.query_control_plane_service.app.contracts.external_hedge_postu
     ExternalHedgePolicyRequest,
     ExternalOrderExecutionAcknowledgementRequest,
 )
+from src.services.query_control_plane_service.app.contracts.index_catalog import IndexCatalogRequest
 from src.services.query_control_plane_service.app.contracts.instrument_eligibility import (
     InstrumentEligibilityBulkRequest,
 )
@@ -197,7 +200,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkReturnSeriesRequest,
     ClassificationTaxonomyRequest,
     CoverageRequest,
-    IndexCatalogRequest,
     IndexSeriesRequest,
     IntegrationWindow,
     RiskFreeSeriesRequest,
@@ -2539,12 +2541,10 @@ async def test_get_external_fx_forward_curve_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
     benchmark_service = MagicMock(spec=BenchmarkCatalogService)
+    index_service = MagicMock(spec=IndexCatalogService)
     benchmark_service.list = AsyncMock(return_value={"as_of_date": "2026-01-31", "records": []})
-    mock_service.list_index_catalog = AsyncMock(
-        return_value={"as_of_date": "2026-01-31", "records": []}
-    )
+    index_service.list = AsyncMock(return_value={"as_of_date": "2026-01-31", "records": []})
 
     benchmark_response = await fetch_benchmark_catalog(
         request=BenchmarkCatalogRequest(as_of_date="2026-01-31"),
@@ -2555,18 +2555,13 @@ async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
             as_of_date="2026-01-31",
             index_ids=["IDX_MSCI_WORLD_TR"],
         ),
-        integration_service=mock_service,
+        index_catalog_service=index_service,
     )
 
     assert benchmark_response["records"] == []
     assert index_response["records"] == []
-    mock_service.list_index_catalog.assert_awaited_once_with(
-        as_of_date=date(2026, 1, 31),
-        index_ids=["IDX_MSCI_WORLD_TR"],
-        index_currency=None,
-        index_type=None,
-        index_status=None,
-    )
+    index_service.list.assert_awaited_once()
+    assert index_service.list.await_args.kwargs["request"].index_ids == ["IDX_MSCI_WORLD_TR"]
 
 
 @pytest.mark.asyncio

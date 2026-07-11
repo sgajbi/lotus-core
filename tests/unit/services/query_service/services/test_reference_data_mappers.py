@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -7,39 +7,10 @@ from src.services.query_service.app.services.reference_data_mappers import (
     benchmark_market_series_point,
     benchmark_return_series_point,
     classification_taxonomy_entry,
-    index_definition_response,
     index_price_series_point,
     index_return_series_point,
     risk_free_series_point,
 )
-
-
-def test_index_definition_response_maps_reference_catalog_row() -> None:
-    source_timestamp = datetime(2026, 1, 31, 8, tzinfo=UTC)
-
-    response = index_definition_response(
-        SimpleNamespace(
-            index_id="IDX_MSCI_WORLD_TR",
-            index_name="MSCI World Total Return",
-            index_currency="USD",
-            index_type="equity_index",
-            index_status="active",
-            index_provider="MSCI",
-            index_market="global_developed",
-            classification_set_id="wm_global_taxonomy_v1",
-            classification_labels={"asset_class": "equity", "region": "global"},
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            quality_status="accepted",
-            source_timestamp=source_timestamp,
-            source_vendor="MSCI",
-            source_record_id="idx_world_tr_v20260131",
-        )
-    )
-
-    assert response.index_id == "IDX_MSCI_WORLD_TR"
-    assert response.index_provider == "MSCI"
-    assert response.classification_labels == {"asset_class": "equity", "region": "global"}
 
 
 def test_market_reference_series_points_map_provider_rows() -> None:

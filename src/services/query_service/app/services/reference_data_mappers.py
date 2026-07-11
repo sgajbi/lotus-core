@@ -7,7 +7,6 @@ from ..dtos.reference_integration_dto import (
     BenchmarkReturnSeriesPoint,
     ClassificationTaxonomyEntry,
     ComponentSeriesResponse,
-    IndexDefinitionResponse,
     IndexPriceSeriesPoint,
     IndexReturnSeriesPoint,
     RiskFreeSeriesPoint,
@@ -16,26 +15,6 @@ from ..dtos.reference_integration_dto import (
 from .integration_value_normalization import (
     as_decimal,
 )
-
-
-def index_definition_response(row: Any) -> IndexDefinitionResponse:
-    return IndexDefinitionResponse(
-        index_id=row.index_id,
-        index_name=row.index_name,
-        index_currency=row.index_currency,
-        index_type=row.index_type,
-        index_status=row.index_status,
-        index_provider=row.index_provider,
-        index_market=row.index_market,
-        classification_set_id=row.classification_set_id,
-        classification_labels=dict(row.classification_labels or {}),
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        quality_status=row.quality_status,
-        source_timestamp=row.source_timestamp,
-        source_vendor=row.source_vendor,
-        source_record_id=row.source_record_id,
-    )
 
 
 def index_price_series_point(row: Any) -> IndexPriceSeriesPoint:
