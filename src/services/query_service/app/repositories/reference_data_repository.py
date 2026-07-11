@@ -11,7 +11,6 @@ from portfolio_common.database_models import (
     BenchmarkReturnSeries,
     ClassificationTaxonomy,
     ClientIncomeNeedsSchedule,
-    ClientRestrictionProfile,
     ClientTaxProfile,
     ClientTaxRuleSet,
     FxRate,
@@ -31,7 +30,6 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.source_lifecycle_predicates import (
     CLIENT_INCOME_NEEDS_ACTIVE,
-    CLIENT_RESTRICTION_ACTIVE,
     CLIENT_TAX_PROFILE_ACTIVE,
     CLIENT_TAX_RULE_SET_ACTIVE,
     DISCRETIONARY_MANDATE_TYPE,
@@ -241,64 +239,6 @@ class ReferenceDataRepository:
             stmt = stmt.where(PortfolioMandateBinding.booking_center_code == booking_center_code)
         result = await self._db.execute(stmt)
         return result.scalars().first()
-
-    async def list_client_restriction_profiles(
-        self,
-        *,
-        portfolio_id: str,
-        client_id: str,
-        as_of_date: date,
-        mandate_id: str | None = None,
-        include_inactive_restrictions: bool = False,
-    ) -> list[ClientRestrictionProfile]:
-        predicates = [
-            ClientRestrictionProfile.portfolio_id == portfolio_id,
-            ClientRestrictionProfile.client_id == client_id,
-            effective_filter(
-                ClientRestrictionProfile.effective_from,
-                ClientRestrictionProfile.effective_to,
-                as_of_date,
-            ),
-        ]
-        if mandate_id:
-            predicates.append(
-                or_(
-                    ClientRestrictionProfile.mandate_id.is_(None),
-                    ClientRestrictionProfile.mandate_id == mandate_id,
-                )
-            )
-        if not include_inactive_restrictions:
-            predicates.append(
-                CLIENT_RESTRICTION_ACTIVE.sqlalchemy_filter(
-                    ClientRestrictionProfile.restriction_status
-                )
-            )
-
-        ranked = ranked_latest_effective_ids(
-            ClientRestrictionProfile,
-            ClientRestrictionProfile.restriction_scope,
-            ClientRestrictionProfile.restriction_code,
-            predicates=predicates,
-            order_by=(
-                ClientRestrictionProfile.effective_from.desc(),
-                ClientRestrictionProfile.observed_at.desc().nullslast(),
-                ClientRestrictionProfile.restriction_version.desc(),
-                ClientRestrictionProfile.updated_at.desc(),
-                ClientRestrictionProfile.created_at.desc(),
-                ClientRestrictionProfile.id.desc(),
-            ),
-        )
-        stmt = (
-            select(ClientRestrictionProfile)
-            .join(ranked, ClientRestrictionProfile.id == ranked.c.id)
-            .where(ranked.c.rn == 1)
-            .order_by(
-                ClientRestrictionProfile.restriction_scope.asc(),
-                ClientRestrictionProfile.restriction_code.asc(),
-            )
-        )
-        result = await self._db.execute(stmt)
-        return list(result.scalars().all())
 
     async def list_sustainability_preference_profiles(
         self,

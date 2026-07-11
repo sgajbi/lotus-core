@@ -3,6 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.services.query_control_plane_service.app.application.client_restriction_profile import (
+    ClientRestrictionProfileService,
+)
 from src.services.query_control_plane_service.app.application.core_snapshot.service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
@@ -12,6 +15,9 @@ from src.services.query_control_plane_service.app.application.core_snapshot.serv
 )
 from src.services.query_control_plane_service.app.application.integration_policy import (
     IntegrationPolicyService,
+)
+from src.services.query_control_plane_service.app.contracts.client_restriction_profile import (
+    ClientRestrictionProfileRequest,
 )
 from src.services.query_control_plane_service.app.contracts.core_snapshot import (
     CoreSnapshotMode,
@@ -26,6 +32,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     PolicyProvenanceMetadata,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_client_restriction_profile_service,
     get_core_snapshot_service,
     get_integration_policy_service,
     get_integration_service,
@@ -85,7 +92,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     CioModelChangeAffectedCohortRequest,
     ClassificationTaxonomyRequest,
     ClientIncomeNeedsScheduleRequest,
-    ClientRestrictionProfileRequest,
     ClientTaxProfileRequest,
     ClientTaxRuleSetRequest,
     CoverageRequest,
@@ -177,6 +183,11 @@ def test_get_integration_policy_service_factory_returns_service() -> None:
 def test_get_core_snapshot_service_factory_returns_service() -> None:
     service = get_core_snapshot_service(db=MagicMock())
     assert isinstance(service, CoreSnapshotService)
+
+
+def test_get_client_restriction_profile_service_factory_returns_service() -> None:
+    service = get_client_restriction_profile_service(db=MagicMock())
+    assert isinstance(service, ClientRestrictionProfileService)
 
 
 @pytest.mark.asyncio
@@ -1641,7 +1652,7 @@ async def test_get_dpm_source_readiness_router_function() -> None:
 
 @pytest.mark.asyncio
 async def test_get_client_restriction_profile_router_function() -> None:
-    mock_service = MagicMock(spec=IntegrationService)
+    mock_service = MagicMock(spec=ClientRestrictionProfileService)
     mock_service.get_client_restriction_profile = AsyncMock(
         return_value={
             "product_name": "ClientRestrictionProfile",
@@ -1686,13 +1697,38 @@ async def test_get_client_restriction_profile_router_function() -> None:
     response = await get_client_restriction_profile(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
-        integration_service=mock_service,
+        restriction_profile_service=mock_service,
     )
 
     assert response["product_name"] == "ClientRestrictionProfile"
     mock_service.get_client_restriction_profile.assert_awaited_once_with(
         portfolio_id="PB_SG_GLOBAL_BAL_001",
         request=request,
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_restriction_profile_maps_missing_binding_to_problem_details() -> None:
+    mock_service = MagicMock(spec=ClientRestrictionProfileService)
+    mock_service.get_client_restriction_profile = AsyncMock(return_value=None)
+
+    with pytest.raises(QueryControlPlaneProblem) as exc_info:
+        await get_client_restriction_profile(
+            portfolio_id="PB_MISSING",
+            request=ClientRestrictionProfileRequest(as_of_date="2026-05-03"),
+            restriction_profile_service=mock_service,
+        )
+
+    assert_query_control_plane_problem(
+        exc_info.value,
+        status_code=404,
+        error_code="QCP_INTEGRATION_SOURCE_NOT_FOUND",
+        detail="No effective discretionary mandate binding found for portfolio and as_of_date.",
+        metadata={
+            "source_product": "ClientRestrictionProfile",
+            "portfolio_id": "PB_MISSING",
+            "reason": "not_found",
+        },
     )
 
 
@@ -1979,12 +2015,6 @@ async def test_get_external_hedge_execution_readiness_router_function() -> None:
 @pytest.mark.parametrize(
     ("route_handler", "service_method", "route_request", "source_product"),
     [
-        (
-            get_client_restriction_profile,
-            "get_client_restriction_profile",
-            ClientRestrictionProfileRequest(as_of_date="2026-05-03"),
-            "ClientRestrictionProfile",
-        ),
         (
             get_sustainability_preference_profile,
             "get_sustainability_preference_profile",

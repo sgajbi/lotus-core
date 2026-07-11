@@ -10,7 +10,6 @@ from ..dtos.reference_integration_dto import (
     CioModelChangeAffectedMandate,
     ClassificationTaxonomyEntry,
     ClientIncomeNeedsScheduleEntry,
-    ClientRestrictionProfileEntry,
     ClientTaxProfileEntry,
     ClientTaxRuleSetEntry,
     ComponentSeriesResponse,
@@ -490,25 +489,6 @@ def client_income_needs_schedule_entry(row: Any) -> ClientIncomeNeedsScheduleEnt
         end_date=row.end_date,
         priority=int(row.priority),
         funding_policy=row.funding_policy,
-        source_record_id=row.source_record_id,
-    )
-
-
-def client_restriction_profile_entry(row: Any) -> ClientRestrictionProfileEntry:
-    return ClientRestrictionProfileEntry(
-        restriction_scope=row.restriction_scope,
-        restriction_code=row.restriction_code,
-        restriction_status=row.restriction_status,
-        restriction_source=row.restriction_source,
-        applies_to_buy=bool(row.applies_to_buy),
-        applies_to_sell=bool(row.applies_to_sell),
-        instrument_ids=string_list(row.instrument_ids),
-        asset_classes=string_list(row.asset_classes),
-        issuer_ids=string_list(row.issuer_ids),
-        country_codes=string_list(row.country_codes),
-        effective_from=row.effective_from,
-        effective_to=row.effective_to,
-        restriction_version=int(row.restriction_version),
         source_record_id=row.source_record_id,
     )
 

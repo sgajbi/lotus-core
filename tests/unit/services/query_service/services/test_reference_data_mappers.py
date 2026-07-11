@@ -11,7 +11,6 @@ from src.services.query_service.app.services.reference_data_mappers import (
     cio_model_change_affected_mandate,
     classification_taxonomy_entry,
     client_income_needs_schedule_entry,
-    client_restriction_profile_entry,
     client_tax_profile_entry,
     client_tax_rule_set_entry,
     dpm_portfolio_universe_candidate,
@@ -626,25 +625,7 @@ def test_client_liquidity_entries_map_source_data_rows() -> None:
     assert withdrawal.purpose_code == "education"
 
 
-def test_client_governance_entries_map_source_data_rows() -> None:
-    restriction = client_restriction_profile_entry(
-        SimpleNamespace(
-            restriction_scope="issuer",
-            restriction_code="NO_PRIVATE_CREDIT_BUY",
-            restriction_status="active",
-            restriction_source="investment_policy_statement",
-            applies_to_buy=True,
-            applies_to_sell=False,
-            instrument_ids=["BOND_PRIVATE_CREDIT_001", ""],
-            asset_classes=["private_credit"],
-            issuer_ids=["ISSUER_001"],
-            country_codes=["US"],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            restriction_version="5",
-            source_record_id="restriction-1",
-        )
-    )
+def test_sustainability_preference_entry_maps_source_data_row() -> None:
     preference = sustainability_preference_profile_entry(
         SimpleNamespace(
             preference_framework="LOTUS_SUSTAINABILITY_V1",
@@ -663,10 +644,6 @@ def test_client_governance_entries_map_source_data_rows() -> None:
         )
     )
 
-    assert restriction.applies_to_buy is True
-    assert restriction.applies_to_sell is False
-    assert restriction.instrument_ids == ["BOND_PRIVATE_CREDIT_001"]
-    assert restriction.restriction_version == 5
     assert preference.minimum_allocation == Decimal("0.2000000000")
     assert preference.maximum_allocation is None
     assert preference.applies_to_asset_classes == ["equity"]

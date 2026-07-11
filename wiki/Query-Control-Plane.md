@@ -28,7 +28,7 @@ This makes it a contract and operations plane, not a generic duplicate of the re
 | --- | --- | --- |
 | Support and lineage | Portfolio readiness, support overview, control-stage evidence, replay evidence, reconciliation evidence, and lineage drill-through. | Performance, risk, or advisory business conclusions. |
 | Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
-| Integration contracts | Policy-aware snapshots, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access or unmanaged compatibility aliases. |
+| Integration contracts | Policy-aware snapshots, QCP-owned client-restriction evidence, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access, DPM decisioning, or unmanaged compatibility aliases. |
 | Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
 | Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
 
@@ -93,6 +93,7 @@ Primary contract areas include:
 - `PortfolioTimeseriesInput`
 - `PositionTimeseriesInput`
 - `PortfolioAnalyticsReference`
+- `ClientRestrictionProfile`
 - integration policy and capability diagnostics
 - supportability, lineage, reconciliation, and reprocessing evidence bundles
 - simulation session and projected-state contracts
@@ -192,6 +193,9 @@ router inside the operational read plane.
   contract while those downstream-owned decisions migrate to `lotus-advise`
 - analytics input/export code must remain QCP package-owned; do not restore Query Service DTO,
   workflow, repository, or runtime-setting imports for this route family
+- client-restriction contracts, application policy, immutable records, source port, and SQL adapter
+  must remain QCP package-owned; Core publishes effective restriction evidence while
+  `lotus-manage` owns DPM interpretation, enforcement, workflow, and client-facing conclusions
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 

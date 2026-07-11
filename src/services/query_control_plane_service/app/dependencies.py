@@ -16,6 +16,7 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
 )
+from .application.client_restriction_profile import ClientRestrictionProfileService
 from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
@@ -28,6 +29,9 @@ from .application.simulation import SimulationService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
+from .infrastructure.client_restriction_profile_sources import (
+    SqlAlchemyClientRestrictionProfileSourceReader,
+)
 from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
@@ -65,6 +69,15 @@ def get_core_snapshot_service(
             simulation_store=SqlAlchemySimulationStore(db),
             clock=SystemClock(),
         )
+    )
+
+
+def get_client_restriction_profile_service(
+    db: AsyncSession = Depends(get_async_db_session),
+) -> ClientRestrictionProfileService:
+    return ClientRestrictionProfileService(
+        reader=SqlAlchemyClientRestrictionProfileSourceReader(db),
+        clock=SystemClock(),
     )
 
 

@@ -338,7 +338,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   lineage, and quality status. The table lets `lotus-manage` consume source-owned restriction truth
   instead of maintaining local fallback restriction fixtures.
 - **Relationships**: `portfolio_id` references `portfolios.portfolio_id`.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/reference_data_repository.py`, `src/services/query_service/app/services/integration_service.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/client_restriction_profile_sources.py`, `src/services/query_control_plane_service/app/application/client_restriction_profile.py`, `src/services/query_control_plane_service/app/routers/integration.py`, `src/services/ingestion_service/app/DTOs/reference_data_dto.py`, `src/services/ingestion_service/app/routers/reference_data.py`, `src/services/ingestion_service/app/services/reference_data_ingestion_service.py`
 - **Typical access patterns**: Effective-date lookup by portfolio id, client id, mandate id, and
   as-of date; active restrictions are returned by default and deterministic latest-version
   selection is applied by scope and restriction code.

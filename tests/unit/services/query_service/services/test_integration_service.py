@@ -13,7 +13,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCompositionWindowRequest,
     CioModelChangeAffectedCohortRequest,
     ClientIncomeNeedsScheduleRequest,
-    ClientRestrictionProfileRequest,
     ClientTaxProfileRequest,
     ClientTaxRuleSetRequest,
     DiscretionaryMandateBindingRequest,
@@ -756,85 +755,6 @@ async def test_resolve_dpm_portfolio_universe_candidates_marks_empty_universe_in
     assert response.supportability.state == "INCOMPLETE"
     assert response.supportability.reason == "DPM_PORTFOLIO_UNIVERSE_EMPTY"
     assert response.candidates == []
-    assert response.data_quality_status == "MISSING"
-
-
-@pytest.mark.asyncio
-async def test_client_restriction_profile_returns_ready_source_records():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_restriction_profiles.return_value = [  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        SimpleNamespace(
-            restriction_scope="asset_class",
-            restriction_code="NO_PRIVATE_CREDIT_BUY",
-            restriction_status="active",
-            restriction_source="client_mandate",
-            applies_to_buy=True,
-            applies_to_sell=False,
-            instrument_ids=[],
-            asset_classes=["private_credit"],
-            issuer_ids=[],
-            country_codes=[],
-            effective_from=date(2026, 1, 1),
-            effective_to=None,
-            restriction_version=1,
-            source_record_id="client-restriction:1",
-            observed_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-            updated_at=datetime(2026, 5, 3, 9, tzinfo=UTC),
-        )
-    ]
-
-    response = await service.get_client_restriction_profile(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientRestrictionProfileRequest(
-            as_of_date=as_of_date,
-            tenant_id="default",
-            mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        ),
-    )
-
-    assert response is not None
-    assert response.product_name == "ClientRestrictionProfile"
-    assert response.client_id == "CIF_SG_000184"
-    assert response.supportability.state == "READY"
-    assert response.supportability.restriction_count == 1
-    assert response.restrictions[0].restriction_code == "NO_PRIVATE_CREDIT_BUY"
-    assert response.restrictions[0].asset_classes == ["private_credit"]
-    assert response.lineage["source_table"] == (
-        "client_restriction_profiles,portfolio_mandate_bindings"
-    )
-    service._reference_repository.list_client_restriction_profiles.assert_awaited_once_with(  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        portfolio_id="PB_SG_GLOBAL_BAL_001",
-        client_id="CIF_SG_000184",
-        as_of_date=as_of_date,
-        mandate_id="MANDATE_PB_SG_GLOBAL_BAL_001",
-        include_inactive_restrictions=False,
-    )
-
-
-@pytest.mark.asyncio
-async def test_client_restriction_profile_marks_missing_profile_incomplete():
-    service = make_service()
-    as_of_date = date(2026, 5, 3)
-    service._reference_repository = AsyncMock()  # pylint: disable=protected-access
-    service._reference_repository.resolve_discretionary_mandate_binding.return_value = (  # type: ignore[attr-defined] # pylint: disable=line-too-long
-        profile_binding_row(as_of_date)
-    )
-    service._reference_repository.list_client_restriction_profiles.return_value = []  # type: ignore[attr-defined] # pylint: disable=line-too-long
-
-    response = await service.get_client_restriction_profile(
-        "PB_SG_GLOBAL_BAL_001",
-        ClientRestrictionProfileRequest(as_of_date=as_of_date, tenant_id="default"),
-    )
-
-    assert response is not None
-    assert response.supportability.state == "INCOMPLETE"
-    assert response.supportability.reason == "CLIENT_RESTRICTION_PROFILE_EMPTY"
-    assert response.supportability.missing_data_families == ["client_restrictions"]
     assert response.data_quality_status == "MISSING"
 
 
@@ -3013,6 +2933,7 @@ async def test_reference_contract_none_and_fx_branches() -> None:
     )
     assert benchmark_market_series.fx_context_source_currency == "EUR"
     assert benchmark_market_series.fx_context_target_currency == "USD"
+
 
 @pytest.mark.asyncio
 async def test_benchmark_composition_window_rejects_currency_changes_within_window() -> None:
