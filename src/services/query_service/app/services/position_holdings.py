@@ -76,15 +76,14 @@ def _position_basis_matches(snapshot_row: Any, history_row: Any) -> bool:
     )
 
 
-def _fallback_unrealized_amount(
+def _history_fallback_unrealized_amount(
     *,
     fallback_valuation: dict[str, Any],
-    unrealized_field: str,
     market_value_field: str,
     cost_basis: Any,
 ) -> Decimal | None:
     return _unrealized_amount(
-        unrealized_amount=fallback_valuation.get(unrealized_field),
+        unrealized_amount=None,
         market_value=fallback_valuation.get(market_value_field),
         cost_basis=cost_basis,
     )
@@ -213,18 +212,16 @@ def position_valuation_data(
         return ValuationData(
             market_price=fallback_valuation.get("market_price"),
             market_value=fallback_valuation.get("market_value"),
-            unrealized_gain_loss=_fallback_unrealized_amount(
+            unrealized_gain_loss=_history_fallback_unrealized_amount(
                 fallback_valuation=fallback_valuation,
-                unrealized_field="unrealized_gain_loss",
                 market_value_field="market_value",
                 cost_basis=position_row.cost_basis,
             ),
-            unrealized_price_gain_loss=fallback_valuation.get("unrealized_price_gain_loss"),
-            unrealized_fx_gain_loss=fallback_valuation.get("unrealized_fx_gain_loss"),
+            unrealized_price_gain_loss=None,
+            unrealized_fx_gain_loss=None,
             market_value_local=fallback_valuation.get("market_value_local"),
-            unrealized_gain_loss_local=_fallback_unrealized_amount(
+            unrealized_gain_loss_local=_history_fallback_unrealized_amount(
                 fallback_valuation=fallback_valuation,
-                unrealized_field="unrealized_gain_loss_local",
                 market_value_field="market_value_local",
                 cost_basis=position_row.cost_basis_local,
             ),

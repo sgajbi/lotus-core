@@ -60,13 +60,17 @@ class ProcessTransactionUseCase:
                     correlation_id=metadata.correlation_id,
                     traceparent=metadata.traceparent,
                 )
-            with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
-                cashflow_result = await unit_of_work.cashflow.process(
-                    transaction,
-                    event_id=metadata.event_id,
-                    correlation_id=metadata.correlation_id,
-                    traceparent=metadata.traceparent,
-                )
+            cashflow_results = []
+            for processed_transaction in cost_result.processed_transactions:
+                with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
+                    cashflow_results.append(
+                        await unit_of_work.cashflow.process(
+                            processed_transaction,
+                            event_id=metadata.event_id,
+                            correlation_id=metadata.correlation_id,
+                            traceparent=metadata.traceparent,
+                        )
+                    )
             position_results = []
             for processed_transaction in cost_result.processed_transactions:
                 with self._observer.observe(TransactionProcessingOperation.POSITION):
@@ -87,7 +91,7 @@ class ProcessTransactionUseCase:
                 item.transaction_id for item in cost_result.processed_transactions
             ),
             instrument_update_count=cost_result.instrument_update_count,
-            cashflow_record_count=cashflow_result.cashflow_record_count,
+            cashflow_record_count=sum(item.cashflow_record_count for item in cashflow_results),
             position_record_count=sum(item.position_record_count for item in position_results),
             replay_queued_count=sum(item.replay_queued for item in position_results),
         )

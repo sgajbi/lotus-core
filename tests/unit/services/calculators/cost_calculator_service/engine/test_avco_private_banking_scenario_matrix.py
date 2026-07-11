@@ -246,9 +246,7 @@ def test_avco_non_lot_corporate_action_and_rights_events_preserve_sources(
         transaction_type=transaction_type,
         transaction_date="2026-01-02T00:00:00Z",
         quantity="0",
-        gross_amount="100"
-        if transaction_type in {"CASH_CONSIDERATION", "RIGHTS_REFUND"}
-        else "0",
+        gross_amount="100" if transaction_type in {"CASH_CONSIDERATION", "RIGHTS_REFUND"} else "0",
     )
     if transaction_type == "CASH_CONSIDERATION":
         event.update(

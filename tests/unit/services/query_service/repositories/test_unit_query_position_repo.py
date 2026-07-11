@@ -175,6 +175,8 @@ async def test_get_latest_snapshot_valuation_map_skips_rows_without_security_id(
             "market_price": 101.0,
             "market_value": 1212.0,
             "unrealized_gain_loss": 112.0,
+            "unrealized_price_gain_loss": None,
+            "unrealized_fx_gain_loss": None,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
         }
@@ -223,6 +225,8 @@ async def test_get_latest_snapshot_valuation_map_as_of_date_filters_and_maps_lat
             "market_price": 101.0,
             "market_value": 1212.0,
             "unrealized_gain_loss": 112.0,
+            "unrealized_price_gain_loss": None,
+            "unrealized_fx_gain_loss": None,
             "market_value_local": 1212.0,
             "unrealized_gain_loss_local": 112.0,
         }
