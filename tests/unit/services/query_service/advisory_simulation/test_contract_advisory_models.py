@@ -3,10 +3,17 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
+from src.services.query_service.app.advisory_simulation.advisory_decision_models import (
+    GateDecision as AdvisoryGateDecision,
+)
+from src.services.query_service.app.advisory_simulation.advisory_decision_models import (
+    SuitabilityThresholds as AdvisorySuitabilityThresholds,
+)
 from src.services.query_service.app.advisory_simulation.models import (
     CashFlowIntent,
     EngineOptions,
     FxSpotIntent,
+    GateDecision,
     GroupConstraint,
     IntentRationale,
     LineageData,
@@ -23,7 +30,13 @@ from src.services.query_service.app.advisory_simulation.models import (
     RuleResult,
     ShelfEntry,
     SimulatedState,
+    SuitabilityThresholds,
 )
+
+
+def test_advisory_decision_models_remain_compatibility_re_exports() -> None:
+    assert GateDecision is AdvisoryGateDecision
+    assert SuitabilityThresholds is AdvisorySuitabilityThresholds
 
 
 def test_advisory_engine_options_defaults():

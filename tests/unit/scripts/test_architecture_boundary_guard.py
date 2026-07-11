@@ -136,6 +136,85 @@ def test_transaction_processing_application_rejects_event_dto_import(tmp_path, m
     ]
 
 
+def test_generic_simulation_rejects_absolute_advisory_decisioning_import(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "query_service"
+        / "app"
+        / "services"
+        / "simulation_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.query_service.app.advisory_simulation.models import SuitabilityResult\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES)
+
+    assert findings == [
+        "src/services/query_service/app/services/simulation_service.py:1: "
+        "generic simulation must not import advisory decisioning: disallowed direct import "
+        "'services.query_service.app.advisory_simulation.models'"
+    ]
+
+
+def test_generic_simulation_rejects_relative_advisory_decisioning_import(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "query_service"
+        / "app"
+        / "services"
+        / "simulation_service.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from .advisory_simulation_service import execute_advisory_simulation\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    findings = _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES)
+
+    assert findings == [
+        "src/services/query_service/app/services/simulation_service.py:1: "
+        "generic simulation must not import advisory decisioning: disallowed direct import "
+        "'advisory_simulation_service'"
+    ]
+
+
+def test_advisory_compatibility_route_can_use_quarantined_simulation_service(
+    tmp_path, monkeypatch
+) -> None:
+    source = (
+        tmp_path
+        / "src"
+        / "services"
+        / "query_control_plane_service"
+        / "app"
+        / "routers"
+        / "advisory_simulation.py"
+    )
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from src.services.query_service.app.services.advisory_simulation_service "
+        "import execute_advisory_simulation\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
+
+    assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == []
+
+
 def test_direct_import_boundary_ignores_allowed_dto_import(tmp_path, monkeypatch) -> None:
     repo_root = tmp_path
     router = (
