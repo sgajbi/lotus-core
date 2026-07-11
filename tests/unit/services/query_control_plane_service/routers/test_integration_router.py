@@ -61,6 +61,9 @@ from src.services.query_control_plane_service.app.application.integration_policy
 from src.services.query_control_plane_service.app.application.portfolio_manager_book import (
     PortfolioManagerBookService,
 )
+from src.services.query_control_plane_service.app.application.reference_coverage import (
+    ReferenceCoverageService,
+)
 from src.services.query_control_plane_service.app.application.risk_free_series import (
     RiskFreeSeriesService,
 )
@@ -82,6 +85,9 @@ from src.services.query_control_plane_service.app.contracts.benchmark_compositio
 from src.services.query_control_plane_service.app.contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
 )
+from src.services.query_control_plane_service.app.contracts.benchmark_market_series import (
+    BenchmarkMarketSeriesRequest,
+)
 from src.services.query_control_plane_service.app.contracts.benchmark_return_series import (
     BenchmarkReturnSeriesRequest,
 )
@@ -101,6 +107,9 @@ from src.services.query_control_plane_service.app.contracts.client_tax_profile i
 )
 from src.services.query_control_plane_service.app.contracts.client_tax_rule_set import (
     ClientTaxRuleSetRequest,
+)
+from src.services.query_control_plane_service.app.contracts.common import (
+    IntegrationWindow,
 )
 from src.services.query_control_plane_service.app.contracts.core_snapshot import (
     CoreSnapshotMode,
@@ -157,6 +166,9 @@ from src.services.query_control_plane_service.app.contracts.portfolio_manager_bo
 from src.services.query_control_plane_service.app.contracts.portfolio_tax_lots import (
     PortfolioTaxLotWindowRequest,
 )
+from src.services.query_control_plane_service.app.contracts.reference_coverage import (
+    CoverageRequest,
+)
 from src.services.query_control_plane_service.app.contracts.risk_free_series import (
     IntegrationWindow as RiskFreeIntegrationWindow,
 )
@@ -176,6 +188,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_external_hedge_posture_service,
     get_integration_policy_service,
     get_integration_service,
+    get_reference_coverage_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
 )
@@ -225,10 +238,7 @@ from src.services.query_control_plane_service.app.routers.response_helpers impor
     QueryControlPlaneProblem,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
-    BenchmarkMarketSeriesRequest,
     ClassificationTaxonomyRequest,
-    CoverageRequest,
-    IntegrationWindow,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 
@@ -296,6 +306,11 @@ def test_get_integration_service_factory_returns_service() -> None:
 def test_get_benchmark_market_series_service_factory_returns_narrow_service() -> None:
     service = get_benchmark_market_series_service(db=MagicMock())
     assert isinstance(service, BenchmarkMarketSeriesService)
+
+
+def test_get_reference_coverage_service_factory_returns_narrow_service() -> None:
+    service = get_reference_coverage_service(db=MagicMock())
+    assert isinstance(service, ReferenceCoverageService)
 
 
 def test_get_transaction_economics_service_factory_returns_narrow_service() -> None:
@@ -2598,7 +2613,7 @@ async def test_fetch_benchmark_and_index_catalog_router_functions() -> None:
 @pytest.mark.asyncio
 async def test_fetch_benchmark_definition_and_coverage_router_functions() -> None:
     definition_service = MagicMock(spec=BenchmarkDefinitionService)
-    mock_service = MagicMock(spec=IntegrationService)
+    coverage_service = MagicMock(spec=ReferenceCoverageService)
     definition_service.resolve = AsyncMock(
         return_value={
             "benchmark_id": "BMK_GLOBAL_BALANCED_60_40",
@@ -2622,7 +2637,7 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
             "contract_version": "rfc_062_v1",
         }
     )
-    mock_service.get_benchmark_coverage = AsyncMock(
+    coverage_service.get_benchmark = AsyncMock(
         return_value={
             "request_fingerprint": "fp-coverage-1",
             "observed_start_date": "2026-01-01",
@@ -2644,9 +2659,9 @@ async def test_fetch_benchmark_definition_and_coverage_router_functions() -> Non
     coverage_response = await get_benchmark_coverage(
         benchmark_id="BMK_GLOBAL_BALANCED_60_40",
         request=CoverageRequest(
-            window=IntegrationWindow(start_date="2026-01-01", end_date="2026-01-31")
+            window={"start_date": "2026-01-01", "end_date": "2026-01-31"}
         ),
-        integration_service=mock_service,
+        reference_coverage_service=coverage_service,
     )
 
     assert definition_response["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
@@ -2778,6 +2793,7 @@ async def test_fetch_benchmark_definition_not_found_maps_problem_details() -> No
 @pytest.mark.asyncio
 async def test_reference_router_success_paths_cover_all_endpoints() -> None:
     mock_service = MagicMock(spec=IntegrationService)
+    reference_coverage_service = MagicMock(spec=ReferenceCoverageService)
     benchmark_market_series_service = MagicMock(spec=BenchmarkMarketSeriesService)
     benchmark_return_series_service = MagicMock(spec=BenchmarkReturnSeriesService)
     index_series_service = MagicMock(spec=IndexSeriesService)
@@ -2879,7 +2895,7 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
             "request_fingerprint": "fp-taxonomy-1",
         }
     )
-    mock_service.get_risk_free_coverage = AsyncMock(
+    reference_coverage_service.get_risk_free = AsyncMock(
         return_value={
             "request_fingerprint": "fp-risk-free-coverage-1",
             "observed_start_date": None,
@@ -2998,16 +3014,16 @@ async def test_reference_router_success_paths_cover_all_endpoints() -> None:
 
     risk_free_coverage_response = await get_risk_free_coverage(
         currency="USD",
-        request=CoverageRequest(window=request_window),
-        integration_service=mock_service,
+        request=CoverageRequest(window=request_window.model_dump()),
+        reference_coverage_service=reference_coverage_service,
     )
     assert risk_free_coverage_response["total_points"] == 0
     assert risk_free_coverage_response["request_fingerprint"] == "fp-risk-free-coverage-1"
-    mock_service.get_risk_free_coverage.assert_awaited_once_with(
-        currency="USD",
-        start_date=request_window.start_date,
-        end_date=request_window.end_date,
-    )
+    reference_coverage_service.get_risk_free.assert_awaited_once()
+    coverage_call = reference_coverage_service.get_risk_free.await_args.kwargs
+    assert coverage_call["currency"] == "USD"
+    assert coverage_call["request"].window.start_date == request_window.start_date
+    assert coverage_call["request"].window.end_date == request_window.end_date
 
 
 @pytest.mark.asyncio

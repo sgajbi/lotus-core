@@ -37,6 +37,7 @@ from src.services.query_control_plane_service.app.dependencies import (
     get_index_series_service,
     get_integration_policy_service,
     get_integration_service,
+    get_reference_coverage_service,
     get_risk_free_series_service,
     get_sustainability_preference_profile_service,
     get_transaction_economics_service,
@@ -405,7 +406,8 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_benchmark_coverage = AsyncMock(
+    mock_reference_coverage_service = MagicMock()
+    mock_reference_coverage_service.get_benchmark = AsyncMock(
         return_value={
             "request_fingerprint": "fp-benchmark-coverage-1",
             "observed_start_date": "2026-01-01",
@@ -422,7 +424,7 @@ async def async_test_client():
             ),
         }
     )
-    mock_integration_service.get_risk_free_coverage = AsyncMock(
+    mock_reference_coverage_service.get_risk_free = AsyncMock(
         return_value={
             "request_fingerprint": "fp-risk-free-coverage-1",
             "observed_start_date": None,
@@ -549,6 +551,7 @@ async def async_test_client():
     mock_integration_service.benchmark_market_series_service = (
         mock_benchmark_market_series_service
     )
+    mock_integration_service.reference_coverage_service = mock_reference_coverage_service
     mock_integration_service.get_prices = AsyncMock(
         return_value={
             "index_id": "IDX_MSCI_WORLD_TR",
@@ -655,6 +658,9 @@ async def async_test_client():
     app.dependency_overrides[get_external_hedge_posture_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_policy_service] = lambda: mock_integration_service
     app.dependency_overrides[get_integration_service] = lambda: mock_integration_service
+    app.dependency_overrides[get_reference_coverage_service] = lambda: (
+        mock_reference_coverage_service
+    )
     app.dependency_overrides[get_risk_free_series_service] = lambda: mock_risk_free_series_service
     app.dependency_overrides[get_index_catalog_service] = lambda: mock_index_catalog_service
     app.dependency_overrides[get_index_series_service] = lambda: mock_integration_service
@@ -685,6 +691,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_external_hedge_posture_service, None)
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
+    app.dependency_overrides.pop(get_reference_coverage_service, None)
     app.dependency_overrides.pop(get_risk_free_series_service, None)
     app.dependency_overrides.pop(get_index_catalog_service, None)
     app.dependency_overrides.pop(get_index_series_service, None)
@@ -1731,6 +1738,7 @@ async def test_risk_free_series_success(async_test_client):
 
 async def test_benchmark_coverage_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    coverage_service = mock_integration_service.reference_coverage_service
 
     response = await client.post(
         "/integration/benchmarks/BMK_GLOBAL_BALANCED_60_40/coverage",
@@ -1748,15 +1756,16 @@ async def test_benchmark_coverage_success(async_test_client):
     assert body["quality_status_distribution"] == {"ACCEPTED": 31}
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_benchmark_coverage.assert_awaited_once_with(
-        benchmark_id="BMK_GLOBAL_BALANCED_60_40",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 1, 31),
-    )
+    coverage_service.get_benchmark.assert_awaited_once()
+    coverage_call = coverage_service.get_benchmark.await_args.kwargs
+    assert coverage_call["benchmark_id"] == "BMK_GLOBAL_BALANCED_60_40"
+    assert coverage_call["request"].window.start_date == date(2026, 1, 1)
+    assert coverage_call["request"].window.end_date == date(2026, 1, 31)
 
 
 async def test_risk_free_coverage_success(async_test_client):
     client, _mock_core_snapshot_service, mock_integration_service = async_test_client
+    coverage_service = mock_integration_service.reference_coverage_service
 
     response = await client.post(
         "/integration/reference/risk-free-series/coverage?currency=USD",
@@ -1771,11 +1780,11 @@ async def test_risk_free_coverage_success(async_test_client):
     assert body["missing_dates_count"] == 31
     assert body["reconciliation_status"] == "UNKNOWN"
     assert body["data_quality_status"] == "UNKNOWN"
-    mock_integration_service.get_risk_free_coverage.assert_awaited_once_with(
-        currency="USD",
-        start_date=date(2026, 1, 1),
-        end_date=date(2026, 1, 31),
-    )
+    coverage_service.get_risk_free.assert_awaited_once()
+    coverage_call = coverage_service.get_risk_free.await_args.kwargs
+    assert coverage_call["currency"] == "USD"
+    assert coverage_call["request"].window.start_date == date(2026, 1, 1)
+    assert coverage_call["request"].window.end_date == date(2026, 1, 31)
 
 
 async def test_classification_taxonomy_success(async_test_client):

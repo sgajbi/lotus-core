@@ -1,3 +1,5 @@
+"""Query Service contracts for classification taxonomy reads."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -9,105 +11,6 @@ from portfolio_common.source_data_product_metadata import (
     product_version_field,
 )
 from pydantic import BaseModel, ConfigDict, Field
-
-from .reference_integration_common_dto import IntegrationWindow
-
-
-class BenchmarkDefinitionRequest(BaseModel):
-    as_of_date: date = Field(
-        ...,
-        description="Point-in-time date used to resolve benchmark definition version.",
-        examples=["2026-01-31"],
-    )
-
-    model_config = ConfigDict()
-
-
-class SeriesRequest(BaseModel):
-    as_of_date: date = Field(
-        ...,
-        description="As-of date used for effective definition/composition resolution.",
-        examples=["2026-01-31"],
-    )
-    window: IntegrationWindow = Field(
-        ...,
-        description="Date window for series extraction.",
-    )
-    frequency: Literal["daily"] = Field(
-        ...,
-        description="Requested output frequency label. Currently only daily is supported.",
-        examples=["daily"],
-    )
-
-    model_config = ConfigDict()
-
-
-from .reference_integration_benchmark_market_series_dto import (  # noqa: E402, F401
-    BenchmarkMarketSeriesRequest,
-    BenchmarkMarketSeriesResponse,
-    ComponentSeriesResponse,
-    SeriesPoint,
-)
-
-
-class CoverageRequest(BaseModel):
-    window: IntegrationWindow = Field(..., description="Coverage observation window.")
-
-    model_config = ConfigDict()
-
-
-class CoverageResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["DataQualityCoverageReport"] = product_name_field(
-        "DataQualityCoverageReport"
-    )
-    product_version: Literal["v1"] = product_version_field()
-    request_fingerprint: str = Field(
-        ...,
-        description="Deterministic request fingerprint for the coverage diagnostics scope.",
-        examples=["2cb014be96ad2cb65ce1833d9f2b88a2"],
-    )
-    observed_start_date: date | None = Field(
-        None,
-        description="Observed first date in data window.",
-        examples=["2026-01-01"],
-    )
-    observed_end_date: date | None = Field(
-        None,
-        description="Observed last date in data window.",
-        examples=["2026-01-31"],
-    )
-    expected_start_date: date = Field(
-        ...,
-        description="Expected start date from request window.",
-        examples=["2026-01-01"],
-    )
-    expected_end_date: date = Field(
-        ...,
-        description="Expected end date from request window.",
-        examples=["2026-01-31"],
-    )
-    total_points: int = Field(
-        ...,
-        description="Total points available in observed window.",
-        examples=[31],
-    )
-    missing_dates_count: int = Field(
-        ...,
-        description="Count of missing calendar dates within expected window.",
-        examples=[2],
-    )
-    missing_dates_sample: list[date] = Field(
-        default_factory=list,
-        description="Sample of missing dates in the expected window.",
-        examples=[["2026-01-10", "2026-01-21"]],
-    )
-    quality_status_distribution: dict[str, int] = Field(
-        default_factory=dict,
-        description="Quality status distribution over observed points.",
-        examples=[{"accepted": 29, "estimated": 2}],
-    )
-
-    model_config = ConfigDict()
 
 
 class ClassificationTaxonomyRequest(BaseModel):
