@@ -35,6 +35,8 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
         "ENTERPRISE_FEATURE_FLAGS_JSON",
         "ENTERPRISE_CAPABILITY_RULES_JSON",
         "LOTUS_CORE_ANALYTICS_EXPORT_EXECUTION_TIMEOUT_SECONDS",
+        "LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON",
+        "LOTUS_CORE_POLICY_VERSION",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -54,6 +56,8 @@ def test_control_plane_settings_parse_defaults(monkeypatch) -> None:
     assert settings.enterprise_feature_flags == {}
     assert settings.enterprise_capability_rules == {}
     assert settings.analytics_export_execution_timeout_seconds == 300
+    assert settings.integration_snapshot_policy_json == ""
+    assert settings.lotus_core_policy_version == "tenant-default-v1"
     assert settings.page_token_key_id == "local-dev"
     assert settings.page_token_previous_keys == {}
     assert settings.page_token_ttl_seconds == 900

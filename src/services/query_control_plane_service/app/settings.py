@@ -59,6 +59,7 @@ def env_json_map(name: str) -> dict[str, Any]:
 @dataclass(frozen=True, slots=True)
 class QueryControlPlaneSettings:
     lotus_core_policy_version: str
+    integration_snapshot_policy_json: str
     capability_tenant_overrides_json: str
     page_token_secret: str
     page_token_key_id: str
@@ -88,6 +89,7 @@ def load_query_control_plane_settings() -> QueryControlPlaneSettings:
     )
     return QueryControlPlaneSettings(
         lotus_core_policy_version=env_str("LOTUS_CORE_POLICY_VERSION", "tenant-default-v1"),
+        integration_snapshot_policy_json=env_str("LOTUS_CORE_INTEGRATION_SNAPSHOT_POLICY_JSON", ""),
         capability_tenant_overrides_json=env_str("LOTUS_CORE_CAPABILITY_TENANT_OVERRIDES_JSON", ""),
         page_token_secret=_page_token_secret(),
         page_token_key_id=_page_token_key_id(),

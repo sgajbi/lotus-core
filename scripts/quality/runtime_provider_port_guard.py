@@ -15,6 +15,10 @@ REPRESENTATIVE_WORKFLOWS: dict[Path, tuple[str, ...]] = {
         "from portfolio_common.runtime_providers import Clock",
         "_clock.utc_now()",
     ),
+    Path("src/services/query_control_plane_service/app/application/integration_policy.py"): (
+        "from portfolio_common.runtime_providers import Clock",
+        "_clock.utc_now()",
+    ),
     Path("src/services/query_control_plane_service/app/application/simulation.py"): (
         "from portfolio_common.runtime_providers import Clock, IdGenerator",
         "_clock.utc_now()",

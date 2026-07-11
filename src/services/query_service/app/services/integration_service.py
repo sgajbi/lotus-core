@@ -6,7 +6,6 @@ from typing import Any, cast
 from portfolio_common.page_tokens import PageTokenCodec
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..dtos.integration_dto import EffectiveIntegrationPolicyResponse
 from ..dtos.reference_integration_dto import (
     BenchmarkAssignmentResponse,
     BenchmarkCatalogResponse,
@@ -86,7 +85,6 @@ from .dpm_portfolio_management_integration_service import (
 )
 from .dpm_readiness_integration_service import DpmReadinessIntegrationService
 from .external_hedge_integration_service import ExternalHedgeIntegrationService
-from .integration_policy import resolve_effective_policy_response
 from .transaction_economics_integration_service import TransactionEconomicsIntegrationService
 
 logger = logging.getLogger(__name__)
@@ -168,18 +166,6 @@ class IntegrationService:
 
     def _decode_page_token(self, token: str | None) -> dict[str, Any]:
         return cast(dict[str, Any], self._page_token_codec.decode(token))
-
-    def get_effective_policy(
-        self,
-        consumer_system: str,
-        tenant_id: str,
-        include_sections: list[str] | None,
-    ) -> EffectiveIntegrationPolicyResponse:
-        return resolve_effective_policy_response(
-            consumer_system=consumer_system,
-            tenant_id=tenant_id,
-            include_sections=include_sections,
-        )
 
     async def resolve_benchmark_assignment(
         self, portfolio_id: str, as_of_date: date

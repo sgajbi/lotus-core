@@ -20,6 +20,10 @@ from .application.core_snapshot.service import (
     CoreSnapshotDependencies,
     CoreSnapshotService,
 )
+from .application.integration_policy import (
+    IntegrationPolicyConfiguration,
+    IntegrationPolicyService,
+)
 from .application.simulation import SimulationService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
@@ -61,6 +65,17 @@ def get_core_snapshot_service(
             simulation_store=SqlAlchemySimulationStore(db),
             clock=SystemClock(),
         )
+    )
+
+
+def get_integration_policy_service() -> IntegrationPolicyService:
+    settings = load_query_control_plane_settings()
+    return IntegrationPolicyService(
+        configuration=IntegrationPolicyConfiguration(
+            policy_version=settings.lotus_core_policy_version,
+            policy_json=settings.integration_snapshot_policy_json,
+        ),
+        clock=SystemClock(),
     )
 
 
