@@ -1,6 +1,11 @@
+"""Coordinate transitional position valuation workflow behavior."""
+
+from __future__ import annotations
+
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from portfolio_common.config import KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC
 from portfolio_common.database_models import (
@@ -10,17 +15,19 @@ from portfolio_common.database_models import (
     MarketPrice,
     Portfolio,
 )
-from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     DailyPositionSnapshotPersistedEvent,
     PortfolioValuationRequiredEvent,
 )
-from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.monitoring import VALUATION_JOBS_FAILED_TOTAL, VALUATION_JOBS_SKIPPED_TOTAL
-from portfolio_common.outbox_repository import OutboxRepository
 
 from .logic.valuation_logic import ValuationComponents, ValuationLogic
-from .repositories.valuation_repository import ValuationRepository
+
+if TYPE_CHECKING:
+    from portfolio_common.idempotency_repository import IdempotencyRepository
+    from portfolio_common.outbox_repository import OutboxRepository
+
+    from .repositories.valuation_repository import ValuationRepository
 
 logger = logging.getLogger(__name__)
 
@@ -41,47 +48,42 @@ def _normalize_currency_code(value: object) -> str:
 class DataNotFoundError(Exception):
     """Custom exception for retryable data fetching errors."""
 
-    pass
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValuationReferenceData:
     instrument: Instrument | None
     portfolio: Portfolio | None
     price: MarketPrice | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValuationSnapshotResult:
     snapshot: DailyPositionSnapshot
     job_failure_reason: str | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ValuationProcessorDependencies:
     repo: ValuationRepository
     idempotency_repo: IdempotencyRepository
     outbox_repo: OutboxRepository
 
 
-class ValuationProcessorDependencyFactory:
-    def from_session(self, db: Any) -> ValuationProcessorDependencies:
-        return ValuationProcessorDependencies(
-            repo=ValuationRepository(db),
-            idempotency_repo=IdempotencyRepository(db),
-            outbox_repo=OutboxRepository(db),
-        )
+class ValuationProcessorDependencyFactory(Protocol):
+    """Build valuation collaborators for one caller-owned database session."""
+
+    def from_session(self, db: Any) -> ValuationProcessorDependencies: ...
 
 
 class ValuationJobProcessor:
     def __init__(
         self,
         *,
-        session_provider: Any | None = None,
-        dependency_factory: ValuationProcessorDependencyFactory | None = None,
+        session_provider: Callable[[], Any],
+        dependency_factory: ValuationProcessorDependencyFactory,
     ) -> None:
         self._session_provider = session_provider
-        self._dependency_factory = dependency_factory or ValuationProcessorDependencyFactory()
+        self._dependency_factory = dependency_factory
 
     async def process_valid_event(
         self,
@@ -89,7 +91,7 @@ class ValuationJobProcessor:
         event_id: str,
         correlation_id: str,
     ) -> None:
-        async for db in self._open_session():
+        async for db in self._session_provider():
             try:
                 await self._process_event_session(db, event, event_id, correlation_id)
             except DataNotFoundError as exc:
@@ -139,7 +141,7 @@ class ValuationJobProcessor:
         event: PortfolioValuationRequiredEvent,
         exc: Exception,
     ) -> None:
-        async for db in self._open_session():
+        async for db in self._session_provider():
             async with db.begin():
                 dependencies = self._dependency_factory.from_session(db)
                 await dependencies.repo.update_job_status(
@@ -150,10 +152,6 @@ class ValuationJobProcessor:
                     status=VALUATION_FAILED,
                     failure_reason=str(exc),
                 )
-
-    def _open_session(self):
-        session_provider = self._session_provider or get_async_db_session
-        return session_provider()
 
     async def _build_snapshot_for_event(
         self,

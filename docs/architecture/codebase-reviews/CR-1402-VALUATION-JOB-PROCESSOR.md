@@ -1,5 +1,15 @@
 # CR-1402 Valuation Job Processor
 
+Status: Superseded in part by CR-1516 on 2026-07-11
+
+## Current State
+
+The consumer/processor separation remains valid. CR-1516 removed the processor's concrete session
+default and moved repository/idempotency/outbox construction into `app/infrastructure`; tests now
+inject the real seam rather than patching processor globals. The processor remains transitional
+until persistence models, metrics, and transaction handling are behind framework-neutral ports.
+See [CR-1516](./CR-1516-VALUATION-DEPENDENCY-COMPOSITION.md).
+
 ## Objective
 
 Fix GitHub issue #535 by moving valuation job workflow, state vocabulary, snapshot valuation

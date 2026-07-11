@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from ..infrastructure import build_valuation_job_processor
 from ..valuation_processor import ValuationJobProcessor
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ class ValuationConsumer(BaseConsumer):
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._valuation_processor = valuation_processor or ValuationJobProcessor()
+        self._valuation_processor = valuation_processor or build_valuation_job_processor()
 
     @staticmethod
     def _build_processing_event_id(*, msg: Message) -> str:

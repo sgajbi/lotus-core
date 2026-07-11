@@ -29,6 +29,7 @@ from services.calculators.position_valuation_calculator.app.repositories.valuati
 )
 from services.calculators.position_valuation_calculator.app.valuation_processor import (
     ValuationJobProcessor,
+    ValuationProcessorDependencies,
 )
 from tests.unit.test_support.async_session_iter import make_single_session_getter
 
@@ -36,12 +37,13 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture
-def consumer() -> ValuationConsumer:
+def consumer(mock_dependencies: dict) -> ValuationConsumer:
     """Provides a clean instance of the ValuationConsumer."""
     consumer = ValuationConsumer(
         bootstrap_servers="mock_server",
         topic="valuation.job.requested",
         group_id="test_group",
+        valuation_processor=mock_dependencies["processor"],
     )
     consumer._send_to_dlq_async = AsyncMock()
     return consumer
@@ -89,29 +91,23 @@ def mock_dependencies():
 
     get_session_gen = make_single_session_getter(mock_db_session)
 
-    with (
-        patch(
-            "services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
-            new=get_session_gen,
-        ),
-        patch(
-            "services.calculators.position_valuation_calculator.app.valuation_processor.IdempotencyRepository",
-            return_value=mock_idempotency_repo,
-        ),
-        patch(
-            "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationRepository",
-            return_value=mock_valuation_repo,
-        ),
-        patch(
-            "services.calculators.position_valuation_calculator.app.valuation_processor.OutboxRepository",
-            return_value=mock_outbox_repo,
-        ),
-    ):
-        yield {
-            "idempotency_repo": mock_idempotency_repo,
-            "outbox_repo": mock_outbox_repo,
-            "valuation_repo": mock_valuation_repo,
-        }
+    dependency_factory = MagicMock()
+    dependency_factory.from_session.return_value = ValuationProcessorDependencies(
+        repo=mock_valuation_repo,
+        idempotency_repo=mock_idempotency_repo,
+        outbox_repo=mock_outbox_repo,
+    )
+    processor = ValuationJobProcessor(
+        session_provider=get_session_gen,
+        dependency_factory=dependency_factory,
+    )
+    yield {
+        "idempotency_repo": mock_idempotency_repo,
+        "outbox_repo": mock_outbox_repo,
+        "valuation_repo": mock_valuation_repo,
+        "dependency_factory": dependency_factory,
+        "processor": processor,
+    }
 
 
 async def test_valuation_processor_executes_success_path_without_kafka_consumer(
@@ -150,7 +146,7 @@ async def test_valuation_processor_executes_success_path_without_kafka_consumer(
     )
     mock_valuation_repo.upsert_daily_snapshot.return_value = persisted_snapshot
 
-    await ValuationJobProcessor().process_valid_event(
+    await mock_dependencies["processor"].process_valid_event(
         mock_event,
         "valuation.job.requested-0-91",
         "processor-corr-id",
@@ -178,7 +174,7 @@ async def test_valuation_processor_duplicate_claim_skips_valuation_reads(
     mock_valuation_repo = mock_dependencies["valuation_repo"]
     mock_idempotency_repo.claim_event_processing.return_value = False
 
-    await ValuationJobProcessor().process_valid_event(
+    await mock_dependencies["processor"].process_valid_event(
         mock_event,
         "valuation.job.requested-0-92",
         "processor-corr-id",
@@ -217,7 +213,7 @@ async def test_valuation_processor_marks_snapshot_unvalued_when_price_is_missing
 
     mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
 
-    await ValuationJobProcessor().process_valid_event(
+    await mock_dependencies["processor"].process_valid_event(
         mock_event,
         "valuation.job.requested-0-93",
         "processor-corr-id",
@@ -260,7 +256,7 @@ async def test_valuation_processor_marks_snapshot_stale_when_price_date_precedes
 
     mock_valuation_repo.upsert_daily_snapshot.side_effect = persist_snapshot
 
-    await ValuationJobProcessor().process_valid_event(
+    await mock_dependencies["processor"].process_valid_event(
         mock_event,
         "valuation.job.requested-0-94",
         "processor-corr-id",

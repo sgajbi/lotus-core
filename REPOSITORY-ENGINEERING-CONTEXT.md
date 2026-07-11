@@ -1528,9 +1528,10 @@ Most relevant current governance:
      handoff only, while `ValuationJobProcessor` owns valuation state vocabulary, snapshot
      construction, missing-price and stale/current classification, missing-FX failure handling,
      no-position skip, job completion, unexpected-error failure marking, idempotency, and outbox
-     staging. Future backfill, replay, or batch valuation entry points should reuse the processor
-     with an injected session provider/dependency factory instead of copying consumer workflow
-     logic.
+     staging. Production session and concrete repository/idempotency/outbox construction belong to
+     `app/infrastructure`; tests and alternate entry points inject the provider and factory instead
+     of patching processor globals. Future backfill, replay, or batch valuation entry points should
+     reuse this explicit composition instead of copying consumer workflow logic.
 122. Valuation orchestration scheduler refactoring is in progress under GitHub issue #545.
      `ValuationJobDispatcher` now owns valuation job dispatch payload mapping, correlation
      headers, dispatch-budget enforcement, publisher delivery confirmation, and dispatch recovery
@@ -2027,6 +2028,14 @@ Most relevant current governance:
      and imported subpackages are present; repo-root tests and bind-mounted Compose are not package
      closure evidence. Keep `tests/unit/test_service_wheel_package_contract.py` in the fast lane and
      extend it when adding service projects.
+154. `ValuationJobProcessor` requires an injected session provider and dependency factory;
+     `position_valuation_calculator.app.infrastructure` owns production defaults and concrete
+     `ValuationRepository`, `IdempotencyRepository`, and `OutboxRepository` construction. Do not
+     restore constructors or `get_async_db_session` in the processor or patch those globals in
+     tests. The processor is not yet application-layer clean: keep it transitional until valuation
+     persistence records, metrics, publication, and transaction ownership are behind typed ports
+     and a unit of work. Position valuation remains a separate deployable unless workload and
+     failure-isolation evidence justifies a boundary change.
 
 ## Context Maintenance Rule
 

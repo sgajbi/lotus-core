@@ -18,11 +18,14 @@ from portfolio_common.events import PortfolioValuationRequiredEvent
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.services.calculators.position_valuation_calculator.app import (
-    valuation_processor as valuation_processor_module,
-)
 from src.services.calculators.position_valuation_calculator.app.consumers import (
     valuation_consumer as valuation_consumer_module,
+)
+from src.services.calculators.position_valuation_calculator.app.infrastructure import (
+    build_valuation_job_processor,
+)
+from src.services.calculators.position_valuation_calculator.app.repositories import (
+    valuation_repository as valuation_repository_module,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -112,21 +115,17 @@ async def test_valuation_message_persists_snapshot_outbox_and_idempotency(
     msg.offset.return_value = 7
     msg.headers.return_value = [("correlation_id", b"corr-val-int-01")]
 
+    async def override_session():
+        yield async_db_session
+
     consumer = valuation_consumer_module.ValuationConsumer(
         bootstrap_servers="mock_server",
         topic="valuation.job.requested",
         group_id="test_group",
+        valuation_processor=build_valuation_job_processor(session_provider=override_session),
     )
     consumer._send_to_dlq_async = AsyncMock()
-
-    async def override_session():
-        yield async_db_session
-
-    with patch(
-        "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
-        new=override_session,
-    ):
-        await consumer.process_message(msg)
+    await consumer.process_message(msg)
 
     snapshots = (
         (
@@ -269,18 +268,12 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
     msg.offset.return_value = 8
     msg.headers.return_value = [("correlation_id", b"corr-val-int-02")]
 
-    consumer = valuation_consumer_module.ValuationConsumer(
-        bootstrap_servers="mock_server",
-        topic="valuation.job.requested",
-        group_id="test_group",
-    )
-    consumer._send_to_dlq_async = AsyncMock()
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
 
     async def override_session():
         yield async_db_session
 
-    original_update_job_status = valuation_processor_module.ValuationRepository.update_job_status
+    original_update_job_status = valuation_repository_module.ValuationRepository.update_job_status
 
     async def update_job_status_with_ownership_loss(
         self,
@@ -313,16 +306,17 @@ async def test_valuation_message_skips_side_effects_after_losing_job_ownership(
             failure_reason=failure_reason,
         )
 
-    with (
-        patch(
-            "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
-            new=override_session,
-        ),
-        patch.object(
-            valuation_processor_module.ValuationRepository,
-            "update_job_status",
-            new=update_job_status_with_ownership_loss,
-        ),
+    consumer = valuation_consumer_module.ValuationConsumer(
+        bootstrap_servers="mock_server",
+        topic="valuation.job.requested",
+        group_id="test_group",
+        valuation_processor=build_valuation_job_processor(session_provider=override_session),
+    )
+    consumer._send_to_dlq_async = AsyncMock()
+    with patch.object(
+        valuation_repository_module.ValuationRepository,
+        "update_job_status",
+        new=update_job_status_with_ownership_loss,
     ):
         await consumer.process_message(msg)
 
@@ -492,21 +486,17 @@ async def test_valuation_message_allows_rearmed_same_scope_delivery_to_refresh_s
     msg.offset.return_value = 10
     msg.headers.return_value = [("correlation_id", b"corr-val-int-03")]
 
+    async def override_session():
+        yield async_db_session
+
     consumer = valuation_consumer_module.ValuationConsumer(
         bootstrap_servers="mock_server",
         topic="valuation.job.requested",
         group_id="test_group",
+        valuation_processor=build_valuation_job_processor(session_provider=override_session),
     )
     consumer._send_to_dlq_async = AsyncMock()
-
-    async def override_session():
-        yield async_db_session
-
-    with patch(
-        "src.services.calculators.position_valuation_calculator.app.valuation_processor.get_async_db_session",
-        new=override_session,
-    ):
-        await consumer.process_message(msg)
+    await consumer.process_message(msg)
 
     snapshot = await async_db_session.scalar(
         select(DailyPositionSnapshot).where(
