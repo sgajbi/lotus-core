@@ -38,13 +38,18 @@ Pure models, ordering, lot disposition, FIFO/AVCO policy, corporate-action cash 
 incremental and average-cost checkpoint state, and calculation diagnostics live in the
 target-owned `app/domain/cost_basis` package behind one public domain API. The transitional
 timeline coordinator is target-owned application behavior behind a framework-neutral observation
-port; Prometheus duration/depth recording is a target infrastructure adapter. The transitional
-application workflow is
+port; Prometheus duration/depth recording and legacy SQL/outbox staging are target infrastructure
+adapters. `ProcessTransactionUseCase` remains the single combined application coordinator. The
+transitional application workflow is
 `cost_calculator_service/app/cost_calculation_workflow.py`, imported by target infrastructure until
 its application and persistence ports are extracted. The repository explicitly maps the domain's
 `calculation_state_version` to the compatible `engine_state_version` database column;
 `app/consumer.py` is a quarantined compatibility shell for legacy delivery tests and must not be
 imported by the unified runtime.
+
+The removed `cost_calculation_processor.py` is not an extension point. The quarantined compatibility
+consumer retains its old physical idempotency name and retry/DLQ lifecycle only for rollback and
+characterization; new processing paths must use the combined application use case and ports.
 
 For an eligible persisted transaction event, the service:
 

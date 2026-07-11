@@ -141,7 +141,7 @@ manifests are deleted; do not recreate them:
 
 | Compatibility package | Path | Current use | Removal condition |
 | --- | --- | --- | --- |
-| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Transitional cost workflow, SQL repository, and compatibility delivery/tests; cost-basis policy, checkpoint state, and timeline orchestration are target-owned; old replay delivery is removed | Extract target workflow use cases and repository/publication ports, migrate delivery tests, then delete the legacy root after canonical QA. |
+| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Transitional cost workflow, SQL repository, and quarantined compatibility delivery/tests; cost policy, checkpoints, timeline orchestration, and compatibility staging adapter are target-owned; the mixed processor and old replay delivery are removed | Extract target workflow/publication ports and SQL adapter ownership, migrate delivery tests, then delete the legacy root after canonical QA. |
 | `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow workflow/domain/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after canonical QA. |
 
 ## Database Ownership

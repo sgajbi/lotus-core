@@ -104,10 +104,11 @@ combined completion contract.
    workflow/domain/repository modules and remove the obsolete normal-path stage wait only after
    downstream compatibility, registry/cluster rollout, and canonical platform QA pass.
 
-Steps 1 through 6, the position source move, and cost-basis policy, checkpoint, and timeline
-orchestration moves from step 7 are implemented locally. The branch must not claim full runtime
-consolidation complete before the remaining cost workflow/repository and cashflow source retirement and the
-release/deployment gates are validated.
+Steps 1 through 6, the position source move, cost-basis policy/checkpoint/timeline moves, and target
+compatibility staging ownership from step 7 are implemented locally. The mixed legacy cost event
+processor is removed. The branch must not claim full runtime consolidation complete before the
+remaining cost workflow/repository and cashflow source retirement and the release/deployment gates
+are validated.
 
 ## Rollback
 

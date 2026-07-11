@@ -2,7 +2,7 @@
 
 Date: 2026-07-10  
 Issue: #468  
-Status: Hardened locally
+Status: Hardened locally; processor contract superseded by CR-1514
 
 ## Objective
 
@@ -18,6 +18,10 @@ inheriting Kafka delivery state.
   idempotency, and legacy transaction scope on the compatibility consumer.
 - Renamed the structural processor contract to `CostCalculationWorkflowPort` to distinguish the
   interface from the concrete workflow.
+
+The final bullet records the intermediate state at this decision date. CR-1514 removed that
+mixed-layer processor contract and confines the transitional workflow protocol to target
+infrastructure.
 
 ## Compatibility
 

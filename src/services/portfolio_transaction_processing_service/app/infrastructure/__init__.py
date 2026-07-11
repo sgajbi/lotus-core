@@ -11,7 +11,12 @@ from .composition import (
     build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
-from .cost_processing_adapter import CostProcessingCompatibilityAdapter
+from .cost_processing_adapter import (
+    CostProcessingCompatibilityAdapter,
+    CostStagingResult,
+    CostStagingWorkflow,
+    PortfolioNotFoundError,
+)
 from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
 from .prometheus_cost_basis_observability import (
@@ -37,8 +42,11 @@ __all__ = [
     "CanonicalTransactionReplayer",
     "CashflowProcessingCompatibilityAdapter",
     "CostProcessingCompatibilityAdapter",
+    "CostStagingResult",
+    "CostStagingWorkflow",
     "PositionProcessingCompatibilityAdapter",
     "PipelineStageProcessingCompatibilityAdapter",
+    "PortfolioNotFoundError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",

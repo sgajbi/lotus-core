@@ -6,17 +6,19 @@ from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import TransactionEvent
 from portfolio_common.exceptions import RetryableConsumerError
+from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
+from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from .cost_calculation_processor import (
-    CostCalculationEventProcessor,
-    CostCalculationProcessorDependencyFactory,
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CostProcessingCompatibilityAdapter,
     PortfolioNotFoundError,
 )
+
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -27,6 +29,7 @@ from .cost_calculation_workflow import (
     _normalize_event_code,
     _normalize_fee_amount,
 )
+from .repository import CostCalculatorRepository
 
 __all__ = [
     "LOT_OPENING_BEHAVIORS",
@@ -41,6 +44,7 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+COST_CALCULATOR_COMPATIBILITY_SERVICE_NAME = "cost-calculator"
 
 
 def _message_value(msg: Message) -> str:
@@ -86,15 +90,24 @@ class CostCalculatorConsumer(CostCalculationWorkflow, BaseConsumer):
         event_id: str,
         correlation_id: str,
     ) -> None:
-        dependency_factory = CostCalculationProcessorDependencyFactory()
-        processor = CostCalculationEventProcessor(self)
         async for db in get_async_db_session():
             async with db.begin():
-                await processor.process_valid_event(
+                idempotency_repository = IdempotencyRepository(db)
+                if not await idempotency_repository.claim_event_processing(
+                    event_id,
+                    event.portfolio_id,
+                    COST_CALCULATOR_COMPATIBILITY_SERVICE_NAME,
+                    correlation_id,
+                ):
+                    logger.warning("Event already processed. Skipping.")
+                    return
+                await CostProcessingCompatibilityAdapter(
+                    workflow=self,
+                    repository=CostCalculatorRepository(db),
+                    outbox_repository=OutboxRepository(db),
+                ).stage_event(
                     event=event,
-                    event_id=event_id,
                     correlation_id=correlation_id,
-                    dependencies=dependency_factory.from_session(db),
                 )
 
     async def _handle_process_message_error(

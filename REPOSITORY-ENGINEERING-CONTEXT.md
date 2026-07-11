@@ -1515,15 +1515,14 @@ Most relevant current governance:
      `DpmPortfolioManagementIntegrationService` owns portfolio-manager book membership, CIO
      model-change cohort, and DPM portfolio-universe repository/page-token wiring. Do not add new
      cohesive source-data product families directly to the full `IntegrationService` facade.
-120. Kafka consumers should keep transport responsibilities separate from valid-message
-     application orchestration. The cost-calculation consumer now routes valid transaction events
-     through `CostCalculationEventProcessor` and `CostCalculationProcessorDependencies`, with
-     concrete `CostCalculatorRepository`, `IdempotencyRepository`, and `OutboxRepository`
-     construction isolated in `CostCalculationProcessorDependencyFactory.from_session(...)`.
-     Future consumers with idempotency claims, repository reads/writes, outbox staging, or
-     reconciliation diagnostics should follow the processor/dependency-factory pattern so workflow
-     sequencing is testable without Kafka consumer objects and concrete infrastructure remains at
-     the runtime wiring boundary.
+120. Kafka consumers must keep transport responsibilities separate from application orchestration.
+     The active combined path uses `ProcessTransactionUseCase` and target ports. Transitional cost
+     SQL/outbox staging belongs to `CostProcessingCompatibilityAdapter`; the quarantined legacy
+     consumer alone retains its physical idempotency claim, concrete repository construction, and
+     retry/DLQ lifecycle for rollback characterization. Do not recreate
+     `cost_calculation_processor.py` or copy this compatibility delivery shape into new consumers.
+     New consumers with idempotency, repository, publication, or reconciliation behavior require a
+     framework-neutral application use case plus ports and infrastructure composition.
 121. Valuation job processing follows the same consumer/application split at greater depth:
      `ValuationConsumer` owns Kafka decode, correlation context, retry classification, and DLQ
      handoff only, while `ValuationJobProcessor` owns valuation state vocabulary, snapshot
@@ -2014,6 +2013,13 @@ Most relevant current governance:
      the legacy `transaction_processor.py` path or generic aliases. Workflow, SQL repository, and
      compatibility delivery remain separate migration slices with their own ports and transaction
      boundary proof.
+152. Cost compatibility staging is target infrastructure behavior owned by
+     `CostProcessingCompatibilityAdapter`, not a second application use case. It may temporarily
+     describe the legacy workflow's private method surface and concrete SQL/outbox collaborators,
+     but those types must not leak into target application or domain packages. The combined path
+     remains `ProcessTransactionUseCase` -> `CostProcessingPort` -> adapter inside one SQLAlchemy
+     unit of work. Keep legacy physical idempotency only in the quarantined consumer; never restore
+     `cost_calculation_processor.py`, its dependency bundle/factory, or generic processor aliases.
 
 ## Context Maintenance Rule
 
