@@ -19,6 +19,7 @@ from src.services.query_control_plane_service.app.contracts.integration_policy i
     PolicyProvenanceMetadata,
 )
 from src.services.query_control_plane_service.app.dependencies import (
+    get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
     get_client_tax_profile_service,
     get_client_tax_rule_set_service,
@@ -532,6 +533,9 @@ async def async_test_client():
     app.dependency_overrides[get_client_restriction_profile_service] = lambda: (
         mock_integration_service
     )
+    app.dependency_overrides[get_client_liquidity_evidence_service] = lambda: (
+        mock_integration_service
+    )
     app.dependency_overrides[get_client_tax_profile_service] = lambda: mock_integration_service
     app.dependency_overrides[get_client_tax_rule_set_service] = lambda: mock_integration_service
     app.dependency_overrides[get_sustainability_preference_profile_service] = lambda: (
@@ -544,6 +548,7 @@ async def async_test_client():
     app.dependency_overrides.pop(get_integration_policy_service, None)
     app.dependency_overrides.pop(get_integration_service, None)
     app.dependency_overrides.pop(get_client_restriction_profile_service, None)
+    app.dependency_overrides.pop(get_client_liquidity_evidence_service, None)
     app.dependency_overrides.pop(get_client_tax_profile_service, None)
     app.dependency_overrides.pop(get_client_tax_rule_set_service, None)
     app.dependency_overrides.pop(get_sustainability_preference_profile_service, None)

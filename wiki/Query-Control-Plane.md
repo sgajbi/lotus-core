@@ -28,7 +28,7 @@ This makes it a contract and operations plane, not a generic duplicate of the re
 | --- | --- | --- |
 | Support and lineage | Portfolio readiness, support overview, control-stage evidence, replay evidence, reconciliation evidence, and lineage drill-through. | Performance, risk, or advisory business conclusions. |
 | Analytics inputs | Portfolio and position timeseries inputs, analytics references, and export-job lifecycle for large-window retrieval. | Calculated performance or risk metrics. |
-| Integration contracts | Policy-aware snapshots, QCP-owned client-restriction, sustainability-preference, and client tax-reference evidence, benchmark/reference contracts, enrichment contracts, taxonomy and market/reference coverage diagnostics. | Raw ad hoc table access, DPM or tax decisioning, or unmanaged compatibility aliases. |
+| Integration contracts | Policy-aware snapshots; QCP-owned client restriction, sustainability, tax-reference, income-needs, liquidity-reserve, and planned-withdrawal evidence; benchmark/reference, enrichment, taxonomy, and coverage contracts. | Raw ad hoc table access, financial planning, DPM/tax decisioning, treasury/OMS workflow, or unmanaged aliases. |
 | Capabilities and policy | Consumer-aware capability and policy discovery using canonical snake_case query parameters. | Client-specific entitlement adjudication outside the governed policy contract. |
 | Simulation | Deterministic source-owned simulation sessions and projected state. | Recommendation, suitability, or advisor decisioning logic. |
 
@@ -205,6 +205,12 @@ router inside the operational read plane.
   evidence; tax advice, optimization, suitability, and approval remain outside Core
 - client-tax-rule contracts and implementation must remain QCP-owned and bounded to source
   references; tax policy decisions, approvals, and reporting certification remain outside Core
+- client income-needs, liquidity-reserve, and planned-withdrawal contracts share the QCP-owned
+  `client_liquidity_evidence` capability while retaining product-specific records and SQL policy;
+  do not restore the deleted Query Service DTO, mapper, repository, response, or facade paths
+- Core publishes captured liquidity requirement and schedule facts only; financial planning,
+  suitability, funding recommendations, treasury instructions, OMS acknowledgement, and DPM
+  interpretation remain downstream responsibilities
 - `lotus-risk` may consume projected Core state, but scenario, stress, concentration, VaR, and risk
   conclusions remain owned by `lotus-risk`
 
