@@ -1,6 +1,7 @@
 """SQL adapter tests for benchmark definition evidence."""
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -87,3 +88,72 @@ async def test_component_query_ranks_each_index_and_orders_output() -> None:
     assert "benchmark_composition_series.index_id" in sql
     assert "benchmark_composition_series.source_timestamp DESC NULLS LAST" in sql
     assert "ORDER BY benchmark_composition_series.index_id ASC" in sql
+
+
+@pytest.mark.asyncio
+async def test_overlapping_definition_query_is_window_bounded_and_stably_ordered() -> None:
+    row = SimpleNamespace(
+        benchmark_id="BMK_1",
+        benchmark_name="Benchmark 1",
+        benchmark_type="composite",
+        benchmark_currency="USD",
+        return_convention="total_return_index",
+        benchmark_status="active",
+        benchmark_family=None,
+        benchmark_provider="provider",
+        rebalance_frequency="quarterly",
+        classification_set_id=None,
+        classification_labels={},
+        effective_from=date(2026, 1, 1),
+        effective_to=None,
+        source_vendor="provider",
+        source_record_id="definition:1",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    session = _session_returning(row)
+
+    records = await benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(
+        session
+    ).list_definitions_overlapping_window(
+        benchmark_id="BMK_1",
+        start_date=date(2026, 1, 15),
+        end_date=date(2026, 3, 31),
+    )
+
+    assert records[0].benchmark_currency == "USD"
+    sql = str(session.execute.await_args.args[0])
+    assert "benchmark_definitions.effective_from <=" in sql
+    assert "benchmark_definitions.effective_to IS NULL" in sql
+    assert "benchmark_definitions.source_timestamp ASC NULLS LAST" in sql
+
+
+@pytest.mark.asyncio
+async def test_overlapping_component_query_preserves_all_rebalance_segments() -> None:
+    row = SimpleNamespace(
+        benchmark_id="BMK_1",
+        index_id="IDX_1",
+        composition_effective_from=date(2026, 1, 1),
+        composition_effective_to=None,
+        composition_weight="1.0000000000",
+        rebalance_event_id="rebalance_1",
+        source_vendor="provider",
+        source_record_id="component:1",
+        quality_status="accepted",
+        **_timestamps(),
+    )
+    session = _session_returning(row)
+
+    records = await benchmark_definition_sources.SqlAlchemyBenchmarkDefinitionReader(
+        session
+    ).list_components_overlapping_window(
+        benchmark_id="BMK_1",
+        start_date=date(2026, 1, 15),
+        end_date=date(2026, 3, 31),
+    )
+
+    assert records[0].composition_weight == Decimal("1.0000000000")
+    sql = str(session.execute.await_args.args[0])
+    assert "benchmark_composition_series.composition_effective_from <=" in sql
+    assert "benchmark_composition_series.composition_effective_to IS NULL" in sql
+    assert "benchmark_composition_series.index_id ASC" in sql

@@ -8,8 +8,6 @@ from portfolio_common.source_data_products import source_data_product_openapi_ex
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkCatalogRequest,
     BenchmarkCatalogResponse,
-    BenchmarkCompositionWindowRequest,
-    BenchmarkCompositionWindowResponse,
     BenchmarkMarketSeriesRequest,
     BenchmarkMarketSeriesResponse,
     BenchmarkReturnSeriesRequest,
@@ -29,6 +27,7 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
 from src.services.query_service.app.services.integration_service import IntegrationService
 
 from ..application.benchmark_assignment import BenchmarkAssignmentService
+from ..application.benchmark_composition import BenchmarkCompositionService
 from ..application.benchmark_definition import BenchmarkDefinitionService
 from ..application.client_liquidity_evidence import ClientLiquidityEvidenceService
 from ..application.client_restriction_profile import ClientRestrictionProfileService
@@ -54,6 +53,10 @@ from ..application.transaction_economics.service import TransactionEconomicsServ
 from ..contracts.benchmark_assignment import (
     BenchmarkAssignmentRequest,
     BenchmarkAssignmentResponse,
+)
+from ..contracts.benchmark_composition import (
+    BenchmarkCompositionWindowRequest,
+    BenchmarkCompositionWindowResponse,
 )
 from ..contracts.benchmark_definition import (
     BenchmarkDefinitionRequest,
@@ -145,6 +148,7 @@ from ..contracts.transaction_cost_curve import (
 )
 from ..dependencies import (
     get_benchmark_assignment_service,
+    get_benchmark_composition_service,
     get_benchmark_definition_service,
     get_client_liquidity_evidence_service,
     get_client_restriction_profile_service,
@@ -2199,15 +2203,14 @@ async def fetch_benchmark_composition_window(
         description="Benchmark identifier for the requested composition window contract.",
         examples=["BENCH-SP500-TR"],
     ),
-    integration_service: IntegrationService = Depends(get_integration_service),
+    benchmark_composition_service: BenchmarkCompositionService = Depends(
+        get_benchmark_composition_service
+    ),
 ) -> BenchmarkCompositionWindowResponse:
     try:
-        response = cast(
-            BenchmarkCompositionWindowResponse | None,
-            await integration_service.get_benchmark_composition_window(
-                benchmark_id=benchmark_id,
-                request=request,
-            ),
+        response = await benchmark_composition_service.resolve(
+            benchmark_id=benchmark_id,
+            request=request,
         )
     except ValueError as exc:
         _raise_integration_source_conflict(

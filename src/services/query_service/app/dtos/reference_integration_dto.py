@@ -24,15 +24,6 @@ class BenchmarkDefinitionRequest(BaseModel):
     model_config = ConfigDict()
 
 
-class BenchmarkCompositionWindowRequest(BaseModel):
-    window: IntegrationWindow = Field(
-        ...,
-        description="Window used to resolve overlapping benchmark composition segments.",
-    )
-
-    model_config = ConfigDict()
-
-
 class BenchmarkConstituentSegmentResponse(BaseModel):
     index_id: str = Field(
         ...,
@@ -58,44 +49,6 @@ class BenchmarkConstituentSegmentResponse(BaseModel):
         None,
         description="Rebalance event identifier linking related composition changes.",
         examples=["rebalance_2026q1"],
-    )
-
-    model_config = ConfigDict()
-
-
-class BenchmarkCompositionWindowResponse(SourceDataProductRuntimeMetadata):
-    product_name: Literal["BenchmarkConstituentWindow"] = product_name_field(
-        "BenchmarkConstituentWindow"
-    )
-    product_version: Literal["v1"] = product_version_field()
-    benchmark_id: str = Field(
-        ...,
-        description="Canonical benchmark identifier.",
-        examples=["BMK_GLOBAL_BALANCED_60_40"],
-    )
-    benchmark_currency: str = Field(
-        ...,
-        description="Benchmark currency enforced across the requested composition window.",
-        examples=["USD"],
-    )
-    resolved_window: IntegrationWindow = Field(
-        ...,
-        description="Resolved date window returned by the composition contract.",
-    )
-    segments: list[BenchmarkConstituentSegmentResponse] = Field(
-        default_factory=list,
-        description="Ordered benchmark composition segments overlapping the requested window.",
-    )
-    lineage: dict[str, str] = Field(
-        default_factory=dict,
-        description="Lineage metadata (contract_version, source_system, generated_by).",
-        examples=[
-            {
-                "contract_version": "rfc_062_v1",
-                "source_system": "lotus-core",
-                "generated_by": "query_control_plane_service",
-            }
-        ],
     )
 
     model_config = ConfigDict()
