@@ -1,41 +1,23 @@
-import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, cast
 
-from portfolio_common.page_tokens import PageTokenCodec
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reference_integration_dto import (
-    BenchmarkMarketSeriesRequest,
-    BenchmarkMarketSeriesResponse,
     ClassificationTaxonomyResponse,
     CoverageResponse,
 )
 from ..repositories.reference_data_repository import ReferenceDataRepository
-from ..settings import load_query_service_settings
 from .benchmark_reference_integration_service import BenchmarkReferenceIntegrationService
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class IntegrationServiceDependencies:
     reference_repository: ReferenceDataRepository
-    page_token_codec: PageTokenCodec
 
     @classmethod
     def from_session(cls, db: AsyncSession) -> "IntegrationServiceDependencies":
-        settings = load_query_service_settings()
-        return cls(
-            reference_repository=ReferenceDataRepository(db),
-            page_token_codec=PageTokenCodec(
-                secret=settings.page_token_secret,
-                active_kid=settings.page_token_key_id,
-                previous_secrets=settings.page_token_previous_keys,
-                ttl_seconds=settings.page_token_ttl_seconds,
-            ),
-        )
+        return cls(reference_repository=ReferenceDataRepository(db))
 
 
 class IntegrationService:
@@ -51,27 +33,8 @@ class IntegrationService:
             dependencies = IntegrationServiceDependencies.from_session(db)
         self.db = db
         self._reference_repository = dependencies.reference_repository
-        self._page_token_codec = dependencies.page_token_codec
         self._benchmark_reference_service = BenchmarkReferenceIntegrationService(
             reference_repository_provider=lambda: self._reference_repository,
-            decode_page_token=self._decode_page_token,
-            encode_page_token=self._encode_page_token,
-        )
-
-    def _encode_page_token(self, payload: dict[str, Any]) -> str:
-        return cast(str, self._page_token_codec.encode(payload))
-
-    def _decode_page_token(self, token: str | None) -> dict[str, Any]:
-        return cast(dict[str, Any], self._page_token_codec.decode(token))
-
-    async def get_benchmark_market_series(
-        self,
-        benchmark_id: str,
-        request: BenchmarkMarketSeriesRequest,
-    ) -> BenchmarkMarketSeriesResponse:
-        return await self._benchmark_reference_service.get_benchmark_market_series(
-            benchmark_id=benchmark_id,
-            request=request,
         )
 
     async def get_benchmark_coverage(
