@@ -864,7 +864,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Normalized transaction fee breakdown.
 - **Description**: Per-transaction fee components (brokerage, duty, exchange fee, etc.).
 - **Relationships**: `transaction_id` -> `transactions.transaction_id`; ORM relationship `transaction` -> `Transaction`
-- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`, `src/libs/portfolio-common/portfolio_common/models.py`, `src/services/calculators/cost_calculator_service/app/consumer.py`, `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`, `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
+- **Usage (modules/features)**: `src/services/calculators/cost_calculator_service/app/repository.py`, `src/libs/portfolio-common/portfolio_common/models.py`, `src/services/portfolio_transaction_processing_service/app/domain/cost_basis`, `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -874,6 +874,9 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `currency` (String): ISO currency code for monetary interpretation of related amounts.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+- **Integrity**: `amount > 0`; component identity is unique by transaction plus normalized fee type
+  and currency.
 
 ## `cashflows`
 
@@ -928,6 +931,10 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   - `source_system` (String): Domain attribute used by the owning module.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
+
+- **Integrity**: `open_quantity >= 0`, `open_quantity <= original_quantity`,
+  `lot_cost_local >= 0`, and `lot_cost_base >= 0`. Combined quantity checks also imply a
+  nonnegative original quantity.
 
 ## `cost_basis_processing_state`
 

@@ -1591,6 +1591,10 @@ class TransactionCost(Base):
     transaction = relationship("Transaction", back_populates="costs")
 
     __table_args__ = (
+        CheckConstraint(
+            "amount > 0",
+            name="ck_transaction_costs_amount_positive",
+        ),
         Index("ix_transaction_costs_transaction_id", "transaction_id"),
         Index(
             "ix_txn_costs_positive_txn_id",
@@ -1698,6 +1702,22 @@ class PositionLotState(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "open_quantity >= 0",
+            name="ck_position_lot_open_quantity_nonnegative",
+        ),
+        CheckConstraint(
+            "open_quantity <= original_quantity",
+            name="ck_position_lot_open_not_above_original",
+        ),
+        CheckConstraint(
+            "lot_cost_local >= 0",
+            name="ck_position_lot_local_cost_nonnegative",
+        ),
+        CheckConstraint(
+            "lot_cost_base >= 0",
+            name="ck_position_lot_base_cost_nonnegative",
+        ),
         Index(
             "ix_position_lot_norm_port_sec",
             func.trim(portfolio_id),

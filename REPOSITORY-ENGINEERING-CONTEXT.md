@@ -1989,6 +1989,15 @@ Most relevant current governance:
      records exist. Database simplification follows ownership stabilization and requires additive
      migration, rollback, replay/backfill, query-plan, concurrency, and downstream read-contract
      evidence.
+149. `transaction_costs` stores only positive normalized fee components. `position_lot_state`
+     requires nonnegative open quantity and local/base basis, with open quantity no greater than
+     original quantity. Preserve these checks in ORM metadata and migrations and prove rejection
+     on PostgreSQL; application validation is not a database integrity boundary. Do not add accrued
+     income sign constraints without bond ex-coupon methodology evidence. Before deployment,
+     report violating keys through privacy-safe diagnostics and remediate through governed
+     reconciliation, never silent migration coercion. Keep cost components, lot lineage,
+     incremental checkpoints, and AVCO aggregates separate until cardinality, lifecycle,
+     query-plan, and write-amplification evidence supports a different table boundary.
 
 ## Context Maintenance Rule
 
