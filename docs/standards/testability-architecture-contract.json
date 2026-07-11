@@ -5,8 +5,7 @@
     "src/services/**/app/domain/**/*.py",
     "src/services/**/app/application/**/*.py",
     "src/services/**/app/ports/**/*.py",
-    "src/services/**/app/policies/**/*.py",
-    "src/services/calculators/position_calculator/app/core/position_reducer.py"
+    "src/services/**/app/policies/**/*.py"
   ],
   "forbiddenImportPrefixes": [
     "boto3",

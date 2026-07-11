@@ -52,10 +52,9 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
         / "src"
         / "services"
         / "calculators"
-        / "position_calculator"
+        / "cost_calculator_service"
         / "app"
-        / "core"
-        / "position_logic.py"
+        / "consumer.py"
     )
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -71,7 +70,7 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
     )
 
     assert findings == [
-        "src/services/calculators/position_calculator/app/core/position_logic.py:1: "
+        "src/services/calculators/cost_calculator_service/app/consumer.py:1: "
         "calculator modules must not import orchestrator or query internals: disallowed direct "
         "import 'services.pipeline_orchestrator_service.app.services'"
     ]

@@ -42,16 +42,16 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/calculators/cost_calculator_service/app/repository.py:update_transaction_costs": (
         "Transaction",
     ),
-    "src/services/calculators/position_calculator/app/repositories/position_repository.py:get_all_transactions_for_security": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py:get_all_transactions_for_security": (
         "Transaction",
     ),
-    "src/services/calculators/position_calculator/app/repositories/position_repository.py:get_last_position_before": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py:get_last_position_before": (
         "PositionHistory",
     ),
-    "src/services/calculators/position_calculator/app/repositories/position_repository.py:get_transaction_by_id": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py:get_transaction_by_id": (
         "Transaction",
     ),
-    "src/services/calculators/position_calculator/app/repositories/position_repository.py:get_transactions_on_or_after": (
+    "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py:get_transactions_on_or_after": (
         "Transaction",
     ),
     "src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py:create_run": (

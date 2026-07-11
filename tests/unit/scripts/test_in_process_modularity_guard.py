@@ -135,3 +135,18 @@ def test_in_process_modularity_guard_rejects_unclassified_legacy_folder(
     findings = find_in_process_modularity_findings(tmp_path)
 
     assert any(finding.rule == "missing-legacy-folder-classification" for finding in findings)
+
+
+def test_in_process_modularity_guard_rejects_restored_retired_legacy_folder(
+    tmp_path: Path,
+) -> None:
+    _write_required_paths(tmp_path)
+    payload = _catalog_payload()
+    adoption = payload["representativeAdoptions"][0]
+    adoption["retiredLegacyFolders"] = ["src/services/example_service/app/retired"]
+    _write(tmp_path / "src/services/example_service/app/retired/__init__.py", "")
+    _write_catalog(tmp_path, payload)
+
+    findings = find_in_process_modularity_findings(tmp_path)
+
+    assert any(finding.rule == "retired-legacy-folder-restored" for finding in findings)

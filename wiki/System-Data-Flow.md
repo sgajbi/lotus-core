@@ -16,7 +16,8 @@ Use it when you need to reason about:
 1. upstream systems submit source data to `ingestion_service`
 2. `ingestion_service` validates payloads and publishes raw events to Kafka
 3. `persistence_service` writes canonical source records and emits completion events
-4. calculators and generators materialize cost, position, valuation, cashflow, and time-series state
+4. unified transaction processing atomically materializes cost, position, and cashflow state;
+   independent generators materialize valuation and time-series state
 5. `query_service` and `query_control_plane_service` expose operational and downstream-governed read
    contracts over persisted state
 
@@ -54,22 +55,19 @@ See also:
 
 Downstream workers consume completion topics and build the supported derived state:
 
-- cost calculator
-  enriches transaction history and emits `processed_transactions_completed`
-- position calculator
-  materializes position history and emits `position_history_persisted`
+- transaction processing
+  atomically enriches cost, materializes cashflow and position history, and emits the authoritative
+  transaction-processing completion fact plus supported compatibility facts
 - valuation calculator
   combines position and market signals and emits `daily_position_snapshot_persisted`
-- cashflow calculator
-  materializes normalized cashflow state
 - timeseries generator
   materializes position and portfolio time-series state
 
 See also:
 
-- [Cost Calculator](Cost-Calculator)
-- [Cashflow Calculator](Cashflow-Calculator)
-- [Position Calculator](Position-Calculator)
+- [Cost Processing](Cost-Calculator)
+- [Cashflow Processing](Cashflow-Calculator)
+- [Position Processing](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [Timeseries Generator Service](Timeseries-Generator-Service)

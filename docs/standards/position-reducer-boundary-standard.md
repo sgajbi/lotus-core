@@ -5,7 +5,7 @@ decision planning pure, typed, and independently testable.
 
 ## Responsibilities
 
-`position_calculator.app.core.position_reducer` owns:
+`portfolio_transaction_processing_service.app.domain.position_reducer` owns:
 
 1. position balance state transitions for buy and sell events,
 2. cash movement amount and booked-cost deltas,
@@ -16,7 +16,8 @@ decision planning pure, typed, and independently testable.
 7. effective completed-date selection for backdated replay decisions,
 8. replay watermark planning for original backdated transactions.
 
-`position_calculator.app.core.position_logic` owns:
+`portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow`
+owns:
 
 1. epoch-fencing checks,
 2. repository reads and writes,
@@ -50,8 +51,8 @@ Backdated replay planning must be deterministic from:
 
 ## Compatibility
 
-This is an in-process modularity rule. It preserves `PositionCalculator.calculate(...)`,
-`PositionCalculator.calculate_next_position(...)`, database schema, repository contracts,
+This is an in-process modularity rule. It preserves `PositionCalculationWorkflow.calculate(...)`,
+`PositionCalculationWorkflow.calculate_next_position(...)`, database schema, repository contracts,
 epoch-fencing behavior, deterministic history ordering, and public API behavior. The retired,
 runtime-inactive internal replay event is intentionally removed; the unified operator replay
 request path remains unchanged.

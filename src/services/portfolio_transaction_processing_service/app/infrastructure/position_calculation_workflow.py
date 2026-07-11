@@ -1,4 +1,5 @@
-# src/services/calculators/position_calculator/app/core/position_logic.py
+"""Calculate position history inside the unified transaction-processing unit of work."""
+
 import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -16,13 +17,12 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing import EpochFencer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.position_models import PositionState as PositionStateDTO
-from ..core.position_reducer import (
+from ..domain.position_reducer import (
     PositionBalanceState,
     calculate_next_position_state,
-    plan_backdated_replay,
+    plan_backdated_recalculation,
 )
-from ..repositories.position_repository import PositionRepository
+from .position_repository import PositionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class PositionCalculationResult:
     rebuilt_events: tuple[TransactionEvent, ...] = ()
 
 
-class PositionCalculator:
+class PositionCalculationWorkflow:
     """
     Handles position recalculation and atomic current-epoch backdated rebuilds.
     """
@@ -66,18 +66,23 @@ class PositionCalculator:
             portfolio_id, security_id, current_state.epoch
         )
 
-        replay_decision = plan_backdated_replay(
+        recalculation_decision = plan_backdated_recalculation(
             event_epoch=event.epoch,
             transaction_date=transaction_date,
             current_watermark_date=current_state.watermark_date,
             latest_position_history_date=latest_position_history_date,
             latest_completed_snapshot_date=latest_completed_snapshot_date,
         )
-        if replay_decision.should_queue_replay:
-            if replay_decision.replay_watermark_date is None:
-                raise RuntimeError("Backdated replay decision did not include a replay watermark.")
+        if recalculation_decision.should_recalculate:
+            if recalculation_decision.recalculation_watermark_date is None:
+                raise RuntimeError(
+                    "Backdated recalculation decision did not include a rebuild watermark."
+                )
             if not rebuild_existing and await repo.is_transaction_materialized(
-                portfolio_id, security_id, event.transaction_id, current_state.epoch
+                portfolio_id,
+                security_id,
+                event.transaction_id,
+                current_state.epoch,
             ):
                 POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
                     outcome="coalesced",
@@ -99,8 +104,8 @@ class PositionCalculator:
                 repo=repo,
                 position_state_repo=position_state_repo,
                 current_state=current_state,
-                effective_completed_date=replay_decision.effective_completed_date,
-                replay_watermark_date=replay_decision.replay_watermark_date,
+                effective_completed_date=recalculation_decision.effective_completed_date,
+                replay_watermark_date=recalculation_decision.recalculation_watermark_date,
                 latest_position_history_date=latest_position_history_date,
             )
 
@@ -382,7 +387,7 @@ class PositionCalculator:
         if not transactions:
             return []
 
-        current_state = PositionStateDTO(
+        current_state = PositionBalanceState(
             quantity=anchor_position.quantity if anchor_position else Decimal(0),
             cost_basis=anchor_position.cost_basis if anchor_position else Decimal(0),
             cost_basis_local=anchor_position.cost_basis_local
@@ -393,7 +398,9 @@ class PositionCalculator:
         new_history_records = []
 
         for transaction in transactions:
-            new_state = PositionCalculator.calculate_next_position(current_state, transaction)
+            new_state = PositionCalculationWorkflow.calculate_next_position(
+                current_state, transaction
+            )
 
             new_position_record = PositionHistory(
                 portfolio_id=transaction.portfolio_id,
@@ -413,18 +420,6 @@ class PositionCalculator:
 
     @staticmethod
     def calculate_next_position(
-        current_state: PositionStateDTO, transaction: TransactionEvent
-    ) -> PositionStateDTO:
-        next_state = calculate_next_position_state(
-            PositionBalanceState(
-                quantity=current_state.quantity,
-                cost_basis=current_state.cost_basis,
-                cost_basis_local=current_state.cost_basis_local,
-            ),
-            transaction,
-        )
-        return PositionStateDTO(
-            quantity=next_state.quantity,
-            cost_basis=next_state.cost_basis,
-            cost_basis_local=next_state.cost_basis_local,
-        )
+        current_state: PositionBalanceState, transaction: TransactionEvent
+    ) -> PositionBalanceState:
+        return calculate_next_position_state(current_state, transaction)

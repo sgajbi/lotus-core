@@ -20,9 +20,11 @@ from src.services.calculators.cashflow_calculator_service.app.core.enums import 
     CashflowClassification,
     CashflowTiming,
 )
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
-from src.services.calculators.position_calculator.app.core.position_models import (
-    PositionState as PositionStateDTO,
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+    PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationWorkflow,
 )
 
 FIXTURE_PATH = Path("tests/fixtures/cross-product-transaction-golden-scenarios.v1.json")
@@ -70,8 +72,10 @@ def test_equity_buy_sell_golden_position_and_cost_relief() -> None:
         quantity=Decimal("0"), cost_basis=Decimal("0"), cost_basis_local=Decimal("0")
     )
 
-    after_buy = PositionCalculator.calculate_next_position(state, _event(buy, net_cost="1000"))
-    after_sell = PositionCalculator.calculate_next_position(
+    after_buy = PositionCalculationWorkflow.calculate_next_position(
+        state, _event(buy, net_cost="1000")
+    )
+    after_sell = PositionCalculationWorkflow.calculate_next_position(
         after_buy, _event(sell, net_cost="-400")
     )
 
@@ -100,7 +104,7 @@ def test_dividend_golden_cashflow_preserves_position_and_income_amount(monkeypat
         cost_basis_local=Decimal("1000"),
     )
     event = _event(dividend)
-    next_state = PositionCalculator.calculate_next_position(state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(state, event)
     cashflow = CashflowLogic.calculate(
         event,
         CashflowRule(
@@ -126,8 +130,8 @@ def test_transfer_golden_position_and_cost_delta() -> None:
         cost_basis_local=Decimal("100"),
     )
 
-    after_in = PositionCalculator.calculate_next_position(state, _event(transfer_in))
-    after_out = PositionCalculator.calculate_next_position(after_in, _event(transfer_out))
+    after_in = PositionCalculationWorkflow.calculate_next_position(state, _event(transfer_in))
+    after_out = PositionCalculationWorkflow.calculate_next_position(after_in, _event(transfer_out))
 
     assert after_out.quantity == Decimal("99")
     assert after_out.cost_basis == Decimal("105")
@@ -149,11 +153,13 @@ def test_fund_golden_subscription_distribution_reinvestment_and_redemption(
     )
     state = PositionStateDTO()
 
-    after_subscription = PositionCalculator.calculate_next_position(state, _event(subscription))
-    after_reinvestment = PositionCalculator.calculate_next_position(
+    after_subscription = PositionCalculationWorkflow.calculate_next_position(
+        state, _event(subscription)
+    )
+    after_reinvestment = PositionCalculationWorkflow.calculate_next_position(
         after_subscription, _event(reinvestment)
     )
-    after_redemption = PositionCalculator.calculate_next_position(
+    after_redemption = PositionCalculationWorkflow.calculate_next_position(
         after_reinvestment, _event(redemption)
     )
     distribution_cashflow = CashflowLogic.calculate(
@@ -193,7 +199,7 @@ def test_option_and_structured_product_golden_target_gap_and_coupon_cashflow(
 
     exercise_out_definition = get_transaction_type_definition(exercise_out["transaction_type"])
     exercise_in_definition = get_transaction_type_definition(exercise_in["transaction_type"])
-    structured_coupon_state = PositionCalculator.calculate_next_position(
+    structured_coupon_state = PositionCalculationWorkflow.calculate_next_position(
         PositionStateDTO(quantity=Decimal("10"), cost_basis=Decimal("1000")),
         _event(structured_coupon),
     )
@@ -225,9 +231,11 @@ def test_correction_golden_cancel_and_rebook_restates_position() -> None:
     original, cancel, rebook = scenario["input_events"]
     state = PositionStateDTO()
 
-    after_original = PositionCalculator.calculate_next_position(state, _event(original))
-    after_cancel = PositionCalculator.calculate_next_position(after_original, _event(cancel))
-    after_rebook = PositionCalculator.calculate_next_position(after_cancel, _event(rebook))
+    after_original = PositionCalculationWorkflow.calculate_next_position(state, _event(original))
+    after_cancel = PositionCalculationWorkflow.calculate_next_position(
+        after_original, _event(cancel)
+    )
+    after_rebook = PositionCalculationWorkflow.calculate_next_position(after_cancel, _event(rebook))
 
     expected = scenario["expected"]
     assert after_original.quantity == Decimal("100")

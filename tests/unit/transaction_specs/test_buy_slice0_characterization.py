@@ -8,9 +8,11 @@ from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
-from src.services.calculators.position_calculator.app.core.position_models import (
-    PositionState as PositionStateDTO,
+from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+    PositionBalanceState as PositionStateDTO,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationWorkflow,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 
@@ -79,7 +81,7 @@ def test_buy_position_calculation_increases_quantity_and_cost_basis() -> None:
         net_cost_local=Decimal("1000"),
     )
 
-    next_state = PositionCalculator.calculate_next_position(state, event)
+    next_state = PositionCalculationWorkflow.calculate_next_position(state, event)
     assert next_state.quantity == Decimal("10")
     assert next_state.cost_basis == Decimal("1000")
     assert next_state.cost_basis_local == Decimal("1000")

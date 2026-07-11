@@ -34,7 +34,7 @@
 - [Cost Calculator](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Financial Reconciliation](Financial-Reconciliation)
-- [Position Calculator](Position-Calculator)
+- [Position Processing](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
 - [Timeseries Generator Service](Timeseries-Generator-Service)

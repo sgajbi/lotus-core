@@ -21,7 +21,6 @@ from src.services.calculators.cost_calculator_service.app.cost_calculation_proce
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
 )
-from src.services.calculators.position_calculator.app.repositories import position_repository
 from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
     PipelineStageRepository,
 )
@@ -44,6 +43,7 @@ from .cashflow_processing_adapter import (
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
 from .pipeline_stage_processing_adapter import PipelineStageProcessingCompatibilityAdapter
 from .position_processing_adapter import PositionProcessingCompatibilityAdapter
+from .position_repository import PositionRepository
 
 TRANSACTION_PROCESSING_SERVICE_NAME = "portfolio-transaction-processing"
 _AdapterT = TypeVar("_AdapterT")
@@ -164,7 +164,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         )
         self._position = PositionProcessingCompatibilityAdapter(
             db_session=session,
-            repository=position_repository.PositionRepository(session),
+            repository=PositionRepository(session),
             position_state_repository=PositionStateRepository(session),
         )
         self._pipeline = PipelineStageProcessingCompatibilityAdapter(

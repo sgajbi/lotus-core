@@ -12,17 +12,19 @@ def _write(path: Path, text: str) -> None:
 
 def _write_required_boundary(root: Path) -> None:
     _write(
-        root / "src/services/calculators/position_calculator/app/core/position_reducer.py",
+        root
+        / "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
         "class PositionBalanceState: pass\n"
-        "class BackdatedReplayDecision: pass\n"
+        "class BackdatedRecalculationDecision: pass\n"
         "def calculate_next_position_state(): pass\n"
-        "def plan_backdated_replay(): pass\n"
+        "def plan_backdated_recalculation(): pass\n"
         "def cash_position_deltas(): pass\n",
     )
     _write(
-        root / "src/services/calculators/position_calculator/app/core/position_logic.py",
+        root / "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "position_calculation_workflow.py",
         "calculate_next_position_state\n"
-        "plan_backdated_replay\n"
+        "plan_backdated_recalculation\n"
         "PositionBalanceState\n"
         "EpochFencer\n"
         "REPROCESSING_EPOCH_BUMPED_TOTAL\n",
@@ -40,11 +42,12 @@ def test_position_reducer_boundary_guard_rejects_runtime_coupling_in_reducer(
 ) -> None:
     _write_required_boundary(tmp_path)
     _write(
-        tmp_path / "src/services/calculators/position_calculator/app/core/position_reducer.py",
+        tmp_path
+        / "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
         "class PositionBalanceState: pass\n"
-        "class BackdatedReplayDecision: pass\n"
+        "class BackdatedRecalculationDecision: pass\n"
         "def calculate_next_position_state(): pass\n"
-        "def plan_backdated_replay(): pass\n"
+        "def plan_backdated_recalculation(): pass\n"
         "def cash_position_deltas(): pass\n"
         "AsyncSession\n"
         "PositionRepository\n"
@@ -81,9 +84,10 @@ def test_position_reducer_boundary_guard_rejects_legacy_reducer_logic_in_orchest
 ) -> None:
     _write_required_boundary(tmp_path)
     _write(
-        tmp_path / "src/services/calculators/position_calculator/app/core/position_logic.py",
+        tmp_path / "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "position_calculation_workflow.py",
         "calculate_next_position_state\n"
-        "plan_backdated_replay\n"
+        "plan_backdated_recalculation\n"
         "PositionBalanceState\n"
         "EpochFencer\n"
         "OutboxRepository\n"

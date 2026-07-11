@@ -58,7 +58,7 @@ If this service is stale or incorrect:
 
 ## Boundary rules
 
-- `position_calculator` and `valuation` produce upstream state changes
+- unified transaction position processing and valuation produce upstream state changes
 - `timeseries_generator_service` owns position time-series materialization
 - portfolio aggregation execution is delegated to the aggregation runtime
 - downstream performance and risk conclusions do not belong here

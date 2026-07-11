@@ -210,6 +210,6 @@ Check beyond this service when:
 
 - [System Data Flow](System-Data-Flow)
 - [Cashflow Calculator](Cashflow-Calculator)
-- [Position Calculator](Position-Calculator)
+- [Position Processing](Position-Calculator)
 - [Operations Runbook](Operations-Runbook)
 - [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)

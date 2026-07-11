@@ -10,11 +10,11 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.services.calculators.position_calculator.app.core.position_logic import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
     PositionCalculationResult,
-    PositionCalculator,
+    PositionCalculationWorkflow,
 )
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
     PositionRepository,
 )
 from tests.test_support.transaction_processing import (
@@ -83,7 +83,7 @@ async def _calculate_position(
     repository_factory,
 ) -> PositionCalculationResult:
     async with session_factory() as session, session.begin():
-        return await PositionCalculator.calculate(
+        return await PositionCalculationWorkflow.calculate(
             event,
             session,
             repository_factory(session),

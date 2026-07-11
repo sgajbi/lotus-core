@@ -11,8 +11,10 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationWorkflow,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
     PositionRepository,
 )
 
@@ -101,7 +103,7 @@ async def test_inline_reprocessing_rolls_back_epoch_when_position_persistence_fa
     del setup_repro_atomicity_data
     with pytest.raises(RuntimeError, match="position persistence failed"):
         async with async_db_session.begin():
-            await PositionCalculator.calculate(
+            await PositionCalculationWorkflow.calculate(
                 event=_backdated_event(),
                 db_session=async_db_session,
                 repo=_FailingPositionRepository(async_db_session),
@@ -151,7 +153,7 @@ async def test_inline_reprocessing_deduplicates_trigger_and_emits_no_replay_even
     await async_db_session.commit()
 
     async with async_db_session.begin():
-        result = await PositionCalculator.calculate(
+        result = await PositionCalculationWorkflow.calculate(
             event=event,
             db_session=async_db_session,
             repo=PositionRepository(async_db_session),

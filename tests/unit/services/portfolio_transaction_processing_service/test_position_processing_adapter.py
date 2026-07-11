@@ -9,16 +9,16 @@ import pytest
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.position_calculator.app.core.position_logic import (
-    PositionCalculationResult,
-)
-from src.services.calculators.position_calculator.app.repositories.position_repository import (
-    PositionRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PositionProcessingCompatibilityAdapter,
     legacy_transaction_event_mapper,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
+    PositionCalculationResult,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
+    PositionRepository,
 )
 
 
