@@ -26,7 +26,11 @@ def _write_required_modules(root: Path) -> None:
         "class LookupCatalogResult: pass\n",
     )
     _write(
-        root / "src/services/query_service/app/application/core_snapshot.py",
+        root
+        / (
+            "src/services/query_control_plane_service/app/application/core_snapshot/"
+            "identity_command.py"
+        ),
         "class CoreSnapshotIdentityCommand: pass\n"
         "class CoreSnapshotOptionsCommand: pass\n"
         "class CoreSnapshotSimulationCommand: pass\n",
@@ -46,11 +50,13 @@ def test_application_command_result_guard_allows_application_contracts(
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/identity.py",
         "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         "",
     )
 
@@ -71,7 +77,8 @@ def test_application_command_result_guard_rejects_api_dto_contracts(
         "from ..dtos.lookup_dto import LookupItem, LookupResponse\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         'request.model_dump(mode="json")\n',
     )
 
@@ -111,11 +118,13 @@ def test_application_command_result_guard_checks_core_snapshot_identity_module(
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/identity.py",
         "CoreSnapshotIdentityCommand\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         "",
     )
 
@@ -123,7 +132,7 @@ def test_application_command_result_guard_checks_core_snapshot_identity_module(
 
     assert [(finding.path, finding.snippet) for finding in findings] == [
         (
-            "src/services/query_service/app/services/core_snapshot_identity.py",
+            "src/services/query_control_plane_service/app/application/core_snapshot/identity.py",
             "canonical_payload()",
         )
     ]
@@ -142,18 +151,21 @@ def test_application_command_result_guard_rejects_core_snapshot_service_shortcut
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/identity.py",
         "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         'request.model_dump(mode="json")\n',
     )
 
     findings = find_application_command_result_findings(tmp_path)
 
     assert any(
-        finding.path == "src/services/query_service/app/services/core_snapshot_service.py"
+        finding.path
+        == "src/services/query_control_plane_service/app/application/core_snapshot/service.py"
         and finding.snippet == 'request.model_dump(mode="json")'
         for finding in findings
     )
@@ -176,7 +188,11 @@ def test_application_command_result_guard_rejects_missing_symbol(
         "class LookupCatalogResult: pass\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/application/core_snapshot.py",
+        tmp_path
+        / (
+            "src/services/query_control_plane_service/app/application/core_snapshot/"
+            "identity_command.py"
+        ),
         "class CoreSnapshotIdentityCommand: pass\n"
         "class CoreSnapshotOptionsCommand: pass\n"
         "class CoreSnapshotSimulationCommand: pass\n",
@@ -190,11 +206,13 @@ def test_application_command_result_guard_rejects_missing_symbol(
         "PortfolioLookupQuery\nInstrumentLookupQuery\nCurrencyLookupQuery\nLookupCatalogResult\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_identity.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/identity.py",
         "CoreSnapshotIdentityCommand\ncanonical_payload()\n",
     )
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         "",
     )
 

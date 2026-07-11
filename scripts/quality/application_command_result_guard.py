@@ -16,7 +16,9 @@ REQUIRED_MODULE_SYMBOLS = {
         "class CurrencyLookupQuery",
         "class LookupCatalogResult",
     ),
-    Path("src/services/query_service/app/application/core_snapshot.py"): (
+    Path(
+        "src/services/query_control_plane_service/app/application/core_snapshot/identity_command.py"
+    ): (
         "class CoreSnapshotIdentityCommand",
         "class CoreSnapshotOptionsCommand",
         "class CoreSnapshotSimulationCommand",
@@ -34,7 +36,7 @@ FORBIDDEN_SERVICE_SNIPPETS = {
         "LookupResponse": "lookup use case must return application results",
         "LookupItem": "lookup use case must use application result items",
     },
-    Path("src/services/query_service/app/services/core_snapshot_service.py"): {
+    Path("src/services/query_control_plane_service/app/application/core_snapshot/service.py"): {
         'request.model_dump(mode="json")': (
             "core snapshot fingerprinting must use canonical application command payloads"
         ),
@@ -53,7 +55,7 @@ REQUIRED_SERVICE_SNIPPETS = {
         "CurrencyLookupQuery",
         "LookupCatalogResult",
     ),
-    Path("src/services/query_service/app/services/core_snapshot_identity.py"): (
+    Path("src/services/query_control_plane_service/app/application/core_snapshot/identity.py"): (
         "CoreSnapshotIdentityCommand",
         "canonical_payload()",
     ),

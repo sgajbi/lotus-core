@@ -5,15 +5,8 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from portfolio_common.source_data_products import source_data_product_openapi_extra
 
-from src.services.query_service.app.dtos.core_snapshot_dto import (
-    CoreSnapshotRequest,
-    CoreSnapshotResponse,
-    CoreSnapshotSection,
-)
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
-    InstrumentEnrichmentBulkRequest,
-    InstrumentEnrichmentBulkResponse,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
     BenchmarkAssignmentRequest,
@@ -88,18 +81,27 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     TransactionCostCurveRequest,
     TransactionCostCurveResponse,
 )
-from src.services.query_service.app.services.core_snapshot_governance import (
+from src.services.query_service.app.services.integration_service import IntegrationService
+
+from ..application.core_snapshot.governance import (
     SnapshotGovernanceContext,
 )
-from src.services.query_service.app.services.core_snapshot_service import (
+from ..application.core_snapshot.service import (
     CoreSnapshotBadRequestError,
     CoreSnapshotConflictError,
     CoreSnapshotNotFoundError,
     CoreSnapshotService,
     CoreSnapshotUnavailableSectionError,
 )
-from src.services.query_service.app.services.integration_service import IntegrationService
-
+from ..contracts.core_snapshot import (
+    CoreSnapshotRequest,
+    CoreSnapshotResponse,
+    CoreSnapshotSection,
+)
+from ..contracts.instrument_enrichment import (
+    InstrumentEnrichmentBulkRequest,
+    InstrumentEnrichmentBulkResponse,
+)
 from ..dependencies import get_core_snapshot_service, get_integration_service
 from .response_helpers import (
     problem_example,
@@ -898,6 +900,7 @@ async def _core_snapshot_response_or_http_error(
             error_code="QCP_CORE_SNAPSHOT_UNAVAILABLE_SECTION",
             metadata={"source_product": "PortfolioStateSnapshot", "reason": exc.__class__.__name__},
         )
+    raise AssertionError("problem response helper returned unexpectedly")
 
 
 @router.post(

@@ -27,8 +27,8 @@ def _write_required_artifacts(root: Path) -> None:
         "finding = self._id_generator.new_hex()\n",
     )
     _write(
-        root / "src/services/query_service/app/services/core_snapshot_service.py",
-        "from portfolio_common.runtime_providers import Clock, SystemClock\n"
+        root / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
+        "from portfolio_common.runtime_providers import Clock\n"
         "generated_at = self._clock.utc_now()\n",
     )
     _write(
@@ -48,7 +48,8 @@ def test_runtime_provider_port_guard_accepts_required_artifacts(tmp_path: Path) 
 def test_runtime_provider_port_guard_rejects_direct_datetime_call(tmp_path: Path) -> None:
     _write_required_artifacts(tmp_path)
     _write(
-        tmp_path / "src/services/query_service/app/services/core_snapshot_service.py",
+        tmp_path
+        / "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         "from portfolio_common.runtime_providers import Clock, SystemClock\n"
         "generated_at = self._clock.utc_now()\n"
         "fallback = datetime.now(UTC)\n",

@@ -8,6 +8,12 @@ from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
 )
 
+from src.services.query_control_plane_service.app.application.core_snapshot.service import (
+    CoreSnapshotBadRequestError,
+    CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError,
+    CoreSnapshotUnavailableSectionError,
+)
 from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
     get_integration_service,
@@ -16,12 +22,6 @@ from src.services.query_control_plane_service.app.main import app
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
     PolicyProvenanceMetadata,
-)
-from src.services.query_service.app.services.core_snapshot_service import (
-    CoreSnapshotBadRequestError,
-    CoreSnapshotConflictError,
-    CoreSnapshotNotFoundError,
-    CoreSnapshotUnavailableSectionError,
 )
 
 pytestmark = pytest.mark.asyncio

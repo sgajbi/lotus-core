@@ -11,8 +11,8 @@ REPRESENTATIVE_WORKFLOWS: dict[Path, tuple[str, ...]] = {
         "_monotonic_timer.seconds()",
         "_id_generator.new_hex()",
     ),
-    Path("src/services/query_service/app/services/core_snapshot_service.py"): (
-        "from portfolio_common.runtime_providers import Clock, SystemClock",
+    Path("src/services/query_control_plane_service/app/application/core_snapshot/service.py"): (
+        "from portfolio_common.runtime_providers import Clock",
         "_clock.utc_now()",
     ),
     Path("src/services/query_control_plane_service/app/application/simulation.py"): (

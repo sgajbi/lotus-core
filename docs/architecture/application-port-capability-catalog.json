@@ -167,6 +167,31 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "query-control-plane.core-snapshot-source-reader",
+      "capability_family": "repository-reader",
+      "owner_service": "query_control_plane_service",
+      "port_module": "src/services/query_control_plane_service/app/ports/core_snapshot.py",
+      "port_symbols": [
+        "CoreSnapshotSourceReader"
+      ],
+      "adapter_modules": [
+        "src/services/query_control_plane_service/app/infrastructure/core_snapshot_sources.py"
+      ],
+      "consumer_modules": [
+        "src/services/query_control_plane_service/app/application/core_snapshot/service.py"
+      ],
+      "guard_scripts": [
+        "scripts/architecture_boundary_guard.py",
+        "scripts/repository_output_shape_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "query-control-plane.simulation-ports",
       "capability_family": "repository-reader-writer",
       "owner_service": "query_control_plane_service",
@@ -240,7 +265,7 @@
       ],
       "consumer_modules": [
         "src/services/financial_reconciliation_service/app/services/reconciliation_service.py",
-        "src/services/query_service/app/services/core_snapshot_service.py",
+        "src/services/query_control_plane_service/app/application/core_snapshot/service.py",
         "src/services/query_control_plane_service/app/application/simulation.py"
       ],
       "guard_scripts": [

@@ -31,7 +31,8 @@ The first representative command/result migrations are:
    application results while `src/services/query_service/app/routers/lookups.py` maps results to
    the public lookup response DTO.
 3. Core snapshot identity workflow:
-   `src/services/query_service/app/application/core_snapshot.py` defines the canonical snapshot
+   `src/services/query_control_plane_service/app/application/core_snapshot/identity_command.py`
+   defines the canonical snapshot
    identity command used for request fingerprinting. `CoreSnapshotService` must build snapshot
    request fingerprints from that command payload instead of API DTO serialization.
 4. Portfolio transaction processing workflow:

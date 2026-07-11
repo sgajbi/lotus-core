@@ -3,6 +3,21 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.services.query_control_plane_service.app.application.core_snapshot.service import (
+    CoreSnapshotBadRequestError,
+    CoreSnapshotConflictError,
+    CoreSnapshotNotFoundError,
+    CoreSnapshotService,
+    CoreSnapshotUnavailableSectionError,
+)
+from src.services.query_control_plane_service.app.contracts.core_snapshot import (
+    CoreSnapshotMode,
+    CoreSnapshotRequest,
+    CoreSnapshotSection,
+)
+from src.services.query_control_plane_service.app.contracts.instrument_enrichment import (
+    InstrumentEnrichmentBulkRequest,
+)
 from src.services.query_control_plane_service.app.dependencies import (
     get_core_snapshot_service,
     get_integration_service,
@@ -52,14 +67,8 @@ from src.services.query_control_plane_service.app.routers.integration import (
 from src.services.query_control_plane_service.app.routers.response_helpers import (
     QueryControlPlaneProblem,
 )
-from src.services.query_service.app.dtos.core_snapshot_dto import (
-    CoreSnapshotMode,
-    CoreSnapshotRequest,
-    CoreSnapshotSection,
-)
 from src.services.query_service.app.dtos.integration_dto import (
     EffectiveIntegrationPolicyResponse,
-    InstrumentEnrichmentBulkRequest,
     PolicyProvenanceMetadata,
 )
 from src.services.query_service.app.dtos.reference_integration_dto import (
@@ -99,13 +108,6 @@ from src.services.query_service.app.dtos.reference_integration_dto import (
     RiskFreeSeriesRequest,
     SustainabilityPreferenceProfileRequest,
     TransactionCostCurveRequest,
-)
-from src.services.query_service.app.services.core_snapshot_service import (
-    CoreSnapshotBadRequestError,
-    CoreSnapshotConflictError,
-    CoreSnapshotNotFoundError,
-    CoreSnapshotService,
-    CoreSnapshotUnavailableSectionError,
 )
 from src.services.query_service.app.services.integration_service import IntegrationService
 

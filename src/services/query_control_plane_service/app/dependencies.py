@@ -3,10 +3,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.runtime_providers import SystemClock, UuidIdGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.query_service.app.services.core_snapshot_service import (
-    CoreSnapshotDependencies,
-    CoreSnapshotService,
-)
 from src.services.query_service.app.services.integration_service import (
     IntegrationService,
     IntegrationServiceDependencies,
@@ -20,10 +16,15 @@ from .application.analytics.analytics_timeseries_service import (
     AnalyticsRuntimePolicy,
     AnalyticsTimeseriesService,
 )
+from .application.core_snapshot.service import (
+    CoreSnapshotDependencies,
+    CoreSnapshotService,
+)
 from .application.simulation import SimulationService
 from .infrastructure.analytics_export_repository import AnalyticsExportRepository
 from .infrastructure.analytics_timeseries_repository import AnalyticsTimeseriesRepository
 from .infrastructure.analytics_unit_of_work import SqlAlchemyAnalyticsUnitOfWork
+from .infrastructure.core_snapshot_sources import SqlAlchemyCoreSnapshotSourceReader
 from .infrastructure.simulation_store import (
     SqlAlchemySimulationBaselineReader,
     SqlAlchemySimulationStore,
@@ -54,7 +55,13 @@ def get_analytics_timeseries_service(
 def get_core_snapshot_service(
     db: AsyncSession = Depends(get_async_db_session),
 ) -> CoreSnapshotService:
-    return CoreSnapshotService(dependencies=CoreSnapshotDependencies.from_session(db))
+    return CoreSnapshotService(
+        dependencies=CoreSnapshotDependencies(
+            source_reader=SqlAlchemyCoreSnapshotSourceReader(db),
+            simulation_store=SqlAlchemySimulationStore(db),
+            clock=SystemClock(),
+        )
+    )
 
 
 def get_integration_service(
