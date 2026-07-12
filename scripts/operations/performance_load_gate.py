@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -28,55 +27,32 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-try:
-    from scripts.quality.ci_service_sets import PERFORMANCE_GATE_SERVICES
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import PERFORMANCE_GATE_SERVICES
-
-try:
-    from scripts.operations.transaction_processing_load_support import (
-        build_transaction_batch as _build_transaction_batch,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        ingest_transactions as _ingest_transactions,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        processed_event_count as _processed_event_count,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        seed_load_context as _seed_load_context,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        transaction_processing_operation_count as _transaction_processing_operation_count,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        wait_for_transaction_processing as _wait_for_transaction_processing,
-    )
-    from scripts.operations.transaction_processing_load_support import (
-        wait_for_transaction_processing_operation_count as _wait_for_operation_count,
-    )
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from transaction_processing_load_support import (
-        build_transaction_batch as _build_transaction_batch,
-    )
-    from transaction_processing_load_support import (
-        ingest_transactions as _ingest_transactions,
-    )
-    from transaction_processing_load_support import (
-        processed_event_count as _processed_event_count,
-    )
-    from transaction_processing_load_support import (
-        seed_load_context as _seed_load_context,
-    )
-    from transaction_processing_load_support import (
-        transaction_processing_operation_count as _transaction_processing_operation_count,
-    )
-    from transaction_processing_load_support import (
-        wait_for_transaction_processing as _wait_for_transaction_processing,
-    )
-    from transaction_processing_load_support import (
-        wait_for_transaction_processing_operation_count as _wait_for_operation_count,
-    )
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    build_transaction_batch as _build_transaction_batch,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    ingest_transactions as _ingest_transactions,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    processed_event_count as _processed_event_count,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    seed_load_context as _seed_load_context,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    transaction_processing_operation_count as _transaction_processing_operation_count,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    wait_for_transaction_processing as _wait_for_transaction_processing,
+)
+from scripts.operations.transaction_processing_load_support import (  # noqa: E402
+    wait_for_transaction_processing_operation_count as _wait_for_operation_count,
+)
+from scripts.quality.ci_service_sets import PERFORMANCE_GATE_SERVICES  # noqa: E402
+from tests.test_support.managed_compose_run import (  # noqa: E402
+    ManagedComposeRun,
+    prepare_managed_compose_run,
+)
 
 
 @dataclass(slots=True)
@@ -114,30 +90,12 @@ class LoadProfile(TypedDict):
     thresholds: dict[str, Any]
 
 
-def _run(cmd: list[str], cwd: Path) -> None:
-    completed = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"Command failed ({completed.returncode}): {' '.join(cmd)}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-
-
 def _non_negative_delta(current: float, baseline: float) -> float:
     return max(current - baseline, 0.0)
 
 
 def _non_negative_delta_int(current: int, baseline: int) -> int:
     return max(current - baseline, 0)
-
-
-def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
-    cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
-    if build:
-        cmd.append("--build")
-    cmd.extend(PERFORMANCE_GATE_SERVICES)
-    _run(cmd, cwd=repo_root)
 
 
 def _wait_ready(
@@ -405,35 +363,31 @@ def _write_report(
     return json_path, md_path
 
 
-def main() -> int:
+def _requested_endpoint(cli_value: str | None, environment_key: str) -> str | None:
+    return cli_value or os.getenv(environment_key)
+
+
+def main(
+    _args: argparse.Namespace | None = None,
+    _managed_run: ManagedComposeRun | None = None,
+) -> int:
     parser = argparse.ArgumentParser(description="Run deterministic performance load gate.")
     parser.add_argument("--repo-root", default=".", help="Path to lotus-core repository root.")
     parser.add_argument("--compose-file", default="docker-compose.yml")
-    parser.add_argument(
-        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
-    )
-    parser.add_argument(
-        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
-    )
-    parser.add_argument(
-        "--event-replay-base-url",
-        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
-    )
-    parser.add_argument(
-        "--transaction-processing-base-url",
-        default=os.getenv("E2E_TRANSACTION_PROCESSING_URL", "http://localhost:8090"),
-    )
-    parser.add_argument(
-        "--host-database-url",
-        default=os.getenv(
-            "HOST_DATABASE_URL",
-            "postgresql://user:password@localhost:55432/portfolio_db",
-        ),
-    )
+    parser.add_argument("--ingestion-base-url")
+    parser.add_argument("--query-base-url")
+    parser.add_argument("--event-replay-base-url")
+    parser.add_argument("--transaction-processing-base-url")
+    parser.add_argument("--host-database-url")
     parser.add_argument("--ops-token", default="lotus-core-ops-local")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--skip-compose", action="store_true")
+    parser.add_argument("--keep-compose", action="store_true")
+    parser.add_argument(
+        "--compose-log-path",
+        default="output/task-runs/diagnostics/performance-load-gate-compose.log",
+    )
     parser.add_argument("--ready-timeout-seconds", type=int, default=240)
     parser.add_argument("--drain-timeout-seconds", type=int, default=180)
     parser.add_argument(
@@ -443,11 +397,79 @@ def main() -> int:
         help="fast: PR-friendly quick gate, full: institutional load profile gate.",
     )
     parser.add_argument("--enforce", action="store_true")
-    args = parser.parse_args()
+    args = _args or parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
-    if not args.skip_compose:
-        _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
+    if not args.skip_compose and _managed_run is None:
+        requested_endpoints = {
+            "E2E_INGESTION_URL": _requested_endpoint(
+                args.ingestion_base_url,
+                "E2E_INGESTION_URL",
+            ),
+            "E2E_QUERY_URL": _requested_endpoint(args.query_base_url, "E2E_QUERY_URL"),
+            "E2E_EVENT_REPLAY_URL": _requested_endpoint(
+                args.event_replay_base_url,
+                "E2E_EVENT_REPLAY_URL",
+            ),
+            "E2E_TRANSACTION_PROCESSING_URL": _requested_endpoint(
+                args.transaction_processing_base_url,
+                "E2E_TRANSACTION_PROCESSING_URL",
+            ),
+            "HOST_DATABASE_URL": _requested_endpoint(
+                args.host_database_url,
+                "HOST_DATABASE_URL",
+            ),
+        }
+        managed_run = prepare_managed_compose_run(
+            scope="performance-load-gate",
+            compose_file=repo_root / args.compose_file,
+            services=tuple(PERFORMANCE_GATE_SERVICES),
+            build=args.build,
+            log_path=repo_root / args.compose_log_path,
+            endpoint_urls=requested_endpoints,
+            keep_stack=args.keep_compose,
+        )
+        endpoints = managed_run.runtime.endpoints
+        args.ingestion_base_url = (
+            requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
+        )
+        args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
+        args.event_replay_base_url = (
+            requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
+        )
+        args.transaction_processing_base_url = (
+            requested_endpoints["E2E_TRANSACTION_PROCESSING_URL"]
+            or endpoints.e2e_transaction_processing_url
+        )
+        args.host_database_url = (
+            requested_endpoints["HOST_DATABASE_URL"] or endpoints.host_database_url
+        )
+        with managed_run:
+            return main(args, managed_run)
+
+    args.ingestion_base_url = (
+        args.ingestion_base_url
+        or _requested_endpoint(None, "E2E_INGESTION_URL")
+        or "http://localhost:8200"
+    )
+    args.query_base_url = (
+        args.query_base_url or _requested_endpoint(None, "E2E_QUERY_URL") or "http://localhost:8201"
+    )
+    args.event_replay_base_url = (
+        args.event_replay_base_url
+        or _requested_endpoint(None, "E2E_EVENT_REPLAY_URL")
+        or "http://localhost:8209"
+    )
+    args.transaction_processing_base_url = (
+        args.transaction_processing_base_url
+        or _requested_endpoint(None, "E2E_TRANSACTION_PROCESSING_URL")
+        or "http://localhost:8090"
+    )
+    args.host_database_url = (
+        args.host_database_url
+        or _requested_endpoint(None, "HOST_DATABASE_URL")
+        or "postgresql://user:password@localhost:55432/portfolio_db"
+    )
     _wait_ready(
         ingestion_base_url=args.ingestion_base_url,
         event_replay_base_url=args.event_replay_base_url,
