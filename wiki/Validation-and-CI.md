@@ -11,6 +11,9 @@ smallest evidence command for a change, then cite generated artifacts from the r
 | Local feature confidence | `make ci-local` | Fastest repo-native feature-lane parity check. |
 | PR merge readiness | `make ci` | Pull-request merge-gate parity before opening or updating a PR. |
 | Release/main posture | `make ci-main` | Main-push releasability parity. |
+| Dependency consistency | `make verify-dependencies` | Reuses only an exact, integrity-checked environment. |
+| Clean dependency proof | `make verify-dependencies-clean` | Always bootstraps without a cache read; required on main. |
+| Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
 | Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
 
 ## Lane model
@@ -20,6 +23,12 @@ smallest evidence command for a change, then cite generated artifacts from the r
 1. `Remote Feature Lane`
 2. `Pull Request Merge Gate`
 3. `Main Releasability Gate`
+
+Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
+platform, installer, dependency/packaging manifests, locks, and the cache implementation. Main and
+scheduled releasability always run `make verify-dependencies-clean`. Machine-readable clean and
+audit reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the
+separate mainline clean-install report.
 
 ## Repo-native lane mapping
 
@@ -33,6 +42,10 @@ smallest evidence command for a change, then cite generated artifacts from the r
   scheduled/manual institutional completion and sign-off parity
 - `make test-transaction-processing-contract`
   DB-direct combined transaction-processing contract; blocking in PR and main lanes
+- `make verify-dependencies`
+  exact-key dependency-health cache with marker and `pip check` integrity proof
+- `make verify-dependencies-clean`
+  operator/mainline clean-install proof and explicit cache bypass
 
 ## Important gates
 
@@ -116,6 +129,8 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make test-transaction-processing-contract`
   protects atomic combined cost, cashflow, position, replay, rollback, fee, FX, multi-lot,
   backdated correction, epoch rebuild, and one-event-per-input behavior
+- required external Docker images use bounded retry only for classified registry/network failures;
+  permanent tag/auth errors fail immediately and raw registry output is never returned
 - `make profile-cost-processing-modes`
   characterizes ordered lot-opening append, state-dependent disposal append, and deterministic
   backdated rebuild without claiming database or Kafka throughput

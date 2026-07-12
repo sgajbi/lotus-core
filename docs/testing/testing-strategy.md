@@ -113,6 +113,41 @@ complete.
    1. Unit coverage for logic branches.
    2. At least one boundary/integration assertion for external behavior.
 
+## Dependency Health Evidence
+
+Dependency consistency and vulnerability audit use one content-addressed environment contract:
+
+| Command | Cache Posture | Evidence |
+|---|---|---|
+| `make verify-dependencies` | Reuse only after marker identity, interpreter path, and `pip check` pass. | `output/dependency-health/report.json` |
+| `make verify-dependencies-clean` | Bypass cache reads and perform a clean installation. | `output/dependency-health/clean-install-report.json` |
+| `make security-audit` | Recheck integrity, then run `pip-audit` against the verified environment. | `output/dependency-health/report.json` |
+
+The key covers the Python implementation/version, platform, invoking pip version, root and service
+`pyproject.toml` files, dependency/test/tooling lock inputs, and both cache implementation modules.
+Invalid JSON, a missing interpreter, identity drift, or failed `pip check` invalidates the entry.
+Builds occur in disposable staging directories and receive a success marker only after installation
+and `pip check` complete. Feature and PR lanes may restore this ignored cache; every main push and
+scheduled Main Releasability run executes the clean target. Both lanes upload the JSON evidence.
+
+Local Windows evidence on 2026-07-12 measured `221.979s` for clean bootstrap and `1.781s` plus
+`1.780s` for two unchanged verified hits, a 99.2% wall-time reduction. This is validation-tooling
+evidence, not application runtime performance evidence.
+
+## Required Docker Image Acquisition
+
+Compose-backed suites inspect immutable external images before startup. Missing images use three
+bounded pull attempts, a 120-second timeout per attempt, exponential backoff with bounded jitter,
+and source-safe outcome fields. Registry timeouts, transient `5xx` failures, connection failures,
+and rate limits are retryable; unknown, authentication, authorization, and missing-manifest errors
+fail immediately. Final errors expose image, failure class, attempt count, and elapsed time without
+raw registry/authentication output.
+
+GitHub-hosted matrix jobs do not share a Docker daemon, so a workflow-level pre-pull cannot be
+truthfully reused across cells. Existing BuildKit prebuild caches remain responsible for repo-built
+images; the shared test helper owns bounded external-image acquisition. Revisit cross-job image
+distribution only if a governed registry mirror or runner-level immutable image cache is introduced.
+
 ## Quality Gates
 
 1. No new endpoint without explicit success + error contract tests.

@@ -3,6 +3,19 @@
 Use this page when you are setting up `lotus-core` for development, validation, or a demo-support
 slice. For business capability orientation, start with [Supported Features](Supported-Features).
 
+## Current Scope
+
+This page covers a developer or support engineer's first local setup and repository-native evidence
+path. It does not certify a production deployment, client demo, external dependency, or released
+image; use [Validation and CI](Validation-and-CI) and the linked runbooks for those decisions.
+
+| Need | Start Here | Evidence Boundary |
+|---|---|---|
+| Install and local confidence | [First Local Setup](#first-local-setup) | Local dependency and test evidence only. |
+| Supported API/runtime proof | [App-Level Evidence](#app-level-evidence) | Deterministic supported-surface artifact, not production certification. |
+| Isolated service diagnosis | [App-Local Runtime](#app-local-runtime) | Developer compose posture, not canonical front-office proof. |
+| Product/demo runtime | [Runtime Choice](#runtime-choice) | Routes canonical proof to the governed Workbench flow. |
+
 ## Prerequisites
 
 - Python 3.11 or newer,
@@ -70,6 +83,8 @@ make test-docker-smoke
 | Symptom | First check |
 | --- | --- |
 | Dependency install or audit fails | `make verify-dependencies`, then `make security-audit` |
+| Dependency cache appears stale or corrupt | Run `make verify-dependencies-clean`; inspect `output/dependency-health/clean-install-report.json` |
+| External Docker image pull is transiently unavailable | Inspect the bounded `docker_image_pull_failed` attempt/failure-class diagnostics; permanent failures require correcting the image/tag/auth source |
 | Routes or OpenAPI drift | `make route-contract-family-guard` and `make openapi-gate` |
 | Source-data product drift | `make source-data-product-contract-guard` |
 | Runtime stack starts but APIs fail | [Operations Runbook](Operations-Runbook) startup checks |
