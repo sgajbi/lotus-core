@@ -3,8 +3,8 @@
 ## Objective
 
 Complete the direct-driver isolation sub-slice of GitHub issue #730 by moving latency,
-performance-load, Docker-smoke, and institutional-completion validation behind one Compose
-lifecycle owner.
+performance-load, Docker-smoke, institutional-completion, and failure-recovery validation behind
+one Compose lifecycle owner.
 
 ## Finding
 
@@ -35,6 +35,9 @@ default-project log command.
   supported 240-day history window, and uses seed-only mode before its own query-readiness check.
 - Captured project identity and compose-file identity in every diagnostic log before teardown.
 - Replaced workflow default-project log commands with driver/fixture-owned diagnostic artifacts.
+- Extended the owner to failure recovery: its integration-profile runtime, migration wait,
+  interruption lookup, connection endpoints, diagnostic capture, and teardown now use the same
+  project. External `--skip-compose` runs retain explicit or environment-provided project identity.
 - Added an AST regression guard preventing the four drivers from recreating Compose `up`, `down`,
   or `logs` commands.
 - Removed duplicated driver startup helpers and the now-dead performance command runner.
@@ -57,6 +60,8 @@ default-project log command.
   `5,746,292` byte project-identified diagnostic log and left zero project containers behind.
 - Scoped Ruff lint/format, configured MyPy, workflow parsing/governance, documentation evidence,
   wiki validation, and `git diff --check` passed.
+- The failure-recovery extension passed `56` focused lifecycle/workflow tests, configured MyPy,
+  and the `227`-test operations contract suite before live runtime validation.
 
 ## Compatibility
 
@@ -74,5 +79,5 @@ methodology do not change because their contracts are untouched.
 ## Remaining Work
 
 Issue #730 remains open for scenario shards, change-impact selection, exact-SHA selective dispatch,
-failure-recovery and app-certification diagnostic completeness, field-level polling evidence, and
-timing/queue/flake/rerun trend reporting.
+app-certification diagnostic completeness, field-level polling evidence, and timing/queue/flake/
+rerun trend reporting.

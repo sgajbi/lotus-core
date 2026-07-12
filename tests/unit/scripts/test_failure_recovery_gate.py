@@ -8,6 +8,7 @@ from scripts.operations.failure_recovery_gate import (
     _compose_command,
     _consumer_lag,
     _evaluate_recovery_result,
+    _prepare_failure_recovery_managed_run,
     _resolve_interruption_container,
     _resolve_runtime_connections,
     _set_container_pause,
@@ -23,6 +24,98 @@ def _complete_counts(records: int) -> TransactionProcessingCounts:
         position_count=records,
         processing_claim_count=records,
     )
+
+
+def test_prepare_failure_recovery_run_owns_integration_runtime_and_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+    sentinel = object()
+
+    def fake_prepare(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate._load_test_runtime_helpers",
+        lambda: (object(), fake_prepare),
+    )
+    args = SimpleNamespace(
+        compose_file="docker-compose.yml",
+        compose_project_name="operator-proof-project",
+        ingestion_base_url="http://127.0.0.1:18100",
+        query_base_url="http://127.0.0.1:18201",
+        event_replay_base_url="http://127.0.0.1:18102",
+        host_database_url="postgresql://localhost:15432/portfolio_db",
+        build=True,
+        output_dir="output/task-runs",
+        keep_stack_up=True,
+        skip_compose=False,
+    )
+
+    managed = _prepare_failure_recovery_managed_run(
+        args=args,
+        repo_root=tmp_path,
+    )
+
+    assert managed is sentinel
+    assert captured == {
+        "profile": "integration",
+        "scope": "failure-recovery-gate",
+        "compose_project_name": "operator-proof-project",
+        "compose_file": tmp_path / "docker-compose.yml",
+        "services": (
+            "kafka-topic-creator",
+            "migration-runner",
+            "ingestion_service",
+            "query_service",
+            "event_replay_service",
+            "persistence_service",
+            "portfolio_transaction_processing_service",
+            "pipeline_orchestrator_service",
+        ),
+        "build": True,
+        "log_path": (tmp_path / "output/task-runs/diagnostics/failure-recovery-gate-compose.log"),
+        "endpoint_urls": {
+            "E2E_INGESTION_URL": "http://127.0.0.1:18100",
+            "E2E_QUERY_URL": "http://127.0.0.1:18201",
+            "E2E_EVENT_REPLAY_URL": "http://127.0.0.1:18102",
+            "HOST_DATABASE_URL": "postgresql://localhost:15432/portfolio_db",
+        },
+        "keep_stack": True,
+    }
+
+
+def test_prepare_failure_recovery_external_run_preserves_environment_project(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "existing-operator-stack")
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate._load_test_runtime_helpers",
+        lambda: (
+            object(),
+            lambda **kwargs: captured.update(kwargs) or object(),
+        ),
+    )
+    args = SimpleNamespace(
+        compose_file="docker-compose.yml",
+        compose_project_name=None,
+        ingestion_base_url=None,
+        query_base_url=None,
+        event_replay_base_url=None,
+        host_database_url=None,
+        build=False,
+        output_dir="output/task-runs",
+        keep_stack_up=False,
+        skip_compose=True,
+    )
+
+    _prepare_failure_recovery_managed_run(args=args, repo_root=tmp_path)
+
+    assert captured["compose_project_name"] == "existing-operator-stack"
 
 
 def test_runtime_connections_default_to_generated_isolated_endpoints() -> None:

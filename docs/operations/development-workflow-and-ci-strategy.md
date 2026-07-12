@@ -88,7 +88,8 @@ in `test_manifest.py`, mutate shared process environment for same-process concur
 retry a bind conflict with unchanged dynamic assignments. Preserve fixed port environment values
 only for explicit operator-controlled runtimes.
 
-Latency, performance-load, institutional-completion, and endpoint-smoke use `ManagedComposeRun`.
+Latency, performance-load, institutional-completion, failure-recovery, and endpoint-smoke use
+`ManagedComposeRun`.
 The managed owner removes inherited parent-runtime ports, preserves explicit local endpoint URL
 overrides, prepares a unique project, starts through `compose_up(...)`, captures project-identified
 logs, and tears down before returning. Use `--skip-compose` for an already-running external target
@@ -97,6 +98,11 @@ and the driver-specific keep-stack option only for explicit local diagnosis.
 CI uploads `output/task-runs/diagnostics/*.log` produced by the lifecycle owner. Do not add a
 post-run `docker compose logs` step: after managed teardown it addresses the wrong implicit project
 and can overwrite useful evidence with an empty artifact.
+
+Failure recovery uses the `integration` runtime profile. Its migration-runner polling,
+interruption-service lookup, database/Kafka/HTTP endpoints, and diagnostic artifact must remain
+bound to that runtime's exact project. `--skip-compose` preserves an explicitly named external
+project and `--keep-stack-up` is the only supported local post-run inspection path.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.

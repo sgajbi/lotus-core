@@ -13,11 +13,12 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import (
@@ -25,6 +26,9 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from sqlalchemy import Engine, create_engine
+
+if TYPE_CHECKING:
+    from tests.test_support.managed_compose_run import ManagedComposeRun
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -405,10 +409,42 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
 
 
 def _load_test_runtime_helpers():
-    from tests.test_support.docker_stack import compose_down, compose_up, wait_for_migration_runner
-    from tests.test_support.runtime_env import prepare_test_runtime
+    from tests.test_support.docker_stack import wait_for_migration_runner
+    from tests.test_support.managed_compose_run import prepare_managed_compose_run
 
-    return compose_down, compose_up, wait_for_migration_runner, prepare_test_runtime
+    return wait_for_migration_runner, prepare_managed_compose_run
+
+
+def _prepare_failure_recovery_managed_run(
+    *, args: argparse.Namespace, repo_root: Path
+) -> ManagedComposeRun:
+    """Prepare the isolated Compose owner for one failure-recovery proof run."""
+
+    _, prepare_managed_compose_run = _load_test_runtime_helpers()
+    compose_file = Path(args.compose_file)
+    if not compose_file.is_absolute():
+        compose_file = repo_root / compose_file
+    return prepare_managed_compose_run(
+        profile="integration",
+        scope="failure-recovery-gate",
+        compose_project_name=(
+            args.compose_project_name
+            or (os.getenv("COMPOSE_PROJECT_NAME") if args.skip_compose else None)
+        ),
+        compose_file=compose_file,
+        services=_FAILURE_RECOVERY_GATE_SERVICES,
+        build=args.build,
+        log_path=(
+            repo_root / args.output_dir / "diagnostics" / "failure-recovery-gate-compose.log"
+        ),
+        endpoint_urls={
+            "E2E_INGESTION_URL": args.ingestion_base_url,
+            "E2E_QUERY_URL": args.query_base_url,
+            "E2E_EVENT_REPLAY_URL": args.event_replay_base_url,
+            "HOST_DATABASE_URL": args.host_database_url,
+        },
+        keep_stack=args.keep_stack_up,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -467,33 +503,18 @@ def main() -> int:
     transaction_seed = f"FAIL-{run_id}"
     transaction_id_prefix = f"TX_{transaction_seed}"
 
-    compose_down, compose_up, wait_for_migration_runner, prepare_test_runtime = (
-        _load_test_runtime_helpers()
-    )
-    source_env = os.environ.copy()
-    if args.compose_project_name:
-        source_env["COMPOSE_PROJECT_NAME"] = args.compose_project_name
-    runtime = prepare_test_runtime(
-        profile="integration",
-        scope="failure-recovery-gate",
-        env=source_env,
-        preserve_existing=True,
-    )
+    wait_for_migration_runner, _ = _load_test_runtime_helpers()
+    managed_run = _prepare_failure_recovery_managed_run(args=args, repo_root=repo_root)
+    runtime = managed_run.runtime
     runtime.export_to(os.environ)
-    engine = None
-    offset_store = None
 
-    try:
+    with ExitStack() as lifecycle:
         if not args.skip_compose:
-            compose_up(
-                args.compose_file,
-                build=args.build,
-                services=list(_FAILURE_RECOVERY_GATE_SERVICES),
-                runtime=runtime,
-            )
+            lifecycle.enter_context(managed_run)
             wait_for_migration_runner(
-                args.compose_file,
+                managed_run.compose_file,
                 timeout_seconds=args.ready_timeout_seconds,
+                runtime=runtime,
             )
         else:
             runtime.port_reservation.release()
@@ -508,10 +529,12 @@ def main() -> int:
             endpoints=endpoints,
         )
         engine = create_engine(host_database_url, pool_pre_ping=True)
+        lifecycle.callback(engine.dispose)
         offset_store = KafkaOffsetStore(
             bootstrap_servers=kafka_bootstrap_servers,
             timeout_seconds=10,
         )
+        lifecycle.callback(offset_store.close)
         _wait_ready(
             ingestion_base_url=ingestion_base_url,
             event_replay_base_url=event_replay_base_url,
@@ -672,14 +695,6 @@ def main() -> int:
         if args.enforce and not result.checks_passed:
             return 1
         return 0
-    finally:
-        runtime.port_reservation.release()
-        if offset_store is not None:
-            offset_store.close()
-        if engine is not None:
-            engine.dispose()
-        if not args.skip_compose and not args.keep_stack_up:
-            compose_down(args.compose_file, runtime=runtime)
 
 
 if __name__ == "__main__":
