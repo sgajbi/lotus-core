@@ -50,6 +50,7 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
     *RUNTIME_BOOTSTRAP_SERVICES,
     "ingestion_service",
     "event_replay_service",
+    "financial_reconciliation_service",
     "query_service",
     "query_control_plane_service",
     "persistence_service",
@@ -61,10 +62,7 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
     "portfolio_aggregation_service",
 )
 
-INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = (
-    *E2E_SMOKE_SERVICES,
-    "financial_reconciliation_service",
-)
+INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = E2E_SMOKE_SERVICES
 
 E2E_RECOVERY_SERVICES: tuple[str, ...] = tuple(
     service

@@ -11,6 +11,8 @@ from scripts.quality.ci_service_sets import (
     PR_RUNTIME_IMAGE_SET_SERVICES,
     RUNTIME_BOOTSTRAP_SERVICES,
 )
+from scripts.release.prebuild_ci_images import SERVICE_BUILDS
+from tests.conftest import FULL_STACK_SERVICES
 from tests.e2e.test_failure_scenarios import _core_service_health_urls
 
 
@@ -95,3 +97,7 @@ def test_main_runtime_image_set_includes_full_certification_services() -> None:
         dict.fromkeys((*PR_RUNTIME_IMAGE_SET_SERVICES, *INSTITUTIONAL_COMPLETION_GATE_SERVICES))
     )
     assert "financial_reconciliation_service" in MAIN_RUNTIME_IMAGE_SET_SERVICES
+
+
+def test_e2e_runtime_image_set_covers_every_repo_built_full_stack_service() -> None:
+    assert set(E2E_SMOKE_SERVICES) == set(FULL_STACK_SERVICES).intersection(SERVICE_BUILDS)
