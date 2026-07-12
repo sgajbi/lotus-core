@@ -9,6 +9,7 @@ from scripts.operations.failure_recovery_gate import (
     _consumer_lag,
     _evaluate_recovery_result,
     _resolve_interruption_container,
+    _resolve_runtime_connections,
     _set_container_pause,
 )
 from scripts.operations.transaction_processing_load_support import TransactionProcessingCounts
@@ -21,6 +22,42 @@ def _complete_counts(records: int) -> TransactionProcessingCounts:
         cashflow_count=records,
         position_count=records,
         processing_claim_count=records,
+    )
+
+
+def test_runtime_connections_default_to_generated_isolated_endpoints() -> None:
+    endpoints = SimpleNamespace(
+        host_database_url="postgresql://localhost:62362/portfolio_db",
+        kafka_bootstrap_servers="localhost:62360",
+    )
+
+    resolved = _resolve_runtime_connections(
+        requested_host_database_url=None,
+        requested_kafka_bootstrap_servers=None,
+        endpoints=endpoints,
+    )
+
+    assert resolved == (
+        "postgresql://localhost:62362/portfolio_db",
+        "localhost:62360",
+    )
+
+
+def test_runtime_connections_preserve_explicit_operator_overrides() -> None:
+    endpoints = SimpleNamespace(
+        host_database_url="postgresql://localhost:62362/portfolio_db",
+        kafka_bootstrap_servers="localhost:62360",
+    )
+
+    resolved = _resolve_runtime_connections(
+        requested_host_database_url="postgresql://db.example/core",
+        requested_kafka_bootstrap_servers="kafka.example:9092",
+        endpoints=endpoints,
+    )
+
+    assert resolved == (
+        "postgresql://db.example/core",
+        "kafka.example:9092",
     )
 
 
