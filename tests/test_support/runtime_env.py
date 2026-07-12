@@ -270,8 +270,11 @@ def prepare_test_runtime(
     scope: str,
     env: dict[str, str] | None = None,
     preserve_existing: bool = True,
+    inherit_process_environment: bool = True,
 ) -> PreparedTestRuntime:
-    runtime_env = dict(env or os.environ)
+    runtime_env = dict(os.environ) if inherit_process_environment else {}
+    if env is not None:
+        runtime_env.update(env)
     selected_profile = profile.strip().lower() or "unit"
     selected_scope = scope.strip().lower() or selected_profile
     seed_ports = profile_seed_ports(selected_profile)

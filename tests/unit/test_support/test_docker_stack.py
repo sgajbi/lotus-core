@@ -119,6 +119,7 @@ def test_compose_up_reallocates_reserved_ports_after_bind_race() -> None:
         scope="bind-race",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
     attempted_query_ports: list[str] = []
 
@@ -126,6 +127,8 @@ def test_compose_up_reallocates_reserved_ports_after_bind_race() -> None:
         if args[0:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
         if "up" in args:
+            assert kwargs["env"] is runtime.values
+            assert ["-p", runtime.endpoints.compose_project_name] == args[2:4]
             attempted_query_ports.append(runtime.values["LOTUS_QUERY_HOST_PORT"])
             if len(attempted_query_ports) == 1:
                 raise subprocess.CalledProcessError(
@@ -141,7 +144,7 @@ def test_compose_up_reallocates_reserved_ports_after_bind_race() -> None:
         retries=1,
         retry_wait_seconds=0,
         runner=runner,
-        port_reservation=runtime.port_reservation,
+        runtime=runtime,
     )
 
     assert len(attempted_query_ports) == 2
@@ -155,6 +158,7 @@ def test_compose_up_reports_exhausted_host_port_reallocation() -> None:
         scope="bind-race-exhausted",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
 
     def runner(args, **kwargs):  # noqa: ANN001, ARG001
@@ -178,7 +182,7 @@ def test_compose_up_reports_exhausted_host_port_reallocation() -> None:
             retries=1,
             retry_wait_seconds=0,
             runner=runner,
-            port_reservation=runtime.port_reservation,
+            runtime=runtime,
         )
 
     runtime.port_reservation.release()

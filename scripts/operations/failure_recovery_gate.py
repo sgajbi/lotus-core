@@ -489,7 +489,7 @@ def main() -> int:
                 args.compose_file,
                 build=args.build,
                 services=list(_FAILURE_RECOVERY_GATE_SERVICES),
-                port_reservation=runtime.port_reservation,
+                runtime=runtime,
             )
             wait_for_migration_runner(
                 args.compose_file,
@@ -679,7 +679,7 @@ def main() -> int:
         if engine is not None:
             engine.dispose()
         if not args.skip_compose and not args.keep_stack_up:
-            compose_down(args.compose_file)
+            compose_down(args.compose_file, runtime=runtime)
 
 
 if __name__ == "__main__":

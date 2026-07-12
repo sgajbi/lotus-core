@@ -182,7 +182,7 @@ def docker_services(request):  # noqa: ARG001
             services=test_services,
             retries=compose_retries,
             retry_wait_seconds=compose_retry_wait,
-            port_reservation=_test_runtime.port_reservation,
+            runtime=_test_runtime,
         )
 
         emit_test_output("\n--- Waiting for database migrations to complete ---")
@@ -262,14 +262,18 @@ def docker_services(request):  # noqa: ARG001
         compose_log_file = os.getenv("LOTUS_TESTS_COMPOSE_LOG_FILE")
         if compose_log_file:
             emit_test_output(f"\n--- Capturing Docker compose logs to {compose_log_file} ---")
-            capture_compose_logs(compose_file, compose_log_file)
+            capture_compose_logs(
+                compose_file,
+                compose_log_file,
+                runtime=_test_runtime,
+            )
         if _env_bool("LOTUS_TESTS_KEEP_STACK_UP", False):
             emit_test_output(
                 "\n--- Keeping Docker services running for post-failure inspection ---"
             )
         else:
             emit_test_output("\n--- Tearing down Docker services ---")
-            compose_down(compose_file)
+            compose_down(compose_file, runtime=_test_runtime)
 
 
 # --- NEW: E2E API Client Fixture ---
