@@ -17,7 +17,7 @@ noticing which observability contract proof had to be refreshed.
 ## Actions
 
 - Added `docs/standards/observability-contract-test-pack.v1.json` for #571 scenarios.
-- Added `scripts/observability_contract_test_pack_guard.py` and focused guard tests.
+- Added `scripts/quality/observability_contract_test_pack_guard.py` and focused guard tests.
 - Wired `make observability-contract-test-pack-guard` into `make lint`.
 - Added a shared HTTP bootstrap regression proving malformed `traceparent` headers are replaced
   with valid W3C trace context.
@@ -35,7 +35,7 @@ Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_observability_contract_test_pack_guard.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py -k "observability_contract or malformed_traceparent" -q`
 - `python -m pytest tests/unit/test_http_middleware_chain_contract.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py tests/unit/libs/portfolio-common/test_logging_utils.py tests/unit/libs/portfolio-common/test_monitoring.py tests/unit/scripts/test_metric_vocabulary_guard.py tests/unit/scripts/test_structured_log_guard.py tests/unit/services/ingestion_service/services/test_ingestion_payload_evidence.py tests/integration/services/ingestion_service/test_ingestion_routers.py -k "<observability evidence selection>" -q`
-- `python scripts/observability_contract_test_pack_guard.py`
+- `python scripts/quality/observability_contract_test_pack_guard.py`
 - `make observability-contract-test-pack-guard`
 - `make test-ops-contract`
 - scoped Ruff lint and format over the new guard/tests

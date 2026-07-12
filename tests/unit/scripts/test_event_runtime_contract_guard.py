@@ -2,7 +2,7 @@ from pathlib import Path
 
 from portfolio_common.event_supportability import DirectKafkaTopicDefinition, EventFamilyDefinition
 
-from scripts import event_runtime_contract_guard as guard
+from scripts.quality import event_runtime_contract_guard as guard
 
 
 def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts() -> None:

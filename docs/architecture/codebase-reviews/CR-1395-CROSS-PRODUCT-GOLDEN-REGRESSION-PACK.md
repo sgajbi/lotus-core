@@ -20,7 +20,7 @@ lineage impact visible across product families.
   income/cashflow impact, and lineage.
 - Added `docs/standards/cross-product-golden-regression-pack.v1.json` to define required scenario
   coverage, statuses, executable evidence, and sensitive-data policy.
-- Added `scripts/cross_product_golden_regression_guard.py` plus focused guard tests.
+- Added `scripts/quality/cross_product_golden_regression_guard.py` plus focused guard tests.
 - Added executable unit-level golden tests for equity buy/sell cost relief, dividend income,
   transfer in/out position and cost deltas, and CA bundle spin-off basis transfer.
 - Extended the fixture and executable tests for fund subscription/distribution/reinvestment/
@@ -45,7 +45,7 @@ and parent-event model depth to `sgajbi/lotus-core#472` and `sgajbi/lotus-core#4
 Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_cross_product_golden_regression_guard.py -q`
-- `python scripts/cross_product_golden_regression_guard.py`
+- `python scripts/quality/cross_product_golden_regression_guard.py`
 - `python -m pytest tests/unit/transaction_specs/test_cross_product_golden_scenarios.py -q`
 - scoped Ruff lint and format over the new guard/tests
 - `make cross-product-golden-regression-guard`

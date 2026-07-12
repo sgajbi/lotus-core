@@ -17,7 +17,7 @@ owned, expiring exception and follow-up issue.
 
 1. Added `docs/standards/in-process-boundary-contract-standard.md`.
 2. Added `docs/standards/in-process-boundary-exceptions.json` with bounded transitional exceptions.
-3. Added `scripts/in_process_boundary_guard.py`.
+3. Added `scripts/quality/in_process_boundary_guard.py`.
 4. Added focused guard tests.
 5. Wired `in-process-boundary-guard` into `make architecture-guard`.
 
@@ -37,11 +37,11 @@ worker, scheduler, topic, database, Dockerfile, or deployment boundary is introd
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/scripts/test_in_process_boundary_guard.py -q`
-2. `python scripts/in_process_boundary_guard.py`
-3. `python -m ruff check scripts/in_process_boundary_guard.py tests/unit/scripts/test_in_process_boundary_guard.py --ignore E501,I001`
-4. `python -m ruff format --check scripts/in_process_boundary_guard.py tests/unit/scripts/test_in_process_boundary_guard.py`
+2. `python scripts/quality/in_process_boundary_guard.py`
+3. `python -m ruff check scripts/quality/in_process_boundary_guard.py tests/unit/scripts/test_in_process_boundary_guard.py --ignore E501,I001`
+4. `python -m ruff format --check scripts/quality/in_process_boundary_guard.py tests/unit/scripts/test_in_process_boundary_guard.py`
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`
 
 ## Documentation And Context

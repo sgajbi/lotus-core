@@ -41,7 +41,7 @@ shape: `code`, `capability`, and `message`.
 
 Focused local validation:
 
-1. `python scripts/ingestion_service_framework_guard.py`
+1. `python scripts/quality/ingestion_service_framework_guard.py`
 2. `python -m pytest tests/unit/services/ingestion_service/test_adapter_mode.py tests/unit/services/ingestion_service/test_dependencies.py tests/unit/scripts/test_ingestion_service_framework_guard.py -q`
 3. `python -m pytest tests/unit/services/ingestion_service/test_adapter_mode.py tests/unit/services/ingestion_service/test_dependencies.py tests/unit/scripts/test_ingestion_service_framework_guard.py tests/unit/services/ingestion_service/test_reference_data_ingestion_service.py tests/unit/services/ingestion_service/routers/test_uploads.py tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py -q`
 4. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "upload or reference_data" -q`
@@ -51,7 +51,7 @@ Focused local validation:
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

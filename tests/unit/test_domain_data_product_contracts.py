@@ -19,7 +19,7 @@ from portfolio_common.source_data_security import (
     get_source_data_security_profile,
 )
 
-from scripts.validate_domain_data_product_contracts import (
+from scripts.validation.validate_domain_data_product_contracts import (
     LOCAL_DECLARATION_DIR,
     platform_validation_dependencies_available,
     validate_repo_native_contracts,
@@ -207,6 +207,6 @@ def test_core_declaration_preserves_high_value_mesh_products_and_trust_posture()
 def test_core_declaration_readme_documents_local_validation_path() -> None:
     readme = (LOCAL_DECLARATION_DIR / "README.md").read_text(encoding="utf-8")
 
-    assert "python scripts/validate_domain_data_product_contracts.py" in readme
+    assert "python scripts/validation/validate_domain_data_product_contracts.py" in readme
     assert "make domain-product-validate" in readme
     assert "source_data_products.py" in readme

@@ -788,7 +788,7 @@ Local evidence captured on 2026-06-05 after CR-1034:
   focused manifest/workflow governance tests passed with 22 tests; `make
   quality-workflow-governance-gate` passed with 12 tests.
 - CR-1170 focused evidence: focused OpenAPI/workflow/Spectral tests passed with 22 tests;
-  `python scripts/openapi_quality_gate.py` passed; `make quality-openapi-spectral-gate` generated
+  `python scripts/quality/openapi_quality_gate.py` passed; `make quality-openapi-spectral-gate` generated
   14 service artifacts and reported no warn-or-higher Spectral results; `make
   quality-workflow-governance-gate` passed with 12 tests.
 - CR-1171 focused evidence: `make architecture-guard` passed; `make quality-import-boundary-gate`

@@ -42,7 +42,7 @@ Commands:
 5. `python -m pytest tests/unit/services/persistence_service -q`
 6. `python -m pytest tests/unit/services/ingestion_service/services -q`
 7. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -q`
-8. `python scripts/warning_budget_gate.py --suite unit --max-warnings 0 --quiet`
+8. `python scripts/quality/warning_budget_gate.py --suite unit --max-warnings 0 --quiet`
 
 Results:
 

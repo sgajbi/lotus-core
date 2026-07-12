@@ -27,7 +27,7 @@ legacy index for reversibility.
 Commands:
 
 1. `python -m alembic heads`
-2. `python scripts/migration_contract_check.py --mode alembic-sql`
+2. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 3. `python -m ruff check alembic/versions/c0d8e9f0a1b2_perf_drop_duplicate_valuation_stale_index.py`
 4. `python -m ruff format --check alembic/versions/c0d8e9f0a1b2_perf_drop_duplicate_valuation_stale_index.py`
 5. `git diff --check`

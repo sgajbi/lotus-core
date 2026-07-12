@@ -11,7 +11,7 @@ snapshot/simulation, integration-policy, source-data, and support/control-plane 
 
 ## Change
 
-- Added `scripts/qcp_problem_details_guard.py`.
+- Added `scripts/quality/qcp_problem_details_guard.py`.
 - Added `make qcp-problem-details-guard`.
 - Wired the guard into `make lint` so the defect class fails early in the static-quality lane.
 - Added focused guard tests for FastAPI and Starlette `HTTPException` imports, direct
@@ -36,9 +36,9 @@ source-location-specific failure before expensive integration or OpenAPI gates.
 - `make qcp-problem-details-guard` passed.
 - `make lint` passed, proving the guard runs inside the Feature Lane, PR Merge Gate, and Main
   Releasability lint target without weakening existing quality gates.
-- `python -m ruff check scripts/qcp_problem_details_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py --ignore E501,I001`
+- `python -m ruff check scripts/quality/qcp_problem_details_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py --ignore E501,I001`
   passed.
-- `python -m ruff format --check scripts/qcp_problem_details_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py`
+- `python -m ruff format --check scripts/quality/qcp_problem_details_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py`
   passed.
 - `make typecheck` passed with no issues in 50 source files.
 - `make quality-unit-collection-gate` passed with 3,255 of 3,265 unit tests collected and 10

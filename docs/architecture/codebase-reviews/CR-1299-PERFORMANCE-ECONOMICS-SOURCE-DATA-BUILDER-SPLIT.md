@@ -44,7 +44,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/query_service/services/test_performance_component_economics.py tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py -q`
    - 21 passed.
-2. `python scripts/test_manifest.py --suite boundary-mapping-conformance --quiet`
+2. `python scripts/quality/test_manifest.py --suite boundary-mapping-conformance --quiet`
    - 6 passed.
 3. `python -m ruff check src\services\query_service\app\services\performance_component_economics.py src\services\query_service\app\services\performance_component_economics_policy.py src\services\query_service\app\services\performance_component_economics_rows.py src\services\query_service\app\services\performance_component_economics_response.py tests\unit\services\query_service\services\test_performance_component_economics.py tests\unit\boundary_mapping\test_transaction_and_source_data_conformance.py`
    - passed.

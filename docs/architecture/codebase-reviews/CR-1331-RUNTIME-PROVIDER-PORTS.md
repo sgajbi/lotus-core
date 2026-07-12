@@ -22,7 +22,7 @@ TTL expiry, IDs, and elapsed-duration metrics without monkeypatching global func
 6. Added provider and fake-provider behavior tests.
 7. Updated the application port catalog to point at the shared provider contract.
 8. Added `docs/standards/runtime-provider-port-standard.md`.
-9. Added `scripts/runtime_provider_port_guard.py` and wired it into `make architecture-guard`.
+9. Added `scripts/quality/runtime_provider_port_guard.py` and wired it into `make architecture-guard`.
 
 ## Compatibility Impact
 
@@ -47,9 +47,9 @@ follow-up migration scope and are not claimed as fixed by this slice.
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_runtime_providers.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/services/query_service/services/test_simulation_service.py tests/unit/scripts/test_runtime_provider_port_guard.py -q`
-2. `python scripts/runtime_provider_port_guard.py`
+2. `python scripts/quality/runtime_provider_port_guard.py`
 3. Scoped Ruff check over changed runtime-provider, workflow, guard, and test files.
 4. Scoped Ruff format check over changed runtime-provider, workflow, guard, and test files.
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`

@@ -51,7 +51,7 @@ must never resurrect already-completed durable work or downgrade a live owner un
   - `python -m pytest tests/integration/services/timeseries_generator_service/test_int_timeseries_repo.py -k overwrite_completed_rows -q`
   - Result: each passed
 - Quality gate:
-  - `python scripts/openapi_quality_gate.py`
+  - `python scripts/quality/openapi_quality_gate.py`
   - touched-surface `ruff check`
 
 ## Follow-up

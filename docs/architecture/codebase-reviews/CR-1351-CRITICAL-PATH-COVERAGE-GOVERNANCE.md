@@ -20,8 +20,8 @@ the PR gate cannot rely only on one repository-wide percentage.
 ## Implementation
 
 - Added `docs/standards/critical-path-coverage.v1.json`.
-- Added `scripts/critical_path_coverage_guard.py`.
-- Updated `scripts/coverage_gate.py` to emit `output/coverage/coverage.json` and
+- Added `scripts/quality/critical_path_coverage_guard.py`.
+- Updated `scripts/quality/coverage_gate.py` to emit `output/coverage/coverage.json` and
   `output/coverage/critical-path-coverage-report.json`.
 - Added `make critical-path-coverage-guard` and lint/docs evidence wiring.
 - Updated PR and main coverage jobs to fetch base history and pass changed-code base context.
@@ -64,7 +64,7 @@ contract changed. One error-path behavior was restored to the documented contrac
 Planned and recorded before commit:
 
 - `python -m pytest tests/unit/scripts/test_critical_path_coverage_guard.py -q`
-- `python scripts/critical_path_coverage_guard.py --contract-only`
+- `python scripts/quality/critical_path_coverage_guard.py --contract-only`
 - `python -m pytest tests/integration/services/query_service/test_advisory_simulation_router.py::test_advisory_simulation_execution_router_returns_problem_details_on_execution_failure -q`
 - scoped Ruff lint/format for the new guard and tests
 - `make docs-evidence-pack`

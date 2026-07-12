@@ -33,7 +33,7 @@ records RFC identity, family, path, status, owner, affected services/routes/data
 implementation references, test evidence, docs/wiki links, supported-feature references, canonical
 registry references, supersession metadata, and status rationale.
 
-Added `scripts/rfc_status_ledger_guard.py` to discover RFC documents and fail when ledger metadata
+Added `scripts/quality/rfc_status_ledger_guard.py` to discover RFC documents and fail when ledger metadata
 is missing, stale, duplicated, malformed, or missing transaction-specific links to
 `portfolio_common.transaction_type_registry` and `docs/features/supported-features.md`.
 
@@ -57,10 +57,10 @@ name, runtime topology, Dockerfile, package import path, or public runtime behav
 
 Focused validation before commit:
 
-- `python scripts/rfc_status_ledger_guard.py`
+- `python scripts/quality/rfc_status_ledger_guard.py`
 - `python -m pytest tests/unit/scripts/test_rfc_status_ledger_guard.py tests/unit/scripts/test_generate_documentation_evidence_pack.py -q`
-- `python -m ruff check scripts/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
-- `python -m ruff format --check scripts/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
+- `python -m ruff check scripts/quality/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
+- `python -m ruff format --check scripts/quality/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 - `make quality-wiki-docs-gate`
 - `make docs-evidence-pack`
 - `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki --changed-page RFC-Index.md --changed-page Validation-and-CI.md`

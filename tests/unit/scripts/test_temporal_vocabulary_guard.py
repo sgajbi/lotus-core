@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import temporal_vocabulary_guard as guard
+from scripts.quality import temporal_vocabulary_guard as guard
 
 
 def _occurrence(relative_path: str, field: str) -> guard.FieldOccurrence:

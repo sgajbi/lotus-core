@@ -37,7 +37,7 @@ current-epoch position rebuild, and one-event-per-input behavior.
 No application, calculation, API, Kafka, database, image, or deployed runtime behavior changed.
 Feature Lane remains fast and does not run this DB-heavy pack. PR and main lanes now block on it.
 
-`scripts/ci_service_sets.py` intentionally remains on the three legacy calculator services because
+`scripts/quality/ci_service_sets.py` intentionally remains on the three legacy calculator services because
 Compose does not yet define the target. Add the target and remove the legacy services in the same
 deployment cutover; never make CI start both topologies. No wiki change is required beyond the CI
 reader guidance updated in this slice.

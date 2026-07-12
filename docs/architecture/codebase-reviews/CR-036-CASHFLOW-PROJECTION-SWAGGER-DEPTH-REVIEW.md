@@ -36,5 +36,5 @@ Deepen the Swagger/OpenAPI contract for the core read-plane cashflow projection 
 
 - `src/services/query_service/app/routers/cashflow_projection.py`
 - `tests/integration/services/query_service/test_main_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

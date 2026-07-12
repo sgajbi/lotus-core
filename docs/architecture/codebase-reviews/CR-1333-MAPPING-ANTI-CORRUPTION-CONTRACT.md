@@ -13,7 +13,7 @@ selected inline mapping regressions do not return to orchestration or persistenc
 
 ## Changes
 
-1. Added `scripts/mapping_anti_corruption_guard.py`.
+1. Added `scripts/quality/mapping_anti_corruption_guard.py`.
 2. Added guard tests for the contract artifact, issue cross-links, ingestion DTO dump regression,
    and pipeline outbox serialization regression.
 3. Wired `mapping-anti-corruption-guard` into `make architecture-guard` and scoped lint/format.
@@ -41,9 +41,9 @@ supported capability changed.
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/scripts/test_mapping_anti_corruption_guard.py tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py -q`
-2. `python scripts/mapping_anti_corruption_guard.py`
-3. `python -m ruff check scripts/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py --ignore E501,I001`
-4. `python -m ruff format --check scripts/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py`
+2. `python scripts/quality/mapping_anti_corruption_guard.py`
+3. `python -m ruff check scripts/quality/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py --ignore E501,I001`
+4. `python -m ruff format --check scripts/quality/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py`
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`

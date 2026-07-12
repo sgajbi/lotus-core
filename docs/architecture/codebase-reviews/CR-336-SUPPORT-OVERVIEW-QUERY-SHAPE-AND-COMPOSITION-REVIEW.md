@@ -66,7 +66,7 @@ service-level composition boundary.
   - passed after deterministic `as_of_date` probe update; `support_overview` p95
     `51.46ms` against the then-current `240ms` budget and `portfolio_positions`
     p95 `47.9ms` against `280ms` budget
-- `python scripts/latency_profile.py --skip-compose --enforce`
+- `python scripts/operations/latency_profile.py --skip-compose --enforce`
   - passed after bounded-percentile gate update; `support_overview` p95 `22.94ms`
     against `320ms` budget and `portfolio_positions` p95 `16.44ms` against
     `280ms` budget

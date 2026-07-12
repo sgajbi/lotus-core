@@ -50,7 +50,7 @@ Local validation passed:
 Additional branch gates should be rerun after commit:
 
 1. `python -m alembic heads`
-2. `python scripts/migration_contract_check.py --mode alembic-sql`
+2. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 3. touched-surface `python -m ruff check`
 4. touched-surface `python -m ruff format --check`
 5. `git diff --check`

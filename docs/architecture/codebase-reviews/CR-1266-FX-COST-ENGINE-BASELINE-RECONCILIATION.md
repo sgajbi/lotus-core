@@ -33,7 +33,7 @@ unrealized MTM, hedge attribution, execution quality, best execution, or OMS ack
 
 - `python -m pytest tests/unit/libs/portfolio_common/test_fx_baseline_processing.py tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py tests/unit/transaction_specs/test_fx_slice0_characterization.py -q`:
   68 passed.
-- `python scripts/test_manifest.py --suite transaction-fx-contract --quiet`:
+- `python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet`:
   336 passed.
 - `make test-transaction-fx-contract`:
   336 passed.

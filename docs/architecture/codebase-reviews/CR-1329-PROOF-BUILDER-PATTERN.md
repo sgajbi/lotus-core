@@ -18,7 +18,7 @@ documentation while preserving current runtime topology.
 2. Added focused unit tests that assemble proof artifacts without FastAPI, databases, Kafka, or
    downstream services.
 3. Added `docs/standards/proof-builder-pattern-standard.md`.
-4. Added `scripts/proof_builder_pattern_guard.py` with unit tests.
+4. Added `scripts/quality/proof_builder_pattern_guard.py` with unit tests.
 5. Wired `proof-builder-pattern-guard` into `make architecture-guard`.
 
 ## Compatibility Impact
@@ -37,9 +37,9 @@ or deployable. A future runtime proof service requires the runtime-boundary deci
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py -q`
-2. `python scripts/proof_builder_pattern_guard.py`
-3. `python -m ruff check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py --ignore E501,I001`
-4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py`
+2. `python scripts/quality/proof_builder_pattern_guard.py`
+3. `python -m ruff check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/quality/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py --ignore E501,I001`
+4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/quality/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py`
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`

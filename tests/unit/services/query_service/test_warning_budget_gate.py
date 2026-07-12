@@ -1,4 +1,4 @@
-from scripts.warning_budget_gate import parse_warning_count
+from scripts.quality.warning_budget_gate import parse_warning_count
 
 
 def test_parse_warning_count_from_pytest_summary() -> None:

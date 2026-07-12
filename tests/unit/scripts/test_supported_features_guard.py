@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import supported_features_guard as guard
+from scripts.quality import supported_features_guard as guard
 
 
 def _base_capability(**overrides) -> dict[str, object]:
@@ -92,7 +92,9 @@ def _write_repo(tmp_path: Path, *, capability: dict[str, object] | None = None) 
             "Portfolio and account source of record",
         ]
     )
-    (tmp_path / "docs" / "supported-features.md").write_text(docs_text, encoding="utf-8")
+    docs_path = tmp_path / "docs" / "features" / "supported-features.md"
+    docs_path.parent.mkdir(parents=True)
+    docs_path.write_text(docs_text, encoding="utf-8")
     wiki_path = tmp_path / "wiki" / "Supported-Features.md"
     wiki_path.parent.mkdir(parents=True)
     wiki_path.write_text(wiki_text, encoding="utf-8")

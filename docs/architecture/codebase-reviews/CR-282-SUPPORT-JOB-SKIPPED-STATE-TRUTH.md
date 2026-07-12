@@ -29,7 +29,7 @@ still collapsing that real outcome into `COMPLETED`.
   - `56 passed`
 - `python -m ruff check src/services/query_service/app/services/operations_service.py src/services/query_service/app/dtos/operations_dto.py tests/unit/services/query_service/services/test_operations_service.py tests/integration/services/query_service/test_int_operations_service.py`
   - passed
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
   - passed
 
 ## Follow-up

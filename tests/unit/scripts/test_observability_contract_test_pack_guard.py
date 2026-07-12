@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.observability_contract_test_pack_guard import (
+from scripts.quality.observability_contract_test_pack_guard import (
     REQUIRED_SCENARIOS,
     validate_observability_contract_test_pack,
 )

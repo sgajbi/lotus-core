@@ -8,7 +8,7 @@ from portfolio_common.source_data_products import (
 )
 from portfolio_common.source_data_security import SourceDataSecurityProfile
 
-from scripts import source_data_product_contract_guard as guard
+from scripts.quality import source_data_product_contract_guard as guard
 
 
 def _route(

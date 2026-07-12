@@ -11,7 +11,7 @@ README, wiki, API, RFC, runbook, and supported-feature claims instead of scatter
 
 ## Changes
 
-1. Added `scripts/generate_documentation_evidence_pack.py`.
+1. Added `scripts/generators/generate_documentation_evidence_pack.py`.
 2. Added `make docs-evidence-pack`, which writes
    `output/documentation-evidence/documentation-evidence-pack.json`.
 3. The evidence manifest records command, UTC timestamp, git SHA, runtime profile, status,
@@ -36,9 +36,9 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_generate_documentation_evidence_pack.py -q`
 2. `make docs-evidence-pack`
-3. `python scripts/wiki_validation_guard.py`
-4. `python -m ruff check scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
-5. `python -m ruff format --check scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
+3. `python scripts/quality/wiki_validation_guard.py`
+4. `python -m ruff check scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
+5. `python -m ruff format --check scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 6. `git diff --check`
 
 ## Documentation, Wiki, Context, And Skill Decision

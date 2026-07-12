@@ -15,14 +15,14 @@ For banking-grade builds, the runtime dependency set needs to be:
 Shared constraints were a good intermediate fence, but after web-stack convergence they were no longer the strongest truthful contract available.
 
 ## Change
-- Added `scripts/update_shared_runtime_lock.py` to:
+- Added `scripts/development/update_shared_runtime_lock.py` to:
   - collect the direct runtime dependency union across service `pyproject.toml` files
   - fail if any floating runtime dependency remains
   - compile `requirements/shared-runtime.lock.txt`
 - Added generated artifacts:
   - `requirements/shared-runtime.in`
   - `requirements/shared-runtime.lock.txt`
-- Updated `scripts/bootstrap_dev.py` to install against the shared runtime lock
+- Updated `scripts/development/bootstrap_dev.py` to install against the shared runtime lock
 - Added `make compile-runtime-lock`
 - Switched service Dockerfiles from the old shared constraints artifact to the shared runtime lock
 - Pinned remaining floating direct runtime dependencies needed to compile the broader lock truthfully

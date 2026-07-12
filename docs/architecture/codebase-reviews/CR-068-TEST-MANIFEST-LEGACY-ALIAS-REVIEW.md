@@ -2,7 +2,7 @@
 
 ## Scope
 
-- `scripts/test_manifest.py`
+- `scripts/quality/test_manifest.py`
 - `tests/unit/services/query_service/test_test_manifest.py`
 
 ## Findings
@@ -19,7 +19,7 @@
 
 ## Actions taken
 
-- Removed the legacy suite aliases from `scripts/test_manifest.py`.
+- Removed the legacy suite aliases from `scripts/quality/test_manifest.py`.
 - Removed the corresponding alias-profile mappings from `SUITE_ENV_PROFILE`.
 - Updated the manifest unit tests to use the canonical suite names:
   - `transaction-sell-contract`
@@ -32,4 +32,4 @@
 ## Evidence
 
 - `python -m pytest tests/unit/services/query_service/test_test_manifest.py -q`
-- `python scripts/test_manifest.py --suite transaction-fx-contract --print-args`
+- `python scripts/quality/test_manifest.py --suite transaction-fx-contract --print-args`

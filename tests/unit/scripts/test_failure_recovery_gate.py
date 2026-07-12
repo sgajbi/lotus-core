@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.failure_recovery_gate import (
+from scripts.operations.failure_recovery_gate import (
     RecoveryMode,
     _compose_command,
     _consumer_lag,
@@ -11,7 +11,7 @@ from scripts.failure_recovery_gate import (
     _resolve_interruption_container,
     _set_container_pause,
 )
-from scripts.transaction_processing_load_support import TransactionProcessingCounts
+from scripts.operations.transaction_processing_load_support import TransactionProcessingCounts
 
 
 def _complete_counts(records: int) -> TransactionProcessingCounts:
@@ -46,7 +46,7 @@ def test_resolve_interruption_container_requires_running_compose_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "scripts.failure_recovery_gate._run_capture",
+        "scripts.operations.failure_recovery_gate._run_capture",
         lambda cmd, cwd: "abc123containerid\n",
     )
 
@@ -64,7 +64,7 @@ def test_resolve_interruption_container_fails_closed_when_service_is_not_running
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "scripts.failure_recovery_gate._run_capture",
+        "scripts.operations.failure_recovery_gate._run_capture",
         lambda cmd, cwd: "",
     )
 
@@ -82,7 +82,7 @@ def test_set_container_pause_uses_resolved_container_id(
 ) -> None:
     calls: list[tuple[list[str], Path]] = []
     monkeypatch.setattr(
-        "scripts.failure_recovery_gate._run_capture",
+        "scripts.operations.failure_recovery_gate._run_capture",
         lambda cmd, cwd: calls.append((cmd, cwd)) or "",
     )
     repo_root = Path("/tmp/repo")

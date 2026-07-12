@@ -3,8 +3,8 @@
 ## Scope
 
 - `src/libs/portfolio-common/portfolio_common/logging_utils.py`
-- `scripts/openapi_quality_gate.py`
-- `scripts/api_vocabulary_inventory.py`
+- `scripts/quality/openapi_quality_gate.py`
+- `scripts/quality/api_vocabulary_inventory.py`
 - `tests/unit/libs/portfolio-common/test_logging_utils.py`
 
 ## Findings
@@ -17,8 +17,8 @@
 - Added a tooling-only quiet flag in `logging_utils.setup_logging()`:
   - `LOTUS_TOOLING_QUIET=1` now drives the root logger to `ERROR`
 - Set that flag by default in:
-  - `scripts/openapi_quality_gate.py`
-  - `scripts/api_vocabulary_inventory.py`
+  - `scripts/quality/openapi_quality_gate.py`
+  - `scripts/quality/api_vocabulary_inventory.py`
 - Added unit coverage proving quiet-mode and normal-mode logger levels.
 
 ## Result
@@ -28,5 +28,5 @@
 ## Evidence
 
 - `python -m pytest tests/unit/libs/portfolio-common/test_logging_utils.py -q`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

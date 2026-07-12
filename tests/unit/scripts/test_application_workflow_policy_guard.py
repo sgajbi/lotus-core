@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.application_workflow_policy_guard import (
+from scripts.quality.application_workflow_policy_guard import (
     find_application_workflow_policy_findings,
 )
 

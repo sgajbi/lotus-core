@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.prebuild_ci_images import SERVICE_BUILDS
+from scripts.release.prebuild_ci_images import SERVICE_BUILDS
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LEGACY_TRANSACTION_WORKERS = {

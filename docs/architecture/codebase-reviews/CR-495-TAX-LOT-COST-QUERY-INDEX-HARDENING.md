@@ -45,7 +45,7 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_repository.py tests/unit/services/query_service/repositories/test_buy_state_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py src/services/calculators/cost_calculator_service/app/repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_repository.py alembic/versions/c0d2e3f4a5b6_perf_add_tax_lot_cost_query_indexes.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py src/services/calculators/cost_calculator_service/app/repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_repository.py alembic/versions/c0d2e3f4a5b6_perf_add_tax_lot_cost_query_indexes.py`
 

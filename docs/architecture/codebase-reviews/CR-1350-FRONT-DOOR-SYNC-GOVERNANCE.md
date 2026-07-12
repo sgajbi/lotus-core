@@ -36,7 +36,7 @@ Added `docs/standards/front-door-sync.v1.json` to define canonical sources, summ
 surfaces, required README links, wiki home links, wiki sidebar pages, PR template documentation
 terms, and the update checklist for front-door truth changes.
 
-Added `scripts/front_door_sync_guard.py` to fail when required front-door files, links, sidebar
+Added `scripts/quality/front_door_sync_guard.py` to fail when required front-door files, links, sidebar
 entries, or PR documentation/no-doc-change terms drift.
 
 Added focused tests for accepted contracts, missing README links, missing sidebar pages, and missing
@@ -57,10 +57,10 @@ name, runtime topology, Dockerfile, package import path, or public runtime behav
 
 Focused validation before commit:
 
-- `python scripts/front_door_sync_guard.py`
+- `python scripts/quality/front_door_sync_guard.py`
 - `python -m pytest tests/unit/scripts/test_front_door_sync_guard.py tests/unit/scripts/test_generate_documentation_evidence_pack.py -q`
-- `python -m ruff check scripts/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
-- `python -m ruff format --check scripts/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
+- `python -m ruff check scripts/quality/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
+- `python -m ruff format --check scripts/quality/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 - `make docs-evidence-pack`
 - `make quality-wiki-docs-gate`
 - `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki --changed-page Validation-and-CI.md`

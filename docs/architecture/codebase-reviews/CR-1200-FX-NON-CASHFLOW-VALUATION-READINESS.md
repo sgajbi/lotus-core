@@ -70,7 +70,7 @@ Focused format proof:
 
 Architecture proof:
 
-- `python scripts/architecture_boundary_guard.py --strict`
+- `python scripts/quality/architecture_boundary_guard.py --strict`
 - Result: passed
 
 Local runtime note:

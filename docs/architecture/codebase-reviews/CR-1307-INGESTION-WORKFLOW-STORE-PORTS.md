@@ -22,7 +22,7 @@ audit/idempotency workflows while preserving existing API, persistence, and oper
 4. Preserved existing SQLAlchemy helper behavior as the default runtime implementation.
 5. Added fake-store tests for idempotency replay versus conflict behavior and typed audit write
    failure propagation.
-6. Added `scripts/ingestion_store_port_guard.py` and wired it into `make architecture-guard`.
+6. Added `scripts/quality/ingestion_store_port_guard.py` and wired it into `make architecture-guard`.
 7. Added `docs/standards/ingestion-workflow-store-port-standard.md`.
 
 ## Behavior And Compatibility
@@ -40,7 +40,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/ingestion_service/services/test_ingestion_job_service_ports.py tests/unit/services/ingestion_service/services/test_ingestion_replay_audits.py tests/unit/services/ingestion_service/services/test_ingestion_job_service_guardrails.py tests/unit/scripts/test_ingestion_store_port_guard.py -q`
    - 28 passed.
-2. `python scripts/ingestion_store_port_guard.py`
+2. `python scripts/quality/ingestion_store_port_guard.py`
    - Passed.
 3. Scoped Ruff lint passed.
 4. Scoped Ruff format passed.

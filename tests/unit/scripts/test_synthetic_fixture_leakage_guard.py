@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import synthetic_fixture_leakage_guard as guard
+from scripts.quality import synthetic_fixture_leakage_guard as guard
 
 
 def _write(path: Path, content: str) -> None:

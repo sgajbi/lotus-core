@@ -40,8 +40,8 @@ Operational note:
 Evidence:
 - `.github/workflows/ci.yml`
 - `Makefile`
-- `scripts/coverage_gate.py`
-- `scripts/test_manifest.py`
+- `scripts/quality/coverage_gate.py`
+- `scripts/quality/test_manifest.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -80,7 +80,7 @@ No material implementation gap in repository for RFC 030 intent; enforcement pol
 2. Local parity commands:
    - `Makefile`
 3. Coverage gate utility and suite manifest:
-   - `scripts/coverage_gate.py`, `scripts/test_manifest.py`
+   - `scripts/quality/coverage_gate.py`, `scripts/quality/test_manifest.py`
 
 ## Original Acceptance Criteria Alignment
 

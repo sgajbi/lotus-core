@@ -19,7 +19,7 @@ Updated `.importlinter` so it enforces the intended boundaries:
 
 Added:
 
-1. `scripts/import_boundary_gate.py` as a stable entrypoint that sets the repo source path before
+1. `scripts/quality/import_boundary_gate.py` as a stable entrypoint that sets the repo source path before
    invoking import-linter,
 2. `make quality-import-boundary-gate`,
 3. a dedicated `Quality Baseline / Import Boundary Gate` workflow job.

@@ -34,7 +34,7 @@ Commands:
 1. `python -m pytest tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 2. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories tests/unit/services/financial_reconciliation_service -q`
 3. `python -m alembic heads`
-4. `python scripts/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 5. `python -m ruff check src/services/query_service/app/repositories/operations_repository.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e5f6a7b8c9_perf_normalize_position_state_status.py`
 6. `python -m ruff format --check src/services/query_service/app/repositories/operations_repository.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e5f6a7b8c9_perf_normalize_position_state_status.py`
 7. `git diff --check`

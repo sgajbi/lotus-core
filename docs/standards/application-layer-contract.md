@@ -51,7 +51,7 @@ and `consumers` packages remain transitional migration scope.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_layer_contract_guard.py`. The guard scans
+`make architecture-guard` runs `scripts/quality/application_layer_contract_guard.py`. The guard scans
 `app/application` and `app/use_cases` packages and blocks FastAPI/Starlette imports, SQLAlchemy
 imports, direct Kafka producer construction, direct repository imports, producer imports, and
 consumer infrastructure imports.

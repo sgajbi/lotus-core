@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.position_reducer_boundary_guard import (
+from scripts.quality.position_reducer_boundary_guard import (
     find_position_reducer_boundary_findings,
 )
 

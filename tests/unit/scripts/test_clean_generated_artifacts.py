@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import clean_generated_artifacts as clean
+from scripts.development import clean_generated_artifacts as clean
 
 
 def _write(path: Path, content: str = "generated") -> None:

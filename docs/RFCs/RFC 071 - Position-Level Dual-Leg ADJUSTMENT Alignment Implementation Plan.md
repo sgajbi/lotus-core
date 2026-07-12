@@ -49,7 +49,7 @@ Validation evidence:
  - `tests/unit/libs/portfolio_common/test_dividend_validation.py`
  - `tests/unit/libs/portfolio_common/test_interest_validation.py`
 2. Migration contract gate:
- - `python scripts/migration_contract_check.py --mode alembic-sql`
+ - `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 
 Residual operational note:
 1. Local persistence integration test environment may require migration refresh to latest head before executing full integration repository suites, due existing local DB schema drift.
@@ -203,10 +203,10 @@ Per approved slice, run applicable gates:
 1. `python -m ruff check ...`
 2. `make typecheck`
 3. targeted unit/integration/e2e suites
-4. `python scripts/migration_contract_check.py --mode alembic-sql` (if migration touched)
-5. `python scripts/openapi_quality_gate.py` (if API touched)
-6. `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
-7. `python scripts/api_vocabulary_inventory.py --validate-only` (if API touched)
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` (if migration touched)
+5. `python scripts/quality/openapi_quality_gate.py` (if API touched)
+6. `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
+7. `python scripts/quality/api_vocabulary_inventory.py --validate-only` (if API touched)
 
 ## Risks and Mitigations
 1. Risk: hidden cash double counting through legacy assumptions.

@@ -35,8 +35,8 @@ worker, scheduler, or deployment boundary.
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_event_mapping.py tests/unit/services/persistence_service/repositories/test_transaction_db_repository.py tests/unit/services/pipeline_orchestrator_service/adapters/test_outbox_event_mapper.py tests/unit/services/pipeline_orchestrator_service/services/test_pipeline_orchestrator_service.py -q`
-2. `python scripts/event_runtime_contract_guard.py`
+2. `python scripts/quality/event_runtime_contract_guard.py`
 3. Scoped Ruff check over changed pipeline adapter/service/test files.
 4. Scoped Ruff format check over changed pipeline adapter/service/test files.
-5. `python scripts/wiki_validation_guard.py`
+5. `python scripts/quality/wiki_validation_guard.py`
 6. `git diff --check`

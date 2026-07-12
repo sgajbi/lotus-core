@@ -19,7 +19,7 @@ source truth.
 
 ## Implementation
 
-- Added `scripts/generated_artifact_tracking_guard.py`.
+- Added `scripts/quality/generated_artifact_tracking_guard.py`.
 - Added `make generated-artifact-tracking-guard`.
 - Wired the guard and focused tests into `make lint`.
 - Updated README, Validation/CI wiki source, and repository engineering context.
@@ -48,7 +48,7 @@ runtime topology, Dockerfile, package import path, or runtime behavior changed.
 Planned and recorded before commit:
 
 - `python -m pytest tests/unit/scripts/test_generated_artifact_tracking_guard.py -q`
-- `python scripts/generated_artifact_tracking_guard.py`
+- `python scripts/quality/generated_artifact_tracking_guard.py`
 - scoped Ruff lint/format for the guard and tests
 - `make generated-artifact-tracking-guard`
 - `make quality-wiki-docs-gate`

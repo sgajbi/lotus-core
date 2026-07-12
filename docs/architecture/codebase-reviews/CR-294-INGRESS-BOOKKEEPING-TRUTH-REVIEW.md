@@ -60,7 +60,7 @@ Date: 2026-03-14
 ## Validation
 - `python -m pytest tests/unit/services/ingestion_service/services/test_ingestion_job_service_state_transitions.py tests/unit/services/ingestion_service/routers/test_job_bookkeeping.py tests/integration/services/ingestion_service/test_ingestion_routers.py -k "bookkeeping or mark_queued or record_failure_observation" -q`
 - `python -m ruff check src/services/ingestion_service/app/routers/job_bookkeeping.py src/services/ingestion_service/app/services/ingestion_job_service.py src/services/ingestion_service/app/routers/transactions.py src/services/ingestion_service/app/routers/portfolios.py src/services/ingestion_service/app/routers/instruments.py src/services/ingestion_service/app/routers/market_prices.py src/services/ingestion_service/app/routers/fx_rates.py src/services/ingestion_service/app/routers/business_dates.py src/services/ingestion_service/app/routers/portfolio_bundle.py src/services/ingestion_service/app/routers/reprocessing.py src/services/ingestion_service/app/routers/reference_data.py tests/unit/services/ingestion_service/services/test_ingestion_job_service_state_transitions.py tests/unit/services/ingestion_service/routers/test_job_bookkeeping.py tests/integration/services/ingestion_service/test_ingestion_routers.py`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
 
 ## Follow-up
 - The next worthwhile move is to add one DB-backed proof for the same post-persist bookkeeping failure

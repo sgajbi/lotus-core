@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import incident_playbook_guard as guard
+from scripts.quality import incident_playbook_guard as guard
 
 
 def _playbook(playbook_id: str = "ingestion-stuck-failed", **overrides) -> dict[str, object]:

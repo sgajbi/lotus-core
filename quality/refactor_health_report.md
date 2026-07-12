@@ -154,7 +154,7 @@ mapper/service, ASGI router, and OpenAPI tests plus `make lint`, OpenAPI, vocabu
 typecheck, unit-collection, wiki-docs, scoped Ruff, and diff checks.
 
 Current continuation: CR-1169 addresses validated GitHub issue #445 by moving collection gates onto
-`scripts/test_manifest.py` and adding a manifest-backed `integration-lite` collection gate to the
+`scripts/quality/test_manifest.py` and adding a manifest-backed `integration-lite` collection gate to the
 quality-baseline workflow. `make quality-unit-collection-gate` collects `3376/3386` unit-lane tests
 with 10 manifest deselects, `make quality-integration-lite-collection-gate` collects 126
 integration-lite tests, focused manifest/workflow governance tests pass with 22 tests, and issue
@@ -2088,7 +2088,7 @@ health before that claim is defensible.
      tests passed with 10 tests; scoped Ruff lint and format checks passed; complexity and
      maintainability gates passed; Radon reports the helper reduced from `B (8)` to `A (4)`.
 320. Addressed validated GitHub issue #445 by routing collection-only gates through
-     `scripts/test_manifest.py` and adding a named manifest-backed `integration-lite` collection
+     `scripts/quality/test_manifest.py` and adding a named manifest-backed `integration-lite` collection
      job to the quality-baseline workflow. `make quality-unit-collection-gate` collected
      `3376/3386` tests with 10 manifest deselects, `make quality-integration-lite-collection-gate`
      collected 126 tests, focused manifest/workflow governance tests passed with 22 tests, and
@@ -2097,10 +2097,10 @@ health before that claim is defensible.
      `output/openapi/` and adding an enforced portable Spectral blocker-subset gate to the
      quality-baseline API governance job. The new `make quality-openapi-spectral-gate` generated
      14 service artifacts and reported no warn-or-higher Spectral results; focused
-     OpenAPI/workflow/Spectral tests passed with 22 tests; `python scripts/openapi_quality_gate.py`
+     OpenAPI/workflow/Spectral tests passed with 22 tests; `python scripts/quality/openapi_quality_gate.py`
      passed; and `make quality-workflow-governance-gate` passed with 12 tests.
 322. Began validated GitHub issue #462 by adding AST-based direct-import architecture checks to
-     `scripts/architecture_boundary_guard.py`. `make architecture-guard` now blocks direct
+     `scripts/quality/architecture_boundary_guard.py`. `make architecture-guard` now blocks direct
      query-control-plane router imports of query-service repositories, query runtime router imports
      of query-control-plane internals, and ingestion router imports of other service
      implementations. Focused architecture boundary tests passed with 2 tests; `make

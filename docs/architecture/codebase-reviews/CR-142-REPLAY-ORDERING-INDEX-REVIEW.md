@@ -15,7 +15,7 @@ The replay pipeline now has deterministic oldest-impact-first ordering on both t
   - only where `job_type = 'RESET_WATERMARKS' AND status = 'PENDING'`
 
 ## Validation
-- `python scripts/migration_contract_check.py --mode alembic-sql`
+- `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 - `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py alembic/versions/f2b3c4d5e6f7_perf_add_replay_ordering_indexes.py`
 
 ## Status

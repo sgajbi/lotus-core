@@ -28,7 +28,7 @@ counts, filter presence, as-of dates, retry outcomes, lifecycle phases, and boun
 
 ## Guardrail
 
-`scripts/structured_log_guard.py` statically rejects:
+`scripts/quality/structured_log_guard.py` statically rejects:
 
 1. f-string logger messages in guarded operational paths,
 2. sensitive identifier variables passed as logger message-formatting arguments.

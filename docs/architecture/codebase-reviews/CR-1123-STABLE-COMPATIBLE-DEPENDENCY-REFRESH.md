@@ -55,7 +55,7 @@ one with documented evidence.
 
 Dependency lock regeneration:
 
-- `python scripts/update_shared_runtime_lock.py`
+- `python scripts/development/update_shared_runtime_lock.py`
 - Result: passed and regenerated `requirements/shared-runtime.in` plus
   `requirements/shared-runtime.lock.txt`
 

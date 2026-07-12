@@ -35,7 +35,7 @@
       ],
       "validation_evidence": [
         "make lotus-core-validate",
-        "scripts/certify_lotus_core_app.py",
+        "scripts/validation/certify_lotus_core_app.py",
         "docs/architecture/RFC-0082-downstream-endpoint-consumer-and-test-coverage-audit.md"
       ],
       "safe_demo_claims": [

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.repository_port_guard import find_repository_port_findings
+from scripts.quality.repository_port_guard import find_repository_port_findings
 
 
 def _write(path: Path, text: str) -> None:

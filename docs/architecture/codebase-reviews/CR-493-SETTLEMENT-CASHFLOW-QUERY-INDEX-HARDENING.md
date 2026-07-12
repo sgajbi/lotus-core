@@ -28,7 +28,7 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_query_cashflow_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/b0c1d2e3f4a6_perf_add_transaction_settlement_date_index.py src/services/query_service/app/repositories/cashflow_repository.py tests/unit/services/query_service/repositories/test_query_cashflow_repository.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/b0c1d2e3f4a6_perf_add_transaction_settlement_date_index.py src/services/query_service/app/repositories/cashflow_repository.py tests/unit/services/query_service/repositories/test_query_cashflow_repository.py`
 

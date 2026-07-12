@@ -22,3 +22,11 @@ matches its purpose; do not add uncategorized documents beside this index.
 Individual codebase-review evidence records live under
 [architecture/codebase-reviews](./architecture/codebase-reviews/README.md). Their current status
 is indexed by the [codebase review ledger](./architecture/CODEBASE-REVIEW-LEDGER.md).
+
+## Naming Contract
+
+1. Name files for the domain subject and artifact purpose so their role is clear without opening
+   them.
+2. Reserve RFC identifiers for RFC documents and RFC-specific implementation or closure records.
+3. Reserve issue and codebase-review identifiers for evidence records governed by their ledgers.
+4. Do not use an RFC or issue number as a substitute for a durable domain name.

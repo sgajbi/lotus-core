@@ -1,4 +1,4 @@
-from scripts.test_manifest import SUITE_RUNTIME_MODE
+from scripts.quality.test_manifest import SUITE_RUNTIME_MODE
 from tests.conftest import (
     DB_ONLY_SERVICES,
     DB_PLUS_KAFKA_SERVICES,

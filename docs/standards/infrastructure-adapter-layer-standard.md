@@ -51,7 +51,7 @@ definitions or concrete helper wiring.
 `SimulationService` uses `src/services/query_service/app/infrastructure/unit_of_work.py` as the
 representative SQLAlchemy unit-of-work adapter.
 
-`make architecture-guard` runs `scripts/infrastructure_adapter_layer_guard.py` to keep this
+`make architecture-guard` runs `scripts/quality/infrastructure_adapter_layer_guard.py` to keep this
 representative migration from drifting back into the transitional package.
 
 ## Runtime Boundary

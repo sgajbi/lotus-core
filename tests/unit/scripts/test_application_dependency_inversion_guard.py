@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.application_dependency_inversion_guard import (
+from scripts.quality.application_dependency_inversion_guard import (
     find_application_dependency_inversion_findings,
 )
 

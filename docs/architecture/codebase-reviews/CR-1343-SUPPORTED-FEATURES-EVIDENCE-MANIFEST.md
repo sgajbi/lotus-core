@@ -16,7 +16,7 @@ downstream ownership drift.
 
 - Added `contracts/supported-features/lotus-core-supported-features.v1.json` as the canonical
   supported-feature manifest.
-- Added `scripts/supported_features_guard.py` and focused guard tests.
+- Added `scripts/quality/supported_features_guard.py` and focused guard tests.
 - Added `make supported-features-guard`.
 - Wired the guard into `make architecture-guard`, `make quality-wiki-docs-gate`,
   `make docs-evidence-pack`, and `make lotus-core-validate`.
@@ -34,7 +34,7 @@ Focused validation before commit:
 
 ```powershell
 python -m pytest tests/unit/scripts/test_supported_features_guard.py tests/unit/scripts/test_generate_documentation_evidence_pack.py tests/unit/scripts/test_certify_lotus_core_app.py -q
-python scripts/supported_features_guard.py
+python scripts/quality/supported_features_guard.py
 make quality-wiki-docs-gate
 make architecture-guard
 ```

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.application_command_result_guard import (
+from scripts.quality.application_command_result_guard import (
     find_application_command_result_findings,
 )
 

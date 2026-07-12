@@ -28,7 +28,7 @@ pattern for:
 4. source-data product evidence,
 5. API/transport DTO exclusions.
 
-Added `scripts/repository_output_shape_guard.py`.
+Added `scripts/quality/repository_output_shape_guard.py`.
 
 The guard:
 

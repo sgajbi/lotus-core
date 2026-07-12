@@ -31,7 +31,7 @@ Added `docs/standards/api-route-catalog.v1.json` with 217 current OpenAPI routes
 are enriched from `docs/standards/route-contract-family-registry.json`; shared `/health`,
 `/metrics`, `/version`, and OpenAPI routes are cataloged as shared operational routes.
 
-Added `scripts/generate_api_route_catalog.py` with a `--check` mode that fails when the tracked
+Added `scripts/generators/generate_api_route_catalog.py` with a `--check` mode that fails when the tracked
 catalog drifts from generated OpenAPI plus route-family governance.
 
 Added focused unit tests for route-family enrichment, request/response/error schema extraction,
@@ -52,11 +52,11 @@ name, runtime topology, Dockerfile, package import path, or public runtime behav
 
 Focused validation before commit:
 
-- `python scripts/generate_api_route_catalog.py --check`
+- `python scripts/generators/generate_api_route_catalog.py --check`
 - `make api-vocabulary-gate`
 - `python -m pytest tests/unit/scripts/test_generate_api_route_catalog.py tests/unit/scripts/test_generate_documentation_evidence_pack.py -q`
-- `python -m ruff check scripts/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
-- `python -m ruff format --check scripts/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py scripts/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
+- `python -m ruff check scripts/generators/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py --ignore E501,I001`
+- `python -m ruff format --check scripts/generators/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py scripts/generators/generate_documentation_evidence_pack.py tests/unit/scripts/test_generate_documentation_evidence_pack.py`
 - `make docs-evidence-pack`
 - `make quality-wiki-docs-gate`
 - `python C:\Users\Sandeep\.codex\skills\lotus-readme-wiki-governance\scripts\audit_wiki_quality.py --wiki-dir wiki --changed-page API-Surface.md`

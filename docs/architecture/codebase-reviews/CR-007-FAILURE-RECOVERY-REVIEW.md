@@ -4,7 +4,7 @@
 
 Review the semantics, observability model, and testability of the failure-recovery gate:
 
-- `scripts/failure_recovery_gate.py`
+- `scripts/operations/failure_recovery_gate.py`
 - ingestion health surfaces exposed via `event_replay_service`
 - related backlog / error-budget instrumentation
 
@@ -92,7 +92,7 @@ That would change policy before improving clarity.
 
 Implemented:
 
-- explicit recovery classification in `scripts/failure_recovery_gate.py`
+- explicit recovery classification in `scripts/operations/failure_recovery_gate.py`
   - `FULLY_DRAINED`
   - `BOUNDED_RECOVERY`
   - `FAILED_RECOVERY`

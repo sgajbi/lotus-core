@@ -19,7 +19,7 @@ blocks, so broad complexity enforcement is not yet truthful.
 Add a repo-native maintainability gate:
 
 ```powershell
-python scripts/maintainability_gate.py src
+python scripts/quality/maintainability_gate.py src
 ```
 
 The gate parses `radon mi --json` output and fails only when a source module drops below C. This

@@ -8,7 +8,7 @@ Partition automation coverage for high-volume date-ranged market and reference s
 
 ## Finding
 
-`scripts/db_partition_advisor.py` already provides the right conservative automation pattern for
+`scripts/operations/db_partition_advisor.py` already provides the right conservative automation pattern for
 partition planning: generate monthly range-partition DDL and execute it only for tables that are
 already PostgreSQL partitioned parents. That avoids unsafe in-place conversion of populated tables.
 
@@ -38,8 +38,8 @@ expand.
 Commands:
 
 1. `python -m pytest tests/unit/scripts/test_db_partition_advisor.py -q`
-2. `python -m ruff check scripts/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
-3. `python -m ruff format --check scripts/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
+2. `python -m ruff check scripts/operations/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
+3. `python -m ruff format --check scripts/operations/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
 4. `git diff --check`
 
 Results:

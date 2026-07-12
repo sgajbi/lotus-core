@@ -25,11 +25,11 @@ Original RFC 053 requested:
 ## Current Implementation Reality
 
 Implemented:
-1. `scripts/coverage_gate.py` sets `FAIL_UNDER = "99"`.
+1. `scripts/quality/coverage_gate.py` sets `FAIL_UNDER = "99"`.
 2. Gate combines unit + integration-lite coverage and reports with this threshold.
 
 Evidence:
-- `scripts/coverage_gate.py`
+- `scripts/quality/coverage_gate.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -60,7 +60,7 @@ No high-value implementation gap identified for RFC 053 scope.
 
 ## Test and Validation Evidence
 
-1. `scripts/coverage_gate.py`
+1. `scripts/quality/coverage_gate.py`
 
 ## Original Acceptance Criteria Alignment
 

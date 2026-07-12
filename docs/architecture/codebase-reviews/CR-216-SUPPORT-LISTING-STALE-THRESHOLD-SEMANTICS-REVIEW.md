@@ -29,5 +29,5 @@ That meant a caller could request a different threshold, see it echoed back in t
 - `tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
 - `python -m pytest tests/unit/services/query_service/services/test_operations_service.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/integration/services/query_control_plane_service/test_operations_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
 - `python -m ruff check src/services/query_service/app/services/operations_service.py tests/unit/services/query_service/services/test_operations_service.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/integration/services/query_control_plane_service/test_operations_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`

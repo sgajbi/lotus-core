@@ -44,5 +44,5 @@ The event replay control-plane surface is now materially clearer for operators:
 
 - `src/services/event_replay_service/app/routers/ingestion_operations.py`
 - `tests/integration/services/event_replay_service/test_event_replay_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

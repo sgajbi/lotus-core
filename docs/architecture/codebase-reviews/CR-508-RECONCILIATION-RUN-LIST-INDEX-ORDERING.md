@@ -30,7 +30,7 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/financial_reconciliation_service/test_reconciliation_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/financial_reconciliation_service/test_reconciliation_repository.py alembic/versions/c0e3f4a5b6c7_perf_add_reconciliation_run_list_index.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py src/services/financial_reconciliation_service/app/repositories/reconciliation_repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/financial_reconciliation_service/test_reconciliation_repository.py alembic/versions/c0e3f4a5b6c7_perf_add_reconciliation_run_list_index.py`
 6. `git diff --check`

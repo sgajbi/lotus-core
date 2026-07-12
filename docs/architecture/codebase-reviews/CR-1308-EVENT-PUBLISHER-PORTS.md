@@ -26,7 +26,7 @@ topic, key, payload, header, failure, and flush behavior.
 7. Added fake/wrapped-publisher coverage for ingestion topic/key/payload/header propagation,
    idempotency/correlation/trace headers, batch failure accounting, reprocessing flush failure, and
    valuation scheduler dispatch behavior.
-8. Added `scripts/event_publisher_port_guard.py`, wired it into `make architecture-guard`, and
+8. Added `scripts/quality/event_publisher_port_guard.py`, wired it into `make architecture-guard`, and
    documented the event publisher port standard.
 
 ## Behavior And Compatibility
@@ -44,7 +44,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_event_publisher.py tests/unit/services/ingestion_service/services/test_ingestion_service.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py tests/unit/scripts/test_event_publisher_port_guard.py -q`
    - 49 passed, 1 existing Pydantic serialization warning in an empty-partition-key test.
-2. `python scripts/event_publisher_port_guard.py`
+2. `python scripts/quality/event_publisher_port_guard.py`
    - Passed.
 3. Scoped Ruff lint passed.
 4. Scoped Ruff format passed.

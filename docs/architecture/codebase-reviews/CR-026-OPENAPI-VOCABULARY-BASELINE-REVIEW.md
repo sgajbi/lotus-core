@@ -9,8 +9,8 @@ quality improvement becomes an explicit part of the code-review program.
 
 The current repository already passes the core RFC-0067 controls:
 
-1. `python scripts/openapi_quality_gate.py`
-2. `python scripts/api_vocabulary_inventory.py --validate-only`
+1. `python scripts/quality/openapi_quality_gate.py`
+2. `python scripts/quality/api_vocabulary_inventory.py --validate-only`
 
 That means the repo is not failing on basic contract governance.
 
@@ -40,6 +40,6 @@ forward rather than treating it as a one-time RFC gate.
 
 ## Evidence
 
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`
 - alias scan across `src`, `scripts`, and `tests`

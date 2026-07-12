@@ -4,8 +4,7 @@ from unittest.mock import MagicMock
 
 import requests
 
-from scripts.ci_service_sets import LATENCY_GATE_SERVICES
-from scripts.latency_profile import (
+from scripts.operations.latency_profile import (
     RuntimeContext,
     _cases,
     _enforce_gate,
@@ -17,6 +16,7 @@ from scripts.latency_profile import (
     _run_compose_up,
     _wait_compose_service_completed_successfully,
 )
+from scripts.quality.ci_service_sets import LATENCY_GATE_SERVICES
 
 
 def test_percentile_single_sample() -> None:
@@ -132,7 +132,7 @@ def test_resolve_runtime_ids_accepts_default_portfolio_when_ready(monkeypatch) -
 
     session.get.side_effect = get_side_effect
     session.post.return_value = benchmark_response
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
 
     runtime_context = _resolve_runtime_ids(
         session,
@@ -184,7 +184,7 @@ def test_resolve_runtime_ids_falls_back_to_portfolio_open_date_when_support_busi
 
     session.get.side_effect = get_side_effect
     session.post.return_value = benchmark_response
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
 
     runtime_context = _resolve_runtime_ids(
         session,
@@ -214,10 +214,10 @@ def test_resolve_runtime_ids_raises_when_no_portfolio_becomes_ready(monkeypatch)
 
     session.get.side_effect = get_side_effect
     session.post.return_value = not_ready_response
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
 
     timeline = iter([100.0, 101.0, 106.0])
-    monkeypatch.setattr("scripts.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
 
     try:
         _resolve_runtime_ids(
@@ -326,7 +326,7 @@ def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) ->
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
 
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
 
     _raise_if_compose_service_failed("demo_data_loader")
 
@@ -337,7 +337,7 @@ def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
 
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
 
     try:
         _raise_if_compose_service_failed("demo_data_loader")
@@ -355,8 +355,8 @@ def test_wait_compose_service_completed_successfully_waits_for_zero_exit(monkeyp
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout=next(states), stderr="")
 
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
 
     _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
 
@@ -369,7 +369,7 @@ def test_wait_compose_service_completed_successfully_raises_on_failed_exit(
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
 
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
 
     try:
         _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
@@ -388,9 +388,9 @@ def test_wait_compose_service_completed_successfully_raises_on_timeout(
         return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
 
     timeline = iter([100.0, 101.0, 106.0])
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
-    monkeypatch.setattr("scripts.latency_profile.time.sleep", lambda _: None)
-    monkeypatch.setattr("scripts.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
 
     try:
         _wait_compose_service_completed_successfully("demo_data_loader", timeout_seconds=5)
@@ -407,7 +407,7 @@ def test_run_compose_up_limits_started_services(monkeypatch) -> None:
         calls.append(cmd)
         return CompletedProcess(cmd, 0)
 
-    monkeypatch.setattr("scripts.latency_profile.subprocess.run", _fake_run)
+    monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
 
     _run_compose_up(build=False)
 

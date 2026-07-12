@@ -47,7 +47,7 @@ Current typed read-record precedent:
 
 ## Conformance Gate
 
-`make architecture-guard` runs `scripts/mapping_anti_corruption_guard.py` as the representative
+`make architecture-guard` runs `scripts/quality/mapping_anti_corruption_guard.py` as the representative
 contract index for this boundary. The guard verifies that each boundary family has a named
 artifact, that issue #661 stays cross-linked with #640 and #648, and that selected inline mapping
 snippets do not drift back into orchestration or persistence repositories.

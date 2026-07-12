@@ -5,7 +5,7 @@
     "FastAPI OpenAPI output",
     "docs/standards/route-contract-family-registry.json"
   ],
-  "guard_command": "python scripts/generate_api_route_catalog.py --check",
+  "guard_command": "python scripts/generators/generate_api_route_catalog.py --check",
   "description": "Implementation-backed API route catalog generated from OpenAPI and enriched with RFC-0082/RFC-0083 route-family governance metadata.",
   "entries": [
     {

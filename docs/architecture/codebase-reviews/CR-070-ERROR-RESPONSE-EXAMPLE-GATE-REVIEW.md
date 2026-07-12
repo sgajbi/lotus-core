@@ -11,12 +11,12 @@ Close the remaining systemic Swagger gap where JSON error responses, especially 
 ## Changes
 1. Extended `portfolio_common.openapi_enrichment` so non-2xx JSON responses receive generated examples as well, not only 2xx responses.
 2. Improved schema-field example generation so nested object/array fields prefer recursive schema examples while primitive fields keep canonical key-based examples.
-3. Extended `scripts/openapi_quality_gate.py` to fail when JSON error responses are missing examples.
+3. Extended `scripts/quality/openapi_quality_gate.py` to fail when JSON error responses are missing examples.
 4. Added unit coverage for both enrichment and gate behavior.
 
 ## Validation
 - `python -m pytest tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/services/query_service/test_openapi_quality_gate.py -q`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
 - direct schema sweep confirmed zero missing JSON error-response examples for:
   - `query_service`
   - `query_control_plane_service`

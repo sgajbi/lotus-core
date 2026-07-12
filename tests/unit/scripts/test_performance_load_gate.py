@@ -1,6 +1,6 @@
 import json
 
-from scripts.performance_load_gate import (
+from scripts.operations.performance_load_gate import (
     _build_transaction_batch,
     _evaluate_profile,
     _write_report,

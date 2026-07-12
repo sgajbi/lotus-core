@@ -8,7 +8,7 @@ The smoke, latency, performance, and recovery gates were all rebuilding compose 
 
 ## Fix
 - Added explicit `image:` tags for compose-built services
-- Added `scripts/prebuild_ci_images.py` to prebuild compose images into the local Docker engine with reusable local BuildKit cache
+- Added `scripts/release/prebuild_ci_images.py` to prebuild compose images into the local Docker engine with reusable local BuildKit cache
 - Updated CI jobs to:
   - restore `.buildx-cache`
   - prebuild images
@@ -17,7 +17,7 @@ The smoke, latency, performance, and recovery gates were all rebuilding compose 
 
 ## Evidence
 - `docker compose config -q`
-- `python scripts/prebuild_ci_images.py --cache-dir .buildx-cache-smoke --services query_service`
+- `python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache-smoke --services query_service`
 - `.github/workflows/ci.yml` parsed successfully
 
 ## Follow-up

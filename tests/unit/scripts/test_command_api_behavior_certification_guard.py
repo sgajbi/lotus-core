@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.command_api_behavior_certification_guard import (
+from scripts.quality.command_api_behavior_certification_guard import (
     REQUIRED_SCENARIOS,
     validate_command_api_behavior_certification_pack,
 )

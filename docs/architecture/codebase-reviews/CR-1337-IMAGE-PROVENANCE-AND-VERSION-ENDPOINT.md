@@ -19,15 +19,15 @@ immutable image release controls enforceable instead of implicit.
 3. Added OCI labels and matching runtime environment variables to all service Dockerfiles for Git
    commit SHA, Git branch, build timestamp, repo URL, image version, image digest, and CI pipeline
    run ID.
-4. Updated `scripts/prebuild_ci_images.py` to pass the provenance build args from GitHub Actions,
+4. Updated `scripts/release/prebuild_ci_images.py` to pass the provenance build args from GitHub Actions,
    Git, or explicit `LOTUS_*` overrides.
-5. Updated `scripts/write_build_provenance.py` so build evidence records the same metadata.
+5. Updated `scripts/release/write_build_provenance.py` so build evidence records the same metadata.
 6. Added `.github/workflows/image-release.yml` as the CI-only immutable image publication lane:
    Git-SHA tags, GHCR push, BuildKit SBOM/provenance, CycloneDX SBOM artifacts, Trivy scan,
    Cosign signing, digest capture, and per-image release manifests.
-7. Added `scripts/write_image_release_manifest.py` for digest, scan, signing, attestation,
+7. Added `scripts/release/write_image_release_manifest.py` for digest, scan, signing, attestation,
    deploy-by-digest, same-image promotion, and runtime-env evidence.
-8. Added `scripts/image_provenance_guard.py`, `make image-provenance-guard`, and wired the guard
+8. Added `scripts/quality/image_provenance_guard.py`, `make image-provenance-guard`, and wired the guard
    into `make architecture-guard`.
 9. Updated README, operations runbooks, wiki source, validation/CI wiki source, and repo context.
 
@@ -48,9 +48,9 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py -q`
 2. `python -m pytest tests/unit/scripts/test_write_image_release_manifest.py tests/unit/test_ci_workflow_action_versions.py -q`
-3. `python scripts/image_provenance_guard.py`
-4. `python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/prebuild_ci_images.py scripts/write_build_provenance.py scripts/write_image_release_manifest.py scripts/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/scripts/test_write_image_release_manifest.py --ignore E501,I001`
-5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/prebuild_ci_images.py scripts/write_build_provenance.py scripts/write_image_release_manifest.py scripts/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/scripts/test_write_image_release_manifest.py`
+3. `python scripts/quality/image_provenance_guard.py`
+4. `python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/release/prebuild_ci_images.py scripts/release/write_build_provenance.py scripts/release/write_image_release_manifest.py scripts/quality/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/scripts/test_write_image_release_manifest.py --ignore E501,I001`
+5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/release/prebuild_ci_images.py scripts/release/write_build_provenance.py scripts/release/write_image_release_manifest.py scripts/quality/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/scripts/test_write_image_release_manifest.py`
 
 ## Documentation, Wiki, Context, And Skill Decision
 

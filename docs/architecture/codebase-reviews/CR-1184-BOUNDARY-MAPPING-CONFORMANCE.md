@@ -40,8 +40,8 @@ new mapper also explicitly excludes event envelope metadata (`event_type`, `sche
 - Result refreshed on 2026-07-01: `9 passed`
 - `make test-boundary-mapping-conformance`
 - Result refreshed on 2026-07-01: `3 passed`
-- `python scripts/test_manifest.py --suite boundary-mapping-conformance --validate-only`
-- `python -m ruff check tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py src/services/persistence_service/app/repositories/transaction_db_repo.py scripts/test_manifest.py`
+- `python scripts/quality/test_manifest.py --suite boundary-mapping-conformance --validate-only`
+- `python -m ruff check tests/unit/boundary_mapping/test_transaction_and_source_data_conformance.py src/services/persistence_service/app/repositories/transaction_db_repo.py scripts/quality/test_manifest.py`
 
 ## Documentation And Wiki Decision
 

@@ -11,7 +11,7 @@ opaque inline `Makefile` command.
 
 ## Expected Improvement
 
-`make clean` now delegates to `scripts/clean_generated_artifacts.py`, a reviewed, test-backed
+`make clean` now delegates to `scripts/development/clean_generated_artifacts.py`, a reviewed, test-backed
 cleanup utility with an explicit repo-root-scoped allowlist. The policy removes ignored local
 caches, Python bytecode, build/package byproducts, coverage files, and generated `output/`
 evidence artifacts while preserving source, docs, wiki source, migrations, contracts, `.git`,
@@ -62,15 +62,15 @@ operator-facing runtime behavior, API support, source-data product truth, or pub
 
 - `python -m pytest tests/unit/scripts/test_clean_generated_artifacts.py tests/unit/scripts/test_source_contract_guards.py -q`
   passed with 6 tests.
-- `python -m ruff check scripts/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py --ignore E501,I001`
+- `python -m ruff check scripts/development/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py --ignore E501,I001`
   passed.
-- `python -m ruff format --check scripts/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py`
+- `python -m ruff format --check scripts/development/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py`
   passed after formatting the new script.
-- `python scripts/clean_generated_artifacts.py --dry-run`
+- `python scripts/development/clean_generated_artifacts.py --dry-run`
   reported 177 governed generated artifacts, including current disposable caches, bytecode,
   `output`, service `*.egg-info`, and untracked `src/services/query_service/build`.
 - `make -n clean`
-  confirmed the Make target delegates to `python scripts/clean_generated_artifacts.py`.
+  confirmed the Make target delegates to `python scripts/development/clean_generated_artifacts.py`.
 - `git diff --check`
   passed with CRLF normalization warnings only.
 - `make lint`

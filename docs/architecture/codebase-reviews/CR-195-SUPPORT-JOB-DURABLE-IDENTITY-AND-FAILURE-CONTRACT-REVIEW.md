@@ -29,4 +29,4 @@ That left the support-plane contract weaker than analytics export and reconcilia
 - `tests/unit/services/query_service/services/test_operations_service.py`
 - `tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`

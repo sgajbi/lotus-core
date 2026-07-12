@@ -47,14 +47,14 @@ Implemented evidence:
    - `tests/e2e/test_rapid_reprocessing.py`
    - `tests/e2e/test_failure_scenarios.py`
 4. Deterministic resilience/load gates and consolidated signoff:
-   - `scripts/performance_load_gate.py`
-   - `scripts/failure_recovery_gate.py`
-   - `scripts/institutional_signoff_pack.py`
+   - `scripts/operations/performance_load_gate.py`
+   - `scripts/operations/failure_recovery_gate.py`
+   - `scripts/validation/institutional_signoff_pack.py`
 5. Property-based invariant coverage for financial calculator engine:
    - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py`
    - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
 6. Independent offline integrity auditing:
-   - `scripts/offline_integrity_auditor.py`
+   - `scripts/operations/offline_integrity_auditor.py`
    - `tests/unit/scripts/test_offline_integrity_auditor.py`
 
 Still missing versus original full ambition:
@@ -69,7 +69,7 @@ Still missing versus original full ambition:
 | Load/stress testing pillar | Deterministic load gate script and artifacts | Implemented (initial) | `performance_load_gate.py` |
 | Failure injection/recovery testing | Deterministic interruption/recovery gate | Implemented (initial) | `failure_recovery_gate.py` |
 | Full chaos matrix automation | Not yet broad/scheduled as requested | Partial gap | backlog delta RFC-010-D01 |
-| Independent offline integrity auditor | Ledger-vs-snapshot recomputation script with report artifacts | Implemented | `scripts/offline_integrity_auditor.py` |
+| Independent offline integrity auditor | Ledger-vs-snapshot recomputation script with report artifacts | Implemented | `scripts/operations/offline_integrity_auditor.py` |
 | Property-based financial invariants | Hypothesis-driven invariants for FIFO/AVCO cost-basis logic | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py` |
 
 ## Design Reasoning and Trade-offs
@@ -106,13 +106,13 @@ Open deltas are high-value and still relevant to current platform maturity goals
 2. Property-based invariants:
    - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_property_invariants.py`
 3. Offline integrity auditor:
-   - `scripts/offline_integrity_auditor.py`
+   - `scripts/operations/offline_integrity_auditor.py`
    - `tests/unit/scripts/test_offline_integrity_auditor.py`
 4. Load/failure deterministic gates:
-   - `scripts/performance_load_gate.py`
-   - `scripts/failure_recovery_gate.py`
+   - `scripts/operations/performance_load_gate.py`
+   - `scripts/operations/failure_recovery_gate.py`
 5. Consolidated signoff:
-   - `scripts/institutional_signoff_pack.py`
+   - `scripts/validation/institutional_signoff_pack.py`
 
 ## Original Acceptance Criteria Alignment
 

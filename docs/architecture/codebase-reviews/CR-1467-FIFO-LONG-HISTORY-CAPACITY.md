@@ -28,7 +28,7 @@ availability checks and partial disposal complete without scanning it.
 ## Reproducible Capacity Evidence
 
 Added `make profile-cost-history-capacity`, backed by
-`scripts/cost_history_capacity_profile.py`. It profiles the real parser, sorter, FIFO/AVCO
+`scripts/operations/cost_history_capacity_profile.py`. It profiles the real parser, sorter, FIFO/AVCO
 strategy, and cost calculator over 1,000, 2,000, 4,000, and 8,000 deterministic transactions and
 writes `output/cost-history-capacity-profile.json` with schema
 `lotus-core.cost-history-capacity-profile.v1`.

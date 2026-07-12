@@ -13,7 +13,7 @@ The executable helper is:
 
 1. `src/libs/portfolio-common/portfolio_common/event_supportability.py`
 2. `tests/unit/libs/portfolio-common/test_event_supportability.py`
-3. `scripts/event_runtime_contract_guard.py`
+3. `scripts/quality/event_runtime_contract_guard.py`
 4. `tests/unit/scripts/test_event_runtime_contract_guard.py`
 5. `src/libs/portfolio-common/portfolio_common/events.py`
 6. `src/libs/portfolio-common/portfolio_common/outbox_repository.py`
@@ -165,9 +165,9 @@ Future runtime slices must:
 
 Slice 10 validation is:
 
-1. `python scripts/event_runtime_contract_guard.py`,
+1. `python scripts/quality/event_runtime_contract_guard.py`,
 2. `python -m pytest tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py -q`,
-3. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py --ignore E501,I001`,
-4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py`,
+3. `python -m ruff check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/quality/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py --ignore E501,I001`,
+4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py scripts/quality/event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/scripts/test_event_runtime_contract_guard.py`,
 5. `git diff --check`,
 6. `make lint`.

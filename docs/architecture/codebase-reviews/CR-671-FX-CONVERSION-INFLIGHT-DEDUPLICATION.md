@@ -36,7 +36,7 @@ Local validation passed:
 3. focused cash balance service proof
 4. focused transaction service proof
 5. `python -m alembic heads`
-6. `python scripts/migration_contract_check.py --mode alembic-sql`
+6. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 7. touched-surface `python -m ruff check`
 8. touched-surface `python -m ruff format --check`
 9. `git diff --check`

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.image_provenance_guard import find_image_provenance_findings
+from scripts.quality.image_provenance_guard import find_image_provenance_findings
 
 
 def _write_required_sources(root: Path, *, bootstrap_content: str | None = None) -> None:
@@ -35,7 +35,7 @@ def _write_required_sources(root: Path, *, bootstrap_content: str | None = None)
         ),
         encoding="utf-8",
     )
-    scripts_dir = root / "scripts"
+    scripts_dir = root / "scripts" / "release"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     scripts_dir.joinpath("prebuild_ci_images.py").write_text(
         "\n".join(

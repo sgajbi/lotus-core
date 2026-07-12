@@ -24,7 +24,7 @@ ingestion write surface.
   60 seconds, 120 requests, and 10000 records.
 - Listed every locally rate-limited ingestion write endpoint template that the upstream gateway
   policy must cover.
-- Added `scripts/ingestion_gateway_rate_limit_policy_guard.py`.
+- Added `scripts/quality/ingestion_gateway_rate_limit_policy_guard.py`.
 - Added `make ingestion-gateway-rate-limit-policy-guard` and wired it into `make lint`.
 - Added focused guard tests proving current truth passes and endpoint/docs drift fails.
 

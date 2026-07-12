@@ -31,7 +31,7 @@ exception when those updates move behind an explicit unit-of-work boundary.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/repository_transaction_boundary_guard.py`. The guard scans
+`make architecture-guard` runs `scripts/quality/repository_transaction_boundary_guard.py`. The guard scans
 repository modules for direct `commit()` or `rollback()` calls and fails unless the file is listed
 as a transitional exception. It also fails stale exceptions after a repository no longer owns direct
 transaction completion.

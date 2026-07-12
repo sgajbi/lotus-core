@@ -11,7 +11,7 @@ still local-process state.
 
 ## Change
 
-- Added `scripts/ingestion_rate_limit_scope_guard.py`.
+- Added `scripts/quality/ingestion_rate_limit_scope_guard.py`.
 - Added `make ingestion-rate-limit-scope-guard` and wired it into `make lint`.
 - Added guard tests for:
   - current repository truth passing,

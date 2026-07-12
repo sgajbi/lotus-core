@@ -25,5 +25,5 @@
 ## Evidence
 
 - `python -m pytest tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py -q`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

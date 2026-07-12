@@ -49,5 +49,5 @@ integrators.
 - `src/services/financial_reconciliation_service/app/dtos.py`
 - `src/services/financial_reconciliation_service/app/routers/reconciliation.py`
 - `tests/integration/services/financial_reconciliation_service/test_financial_reconciliation_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

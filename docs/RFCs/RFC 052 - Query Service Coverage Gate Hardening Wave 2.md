@@ -33,15 +33,15 @@ Implemented:
 1. `test_integration_service.py` includes tenant/default/strict/allowed-section branch tests.
 2. `test_capabilities_service.py` includes malformed JSON/non-object/override edge cases.
 3. `test_main_app.py` includes lifespan startup/shutdown log assertions.
-4. Integration-lite suite discovery in `scripts/test_manifest.py` includes query router dependency tests, which includes capabilities router tests.
+4. Integration-lite suite discovery in `scripts/quality/test_manifest.py` includes query router dependency tests, which includes capabilities router tests.
 
 Evidence:
 - `tests/unit/services/query_service/services/test_integration_service.py`
 - `tests/unit/services/query_service/services/test_capabilities_service.py`
 - `tests/integration/services/query_service/test_capabilities_router_dependency.py`
 - `tests/integration/services/query_service/test_main_app.py`
-- `scripts/test_manifest.py`
-- `scripts/coverage_gate.py`
+- `scripts/quality/test_manifest.py`
+- `scripts/quality/coverage_gate.py`
 
 ## Requirement-to-Implementation Traceability
 

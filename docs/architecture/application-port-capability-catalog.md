@@ -39,9 +39,9 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_port_catalog_guard.py`,
-`scripts/application_dependency_inversion_guard.py`,
-`scripts/infrastructure_adapter_layer_guard.py`, `scripts/repository_transaction_boundary_guard.py`,
+`make architecture-guard` runs `scripts/quality/application_port_catalog_guard.py`,
+`scripts/quality/application_dependency_inversion_guard.py`,
+`scripts/quality/infrastructure_adapter_layer_guard.py`, `scripts/quality/repository_transaction_boundary_guard.py`,
 and the specific port-regression guards for ingestion stores, event publishing, repository
 capability ports, and unit-of-work boundaries.
 

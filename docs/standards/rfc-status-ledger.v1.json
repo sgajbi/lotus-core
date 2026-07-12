@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus-core.rfc-status-ledger.v1",
   "repository": "lotus-core",
-  "guard_command": "python scripts/rfc_status_ledger_guard.py",
+  "guard_command": "python scripts/quality/rfc_status_ledger_guard.py",
   "families": [
     "architecture",
     "core",

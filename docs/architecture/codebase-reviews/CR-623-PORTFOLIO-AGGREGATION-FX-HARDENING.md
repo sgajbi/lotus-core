@@ -39,7 +39,7 @@ Local validation passed:
 
 1. `python -m pytest tests/unit/services/portfolio_aggregation_service/core/test_portfolio_aggregation_timeseries_logic.py tests/unit/services/portfolio_aggregation_service/consumers/test_portfolio_timeseries_consumer.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. touched-surface `python -m ruff check`
 5. touched-surface `python -m ruff format --check`
 6. `git diff --check`

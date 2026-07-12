@@ -19,10 +19,10 @@ promotion, and no build-secret leakage.
 2. Updated the standard `/version` OpenAPI example to include the OCI label map.
 3. Added `oci_labels` to image release manifests so release evidence can be compared directly
    with runtime metadata and OCI label names.
-4. Tightened `scripts/write_image_release_manifest.py` to require a full 40-character lowercase
+4. Tightened `scripts/release/write_image_release_manifest.py` to require a full 40-character lowercase
    Git SHA, non-placeholder branch/build/repo/pipeline metadata, a valid `sha256:` digest, and
    promotion evidence across `dev`, `uat`, and `prod`.
-5. Extended `scripts/image_provenance_guard.py` and focused tests so future changes cannot drop
+5. Extended `scripts/quality/image_provenance_guard.py` and focused tests so future changes cannot drop
    `/version` OCI-label parity or release-manifest OCI-label evidence silently.
 6. Updated README, operations docs, wiki source, and repository context to match the stricter
    implementation-backed contract.
@@ -48,9 +48,9 @@ that label would produce a different image digest.
 Focused local validation:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_write_image_release_manifest.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_prebuild_ci_images.py -q`
-2. `python scripts/image_provenance_guard.py`
-3. `python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/write_image_release_manifest.py scripts/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_write_image_release_manifest.py tests/unit/scripts/test_image_provenance_guard.py --ignore E501,I001`
-4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/write_image_release_manifest.py scripts/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_write_image_release_manifest.py tests/unit/scripts/test_image_provenance_guard.py`
+2. `python scripts/quality/image_provenance_guard.py`
+3. `python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/release/write_image_release_manifest.py scripts/quality/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_write_image_release_manifest.py tests/unit/scripts/test_image_provenance_guard.py --ignore E501,I001`
+4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py scripts/release/write_image_release_manifest.py scripts/quality/image_provenance_guard.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_write_image_release_manifest.py tests/unit/scripts/test_image_provenance_guard.py`
 
 ## Documentation, Wiki, Context, And Skill Decision
 

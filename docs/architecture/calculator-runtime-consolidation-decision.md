@@ -73,7 +73,7 @@ complete before step 7 and the remaining release/deployment gates are validated.
 ## Rollback
 
 Retain the existing event contracts throughout migration. Use
-`scripts/transaction_processing_cutover_offsets.py` to audit and copy exact drained live/replay
+`scripts/operations/transaction_processing_cutover_offsets.py` to audit and copy exact drained live/replay
 offsets into the target groups. Before legacy deployables are removed, rollback requires a
 quiesced, reviewed reverse offset handoff and one atomic deployment-manifest change back to all
 three images. Database rollback is not required because this decision introduces no schema

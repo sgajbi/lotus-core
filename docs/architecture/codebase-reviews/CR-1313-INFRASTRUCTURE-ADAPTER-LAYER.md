@@ -21,7 +21,7 @@ infrastructure layer or transitional packages with a migration path.
 3. Left `src/services/ingestion_service/app/adapters/ingestion_workflow_stores.py` as a
    compatibility re-export.
 4. Updated `IngestionJobService` to import migrated concrete stores from `app.infrastructure`.
-5. Added `scripts/infrastructure_adapter_layer_guard.py` and unit tests.
+5. Added `scripts/quality/infrastructure_adapter_layer_guard.py` and unit tests.
 6. Wired `infrastructure-adapter-layer-guard` into `make architecture-guard`.
 7. Updated the application port catalog and repo context with the infrastructure adapter boundary.
 
@@ -39,7 +39,7 @@ application code uses the new infrastructure path.
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_infrastructure_adapter_layer_guard.py tests/unit/scripts/test_application_port_catalog_guard.py tests/unit/services/ingestion_service/services/test_ingestion_job_service_ports.py -q`
-2. `python scripts/infrastructure_adapter_layer_guard.py`
+2. `python scripts/quality/infrastructure_adapter_layer_guard.py`
 3. Scoped Ruff lint and format checks for the migrated adapter, guard, and tests.
 4. `make architecture-guard`
 

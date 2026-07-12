@@ -10,7 +10,7 @@ Given the repo's current split service framework versions, a single full lockfil
 
 ## Fix
 - Added `constraints/shared-build-constraints.txt`
-- Wired `scripts/bootstrap_dev.py` to install editable projects, test requirements, and dev tooling under that constraints file
+- Wired `scripts/development/bootstrap_dev.py` to install editable projects, test requirements, and dev tooling under that constraints file
 - Wired service Dockerfiles to copy the shared constraints file and export:
   - `PIP_CONSTRAINT=/app/constraints/shared-build-constraints.txt`
 - Updated `tests/requirements.txt` to align `asyncpg` and pin `httpx`

@@ -20,8 +20,8 @@ run consistently in local checks and CI.
 ## Change
 
 - Added deterministic per-service OpenAPI artifact generation under `output/openapi/`.
-- Added `scripts/generate_openapi_artifacts.py`.
-- Added `scripts/openapi_spectral_gate.py`, a cross-platform wrapper that invokes `npx` directly
+- Added `scripts/generators/generate_openapi_artifacts.py`.
+- Added `scripts/quality/openapi_spectral_gate.py`, a cross-platform wrapper that invokes `npx` directly
   (`npx.cmd` on Windows, `npx` elsewhere) and passes generated artifact paths without shell globs.
 - Added `make quality-openapi-spectral-gate`.
 - Added an enforced `OpenAPI Spectral gate` step to the quality-baseline API governance job.

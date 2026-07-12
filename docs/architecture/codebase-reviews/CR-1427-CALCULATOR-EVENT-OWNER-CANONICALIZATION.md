@@ -35,7 +35,7 @@ runtime topology, route, or OpenAPI contract changed. This corrects governance m
 ## Evidence
 
 - `python -m pytest tests/unit/scripts/test_event_runtime_contract_guard.py tests/unit/libs/portfolio-common/test_event_supportability.py -q` -> 36 passed.
-- `python scripts/event_runtime_contract_guard.py` -> passed.
+- `python scripts/quality/event_runtime_contract_guard.py` -> passed.
 - Scoped Ruff lint and format checks -> passed.
 - `git diff --check` -> passed.
 

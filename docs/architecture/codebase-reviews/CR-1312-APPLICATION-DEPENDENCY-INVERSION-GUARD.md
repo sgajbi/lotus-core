@@ -15,7 +15,7 @@ after a governed port exists for that capability.
 
 ## Changes
 
-1. Added `scripts/application_dependency_inversion_guard.py`.
+1. Added `scripts/quality/application_dependency_inversion_guard.py`.
 2. Added focused unit tests for allowed port-enabled modules and rejected concrete dependencies.
 3. Wired `application-dependency-inversion-guard` into `make architecture-guard`.
 4. Added `docs/standards/application-dependency-inversion-standard.md`.
@@ -36,7 +36,7 @@ split.
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_application_dependency_inversion_guard.py tests/unit/scripts/test_application_port_catalog_guard.py tests/unit/scripts/test_repository_port_guard.py tests/unit/scripts/test_event_publisher_port_guard.py tests/unit/scripts/test_ingestion_store_port_guard.py -q`
-2. `python scripts/application_dependency_inversion_guard.py`
+2. `python scripts/quality/application_dependency_inversion_guard.py`
 3. Scoped Ruff lint and format checks for the new guard and tests.
 4. `make architecture-guard`
 

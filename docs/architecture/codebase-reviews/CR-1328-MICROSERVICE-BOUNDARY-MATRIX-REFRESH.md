@@ -38,7 +38,7 @@ change the current deployable catalog.
 
 Focused validation was run before commit:
 
-1. `python scripts/runtime_boundary_decision_guard.py`
+1. `python scripts/quality/runtime_boundary_decision_guard.py`
 2. `make architecture-guard`
-3. `python scripts/wiki_validation_guard.py`
+3. `python scripts/quality/wiki_validation_guard.py`
 4. `git diff --check`

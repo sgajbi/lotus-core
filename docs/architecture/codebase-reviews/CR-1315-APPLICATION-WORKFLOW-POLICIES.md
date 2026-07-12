@@ -23,7 +23,7 @@ explicit while preserving existing router and downstream contracts.
 6. Routed `IngestionJobService.record_consumer_dlq_replay_audit(...)` through `AuditWorkflow`.
 7. Added fake-port workflow tests for duplicate idempotency, conflict outcome, audit success, and
    fail-closed audit errors.
-8. Added `scripts/application_workflow_policy_guard.py` and wired it into
+8. Added `scripts/quality/application_workflow_policy_guard.py` and wired it into
    `make architecture-guard`.
 9. Added `docs/standards/application-workflow-policy-standard.md`.
 
@@ -41,7 +41,7 @@ Existing routers can continue calling `IngestionJobService.create_or_get_job(...
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_application_workflow_policy_guard.py tests/unit/services/ingestion_service/application/test_workflow_policies.py tests/unit/services/ingestion_service/services/test_ingestion_job_service_ports.py -q`
-2. `python scripts/application_workflow_policy_guard.py`
+2. `python scripts/quality/application_workflow_policy_guard.py`
 3. Scoped Ruff lint and format checks for the new workflow, guard, and tests.
 4. `make architecture-guard`
 

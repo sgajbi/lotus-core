@@ -31,7 +31,7 @@ responses and downstream behavior.
    snapshot identity command.
 8. Replaced core snapshot request fingerprinting from `request.model_dump(mode="json")` with the
    canonical identity command payload while preserving the payload shape.
-9. Added `scripts/application_command_result_guard.py` and wired it into
+9. Added `scripts/quality/application_command_result_guard.py` and wired it into
    `make architecture-guard`.
 10. Added `docs/standards/application-command-result-standard.md`.
 
@@ -52,7 +52,7 @@ depending on API DTO serialization as the source of identity truth.
 Focused local validation:
 
 1. `python -m pytest tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py tests/unit/services/ingestion_service/routers/test_uploads.py tests/unit/services/query_service/services/test_lookup_catalog_service.py tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/scripts/test_application_command_result_guard.py -q`
-2. `python scripts/application_command_result_guard.py`
+2. `python scripts/quality/application_command_result_guard.py`
 3. Scoped Ruff check and format-check for the touched Python modules.
 4. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "upload_preview_rejects_unsupported_file_format or upload_commit_rejects_unsupported_file_format or upload_commit_xlsx_rejects_invalid_without_partial or upload_commit_rejects_empty_csv or upload_preview_csv_with_aliases or upload_commit_csv_publishes_valid_rows" -q`
 5. `python -m pytest tests/integration/services/query_service/test_lookup_contract_router.py -q`

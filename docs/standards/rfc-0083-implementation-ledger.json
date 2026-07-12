@@ -83,7 +83,7 @@
       "artifacts": [
         "docs/standards/temporal-vocabulary.md",
         "docs/standards/temporal-vocabulary-allowlist.json",
-        "scripts/temporal_vocabulary_guard.py",
+        "scripts/quality/temporal_vocabulary_guard.py",
         "tests/unit/scripts/test_temporal_vocabulary_guard.py"
       ]
     },
@@ -94,7 +94,7 @@
       "validationLane": "route contract-family guard",
       "artifacts": [
         "docs/standards/route-contract-family-registry.json",
-        "scripts/route_contract_family_guard.py",
+        "scripts/quality/route_contract_family_guard.py",
         "tests/unit/scripts/test_route_contract_family_guard.py"
       ]
     },
@@ -140,8 +140,8 @@
         "docs/architecture/RFC-0083-source-data-product-catalog.md",
         "src/libs/portfolio-common/portfolio_common/source_data_products.py",
         "tests/unit/libs/portfolio-common/test_source_data_products.py",
-        "scripts/analytics_input_consumer_contract_guard.py",
-        "scripts/source_data_product_contract_guard.py",
+        "scripts/quality/analytics_input_consumer_contract_guard.py",
+        "scripts/quality/source_data_product_contract_guard.py",
         "tests/unit/scripts/test_analytics_input_consumer_contract_guard.py",
         "tests/unit/scripts/test_source_data_product_contract_guard.py"
       ]
@@ -199,7 +199,7 @@
         "src/libs/portfolio-common/portfolio_common/event_supportability.py",
         "src/libs/portfolio-common/portfolio_common/events.py",
         "tests/unit/libs/portfolio-common/test_event_supportability.py",
-        "scripts/event_runtime_contract_guard.py",
+        "scripts/quality/event_runtime_contract_guard.py",
         "tests/unit/scripts/test_event_runtime_contract_guard.py",
         "src/libs/portfolio-common/portfolio_common/outbox_repository.py",
         "tests/unit/libs/portfolio-common/test_outbox_repository.py"
@@ -213,7 +213,7 @@
       "artifacts": [
         "docs/architecture/RFC-0083-production-readiness-closure.md",
         "docs/standards/rfc-0083-implementation-ledger.json",
-        "scripts/rfc0083_closure_guard.py",
+        "scripts/quality/rfc0083_closure_guard.py",
         "tests/unit/scripts/test_rfc0083_closure_guard.py"
       ]
     }

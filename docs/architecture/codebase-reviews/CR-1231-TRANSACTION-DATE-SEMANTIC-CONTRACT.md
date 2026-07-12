@@ -42,10 +42,10 @@ runtime field and migration plan are introduced.
 Initial generation and contract checks:
 
 - API vocabulary inventory regenerated with
-  `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`.
-- OpenAPI quality gate passed with `python scripts/openapi_quality_gate.py`.
+  `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`.
+- OpenAPI quality gate passed with `python scripts/quality/openapi_quality_gate.py`.
 - Generated OpenAPI artifacts under `output/openapi` and `output/openapi-test` were refreshed
-  through `scripts.openapi_quality_gate.write_openapi_artifacts(...)` for local evidence.
+  through `scripts.quality.openapi_quality_gate.write_openapi_artifacts(...)` for local evidence.
 - Stale wording scan found no remaining `Transaction booking timestamp`, `booked ledger
   date/time`, `Timestamp when the SELL transaction was booked`, or `trade booking from
   contractual` occurrences under `src/services/query_service/app`, `docs/features`,

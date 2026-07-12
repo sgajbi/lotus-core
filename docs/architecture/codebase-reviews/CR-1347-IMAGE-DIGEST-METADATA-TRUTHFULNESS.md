@@ -40,7 +40,7 @@ The implementation-backed contract remains:
 
 Focused local validation:
 
-1. `python scripts/image_provenance_guard.py`
+1. `python scripts/quality/image_provenance_guard.py`
 2. `python -m pytest tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/scripts/test_image_provenance_guard.py tests/unit/scripts/test_write_image_release_manifest.py -q`
 3. `python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py --ignore E501,I001`
 4. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py`

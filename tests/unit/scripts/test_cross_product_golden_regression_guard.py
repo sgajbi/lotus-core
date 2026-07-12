@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.cross_product_golden_regression_guard import validate_cross_product_golden_pack
+from scripts.quality.cross_product_golden_regression_guard import validate_cross_product_golden_pack
 
 
 def _current_pack_and_fixture() -> tuple[dict, dict]:

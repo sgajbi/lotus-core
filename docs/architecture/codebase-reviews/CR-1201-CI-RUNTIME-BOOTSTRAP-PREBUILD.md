@@ -64,7 +64,7 @@ Focused unit proof:
 
 Focused static proof:
 
-- `python -m ruff check scripts/ci_service_sets.py scripts/prebuild_ci_images.py tests/conftest.py tests/test_support/docker_stack.py tests/unit/scripts/test_ci_service_sets.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/test_support/test_docker_stack.py`
+- `python -m ruff check scripts/quality/ci_service_sets.py scripts/release/prebuild_ci_images.py tests/conftest.py tests/test_support/docker_stack.py tests/unit/scripts/test_ci_service_sets.py tests/unit/scripts/test_prebuild_ci_images.py tests/unit/test_support/test_docker_stack.py`
 - Result: passed
 
 Whitespace proof:
@@ -78,7 +78,7 @@ Repo-native CI governance proof:
 - Result: passed
 - `make warning-gate`
 - Result: `3234 passed, 10 deselected`, zero warnings
-- `python scripts/migration_contract_check.py --mode alembic-sql`
+- `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 - Result: passed
 - `make quality-workflow-governance-gate`
 - Result: passed

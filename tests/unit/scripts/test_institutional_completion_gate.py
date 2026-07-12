@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
-from scripts.institutional_completion_gate import (
+from scripts.quality.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
+from scripts.validation.institutional_completion_gate import (
     ScenarioArtifactMetadata,
     _compose_down,
     _compose_up,
@@ -135,7 +135,7 @@ def test_compose_up_starts_governed_completion_services(monkeypatch: pytest.Monk
     def _fake_run(cmd: list[str], cwd: Path) -> None:
         calls.append((cmd, cwd))
 
-    monkeypatch.setattr("scripts.institutional_completion_gate._run", _fake_run)
+    monkeypatch.setattr("scripts.validation.institutional_completion_gate._run", _fake_run)
 
     repo_root = Path("/tmp/repo")
     _compose_up(repo_root=repo_root, compose_file="docker-compose.yml", build=False)
@@ -162,7 +162,7 @@ def test_compose_down_uses_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_run(cmd: list[str], cwd: Path) -> None:
         calls.append((cmd, cwd))
 
-    monkeypatch.setattr("scripts.institutional_completion_gate._run", _fake_run)
+    monkeypatch.setattr("scripts.validation.institutional_completion_gate._run", _fake_run)
 
     repo_root = Path("/tmp/repo")
     _compose_down(repo_root=repo_root, compose_file="docker-compose.yml")
@@ -185,7 +185,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         args: list[str],
     ) -> str:
         calls.append((script_relative_path, args))
-        if script_relative_path == "scripts/bank_day_load_scenario.py":
+        if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
             scenario_artifact.write_text(
                 json.dumps(
@@ -204,20 +204,20 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         return ""
 
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._run_python_script",
+        "scripts.validation.institutional_completion_gate._run_python_script",
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_up",
+        "scripts.validation.institutional_completion_gate._compose_up",
         lambda **_kwargs: calls.append(("compose_up", [])),
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_down",
+        "scripts.validation.institutional_completion_gate._compose_down",
         lambda **_kwargs: calls.append(("compose_down", [])),
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate.Path.resolve",
-        lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
+        "scripts.validation.institutional_completion_gate.Path.resolve",
+        lambda self: repo_root / "scripts" / "validation" / "institutional_completion_gate.py",
     )
     monkeypatch.setattr(
         "sys.argv",
@@ -232,7 +232,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
     assert calls == [
         ("compose_up", []),
         (
-            "scripts/bank_day_load_scenario.py",
+            "scripts/operations/bank_day_load_scenario.py",
             [
                 "--portfolio-count",
                 "1000",
@@ -251,7 +251,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
             ],
         ),
         (
-            "scripts/bank_day_load_reconciliation_report.py",
+            "scripts/operations/bank_day_load_reconciliation_report.py",
             [
                 "--run-id",
                 "20260419T120000Z",
@@ -287,7 +287,7 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
         args: list[str],
     ) -> str:
         calls.append((script_relative_path, args))
-        if script_relative_path == "scripts/bank_day_load_scenario.py":
+        if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
             scenario_artifact.write_text(
                 json.dumps(
@@ -305,20 +305,20 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
         return ""
 
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._run_python_script",
+        "scripts.validation.institutional_completion_gate._run_python_script",
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_up",
+        "scripts.validation.institutional_completion_gate._compose_up",
         lambda **_kwargs: calls.append(("compose_up", [])),
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_down",
+        "scripts.validation.institutional_completion_gate._compose_down",
         lambda **_kwargs: calls.append(("compose_down", [])),
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate.Path.resolve",
-        lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
+        "scripts.validation.institutional_completion_gate.Path.resolve",
+        lambda self: repo_root / "scripts" / "validation" / "institutional_completion_gate.py",
     )
     monkeypatch.setattr(
         "sys.argv",
@@ -330,7 +330,7 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
     )
 
     assert main() == 0
-    assert calls[-2][0] == "scripts/bank_day_load_reconciliation_report.py"
+    assert calls[-2][0] == "scripts/operations/bank_day_load_reconciliation_report.py"
 
 
 def test_main_preserves_primary_error_when_teardown_also_fails(
@@ -360,16 +360,16 @@ def test_main_preserves_primary_error_when_teardown_also_fails(
         script_relative_path: str,
         args: list[str],
     ) -> str:
-        if script_relative_path == "scripts/bank_day_load_scenario.py":
+        if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             return "Wrote JSON report: output/task-runs/20260419T120000Z-bank-day-load.json\n"
         raise RuntimeError("reconciliation failed")
 
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._run_python_script",
+        "scripts.validation.institutional_completion_gate._run_python_script",
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_up",
+        "scripts.validation.institutional_completion_gate._compose_up",
         lambda **_kwargs: None,
     )
 
@@ -377,12 +377,12 @@ def test_main_preserves_primary_error_when_teardown_also_fails(
         raise RuntimeError("compose down failed")
 
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate._compose_down",
+        "scripts.validation.institutional_completion_gate._compose_down",
         _raise_cleanup_error,
     )
     monkeypatch.setattr(
-        "scripts.institutional_completion_gate.Path.resolve",
-        lambda self: repo_root / "scripts" / "institutional_completion_gate.py",
+        "scripts.validation.institutional_completion_gate.Path.resolve",
+        lambda self: repo_root / "scripts" / "validation" / "institutional_completion_gate.py",
     )
     monkeypatch.setattr(
         "sys.argv",

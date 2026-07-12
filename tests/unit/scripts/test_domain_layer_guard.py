@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.domain_layer_guard import find_domain_import_findings
+from scripts.quality.domain_layer_guard import find_domain_import_findings
 
 
 def _write(path: Path, text: str) -> None:

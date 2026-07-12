@@ -18,7 +18,7 @@ coupling.
 1. Added `docs/standards/application-port-layer-standard.md`.
 2. Added `docs/architecture/application-port-capability-catalog.json`.
 3. Added `docs/architecture/application-port-capability-catalog.md`.
-4. Added `scripts/application_port_catalog_guard.py` and unit tests.
+4. Added `scripts/quality/application_port_catalog_guard.py` and unit tests.
 5. Wired `application-port-catalog-guard` into `make architecture-guard`.
 6. Linked the catalog from repo context and the codebase review ledger.
 
@@ -35,7 +35,7 @@ This is design-time modularity and governance only. It does not introduce a new 
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_application_port_catalog_guard.py -q`
-2. `python scripts/application_port_catalog_guard.py`
+2. `python scripts/quality/application_port_catalog_guard.py`
 3. Scoped Ruff lint and format checks for the new guard and tests.
 4. `make architecture-guard`
 

@@ -34,14 +34,14 @@ It defines the active, enforceable governance model for query-service contracts:
 6. Performance-sensitive query contracts must use bounded scope semantics and documented filtering rules.
 
 ## Required CI Controls
-1. `scripts/openapi_quality_gate.py`
-2. `scripts/api_vocabulary_inventory.py --validate-only`
-3. `scripts/no_alias_contract_guard.py`
+1. `scripts/quality/openapi_quality_gate.py`
+2. `scripts/quality/api_vocabulary_inventory.py --validate-only`
+3. `scripts/quality/no_alias_contract_guard.py`
 
 ## Evidence
-1. `scripts/openapi_quality_gate.py`
-2. `scripts/api_vocabulary_inventory.py`
-3. `scripts/no_alias_contract_guard.py`
+1. `scripts/quality/openapi_quality_gate.py`
+2. `scripts/quality/api_vocabulary_inventory.py`
+3. `scripts/quality/no_alias_contract_guard.py`
 4. `docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`
 5. `.github/workflows/ci.yml`
 

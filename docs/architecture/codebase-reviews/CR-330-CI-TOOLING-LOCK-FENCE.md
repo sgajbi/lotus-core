@@ -8,7 +8,7 @@ Pinned CI/local tooling install layer for `lotus-core`.
 
 ## Fix
 - Added `requirements/ci-tooling.lock.txt`
-- Wired `scripts/bootstrap_dev.py` to install the tooling layer from that lock file under the shared build constraints
+- Wired `scripts/development/bootstrap_dev.py` to install the tooling layer from that lock file under the shared build constraints
 
 ## Evidence
 - workflow YAML parsed successfully after the bootstrap/install path change

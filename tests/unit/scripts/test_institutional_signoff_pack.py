@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from scripts.institutional_signoff_pack import (
+from scripts.validation.institutional_signoff_pack import (
     _completion_lag_seconds,
     _docker_smoke_status,
     _failure_recovery_status,

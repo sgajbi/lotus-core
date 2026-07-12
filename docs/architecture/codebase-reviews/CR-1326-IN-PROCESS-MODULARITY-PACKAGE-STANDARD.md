@@ -27,7 +27,7 @@ shape.
    adapters/repositories -> ports.
 5. Added `docs/architecture/in-process-modularity-adoption-catalog.json` with `ingestion_service`
    as the representative adoption and explicit legacy-folder migration scope.
-6. Added `scripts/in_process_modularity_guard.py` and guard tests for representative package paths,
+6. Added `scripts/quality/in_process_modularity_guard.py` and guard tests for representative package paths,
    runtime composition files, evidence links, and legacy-folder classification.
 7. Wired `in-process-modularity-guard` into `make architecture-guard`.
 
@@ -55,14 +55,14 @@ standard, and recent CR entries that proved fake-port and boundary-guard behavio
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_in_process_modularity_guard.py -q`
-2. `python scripts/in_process_modularity_guard.py`
-3. `python -m ruff check scripts/in_process_modularity_guard.py tests/unit/scripts/test_in_process_modularity_guard.py --ignore E501,I001`
-4. `python -m ruff format --check scripts/in_process_modularity_guard.py tests/unit/scripts/test_in_process_modularity_guard.py`
+2. `python scripts/quality/in_process_modularity_guard.py`
+3. `python -m ruff check scripts/quality/in_process_modularity_guard.py tests/unit/scripts/test_in_process_modularity_guard.py --ignore E501,I001`
+4. `python -m ruff format --check scripts/quality/in_process_modularity_guard.py tests/unit/scripts/test_in_process_modularity_guard.py`
 
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

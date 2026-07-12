@@ -19,7 +19,7 @@ For production-grade governance, performance improvements are not enough. The bu
 ## Change
 - Pinned service Dockerfiles to:
   - `python:3.11-slim-bookworm@sha256:97b0eafb29f5ebfba254be840115b2f3bc24ff6ff3de9b905e04b74ee7227ba6`
-- Added `scripts/write_build_provenance.py`
+- Added `scripts/release/write_build_provenance.py`
 - Updated CI Docker cache keys to track `requirements/shared-runtime.lock.txt`
 - Added Docker-build evidence generation in CI:
   - CycloneDX SBOM from `requirements/shared-runtime.lock.txt`

@@ -8,7 +8,7 @@ full production runtime closure.
 The machine-readable ledger and guard are:
 
 1. `docs/standards/rfc-0083-implementation-ledger.json`
-2. `scripts/rfc0083_closure_guard.py`
+2. `scripts/quality/rfc0083_closure_guard.py`
 3. `tests/unit/scripts/test_rfc0083_closure_guard.py`
 
 ## Closure Scope
@@ -111,9 +111,9 @@ Additional live source-data coverage proof completed on 2026-04-16:
 
 Slice 11 validation is:
 
-1. `python scripts/rfc0083_closure_guard.py`,
+1. `python scripts/quality/rfc0083_closure_guard.py`,
 2. `python -m pytest tests/unit/scripts/test_rfc0083_closure_guard.py -q`,
-3. `python -m ruff check scripts/rfc0083_closure_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py --ignore E501,I001`,
-4. `python -m ruff format --check scripts/rfc0083_closure_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py`,
+3. `python -m ruff check scripts/quality/rfc0083_closure_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py --ignore E501,I001`,
+4. `python -m ruff format --check scripts/quality/rfc0083_closure_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py`,
 5. `git diff --check`,
 6. `make lint`.

@@ -189,7 +189,7 @@ sequenceDiagram
 ```
 
 Event and outbox governance is defined by
-`RFC-0083-eventing-supportability-target-model.md`, `scripts/event_runtime_contract_guard.py`,
+`RFC-0083-eventing-supportability-target-model.md`, `scripts/quality/event_runtime_contract_guard.py`,
 `portfolio_common.event_supportability`, `portfolio_common.outbox_repository`, and
 `portfolio_common.outbox_dispatcher`.
 
@@ -216,7 +216,7 @@ Downstream-facing route-family truth lives in `RFC-0082-contract-family-inventor
 | bounded contexts and deployables | `lotus-core-target-architecture.md`, `microservice-boundaries-and-trigger-matrix.md`, `runtime-boundary-decision-catalog.json` |
 | API catalog and route ownership | `RFC-0082-contract-family-inventory.md`, `docs/standards/route-contract-family-registry.json`, `wiki/API-Surface.md` |
 | source-data products | `RFC-0083-source-data-product-catalog.md`, `docs/features/supported-features.md`, `wiki/Mesh-Data-Products.md` |
-| event/outbox flow | `RFC-0083-eventing-supportability-target-model.md`, `scripts/event_runtime_contract_guard.py`, `docs/operations/runbook.md` |
+| event/outbox flow | `RFC-0083-eventing-supportability-target-model.md`, `scripts/quality/event_runtime_contract_guard.py`, `docs/operations/runbook.md` |
 | mapping and anti-corruption | `mapping-anti-corruption-boundary.md`, `CR-1330-API-MAPPER-PATTERN.md`, `CR-1333-MAPPING-ANTI-CORRUPTION-CONTRACT.md` |
 | runtime providers and ports | `runtime-provider-port-policy.md`, `application-port-capability-catalog.md`, `CR-1331-RUNTIME-PROVIDER-PORTS.md` |
 | supportability and incidents | `docs/operations/runbook.md`, `docs/operations/Incident-Playbooks.md`, `wiki/Operations-Runbook.md` |

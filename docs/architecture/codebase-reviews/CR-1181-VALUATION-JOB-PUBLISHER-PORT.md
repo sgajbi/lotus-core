@@ -36,8 +36,8 @@ through an injected port instead of constructing a concrete producer itself.
 - `python -m pytest tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/scripts/test_architecture_boundary_guard.py -q`
 - `make architecture-guard`
 - `make quality-import-boundary-gate`
-- `python -m ruff check src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py scripts/architecture_boundary_guard.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/scripts/test_architecture_boundary_guard.py`
-- `python -m ruff format --check src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py scripts/architecture_boundary_guard.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff check src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py scripts/quality/architecture_boundary_guard.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff format --check src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py src/services/valuation_orchestrator_service/app/core/valuation_scheduler.py scripts/quality/architecture_boundary_guard.py tests/unit/services/valuation_orchestrator_service/core/test_valuation_scheduler.py tests/unit/scripts/test_architecture_boundary_guard.py`
 - `git diff --check`
 
 ## Documentation And Wiki Decision

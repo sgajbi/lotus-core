@@ -53,4 +53,4 @@ but it no longer pretends to be platform-shared code.
 - `src/services/calculators/cost_calculator_service/app/cost_engine/processing/*`
 - `tests/unit/services/calculators/cost_calculator_service/engine/*`
 - `src/services/calculators/cost_calculator_service/Dockerfile`
-- `scripts/test_manifest.py`
+- `scripts/quality/test_manifest.py`

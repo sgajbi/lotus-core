@@ -23,7 +23,7 @@ API router and moving replay payload dispatch behind an application-layer bounda
   `IngestionService` backed dispatcher.
 - Updated ingestion job retry and consumer-DLQ replay routes to pass the dispatcher through their
   existing workflow helpers.
-- Extended `scripts/architecture_boundary_guard.py` with an event-replay router Kafka-import rule.
+- Extended `scripts/quality/architecture_boundary_guard.py` with an event-replay router Kafka-import rule.
 - Updated focused tests to exercise dispatcher publish mapping and architecture-rule enforcement.
 
 ## Compatibility
@@ -39,8 +39,8 @@ producer adapter; only the API-layer dependency direction changed.
 - `python -m pytest tests/unit/services/event_replay_service/test_ingestion_operations.py tests/unit/scripts/test_architecture_boundary_guard.py tests/integration/services/event_replay_service/test_event_replay_app.py -q`
 - `make architecture-guard`
 - `make quality-import-boundary-gate`
-- `python -m ruff check src/services/event_replay_service/app/application/replay_payload_dispatcher.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/architecture_boundary_guard.py tests/unit/services/event_replay_service/test_ingestion_operations.py tests/unit/scripts/test_architecture_boundary_guard.py`
-- `python -m ruff format --check src/services/event_replay_service/app/application/replay_payload_dispatcher.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/architecture_boundary_guard.py tests/unit/services/event_replay_service/test_ingestion_operations.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff check src/services/event_replay_service/app/application/replay_payload_dispatcher.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/quality/architecture_boundary_guard.py tests/unit/services/event_replay_service/test_ingestion_operations.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff format --check src/services/event_replay_service/app/application/replay_payload_dispatcher.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/quality/architecture_boundary_guard.py tests/unit/services/event_replay_service/test_ingestion_operations.py tests/unit/scripts/test_architecture_boundary_guard.py`
 - `git diff --check`
 
 ## Documentation And Wiki Decision

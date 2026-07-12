@@ -20,7 +20,7 @@ display name.
 - Added `tests/fixtures/private-banking-portfolio-fixture.v1.json` covering client, account,
   portfolio, custody, instrument, transaction, cash, FX, benchmark, and reporting-currency
   relationships.
-- Added `scripts/synthetic_fixture_leakage_guard.py` and unit tests for credential, database URL,
+- Added `scripts/quality/synthetic_fixture_leakage_guard.py` and unit tests for credential, database URL,
   personal data, account-number, uncataloged CIF-style ID, and relationship-coverage failures.
 - Wired `make synthetic-fixture-leakage-guard` into `make lint`.
 - Replaced the human-looking front-office seed display name in Core docs with a synthetic label.
@@ -36,7 +36,7 @@ cataloged as synthetic authored identifiers.
 Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_synthetic_fixture_leakage_guard.py -q`
-- `python scripts/synthetic_fixture_leakage_guard.py`
+- `python scripts/quality/synthetic_fixture_leakage_guard.py`
 - `make synthetic-fixture-leakage-guard`
 - scoped Ruff lint and format over the new guard/tests
 - `make risk-based-test-coverage-matrix-guard`

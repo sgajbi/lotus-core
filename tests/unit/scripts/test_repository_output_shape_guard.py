@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import repository_output_shape_guard as guard
+from scripts.quality import repository_output_shape_guard as guard
 
 
 def _write(path: Path, content: str) -> None:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import front_door_sync_guard as guard
+from scripts.quality import front_door_sync_guard as guard
 
 
 def _write_front_door_fixture(repo_root: Path) -> None:

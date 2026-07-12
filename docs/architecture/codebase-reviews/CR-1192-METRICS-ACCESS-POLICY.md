@@ -53,7 +53,7 @@ outside a private metrics network.
   passed with 14 tests.
 - `python -m pytest tests/unit/libs/portfolio-common/test_http_app_bootstrap.py tests/unit/libs/portfolio-common/test_worker_runtime.py tests/unit/scripts/test_source_contract_guards.py -q`
   passed with 19 tests.
-- `python scripts/config_access_guard.py` passed.
+- `python scripts/quality/config_access_guard.py` passed.
 - `python -m ruff check src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py`
   passed.
 - `python -m ruff format --check src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py`

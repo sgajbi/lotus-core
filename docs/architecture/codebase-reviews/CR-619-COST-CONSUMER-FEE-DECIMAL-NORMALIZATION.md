@@ -34,7 +34,7 @@ Local validation passed:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_portfolio_common_decimal_amounts.py tests/unit/libs/portfolio-common/test_transaction_fee_components.py tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. touched-surface `python -m ruff check`
 5. touched-surface `python -m ruff format --check`
 6. `git diff --check`

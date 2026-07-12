@@ -38,8 +38,8 @@ coverage.
 Local validation:
 
 - `python -m pytest tests/unit/scripts/test_latency_profile.py -q`
-- `python -m ruff check scripts/latency_profile.py tests/unit/scripts/test_latency_profile.py`
-- `python -m ruff format --check scripts/latency_profile.py tests/unit/scripts/test_latency_profile.py`
+- `python -m ruff check scripts/operations/latency_profile.py tests/unit/scripts/test_latency_profile.py`
+- `python -m ruff format --check scripts/operations/latency_profile.py tests/unit/scripts/test_latency_profile.py`
 
 Remote validation:
 

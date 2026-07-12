@@ -45,7 +45,7 @@ Evidence:
 - `docs/testing/testing-strategy.md`
 - `docs/incidents/incident_to_coverage.md`
 - `tests/integration/services/persistence_service/consumers/test_transaction_consumer_boundary.py`
-- `scripts/test_manifest.py`
+- `scripts/quality/test_manifest.py`
 - `.github/workflows/ci.yml`
 
 ## Requirement-to-Implementation Traceability
@@ -83,7 +83,7 @@ No open deltas remain for RFC-028.
 1. Domain-event instantiation in unit suites (examples listed above).
 2. CI matrix execution paths:
    - `.github/workflows/ci.yml`
-   - `Makefile` / `scripts/test_manifest.py`
+   - `Makefile` / `scripts/quality/test_manifest.py`
 
 ## Original Acceptance Criteria Alignment
 

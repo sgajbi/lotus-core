@@ -27,7 +27,7 @@ status as `DONE`, while the durable runtime and repository-backed tests use `COM
   - `80 passed`
 - `python -m ruff check src/services/query_service/app/dtos/operations_dto.py tests/unit/services/query_service/services/test_operations_service.py tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
   - passed
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
   - passed
 
 ## Follow-up

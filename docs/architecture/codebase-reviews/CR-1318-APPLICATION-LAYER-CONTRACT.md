@@ -17,7 +17,7 @@ application modules from importing framework or infrastructure concerns.
 
 1. Added `docs/standards/application-layer-contract.md`.
 2. Linked the application-layer contract from `docs/architecture/overview.md`.
-3. Added `scripts/application_layer_contract_guard.py`.
+3. Added `scripts/quality/application_layer_contract_guard.py`.
 4. Added unit tests for allowed pure application modules and rejected framework/infrastructure
    imports.
 5. Wired `application-layer-contract-guard` into `make architecture-guard`.
@@ -35,12 +35,12 @@ topic, metric name, application behavior, or runtime topology changed.
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_application_layer_contract_guard.py -q`
-2. `python scripts/application_layer_contract_guard.py`
+2. `python scripts/quality/application_layer_contract_guard.py`
 
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

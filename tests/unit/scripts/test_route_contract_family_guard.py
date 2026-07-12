@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts import route_contract_family_guard as guard
+from scripts.quality import route_contract_family_guard as guard
 
 
 def _route(

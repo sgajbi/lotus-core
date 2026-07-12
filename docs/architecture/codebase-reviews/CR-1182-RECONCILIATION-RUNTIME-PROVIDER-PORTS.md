@@ -38,8 +38,8 @@ defaults still use `perf_counter()` and `uuid4().hex` through adapters.
 - `python -m pytest tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_architecture_boundary_guard.py -q`
 - `make architecture-guard`
 - `make quality-import-boundary-gate`
-- `python -m ruff check src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py scripts/architecture_boundary_guard.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_architecture_boundary_guard.py`
-- `python -m ruff format --check src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py scripts/architecture_boundary_guard.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff check src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py scripts/quality/architecture_boundary_guard.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_architecture_boundary_guard.py`
+- `python -m ruff format --check src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py scripts/quality/architecture_boundary_guard.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_architecture_boundary_guard.py`
 - `git diff --check`
 
 ## Documentation And Wiki Decision

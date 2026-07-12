@@ -37,8 +37,8 @@ Focused validation before commit:
 
 ```powershell
 python -m pytest tests/unit/libs/portfolio-common/test_http_app_bootstrap.py tests/unit/scripts/test_security_control_coverage_guard.py -q
-python scripts/security_control_coverage_guard.py
-python scripts/image_provenance_guard.py
+python scripts/quality/security_control_coverage_guard.py
+python scripts/quality/image_provenance_guard.py
 ```
 
 The focused tests cover local wildcard compatibility, explicit host allowlists, rejected untrusted

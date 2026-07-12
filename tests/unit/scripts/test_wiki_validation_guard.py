@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import wiki_validation_guard as guard
+from scripts.quality import wiki_validation_guard as guard
 
 
 def _write(path: Path, text: str) -> None:

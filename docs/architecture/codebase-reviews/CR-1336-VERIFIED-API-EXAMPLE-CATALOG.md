@@ -14,7 +14,7 @@ and pagination/filtering/sorting behavior.
 
 1. Added `docs/standards/verified-api-examples.v1.json` with representative examples mapped to
    RFC-0082 route families and source test references.
-2. Added `scripts/api_example_catalog_guard.py` and `make api-example-catalog-guard`.
+2. Added `scripts/quality/api_example_catalog_guard.py` and `make api-example-catalog-guard`.
 3. Wired the guard into `make architecture-guard`.
 4. Added guard tests for required category coverage, route-family links, registered route keys,
    source-test references, correlation IDs, problem fields, idempotency metadata, degraded-source
@@ -34,10 +34,10 @@ it records representative examples that must stay aligned with implementation-ba
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_api_example_catalog_guard.py -q`
-2. `python scripts/api_example_catalog_guard.py`
-3. `python scripts/wiki_validation_guard.py`
-4. `python -m ruff check scripts/api_example_catalog_guard.py tests/unit/scripts/test_api_example_catalog_guard.py --ignore E501,I001`
-5. `python -m ruff format --check scripts/api_example_catalog_guard.py tests/unit/scripts/test_api_example_catalog_guard.py`
+2. `python scripts/quality/api_example_catalog_guard.py`
+3. `python scripts/quality/wiki_validation_guard.py`
+4. `python -m ruff check scripts/quality/api_example_catalog_guard.py tests/unit/scripts/test_api_example_catalog_guard.py --ignore E501,I001`
+5. `python -m ruff format --check scripts/quality/api_example_catalog_guard.py tests/unit/scripts/test_api_example_catalog_guard.py`
 6. `git diff --check`
 
 ## Documentation, Wiki, Context, And Skill Decision

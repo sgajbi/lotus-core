@@ -63,7 +63,7 @@ Date: 2026-03-14
 - `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "bookkeeping_failure or replay_audit or replay_consumer_dlq_event" -q`
 - `python -m pytest tests/unit/services/ingestion_service/services/test_ingestion_job_service_guardrails.py -k "replay_audit" -q`
 - `python -m ruff check src/services/event_replay_service/app/routers/ingestion_operations.py src/services/ingestion_service/app/DTOs/ingestion_job_dto.py src/services/ingestion_service/app/services/ingestion_job_service.py tests/integration/services/ingestion_service/test_ingestion_routers.py tests/unit/services/ingestion_service/services/test_ingestion_job_service_guardrails.py`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
 
 ## Follow-up
 - The next worthwhile move is to keep looking for recovery paths where Kafka publish success and

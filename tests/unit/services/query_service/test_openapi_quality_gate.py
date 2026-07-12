@@ -1,6 +1,6 @@
 import json
 
-from scripts.openapi_quality_gate import evaluate_schema, write_openapi_artifacts
+from scripts.quality.openapi_quality_gate import evaluate_schema, write_openapi_artifacts
 
 
 def test_evaluate_schema_flags_missing_contract_fields() -> None:

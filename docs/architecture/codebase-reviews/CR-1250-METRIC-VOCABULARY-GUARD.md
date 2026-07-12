@@ -13,7 +13,7 @@ deterministic repository-native guard.
 - Renamed shared HTTP metric label `path` to `endpoint_template`; the emitted value was already a
   FastAPI route template, so this aligns the label name with the actual bounded value.
 - Registered existing service-local persistence and cost-calculator metrics with explicit owners.
-- Added `scripts/metric_vocabulary_guard.py`, an AST guard that rejects unsafe or unknown metric
+- Added `scripts/quality/metric_vocabulary_guard.py`, an AST guard that rejects unsafe or unknown metric
   labels, dynamic label definitions, non-snake-case metric names, and unowned service-local metric
   definitions.
 - Wired `make metric-vocabulary-guard` into `make lint`, which is consumed by Feature Lane, PR

@@ -40,5 +40,5 @@ Deepen the control-plane Swagger/OpenAPI contract for simulation endpoints.
 - `src/services/query_service/app/dtos/simulation_dto.py`
 - `src/services/query_control_plane_service/app/routers/simulation.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

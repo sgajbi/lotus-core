@@ -40,5 +40,5 @@ Deepen the Swagger/OpenAPI contract for the market-data read endpoints in `query
 - `src/services/query_service/app/routers/prices.py`
 - `src/services/query_service/app/routers/fx_rates.py`
 - `tests/integration/services/query_service/test_main_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

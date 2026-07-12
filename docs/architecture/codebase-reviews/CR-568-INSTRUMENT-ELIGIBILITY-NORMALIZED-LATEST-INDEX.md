@@ -46,8 +46,8 @@ Local validation passed:
 2. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py -q` - 18 passed
 3. `python -m pytest tests/unit/services/query_service/services/test_integration_service.py -q` - 99 passed
 4. `python -m alembic heads` - `c0fcd4e5f6a7 (head)`
-5. `python scripts/migration_contract_check.py --mode alembic-sql` - passed
-6. `python scripts/test_manifest.py --suite unit-db --quiet` - 9 passed
+5. `python scripts/quality/migration_contract_check.py --mode alembic-sql` - passed
+6. `python scripts/quality/test_manifest.py --suite unit-db --quiet` - 9 passed
 7. touched-surface `python -m ruff check` - passed
 8. touched-surface `python -m ruff format --check` - passed
 9. `git diff --check` - passed

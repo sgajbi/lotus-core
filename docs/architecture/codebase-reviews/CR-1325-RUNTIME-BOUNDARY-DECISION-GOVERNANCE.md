@@ -23,7 +23,7 @@ security boundaries are added.
    sections.
 3. Added `docs/standards/runtime-boundary-decision-standard.md`, including no-runtime-split
    rationale requirements for in-process modularity-only refactors.
-4. Added `scripts/runtime_boundary_decision_guard.py`, which discovers
+4. Added `scripts/quality/runtime_boundary_decision_guard.py`, which discovers
    `src/services/**/Dockerfile`, requires catalog entries, blocks stale entries, prevents new
    service paths from using current-state status, and verifies governance files and PR checklist
    coverage.
@@ -45,14 +45,14 @@ current-state and revalidation-required against the existing microservice bounda
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_runtime_boundary_decision_guard.py -q`
-2. `python scripts/runtime_boundary_decision_guard.py`
-3. `python -m ruff check scripts/runtime_boundary_decision_guard.py tests/unit/scripts/test_runtime_boundary_decision_guard.py --ignore E501,I001`
-4. `python -m ruff format --check scripts/runtime_boundary_decision_guard.py tests/unit/scripts/test_runtime_boundary_decision_guard.py`
+2. `python scripts/quality/runtime_boundary_decision_guard.py`
+3. `python -m ruff check scripts/quality/runtime_boundary_decision_guard.py tests/unit/scripts/test_runtime_boundary_decision_guard.py --ignore E501,I001`
+4. `python -m ruff format --check scripts/quality/runtime_boundary_decision_guard.py tests/unit/scripts/test_runtime_boundary_decision_guard.py`
 
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

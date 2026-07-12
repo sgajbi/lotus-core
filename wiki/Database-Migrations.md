@@ -122,17 +122,17 @@ normalized security and correlation-id filters used by support list/count APIs.
 
 Partitioning is a physical storage migration, not a routine runtime optimization. Existing
 authoritative tables should not be silently converted to partitioned parents by maintenance scripts.
-Use `scripts/db_partition_advisor.py` to review current candidates and generate future monthly
+Use `scripts/operations/db_partition_advisor.py` to review current candidates and generate future monthly
 partition DDL:
 
 ```bash
-python scripts/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 3
+python scripts/operations/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 3
 ```
 
 With a PostgreSQL connection, inspect current partition posture:
 
 ```bash
-python scripts/db_partition_advisor.py --inspect --database-url "$DATABASE_URL"
+python scripts/operations/db_partition_advisor.py --inspect --database-url "$DATABASE_URL"
 ```
 
 `--execute` creates future monthly partitions only for tables that are already PostgreSQL

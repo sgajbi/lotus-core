@@ -37,5 +37,5 @@ That meant one response could still be internally inconsistent:
 - `tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
 - `python -m pytest tests/unit/services/query_service/services/test_operations_service.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/integration/services/query_control_plane_service/test_operations_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py -q`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`
 - `python -m ruff check src/services/query_service/app/repositories/operations_repository.py src/services/query_service/app/services/operations_service.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/unit/services/query_service/services/test_operations_service.py tests/integration/services/query_control_plane_service/test_operations_router_dependency.py tests/integration/services/query_control_plane_service/test_control_plane_app.py`

@@ -43,9 +43,9 @@ no longer carries stale suppressions.
 - `python -m pytest tests/unit/services/ingestion_service/test_settings.py tests/unit/scripts/test_monetary_float_guard.py -q`
   passed with 13 tests.
 - `make monetary-float-guard` passed with `Findings=0, allowlisted=0`.
-- `python -m ruff check scripts/check_monetary_float_usage.py tests/unit/scripts/test_monetary_float_guard.py src/services/ingestion_service/app/settings.py tests/unit/services/ingestion_service/test_settings.py`
+- `python -m ruff check scripts/quality/check_monetary_float_usage.py tests/unit/scripts/test_monetary_float_guard.py src/services/ingestion_service/app/settings.py tests/unit/services/ingestion_service/test_settings.py`
   passed.
-- `python -m ruff format --check scripts/check_monetary_float_usage.py tests/unit/scripts/test_monetary_float_guard.py src/services/ingestion_service/app/settings.py tests/unit/services/ingestion_service/test_settings.py`
+- `python -m ruff format --check scripts/quality/check_monetary_float_usage.py tests/unit/scripts/test_monetary_float_guard.py src/services/ingestion_service/app/settings.py tests/unit/services/ingestion_service/test_settings.py`
   passed.
 - `make quality-ruff-gate` passed.
 - `make quality-ruff-format-gate` passed with 1,236 files already formatted.

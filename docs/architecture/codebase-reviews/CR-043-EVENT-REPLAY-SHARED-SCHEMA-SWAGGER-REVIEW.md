@@ -40,5 +40,5 @@ contracts are already strong but component schemas are still thin.
 
 - `src/services/ingestion_service/app/DTOs/ingestion_job_dto.py`
 - `tests/integration/services/event_replay_service/test_event_replay_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

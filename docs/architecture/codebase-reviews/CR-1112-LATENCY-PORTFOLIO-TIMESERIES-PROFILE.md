@@ -26,8 +26,8 @@ coverage.
 The local proof for this slice is:
 
 - `python -m pytest tests/unit/scripts/test_latency_profile.py -q`
-- `python -m ruff check scripts/latency_profile.py tests/unit/scripts/test_latency_profile.py`
-- `python -m ruff format --check scripts/latency_profile.py tests/unit/scripts/test_latency_profile.py`
+- `python -m ruff check scripts/operations/latency_profile.py tests/unit/scripts/test_latency_profile.py`
+- `python -m ruff format --check scripts/operations/latency_profile.py tests/unit/scripts/test_latency_profile.py`
 
 Remote proof is the PR Merge Gate latency job. The expected signal is 30/30 2xx measured calls for
 `analytics_portfolio_timeseries` while preserving p95 enforcement and producing machine-readable

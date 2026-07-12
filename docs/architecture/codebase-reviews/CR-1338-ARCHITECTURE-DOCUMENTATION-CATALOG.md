@@ -16,7 +16,7 @@ agents to scan hundreds of review records before finding current-state implement
    and historical context.
 2. Added coverage rules for large architecture evidence families such as `CR-*`, ADRs, and
    templates so they are intentionally classified without creating a second unmaintainable ledger.
-3. Added `scripts/architecture_documentation_catalog_guard.py` and
+3. Added `scripts/quality/architecture_documentation_catalog_guard.py` and
    `make architecture-docs-catalog-guard`.
 4. Wired the guard into `make architecture-guard` and `quality-wiki-docs-gate`.
 5. Added focused guard tests for valid catalogs, uncataloged architecture documents, missing
@@ -38,7 +38,7 @@ landing without ownership, freshness, status, and truth-role metadata.
 Focused local validation:
 
 1. `python -m pytest tests/unit/scripts/test_architecture_documentation_catalog_guard.py -q`
-2. `python scripts/architecture_documentation_catalog_guard.py`
+2. `python scripts/quality/architecture_documentation_catalog_guard.py`
 
 ## Documentation, Wiki, Context, And Skill Decision
 

@@ -51,7 +51,7 @@ runtime split or an existing baseline service.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/runtime_boundary_decision_guard.py`.
+`make architecture-guard` runs `scripts/quality/runtime_boundary_decision_guard.py`.
 
 The guard:
 

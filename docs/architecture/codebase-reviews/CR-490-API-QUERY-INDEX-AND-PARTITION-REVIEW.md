@@ -49,7 +49,7 @@ Added SQLAlchemy model indexes and Alembic migration
 9. `instrument_lookthrough_components`: normalized parent security, effective window, and
    normalized component ordering.
 
-Added `scripts/db_partition_advisor.py` as a conservative partition-readiness utility:
+Added `scripts/operations/db_partition_advisor.py` as a conservative partition-readiness utility:
 
 1. identifies partition candidates: `transactions`, `position_history`, `daily_position_snapshots`,
    `cashflows`, `position_timeseries`, `portfolio_timeseries`, and `market_prices`,
@@ -85,10 +85,10 @@ Commands:
 2. `python -m pytest tests/unit/libs/portfolio-common tests/unit/libs/portfolio_common -q`
 3. `python -m pytest tests/unit/scripts/test_db_partition_advisor.py -q`
 4. `python -m alembic heads`
-5. `python scripts/migration_contract_check.py --mode alembic-sql`
-6. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/a0b1c2d3e4f5_perf_add_api_query_hot_path_indexes.py scripts/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
-7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/a0b1c2d3e4f5_perf_add_api_query_hot_path_indexes.py scripts/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
-8. `python scripts/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 1`
+5. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
+6. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/a0b1c2d3e4f5_perf_add_api_query_hot_path_indexes.py scripts/operations/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
+7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py alembic/versions/a0b1c2d3e4f5_perf_add_api_query_hot_path_indexes.py scripts/operations/db_partition_advisor.py tests/unit/scripts/test_db_partition_advisor.py`
+8. `python scripts/operations/db_partition_advisor.py --as-of 2026-05-28 --horizon-months 1`
 9. `git diff --check`
 10. `../lotus-platform/automation/Sync-RepoWikis.ps1 -CheckOnly -Repository lotus-core`
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.runtime_provider_port_guard import find_runtime_provider_port_findings
+from scripts.quality.runtime_provider_port_guard import find_runtime_provider_port_findings
 
 
 def _write(path: Path, text: str) -> None:

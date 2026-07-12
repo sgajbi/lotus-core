@@ -28,7 +28,7 @@ real Prometheus metric functions.
 5. Reworked scheduler unit tests to use fake ports for no-job, successful dispatch, partial publish
    failure, flush timeout, stale reset invocation, dispatch recovery, runtime settings, and bounded
    stop behavior.
-6. Added `scripts/aggregation_scheduler_boundary_guard.py` and wired it into
+6. Added `scripts/quality/aggregation_scheduler_boundary_guard.py` and wired it into
    `make architecture-guard`.
 7. Added `docs/standards/aggregation-scheduler-boundary-standard.md` and updated the application
    port catalog.
@@ -47,7 +47,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/portfolio_aggregation_service/core/test_aggregation_scheduler.py tests/unit/scripts/test_aggregation_scheduler_boundary_guard.py -q`
 2. `python -m pytest tests/unit/services/portfolio_aggregation_service/unit/test_portfolio_aggregation_consumer_manager_runtime.py -q`
-3. `python scripts/aggregation_scheduler_boundary_guard.py`
+3. `python scripts/quality/aggregation_scheduler_boundary_guard.py`
 4. `python -m ruff check <touched aggregation scheduler Python paths>`
 5. `python -m ruff format --check <touched aggregation scheduler Python paths>`
 6. `$env:PYTHONPATH='src/services/portfolio_aggregation_service;src/libs/portfolio-common'; python -c "import app.consumer_manager; import app.core.aggregation_scheduler"`
@@ -55,7 +55,7 @@ Focused local validation:
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

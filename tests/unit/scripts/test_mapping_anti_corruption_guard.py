@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.mapping_anti_corruption_guard import find_mapping_anti_corruption_findings
+from scripts.quality.mapping_anti_corruption_guard import find_mapping_anti_corruption_findings
 
 
 def _write(path: Path, text: str) -> None:
@@ -24,9 +24,11 @@ def _write_required_artifacts(root: Path) -> None:
         root / "docs/standards/api-mapper-pattern-standard.md",
         "build application commands\nmap application results\n",
     )
-    _write(root / "scripts/api_mapper_pattern_guard.py", "find_api_mapper_pattern_findings\n")
     _write(
-        root / "scripts/repository_output_shape_guard.py",
+        root / "scripts/quality/api_mapper_pattern_guard.py", "find_api_mapper_pattern_findings\n"
+    )
+    _write(
+        root / "scripts/quality/repository_output_shape_guard.py",
         "evaluate_repository_output_shapes\n",
     )
     _write(

@@ -24,11 +24,11 @@ aggregate lint lane aligned with the current code structure.
 
 ```powershell
 python -m pytest tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py -q
-python scripts/ingestion_gateway_rate_limit_policy_guard.py
-python scripts/config_access_guard.py
+python scripts/quality/ingestion_gateway_rate_limit_policy_guard.py
+python scripts/quality/config_access_guard.py
 python -m pytest tests/unit/libs/portfolio-common/test_config.py tests/unit/libs/portfolio-common/test_kafka_utils.py tests/unit/libs/portfolio-common/test_kafka_consumer.py -q
-python -m ruff check src/libs/portfolio-common/portfolio_common/kafka_consumer_execution.py src/libs/portfolio-common/portfolio_common/kafka_producer_policy.py scripts/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py --ignore E501,I001
-python -m ruff format --check src/libs/portfolio-common/portfolio_common/kafka_consumer_execution.py src/libs/portfolio-common/portfolio_common/kafka_producer_policy.py scripts/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py
+python -m ruff check src/libs/portfolio-common/portfolio_common/kafka_consumer_execution.py src/libs/portfolio-common/portfolio_common/kafka_producer_policy.py scripts/quality/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py --ignore E501,I001
+python -m ruff format --check src/libs/portfolio-common/portfolio_common/kafka_consumer_execution.py src/libs/portfolio-common/portfolio_common/kafka_producer_policy.py scripts/quality/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py
 make lint
 ```
 

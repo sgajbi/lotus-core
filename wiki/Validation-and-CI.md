@@ -94,7 +94,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 - `make quality-wiki-docs-gate`
   validates repo-authored wiki source before publication by checking sidebar coverage, orphaned
   pages, publication-safe page names, first headings, and local relative links; when a published
-  wiki clone is available, run `python scripts/wiki_validation_guard.py --published-wiki-dir <path>`
+  wiki clone is available, run `python scripts/quality/wiki_validation_guard.py --published-wiki-dir <path>`
   to compare authored and published pages
 - `make architecture-guard`
   protects layering and repository boundary posture

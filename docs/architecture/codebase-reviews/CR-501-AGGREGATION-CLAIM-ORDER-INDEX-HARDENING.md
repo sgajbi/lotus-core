@@ -36,7 +36,7 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py tests/unit/services/timeseries_generator_service/timeseries-generator-service/repositories/test_unit_timeseries_repo.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py src/libs/portfolio-common/portfolio_common/timeseries_repository_base.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py alembic/versions/c0d7e8f9a0b1_perf_add_aggregation_claim_order_index.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py src/libs/portfolio-common/portfolio_common/timeseries_repository_base.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/portfolio_aggregation_service/repositories/test_timeseries_repository.py alembic/versions/c0d7e8f9a0b1_perf_add_aggregation_claim_order_index.py`
 6. `git diff --check`

@@ -31,11 +31,11 @@ Commands:
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 2. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories -q`
 3. `python -m alembic heads`
-4. `python scripts/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 5. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e8f9a0b1c2_perf_add_reprocessing_security_support_index.py`
 6. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0e8f9a0b1c2_perf_add_reprocessing_security_support_index.py`
 7. `git diff --check`
-8. `python scripts/test_manifest.py --suite unit-db --quiet`
+8. `python scripts/quality/test_manifest.py --suite unit-db --quiet`
 
 Results:
 

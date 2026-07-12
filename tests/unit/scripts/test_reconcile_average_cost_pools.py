@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from scripts.reconcile_average_cost_pools import SCHEMA_VERSION, build_report, exit_code
+from scripts.operations.reconcile_average_cost_pools import SCHEMA_VERSION, build_report, exit_code
 from src.services.portfolio_transaction_processing_service.app.application import (
     ReconcileAverageCostPoolsResult,
 )

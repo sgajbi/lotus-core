@@ -36,7 +36,7 @@ Local validation passed:
 
 1. focused integration-service concurrency proof
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. touched-surface `python -m mypy --config-file mypy.ini`
 5. touched-surface `python -m ruff check`
 6. touched-surface `python -m ruff format --check`

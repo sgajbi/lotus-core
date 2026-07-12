@@ -21,7 +21,7 @@ only their runtime shell and normal-path transaction boundary are consolidated.
 3. Audit the handoff without mutation:
 
    ```bash
-   python scripts/transaction_processing_cutover_offsets.py \
+   python scripts/operations/transaction_processing_cutover_offsets.py \
      --bootstrap-servers localhost:9092 \
      --output output/transaction-processing-offset-cutover-dry-run.json
    ```
@@ -30,7 +30,7 @@ only their runtime shell and normal-path transaction boundary are consolidated.
 5. Apply and verify exact target offsets:
 
    ```bash
-   python scripts/transaction_processing_cutover_offsets.py \
+   python scripts/operations/transaction_processing_cutover_offsets.py \
      --bootstrap-servers localhost:9092 \
      --apply \
      --output output/transaction-processing-offset-cutover-apply.json

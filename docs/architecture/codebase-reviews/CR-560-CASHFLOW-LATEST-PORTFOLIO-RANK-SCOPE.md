@@ -39,8 +39,8 @@ Commands:
 2. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py -q`
 3. `python -m pytest tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 4. `python -m alembic heads`
-5. `python scripts/migration_contract_check.py --mode alembic-sql`
-6. `python scripts/test_manifest.py --suite unit-db --quiet`
+5. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
+6. `python scripts/quality/test_manifest.py --suite unit-db --quiet`
 7. `python -m ruff check src/services/query_service/app/repositories/cashflow_repository.py tests/unit/services/query_service/repositories/test_query_cashflow_repository.py src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py`
 8. `python -m ruff format --check src/services/query_service/app/repositories/cashflow_repository.py tests/unit/services/query_service/repositories/test_query_cashflow_repository.py src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py`
 9. `git diff --check`

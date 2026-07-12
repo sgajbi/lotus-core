@@ -29,7 +29,7 @@ The current representative ports are:
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/repository_port_guard.py`. The guard blocks the
+`make architecture-guard` runs `scripts/quality/repository_port_guard.py`. The guard blocks the
 representative source-data and reconciliation paths from reverting to broad concrete repository
 annotations once a narrow port exists.
 

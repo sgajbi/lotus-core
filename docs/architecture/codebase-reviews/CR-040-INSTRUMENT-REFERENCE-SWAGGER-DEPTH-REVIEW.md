@@ -38,5 +38,5 @@ Deepen the Swagger/OpenAPI contract for the instrument reference endpoint in `qu
 - `src/services/query_service/app/routers/instruments.py`
 - `src/services/query_service/app/dtos/instrument_dto.py`
 - `tests/integration/services/query_service/test_main_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

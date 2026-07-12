@@ -43,7 +43,7 @@ The first representative command/result migrations are:
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_command_result_guard.py`. The guard protects
+`make architecture-guard` runs `scripts/quality/application_command_result_guard.py`. The guard protects
 the representative migrated upload and lookup services from reintroducing API DTO imports or
 response DTO return contracts, and protects core snapshot fingerprinting from returning to
 `request.model_dump(mode="json")`.

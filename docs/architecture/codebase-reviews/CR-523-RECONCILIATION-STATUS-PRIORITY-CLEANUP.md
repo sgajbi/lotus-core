@@ -33,8 +33,8 @@ Commands:
 
 1. `python -m pytest tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
-4. `python scripts/test_manifest.py --suite unit-db --quiet`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/test_manifest.py --suite unit-db --quiet`
 5. `python -m ruff check src/services/query_service/app/repositories/operations_repository.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0f6a7b8c9d0_perf_normalize_reconciliation_status.py`
 6. `python -m ruff format --check src/services/query_service/app/repositories/operations_repository.py tests/unit/services/query_service/repositories/test_operations_repository.py alembic/versions/c0f6a7b8c9d0_perf_normalize_reconciliation_status.py`
 7. `git diff --check`

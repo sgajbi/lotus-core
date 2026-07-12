@@ -20,14 +20,14 @@ RFC-074 bundle types:
 | Portfolio-flow classification alignment | Alembic migration `a9c4d2e8f1b7_feat_align_tax_cashflow_rule_portfolio_flow.py`; bundle slice-2 test |
 | Calculator semantics harmonized | Position calculator update in `position_logic.py`; bundle tests and existing position logic tests |
 | Query/service projection alignment | Query service updates in `core_snapshot_service.py` and `simulation_service.py`; query service unit tests |
-| Dedicated regression and CI lane | `scripts/test_manifest.py` suite `transaction-portfolio-flow-bundle-contract`; `Makefile` targets; CI matrix update in `.github/workflows/ci.yml` |
+| Dedicated regression and CI lane | `scripts/quality/test_manifest.py` suite `transaction-portfolio-flow-bundle-contract`; `Makefile` targets; CI matrix update in `.github/workflows/ci.yml` |
 | Documentation and governance updates | RFC-074 plan + RFC index updated with slice status and evidence |
 
 ## Validation Executed
 
-1. `python scripts/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet` -> `127 passed`
+1. `python scripts/quality/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet` -> `127 passed`
 2. `python -m ruff check ...` on all touched Python modules -> passed
-3. `python scripts/migration_contract_check.py --mode alembic-sql` -> passed (includes new TAX alignment migration)
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql` -> passed (includes new TAX alignment migration)
 
 ## Residual Risks / Follow-On
 

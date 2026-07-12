@@ -25,7 +25,7 @@ testable without FastAPI.
    400 and 422 mappings.
 6. Added service-level tests proving non-HTTP application errors.
 7. Added router-level tests proving HTTP mapping and response-detail compatibility.
-8. Added `scripts/application_error_taxonomy_guard.py` and wired it into
+8. Added `scripts/quality/application_error_taxonomy_guard.py` and wired it into
    `make architecture-guard`.
 9. Added `docs/standards/application-error-taxonomy-standard.md`.
 
@@ -43,10 +43,10 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py tests/unit/services/ingestion_service/routers/test_uploads.py tests/unit/scripts/test_application_error_taxonomy_guard.py -q`
 2. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "upload_preview_rejects_unsupported_file_format or upload_commit_rejects_unsupported_file_format or upload_commit_xlsx_rejects_invalid_without_partial or upload_commit_rejects_empty_csv" -q`
-3. `python scripts/application_error_taxonomy_guard.py`
+3. `python scripts/quality/application_error_taxonomy_guard.py`
 4. Scoped Ruff check and format-check for the touched Python modules.
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`
 
 The focused unit command passed locally with 10 tests. The upload integration compatibility subset

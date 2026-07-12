@@ -79,7 +79,7 @@ readers for runtime.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/testability_architecture_guard.py`.
+`make architecture-guard` runs `scripts/quality/testability_architecture_guard.py`.
 
 When the guard fails, it reports the protected module path, line, rule, and offending import or
 runtime call. Fix by moving runtime construction to an approved composition root, adding or reusing

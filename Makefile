@@ -5,16 +5,16 @@ LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
 
 install:
-	python scripts/bootstrap_dev.py
+	python scripts/development/bootstrap_dev.py
 
 install-ci:
-	python scripts/bootstrap_dev.py
+	python scripts/development/bootstrap_dev.py
 
 verify-dependencies:
-	python scripts/dependency_health_check.py --skip-audit
+	python scripts/validation/dependency_health_check.py --skip-audit
 
 compile-runtime-lock:
-	python scripts/update_shared_runtime_lock.py
+	python scripts/development/update_shared_runtime_lock.py
 
 quality-ruff-gate:
 	python -m ruff check . --statistics
@@ -23,7 +23,7 @@ quality-ruff-format-gate:
 	python -m ruff format --check .
 
 quality-import-boundary-gate:
-	python scripts/import_boundary_gate.py
+	python scripts/quality/import_boundary_gate.py
 
 quality-bandit-gate:
 	python -m bandit -r src -c pyproject.toml
@@ -35,95 +35,95 @@ quality-deptry-source-gate:
 	python -m deptry src --extend-exclude "src/services/query_service/build" --extend-exclude ".*/tests/"
 
 quality-maintainability-gate:
-	python scripts/maintainability_gate.py src
+	python scripts/quality/maintainability_gate.py src
 
 quality-complexity-gate:
 	python -m xenon --max-absolute E --max-modules C --max-average A src
 
 quality-unit-collection-gate:
-	python scripts/test_manifest.py --suite unit --collect-only --quiet
+	python scripts/quality/test_manifest.py --suite unit --collect-only --quiet
 
 quality-integration-lite-collection-gate:
-	python scripts/test_manifest.py --suite integration-lite --collect-only --quiet
+	python scripts/quality/test_manifest.py --suite integration-lite --collect-only --quiet
 
 quality-workflow-governance-gate:
 	python -m pytest tests/unit/test_ci_workflow_action_versions.py -q
 
 quality-openapi-spectral-gate:
-	python scripts/openapi_spectral_gate.py --output-dir $(OPENAPI_ARTIFACT_DIR)
+	python scripts/quality/openapi_spectral_gate.py --output-dir $(OPENAPI_ARTIFACT_DIR)
 
 quality-wiki-docs-gate:
-	python scripts/wiki_validation_guard.py
-	python scripts/front_door_sync_guard.py
-	python scripts/architecture_documentation_catalog_guard.py
-	python scripts/rfc_status_ledger_guard.py
-	python scripts/supported_features_guard.py
-	python scripts/incident_playbook_guard.py
+	python scripts/quality/wiki_validation_guard.py
+	python scripts/quality/front_door_sync_guard.py
+	python scripts/quality/architecture_documentation_catalog_guard.py
+	python scripts/quality/rfc_status_ledger_guard.py
+	python scripts/quality/supported_features_guard.py
+	python scripts/quality/incident_playbook_guard.py
 
 docs-evidence-pack:
-	python scripts/generate_documentation_evidence_pack.py
+	python scripts/generators/generate_documentation_evidence_pack.py
 
 lint:
-	python -m ruff check src/services/query_service/app src/services/query_control_plane_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py src/libs/portfolio-common/portfolio_common/reconstruction_identity.py src/libs/portfolio-common/portfolio_common/ingestion_evidence.py src/libs/portfolio-common/portfolio_common/reconciliation_quality.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/market_reference_quality.py src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/observability_contracts.py src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py tests/unit/services/query_service tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/libs/portfolio-common/test_reconstruction_identity.py tests/unit/libs/portfolio-common/test_ingestion_evidence.py tests/unit/libs/portfolio-common/test_reconciliation_quality.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_market_reference_quality.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/test_support tests/unit/test_support tests/unit/test_domain_data_product_contracts.py tests/unit/scripts/test_ingestion_rate_limit_scope_guard.py tests/unit/scripts/test_metric_vocabulary_guard.py tests/unit/scripts/test_structured_log_guard.py tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py tests/unit/scripts/test_event_runtime_contract_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py tests/unit/scripts/test_certify_lotus_core_app.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/ingestion_endpoint_contract_gate.py scripts/ingestion_rate_limit_scope_guard.py scripts/metric_vocabulary_guard.py scripts/structured_log_guard.py scripts/qcp_problem_details_guard.py scripts/temporal_vocabulary_guard.py scripts/route_contract_family_guard.py scripts/source_data_product_contract_guard.py scripts/validate_domain_data_product_contracts.py scripts/analytics_input_consumer_contract_guard.py scripts/event_runtime_contract_guard.py scripts/rfc0083_closure_guard.py scripts/certify_lotus_core_app.py --ignore E501,I001
-	python -m ruff check scripts/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py --ignore E501,I001
-	python -m ruff check scripts/repository_output_shape_guard.py tests/unit/scripts/test_repository_output_shape_guard.py --ignore E501,I001
-	python -m ruff check scripts/security_control_coverage_guard.py tests/unit/scripts/test_security_control_coverage_guard.py --ignore E501,I001
-	python -m ruff check scripts/critical_path_coverage_guard.py tests/unit/scripts/test_critical_path_coverage_guard.py --ignore E501,I001
-	python -m ruff check scripts/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py --ignore E501,I001
-	python -m ruff check scripts/synthetic_fixture_leakage_guard.py tests/unit/scripts/test_synthetic_fixture_leakage_guard.py --ignore E501,I001
-	python -m ruff check scripts/test_lane_governance_guard.py tests/unit/scripts/test_test_lane_governance_guard.py --ignore E501,I001
-	python -m ruff check scripts/event_contract_test_pack_guard.py tests/unit/scripts/test_event_contract_test_pack_guard.py --ignore E501,I001
-	python -m ruff check scripts/concurrency_duplicate_delivery_guard.py tests/unit/scripts/test_concurrency_duplicate_delivery_guard.py tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py tests/integration/libs/portfolio-common/test_idempotency_repository.py --ignore E501,I001
-	python -m ruff check scripts/cross_product_golden_regression_guard.py tests/unit/scripts/test_cross_product_golden_regression_guard.py tests/unit/transaction_specs/test_cross_product_golden_scenarios.py --ignore E501,I001
-	python -m ruff check scripts/command_api_behavior_certification_guard.py tests/unit/scripts/test_command_api_behavior_certification_guard.py --ignore E501,I001
-	python -m ruff check scripts/observability_contract_test_pack_guard.py tests/unit/scripts/test_observability_contract_test_pack_guard.py --ignore E501,I001
-	python -m ruff check scripts/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py --ignore E501,I001
-	python -m ruff check scripts/generated_artifact_tracking_guard.py tests/unit/scripts/test_generated_artifact_tracking_guard.py --ignore E501,I001
-	python -m ruff check scripts/endpoint_consolidation_watchlist_guard.py tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py --ignore E501,I001
-	python -m ruff check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py --ignore E501,I001
-	python -m ruff check src/services/query_service/app/routers/http_errors.py src/services/query_service/app/routers/lookup_mappers.py src/services/query_service/app/routers/lookups.py src/services/query_service/app/routers/buy_state.py src/services/query_service/app/routers/cash_accounts.py src/services/query_service/app/routers/cash_movements.py src/services/query_service/app/routers/portfolios.py src/services/query_service/app/routers/positions.py src/services/query_service/app/routers/reporting.py src/services/query_service/app/routers/sell_state.py src/services/query_service/app/routers/transactions.py src/services/financial_reconciliation_service/app/routers/reconciliation_mappers.py src/services/financial_reconciliation_service/app/routers/reconciliation.py src/services/event_replay_service/app/routers/replay_mappers.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/api_mapper_pattern_guard.py tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/routers/test_http_errors.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py tests/unit/services/event_replay_service/test_replay_mappers.py tests/unit/scripts/test_api_mapper_pattern_guard.py --ignore E501,I001
-	python -m ruff check scripts/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py --ignore E501,I001
-	python -m ruff check scripts/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py --ignore E501,I001
-	python -m ruff check src/libs/portfolio-common/portfolio_common/runtime_providers.py src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py src/services/query_service/app/services/core_snapshot_service.py src/services/query_service/app/services/simulation_service.py scripts/runtime_provider_port_guard.py tests/unit/libs/portfolio-common/test_runtime_providers.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/services/query_service/services/test_simulation_service.py tests/unit/scripts/test_runtime_provider_port_guard.py --ignore E501,I001
+	python -m ruff check src/services/query_service/app src/services/query_control_plane_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py src/libs/portfolio-common/portfolio_common/reconstruction_identity.py src/libs/portfolio-common/portfolio_common/ingestion_evidence.py src/libs/portfolio-common/portfolio_common/reconciliation_quality.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/market_reference_quality.py src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/observability_contracts.py src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py tests/unit/services/query_service tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/libs/portfolio-common/test_reconstruction_identity.py tests/unit/libs/portfolio-common/test_ingestion_evidence.py tests/unit/libs/portfolio-common/test_reconciliation_quality.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_market_reference_quality.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/test_support tests/unit/test_support tests/unit/test_domain_data_product_contracts.py tests/unit/scripts/test_ingestion_rate_limit_scope_guard.py tests/unit/scripts/test_metric_vocabulary_guard.py tests/unit/scripts/test_structured_log_guard.py tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py tests/unit/scripts/test_event_runtime_contract_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py tests/unit/scripts/test_certify_lotus_core_app.py scripts/quality/test_manifest.py scripts/quality/coverage_gate.py scripts/quality/openapi_quality_gate.py scripts/quality/warning_budget_gate.py scripts/quality/api_vocabulary_inventory.py scripts/quality/no_alias_contract_guard.py scripts/quality/ingestion_endpoint_contract_gate.py scripts/quality/ingestion_rate_limit_scope_guard.py scripts/quality/metric_vocabulary_guard.py scripts/quality/structured_log_guard.py scripts/quality/qcp_problem_details_guard.py scripts/quality/temporal_vocabulary_guard.py scripts/quality/route_contract_family_guard.py scripts/quality/source_data_product_contract_guard.py scripts/validation/validate_domain_data_product_contracts.py scripts/quality/analytics_input_consumer_contract_guard.py scripts/quality/event_runtime_contract_guard.py scripts/quality/rfc0083_closure_guard.py scripts/validation/certify_lotus_core_app.py --ignore E501,I001
+	python -m ruff check scripts/quality/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/repository_output_shape_guard.py tests/unit/scripts/test_repository_output_shape_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/security_control_coverage_guard.py tests/unit/scripts/test_security_control_coverage_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/critical_path_coverage_guard.py tests/unit/scripts/test_critical_path_coverage_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/synthetic_fixture_leakage_guard.py tests/unit/scripts/test_synthetic_fixture_leakage_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/test_lane_governance_guard.py tests/unit/scripts/test_test_lane_governance_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/event_contract_test_pack_guard.py tests/unit/scripts/test_event_contract_test_pack_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/concurrency_duplicate_delivery_guard.py tests/unit/scripts/test_concurrency_duplicate_delivery_guard.py tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py tests/integration/libs/portfolio-common/test_idempotency_repository.py --ignore E501,I001
+	python -m ruff check scripts/quality/cross_product_golden_regression_guard.py tests/unit/scripts/test_cross_product_golden_regression_guard.py tests/unit/transaction_specs/test_cross_product_golden_scenarios.py --ignore E501,I001
+	python -m ruff check scripts/quality/command_api_behavior_certification_guard.py tests/unit/scripts/test_command_api_behavior_certification_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/observability_contract_test_pack_guard.py tests/unit/scripts/test_observability_contract_test_pack_guard.py --ignore E501,I001
+	python -m ruff check scripts/development/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py --ignore E501,I001
+	python -m ruff check scripts/quality/generated_artifact_tracking_guard.py tests/unit/scripts/test_generated_artifact_tracking_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/endpoint_consolidation_watchlist_guard.py tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py --ignore E501,I001
+	python -m ruff check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/quality/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py --ignore E501,I001
+	python -m ruff check src/services/query_service/app/routers/http_errors.py src/services/query_service/app/routers/lookup_mappers.py src/services/query_service/app/routers/lookups.py src/services/query_service/app/routers/buy_state.py src/services/query_service/app/routers/cash_accounts.py src/services/query_service/app/routers/cash_movements.py src/services/query_service/app/routers/portfolios.py src/services/query_service/app/routers/positions.py src/services/query_service/app/routers/reporting.py src/services/query_service/app/routers/sell_state.py src/services/query_service/app/routers/transactions.py src/services/financial_reconciliation_service/app/routers/reconciliation_mappers.py src/services/financial_reconciliation_service/app/routers/reconciliation.py src/services/event_replay_service/app/routers/replay_mappers.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/quality/api_mapper_pattern_guard.py tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/routers/test_http_errors.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py tests/unit/services/event_replay_service/test_replay_mappers.py tests/unit/scripts/test_api_mapper_pattern_guard.py --ignore E501,I001
+	python -m ruff check scripts/generators/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py --ignore E501,I001
+	python -m ruff check scripts/quality/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py --ignore E501,I001
+	python -m ruff check src/libs/portfolio-common/portfolio_common/runtime_providers.py src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py src/services/query_service/app/services/core_snapshot_service.py src/services/query_service/app/services/simulation_service.py scripts/quality/runtime_provider_port_guard.py tests/unit/libs/portfolio-common/test_runtime_providers.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/services/query_service/services/test_simulation_service.py tests/unit/scripts/test_runtime_provider_port_guard.py --ignore E501,I001
 	python -m ruff check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py tests/test_support/http_middleware_contract.py tests/unit/test_http_middleware_chain_contract.py --ignore E501,I001
-	python -m ruff check scripts/image_provenance_guard.py tests/unit/scripts/test_image_provenance_guard.py --ignore E501,I001
-	python -m ruff check scripts/write_image_release_manifest.py tests/unit/scripts/test_write_image_release_manifest.py --ignore E501,I001
-	python -m ruff check scripts/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py --ignore E501,I001
-	python -m ruff check scripts/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py --ignore E501,I001
-	python -m ruff check scripts/supported_features_guard.py tests/unit/scripts/test_supported_features_guard.py --ignore E501,I001
-	python -m ruff check scripts/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py --ignore E501,I001
-	python -m ruff check scripts/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/image_provenance_guard.py tests/unit/scripts/test_image_provenance_guard.py --ignore E501,I001
+	python -m ruff check scripts/release/write_image_release_manifest.py tests/unit/scripts/test_write_image_release_manifest.py --ignore E501,I001
+	python -m ruff check scripts/quality/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/supported_features_guard.py tests/unit/scripts/test_supported_features_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py --ignore E501,I001
+	python -m ruff check scripts/quality/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py --ignore E501,I001
 	python -m ruff check src/services/pipeline_orchestrator_service/app/adapters/__init__.py src/services/pipeline_orchestrator_service/app/adapters/outbox_event_mapper.py src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py tests/unit/services/pipeline_orchestrator_service/adapters/test_outbox_event_mapper.py tests/unit/services/pipeline_orchestrator_service/services/test_pipeline_orchestrator_service.py --ignore E501,I001
-	python -m ruff check scripts/docker_endpoint_smoke.py scripts/latency_profile.py scripts/performance_load_gate.py scripts/config_access_guard.py --ignore E501,I001
-	python -m ruff format --check src/services/query_service/app/main.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py src/libs/portfolio-common/portfolio_common/reconstruction_identity.py src/libs/portfolio-common/portfolio_common/ingestion_evidence.py src/libs/portfolio-common/portfolio_common/reconciliation_quality.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/market_reference_quality.py src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/observability_contracts.py src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py tests/unit/services/query_service/test_openapi_quality_gate.py tests/unit/services/query_service/test_api_vocabulary_inventory.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/libs/portfolio-common/test_reconstruction_identity.py tests/unit/libs/portfolio-common/test_ingestion_evidence.py tests/unit/libs/portfolio-common/test_reconciliation_quality.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_market_reference_quality.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/test_domain_data_product_contracts.py tests/unit/scripts/test_ingestion_rate_limit_scope_guard.py tests/unit/scripts/test_metric_vocabulary_guard.py tests/unit/scripts/test_structured_log_guard.py tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py tests/unit/scripts/test_event_runtime_contract_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py tests/unit/scripts/test_certify_lotus_core_app.py scripts/test_manifest.py scripts/coverage_gate.py scripts/openapi_quality_gate.py scripts/warning_budget_gate.py scripts/api_vocabulary_inventory.py scripts/no_alias_contract_guard.py scripts/docker_endpoint_smoke.py scripts/latency_profile.py scripts/performance_load_gate.py scripts/ingestion_endpoint_contract_gate.py scripts/ingestion_rate_limit_scope_guard.py scripts/metric_vocabulary_guard.py scripts/structured_log_guard.py scripts/config_access_guard.py scripts/qcp_problem_details_guard.py scripts/temporal_vocabulary_guard.py scripts/route_contract_family_guard.py scripts/source_data_product_contract_guard.py scripts/validate_domain_data_product_contracts.py scripts/analytics_input_consumer_contract_guard.py scripts/event_runtime_contract_guard.py scripts/rfc0083_closure_guard.py scripts/certify_lotus_core_app.py
-	python -m ruff format --check scripts/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py
-	python -m ruff format --check scripts/repository_output_shape_guard.py tests/unit/scripts/test_repository_output_shape_guard.py
-	python -m ruff format --check scripts/security_control_coverage_guard.py tests/unit/scripts/test_security_control_coverage_guard.py
-	python -m ruff format --check scripts/critical_path_coverage_guard.py tests/unit/scripts/test_critical_path_coverage_guard.py
-	python -m ruff format --check scripts/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py
-	python -m ruff format --check scripts/synthetic_fixture_leakage_guard.py tests/unit/scripts/test_synthetic_fixture_leakage_guard.py
-	python -m ruff format --check scripts/test_lane_governance_guard.py tests/unit/scripts/test_test_lane_governance_guard.py
-	python -m ruff format --check scripts/event_contract_test_pack_guard.py tests/unit/scripts/test_event_contract_test_pack_guard.py
-	python -m ruff format --check scripts/concurrency_duplicate_delivery_guard.py tests/unit/scripts/test_concurrency_duplicate_delivery_guard.py tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py tests/integration/libs/portfolio-common/test_idempotency_repository.py
-	python -m ruff format --check scripts/cross_product_golden_regression_guard.py tests/unit/scripts/test_cross_product_golden_regression_guard.py tests/unit/transaction_specs/test_cross_product_golden_scenarios.py
-	python -m ruff format --check scripts/command_api_behavior_certification_guard.py tests/unit/scripts/test_command_api_behavior_certification_guard.py
-	python -m ruff format --check scripts/observability_contract_test_pack_guard.py tests/unit/scripts/test_observability_contract_test_pack_guard.py
-	python -m ruff format --check scripts/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py
-	python -m ruff format --check scripts/generated_artifact_tracking_guard.py tests/unit/scripts/test_generated_artifact_tracking_guard.py
-	python -m ruff format --check scripts/endpoint_consolidation_watchlist_guard.py tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py
-	python -m ruff format --check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py
-	python -m ruff format --check src/services/query_service/app/routers/http_errors.py src/services/query_service/app/routers/lookup_mappers.py src/services/query_service/app/routers/lookups.py src/services/query_service/app/routers/buy_state.py src/services/query_service/app/routers/cash_accounts.py src/services/query_service/app/routers/cash_movements.py src/services/query_service/app/routers/portfolios.py src/services/query_service/app/routers/positions.py src/services/query_service/app/routers/reporting.py src/services/query_service/app/routers/sell_state.py src/services/query_service/app/routers/transactions.py src/services/financial_reconciliation_service/app/routers/reconciliation_mappers.py src/services/financial_reconciliation_service/app/routers/reconciliation.py src/services/event_replay_service/app/routers/replay_mappers.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/api_mapper_pattern_guard.py tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/routers/test_http_errors.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py tests/unit/services/event_replay_service/test_replay_mappers.py tests/unit/scripts/test_api_mapper_pattern_guard.py
-	python -m ruff format --check scripts/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py
-	python -m ruff format --check scripts/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py
-	python -m ruff format --check src/libs/portfolio-common/portfolio_common/runtime_providers.py src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py src/services/query_service/app/services/core_snapshot_service.py src/services/query_service/app/services/simulation_service.py scripts/runtime_provider_port_guard.py tests/unit/libs/portfolio-common/test_runtime_providers.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/services/query_service/services/test_simulation_service.py tests/unit/scripts/test_runtime_provider_port_guard.py
+	python -m ruff check scripts/validation/docker_endpoint_smoke.py scripts/operations/latency_profile.py scripts/operations/performance_load_gate.py scripts/quality/config_access_guard.py --ignore E501,I001
+	python -m ruff format --check src/services/query_service/app/main.py src/services/query_control_plane_service/app/enterprise_readiness.py src/services/ingestion_service/app/main.py src/libs/portfolio-common/portfolio_common/enterprise_readiness.py src/libs/portfolio-common/portfolio_common/openapi_enrichment.py src/libs/portfolio-common/portfolio_common/reconstruction_identity.py src/libs/portfolio-common/portfolio_common/ingestion_evidence.py src/libs/portfolio-common/portfolio_common/reconciliation_quality.py src/libs/portfolio-common/portfolio_common/source_data_products.py src/libs/portfolio-common/portfolio_common/market_reference_quality.py src/libs/portfolio-common/portfolio_common/source_data_security.py src/libs/portfolio-common/portfolio_common/observability_contracts.py src/libs/portfolio-common/portfolio_common/event_supportability.py src/libs/portfolio-common/portfolio_common/events.py src/libs/portfolio-common/portfolio_common/outbox_repository.py tests/unit/services/query_service/test_openapi_quality_gate.py tests/unit/services/query_service/test_api_vocabulary_inventory.py tests/unit/libs/portfolio-common/test_enterprise_readiness_shared.py tests/unit/libs/portfolio-common/test_openapi_enrichment.py tests/unit/libs/portfolio-common/test_reconstruction_identity.py tests/unit/libs/portfolio-common/test_ingestion_evidence.py tests/unit/libs/portfolio-common/test_reconciliation_quality.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/libs/portfolio-common/test_market_reference_quality.py tests/unit/libs/portfolio-common/test_source_data_security.py tests/unit/libs/portfolio-common/test_event_supportability.py tests/unit/libs/portfolio-common/test_outbox_repository.py tests/unit/test_domain_data_product_contracts.py tests/unit/scripts/test_ingestion_rate_limit_scope_guard.py tests/unit/scripts/test_metric_vocabulary_guard.py tests/unit/scripts/test_structured_log_guard.py tests/unit/scripts/test_temporal_vocabulary_guard.py tests/unit/scripts/test_route_contract_family_guard.py tests/unit/scripts/test_qcp_problem_details_guard.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py tests/unit/scripts/test_event_runtime_contract_guard.py tests/unit/scripts/test_rfc0083_closure_guard.py tests/unit/scripts/test_certify_lotus_core_app.py scripts/quality/test_manifest.py scripts/quality/coverage_gate.py scripts/quality/openapi_quality_gate.py scripts/quality/warning_budget_gate.py scripts/quality/api_vocabulary_inventory.py scripts/quality/no_alias_contract_guard.py scripts/validation/docker_endpoint_smoke.py scripts/operations/latency_profile.py scripts/operations/performance_load_gate.py scripts/quality/ingestion_endpoint_contract_gate.py scripts/quality/ingestion_rate_limit_scope_guard.py scripts/quality/metric_vocabulary_guard.py scripts/quality/structured_log_guard.py scripts/quality/config_access_guard.py scripts/quality/qcp_problem_details_guard.py scripts/quality/temporal_vocabulary_guard.py scripts/quality/route_contract_family_guard.py scripts/quality/source_data_product_contract_guard.py scripts/validation/validate_domain_data_product_contracts.py scripts/quality/analytics_input_consumer_contract_guard.py scripts/quality/event_runtime_contract_guard.py scripts/quality/rfc0083_closure_guard.py scripts/validation/certify_lotus_core_app.py
+	python -m ruff format --check scripts/quality/ingestion_gateway_rate_limit_policy_guard.py tests/unit/scripts/test_ingestion_gateway_rate_limit_policy_guard.py
+	python -m ruff format --check scripts/quality/repository_output_shape_guard.py tests/unit/scripts/test_repository_output_shape_guard.py
+	python -m ruff format --check scripts/quality/security_control_coverage_guard.py tests/unit/scripts/test_security_control_coverage_guard.py
+	python -m ruff format --check scripts/quality/critical_path_coverage_guard.py tests/unit/scripts/test_critical_path_coverage_guard.py
+	python -m ruff format --check scripts/quality/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py
+	python -m ruff format --check scripts/quality/synthetic_fixture_leakage_guard.py tests/unit/scripts/test_synthetic_fixture_leakage_guard.py
+	python -m ruff format --check scripts/quality/test_lane_governance_guard.py tests/unit/scripts/test_test_lane_governance_guard.py
+	python -m ruff format --check scripts/quality/event_contract_test_pack_guard.py tests/unit/scripts/test_event_contract_test_pack_guard.py
+	python -m ruff format --check scripts/quality/concurrency_duplicate_delivery_guard.py tests/unit/scripts/test_concurrency_duplicate_delivery_guard.py tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py tests/integration/libs/portfolio-common/test_idempotency_repository.py
+	python -m ruff format --check scripts/quality/cross_product_golden_regression_guard.py tests/unit/scripts/test_cross_product_golden_regression_guard.py tests/unit/transaction_specs/test_cross_product_golden_scenarios.py
+	python -m ruff format --check scripts/quality/command_api_behavior_certification_guard.py tests/unit/scripts/test_command_api_behavior_certification_guard.py
+	python -m ruff format --check scripts/quality/observability_contract_test_pack_guard.py tests/unit/scripts/test_observability_contract_test_pack_guard.py
+	python -m ruff format --check scripts/development/clean_generated_artifacts.py tests/unit/scripts/test_clean_generated_artifacts.py
+	python -m ruff format --check scripts/quality/generated_artifact_tracking_guard.py tests/unit/scripts/test_generated_artifact_tracking_guard.py
+	python -m ruff format --check scripts/quality/endpoint_consolidation_watchlist_guard.py tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py
+	python -m ruff format --check src/libs/portfolio-common/portfolio_common/proof_builders.py scripts/quality/proof_builder_pattern_guard.py tests/unit/libs/portfolio-common/test_proof_builders.py tests/unit/scripts/test_proof_builder_pattern_guard.py
+	python -m ruff format --check src/services/query_service/app/routers/http_errors.py src/services/query_service/app/routers/lookup_mappers.py src/services/query_service/app/routers/lookups.py src/services/query_service/app/routers/buy_state.py src/services/query_service/app/routers/cash_accounts.py src/services/query_service/app/routers/cash_movements.py src/services/query_service/app/routers/portfolios.py src/services/query_service/app/routers/positions.py src/services/query_service/app/routers/reporting.py src/services/query_service/app/routers/sell_state.py src/services/query_service/app/routers/transactions.py src/services/financial_reconciliation_service/app/routers/reconciliation_mappers.py src/services/financial_reconciliation_service/app/routers/reconciliation.py src/services/event_replay_service/app/routers/replay_mappers.py src/services/event_replay_service/app/routers/ingestion_operations.py scripts/quality/api_mapper_pattern_guard.py tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/routers/test_http_errors.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py tests/unit/services/event_replay_service/test_replay_mappers.py tests/unit/scripts/test_api_mapper_pattern_guard.py
+	python -m ruff format --check scripts/generators/generate_api_route_catalog.py tests/unit/scripts/test_generate_api_route_catalog.py
+	python -m ruff format --check scripts/quality/mapping_anti_corruption_guard.py tests/unit/scripts/test_mapping_anti_corruption_guard.py
+	python -m ruff format --check src/libs/portfolio-common/portfolio_common/runtime_providers.py src/services/financial_reconciliation_service/app/services/runtime_providers.py src/services/financial_reconciliation_service/app/services/reconciliation_service.py src/services/query_service/app/services/core_snapshot_service.py src/services/query_service/app/services/simulation_service.py scripts/quality/runtime_provider_port_guard.py tests/unit/libs/portfolio-common/test_runtime_providers.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/services/query_service/services/test_core_snapshot_service.py tests/unit/services/query_service/services/test_simulation_service.py tests/unit/scripts/test_runtime_provider_port_guard.py
 	python -m ruff format --check src/libs/portfolio-common/portfolio_common/build_metadata.py src/libs/portfolio-common/portfolio_common/http_app_bootstrap.py tests/unit/libs/portfolio-common/test_build_metadata.py tests/unit/libs/portfolio-common/test_http_app_bootstrap.py tests/test_support/http_middleware_contract.py tests/unit/test_http_middleware_chain_contract.py
-	python -m ruff format --check scripts/image_provenance_guard.py tests/unit/scripts/test_image_provenance_guard.py
-	python -m ruff format --check scripts/write_image_release_manifest.py tests/unit/scripts/test_write_image_release_manifest.py
-	python -m ruff format --check scripts/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py
-	python -m ruff format --check scripts/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py
-	python -m ruff format --check scripts/supported_features_guard.py tests/unit/scripts/test_supported_features_guard.py
-	python -m ruff format --check scripts/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py
-	python -m ruff format --check scripts/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py
+	python -m ruff format --check scripts/quality/image_provenance_guard.py tests/unit/scripts/test_image_provenance_guard.py
+	python -m ruff format --check scripts/release/write_image_release_manifest.py tests/unit/scripts/test_write_image_release_manifest.py
+	python -m ruff format --check scripts/quality/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py
+	python -m ruff format --check scripts/quality/rfc_status_ledger_guard.py tests/unit/scripts/test_rfc_status_ledger_guard.py
+	python -m ruff format --check scripts/quality/supported_features_guard.py tests/unit/scripts/test_supported_features_guard.py
+	python -m ruff format --check scripts/quality/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py
+	python -m ruff format --check scripts/quality/front_door_sync_guard.py tests/unit/scripts/test_front_door_sync_guard.py
 	python -m ruff format --check src/services/pipeline_orchestrator_service/app/adapters/__init__.py src/services/pipeline_orchestrator_service/app/adapters/outbox_event_mapper.py src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py tests/unit/services/pipeline_orchestrator_service/adapters/test_outbox_event_mapper.py tests/unit/services/pipeline_orchestrator_service/services/test_pipeline_orchestrator_service.py
 	$(MAKE) monetary-float-guard
 	$(MAKE) ingestion-contract-gate
@@ -153,196 +153,196 @@ lint:
 	$(MAKE) rfc0083-closure-guard
 
 monetary-float-guard:
-	python scripts/check_monetary_float_usage.py
+	python scripts/quality/check_monetary_float_usage.py
 
 qcp-problem-details-guard:
-	python scripts/qcp_problem_details_guard.py
+	python scripts/quality/qcp_problem_details_guard.py
 
 metric-vocabulary-guard:
-	python scripts/metric_vocabulary_guard.py
+	python scripts/quality/metric_vocabulary_guard.py
 
 repository-output-shape-guard:
-	python scripts/repository_output_shape_guard.py
+	python scripts/quality/repository_output_shape_guard.py
 
 domain-layer-guard:
-	python scripts/domain_layer_guard.py
+	python scripts/quality/domain_layer_guard.py
 
 testability-architecture-guard:
-	python scripts/testability_architecture_guard.py
+	python scripts/quality/testability_architecture_guard.py
 
 runtime-boundary-decision-guard:
-	python scripts/runtime_boundary_decision_guard.py
+	python scripts/quality/runtime_boundary_decision_guard.py
 
 in-process-modularity-guard:
-	python scripts/in_process_modularity_guard.py
+	python scripts/quality/in_process_modularity_guard.py
 
 in-process-boundary-guard:
-	python scripts/in_process_boundary_guard.py
+	python scripts/quality/in_process_boundary_guard.py
 
 proof-builder-pattern-guard:
-	python scripts/proof_builder_pattern_guard.py
+	python scripts/quality/proof_builder_pattern_guard.py
 
 api-mapper-pattern-guard:
-	python scripts/api_mapper_pattern_guard.py
+	python scripts/quality/api_mapper_pattern_guard.py
 
 api-example-catalog-guard:
-	python scripts/api_example_catalog_guard.py
+	python scripts/quality/api_example_catalog_guard.py
 
 api-route-catalog-guard:
-	python scripts/generate_api_route_catalog.py --check
+	python scripts/generators/generate_api_route_catalog.py --check
 
 architecture-docs-catalog-guard:
-	python scripts/architecture_documentation_catalog_guard.py
+	python scripts/quality/architecture_documentation_catalog_guard.py
 
 rfc-status-ledger-guard:
-	python scripts/rfc_status_ledger_guard.py
+	python scripts/quality/rfc_status_ledger_guard.py
 
 image-provenance-guard:
-	python scripts/image_provenance_guard.py
+	python scripts/quality/image_provenance_guard.py
 
 mapping-anti-corruption-guard:
-	python scripts/mapping_anti_corruption_guard.py
+	python scripts/quality/mapping_anti_corruption_guard.py
 
 runtime-provider-port-guard:
-	python scripts/runtime_provider_port_guard.py
+	python scripts/quality/runtime_provider_port_guard.py
 
 application-layer-contract-guard:
-	python scripts/application_layer_contract_guard.py
+	python scripts/quality/application_layer_contract_guard.py
 
 application-port-catalog-guard:
-	python scripts/application_port_catalog_guard.py
+	python scripts/quality/application_port_catalog_guard.py
 
 application-dependency-inversion-guard:
-	python scripts/application_dependency_inversion_guard.py
+	python scripts/quality/application_dependency_inversion_guard.py
 
 application-workflow-policy-guard:
-	python scripts/application_workflow_policy_guard.py
+	python scripts/quality/application_workflow_policy_guard.py
 
 application-error-taxonomy-guard:
-	python scripts/application_error_taxonomy_guard.py
+	python scripts/quality/application_error_taxonomy_guard.py
 
 application-command-result-guard:
-	python scripts/application_command_result_guard.py
+	python scripts/quality/application_command_result_guard.py
 
 ingestion-service-framework-guard:
-	python scripts/ingestion_service_framework_guard.py
+	python scripts/quality/ingestion_service_framework_guard.py
 
 upload-component-boundary-guard:
-	python scripts/upload_component_boundary_guard.py
+	python scripts/quality/upload_component_boundary_guard.py
 
 transaction-replay-boundary-guard:
-	python scripts/transaction_replay_boundary_guard.py
+	python scripts/quality/transaction_replay_boundary_guard.py
 
 aggregation-scheduler-boundary-guard:
-	python scripts/aggregation_scheduler_boundary_guard.py
+	python scripts/quality/aggregation_scheduler_boundary_guard.py
 
 position-reducer-boundary-guard:
-	python scripts/position_reducer_boundary_guard.py
+	python scripts/quality/position_reducer_boundary_guard.py
 
 infrastructure-adapter-layer-guard:
-	python scripts/infrastructure_adapter_layer_guard.py
+	python scripts/quality/infrastructure_adapter_layer_guard.py
 
 repository-transaction-boundary-guard:
-	python scripts/repository_transaction_boundary_guard.py
+	python scripts/quality/repository_transaction_boundary_guard.py
 
 ingestion-store-port-guard:
-	python scripts/ingestion_store_port_guard.py
+	python scripts/quality/ingestion_store_port_guard.py
 
 event-publisher-port-guard:
-	python scripts/event_publisher_port_guard.py
+	python scripts/quality/event_publisher_port_guard.py
 
 repository-port-guard:
-	python scripts/repository_port_guard.py
+	python scripts/quality/repository_port_guard.py
 
 security-control-coverage-guard:
-	python scripts/security_control_coverage_guard.py
+	python scripts/quality/security_control_coverage_guard.py
 
 critical-path-coverage-guard:
-	python scripts/critical_path_coverage_guard.py --contract-only
+	python scripts/quality/critical_path_coverage_guard.py --contract-only
 
 risk-based-test-coverage-matrix-guard:
-	python scripts/risk_based_test_coverage_matrix_guard.py
+	python scripts/quality/risk_based_test_coverage_matrix_guard.py
 
 synthetic-fixture-leakage-guard:
-	python scripts/synthetic_fixture_leakage_guard.py
+	python scripts/quality/synthetic_fixture_leakage_guard.py
 
 test-lane-governance-guard:
-	python scripts/test_lane_governance_guard.py
+	python scripts/quality/test_lane_governance_guard.py
 
 event-contract-test-pack-guard:
-	python scripts/event_contract_test_pack_guard.py
+	python scripts/quality/event_contract_test_pack_guard.py
 
 concurrency-duplicate-delivery-guard:
-	python scripts/concurrency_duplicate_delivery_guard.py
+	python scripts/quality/concurrency_duplicate_delivery_guard.py
 
 cross-product-golden-regression-guard:
-	python scripts/cross_product_golden_regression_guard.py
+	python scripts/quality/cross_product_golden_regression_guard.py
 
 command-api-behavior-certification-guard:
-	python scripts/command_api_behavior_certification_guard.py
+	python scripts/quality/command_api_behavior_certification_guard.py
 
 observability-contract-test-pack-guard:
-	python scripts/observability_contract_test_pack_guard.py
+	python scripts/quality/observability_contract_test_pack_guard.py
 
 generated-artifact-tracking-guard:
-	python scripts/generated_artifact_tracking_guard.py
+	python scripts/quality/generated_artifact_tracking_guard.py
 
 supported-features-guard:
-	python scripts/supported_features_guard.py
+	python scripts/quality/supported_features_guard.py
 
 incident-playbook-guard:
-	python scripts/incident_playbook_guard.py
+	python scripts/quality/incident_playbook_guard.py
 
 front-door-sync-guard:
-	python scripts/front_door_sync_guard.py
+	python scripts/quality/front_door_sync_guard.py
 
 structured-log-guard:
-	python scripts/structured_log_guard.py
+	python scripts/quality/structured_log_guard.py
 
 no-alias-gate:
-	python scripts/no_alias_contract_guard.py
+	python scripts/quality/no_alias_contract_guard.py
 
 ingestion-contract-gate:
-	python scripts/ingestion_endpoint_contract_gate.py
+	python scripts/quality/ingestion_endpoint_contract_gate.py
 
 ingestion-rate-limit-scope-guard:
-	python scripts/ingestion_rate_limit_scope_guard.py
+	python scripts/quality/ingestion_rate_limit_scope_guard.py
 
 ingestion-gateway-rate-limit-policy-guard:
-	python scripts/ingestion_gateway_rate_limit_policy_guard.py
+	python scripts/quality/ingestion_gateway_rate_limit_policy_guard.py
 
 config-access-guard:
-	python scripts/config_access_guard.py
+	python scripts/quality/config_access_guard.py
 
 temporal-vocabulary-guard:
-	python scripts/temporal_vocabulary_guard.py
+	python scripts/quality/temporal_vocabulary_guard.py
 
 route-contract-family-guard:
-	python scripts/route_contract_family_guard.py
+	python scripts/quality/route_contract_family_guard.py
 
 source-data-product-contract-guard:
-	python scripts/source_data_product_contract_guard.py
+	python scripts/quality/source_data_product_contract_guard.py
 
 endpoint-consolidation-watchlist-guard:
-	python scripts/endpoint_consolidation_watchlist_guard.py
+	python scripts/quality/endpoint_consolidation_watchlist_guard.py
 
 domain-product-validate:
-	python scripts/validate_domain_data_product_contracts.py
+	python scripts/validation/validate_domain_data_product_contracts.py
 
 analytics-input-consumer-contract-guard:
-	python scripts/analytics_input_consumer_contract_guard.py
+	python scripts/quality/analytics_input_consumer_contract_guard.py
 
 event-runtime-contract-guard:
-	python scripts/event_runtime_contract_guard.py
+	python scripts/quality/event_runtime_contract_guard.py
 
 rfc0083-closure-guard:
-	python scripts/rfc0083_closure_guard.py
+	python scripts/quality/rfc0083_closure_guard.py
 
 typecheck:
 	python -m mypy --config-file mypy.ini
 
 architecture-guard:
-	python scripts/architecture_boundary_guard.py --strict
+	python scripts/quality/architecture_boundary_guard.py --strict
 	$(MAKE) domain-layer-guard
 	$(MAKE) testability-architecture-guard
 	$(MAKE) runtime-boundary-decision-guard
@@ -374,29 +374,29 @@ architecture-guard:
 	$(MAKE) repository-port-guard
 
 openapi-gate:
-	python scripts/openapi_quality_gate.py
+	python scripts/quality/openapi_quality_gate.py
 
 api-vocabulary-gate:
-	python scripts/api_vocabulary_inventory.py --validate-only
-	python scripts/generate_api_route_catalog.py --check
+	python scripts/quality/api_vocabulary_inventory.py --validate-only
+	python scripts/generators/generate_api_route_catalog.py --check
 
 live-dpm-source-validate:
-	python scripts/validate_live_dpm_source_products.py --control-base-url $${LOTUS_CORE_CONTROL_BASE_URL:-http://core-control.dev.lotus}
+	python scripts/validation/validate_live_dpm_source_products.py --control-base-url $${LOTUS_CORE_CONTROL_BASE_URL:-http://core-control.dev.lotus}
 
 lotus-core-validate:
-	python scripts/certify_lotus_core_app.py --runtime-build
+	python scripts/validation/certify_lotus_core_app.py --runtime-build
 
 migration-smoke:
-	python scripts/migration_contract_check.py --mode alembic-sql
+	python scripts/quality/migration_contract_check.py --mode alembic-sql
 
 migration-apply:
 	python -m alembic upgrade head
 
 audit-average-cost-pools:
-	python scripts/reconcile_average_cost_pools.py $(AVCO_RECONCILIATION_ARGS)
+	python scripts/operations/reconcile_average_cost_pools.py $(AVCO_RECONCILIATION_ARGS)
 
 reconcile-average-cost-pools:
-	python scripts/reconcile_average_cost_pools.py --apply $(AVCO_RECONCILIATION_ARGS)
+	python scripts/operations/reconcile_average_cost_pools.py --apply $(AVCO_RECONCILIATION_ARGS)
 
 test:
 	$(MAKE) test-unit
@@ -428,79 +428,79 @@ test-heavy:
 	$(MAKE) test-failure-recovery-gate
 
 test-unit:
-	python scripts/test_manifest.py --suite unit --quiet
+	python scripts/quality/test_manifest.py --suite unit --quiet
 
 warning-gate:
-	python scripts/warning_budget_gate.py --suite unit --max-warnings 0 --quiet
+	python scripts/quality/warning_budget_gate.py --suite unit --max-warnings 0 --quiet
 
 test-unit-db:
-	python scripts/test_manifest.py --suite unit-db --quiet
+	python scripts/quality/test_manifest.py --suite unit-db --quiet
 
 test-integration-lite:
-	python scripts/test_manifest.py --suite integration-lite --quiet
+	python scripts/quality/test_manifest.py --suite integration-lite --quiet
 
 test-integration-all:
-	python scripts/test_manifest.py --suite integration-all --quiet
+	python scripts/quality/test_manifest.py --suite integration-all --quiet
 
 test-ops-contract:
-	python scripts/test_manifest.py --suite ops-contract --quiet
+	python scripts/quality/test_manifest.py --suite ops-contract --quiet
 
 test-boundary-mapping-conformance:
-	python scripts/test_manifest.py --suite boundary-mapping-conformance --quiet
+	python scripts/quality/test_manifest.py --suite boundary-mapping-conformance --quiet
 
 test-transaction-buy-contract:
-	python scripts/test_manifest.py --suite transaction-buy-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-buy-contract --quiet
 
 test-transaction-sell-contract:
-	python scripts/test_manifest.py --suite transaction-sell-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-sell-contract --quiet
 
 test-transaction-dividend-contract:
-	python scripts/test_manifest.py --suite transaction-dividend-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-dividend-contract --quiet
 
 test-transaction-interest-contract:
-	python scripts/test_manifest.py --suite transaction-interest-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-interest-contract --quiet
 
 test-transaction-fx-contract:
-	python scripts/test_manifest.py --suite transaction-fx-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet
 
 test-transaction-portfolio-flow-bundle-contract:
-	python scripts/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-portfolio-flow-bundle-contract --quiet
 
 test-transaction-processing-contract:
-	python scripts/test_manifest.py --suite transaction-processing-contract --quiet
+	python scripts/quality/test_manifest.py --suite transaction-processing-contract --quiet
 
 test-e2e-smoke:
-	python scripts/test_manifest.py --suite e2e-smoke --quiet
+	python scripts/quality/test_manifest.py --suite e2e-smoke --quiet
 
 test-e2e-all:
-	python scripts/test_manifest.py --suite e2e-all --quiet
+	python scripts/quality/test_manifest.py --suite e2e-all --quiet
 
 test-docker-smoke:
-	python scripts/docker_endpoint_smoke.py --build
+	python scripts/validation/docker_endpoint_smoke.py --build
 
 test-latency-gate:
-	python scripts/latency_profile.py --build --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
+	python scripts/operations/latency_profile.py --build --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
 
 test-performance-load-gate:
-	python scripts/performance_load_gate.py --build --profile-tier fast --enforce
+	python scripts/operations/performance_load_gate.py --build --profile-tier fast --enforce
 
 test-performance-load-gate-full:
-	python scripts/performance_load_gate.py --build --profile-tier full --enforce
+	python scripts/operations/performance_load_gate.py --build --profile-tier full --enforce
 
 profile-cost-history-capacity:
-	python scripts/cost_history_capacity_profile.py --output output/cost-history-capacity-profile.json
+	python scripts/operations/cost_history_capacity_profile.py --output output/cost-history-capacity-profile.json
 
 profile-cost-processing-modes:
-	python scripts/cost_processing_mode_capacity_profile.py --output output/cost-processing-mode-capacity-profile.json
+	python scripts/operations/cost_processing_mode_capacity_profile.py --output output/cost-processing-mode-capacity-profile.json
 
 test-failure-recovery-gate:
-	python scripts/failure_recovery_gate.py --build --enforce
+	python scripts/operations/failure_recovery_gate.py --build --enforce
 
 test-institutional-completion-gate:
-	python scripts/institutional_completion_gate.py
+	python scripts/validation/institutional_completion_gate.py
 
 test-institutional-signoff-pack:
-	python scripts/institutional_signoff_pack.py --require-all --max-age-hours 24
+	python scripts/validation/institutional_signoff_pack.py --require-all --max-age-hours 24
 
 test-pr-suites:
 	$(MAKE) test-unit-db
@@ -533,12 +533,12 @@ test-institutional-release-gates:
 	$(MAKE) test-institutional-signoff-pack
 
 security-audit:
-	python scripts/dependency_health_check.py
+	python scripts/validation/dependency_health_check.py
 
 check: lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate test
 
 coverage-gate:
-	python scripts/coverage_gate.py
+	python scripts/quality/coverage_gate.py
 
 ci: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate migration-smoke test-pr-suites coverage-gate security-audit test-pr-runtime-gates
 
@@ -550,7 +550,7 @@ docker-build:
 	docker build -f src/services/query_service/Dockerfile -t portfolio-analytics-query-service:ci .
 
 docker-prebuild-ci:
-	python scripts/prebuild_ci_images.py
+	python scripts/release/prebuild_ci_images.py
 
 clean:
-	python scripts/clean_generated_artifacts.py
+	python scripts/development/clean_generated_artifacts.py

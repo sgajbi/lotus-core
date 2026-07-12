@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import generate_runtime_sbom
+from scripts.release import generate_runtime_sbom
 
 
 def test_runtime_sbom_command_has_no_audit_ignores_when_runtime_is_clean() -> None:

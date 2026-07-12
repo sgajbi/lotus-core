@@ -114,7 +114,7 @@ operator rules for this harness:
    portfolio aggregation.
 
 For completed runs that already converged, use
-`python scripts/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
+`python scripts/operations/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
 to collect sampled or exhaustive reconciliation evidence without reseeding data. Increase
 `--portfolio-limit` to widen the proof set; the `20260418T065154Z` institutional run was
 reconciled across all `1000` portfolios with this workflow.

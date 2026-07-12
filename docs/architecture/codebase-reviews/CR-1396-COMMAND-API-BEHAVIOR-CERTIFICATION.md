@@ -17,7 +17,7 @@ not visible as one certification surface.
 ## Actions
 
 - Added `docs/standards/command-api-behavior-certification-pack.v1.json` for #605 scenarios.
-- Added `scripts/command_api_behavior_certification_guard.py` and focused guard tests.
+- Added `scripts/quality/command_api_behavior_certification_guard.py` and focused guard tests.
 - Wired `make command-api-behavior-certification-guard` into `make lint`.
 - Added a route-surface `/ingest/transactions` test for same idempotency key plus different
   payload returning `INGESTION_IDEMPOTENCY_CONFLICT`.
@@ -38,7 +38,7 @@ response fields. The OpenAPI example now matches the already declared response m
 Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_command_api_behavior_certification_guard.py -q`
-- `python scripts/command_api_behavior_certification_guard.py`
+- `python scripts/quality/command_api_behavior_certification_guard.py`
 - `make command-api-behavior-certification-guard`
 - `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "idempotency_replays_existing_job or rejects_same_idempotency_key_with_different_payload" -q`
 - `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k "idempotency_diagnostics_endpoint or idempotency_replays_existing_job or rejects_same_idempotency_key_with_different_payload" -q`

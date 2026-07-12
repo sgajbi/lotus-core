@@ -35,7 +35,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/test_ci_workflow_action_versions.py -q`
 2. `make quality-workflow-governance-gate`
-3. `python scripts/wiki_validation_guard.py`
+3. `python scripts/quality/wiki_validation_guard.py`
 4. `git diff --check`
 
 ## Documentation, Wiki, Context, And Skill Decision

@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from scripts import certify_lotus_core_app as validator
+from scripts.validation import certify_lotus_core_app as validator
 
 
 def _args(tmp_path: Path, **overrides) -> argparse.Namespace:
@@ -109,7 +109,7 @@ def test_lotus_core_validation_skip_modes_are_explicit(tmp_path: Path, monkeypat
     )
     assert supported_feature_check["details"]["command"] == [
         sys.executable,
-        "scripts/supported_features_guard.py",
+        "scripts/quality/supported_features_guard.py",
     ]
 
 

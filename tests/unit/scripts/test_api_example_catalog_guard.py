@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.api_example_catalog_guard import (
+from scripts.quality.api_example_catalog_guard import (
     find_api_example_catalog_findings,
 )
 

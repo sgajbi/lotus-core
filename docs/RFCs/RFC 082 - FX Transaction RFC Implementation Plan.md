@@ -71,8 +71,8 @@ Current `lotus-core` already has strong FX-rate infrastructure for valuation and
 | 4 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-4-CONTRACT-LIFECYCLE.md`, `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`, `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`, `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`, `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py` |
 | 5 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-5-SWAP-GROUPING.md`, `tests/unit/libs/portfolio_common/test_fx_linkage.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
 | 6 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`, `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
-| 7 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-7-QUERY-OBSERVABILITY.md`, `tests/unit/services/query_service/repositories/test_transaction_repository.py`, `tests/unit/services/query_service/services/test_transaction_service.py`, `scripts/openapi_quality_gate.py` |
-| 8 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md`, `scripts/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml`, `tests/e2e/test_fx_lifecycle.py`, live Docker-backed validation (`transaction-fx-contract`: 195 passed; `test_fx_lifecycle.py`: 3 passed) |
+| 7 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-7-QUERY-OBSERVABILITY.md`, `tests/unit/services/query_service/repositories/test_transaction_repository.py`, `tests/unit/services/query_service/services/test_transaction_service.py`, `scripts/quality/openapi_quality_gate.py` |
+| 8 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md`, `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml`, `tests/e2e/test_fx_lifecycle.py`, live Docker-backed validation (`transaction-fx-contract`: 195 passed; `test_fx_lifecycle.py`: 3 passed) |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)
 Deliverables:
@@ -183,7 +183,7 @@ Exit Criteria:
 
 ### Slice 8 - Conformance, Test Suite Wiring, and Exit Report
 Deliverables:
-1. `scripts/test_manifest.py` suite entries:
+1. `scripts/quality/test_manifest.py` suite entries:
  - `transaction-fx-contract`
  - alias `transaction-fx-contract`
 2. `Makefile` targets:
@@ -201,10 +201,10 @@ Per approved slice, run relevant gates:
 1. `python -m ruff check ...`
 2. `make typecheck`
 3. targeted pytest slice suites
-4. `python scripts/migration_contract_check.py --mode alembic-sql` (if schema changed)
-5. `python scripts/openapi_quality_gate.py` (if API touched)
-6. `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
-7. `python scripts/api_vocabulary_inventory.py --validate-only` (if API touched)
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` (if schema changed)
+5. `python scripts/quality/openapi_quality_gate.py` (if API touched)
+6. `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
+7. `python scripts/quality/api_vocabulary_inventory.py --validate-only` (if API touched)
 
 Required FX-specific evidence during execution:
 1. characterization tests for current non-support baseline;
@@ -268,17 +268,17 @@ Every slice PR must include a short shared-doc conformance note listing which sh
 
 ## Final Validation Evidence
 Local validation completed on the implemented branch:
-1. `python scripts/test_manifest.py --suite transaction-fx-contract --quiet`
+1. `python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet`
  - result: `196 passed`
-2. `python scripts/test_manifest.py --suite integration-all --quiet`
+2. `python scripts/quality/test_manifest.py --suite integration-all --quiet`
  - result: `213 passed`
-3. `python scripts/test_manifest.py --suite e2e-all --quiet`
+3. `python scripts/quality/test_manifest.py --suite e2e-all --quiet`
  - result: `56 passed`
-4. `python scripts/test_manifest.py --suite unit --quiet`
+4. `python scripts/quality/test_manifest.py --suite unit --quiet`
  - result: `862 passed, 6 deselected`
-5. `python scripts/test_manifest.py --suite unit-db --quiet`
+5. `python scripts/quality/test_manifest.py --suite unit-db --quiet`
  - result: `6 passed`
-6. `python scripts/test_manifest.py --suite ops-contract --quiet`
+6. `python scripts/quality/test_manifest.py --suite ops-contract --quiet`
  - result: `52 passed`
 
 Targeted regression evidence added during implementation:

@@ -23,5 +23,5 @@
 ## Evidence
 - `src/services/query_service/app/dtos/reference_integration_dto.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

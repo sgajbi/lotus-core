@@ -23,5 +23,5 @@
 - `src/services/ingestion_service/app/DTOs/upload_dto.py`
 - `src/services/ingestion_service/app/routers/uploads.py`
 - `tests/integration/services/ingestion_service/test_ingestion_main_app_contract.py`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`

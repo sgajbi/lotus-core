@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from scripts.render_transaction_processing_deployment import (
+from scripts.release.render_transaction_processing_deployment import (
     PLACEHOLDER_IMAGE_REF,
     DeploymentRenderError,
     render_deployment,

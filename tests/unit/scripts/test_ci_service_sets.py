@@ -1,4 +1,4 @@
-from scripts.ci_service_sets import (
+from scripts.quality.ci_service_sets import (
     DOCKER_SMOKE_SERVICES,
     E2E_SMOKE_SERVICES,
     FAILURE_RECOVERY_GATE_SERVICES,

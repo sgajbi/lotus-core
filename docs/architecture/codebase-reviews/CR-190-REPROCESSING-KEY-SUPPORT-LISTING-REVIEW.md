@@ -107,7 +107,7 @@ tests to verify:
 Validation executed:
 
 - targeted unit + integration support pack: `103 passed`
-- `python scripts/openapi_quality_gate.py`
-- `python scripts/api_vocabulary_inventory.py --validate-only`
+- `python scripts/quality/openapi_quality_gate.py`
+- `python scripts/quality/api_vocabulary_inventory.py --validate-only`
 - touched-surface `ruff check`
 - touched-surface `ruff format --check`

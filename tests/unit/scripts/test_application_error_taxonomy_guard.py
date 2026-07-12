@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.application_error_taxonomy_guard import (
+from scripts.quality.application_error_taxonomy_guard import (
     find_application_error_taxonomy_findings,
 )
 

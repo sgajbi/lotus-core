@@ -18,7 +18,7 @@ the lesson into an executable guard so the same defect class is blocked.
   `ExternalOrderExecutionAcknowledgement:v1` now leave `source_batch_fingerprint` null when true
   source-batch lineage is unavailable.
 - Existing response identity remains available through each product's deterministic `snapshot_id`.
-- `scripts/source_data_product_contract_guard.py` now rejects request/snapshot-scope expressions in
+- `scripts/quality/source_data_product_contract_guard.py` now rejects request/snapshot-scope expressions in
   `source_batch_fingerprint`, including `request_fingerprint(...)`, `snapshot_fingerprint`, and
   `request_scope_fingerprint`.
 
@@ -37,7 +37,7 @@ slices also get a fast local and CI-visible guard instead of depending on manual
 
 ## Validation Evidence
 
-- `python scripts/source_data_product_contract_guard.py` passed.
+- `python scripts/quality/source_data_product_contract_guard.py` passed.
 - `python -m pytest tests/unit/scripts/test_source_data_product_contract_guard.py -q` passed with
   16 tests.
 - `python -m pytest tests/unit/services/query_service/services/test_client_tax_rule_set.py tests/unit/services/query_service/services/test_client_income_needs_schedule.py tests/unit/services/query_service/services/test_planned_withdrawal_schedule.py tests/unit/services/query_service/services/test_liquidity_reserve_requirement.py tests/unit/services/query_service/services/test_cio_model_change_cohort.py tests/unit/services/query_service/services/test_external_currency_exposure.py tests/unit/services/query_service/services/test_external_eligible_hedge_instrument.py tests/unit/services/query_service/services/test_external_fx_forward_curve.py tests/unit/services/query_service/services/test_external_hedge_policy.py tests/unit/services/query_service/services/test_external_hedge_execution_readiness.py tests/unit/services/query_service/services/test_external_order_execution_acknowledgement.py -q`

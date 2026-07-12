@@ -33,7 +33,7 @@ Local validation passed:
 1. `python -m pytest tests/unit/services/query_service/services/test_cash_movement_service.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/integration/services/query_service/test_main_app.py -q`
 2. `python -m pytest tests/unit/docs/test_source_data_product_boundaries.py -q`
 3. `python -m alembic heads`
-4. `python scripts/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 5. touched-surface `python -m ruff check`
 6. touched-surface `python -m ruff format --check`
 7. `git diff --check`

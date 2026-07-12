@@ -17,7 +17,7 @@ local checks.
 
 1. Added `docs/standards/event-contract-test-pack.v1.json` covering every current
    `EVENT_FAMILY_DEFINITIONS` and `DIRECT_KAFKA_TOPIC_DEFINITIONS` entry.
-2. Added `scripts/event_contract_test_pack_guard.py` and
+2. Added `scripts/quality/event_contract_test_pack_guard.py` and
    `tests/unit/scripts/test_event_contract_test_pack_guard.py`.
 3. Wired `make event-contract-test-pack-guard` into `make lint`.
 4. Centralized the governed event schema version in `portfolio_common.events`.

@@ -22,7 +22,7 @@ without database, Kafka, or downstream dependencies.
 4. Updated lookup, reconciliation, event-replay, and representative query-service routers to use
    mapper modules.
 5. Added mapper unit tests.
-6. Added `scripts/api_mapper_pattern_guard.py` with guard tests.
+6. Added `scripts/quality/api_mapper_pattern_guard.py` with guard tests.
 7. Wired `api-mapper-pattern-guard` into `make architecture-guard`.
 
 ## Compatibility Impact
@@ -41,9 +41,9 @@ service, endpoint, queue, database, worker, or deployment boundary.
 Focused validation was run before commit:
 
 1. `python -m pytest tests/unit/services/query_service/routers/test_lookups_router.py tests/unit/services/query_service/routers/test_http_errors.py tests/unit/services/query_service/routers/test_cash_movements_router.py tests/unit/services/financial_reconciliation_service/test_reconciliation_mappers.py tests/unit/services/event_replay_service/test_replay_mappers.py tests/unit/scripts/test_api_mapper_pattern_guard.py -q`
-2. `python scripts/api_mapper_pattern_guard.py`
+2. `python scripts/quality/api_mapper_pattern_guard.py`
 3. Scoped Ruff check over changed mapper/router/guard/test files.
 4. Scoped Ruff format check over changed mapper/router/guard/test files.
 5. `make architecture-guard`
-6. `python scripts/wiki_validation_guard.py`
+6. `python scripts/quality/wiki_validation_guard.py`
 7. `git diff --check`

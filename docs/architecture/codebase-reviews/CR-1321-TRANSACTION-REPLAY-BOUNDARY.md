@@ -25,7 +25,7 @@ partial publish failure classification, and flush-timeout classification unit-te
 5. Added `ReprocessingRepository.from_ports(...)` for fake-port orchestration tests.
 6. Added pure replay tests for ordering, explicit headers, event payload planning, partial publish
    failure, and flush timeout without database or Kafka.
-7. Added `scripts/transaction_replay_boundary_guard.py` and wired it into
+7. Added `scripts/quality/transaction_replay_boundary_guard.py` and wired it into
    `make architecture-guard`.
 8. Added `docs/standards/transaction-replay-boundary-standard.md`.
 
@@ -43,14 +43,14 @@ contract, API route, database schema, or runtime topology changed.
 Focused local validation:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_reprocessing_replay.py tests/unit/libs/portfolio-common/test_reprocessing_repository.py tests/unit/scripts/test_transaction_replay_boundary_guard.py tests/unit/services/calculators/cost_calculator_service/consumer/test_reprocessing_consumer.py tests/unit/tools/test_reprocess_transactions.py -q`
-2. `python scripts/transaction_replay_boundary_guard.py`
+2. `python scripts/quality/transaction_replay_boundary_guard.py`
 3. `python -m ruff check <touched Python paths>`
 4. `python -m ruff format --check <touched Python paths>`
 
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

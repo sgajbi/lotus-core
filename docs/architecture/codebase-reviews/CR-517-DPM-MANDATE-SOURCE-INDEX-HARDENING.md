@@ -40,8 +40,8 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_reference_data_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
-4. `python scripts/test_manifest.py --suite unit-db --quiet`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/test_manifest.py --suite unit-db --quiet`
 5. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py src/services/query_service/app/repositories/reference_data_repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_reference_data_repository.py alembic/versions/c0f1a2b3c4d5_perf_add_dpm_mandate_source_index.py`
 6. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py src/services/query_service/app/repositories/reference_data_repository.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_reference_data_repository.py alembic/versions/c0f1a2b3c4d5_perf_add_dpm_mandate_source_index.py`
 7. `git diff --check`

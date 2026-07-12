@@ -34,4 +34,4 @@ That created the same policy-governance problem we previously fixed for stale th
 - `tests/unit/services/query_service/services/test_operations_service.py`
 - `tests/integration/services/query_control_plane_service/test_operations_router_dependency.py`
 - `tests/integration/services/query_control_plane_service/test_control_plane_app.py`
-- `python scripts/openapi_quality_gate.py`
+- `python scripts/quality/openapi_quality_gate.py`

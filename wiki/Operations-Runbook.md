@@ -40,7 +40,7 @@ Before switching an environment, follow the
 The Kafka offset command is dry-run by default and requires `--apply` to mutate target offsets.
 
 ```bash
-python scripts/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
+python scripts/operations/transaction_processing_cutover_offsets.py --bootstrap-servers localhost:9092
 curl http://localhost:8090/health/ready
 curl http://localhost:8090/version
 make test-performance-load-gate
@@ -196,7 +196,7 @@ ARG/ENV additions, and the shared `/version` route.
 
 For the unified transaction runtime, render
 `deployment/kubernetes/base/portfolio-transaction-processing.yaml` with
-`scripts/render_transaction_processing_deployment.py` and the target CI image-release manifest.
+`scripts/release/render_transaction_processing_deployment.py` and the target CI image-release manifest.
 Never apply the checked-in all-zero digest placeholder or deploy the legacy cost, cashflow, and
 position worker images/scalers. Apply `deployment/kubernetes/keda/processing-scaledobjects.yaml`
 only after the governed Kafka offset handoff.

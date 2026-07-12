@@ -16,7 +16,7 @@ Create one repeatable `lotus-core` app-level validation command for supported de
 
 ## Change
 
-`make lotus-core-validate` runs `scripts/certify_lotus_core_app.py`.
+`make lotus-core-validate` runs `scripts/validation/certify_lotus_core_app.py`.
 
 The command:
 
@@ -56,9 +56,9 @@ Focused validation:
 
 ```powershell
 python -m pytest tests/unit/scripts/test_certify_lotus_core_app.py -q
-python -m ruff check scripts/certify_lotus_core_app.py tests/unit/scripts/test_certify_lotus_core_app.py
-python -m ruff format --check scripts/certify_lotus_core_app.py tests/unit/scripts/test_certify_lotus_core_app.py
-python scripts/certify_lotus_core_app.py --skip-runtime-smoke --json-output output\lotus-core-validation\static-validation.json
+python -m ruff check scripts/validation/certify_lotus_core_app.py tests/unit/scripts/test_certify_lotus_core_app.py
+python -m ruff format --check scripts/validation/certify_lotus_core_app.py tests/unit/scripts/test_certify_lotus_core_app.py
+python scripts/validation/certify_lotus_core_app.py --skip-runtime-smoke --json-output output\lotus-core-validation\static-validation.json
 make lotus-core-validate
 make lint
 make typecheck

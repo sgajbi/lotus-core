@@ -18,7 +18,7 @@ escalation, post-incident evidence, or safe database boundaries.
   ingestion stuck/failed, DLQ growth, replay failure, outbox backlog, valuation/aggregation lag,
   stale source data, reconciliation failure, readiness failure, database connectivity, Kafka
   connectivity, and security/audit denial spikes.
-- Added `scripts/incident_playbook_guard.py` and focused guard tests.
+- Added `scripts/quality/incident_playbook_guard.py` and focused guard tests.
 - Added `make incident-playbook-guard`.
 - Wired the guard into `make quality-wiki-docs-gate`, `make docs-evidence-pack`, and `make lint`.
 - Added `docs/operations/Incident-Playbooks.md` and updated operations runbook/wiki surfaces.
@@ -35,9 +35,9 @@ changed. This is operator documentation, evidence, and validation-governance har
 Focused validation before commit:
 
 ```powershell
-python scripts/incident_playbook_guard.py
+python scripts/quality/incident_playbook_guard.py
 python -m pytest tests/unit/scripts/test_incident_playbook_guard.py -q
-python -m ruff check scripts/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py scripts/generate_documentation_evidence_pack.py --ignore E501,I001
+python -m ruff check scripts/quality/incident_playbook_guard.py tests/unit/scripts/test_incident_playbook_guard.py scripts/generators/generate_documentation_evidence_pack.py --ignore E501,I001
 make quality-wiki-docs-gate
 make docs-evidence-pack
 ```

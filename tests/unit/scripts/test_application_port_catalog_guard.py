@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from scripts.application_port_catalog_guard import find_application_port_catalog_findings
+from scripts.quality.application_port_catalog_guard import find_application_port_catalog_findings
 
 
 def _write(path: Path, text: str) -> None:
@@ -15,7 +15,7 @@ def _write_catalog(root: Path, entry: dict) -> None:
         json.dumps(
             {
                 "schema_version": "lotus-core.application-port-capability-catalog.v1",
-                "catalog_guard": "scripts/application_port_catalog_guard.py",
+                "catalog_guard": "scripts/quality/application_port_catalog_guard.py",
                 "capabilities": [entry],
             }
         ),
@@ -39,7 +39,7 @@ def _valid_entry() -> dict:
 
 
 def test_application_port_catalog_guard_accepts_cataloged_port(tmp_path: Path) -> None:
-    _write(tmp_path / "scripts/application_port_catalog_guard.py", "")
+    _write(tmp_path / "scripts/quality/application_port_catalog_guard.py", "")
     _write(tmp_path / "scripts/example_guard.py", "")
     _write(
         tmp_path / "src/services/query_service/app/ports/example_ports.py",
@@ -58,7 +58,7 @@ def test_application_port_catalog_guard_rejects_missing_symbol_and_wrong_package
 ) -> None:
     entry = _valid_entry()
     entry["port_module"] = "src/services/query_service/app/services/example_ports.py"
-    _write(tmp_path / "scripts/application_port_catalog_guard.py", "")
+    _write(tmp_path / "scripts/quality/application_port_catalog_guard.py", "")
     _write(tmp_path / "scripts/example_guard.py", "")
     _write(tmp_path / "src/services/query_service/app/services/example_ports.py", "")
     _write(tmp_path / "src/services/query_service/app/repositories/example_repository.py", "")
@@ -84,7 +84,7 @@ def test_application_port_catalog_guard_allows_transitional_provider_module(
         "src/services/financial_reconciliation_service/app/services/runtime_providers.py"
     )
     entry["port_symbols"] = ["MonotonicTimer"]
-    _write(tmp_path / "scripts/application_port_catalog_guard.py", "")
+    _write(tmp_path / "scripts/quality/application_port_catalog_guard.py", "")
     _write(tmp_path / "scripts/example_guard.py", "")
     _write(
         tmp_path

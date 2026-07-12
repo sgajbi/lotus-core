@@ -11,7 +11,7 @@ The slice converts a hidden soft-green failure into a reusable CI enforcement pa
 
 1. the PR Merge Gate now checks out `lotus-platform` validation contracts,
 2. the workflow sets `LOTUS_PLATFORM_ROOT` before running Core app validation,
-3. `scripts/validate_domain_data_product_contracts.py` honors `LOTUS_PLATFORM_ROOT` while
+3. `scripts/validation/validate_domain_data_product_contracts.py` honors `LOTUS_PLATFORM_ROOT` while
    preserving the existing sibling-repository default,
 4. the validation job no longer uses `continue-on-error`, `set +e`, warning-only handling, or
    `exit 0`,
@@ -30,8 +30,8 @@ success.
 - `gh run view 28477961040 --job 84409374086 --log`: latest successful PR Merge Gate still showed
   `make lotus-core-validate` failing internally because the domain-product validator expected a
   sibling `lotus-platform` checkout; runtime smoke passed with `Passed: 66 Failed: 0`.
-- `python -m ruff format scripts/validate_domain_data_product_contracts.py tests/unit/test_domain_data_product_contracts.py tests/unit/test_ci_workflow_action_versions.py`: applied formatting.
-- `python -m ruff check scripts/validate_domain_data_product_contracts.py tests/unit/test_domain_data_product_contracts.py tests/unit/test_ci_workflow_action_versions.py --ignore E501,I001`: passed.
+- `python -m ruff format scripts/validation/validate_domain_data_product_contracts.py tests/unit/test_domain_data_product_contracts.py tests/unit/test_ci_workflow_action_versions.py`: applied formatting.
+- `python -m ruff check scripts/validation/validate_domain_data_product_contracts.py tests/unit/test_domain_data_product_contracts.py tests/unit/test_ci_workflow_action_versions.py --ignore E501,I001`: passed.
 - `python -m pytest tests\unit\test_ci_workflow_action_versions.py tests\unit\test_domain_data_product_contracts.py -q`: 20 passed.
 - `python scripts\certify_lotus_core_app.py --skip-runtime-smoke --json-output output\lotus-core-validation\static-validation-cr1264.json`: passed with all static contracts, supported-feature truth, and domain-product validation green; runtime smoke was explicitly skipped for focused local proof.
 - `make quality-workflow-governance-gate`: passed with 13 tests.

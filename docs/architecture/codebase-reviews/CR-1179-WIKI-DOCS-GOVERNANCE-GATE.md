@@ -19,7 +19,7 @@ quality and publication readiness.
 
 ## Changes
 
-- Added `scripts/wiki_validation_guard.py`.
+- Added `scripts/quality/wiki_validation_guard.py`.
 - Added `make quality-wiki-docs-gate`.
 - Added `Quality Baseline / Wiki Docs Gate` to `.github/workflows/quality-baseline.yml`.
 - Added unit coverage for complete wiki source, missing sidebar targets, orphan pages, broken
@@ -34,11 +34,11 @@ changed. This is a CI/documentation governance change only.
 
 ## Validation
 
-- `python scripts/wiki_validation_guard.py`
+- `python scripts/quality/wiki_validation_guard.py`
 - `make quality-wiki-docs-gate`
 - `python -m pytest tests/unit/scripts/test_wiki_validation_guard.py tests/unit/test_ci_workflow_action_versions.py -q`
-- `python -m ruff check scripts/wiki_validation_guard.py tests/unit/scripts/test_wiki_validation_guard.py tests/unit/test_ci_workflow_action_versions.py`
-- `python -m ruff format --check scripts/wiki_validation_guard.py tests/unit/scripts/test_wiki_validation_guard.py tests/unit/test_ci_workflow_action_versions.py`
+- `python -m ruff check scripts/quality/wiki_validation_guard.py tests/unit/scripts/test_wiki_validation_guard.py tests/unit/test_ci_workflow_action_versions.py`
+- `python -m ruff format --check scripts/quality/wiki_validation_guard.py tests/unit/scripts/test_wiki_validation_guard.py tests/unit/test_ci_workflow_action_versions.py`
 
 ## Documentation And Wiki Decision
 

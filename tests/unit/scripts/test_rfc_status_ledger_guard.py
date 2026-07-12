@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import rfc_status_ledger_guard as guard
+from scripts.quality import rfc_status_ledger_guard as guard
 
 
 def _write_required_files(repo_root: Path) -> None:

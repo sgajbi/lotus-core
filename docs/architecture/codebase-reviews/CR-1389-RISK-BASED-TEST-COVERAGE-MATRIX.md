@@ -8,7 +8,7 @@ domains to required proof families, existing evidence, known gaps, and follow-up
 ## Changes
 
 1. Added `docs/standards/risk-based-test-coverage-matrix.v1.json`.
-2. Added `scripts/risk_based_test_coverage_matrix_guard.py`.
+2. Added `scripts/quality/risk_based_test_coverage_matrix_guard.py`.
 3. Added focused pass/fail tests for the guard.
 4. Added pytest markers for API, contract/schema, middleware, security, regression/golden, and E2E
    proof families while keeping strict marker collection enabled.
@@ -35,9 +35,9 @@ Run before commit:
 
 ```powershell
 python -m pytest tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py -q
-python scripts/risk_based_test_coverage_matrix_guard.py
-python -m ruff check scripts/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py --ignore E501,I001
-python -m ruff format --check scripts/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py
+python scripts/quality/risk_based_test_coverage_matrix_guard.py
+python -m ruff check scripts/quality/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py --ignore E501,I001
+python -m ruff format --check scripts/quality/risk_based_test_coverage_matrix_guard.py tests/unit/scripts/test_risk_based_test_coverage_matrix_guard.py
 make risk-based-test-coverage-matrix-guard
 make quality-wiki-docs-gate
 ```

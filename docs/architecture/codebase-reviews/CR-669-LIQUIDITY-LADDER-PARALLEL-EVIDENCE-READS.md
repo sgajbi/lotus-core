@@ -33,7 +33,7 @@ Local validation passed:
 1. focused liquidity ladder service proof
 2. focused cashflow repository query-shape proof
 3. `python -m alembic heads`
-4. `python scripts/migration_contract_check.py --mode alembic-sql`
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 5. touched-surface `python -m ruff check`
 6. touched-surface `python -m ruff format --check`
 7. `git diff --check`

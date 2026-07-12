@@ -36,7 +36,7 @@ Commands:
 
 1. `python -m pytest tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_analytics_export_repository.py tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `python -m ruff check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_analytics_export_repository.py alembic/versions/c0d4e5f6a7b8_perf_add_control_query_lookup_indexes.py`
 5. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/database_models.py tests/unit/libs/portfolio-common/test_database_models.py tests/unit/services/query_service/repositories/test_analytics_export_repository.py alembic/versions/c0d4e5f6a7b8_perf_add_control_query_lookup_indexes.py`
 

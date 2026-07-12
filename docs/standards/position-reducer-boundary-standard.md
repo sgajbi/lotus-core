@@ -46,7 +46,7 @@ Backdated replay planning must be deterministic from:
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/position_reducer_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py`.
 
 ## Compatibility
 

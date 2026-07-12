@@ -1,4 +1,4 @@
-from scripts.architecture_boundary_guard import (
+from scripts.quality.architecture_boundary_guard import (
     DIRECT_IMPORT_BOUNDARY_RULES,
     ApiRouterBoundaryViolation,
     DirectImportBoundaryRule,
@@ -26,7 +26,7 @@ def test_direct_import_boundary_flags_forbidden_absolute_import(tmp_path, monkey
         "import TransactionRepository\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     findings = _scan_for_disallowed_imports(
         [router],
@@ -63,7 +63,7 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
         "import pipeline_orchestrator_service\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
 
     findings = _scan_for_disallowed_imports(
         [source],
@@ -93,7 +93,7 @@ def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monk
         "import CostCalculatorConsumer\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
 
     findings = _scan_for_disallowed_imports(
         [source],
@@ -123,7 +123,7 @@ def test_transaction_processing_application_rejects_event_dto_import(tmp_path, m
         "from portfolio_common.events import TransactionEvent\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
 
     findings = _scan_for_disallowed_imports(
         [source],
@@ -153,7 +153,7 @@ def test_direct_import_boundary_ignores_allowed_dto_import(tmp_path, monkeypatch
         "from src.services.query_service.app.dtos.integration_dto import IntegrationResponse\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     assert (
         _scan_for_disallowed_imports(
@@ -188,7 +188,7 @@ def test_direct_import_boundary_flags_event_replay_router_kafka_import(
         "from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     findings = _scan_for_disallowed_imports(
         [router],
@@ -226,7 +226,7 @@ def test_direct_import_boundary_flags_valuation_scheduler_kafka_import(
         "from portfolio_common.kafka_utils import KafkaProducer, get_kafka_producer\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     findings = _scan_for_disallowed_imports(
         [scheduler],
@@ -266,7 +266,7 @@ def test_direct_import_boundary_flags_reconciliation_runtime_provider_bypass(
         "from time import perf_counter\nfrom uuid import uuid4\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     findings = _scan_for_disallowed_imports(
         [service],
@@ -311,7 +311,7 @@ def test_service_runtime_import_guard_flags_own_repo_root_import(tmp_path, monke
         "ProposalSimulateRequest\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     assert _scan_for_service_runtime_imports([service_module]) == [
         "src/services/query_service/app/advisory_simulation/valuation.py:1: "
@@ -337,7 +337,7 @@ def test_service_runtime_import_guard_allows_package_local_import(tmp_path, monk
         "from app.advisory_simulation.models import ProposalSimulateRequest\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
 
     assert _scan_for_service_runtime_imports([service_module]) == []
 
@@ -347,7 +347,7 @@ def _write_router(tmp_path, monkeypatch, relative_path: str, content: str):
     router = repo_root / relative_path
     router.parent.mkdir(parents=True)
     router.write_text(content, encoding="utf-8")
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", repo_root)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", repo_root)
     return router
 
 

@@ -32,10 +32,10 @@ All planned slices are implemented, including CI-enforced institutional sign-off
 ## Requirement-to-Implementation Traceability
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Load-profile gating (steady/burst/replay-storm) | Implemented | `scripts/performance_load_gate.py`; `.github/workflows/ci.yml`; `Makefile` targets |
-| Failure injection and bounded recovery validation | Implemented | `scripts/failure_recovery_gate.py`; CI `failure-recovery-gate` job |
+| Load-profile gating (steady/burst/replay-storm) | Implemented | `scripts/operations/performance_load_gate.py`; `.github/workflows/ci.yml`; `Makefile` targets |
+| Failure injection and bounded recovery validation | Implemented | `scripts/operations/failure_recovery_gate.py`; CI `failure-recovery-gate` job |
 | Policy/capacity contract visibility | Implemented (via RFC-065 endpoints, reused in 066 gates) | ingestion ops endpoints + smoke/load scripts |
-| Auditable sign-off artifact generation | Implemented | `scripts/institutional_signoff_pack.py`; `docs/operations/Institutional-Signoff-Runbook.md` |
+| Auditable sign-off artifact generation | Implemented | `scripts/validation/institutional_signoff_pack.py`; `docs/operations/Institutional-Signoff-Runbook.md` |
 | CI-enforced final institutional sign-off gate | Implemented | `.github/workflows/ci.yml` (`institutional-signoff-pack` job); `Makefile` (`test-institutional-signoff-pack`) |
 
 ## Design Reasoning and Trade-offs
@@ -54,9 +54,9 @@ No blocking implementation gap remains for RFC-066 CI sign-off enforcement.
 1. Keep recency policy (`max-age-hours=24`) and required artifact set synchronized with release governance standards.
 
 ## Test and Validation Evidence
-1. `scripts/performance_load_gate.py`
-2. `scripts/failure_recovery_gate.py`
-3. `scripts/institutional_signoff_pack.py`
+1. `scripts/operations/performance_load_gate.py`
+2. `scripts/operations/failure_recovery_gate.py`
+3. `scripts/validation/institutional_signoff_pack.py`
 4. `.github/workflows/ci.yml`
 5. `Makefile` (`test-performance-load-gate`, `test-performance-load-gate-full`, `test-failure-recovery-gate`, `test-institutional-signoff-pack`)
 6. `docs/operations/Institutional-Signoff-Runbook.md`

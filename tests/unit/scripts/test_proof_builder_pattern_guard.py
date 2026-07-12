@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.proof_builder_pattern_guard import find_proof_builder_pattern_findings
+from scripts.quality.proof_builder_pattern_guard import find_proof_builder_pattern_findings
 
 
 def _write(path: Path, text: str) -> None:

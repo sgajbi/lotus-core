@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.openapi_spectral_gate import npx_executable, spectral_command
+from scripts.quality.openapi_spectral_gate import npx_executable, spectral_command
 
 
 def test_npx_executable_uses_windows_command_shim() -> None:

@@ -40,8 +40,8 @@ internal ownership of parsing, validation, commit policy, and publish dispatch.
 Focused local validation:
 
 1. `python -m pytest tests/unit/services/ingestion_service/services/test_upload_validation.py tests/unit/services/ingestion_service/services/test_upload_publishers.py tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py tests/unit/scripts/test_upload_component_boundary_guard.py -q`
-2. `python scripts/upload_component_boundary_guard.py`
-3. `python scripts/ingestion_service_framework_guard.py`
+2. `python scripts/quality/upload_component_boundary_guard.py`
+3. `python scripts/quality/ingestion_service_framework_guard.py`
 4. `python -m pytest tests/unit/services/ingestion_service/services/test_upload_validation.py tests/unit/services/ingestion_service/services/test_upload_publishers.py tests/unit/services/ingestion_service/services/test_upload_ingestion_service.py tests/unit/scripts/test_upload_component_boundary_guard.py tests/unit/scripts/test_application_error_taxonomy_guard.py -q`
 5. `python -m pytest tests/integration/services/ingestion_service/test_ingestion_routers.py -k upload -q`
 6. `python -m ruff check <touched Python paths>`
@@ -50,7 +50,7 @@ Focused local validation:
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

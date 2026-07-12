@@ -17,7 +17,7 @@ indefinite flaky-test quarantine.
 - Added `docs/standards/test-lane-governance.v1.json` with marker taxonomy, deterministic
   clock/ID/business-date guidance, bounded polling rules, parallel isolation policy, CI lane
   mapping, quarantine policy, and flake-tracking report location.
-- Added `scripts/test_lane_governance_guard.py` and unit tests for current repo truth, generated
+- Added `scripts/quality/test_lane_governance_guard.py` and unit tests for current repo truth, generated
   flake report, missing marker, unit-lane runtime drift, and expired quarantine failure.
 - Added `unit`, `domain`, `performance`, `resilience`, `certification`, and `flaky_quarantine`
   pytest marker declarations while preserving strict marker enforcement.
@@ -35,11 +35,11 @@ deployment topology changed. Unit suite selection is intentionally stricter for 
 Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_test_lane_governance_guard.py -q`
-- `python scripts/test_lane_governance_guard.py`
+- `python scripts/quality/test_lane_governance_guard.py`
 - `make test-lane-governance-guard`
 - scoped Ruff lint and format over the new guard/tests
-- `python scripts/test_manifest.py --suite unit --collect-only --quiet`
-- `python scripts/test_manifest.py --suite integration-lite --collect-only --quiet`
+- `python scripts/quality/test_manifest.py --suite unit --collect-only --quiet`
+- `python scripts/quality/test_manifest.py --suite integration-lite --collect-only --quiet`
 - `make quality-wiki-docs-gate`
 - `make lint`
 - `git diff --check`

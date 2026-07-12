@@ -28,7 +28,7 @@ repositories, metrics, epoch-fencing objects, persistence models, or Pydantic DT
    helpers from `position_logic.py`.
 5. Added direct reducer tests using plain objects and dataclasses, plus guard tests for the new
    boundary.
-6. Added `scripts/position_reducer_boundary_guard.py` and wired it into
+6. Added `scripts/quality/position_reducer_boundary_guard.py` and wired it into
    `make architecture-guard`.
 7. Added `docs/standards/position-reducer-boundary-standard.md`.
 
@@ -47,14 +47,14 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/calculators/position_calculator/core/test_position_reducer.py tests/unit/services/calculators/position_calculator/core/test_position_logic.py -q`
 2. `python -m pytest tests/unit/services/calculators/position_calculator/core/test_position_reducer.py tests/unit/services/calculators/position_calculator/core/test_position_logic.py tests/unit/scripts/test_position_reducer_boundary_guard.py -q`
-3. `python scripts/position_reducer_boundary_guard.py`
+3. `python scripts/quality/position_reducer_boundary_guard.py`
 4. `python -m ruff check <touched position reducer Python paths>`
 5. `python -m compileall -q src/services/calculators/position_calculator/app/core/position_logic.py src/services/calculators/position_calculator/app/core/position_reducer.py`
 
 Aggregate validation before commit:
 
 1. `make architecture-guard`
-2. `python scripts/wiki_validation_guard.py`
+2. `python scripts/quality/wiki_validation_guard.py`
 3. `git diff --check`
 
 All listed commands passed locally before commit.

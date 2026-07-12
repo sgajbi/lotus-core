@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from scripts.runtime_boundary_decision_guard import (
+from scripts.quality.runtime_boundary_decision_guard import (
     find_runtime_boundary_decision_findings,
 )
 

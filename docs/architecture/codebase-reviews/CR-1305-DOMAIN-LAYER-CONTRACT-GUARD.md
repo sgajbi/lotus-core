@@ -18,7 +18,7 @@ or settings modules unless explicitly allowlisted.
 
 1. Added `docs/standards/domain-layer-contract.md` with package conventions, allowed dependencies,
    disallowed dependencies, guard command, and representative implementations.
-2. Added `scripts/domain_layer_guard.py` to scan service and shared domain packages.
+2. Added `scripts/quality/domain_layer_guard.py` to scan service and shared domain packages.
 3. Added `make domain-layer-guard`.
 4. Wired `make architecture-guard` to run the domain-layer guard.
 5. Added unit tests for allowed pure-domain imports, disallowed framework/repository imports, and

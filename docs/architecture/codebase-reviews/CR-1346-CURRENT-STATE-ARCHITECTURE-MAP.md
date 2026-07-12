@@ -28,7 +28,7 @@ routers, persistence models, middleware, scripts, or downstream adapters.
    - downstream consumer relationships,
    - cross-links to RFCs, CR records, API catalog/governance entries, and runbooks.
 2. Cataloged the map in `docs/architecture/architecture-documentation-catalog.v1.json`.
-3. Extended `scripts/architecture_documentation_catalog_guard.py` so the map must:
+3. Extended `scripts/quality/architecture_documentation_catalog_guard.py` so the map must:
    - exist,
    - be explicitly cataloged,
    - contain required ownership and freshness anchors,
@@ -52,10 +52,10 @@ architecture. It does not approve a new runtime split.
 Commands to run before commit:
 
 ```powershell
-python scripts/architecture_documentation_catalog_guard.py
+python scripts/quality/architecture_documentation_catalog_guard.py
 python -m pytest tests/unit/scripts/test_architecture_documentation_catalog_guard.py -q
-python -m ruff check scripts/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py --ignore E501,I001
-python -m ruff format --check scripts/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py
+python -m ruff check scripts/quality/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py --ignore E501,I001
+python -m ruff format --check scripts/quality/architecture_documentation_catalog_guard.py tests/unit/scripts/test_architecture_documentation_catalog_guard.py
 make quality-wiki-docs-gate
 make docs-evidence-pack
 git diff --check

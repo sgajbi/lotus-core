@@ -9,7 +9,7 @@ wiring on `BaseConsumer`-backed workers.
 
 ## Change
 
-- `scripts/event_runtime_contract_guard.py` now discovers classes that inherit from
+- `scripts/quality/event_runtime_contract_guard.py` now discovers classes that inherit from
   `BaseConsumer`, including indirect subclasses, and validates `dlq_topic=` constructor wiring.
 - The guard resolves literal DLQ topics, `portfolio_common.config` constants, and local aliases such
   as `dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC`.
@@ -38,10 +38,10 @@ instead of silently weakening incident replay, auditability, and failure triage.
 ## Validation Evidence
 
 - `python -m pytest tests/unit/scripts/test_event_runtime_contract_guard.py -q` passed with 14 tests.
-- `python scripts/event_runtime_contract_guard.py` passed.
-- `python -m ruff check scripts/event_runtime_contract_guard.py src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`
+- `python scripts/quality/event_runtime_contract_guard.py` passed.
+- `python -m ruff check scripts/quality/event_runtime_contract_guard.py src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`
   passed.
-- `python -m ruff format --check scripts/event_runtime_contract_guard.py src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`
+- `python -m ruff format --check scripts/quality/event_runtime_contract_guard.py src/libs/portfolio-common/portfolio_common/event_supportability.py tests/unit/scripts/test_event_runtime_contract_guard.py`
   passed.
 - `git diff --check` passed.
 

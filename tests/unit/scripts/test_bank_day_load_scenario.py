@@ -1,7 +1,7 @@
 from argparse import Namespace
 from decimal import Decimal
 
-from scripts.bank_day_load_scenario import (
+from scripts.operations.bank_day_load_scenario import (
     LOG_SERVICE_NAMES,
     ApiProbeResult,
     DatabaseTieOut,

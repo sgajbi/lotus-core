@@ -12,9 +12,9 @@ progressive CI path for the bank-buyable API documentation and vocabulary requir
 
 Added a dedicated `Quality Baseline / API Governance Gate` workflow job that:
 
-1. installs the repository through `python scripts/bootstrap_dev.py`,
-2. runs `python scripts/openapi_quality_gate.py`,
-3. runs `python scripts/api_vocabulary_inventory.py --validate-only`.
+1. installs the repository through `python scripts/development/bootstrap_dev.py`,
+2. runs `python scripts/quality/openapi_quality_gate.py`,
+3. runs `python scripts/quality/api_vocabulary_inventory.py --validate-only`.
 
 The Spectral scaffold remains report-only until a stable generated OpenAPI artifact path exists for
 CI publication.

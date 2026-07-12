@@ -1,7 +1,7 @@
 import json
 import sys
 
-from scripts.check_monetary_float_usage import main, scan_repo
+from scripts.quality.check_monetary_float_usage import main, scan_repo
 
 
 def test_monetary_float_guard_flags_money_like_float_conversion(tmp_path):

@@ -41,7 +41,7 @@ or own entity-specific publish methods. It depends on `BulkUploadValidator` and
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/upload_component_boundary_guard.py`. The guard proves the
+`make architecture-guard` runs `scripts/quality/upload_component_boundary_guard.py`. The guard proves the
 split components exist and blocks the representative monolithic patterns from returning.
 
 ## Compatibility

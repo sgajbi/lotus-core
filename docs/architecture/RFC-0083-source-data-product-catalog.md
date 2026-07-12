@@ -545,9 +545,9 @@ Slice 6 validation is:
 1. `python -m pytest tests/unit/libs/portfolio-common/test_source_data_products.py -q`,
 2. `python -m pytest tests/unit/scripts/test_source_data_product_contract_guard.py -q`,
 3. `python -m pytest tests/unit/scripts/test_analytics_input_consumer_contract_guard.py -q`,
-4. `python scripts/source_data_product_contract_guard.py`,
-5. `python scripts/analytics_input_consumer_contract_guard.py`,
-6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py scripts/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py --ignore E501,I001`,
-7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/source_data_product_contract_guard.py scripts/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py`,
+4. `python scripts/quality/source_data_product_contract_guard.py`,
+5. `python scripts/quality/analytics_input_consumer_contract_guard.py`,
+6. `python -m ruff check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/quality/source_data_product_contract_guard.py scripts/quality/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py --ignore E501,I001`,
+7. `python -m ruff format --check src/libs/portfolio-common/portfolio_common/source_data_products.py scripts/quality/source_data_product_contract_guard.py scripts/quality/analytics_input_consumer_contract_guard.py tests/unit/libs/portfolio-common/test_source_data_products.py tests/unit/scripts/test_source_data_product_contract_guard.py tests/unit/scripts/test_analytics_input_consumer_contract_guard.py`,
 8. `git diff --check`,
 9. `make lint`.

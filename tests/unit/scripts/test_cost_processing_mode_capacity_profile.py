@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scripts.cost_processing_mode_capacity_profile import (
+from scripts.operations.cost_processing_mode_capacity_profile import (
     SCHEMA_VERSION,
     run_processing_mode_profile,
 )

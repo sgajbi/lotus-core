@@ -27,7 +27,7 @@ Commands:
 
 1. `python -m pytest tests/unit/services/persistence_service/repositories/test_persistence_instrument_repository.py tests/unit/services/query_service/repositories/test_instrument_repository.py -q`
 2. `python -m ruff check tests/unit/services/persistence_service/repositories/test_persistence_instrument_repository.py`
-3. `python scripts/warning_budget_gate.py --suite unit --max-warnings 0 --quiet`
+3. `python scripts/quality/warning_budget_gate.py --suite unit --max-warnings 0 --quiet`
 4. `git diff --check`
 
 Results:

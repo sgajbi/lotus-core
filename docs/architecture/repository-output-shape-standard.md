@@ -34,7 +34,7 @@ These are the preferred shape for new high-value source-data paths.
 
 ## Guard
 
-`make repository-output-shape-guard` runs `scripts/repository_output_shape_guard.py`.
+`make repository-output-shape-guard` runs `scripts/quality/repository_output_shape_guard.py`.
 
 The guard:
 
@@ -53,7 +53,7 @@ persistence, operations, reference data, reporting, simulation, and query read p
 being silently declared clean.
 
 The exact method-level transitional exception register lives in
-`scripts/repository_output_shape_guard.py` as
+`scripts/quality/repository_output_shape_guard.py` as
 `TRANSITIONAL_ORM_RETURN_EXCEPTIONS`. Future slices should remove entries as repository outputs are
 converted to explicit records. Adding a new exception is allowed only when the slice documents why
 immediate mapping is too large and records a follow-up.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.transaction_processing_cutover_offsets import (
+from scripts.operations.transaction_processing_cutover_offsets import (
     ConsumerGroupSnapshot,
     OffsetCutoverError,
     PartitionOffset,

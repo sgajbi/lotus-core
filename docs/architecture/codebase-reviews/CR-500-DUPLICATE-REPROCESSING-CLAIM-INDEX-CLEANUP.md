@@ -29,7 +29,7 @@ The downgrade recreates the legacy index to preserve migration reversibility.
 Commands:
 
 1. `python -m alembic heads`
-2. `python scripts/migration_contract_check.py --mode alembic-sql`
+2. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 3. `python -m ruff check alembic/versions/c0d6e7f8a9b0_perf_drop_duplicate_reprocessing_claim_index.py`
 4. `python -m ruff format --check alembic/versions/c0d6e7f8a9b0_perf_drop_duplicate_reprocessing_claim_index.py`
 

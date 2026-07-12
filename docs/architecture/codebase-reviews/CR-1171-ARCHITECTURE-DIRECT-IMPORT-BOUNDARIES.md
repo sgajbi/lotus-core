@@ -20,7 +20,7 @@ repositories or other service internals directly.
 
 ## Change
 
-Extended `scripts/architecture_boundary_guard.py` with AST-based direct-import rules for clean,
+Extended `scripts/quality/architecture_boundary_guard.py` with AST-based direct-import rules for clean,
 deterministic boundaries:
 
 - query-control-plane routers must not import query-service repositories directly,

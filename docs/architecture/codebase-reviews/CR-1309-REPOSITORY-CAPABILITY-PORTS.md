@@ -25,7 +25,7 @@ changing query behavior, reconciliation behavior, persistence SQL, or runtime de
    concrete `ReconciliationRepository` type.
 5. Added type-contract tests proving the source-data resolver and reconciliation service depend on
    repository ports.
-6. Added `scripts/repository_port_guard.py`, wired it into `make architecture-guard`, and added
+6. Added `scripts/quality/repository_port_guard.py`, wired it into `make architecture-guard`, and added
    focused guard tests.
 7. Added `docs/standards/repository-capability-port-standard.md`.
 
@@ -44,7 +44,7 @@ Focused local validation:
 
 1. `python -m pytest tests/unit/services/query_service/services/test_portfolio_tax_lot_window.py tests/unit/services/financial_reconciliation_service/test_reconciliation_service.py tests/unit/scripts/test_repository_port_guard.py -q`
    - 32 passed.
-2. `python scripts/repository_port_guard.py`
+2. `python scripts/quality/repository_port_guard.py`
    - Passed.
 3. Scoped Ruff lint passed.
 4. Scoped Ruff format passed.

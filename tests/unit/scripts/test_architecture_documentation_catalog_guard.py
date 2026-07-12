@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.architecture_documentation_catalog_guard import (
+from scripts.quality.architecture_documentation_catalog_guard import (
     find_architecture_catalog_findings,
 )
 

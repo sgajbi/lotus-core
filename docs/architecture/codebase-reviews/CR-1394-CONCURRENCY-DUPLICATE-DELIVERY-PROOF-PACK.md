@@ -18,7 +18,7 @@ same-idempotency-key concurrent database path had no direct proof.
 - Added `docs/standards/concurrency-duplicate-delivery-test-pack.v1.json` to map the eight #608
   scenarios to concrete evidence, CI lane ownership, deterministic primitives, durable-state
   assertions, protected failure modes, and related remaining scopes.
-- Added `scripts/concurrency_duplicate_delivery_guard.py` plus focused unit tests and wired
+- Added `scripts/quality/concurrency_duplicate_delivery_guard.py` plus focused unit tests and wired
   `make concurrency-duplicate-delivery-guard` into `make lint`.
 - Added a DB-backed processed-event race test proving concurrent claims of the same idempotency key
   create one `processed_events` row.
@@ -39,7 +39,7 @@ to #553 and broader corporate-action/correction golden scenarios to #607.
 Run before commit:
 
 - `python -m pytest tests/unit/scripts/test_concurrency_duplicate_delivery_guard.py -q`
-- `python scripts/concurrency_duplicate_delivery_guard.py`
+- `python scripts/quality/concurrency_duplicate_delivery_guard.py`
 - `make concurrency-duplicate-delivery-guard`
 - `python -m pytest tests/unit/services/persistence_service/adapters/test_persistence_event_adapter.py -q`
 - DB-backed focused integration test for `tests/integration/libs/portfolio-common/test_idempotency_repository.py`

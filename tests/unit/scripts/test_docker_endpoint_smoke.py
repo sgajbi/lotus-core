@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from scripts.docker_endpoint_smoke import (
+from scripts.validation.docker_endpoint_smoke import (
     SMOKE_CSV_TRANSACTION_ID,
     SMOKE_INSTRUMENT_ID,
     SMOKE_ISIN,
@@ -53,9 +53,11 @@ def test_wait_expected_status_retries_until_endpoint_is_ready(monkeypatch: pytes
     get_mock = Mock(side_effect=lambda *args, **kwargs: next(responses))
     now = iter([0, 1, 2, 3])
 
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.requests.get", get_mock)
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.time.time", lambda: next(now))
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
+    monkeypatch.setattr(
+        "scripts.validation.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
 
     _wait_expected_status("http://query/ready-endpoint", {200}, timeout_seconds=5)
 
@@ -68,9 +70,11 @@ def test_wait_expected_status_raises_with_last_status_context(
     get_mock = Mock(return_value=SimpleNamespace(status_code=404))
     now = iter([0, 1, 2, 3])
 
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.requests.get", get_mock)
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("scripts.docker_endpoint_smoke.time.time", lambda: next(now))
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.requests.get", get_mock)
+    monkeypatch.setattr(
+        "scripts.validation.docker_endpoint_smoke.time.sleep", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr("scripts.validation.docker_endpoint_smoke.time.time", lambda: next(now))
 
     with pytest.raises(TimeoutError, match="last_status=404"):
         _wait_expected_status("http://query/missing-endpoint", {200}, timeout_seconds=2)

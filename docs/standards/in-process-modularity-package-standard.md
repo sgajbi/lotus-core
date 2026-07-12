@@ -106,7 +106,7 @@ required and tested.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/in_process_modularity_guard.py`.
+`make architecture-guard` runs `scripts/quality/in_process_modularity_guard.py`.
 
 The guard validates the adoption catalog, representative package paths, runtime composition files,
 legacy-folder classification, and evidence links.

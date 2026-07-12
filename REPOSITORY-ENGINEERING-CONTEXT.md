@@ -36,6 +36,12 @@ Individual codebase-review evidence records belong in
 `docs/architecture/CODEBASE-REVIEW-PLAYBOOK.md` for the review workflow. The architecture
 documentation catalog guard rejects root-level `CR-*` records and loose `docs/` files.
 
+Repository automation follows `scripts/README.md`: executable modules belong under the owning
+`development/`, `generators/`, `operations/`, `quality/`, `release/`, or `validation/` package.
+Use descriptive domain/action filenames. Do not name ordinary files after issues or RFCs; an RFC
+identifier is acceptable only when the module exclusively governs that RFC's status or closure.
+Keep Make targets as the stable operator and CI entry points when internal script modules move.
+
 ## Current-State Summary
 
 Current repository posture:
@@ -54,7 +60,7 @@ Current repository posture:
 9. RFC-0083 Slice 5 now defines the reconciliation/data-quality target model and shared status helper,
 10. RFC-0083 Slice 6 now defines the priority source-data product catalog, product metadata requirements, consumer map, paging/export disposition, route metadata bindings, DTO-envelope product identity, HoldingsAsOf runtime data-quality metadata and reporting evidence timestamps, canonical TransactionLedgerWindow runtime evidence timestamp and window-completeness data-quality metadata, PortfolioCashflowProjection runtime metadata, portfolio base-currency disclosure, and latest cashflow evidence timestamp, PortfolioStateSnapshot runtime metadata, snapshot evidence timestamp, freshness epoch handling, and baseline data-quality classification, analytics-input data-quality classification, market/reference runtime evidence timestamp and data-quality classification, coverage data-quality classification and evidence timestamps, ingestion/reconciliation evidence runtime supportability metadata with reconciliation evidence status derivation, a linted source-data product contract guard, and a `lotus-performance` analytics-input consumer conformance guard,
 11. RFC-0083 Slice 7 now defines market/reference quality, observed-at mapping, and freshness/completeness classification for benchmark, index, risk-free, price, FX, and instrument products,
-12. RFC-0083 Slice 8 now records endpoint-consolidation disposition, deprecates selected pre-live reporting convenience routes in OpenAPI while preserving tested handlers, and enforces the endpoint-consolidation watchlist through `docs/standards/endpoint-consolidation-watchlist.json`, `scripts/endpoint_consolidation_watchlist_guard.py`, and `make endpoint-consolidation-watchlist-guard` so monitored convenience-route families cannot grow without source-data product identity or approved bounded-use rationale,
+12. RFC-0083 Slice 8 now records endpoint-consolidation disposition, deprecates selected pre-live reporting convenience routes in OpenAPI while preserving tested handlers, and enforces the endpoint-consolidation watchlist through `docs/standards/endpoint-consolidation-watchlist.json`, `scripts/quality/endpoint_consolidation_watchlist_guard.py`, and `make endpoint-consolidation-watchlist-guard` so monitored convenience-route families cannot grow without source-data product identity or approved bounded-use rationale,
 13. RFC-0083 Slice 9 now defines source-data product security, tenancy, entitlement, capability, audit, sensitivity, and retention profiles, exposes that posture through guarded `x-lotus-source-data-security` OpenAPI route metadata, prevents operator-only products from drifting outside control-plane/policy route families, constrains access classifications, audit requirements, and sensitivity-driven retention requirements to governed RFC-0082/RFC-0083 lanes, derives default source-data read capability rules from the governed product catalog for both `GET` and query-style `POST` routes, centralizes duplicated query-service/query-control-plane enterprise readiness authorization, policy-header, capability, write-audit, read-audit, read-authorization, and strict capability-rule middleware support in `portfolio_common.enterprise_readiness` while preserving service-local wrappers, and defaults production-like environments to the shared service-local enterprise security profile,
 14. RFC-0083 Slice 10 now defines event family governance, schema governance requirements, operator supportability surface posture, operator-only security profile bindings for support evidence, a guarded runtime outbox event/type topic alignment check, direct Kafka publish-topic governance for source-ingestion, recovery, and job-command topics, explicit shared event-model envelope tolerance, and centralized outbox payload envelope metadata for `event_type`, `schema_version`, `correlation_id`, and `traceparent`,
 15. RFC-0083 Slice 11 now records target-model closure through a machine-readable implementation ledger and closure guard,
@@ -152,7 +158,7 @@ Current repository posture:
 27. Boundary mapping conformance now has a repo-native command,
     `make test-boundary-mapping-conformance`, backed by the test manifest and documented in
     `docs/architecture/mapping-anti-corruption-boundary.md`; `make architecture-guard` also runs
-    `scripts/mapping_anti_corruption_guard.py` as the representative contract index. It currently
+    `scripts/quality/mapping_anti_corruption_guard.py` as the representative contract index. It currently
     protects representative transaction event, persistence event-envelope, portfolio tax-lot, and
     performance-economics source-data mappings.
     Ingestion publish workflows must route API DTO serialization through
@@ -175,7 +181,7 @@ Current repository posture:
     source-data mappers that would otherwise accept raw ORM rows, ORM relationship objects, or
     tuple-shaped SQL results.
     Repository output-shape governance now also has `make repository-output-shape-guard`, wired into
-    `make lint`, backed by `scripts/repository_output_shape_guard.py`, and documented in
+    `make lint`, backed by `scripts/quality/repository_output_shape_guard.py`, and documented in
     `docs/architecture/repository-output-shape-standard.md`. It blocks new public repository methods
     from exposing SQLAlchemy ORM return annotations unless the method is explicitly registered as a
     transitional exception, and it fails stale exceptions after future typed-record conversions.
@@ -366,7 +372,7 @@ Current repository posture:
     keys, secrets, or passwords.
     Test lane governance now lives in `docs/standards/test-lane-governance.v1.json` and is enforced
     by `make test-lane-governance-guard` through `make lint`. Changes to pytest markers,
-    `scripts/test_manifest.py`, Make test targets, flaky-test quarantine, deterministic-time
+    `scripts/quality/test_manifest.py`, Make test targets, flaky-test quarantine, deterministic-time
     guidance, or integration/E2E lane ownership must update the contract and keep unit lanes
     excluding `integration_db`, `db_direct`, `live_worker`, and `e2e` runtime markers.
     Concurrency and duplicate-delivery proof now lives in
@@ -648,7 +654,7 @@ Most relevant current governance:
     `GET /support/load-runs/{run_id}?business_date={date}` as the first completion surface and
     fall back to direct database facts only when runtime rollout has not yet occurred,
 26. exact-run correctness evidence for institutional load no longer requires reseeding a fresh
-    workload: use `scripts/bank_day_load_reconciliation_report.py` against the completed `run_id`
+    workload: use `scripts/operations/bank_day_load_reconciliation_report.py` against the completed `run_id`
     to collect sampled or exhaustive reconciliation proof for positions, transactions, support
     overview state, and timeseries-integrity findings.
 27. institutional sign-off evidence selection must prefer the strongest available proof, not just
@@ -823,9 +829,9 @@ Most relevant current governance:
     OCI label map used for release-manifest parity checks. `/health/live` and `/health/ready`
     expose a bounded runtime block with the same build metadata, service app version, environment,
     runtime profile, started-at time, and uptime for safe incident diagnostics.
-    `scripts/prebuild_ci_images.py` supplies build args in CI, `scripts/write_build_provenance.py`
+    `scripts/release/prebuild_ci_images.py` supplies build args in CI, `scripts/release/write_build_provenance.py`
     records the same metadata in build evidence, `.github/workflows/image-release.yml` is the only
-    image-push path, and `scripts/write_image_release_manifest.py` records digest, OCI label
+    image-push path, and `scripts/release/write_image_release_manifest.py` records digest, OCI label
     parity, SBOM, scan, signing, provenance-attestation, digest-deploy, and same-image-promotion
     evidence across `dev`, `uat`, and `prod`. `make image-provenance-guard` blocks drift,
     including secret-like Dockerfile/workflow build ARG or ENV additions. Local builds may report
@@ -945,7 +951,7 @@ Most relevant current governance:
     branches. Baseline engine and consumer paths support `NONE` and `UPSTREAM_PROVIDED`
     `fx_realized_pnl_mode`; `CASH_LOT_COST_METHOD` remains an explicit future extension that must
     not be simulated without a governed cash-lot ledger, methodology, and tests.
-62. Local cleanup is governed by `scripts/clean_generated_artifacts.py` and exposed through
+62. Local cleanup is governed by `scripts/development/clean_generated_artifacts.py` and exposed through
     `make clean`. Keep cleanup policy explicit, repo-root scoped, and test-backed. It may remove
     ignored local caches, Python bytecode, build/package byproducts, coverage files, and generated
     `output/` evidence artifacts, but must preserve source, docs, wiki source, migrations,
@@ -960,7 +966,7 @@ Most relevant current governance:
     reads, fail-closed typed audit-write behavior, and source-safe diagnostic metadata. Default
     runtime wiring may use SQLAlchemy-backed adapters, but `IngestionJobService` must call the
     ports for job creation/idempotency and replay audit workflows. `make architecture-guard` now
-    runs `scripts/ingestion_store_port_guard.py`; keep it green when adding diagnostics, DLQ event,
+    runs `scripts/quality/ingestion_store_port_guard.py`; keep it green when adding diagnostics, DLQ event,
     ops-control, unit-of-work, or publisher ports. Ingestion job idempotency is endpoint plus
     `X-Idempotency-Key` plus canonical request payload fingerprint: keyed create/replay must
     acquire the transaction-scoped database lock before lookup/create, same payload replays the
@@ -988,7 +994,7 @@ Most relevant current governance:
     `retryable_failure`, `terminal_failure`, or `uncertain` delivery state. Ingestion publish paths
     map those results back to existing `IngestionPublishError` contracts; valuation job publishing
     uses the same port behind the scheduler-specific publisher wrapper. `make architecture-guard`
-    now runs `scripts/event_publisher_port_guard.py` to block governed ingestion and valuation
+    now runs `scripts/quality/event_publisher_port_guard.py` to block governed ingestion and valuation
     application publisher paths from importing `KafkaProducer` or `get_kafka_producer` directly.
     Runtime dispatchers, consumer managers, aggregation scheduler publishing, and outbox
     publication are separate follow-up slices.
@@ -1012,7 +1018,7 @@ Most relevant current governance:
     instead of the concrete `ReconciliationRepository` type. Concrete SQLAlchemy repositories may
     implement multiple ports, but new use cases should name the narrow read/write capability they
     need, add fake-port behavior tests, and keep `make architecture-guard`
-    (`scripts/repository_port_guard.py`) green. This is design modularity inside existing
+    (`scripts/quality/repository_port_guard.py`) green. This is design modularity inside existing
     deployables, not approval for a runtime service split.
 66. Governed application ports are cataloged in
     `docs/architecture/application-port-capability-catalog.json` with the human companion
@@ -1020,7 +1026,7 @@ Most relevant current governance:
     `docs/standards/application-port-layer-standard.md`. Service-local ports should live under
     `src/services/<service>/app/ports/`; shared cross-service ports should live in the narrow
     shared library that owns the reusable contract. `make architecture-guard` now runs
-    `scripts/application_port_catalog_guard.py` before the specific port-regression guards, so new
+    `scripts/quality/application_port_catalog_guard.py` before the specific port-regression guards, so new
     representative ports must keep port modules, symbols, adapters, consumers, standards, and guard
     references truthful. This catalog is not a claim that every dependency has been inverted; it is
     the governed entrypoint for implemented representative port patterns and follow-on slices.
@@ -1037,7 +1043,7 @@ Most relevant current governance:
     `RuntimeError` or leaking concrete library exception classes into application workflows.
 68. Application services with governed port boundaries must not reintroduce direct infrastructure
     dependencies. `make architecture-guard` now runs
-    `scripts/application_dependency_inversion_guard.py`, which protects the representative
+    `scripts/quality/application_dependency_inversion_guard.py`, which protects the representative
     port-enabled ingestion job, ingestion publishing, `PortfolioTaxLotWindow:v1`, and financial
     reconciliation use cases from direct SQLAlchemy session imports, broad concrete repository
     imports, concrete Kafka producer APIs, and direct helper calls for capabilities that now have
@@ -1052,7 +1058,7 @@ Most relevant current governance:
     SQLAlchemy implementations now live in
     `src/services/ingestion_service/app/infrastructure/workflow_stores.py`, while the previous
     `app/adapters/ingestion_workflow_stores.py` module is a compatibility re-export only.
-    `make architecture-guard` now runs `scripts/infrastructure_adapter_layer_guard.py` so migrated
+    `make architecture-guard` now runs `scripts/quality/infrastructure_adapter_layer_guard.py` so migrated
     concrete store wiring cannot drift back into the transitional adapter module. Existing
     `repositories`, `consumers`, `producers`, and `adapters` packages elsewhere remain transitional
     migration scope; do not treat them as approval for new concrete infrastructure coupling in API,
@@ -1063,7 +1069,7 @@ Most relevant current governance:
     query-service `UnitOfWork` port and `SqlAlchemyUnitOfWork` infrastructure adapter for commit,
     rollback, and refresh behavior, while `SimulationRepository` remains a staging repository with
     no direct transaction completion. `make architecture-guard` now runs
-    `scripts/repository_transaction_boundary_guard.py`; direct repository `commit()` or
+    `scripts/quality/repository_transaction_boundary_guard.py`; direct repository `commit()` or
     `rollback()` calls are blocked unless explicitly registered as transitional. The current
     transitional exception is `query_service/app/repositories/operations_repository.py` for
     operator control-plane status updates.
@@ -1076,7 +1082,7 @@ Most relevant current governance:
     `IngestionJobService` preserves its router-facing method signatures but now routes ingestion
     job duplicate/conflict behavior through `IdempotencyWorkflow` and consumer-DLQ replay audit
     writes through `AuditWorkflow`. `make architecture-guard` now runs
-    `scripts/application_workflow_policy_guard.py` so the representative path cannot bypass those
+    `scripts/quality/application_workflow_policy_guard.py` so the representative path cannot bypass those
     policies. Broader command-handler extraction from routers and cross-workflow concurrency
     certification remain follow-up issue scope.
 72. Application services should raise framework-independent application errors and leave HTTP,
@@ -1086,7 +1092,7 @@ Most relevant current governance:
     now raises those errors for upload validation failures, while
     `src/services/ingestion_service/app/routers/uploads.py` maps reason codes back to the existing
     HTTP 400/422 detail contract. `make architecture-guard` now runs
-    `scripts/application_error_taxonomy_guard.py` so the representative path cannot reintroduce
+    `scripts/quality/application_error_taxonomy_guard.py` so the representative path cannot reintroduce
     FastAPI imports, `HTTPException`, or HTTP status mapping inside the application service.
     Broader application-error migration remains follow-up scope and should preserve API contracts
     with router mapping tests.
@@ -1101,7 +1107,7 @@ Most relevant current governance:
     Core snapshot request fingerprinting now uses a canonical identity command from
     `src/services/query_service/app/application/core_snapshot.py` instead of API DTO JSON
     serialization side effects.
-    `make architecture-guard` now runs `scripts/application_command_result_guard.py` so the
+    `make architecture-guard` now runs `scripts/quality/application_command_result_guard.py` so the
     migrated representative services cannot reintroduce API DTO imports or response DTO return
     contracts, and core snapshot fingerprinting cannot return to `request.model_dump(mode="json")`.
     Remaining API DTO usage in broader application services is transitional backlog and should not
@@ -1111,7 +1117,7 @@ Most relevant current governance:
     packages own command/query handling, use-case orchestration, workflow policies, application
     errors, and calls to ports. They must not import FastAPI/Starlette, SQLAlchemy, concrete Kafka
     producers, repository implementations, producer infrastructure, or consumer infrastructure.
-    `make architecture-guard` runs `scripts/application_layer_contract_guard.py` to enforce this
+    `make architecture-guard` runs `scripts/quality/application_layer_contract_guard.py` to enforce this
     over current application packages in ingestion, query, event replay, and financial
     reconciliation services. Legacy `app/services` modules remain incremental migration scope, but
     new use cases should prefer `app/application` plus ports/adapters.
@@ -1122,7 +1128,7 @@ Most relevant current governance:
     adapter-mode HTTP `410 Gone` translation. `adapter_mode.py` raises
     `AdapterModeDisabledError`, while routers import `require_*_adapter_enabled(...)` providers
     from `dependencies.py`. `make architecture-guard` runs
-    `scripts/ingestion_service_framework_guard.py` to prevent FastAPI imports, `Depends(...)`,
+    `scripts/quality/ingestion_service_framework_guard.py` to prevent FastAPI imports, `Depends(...)`,
     `HTTPException`, and `status.HTTP` mapping from returning to ingestion `app/services` modules
     or adapter-mode policy. This keeps current `app/services` modules directly constructable in
     tests while broader migration to `app/application` remains incremental issue scope.
@@ -1135,7 +1141,7 @@ Most relevant current governance:
     `IngestionServiceUploadPublisher` adapter dispatches validated records to existing canonical
     ingestion publish methods. Upload parsing must stay budgeted by bytes, rows, columns, and cell
     length and must stream XLSX rows without materializing the whole worksheet. `make architecture-guard` runs
-    `scripts/upload_component_boundary_guard.py` so upload parsing and entity-specific publish
+    `scripts/quality/upload_component_boundary_guard.py` so upload parsing and entity-specific publish
     dispatch do not drift back into the orchestration service.
 77. Transaction replay planning is split from SQLAlchemy and Kafka adapters. The repo-local
     standard lives at `docs/standards/transaction-replay-boundary-standard.md`.
@@ -1146,7 +1152,7 @@ Most relevant current governance:
     `ReprocessingRepository(db, kafka_producer)` public API while composing
     `SqlAlchemyTransactionReplayReader` and `KafkaTransactionReplayPublisher`; tests may use
     `ReprocessingRepository.from_ports(...)` with fake reader/publisher ports. `make
-    architecture-guard` runs `scripts/transaction_replay_boundary_guard.py` so event planning,
+    architecture-guard` runs `scripts/quality/transaction_replay_boundary_guard.py` so event planning,
     deduplication, and correlation header construction do not drift back into the compatibility
     repository adapter.
 78. Portfolio aggregation scheduler policy is split from global database sessions, concrete
@@ -1160,7 +1166,7 @@ Most relevant current governance:
     behind an aggregation-job publisher port. `AggregationScheduler` preserves its default runtime
     constructor while accepting injected settings, repository provider, metrics sink, clock, and
     publisher for fake-port tests. `make architecture-guard` runs
-    `scripts/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
+    `scripts/quality/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
     repositories, concrete Kafka producers, direct publish/flush calls, and raw metric functions do
     not drift back into scheduler orchestration.
 79. Position calculation rules are split from database sessions, concrete repositories, outbox
@@ -1174,14 +1180,14 @@ Most relevant current governance:
     `PositionCalculator` remains the application orchestrator and compatibility entry point: it
     performs epoch-fencing checks, repository reads/writes, position-history persistence, outbox
     staging, metric emission, replay event ordering, and DTO adaptation. `make architecture-guard`
-    runs `scripts/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
+    runs `scripts/quality/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
     helpers, buy/sell/transfer/corporate-action state helpers, and backdated replay decision
     helpers do not drift back into `position_logic.py`.
 80. Protected business logic modules must stay directly testable without FastAPI, real databases,
     Kafka, Redis, cloud SDKs, or downstream clients. The repo-local standard lives at
     `docs/standards/testability-architecture-standard.md`, and the machine-readable contract lives
     at `docs/standards/testability-architecture-contract.json`. `make architecture-guard` runs
-    `scripts/testability_architecture_guard.py`, which currently protects domain, application,
+    `scripts/quality/testability_architecture_guard.py`, which currently protects domain, application,
     ports, policy, and extracted pure reducer modules from runtime imports, runtime factory calls,
     repository/dependency/router/consumer imports, and concrete client symbols. Runtime composition
     belongs in approved composition roots such as `app/dependencies.py`, routers, consumers,
@@ -1192,7 +1198,7 @@ Most relevant current governance:
     standard lives at `docs/standards/runtime-boundary-decision-standard.md`; the current deployable
     catalog lives at `docs/architecture/runtime-boundary-decision-catalog.json`; and the template
     lives at `docs/architecture/templates/runtime-boundary-decision-record-template.md`.
-    `make architecture-guard` runs `scripts/runtime_boundary_decision_guard.py`, which discovers
+    `make architecture-guard` runs `scripts/quality/runtime_boundary_decision_guard.py`, which discovers
     `src/services/**/Dockerfile`, requires every deployable root to have a catalog entry, blocks
     stale catalog entries, prevents new service paths from using current-state status, and requires
     PR checklist coverage. Existing deployables are cataloged as
@@ -1203,7 +1209,7 @@ Most relevant current governance:
     any runtime split is considered. The repo-local standard lives at
     `docs/standards/in-process-modularity-package-standard.md`; representative adoption is tracked
     in `docs/architecture/in-process-modularity-adoption-catalog.json`; and `make
-    architecture-guard` runs `scripts/in_process_modularity_guard.py`. The standard recommends
+    architecture-guard` runs `scripts/quality/in_process_modularity_guard.py`. The standard recommends
     `domain`, `application`, `ports`, `adapters`, delivery/routers, repositories/persistence,
     runtime composition files, and optional `proof_builders`, while keeping API DTOs at delivery,
     application commands/results in application, domain objects in domain, and persistence models
@@ -1215,7 +1221,7 @@ Most relevant current governance:
     `application`, `use_cases`, `ports`, `adapters`, and `proof_builders` packages. The repo-local
     standard lives at `docs/standards/in-process-boundary-contract-standard.md`; transitional
     exceptions live at `docs/standards/in-process-boundary-exceptions.json`; and `make
-    architecture-guard` runs `scripts/in_process_boundary_guard.py`. Domain packages must stay
+    architecture-guard` runs `scripts/quality/in_process_boundary_guard.py`. Domain packages must stay
     framework-free, infrastructure-free, and persistence-free; application packages may depend on
     domain and ports but not routers, concrete adapters, infrastructure, repositories, API DTOs, or
     legacy service packages; ports must stay framework-neutral and persistence-neutral; adapters may
@@ -1237,7 +1243,7 @@ Most relevant current governance:
     considers a proof service. The repo-local standard lives at
     `docs/standards/proof-builder-pattern-standard.md`; shared typed proof contracts live in
     `portfolio_common.proof_builders`; and `make architecture-guard` runs
-    `scripts/proof_builder_pattern_guard.py`. The first contract families cover source-data
+    `scripts/quality/proof_builder_pattern_guard.py`. The first contract families cover source-data
     supportability, ingestion/replay evidence, reconciliation evidence, and app validation
     evidence. Proof builders accept application/domain/support inputs and return typed artifacts;
     routers map artifacts to API DTOs, repositories own persistence reads, and runbooks document
@@ -1247,7 +1253,7 @@ Most relevant current governance:
     representative for a route family. The repo-local standard lives at
     `docs/standards/api-mapper-pattern-standard.md`; current representative modules cover lookup,
     reconciliation, event-replay command errors, and query-service read error mapping; and `make
-    architecture-guard` runs `scripts/api_mapper_pattern_guard.py`. Keep this context entry as
+    architecture-guard` runs `scripts/quality/api_mapper_pattern_guard.py`. Keep this context entry as
     navigation only: detailed mapping rules belong in the standard and executable guard, not
     duplicated prose.
 87. Runtime current-time, elapsed-duration, and generated-ID access should flow through
@@ -1255,7 +1261,7 @@ Most relevant current governance:
     standard lives at `docs/standards/runtime-provider-port-standard.md`; current representative
     coverage includes financial reconciliation elapsed-duration/finding IDs, core snapshot
     generated metadata, and simulation session/change IDs plus TTL/expiry decisions; and `make
-    architecture-guard` runs `scripts/runtime_provider_port_guard.py`. Legacy analytics and
+    architecture-guard` runs `scripts/quality/runtime_provider_port_guard.py`. Legacy analytics and
     operations services still have direct wall-clock usage and remain explicit migration scope.
 88. Query-control-plane analytics-input responses use response-level `lineage` for reproducibility
     and source-data runtime metadata uses `source_lineage` for source proof. Do not let runtime
@@ -1821,7 +1827,7 @@ Most relevant current governance:
      worker shells beside it. Cost, cashflow, and position remain separate financial modules behind
      `ProcessTransactionUseCase` and one SQLAlchemy unit of work; valuation remains a separate
      job-driven runtime. Before an environment cutover, quiesce producers, drain and stop legacy
-     consumers, then use `scripts/transaction_processing_cutover_offsets.py` in dry-run and explicit
+     consumers, then use `scripts/operations/transaction_processing_cutover_offsets.py` in dry-run and explicit
      apply modes to verify inactive groups, zero source lag, aligned cost/cashflow offsets, and exact
      live/replay target offsets. Never use earliest/latest reset policy as a handoff. Load evidence
      must seed valid portfolio/instrument source facts, use the run business date, and measure through

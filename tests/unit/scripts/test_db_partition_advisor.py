@@ -1,6 +1,6 @@
 from datetime import date
 
-from scripts import db_partition_advisor
+from scripts.operations import db_partition_advisor
 
 
 def test_partition_candidates_cover_core_fact_tables():

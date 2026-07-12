@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.repository_transaction_boundary_guard import (
+from scripts.quality.repository_transaction_boundary_guard import (
     find_repository_transaction_boundary_findings,
 )
 

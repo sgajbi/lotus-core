@@ -21,7 +21,7 @@ declared runtime-separated suite can still be discovered.
 
 ## Change
 
-- Added `suite_pytest_command(...)` to `scripts/test_manifest.py`.
+- Added `suite_pytest_command(...)` to `scripts/quality/test_manifest.py`.
 - Added `--collect-only` support to manifest suite execution.
 - Changed `make quality-unit-collection-gate` to collect the manifest-backed `unit` suite.
 - Added `make quality-integration-lite-collection-gate`.
@@ -36,7 +36,7 @@ runtime execution:
 - local and CI collection use repo-native Make targets,
 - collection gates include manifest-defined suite paths and deselection args,
 - `integration-lite` import/discovery regressions fail before the runtime lane starts,
-- future suite-boundary changes can be tested through `scripts/test_manifest.py` rather than
+- future suite-boundary changes can be tested through `scripts/quality/test_manifest.py` rather than
 duplicating pytest path logic in workflows.
 
 ## Compatibility And Behavior

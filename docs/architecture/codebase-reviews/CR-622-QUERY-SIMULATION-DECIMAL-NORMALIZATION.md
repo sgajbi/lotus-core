@@ -40,7 +40,7 @@ Local validation passed:
 
 1. `python -m pytest tests/unit/services/query_service/test_precision_policy.py tests/unit/services/query_service/test_rounding_golden_vectors.py tests/unit/services/query_service/advisory_simulation/test_advisory_precision_policy.py tests/unit/services/query_service/advisory_simulation/test_valuation.py tests/unit/services/query_service/repositories/test_simulation_repository.py tests/unit/services/query_service/services/test_simulation_service.py -q`
 2. `python -m alembic heads`
-3. `python scripts/migration_contract_check.py --mode alembic-sql`
+3. `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 4. `rg "Decimal\(str\(" src/services src/libs -n`
 5. touched-surface `python -m ruff check`
 6. touched-surface `python -m ruff format --check`

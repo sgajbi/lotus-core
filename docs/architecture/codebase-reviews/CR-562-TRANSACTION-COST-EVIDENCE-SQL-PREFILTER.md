@@ -40,7 +40,7 @@ Local validation passed:
 1. `python -m pytest tests/unit/services/query_service/repositories/test_transaction_repository.py -q` - 25 passed
 2. `python -m pytest tests/unit/services/query_service/services/test_integration_service.py -q` - 99 passed
 3. `python -m alembic heads` - `c0fbb2c3d4e5 (head)`
-4. `python scripts/migration_contract_check.py --mode alembic-sql` - passed
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` - passed
 5. touched-surface `ruff check` - passed
 6. touched-surface `ruff format --check` - passed
 7. `git diff --check` - passed

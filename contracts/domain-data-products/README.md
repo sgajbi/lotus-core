@@ -15,7 +15,7 @@ Current declarations:
 Local validation:
 
 ```powershell
-python scripts/validate_domain_data_product_contracts.py
+python scripts/validation/validate_domain_data_product_contracts.py
 ```
 
 Make target:
