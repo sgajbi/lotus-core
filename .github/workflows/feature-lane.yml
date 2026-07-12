@@ -42,7 +42,10 @@ jobs:
         run: make install-ci
       - name: Resolve dependency health cache key
         id: dependency-health-cache-key
-        run: echo "key=$(python scripts/validation/dependency_health_check.py --print-cache-key)" >> "$GITHUB_OUTPUT"
+        run: |
+          key="$(python scripts/validation/dependency_health_check.py --print-cache-key)"
+          [[ "$key" =~ ^[0-9a-f]{64}$ ]]
+          echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Restore dependency health cache
         id: dependency-health-cache
         uses: actions/cache/restore@v5

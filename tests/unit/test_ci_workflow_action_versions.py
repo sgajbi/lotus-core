@@ -135,10 +135,11 @@ def test_dependency_health_cache_is_reused_only_before_merge() -> None:
         save_index = steps.index(save_step)
         lint_index = next(index for index, step in enumerate(steps) if step.get("name") == "Lint")
         assert key_step["id"] == "dependency-health-cache-key"
-        assert key_step["run"] == (
-            'echo "key=$(python scripts/validation/dependency_health_check.py '
-            '--print-cache-key)" >> "$GITHUB_OUTPUT"'
-        )
+        assert key_step["run"].splitlines() == [
+            'key="$(python scripts/validation/dependency_health_check.py --print-cache-key)"',
+            '[[ "$key" =~ ^[0-9a-f]{64}$ ]]',
+            'echo "key=$key" >> "$GITHUB_OUTPUT"',
+        ]
         assert cache_step["id"] == "dependency-health-cache"
         assert cache_step["uses"] == "actions/cache/restore@v5"
         assert cache_step["with"]["path"] == ".cache/dependency-health"
