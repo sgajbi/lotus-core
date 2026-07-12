@@ -111,6 +111,53 @@ def test_runtime_workflows_use_current_action_pins_for_cache_artifacts_and_build
     ).read_text(encoding="utf-8")
 
 
+def test_dependency_health_cache_is_reused_only_before_merge() -> None:
+    for workflow_path in (
+        Path(".github/workflows/feature-lane.yml"),
+        Path(".github/workflows/pr-merge-gate.yml"),
+    ):
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
+        steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+        cache_step = next(
+            step for step in steps if step.get("name") == "Restore dependency health cache"
+        )
+        assert cache_step["uses"] == "actions/cache@v5"
+        assert cache_step["with"]["path"] == ".cache/dependency-health"
+        cache_key = cache_step["with"]["key"]
+        for cache_input in (
+            "pyproject.toml",
+            "requirements/**/*.txt",
+            "tests/requirements.txt",
+            "src/**/pyproject.toml",
+            "scripts/validation/dependency_health_*.py",
+        ):
+            assert cache_input in cache_key
+
+    main_text = Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
+    assert "Restore dependency health cache" not in main_text
+
+
+def test_main_dependency_health_lane_forces_clean_install_and_retains_evidence() -> None:
+    main_workflow = (
+        yaml.safe_load(Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8"))
+        or {}
+    )
+    steps = main_workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+    step_by_name = {step.get("name"): step for step in steps}
+
+    assert step_by_name["Verify Dependencies"]["run"] == "make verify-dependencies-clean"
+    assert step_by_name["Upload dependency health evidence"]["uses"] == "actions/upload-artifact@v7"
+    assert step_by_name["Upload dependency health evidence"]["if"] == "always()"
+    assert step_by_name["Upload dependency health evidence"]["with"]["path"] == (
+        "output/dependency-health/*.json"
+    )
+
+    makefile_text = Path("Makefile").read_text(encoding="utf-8")
+    assert "verify-dependencies-clean:" in makefile_text
+    assert "--skip-audit --no-cache" in makefile_text
+    assert "clean-install-report.json" in makefile_text
+
+
 def test_workflows_opt_into_node24_action_runtime() -> None:
     missing_opt_in = [
         str(workflow_path)
