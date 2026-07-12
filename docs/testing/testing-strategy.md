@@ -160,6 +160,20 @@ External vendor images are not copied into that bundle. The shared test helper s
 inspection and acquisition for immutable Postgres, Kafka, Prometheus, and other external images.
 This separation avoids treating a CI transport artifact as a registry mirror or release image.
 
+## Compose Runtime Port Isolation
+
+Compose-backed suites use one `PreparedTestRuntime` per project. Dynamically selected TCP ports stay
+bound by `RuntimePortReservation` through image inspection and cleanup, then release immediately
+before Compose startup. If Docker reports a host bind conflict, the helper cleans the failed
+project attempt, reserves a completely new dynamic port generation, refreshes exported database,
+Kafka, and HTTP connection metadata, and retries within the configured bound.
+
+Explicit port overrides are operator intent and are never changed automatically. Suite launchers
+must let the pytest child prepare and own reservations; a parent process must not preallocate ports
+for child-owned Compose. Tests must cover overlapping runtime lifetimes, concurrent preparation,
+forced bind conflict, endpoint refresh, explicit-override preservation, and exhausted-retry
+diagnostics.
+
 ## Quality Gates
 
 1. No new endpoint without explicit success + error contract tests.
