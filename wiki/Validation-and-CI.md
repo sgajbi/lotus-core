@@ -49,6 +49,9 @@ database/Kafka/HTTP endpoints, and a bounded retry. Explicit operator port overr
 Exhausted retries name the failure class, attempts, reallocations, and Compose project so a
 collision is distinguishable from application startup failure.
 
+Local image builds complete while reservations remain held; the subsequent startup does not use
+`up --build`. This keeps build duration outside the host-bind race interval.
+
 | Evidence | Location | Failure Meaning |
 |---|---|---|
 | Build timing | `output/runtime-image-set/build-metrics.json` | Compare unique builds, reused tags, and total producer time. |

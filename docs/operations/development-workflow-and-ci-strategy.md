@@ -78,10 +78,19 @@ reservation immediately before Docker claims the ports and replaces the complete
 generation after a recognized bind conflict. Exhausted retries report
 `host_port_bind_conflict`, attempt count, reallocation count, and Compose project identity.
 
+When a local gate requests image builds, the helper runs `docker compose build` while host-port
+reservations are still active, then starts the services without `--build` immediately after
+release. This keeps image-build duration outside the bind-race interval and avoids repeating a long
+build after a recoverable collision.
+
 Do not restore free-port probing that closes sockets before startup, preallocate child-suite ports
 in `test_manifest.py`, mutate shared process environment for same-process concurrent projects, or
 retry a bind conflict with unchanged dynamic assignments. Preserve fixed port environment values
 only for explicit operator-controlled runtimes.
+
+The fixed-port latency, performance-load, institutional-completion, and endpoint-smoke drivers
+still own direct Compose commands. Their migration to prepared runtimes is tracked under #730 and
+must not be represented as complete by this reservation slice.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.

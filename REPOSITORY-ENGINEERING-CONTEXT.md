@@ -1940,7 +1940,8 @@ Most relevant current governance:
      target's `LOTUS_TRANSACTION_PROCESSING_HOST_PORT`; never reintroduce deleted calculator ports
      or rely on the app-local default when parallel stacks may run. Compose-backed recovery restart
      sets and health checks must derive from `scripts/quality/ci_service_sets.py`, not duplicate a
-     local service list. Compose-backed tests and operational drivers must call
+     local service list. Compose-backed tests and operational drivers that select dynamic ports
+     must call
      `prepare_test_runtime(...)`, export its environment when process-global consumers require it,
      and pass the complete `PreparedTestRuntime` to Compose helpers. Dynamic ports remain bound
      until each startup attempt; a recognized bind conflict reallocates the complete dynamic
@@ -1949,7 +1950,9 @@ Most relevant current governance:
      reallocation. The suite launcher must let the pytest child own reservations rather than
      allocating and releasing ports in its parent process. Concurrent same-process projects must
      use their prepared runtime as the subprocess environment instead of mutating shared process
-     state.
+     state. When local startup requests image builds, build while reservations remain held and run
+     Compose startup without `--build` only after release; do not widen the bind race with a long
+     `up --build` operation.
 140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
