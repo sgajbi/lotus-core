@@ -63,6 +63,9 @@ vendor images remain governed by bounded pull/inspection logic and are not copie
 - Real query-service build, export, reload, and verification: passed.
 - Runtime image-set unit tests: `5 passed`.
 - Prebuild, service-union, workflow, action-version, and main-workflow focused tests: passed.
+- `make ci-local`: passed with `4,278` unit tests, `10` DB tests, `135` integration-lite tests,
+  aggregate/changed/critical coverage, and all local lane guards.
+- `make quality-workflow-governance-gate`: `20 passed`.
 - Workflow YAML parsing and `actionlint`: passed.
 - Scoped Ruff lint/format and `git diff --check`: passed.
 - Wiki professional-page audit and repository documentation gates: passed.
