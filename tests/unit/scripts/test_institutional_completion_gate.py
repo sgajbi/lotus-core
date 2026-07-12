@@ -1,13 +1,11 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from scripts.quality.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
 from scripts.validation.institutional_completion_gate import (
     ScenarioArtifactMetadata,
-    _compose_down,
-    _compose_up,
     _latest_new_scenario_artifact,
     _load_scenario_metadata,
     _reconciliation_args,
@@ -15,6 +13,20 @@ from scripts.validation.institutional_completion_gate import (
     _scenario_args,
     main,
 )
+
+
+class _FakeManagedRun:
+    def __init__(self, calls: list[tuple[str, list[str]]]) -> None:
+        self.calls = calls
+        self.runtime = SimpleNamespace(values={"COMPOSE_PROJECT_NAME": "institutional-test"})
+
+    def __enter__(self) -> "_FakeManagedRun":
+        self.calls.append(("managed_start", []))
+        return self
+
+    def __exit__(self, *args: object) -> bool:
+        self.calls.append(("managed_finish", []))
+        return False
 
 
 def test_load_scenario_metadata_reads_required_fields(tmp_path: Path) -> None:
@@ -129,47 +141,6 @@ def test_scenario_and_reconciliation_args_use_governed_run_values() -> None:
     ]
 
 
-def test_compose_up_starts_governed_completion_services(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[list[str], Path]] = []
-
-    def _fake_run(cmd: list[str], cwd: Path) -> None:
-        calls.append((cmd, cwd))
-
-    monkeypatch.setattr("scripts.validation.institutional_completion_gate._run", _fake_run)
-
-    repo_root = Path("/tmp/repo")
-    _compose_up(repo_root=repo_root, compose_file="docker-compose.yml", build=False)
-
-    assert calls == [
-        (
-            [
-                "docker",
-                "compose",
-                "-f",
-                "docker-compose.yml",
-                "up",
-                "-d",
-                *INSTITUTIONAL_COMPLETION_GATE_SERVICES,
-            ],
-            repo_root,
-        )
-    ]
-
-
-def test_compose_down_uses_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[list[str], Path]] = []
-
-    def _fake_run(cmd: list[str], cwd: Path) -> None:
-        calls.append((cmd, cwd))
-
-    monkeypatch.setattr("scripts.validation.institutional_completion_gate._run", _fake_run)
-
-    repo_root = Path("/tmp/repo")
-    _compose_down(repo_root=repo_root, compose_file="docker-compose.yml")
-
-    assert calls == [(["docker", "compose", "-f", "docker-compose.yml", "down"], repo_root)]
-
-
 def test_main_runs_scenario_then_exhaustive_reconciliation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -183,7 +154,9 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         repo_root: Path,
         script_relative_path: str,
         args: list[str],
+        environment: dict[str, str] | None = None,
     ) -> str:
+        assert environment == {"COMPOSE_PROJECT_NAME": "institutional-test"}
         calls.append((script_relative_path, args))
         if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
@@ -208,12 +181,8 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_up",
-        lambda **_kwargs: calls.append(("compose_up", [])),
-    )
-    monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_down",
-        lambda **_kwargs: calls.append(("compose_down", [])),
+        "scripts.validation.institutional_completion_gate.prepare_managed_compose_run",
+        lambda **_kwargs: _FakeManagedRun(calls),
     )
     monkeypatch.setattr(
         "scripts.validation.institutional_completion_gate.Path.resolve",
@@ -230,7 +199,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
 
     assert main() == 0
     assert calls == [
-        ("compose_up", []),
+        ("managed_start", []),
         (
             "scripts/operations/bank_day_load_scenario.py",
             [
@@ -265,7 +234,7 @@ def test_main_runs_scenario_then_exhaustive_reconciliation(
                 "output/task-runs",
             ],
         ),
-        ("compose_down", []),
+        ("managed_finish", []),
     ]
 
 
@@ -285,7 +254,9 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
         repo_root: Path,
         script_relative_path: str,
         args: list[str],
+        environment: dict[str, str] | None = None,
     ) -> str:
+        assert environment == {"COMPOSE_PROJECT_NAME": "institutional-test"}
         calls.append((script_relative_path, args))
         if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             scenario_artifact = output_dir / "20260419T120000Z-bank-day-load.json"
@@ -309,12 +280,8 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_up",
-        lambda **_kwargs: calls.append(("compose_up", [])),
-    )
-    monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_down",
-        lambda **_kwargs: calls.append(("compose_down", [])),
+        "scripts.validation.institutional_completion_gate.prepare_managed_compose_run",
+        lambda **_kwargs: _FakeManagedRun(calls),
     )
     monkeypatch.setattr(
         "scripts.validation.institutional_completion_gate.Path.resolve",
@@ -333,7 +300,7 @@ def test_main_falls_back_to_latest_new_artifact_when_stdout_has_no_report_path(
     assert calls[-2][0] == "scripts/operations/bank_day_load_reconciliation_report.py"
 
 
-def test_main_preserves_primary_error_when_teardown_also_fails(
+def test_main_propagates_reconciliation_failure_through_managed_lifecycle(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     repo_root = tmp_path
@@ -359,7 +326,9 @@ def test_main_preserves_primary_error_when_teardown_also_fails(
         repo_root: Path,
         script_relative_path: str,
         args: list[str],
+        environment: dict[str, str] | None = None,
     ) -> str:
+        assert environment == {"COMPOSE_PROJECT_NAME": "institutional-test"}
         if script_relative_path == "scripts/operations/bank_day_load_scenario.py":
             return "Wrote JSON report: output/task-runs/20260419T120000Z-bank-day-load.json\n"
         raise RuntimeError("reconciliation failed")
@@ -369,16 +338,8 @@ def test_main_preserves_primary_error_when_teardown_also_fails(
         _fake_run_python_script,
     )
     monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_up",
-        lambda **_kwargs: None,
-    )
-
-    def _raise_cleanup_error(**_kwargs: object) -> None:
-        raise RuntimeError("compose down failed")
-
-    monkeypatch.setattr(
-        "scripts.validation.institutional_completion_gate._compose_down",
-        _raise_cleanup_error,
+        "scripts.validation.institutional_completion_gate.prepare_managed_compose_run",
+        lambda **_kwargs: _FakeManagedRun([]),
     )
     monkeypatch.setattr(
         "scripts.validation.institutional_completion_gate.Path.resolve",
@@ -393,9 +354,5 @@ def test_main_preserves_primary_error_when_teardown_also_fails(
         ],
     )
 
-    with pytest.raises(RuntimeError, match="teardown failed after an earlier error") as excinfo:
+    with pytest.raises(RuntimeError, match="reconciliation failed"):
         main()
-
-    assert "reconciliation failed" in str(excinfo.value)
-    assert excinfo.value.__cause__ is not None
-    assert "compose down failed" in str(excinfo.value.__cause__)

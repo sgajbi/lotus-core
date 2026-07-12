@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -20,10 +21,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-try:
-    from scripts.quality.ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import INSTITUTIONAL_COMPLETION_GATE_SERVICES
+from scripts.quality.ci_service_sets import (  # noqa: E402
+    INSTITUTIONAL_COMPLETION_GATE_SERVICES,
+)
+from tests.test_support.managed_compose_run import (  # noqa: E402
+    prepare_managed_compose_run,
+)
 
 DEFAULT_OUTPUT_DIR = "output/task-runs"
 DEFAULT_COMPOSE_FILE = "docker-compose.yml"
@@ -55,19 +58,13 @@ def _run(cmd: list[str], cwd: Path) -> None:
         )
 
 
-def _compose_up(*, repo_root: Path, compose_file: str, build: bool) -> None:
-    cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
-    if build:
-        cmd.append("--build")
-    cmd.extend(INSTITUTIONAL_COMPLETION_GATE_SERVICES)
-    _run(cmd, cwd=repo_root)
-
-
-def _compose_down(*, repo_root: Path, compose_file: str) -> None:
-    _run(["docker", "compose", "-f", compose_file, "down"], cwd=repo_root)
-
-
-def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list[str]) -> str:
+def _run_python_script(
+    *,
+    repo_root: Path,
+    script_relative_path: str,
+    args: list[str],
+    environment: dict[str, str] | None = None,
+) -> str:
     cmd = [sys.executable, script_relative_path, *args]
     completed = subprocess.run(
         cmd,
@@ -75,6 +72,7 @@ def _run_python_script(*, repo_root: Path, script_relative_path: str, args: list
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
     if completed.returncode != 0:
         raise RuntimeError(
@@ -184,6 +182,11 @@ def main() -> int:
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--compose-file", default=DEFAULT_COMPOSE_FILE)
     parser.add_argument("--build", action="store_true")
+    parser.add_argument("--keep-compose", action="store_true")
+    parser.add_argument(
+        "--compose-log-path",
+        default="output/task-runs/diagnostics/institutional-completion-compose.log",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
@@ -191,14 +194,31 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     known_paths = set(output_dir.glob("*-bank-day-load.json"))
 
-    _compose_up(repo_root=repo_root, compose_file=args.compose_file, build=args.build)
     scenario: ScenarioArtifactMetadata | None = None
-    primary_error: Exception | None = None
-    try:
+    managed_run = prepare_managed_compose_run(
+        scope="institutional-completion",
+        compose_file=repo_root / args.compose_file,
+        services=tuple(INSTITUTIONAL_COMPLETION_GATE_SERVICES),
+        build=args.build,
+        log_path=repo_root / args.compose_log_path,
+        keep_stack=args.keep_compose,
+        endpoint_urls={
+            key: os.getenv(key)
+            for key in (
+                "E2E_INGESTION_URL",
+                "E2E_QUERY_URL",
+                "E2E_EVENT_REPLAY_URL",
+                "E2E_TRANSACTION_PROCESSING_URL",
+                "HOST_DATABASE_URL",
+            )
+        },
+    )
+    with managed_run:
         scenario_stdout = _run_python_script(
             repo_root=repo_root,
             script_relative_path="scripts/operations/bank_day_load_scenario.py",
             args=_scenario_args(args),
+            environment=managed_run.runtime.values,
         )
         scenario_artifact = _reported_scenario_artifact_path(
             stdout=scenario_stdout,
@@ -214,20 +234,8 @@ def main() -> int:
             repo_root=repo_root,
             script_relative_path="scripts/operations/bank_day_load_reconciliation_report.py",
             args=_reconciliation_args(parsed_args=args, scenario=scenario),
+            environment=managed_run.runtime.values,
         )
-    except Exception as exc:
-        primary_error = exc
-        raise
-    finally:
-        try:
-            _compose_down(repo_root=repo_root, compose_file=args.compose_file)
-        except Exception as cleanup_exc:
-            if primary_error is not None:
-                raise RuntimeError(
-                    "Institutional completion gate teardown failed after an earlier error. "
-                    f"Original error: {primary_error}"
-                ) from cleanup_exc
-            raise
     if scenario is None:
         raise RuntimeError("Institutional completion gate completed without scenario metadata.")
     print(scenario.artifact_path)
