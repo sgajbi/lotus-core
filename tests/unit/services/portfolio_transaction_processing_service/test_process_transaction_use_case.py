@@ -91,14 +91,16 @@ class _Idempotency:
         outcome: TransactionIdempotencyOutcome = TransactionIdempotencyOutcome.CLAIMED,
     ) -> None:
         self.calls = calls
-        self.outcome = outcome
+        self.outcomes = [outcome]
         self.claim_kwargs: dict = {}
         self.repair_claimed = True
 
     async def claim(self, **kwargs) -> TransactionIdempotencyOutcome:
         self.calls.append("idempotency")
         self.claim_kwargs = kwargs
-        return self.outcome
+        if len(self.outcomes) > 1:
+            return self.outcomes.pop(0)
+        return self.outcomes[0]
 
     async def claim_repair_delivery(self, **_kwargs) -> bool:
         self.calls.append("repair-idempotency")
@@ -147,9 +149,11 @@ class _Position:
         self.calls = calls
         self.error_on = error_on
         self.cashflow_rebuild_transactions_by_id = cashflow_rebuild_transactions_by_id or {}
+        self.rebuild_existing_calls: list[bool] = []
 
-    async def process(self, transaction: BookedTransaction, **_kwargs) -> PositionProcessingResult:
+    async def process(self, transaction: BookedTransaction, **kwargs) -> PositionProcessingResult:
         self.calls.append(f"position:{transaction.transaction_id}")
+        self.rebuild_existing_calls.append(bool(kwargs.get("rebuild_existing", False)))
         if transaction.transaction_id == self.error_on:
             raise RuntimeError("position failed")
         return PositionProcessingResult(
@@ -460,7 +464,49 @@ async def test_use_case_rejects_material_semantic_conflict_before_financial_work
 
 
 @pytest.mark.asyncio
-async def test_repair_intent_does_not_bypass_material_semantic_conflict() -> None:
+async def test_repair_intent_claims_payload_specific_correction_identity() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_CONFLICT,
+    )
+    unit_of_work.idempotency.outcomes.append(TransactionIdempotencyOutcome.CLAIMED)
+    command = replace(
+        _command(),
+        transaction=replace(
+            _command().transaction,
+            quantity=Decimal("12"),
+            gross_transaction_amount=Decimal("306"),
+        ),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+        ),
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert calls == [
+        "enter",
+        "idempotency",
+        "idempotency",
+        "cost:TX-001",
+        "position:TX-001",
+        "cashflow:TX-001:0",
+        "commit",
+    ]
+    assert unit_of_work.idempotency.claim_kwargs["semantic_key"].startswith(
+        "transaction-correction:v1:PB-001:TX-001:0:sha256:"
+    )
+    assert unit_of_work.position.rebuild_existing_calls == [True]
+
+
+@pytest.mark.asyncio
+async def test_repair_intent_fails_closed_when_correction_identity_conflicts() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(
         calls=calls,
@@ -481,7 +527,7 @@ async def test_repair_intent_does_not_bypass_material_semantic_conflict() -> Non
         ).execute(command)
 
     assert exc_info.value.reason_code == "transaction_semantic_conflict"
-    assert calls == ["enter", "idempotency", "rollback"]
+    assert calls == ["enter", "idempotency", "idempotency", "rollback"]
 
 
 @pytest.mark.asyncio

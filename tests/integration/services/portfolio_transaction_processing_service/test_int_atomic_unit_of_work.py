@@ -13,10 +13,15 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     ProcessTransactionCommand,
     ProcessTransactionUseCase,
     TransactionEventMetadata,
+    TransactionProcessingIntent,
     TransactionProcessingRejected,
     TransactionProcessingStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain import (
+    BookedTransaction,
+    build_transaction_correction_identity,
+    build_transaction_semantic_identity,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     TRANSACTION_PROCESSING_SERVICE_NAME,
@@ -209,6 +214,59 @@ async def test_semantic_fence_suppresses_republication_and_rejects_changed_paylo
             )
         )
     assert semantic_fence_count == 1
+
+
+async def test_explicit_repair_claims_immutable_payload_specific_correction_identity(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    original = _command("CORRECTION")
+    corrected = replace(
+        original,
+        transaction=replace(
+            original.transaction,
+            quantity=Decimal("12"),
+            gross_transaction_amount=Decimal("306.00"),
+        ),
+        metadata=replace(
+            original.metadata,
+            event_id="transactions.corrected-1-902",
+            processing_intent=TransactionProcessingIntent.REPAIR,
+        ),
+    )
+    use_case = ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    )
+
+    original_result = await use_case.execute(original)
+    corrected_result = await use_case.execute(corrected)
+
+    assert original_result.status is TransactionProcessingStatus.PROCESSED
+    assert corrected_result.status is TransactionProcessingStatus.PROCESSED
+    original_identity = build_transaction_semantic_identity(original.transaction)
+    correction_identity = build_transaction_correction_identity(corrected.transaction)
+    async with session_factory() as session:
+        semantic_rows = (
+            (
+                await session.execute(
+                    select(ProcessedEvent.semantic_key, ProcessedEvent.payload_fingerprint)
+                    .where(
+                        ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME,
+                        ProcessedEvent.semantic_key.isnot(None),
+                    )
+                    .order_by(ProcessedEvent.id)
+                )
+            )
+            .tuples()
+            .all()
+        )
+
+    assert semantic_rows == [
+        (original_identity.semantic_key, original_identity.payload_fingerprint),
+        (correction_identity.semantic_key, correction_identity.payload_fingerprint),
+    ]
 
 
 @pytest.mark.parametrize("fail_at", ["cost", "cashflow", "position"])

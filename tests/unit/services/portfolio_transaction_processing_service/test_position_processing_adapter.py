@@ -60,6 +60,7 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
         transaction,
         correlation_id="corr-001",
         traceparent="trace-001",
+        rebuild_existing=True,
     )
 
     assert result.position_record_count == 2
@@ -69,4 +70,5 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
     assert event.transaction_id == "TX-001"
     assert event.correlation_id == "corr-001"
     assert event.traceparent == "trace-001"
+    assert workflow.calculate.await_args.kwargs["rebuild_existing"] is True
     assert "outbox_repo" not in workflow.calculate.await_args.kwargs
