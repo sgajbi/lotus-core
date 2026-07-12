@@ -327,9 +327,24 @@ def compose_up(
         # Best-effort cleanup only. Continue with bring-up retries.
         pass
 
-    args = [*compose_args, "up"]
     if build:
-        args.append("--build")
+        build_args = [*compose_args, "build"]
+        if services:
+            build_args.extend(services)
+        try:
+            runner(
+                build_args,
+                check=True,
+                capture_output=True,
+                env=compose_environment,
+            )
+        except subprocess.CalledProcessError as exc:
+            if runtime is not None:
+                runtime.port_reservation.release()
+            details = _process_error_text(exc).strip()
+            raise DockerStackError(f"docker compose build failed: {details}") from exc
+
+    args = [*compose_args, "up"]
     args.append("-d")
     if services:
         args.extend(services)

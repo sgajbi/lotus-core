@@ -189,6 +189,75 @@ def test_compose_up_reports_exhausted_host_port_reallocation() -> None:
     runtime.port_reservation.release()
 
 
+def test_compose_up_builds_while_ports_are_reserved_then_starts_without_build() -> None:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="build-before-bind",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+        inherit_process_environment=False,
+    )
+    commands: list[list[str]] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        commands.append(list(args))
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
+        if "build" in args:
+            assert runtime.port_reservation.reserved_port_keys
+        if "up" in args:
+            assert runtime.port_reservation.reserved_port_keys == ()
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    compose_up(
+        "docker-compose.yml",
+        build=True,
+        services=["query_service"],
+        retries=0,
+        runner=runner,
+        runtime=runtime,
+    )
+
+    compose_build = next(command for command in commands if "build" in command)
+    compose_start = next(command for command in commands if "up" in command)
+    assert compose_build[-2:] == ["build", "query_service"]
+    assert compose_start[-3:] == ["up", "-d", "query_service"]
+    assert "--build" not in compose_start
+
+
+def test_compose_up_releases_reserved_ports_when_prebuild_fails() -> None:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="failed-prebuild",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+        inherit_process_environment=False,
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
+        if "build" in args:
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=args,
+                stderr=b"query image build failed",
+            )
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    with pytest.raises(DockerStackError, match="docker compose build failed"):
+        compose_up(
+            "docker-compose.yml",
+            build=True,
+            services=["query_service"],
+            retries=0,
+            runner=runner,
+            runtime=runtime,
+        )
+
+    assert runtime.port_reservation.reserved_port_keys == ()
+
+
 def test_ensure_required_images_available_pulls_missing_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
