@@ -138,10 +138,10 @@ evidence, not application runtime performance evidence.
 
 Compose-backed suites inspect immutable external images before startup. Missing images use three
 bounded pull attempts, a 120-second timeout per attempt, exponential backoff with bounded jitter,
-and source-safe outcome fields. Registry timeouts, transient `5xx` failures, connection failures,
-and rate limits are retryable; unknown, authentication, authorization, and missing-manifest errors
-fail immediately. Final errors expose image, failure class, attempt count, and elapsed time without
-raw registry/authentication output.
+and a derived maximum 367.2-second policy budget. Registry timeouts, transient `5xx` failures,
+connection failures, and rate limits are retryable; unknown, authentication, authorization, and
+missing-manifest errors fail immediately. Final errors expose image, failure class, attempt count,
+elapsed time, and policy budget without raw registry/authentication output.
 
 GitHub-hosted matrix jobs do not share a Docker daemon, so a workflow-level pre-pull cannot be
 truthfully reused across cells. Existing BuildKit prebuild caches remain responsible for repo-built

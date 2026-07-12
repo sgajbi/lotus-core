@@ -15,7 +15,7 @@ found no second direct `docker pull`; this helper is the shared acquisition boun
 ## Change
 
 - Added immutable `DockerImagePullPolicy` with bounded attempts, timeout, exponential backoff, and
-  jitter.
+  jitter plus an inspectable maximum 367.2-second default budget.
 - Classified timeout, rate-limit, and transient registry/network failures as retryable.
 - Kept unknown, authentication, authorization, and missing-manifest failures permanent and
   fail-fast.
@@ -33,7 +33,7 @@ runner-level immutable cache.
 
 ## Validation
 
-- `tests/unit/test_support/test_docker_stack.py`: `20 passed`.
+- `tests/unit/test_support/test_docker_stack.py`: `21 passed`.
 - Scoped Ruff lint and format: passed.
 - Same-pattern direct Docker-pull scan: only the governed helper and its tests remain.
 

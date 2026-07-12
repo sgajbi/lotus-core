@@ -46,8 +46,8 @@ truth. Main and scheduled lanes remain mandatory clean-install proof.
 
 ## Validation
 
-- Cache identity and execution tests: `15 passed`.
-- Workflow/cache evidence tests plus dependency tests: `34 passed`.
+- Cache identity and execution tests: `17 passed`.
+- Workflow/cache evidence tests plus dependency tests: `36 passed`.
 - Real clean, two-hit, and cached-audit commands: passed with measurements above.
 - `make typecheck`: passed.
 - Scoped Ruff lint/format and `git diff --check`: passed.
