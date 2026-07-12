@@ -198,6 +198,21 @@ def _build(service: str, cache_dir: Path) -> dict[str, str | float]:
     return {
         "service": service,
         "image_tag": tag,
+        "build_mode": "built",
+        "duration_seconds": round(time.perf_counter() - started_at, 3),
+    }
+
+
+def _tag_existing_image(source_service: str, target_service: str) -> dict[str, str | float]:
+    started_at = time.perf_counter()
+    source_tag, _ = SERVICE_BUILDS[source_service]
+    target_tag, _ = SERVICE_BUILDS[target_service]
+    _run(["docker", "image", "tag", source_tag, target_tag])
+    return {
+        "service": target_service,
+        "image_tag": target_tag,
+        "build_mode": "reused",
+        "reused_from_service": source_service,
         "duration_seconds": round(time.perf_counter() - started_at, 3),
     }
 
@@ -244,7 +259,17 @@ def main() -> int:
 
     cache_dir = (REPO_ROOT / args.cache_dir).resolve()
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
-    metrics = [_build(service, cache_dir) for service in services]
+    built_by_dockerfile: dict[str, str] = {}
+    metrics: list[dict[str, str | float]] = []
+    for service in services:
+        _, dockerfile = SERVICE_BUILDS[service]
+        source_service = built_by_dockerfile.get(dockerfile)
+        if source_service is None:
+            built_by_dockerfile[dockerfile] = service
+            metric = _build(service, cache_dir)
+        else:
+            metric = _tag_existing_image(source_service, service)
+        metrics.append(metric)
     if args.metrics_output:
         metrics_output = args.metrics_output.resolve()
         metrics_output.parent.mkdir(parents=True, exist_ok=True)
