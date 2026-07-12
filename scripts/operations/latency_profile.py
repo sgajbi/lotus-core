@@ -815,6 +815,8 @@ def main() -> int:
         log_path=REPO_ROOT / args.compose_log_path,
         endpoint_urls=requested_endpoints,
         enable_demo_data_pack=True,
+        demo_data_pack_portfolio_ids=(args.portfolio_id,),
+        demo_data_pack_history_days=240,
         keep_stack=args.keep_compose,
     )
     endpoints = managed_run.runtime.endpoints
