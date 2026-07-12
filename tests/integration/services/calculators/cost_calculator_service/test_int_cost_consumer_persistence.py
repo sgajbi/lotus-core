@@ -121,9 +121,7 @@ async def test_adjustment_message_persists_outbox_and_idempotency(
     persisted_transaction = (
         (
             await async_db_session.execute(
-                select(DBTransaction).where(
-                    DBTransaction.transaction_id == "ADJ-COST-INT-01"
-                )
+                select(DBTransaction).where(DBTransaction.transaction_id == "ADJ-COST-INT-01")
             )
         )
         .scalars()
