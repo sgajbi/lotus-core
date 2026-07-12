@@ -88,6 +88,8 @@ class RuntimeEndpoints:
     e2e_query_url: str
     e2e_query_control_plane_url: str
     e2e_event_replay_url: str
+    e2e_transaction_processing_url: str
+    e2e_financial_reconciliation_url: str
 
 
 @dataclass
@@ -247,6 +249,10 @@ def _set_derived_runtime_values(runtime_env: dict[str, str]) -> None:
     event_replay_port = runtime_env["LOTUS_EVENT_REPLAY_HOST_PORT"]
     query_port = runtime_env["LOTUS_QUERY_HOST_PORT"]
     query_control_plane_port = runtime_env["LOTUS_QUERY_CONTROL_PLANE_HOST_PORT"]
+    transaction_processing_port = runtime_env["LOTUS_TRANSACTION_PROCESSING_HOST_PORT"]
+    financial_reconciliation_port = runtime_env[
+        "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT"
+    ]
 
     host_database_url = f"postgresql://{db_user}:{db_password}@localhost:{postgres_port}/{db_name}"
     runtime_env["HOST_DATABASE_URL"] = host_database_url
@@ -256,6 +262,12 @@ def _set_derived_runtime_values(runtime_env: dict[str, str]) -> None:
     runtime_env["E2E_EVENT_REPLAY_URL"] = f"http://localhost:{event_replay_port}"
     runtime_env["E2E_QUERY_URL"] = f"http://localhost:{query_port}"
     runtime_env["E2E_QUERY_CONTROL_PLANE_URL"] = f"http://localhost:{query_control_plane_port}"
+    runtime_env["E2E_TRANSACTION_PROCESSING_URL"] = (
+        f"http://localhost:{transaction_processing_port}"
+    )
+    runtime_env["E2E_FINANCIAL_RECONCILIATION_URL"] = (
+        f"http://localhost:{financial_reconciliation_port}"
+    )
 
 
 def _runtime_endpoints(runtime_env: dict[str, str]) -> RuntimeEndpoints:
@@ -269,6 +281,10 @@ def _runtime_endpoints(runtime_env: dict[str, str]) -> RuntimeEndpoints:
         e2e_query_url=runtime_env["E2E_QUERY_URL"],
         e2e_query_control_plane_url=runtime_env["E2E_QUERY_CONTROL_PLANE_URL"],
         e2e_event_replay_url=runtime_env["E2E_EVENT_REPLAY_URL"],
+        e2e_transaction_processing_url=runtime_env["E2E_TRANSACTION_PROCESSING_URL"],
+        e2e_financial_reconciliation_url=runtime_env[
+            "E2E_FINANCIAL_RECONCILIATION_URL"
+        ],
     )
 
 
