@@ -15,10 +15,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-try:
-    from scripts.quality.ci_service_sets import PREBUILD_GROUPS
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import PREBUILD_GROUPS
+from scripts.quality.ci_service_sets import PREBUILD_GROUPS  # noqa: E402
 
 SERVICE_BUILDS: dict[str, tuple[str, str]] = {
     "kafka-topic-creator": (

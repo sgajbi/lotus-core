@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -252,11 +252,14 @@ def load_and_verify_runtime_image_set(
     """Load an image bundle and fail closed unless its manifest and images match source."""
 
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw_manifest: object = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeImageSetError(
             f"unable to read runtime image manifest: {manifest_path}"
         ) from exc
+    if not isinstance(raw_manifest, dict):
+        raise RuntimeImageSetError("runtime image manifest must be a JSON object")
+    manifest = cast(dict[str, Any], raw_manifest)
     if manifest.get("schema_version") != SCHEMA_VERSION:
         raise RuntimeImageSetError("unsupported runtime image manifest schema")
     if manifest.get("source_commit_sha") != expected_commit_sha:
