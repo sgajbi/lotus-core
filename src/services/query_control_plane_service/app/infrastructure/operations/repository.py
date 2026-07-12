@@ -599,7 +599,7 @@ class OperationsRepository:
             last_source_event_type=row.last_source_event_type,
             created_at=row.created_at,
             ready_emitted_at=row.ready_emitted_at,
-            failure_reason=row.failure_reason,
+            failure_reason=None,
             updated_at=row.updated_at,
         )
 

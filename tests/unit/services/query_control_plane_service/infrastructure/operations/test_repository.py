@@ -31,7 +31,6 @@ def _control_stage_row() -> SimpleNamespace:
         last_source_event_type="CASHFLOW_CALCULATED",
         created_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
         ready_emitted_at=datetime(2025, 8, 30, 10, 4, tzinfo=timezone.utc),
-        failure_reason=None,
         updated_at=CONTROL_STAGE_UPDATED_AT,
     )
 

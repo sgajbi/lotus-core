@@ -370,10 +370,11 @@ class SupportOverviewResponse(BaseModel):
     controls_failure_reason: Optional[str] = Field(
         None,
         description=(
-            "Durable failure reason recorded on the latest portfolio-day financial "
-            "reconciliation control stage, when the latest stage is failed."
+            "Reserved compatibility field. Pipeline control stages do not persist failure "
+            "detail, so this value is null; use "
+            "controls_latest_reconciliation_failure_reason for the durable run failure."
         ),
-        examples=["Tolerance exceeded for portfolio totals."],
+        examples=[None],
     )
     controls_latest_reconciliation_run_id: Optional[str] = Field(
         None,
