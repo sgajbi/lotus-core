@@ -487,6 +487,7 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
     assert prepared[0]["enable_demo_data_pack"] is True
     assert prepared[0]["demo_data_pack_portfolio_ids"] == ("DEMO_DPM_EUR_001",)
     assert prepared[0]["demo_data_pack_history_days"] == 240
+    assert prepared[0]["demo_data_pack_ingest_only"] is True
     assert args.ingestion_base_url == "http://localhost:14000"
     assert args.query_base_url == "http://localhost:14001"
     assert executed == [(args, managed_run)]
