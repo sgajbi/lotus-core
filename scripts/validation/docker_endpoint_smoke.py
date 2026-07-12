@@ -432,19 +432,19 @@ def main(
             keep_stack=args.keep_compose,
             reset_volumes=args.reset_volumes,
         )
-        endpoints = managed_run.runtime.endpoints
-        args.ingestion_base_url = (
-            requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
-        )
-        args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
-        args.event_replay_base_url = (
-            requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
-        )
-        args.query_control_plane_base_url = (
-            requested_endpoints["E2E_QUERY_CONTROL_PLANE_URL"]
-            or endpoints.e2e_query_control_plane_url
-        )
         with managed_run:
+            endpoints = managed_run.runtime.endpoints
+            args.ingestion_base_url = (
+                requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
+            )
+            args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
+            args.event_replay_base_url = (
+                requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
+            )
+            args.query_control_plane_base_url = (
+                requested_endpoints["E2E_QUERY_CONTROL_PLANE_URL"]
+                or endpoints.e2e_query_control_plane_url
+            )
             return main(args, managed_run)
 
     args.ingestion_base_url = (

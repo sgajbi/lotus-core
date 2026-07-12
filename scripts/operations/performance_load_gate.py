@@ -429,22 +429,22 @@ def main(
             endpoint_urls=requested_endpoints,
             keep_stack=args.keep_compose,
         )
-        endpoints = managed_run.runtime.endpoints
-        args.ingestion_base_url = (
-            requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
-        )
-        args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
-        args.event_replay_base_url = (
-            requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
-        )
-        args.transaction_processing_base_url = (
-            requested_endpoints["E2E_TRANSACTION_PROCESSING_URL"]
-            or endpoints.e2e_transaction_processing_url
-        )
-        args.host_database_url = (
-            requested_endpoints["HOST_DATABASE_URL"] or endpoints.host_database_url
-        )
         with managed_run:
+            endpoints = managed_run.runtime.endpoints
+            args.ingestion_base_url = (
+                requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
+            )
+            args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
+            args.event_replay_base_url = (
+                requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
+            )
+            args.transaction_processing_base_url = (
+                requested_endpoints["E2E_TRANSACTION_PROCESSING_URL"]
+                or endpoints.e2e_transaction_processing_url
+            )
+            args.host_database_url = (
+                requested_endpoints["HOST_DATABASE_URL"] or endpoints.host_database_url
+            )
             return main(args, managed_run)
 
     args.ingestion_base_url = (

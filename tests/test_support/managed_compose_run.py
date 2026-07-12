@@ -136,6 +136,7 @@ def prepare_managed_compose_run(
 
     runtime_environment = dict(os.environ)
     runtime_environment.pop("COMPOSE_PROJECT_NAME", None)
+    runtime_environment["LOTUS_TEST_DYNAMIC_PORTS"] = "true"
     for inherited_port_key in profile_seed_ports("e2e"):
         runtime_environment.pop(inherited_port_key, None)
     for endpoint_key, endpoint_url in (endpoint_urls or {}).items():
