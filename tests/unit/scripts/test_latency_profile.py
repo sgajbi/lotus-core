@@ -450,6 +450,7 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
         query_base_url=None,
         event_replay_base_url=None,
         query_control_plane_base_url=None,
+        portfolio_id="DEMO_DPM_EUR_001",
         skip_compose=False,
         compose_file="docker-compose.yml",
         compose_log_path="output/task-runs/diagnostics/latency.log",
@@ -484,6 +485,8 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
     assert prepared[0]["scope"] == "latency-gate"
     assert prepared[0]["services"] == tuple(latency_profile.LATENCY_GATE_SERVICES)
     assert prepared[0]["enable_demo_data_pack"] is True
+    assert prepared[0]["demo_data_pack_portfolio_ids"] == ("DEMO_DPM_EUR_001",)
+    assert prepared[0]["demo_data_pack_history_days"] == 240
     assert args.ingestion_base_url == "http://localhost:14000"
     assert args.query_base_url == "http://localhost:14001"
     assert executed == [(args, managed_run)]

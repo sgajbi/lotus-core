@@ -126,6 +126,8 @@ def prepare_managed_compose_run(
     log_path: str | Path,
     endpoint_urls: dict[str, str | None] | None = None,
     enable_demo_data_pack: bool = False,
+    demo_data_pack_portfolio_ids: tuple[str, ...] = (),
+    demo_data_pack_history_days: int | None = None,
     keep_stack: bool = False,
     reset_volumes: bool = False,
 ) -> ManagedComposeRun:
@@ -144,6 +146,12 @@ def prepare_managed_compose_run(
             runtime_environment[port_key] = str(parsed.port)
     if enable_demo_data_pack:
         runtime_environment["DEMO_DATA_PACK_ENABLED"] = "true"
+        if demo_data_pack_portfolio_ids:
+            runtime_environment["DEMO_DATA_PACK_PORTFOLIO_IDS"] = ",".join(
+                demo_data_pack_portfolio_ids
+            )
+        if demo_data_pack_history_days is not None:
+            runtime_environment["DEMO_DATA_PACK_HISTORY_DAYS"] = str(demo_data_pack_history_days)
 
     runtime = prepare_test_runtime(
         profile="e2e",

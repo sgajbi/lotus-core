@@ -72,11 +72,15 @@ def test_prepare_managed_run_enables_demo_data_only_when_requested(tmp_path: Pat
         build=False,
         log_path=tmp_path / "with-seed-data.log",
         enable_demo_data_pack=True,
+        demo_data_pack_portfolio_ids=("PORTFOLIO_001",),
+        demo_data_pack_history_days=240,
     )
 
     try:
         assert disabled.runtime.values["DEMO_DATA_PACK_ENABLED"] == "false"
         assert enabled.runtime.values["DEMO_DATA_PACK_ENABLED"] == "true"
+        assert enabled.runtime.values["DEMO_DATA_PACK_PORTFOLIO_IDS"] == "PORTFOLIO_001"
+        assert enabled.runtime.values["DEMO_DATA_PACK_HISTORY_DAYS"] == "240"
     finally:
         disabled.runtime.port_reservation.release()
         enabled.runtime.port_reservation.release()
