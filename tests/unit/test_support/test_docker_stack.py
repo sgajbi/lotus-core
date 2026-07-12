@@ -174,8 +174,17 @@ def test_ensure_required_images_available_raises_on_pull_failure(
     assert pull_calls == [["docker", "pull", "confluentinc/cp-zookeeper:7.5.0"]]
 
 
+@pytest.mark.parametrize(
+    "timeout_message",
+    (
+        b"context deadline exceeded",
+        b"connect: connection timed out",
+        b"Client.Timeout exceeded while awaiting headers",
+    ),
+)
 def test_ensure_required_images_available_recovers_from_transient_timeout(
     monkeypatch: pytest.MonkeyPatch,
+    timeout_message: bytes,
 ) -> None:
     monkeypatch.setattr(
         "tests.test_support.docker_stack._load_compose_pull_images",
@@ -193,7 +202,7 @@ def test_ensure_required_images_available_recovers_from_transient_timeout(
                 raise subprocess.CalledProcessError(
                     returncode=1,
                     cmd=args,
-                    stderr=b"context deadline exceeded",
+                    stderr=timeout_message,
                 )
             return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
         raise AssertionError(f"unexpected call: {args}")
@@ -294,6 +303,11 @@ def test_image_pull_failure_classification_is_bounded_and_source_safe(
     [
         ("toomanyrequests: rate limit exceeded", DockerImagePullFailureClass.RATE_LIMITED),
         ("tls handshake timeout", DockerImagePullFailureClass.REGISTRY_UNAVAILABLE),
+        ("connect: connection timed out", DockerImagePullFailureClass.REGISTRY_UNAVAILABLE),
+        (
+            "Client.Timeout exceeded while awaiting headers",
+            DockerImagePullFailureClass.REGISTRY_UNAVAILABLE,
+        ),
         ("manifest unknown", DockerImagePullFailureClass.PERMANENT),
     ],
 )

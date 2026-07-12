@@ -85,6 +85,8 @@ LOGGER = logging.getLogger(__name__)
 _RATE_LIMIT_MARKERS = ("toomanyrequests", "too many requests", "rate limit", "status code: 429")
 _RETRYABLE_PULL_MARKERS = (
     "context deadline exceeded",
+    "connect: connection timed out",
+    "client.timeout exceeded while awaiting headers",
     "tls handshake timeout",
     "i/o timeout",
     "connection reset by peer",
@@ -241,9 +243,10 @@ def _process_error_text(error: subprocess.CalledProcessError) -> str:
 
 
 def _classify_image_pull_failure(details: str) -> DockerImagePullFailureClass:
-    if any(marker in details for marker in _RATE_LIMIT_MARKERS):
+    normalized_details = details.lower()
+    if any(marker in normalized_details for marker in _RATE_LIMIT_MARKERS):
         return DockerImagePullFailureClass.RATE_LIMITED
-    if any(marker in details for marker in _RETRYABLE_PULL_MARKERS):
+    if any(marker in normalized_details for marker in _RETRYABLE_PULL_MARKERS):
         return DockerImagePullFailureClass.REGISTRY_UNAVAILABLE
     return DockerImagePullFailureClass.PERMANENT
 
