@@ -101,3 +101,19 @@ def test_transaction_processing_dashboard_covers_cutover_signals() -> None:
         "correlation_id",
         "trace_id",
     }.intersection(expressions)
+
+
+def test_portfolio_dashboard_uses_unified_transaction_processing_job() -> None:
+    dashboard = json.loads(
+        (ROOT / "grafana" / "dashboards" / "portfolio_analytics.json").read_text(encoding="utf-8")
+    )
+    expressions = "\n".join(
+        target["expr"] for panel in dashboard["panels"] for target in panel.get("targets", [])
+    )
+    prometheus = _read_yaml(ROOT / "prometheus" / "prometheus.yml")
+    active_jobs = {job["job_name"] for job in prometheus["scrape_configs"]}
+
+    assert all(job in expressions for job in active_jobs)
+    assert "position_calculator_service" not in expressions
+    assert "cashflow_calculator_service" not in expressions
+    assert "cost_calculator_service" not in expressions

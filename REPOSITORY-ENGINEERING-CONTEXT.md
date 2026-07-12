@@ -1682,6 +1682,10 @@ Most relevant current governance:
      Keep combined-runtime operating signals together in the focused transaction-processing
      dashboard. Do not invent lag, latency, pool, or outbox alert thresholds from unit/engine-only
      evidence; derive and review them from deployed baseline and failure-recovery measurements.
+     Every broad app-local dashboard service filter must use the current Prometheus scrape-job
+     inventory. A runtime cutover must replace retired worker job names in those aggregate filters
+     and prove the target job is present; a focused dashboard alone does not preserve fleet-level
+     uptime and request-rate visibility.
      Duplicate replay requests may carry distinct Kafka event IDs, but the combined processing
      authority applies one versioned semantic transaction exactly once. Preserve one semantic
      claim, one cashflow/final position state, and one compatibility processed fact. Keep governed
