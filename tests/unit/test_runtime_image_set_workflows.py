@@ -141,3 +141,41 @@ def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
         "certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)",
     ):
         assert command in makefile
+
+
+def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
+    expected_jobs = {
+        PR_WORKFLOW: {
+            "docker-smoke-contract": "output/task-runs/diagnostics/docker-smoke-compose.log",
+            "latency-gate": "output/task-runs/diagnostics/latency-gate-compose.log",
+            "performance-load-gate": (
+                "output/task-runs/diagnostics/performance-load-gate-compose.log"
+            ),
+        },
+        MAIN_WORKFLOW: {
+            "docker-smoke-contract": "output/task-runs/diagnostics/docker-smoke-compose.log",
+            "latency-gate": "output/task-runs/diagnostics/latency-gate-compose.log",
+            "performance-load-gate": (
+                "output/task-runs/diagnostics/performance-load-gate-compose.log"
+            ),
+            "performance-load-gate-full": (
+                "output/task-runs/diagnostics/performance-load-gate-compose.log"
+            ),
+            "institutional-completion-gate": (
+                "output/task-runs/diagnostics/institutional-completion-compose.log"
+            ),
+        },
+    }
+
+    for workflow_path, job_paths in expected_jobs.items():
+        jobs = _workflow(workflow_path)["jobs"]
+        for job_name, diagnostic_path in job_paths.items():
+            job = jobs[job_name]  # type: ignore[index]
+            assert "Capture docker compose logs on failure" not in _step_names(job)
+            assert "docker compose logs" not in _run_commands(job)
+            upload_paths = "\n".join(
+                str(step.get("with", {}).get("path", ""))
+                for step in _steps(job)
+                if str(step.get("uses", "")).startswith("actions/upload-artifact@")
+            )
+            assert diagnostic_path in upload_paths
