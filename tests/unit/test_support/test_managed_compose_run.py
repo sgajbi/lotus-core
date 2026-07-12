@@ -59,6 +59,32 @@ def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
         managed.runtime.port_reservation.release()
 
 
+def test_prepare_managed_run_supports_profile_and_explicit_project_name(
+    tmp_path: Path,
+) -> None:
+    managed = prepare_managed_compose_run(
+        profile="integration",
+        scope="failure-recovery-gate",
+        compose_project_name="core-failure-recovery-proof",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres", "kafka"),
+        build=False,
+        log_path=tmp_path / "failure-recovery-compose.log",
+    )
+
+    try:
+        assert managed.runtime.endpoints.profile == "integration"
+        assert managed.runtime.endpoints.compose_project_name == "core-failure-recovery-proof"
+        assert {
+            "LOTUS_POSTGRES_HOST_PORT",
+            "LOTUS_KAFKA_EXTERNAL_PORT",
+            "LOTUS_INGESTION_HOST_PORT",
+            "LOTUS_QUERY_HOST_PORT",
+        }.issubset(managed.runtime.port_reservation.reserved_port_keys)
+    finally:
+        managed.runtime.port_reservation.release()
+
+
 def test_prepare_managed_run_enables_demo_data_only_when_requested(tmp_path: Path) -> None:
     disabled = prepare_managed_compose_run(
         scope="without-seed-data",

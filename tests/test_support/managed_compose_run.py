@@ -119,7 +119,9 @@ class ManagedComposeRun:
 
 def prepare_managed_compose_run(
     *,
+    profile: str = "e2e",
     scope: str,
+    compose_project_name: str | None = None,
     compose_file: str | Path,
     services: tuple[str, ...],
     build: bool,
@@ -132,12 +134,17 @@ def prepare_managed_compose_run(
     keep_stack: bool = False,
     reset_volumes: bool = False,
 ) -> ManagedComposeRun:
-    """Prepare a unique e2e runtime while preserving explicit local endpoint ports."""
+    """Prepare an isolated runtime while preserving explicit project and endpoint inputs."""
 
+    selected_profile = profile.strip().lower() or "e2e"
     runtime_environment = dict(os.environ)
     runtime_environment.pop("COMPOSE_PROJECT_NAME", None)
+    if compose_project_name:
+        runtime_environment["COMPOSE_PROJECT_NAME"] = compose_project_name
+    runtime_environment["LOTUS_TEST_ENV_PROFILE"] = selected_profile
+    runtime_environment["LOTUS_TEST_SCOPE"] = scope.strip().lower() or selected_profile
     runtime_environment["LOTUS_TEST_DYNAMIC_PORTS"] = "true"
-    for inherited_port_key in profile_seed_ports("e2e"):
+    for inherited_port_key in profile_seed_ports(selected_profile):
         runtime_environment.pop(inherited_port_key, None)
     for endpoint_key, endpoint_url in (endpoint_urls or {}).items():
         port_key = _ENDPOINT_PORT_KEYS.get(endpoint_key)
@@ -158,7 +165,7 @@ def prepare_managed_compose_run(
             runtime_environment["DEMO_DATA_PACK_INGEST_ONLY"] = "true"
 
     runtime = prepare_test_runtime(
-        profile="e2e",
+        profile=selected_profile,
         scope=scope,
         env=runtime_environment,
         preserve_existing=True,
