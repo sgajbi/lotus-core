@@ -7,6 +7,8 @@ import pytest
 import requests
 
 from tests.test_support.docker_stack import (
+    DockerImagePullFailureClass,
+    DockerImagePullPolicy,
     DockerStackError,
     capture_compose_logs,
     compose_up,
@@ -149,10 +151,13 @@ def test_ensure_required_images_available_raises_on_pull_failure(
         lambda _: ["confluentinc/cp-zookeeper:7.5.0"],
     )
 
+    pull_calls: list[list[str]] = []
+
     def runner(args, **kwargs):  # noqa: ANN001
         if args[0:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
         if args[0:2] == ["docker", "pull"]:
+            pull_calls.append(list(args))
             raise subprocess.CalledProcessError(
                 returncode=1,
                 cmd=args,
@@ -160,8 +165,133 @@ def test_ensure_required_images_available_raises_on_pull_failure(
             )
         raise AssertionError(f"unexpected call: {args}")
 
-    with pytest.raises(DockerStackError, match="Failed to pull required Docker image"):
+    with pytest.raises(
+        DockerStackError,
+        match="failure_class=permanent, attempts=1",
+    ):
         ensure_required_images_available(compose_file, runner)
+
+    assert pull_calls == [["docker", "pull", "confluentinc/cp-zookeeper:7.5.0"]]
+
+
+def test_ensure_required_images_available_recovers_from_transient_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["prom/prometheus:v2.47.2"],
+    )
+    pull_timeouts: list[float] = []
+    sleep_delays: list[float] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        if args[0:2] == ["docker", "pull"]:
+            pull_timeouts.append(kwargs["timeout"])
+            if len(pull_timeouts) == 1:
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=args,
+                    stderr=b"context deadline exceeded",
+                )
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise AssertionError(f"unexpected call: {args}")
+
+    ensure_required_images_available(
+        "docker-compose.yml",
+        runner,
+        pull_policy=DockerImagePullPolicy(
+            max_attempts=3,
+            timeout_seconds=17,
+            initial_backoff_seconds=2,
+            jitter_ratio=0.25,
+        ),
+        sleeper=sleep_delays.append,
+        jitter=lambda start, end: end,
+    )
+
+    assert pull_timeouts == [17, 17]
+    assert sleep_delays == [2.5]
+
+
+def test_ensure_required_images_available_bounds_timeout_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["postgres:16-alpine"],
+    )
+    pull_attempts = 0
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        nonlocal pull_attempts
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        if args[0:2] == ["docker", "pull"]:
+            pull_attempts += 1
+            raise subprocess.TimeoutExpired(args, timeout=kwargs["timeout"])
+        raise AssertionError(f"unexpected call: {args}")
+
+    with pytest.raises(
+        DockerStackError,
+        match="failure_class=timeout, attempts=3",
+    ):
+        ensure_required_images_available(
+            "docker-compose.yml",
+            runner,
+            pull_policy=DockerImagePullPolicy(
+                max_attempts=3,
+                timeout_seconds=5,
+                initial_backoff_seconds=0,
+            ),
+            sleeper=lambda _: None,
+        )
+
+    assert pull_attempts == 3
+
+
+def test_image_pull_failure_classification_is_bounded_and_source_safe(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["registry.example.test/platform/base:1"],
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args,
+            stderr=b"unauthorized: https://auth.example.test/token?token=SECRET_VALUE",
+        )
+
+    with pytest.raises(DockerStackError) as exc_info:
+        ensure_required_images_available("docker-compose.yml", runner)
+
+    assert "SECRET_VALUE" not in str(exc_info.value)
+    assert "SECRET_VALUE" not in caplog.text
+    assert "failure_class=permanent" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("details", "expected"),
+    [
+        ("toomanyrequests: rate limit exceeded", DockerImagePullFailureClass.RATE_LIMITED),
+        ("tls handshake timeout", DockerImagePullFailureClass.REGISTRY_UNAVAILABLE),
+        ("manifest unknown", DockerImagePullFailureClass.PERMANENT),
+    ],
+)
+def test_image_pull_failure_classification(
+    details: str,
+    expected: DockerImagePullFailureClass,
+) -> None:
+    from tests.test_support.docker_stack import _classify_image_pull_failure
+
+    assert _classify_image_pull_failure(details) is expected
 
 
 def test_ensure_required_images_available_skips_repo_built_images(

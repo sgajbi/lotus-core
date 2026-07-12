@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
+import random
 import re
 import subprocess
 import time
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Callable
 
@@ -15,6 +19,69 @@ from confluent_kafka.admin import AdminClient
 
 class DockerStackError(RuntimeError):
     """Raised when docker stack bring-up or health checks fail."""
+
+
+class DockerImagePullFailureClass(StrEnum):
+    """Source-safe failure classes for required Docker image acquisition."""
+
+    TIMEOUT = "timeout"
+    RATE_LIMITED = "rate_limited"
+    REGISTRY_UNAVAILABLE = "registry_unavailable"
+    PERMANENT = "permanent"
+
+
+@dataclass(frozen=True)
+class DockerImagePullPolicy:
+    """Bound attempts, subprocess timeouts, and retry delay for image pulls."""
+
+    max_attempts: int = 3
+    timeout_seconds: float = 120.0
+    initial_backoff_seconds: float = 2.0
+    max_backoff_seconds: float = 15.0
+    jitter_ratio: float = 0.20
+
+    def __post_init__(self) -> None:
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+        if self.initial_backoff_seconds < 0 or self.max_backoff_seconds < 0:
+            raise ValueError("backoff values must be nonnegative")
+        if not 0 <= self.jitter_ratio <= 1:
+            raise ValueError("jitter_ratio must be between 0 and 1")
+
+    def retry_delay_seconds(
+        self,
+        failed_attempt: int,
+        jitter: Callable[[float, float], float],
+    ) -> float:
+        base_delay = min(
+            self.max_backoff_seconds,
+            self.initial_backoff_seconds * (2 ** max(0, failed_attempt - 1)),
+        )
+        jitter_ceiling = base_delay * self.jitter_ratio
+        return min(
+            self.max_backoff_seconds,
+            base_delay + jitter(0.0, jitter_ceiling),
+        )
+
+
+LOGGER = logging.getLogger(__name__)
+
+_RATE_LIMIT_MARKERS = ("toomanyrequests", "too many requests", "rate limit", "status code: 429")
+_RETRYABLE_PULL_MARKERS = (
+    "context deadline exceeded",
+    "tls handshake timeout",
+    "i/o timeout",
+    "connection reset by peer",
+    "connection refused",
+    "temporary failure",
+    "service unavailable",
+    "status code: 500",
+    "status code: 502",
+    "status code: 503",
+    "status code: 504",
+)
 
 
 def _compose_base_args(compose_file: str) -> list[str]:
@@ -55,6 +122,11 @@ def _load_compose_pull_images(compose_file: str) -> list[str]:
 def ensure_required_images_available(
     compose_file: str,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    *,
+    pull_policy: DockerImagePullPolicy = DockerImagePullPolicy(),
+    sleeper: Callable[[float], None] = time.sleep,
+    jitter: Callable[[float, float], float] = random.uniform,
+    clock: Callable[[], float] = time.monotonic,
 ) -> None:
     if os.getenv("LOTUS_TESTS_PULL_BASE_IMAGES", "true").strip().lower() not in {
         "1",
@@ -75,13 +147,90 @@ def ensure_required_images_available(
             missing_images.append(image)
 
     for image in missing_images:
+        _pull_required_image(
+            image,
+            runner=runner,
+            policy=pull_policy,
+            sleeper=sleeper,
+            jitter=jitter,
+            clock=clock,
+        )
+
+
+def _pull_required_image(
+    image: str,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess],
+    policy: DockerImagePullPolicy,
+    sleeper: Callable[[float], None],
+    jitter: Callable[[float, float], float],
+    clock: Callable[[], float],
+) -> None:
+    started_at = clock()
+    last_failure = DockerImagePullFailureClass.PERMANENT
+    for attempt in range(1, policy.max_attempts + 1):
         try:
-            runner(["docker", "pull", image], check=True, capture_output=True)
+            runner(
+                ["docker", "pull", image],
+                check=True,
+                capture_output=True,
+                timeout=policy.timeout_seconds,
+            )
+            LOGGER.info(
+                "docker_image_pull_completed",
+                extra={
+                    "image": image,
+                    "attempt": attempt,
+                    "outcome": "success",
+                    "elapsed_seconds": round(clock() - started_at, 3),
+                },
+            )
+            return
+        except subprocess.TimeoutExpired as exc:
+            last_failure = DockerImagePullFailureClass.TIMEOUT
+            pull_error: BaseException = exc
         except subprocess.CalledProcessError as exc:
-            details = (exc.stderr or b"").decode("utf-8", errors="ignore").strip()
+            last_failure = _classify_image_pull_failure(_process_error_text(exc))
+            pull_error = exc
+
+        retrying = (
+            last_failure is not DockerImagePullFailureClass.PERMANENT
+            and attempt < policy.max_attempts
+        )
+        LOGGER.warning(
+            "docker_image_pull_failed",
+            extra={
+                "image": image,
+                "attempt": attempt,
+                "failure_class": last_failure.value,
+                "outcome": "retrying" if retrying else "failed",
+                "elapsed_seconds": round(clock() - started_at, 3),
+            },
+        )
+        if not retrying:
+            elapsed_seconds = round(clock() - started_at, 3)
             raise DockerStackError(
-                f"Failed to pull required Docker image '{image}': {details}"
-            ) from exc
+                "Failed to pull required Docker image "
+                f"'{image}' (failure_class={last_failure.value}, attempts={attempt}, "
+                f"elapsed_seconds={elapsed_seconds})"
+            ) from pull_error
+
+        sleeper(policy.retry_delay_seconds(attempt, jitter))
+
+
+def _process_error_text(error: subprocess.CalledProcessError) -> str:
+    stderr = error.stderr or b""
+    if isinstance(stderr, bytes):
+        return stderr.decode("utf-8", errors="ignore").lower()
+    return str(stderr).lower()
+
+
+def _classify_image_pull_failure(details: str) -> DockerImagePullFailureClass:
+    if any(marker in details for marker in _RATE_LIMIT_MARKERS):
+        return DockerImagePullFailureClass.RATE_LIMITED
+    if any(marker in details for marker in _RETRYABLE_PULL_MARKERS):
+        return DockerImagePullFailureClass.REGISTRY_UNAVAILABLE
+    return DockerImagePullFailureClass.PERMANENT
 
 
 def _is_retryable_compose_up_error(stderr: str) -> bool:
