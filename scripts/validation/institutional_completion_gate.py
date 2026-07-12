@@ -42,22 +42,6 @@ class ScenarioArtifactMetadata:
     artifact_path: Path
 
 
-def _run(cmd: list[str], cwd: Path) -> None:
-    completed = subprocess.run(
-        cmd,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"Command failed ({completed.returncode}): {' '.join(cmd)}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-
-
 def _run_python_script(
     *,
     repo_root: Path,
