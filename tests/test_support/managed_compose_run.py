@@ -125,6 +125,7 @@ def prepare_managed_compose_run(
     build: bool,
     log_path: str | Path,
     endpoint_urls: dict[str, str | None] | None = None,
+    enable_demo_data_pack: bool = False,
     keep_stack: bool = False,
     reset_volumes: bool = False,
 ) -> ManagedComposeRun:
@@ -141,6 +142,8 @@ def prepare_managed_compose_run(
         parsed = urlsplit(endpoint_url)
         if parsed.hostname in _LOCAL_HOSTS and parsed.port is not None:
             runtime_environment[port_key] = str(parsed.port)
+    if enable_demo_data_pack:
+        runtime_environment["DEMO_DATA_PACK_ENABLED"] = "true"
 
     runtime = prepare_test_runtime(
         profile="e2e",
