@@ -438,6 +438,13 @@ def test_compose_service_state_uses_managed_project_environment(monkeypatch) -> 
 
 
 def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
+    for environment_key in (
+        "E2E_INGESTION_URL",
+        "E2E_QUERY_URL",
+        "E2E_EVENT_REPLAY_URL",
+        "E2E_QUERY_CONTROL_PLANE_URL",
+    ):
+        monkeypatch.delenv(environment_key, raising=False)
     args = SimpleNamespace(
         ingestion_base_url=None,
         query_base_url=None,
