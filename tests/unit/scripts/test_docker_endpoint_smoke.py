@@ -153,7 +153,18 @@ def test_main_reenters_under_managed_dynamic_runtime(
         reset_volumes=False,
     )
     managed_run = MagicMock()
-    managed_run.__enter__.return_value = managed_run
+    replacement_endpoints = SimpleNamespace(
+        e2e_ingestion_url="http://localhost:25000",
+        e2e_query_url="http://localhost:25001",
+        e2e_event_replay_url="http://localhost:25009",
+        e2e_query_control_plane_url="http://localhost:25002",
+    )
+
+    def _enter_managed_run() -> object:
+        managed_run.runtime.endpoints = replacement_endpoints
+        return managed_run
+
+    managed_run.__enter__.side_effect = _enter_managed_run
     managed_run.__exit__.return_value = False
     managed_run.runtime.endpoints = SimpleNamespace(
         e2e_ingestion_url="http://localhost:15000",
@@ -179,6 +190,6 @@ def test_main_reenters_under_managed_dynamic_runtime(
     assert original_main(args, None) == 0
     assert prepared[0]["scope"] == "docker-smoke"
     assert prepared[0]["services"] == tuple(docker_endpoint_smoke.DOCKER_SMOKE_SERVICES)
-    assert args.ingestion_base_url == "http://localhost:15000"
-    assert args.query_base_url == "http://localhost:15001"
+    assert args.ingestion_base_url == "http://localhost:25000"
+    assert args.query_base_url == "http://localhost:25001"
     assert reentered == [(args, managed_run)]

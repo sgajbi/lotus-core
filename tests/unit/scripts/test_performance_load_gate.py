@@ -313,7 +313,19 @@ def test_main_reenters_under_managed_dynamic_runtime(
         keep_compose=False,
     )
     managed_run = MagicMock()
-    managed_run.__enter__.return_value = managed_run
+    replacement_endpoints = SimpleNamespace(
+        e2e_ingestion_url="http://localhost:26000",
+        e2e_query_url="http://localhost:26001",
+        e2e_event_replay_url="http://localhost:26009",
+        e2e_transaction_processing_url="http://localhost:26090",
+        host_database_url="postgresql://user:password@localhost:26432/portfolio_db",
+    )
+
+    def _enter_managed_run() -> object:
+        managed_run.runtime.endpoints = replacement_endpoints
+        return managed_run
+
+    managed_run.__enter__.side_effect = _enter_managed_run
     managed_run.__exit__.return_value = False
     managed_run.runtime.endpoints = SimpleNamespace(
         e2e_ingestion_url="http://localhost:16000",
@@ -340,7 +352,7 @@ def test_main_reenters_under_managed_dynamic_runtime(
     assert original_main(args, None) == 0
     assert prepared[0]["scope"] == "performance-load-gate"
     assert prepared[0]["services"] == tuple(performance_load_gate.PERFORMANCE_GATE_SERVICES)
-    assert args.ingestion_base_url == "http://localhost:16000"
-    assert args.transaction_processing_base_url == "http://localhost:16090"
-    assert args.host_database_url.endswith("localhost:16432/portfolio_db")
+    assert args.ingestion_base_url == "http://localhost:26000"
+    assert args.transaction_processing_base_url == "http://localhost:26090"
+    assert args.host_database_url.endswith("localhost:26432/portfolio_db")
     assert reentered == [(args, managed_run)]

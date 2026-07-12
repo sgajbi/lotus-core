@@ -458,7 +458,18 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
         keep_compose=False,
     )
     managed_run = MagicMock()
-    managed_run.__enter__.return_value = managed_run
+    replacement_endpoints = SimpleNamespace(
+        e2e_ingestion_url="http://localhost:24000",
+        e2e_query_url="http://localhost:24001",
+        e2e_event_replay_url="http://localhost:24009",
+        e2e_query_control_plane_url="http://localhost:24002",
+    )
+
+    def _enter_managed_run() -> object:
+        managed_run.runtime.endpoints = replacement_endpoints
+        return managed_run
+
+    managed_run.__enter__.side_effect = _enter_managed_run
     managed_run.__exit__.return_value = False
     managed_run.runtime.endpoints = SimpleNamespace(
         e2e_ingestion_url="http://localhost:14000",
@@ -488,6 +499,6 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
     assert prepared[0]["demo_data_pack_portfolio_ids"] == ("DEMO_DPM_EUR_001",)
     assert prepared[0]["demo_data_pack_history_days"] == 240
     assert prepared[0]["demo_data_pack_ingest_only"] is True
-    assert args.ingestion_base_url == "http://localhost:14000"
-    assert args.query_base_url == "http://localhost:14001"
+    assert args.ingestion_base_url == "http://localhost:24000"
+    assert args.query_base_url == "http://localhost:24001"
     assert executed == [(args, managed_run)]

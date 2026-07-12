@@ -41,6 +41,7 @@ def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("LOTUS_POSTGRES_HOST_PORT", "15432")
+    monkeypatch.setenv("LOTUS_TEST_DYNAMIC_PORTS", "false")
 
     managed = prepare_managed_compose_run(
         scope="fresh-ports",
@@ -52,6 +53,7 @@ def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
 
     try:
         assert managed.runtime.values["LOTUS_POSTGRES_HOST_PORT"] != "15432"
+        assert managed.runtime.values["LOTUS_TEST_DYNAMIC_PORTS"] == "true"
         assert "LOTUS_POSTGRES_HOST_PORT" in managed.runtime.port_reservation.reserved_port_keys
     finally:
         managed.runtime.port_reservation.release()
