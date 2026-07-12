@@ -21,6 +21,8 @@ from scripts.quality.ci_service_sets import PREBUILD_GROUPS  # noqa: E402
 from scripts.release.prebuild_ci_images import SERVICE_BUILDS  # noqa: E402
 
 SCHEMA_VERSION = "lotus-core.runtime-image-set.v1"
+COMPOSE_FILE = REPO_ROOT / "docker-compose.yml"
+DEPENDENCY_LOCK_FILE = REPO_ROOT / "requirements" / "shared-runtime.lock.txt"
 FULL_GIT_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 SHA256_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 OCI_LABEL_FIELDS = {
@@ -130,6 +132,23 @@ def _content_hash(manifest: dict[str, Any]) -> str:
     return _sha256_bytes(_canonical_json(_manifest_content_payload(manifest)))
 
 
+def _dependency_closure_hash(
+    *,
+    compose_file_sha256: str,
+    dependency_lock_sha256: str,
+    services: list[dict[str, str]],
+) -> str:
+    return _sha256_bytes(
+        _canonical_json(
+            {
+                "compose_file_sha256": compose_file_sha256,
+                "dependency_lock_sha256": dependency_lock_sha256,
+                "services": services,
+            }
+        )
+    )
+
+
 def _service_records(
     services: Sequence[str],
     *,
@@ -201,10 +220,19 @@ def create_runtime_image_set(
     if not bundle_path.is_file() or bundle_path.stat().st_size == 0:
         raise RuntimeImageSetError("Docker image bundle was not created")
 
+    compose_file_sha256 = _sha256_file(COMPOSE_FILE)
+    dependency_lock_sha256 = _sha256_file(DEPENDENCY_LOCK_FILE)
     manifest: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         **metadata,
         "service_count": len(records),
+        "compose_file_sha256": compose_file_sha256,
+        "dependency_lock_sha256": dependency_lock_sha256,
+        "dependency_closure_hash": _dependency_closure_hash(
+            compose_file_sha256=compose_file_sha256,
+            dependency_lock_sha256=dependency_lock_sha256,
+            services=records,
+        ),
         "bundle_sha256": _sha256_file(bundle_path),
         "services": records,
     }
@@ -240,6 +268,20 @@ def load_and_verify_runtime_image_set(
         raise RuntimeImageSetError("runtime image bundle digest mismatch")
     if _content_hash(manifest) != manifest.get("content_hash"):
         raise RuntimeImageSetError("runtime image manifest content hash mismatch")
+    services = manifest.get("services")
+    if not isinstance(services, list) or not services:
+        raise RuntimeImageSetError("runtime image manifest has no services")
+    if manifest.get("compose_file_sha256") != _sha256_file(COMPOSE_FILE):
+        raise RuntimeImageSetError("runtime image compose contract mismatch")
+    if manifest.get("dependency_lock_sha256") != _sha256_file(DEPENDENCY_LOCK_FILE):
+        raise RuntimeImageSetError("runtime image dependency lock mismatch")
+    expected_closure_hash = _dependency_closure_hash(
+        compose_file_sha256=str(manifest["compose_file_sha256"]),
+        dependency_lock_sha256=str(manifest["dependency_lock_sha256"]),
+        services=services,
+    )
+    if manifest.get("dependency_closure_hash") != expected_closure_hash:
+        raise RuntimeImageSetError("runtime image dependency closure mismatch")
 
     runner(
         ["docker", "image", "load", "--input", str(bundle_path)],
@@ -259,9 +301,6 @@ def load_and_verify_runtime_image_set(
         )
     }
     _require_source_metadata(metadata)
-    services = manifest.get("services")
-    if not isinstance(services, list) or not services:
-        raise RuntimeImageSetError("runtime image manifest has no services")
     for service in services:
         if not isinstance(service, dict):
             raise RuntimeImageSetError("runtime image manifest contains an invalid service record")

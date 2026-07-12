@@ -79,6 +79,9 @@ def test_create_runtime_image_set_writes_deterministic_manifest_and_bundle(
     assert manifest["schema_version"] == "lotus-core.runtime-image-set.v1"
     assert manifest["source_commit_sha"] == SOURCE_SHA
     assert manifest["service_count"] == 1
+    assert manifest["compose_file_sha256"].startswith("sha256:")
+    assert manifest["dependency_lock_sha256"].startswith("sha256:")
+    assert manifest["dependency_closure_hash"].startswith("sha256:")
     assert manifest["content_hash"].startswith("sha256:")
     assert manifest["bundle_sha256"].startswith("sha256:")
     assert manifest["services"] == [
@@ -215,4 +218,37 @@ def test_load_and_verify_runtime_image_set_rejects_tampered_bundle(
             manifest_path=manifest_path,
             bundle_path=bundle_path,
             expected_commit_sha=SOURCE_SHA,
+        )
+
+
+def test_create_runtime_image_set_rejects_stale_oci_source_label(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM python:3.12-slim\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "scripts.release.runtime_image_set.SERVICE_BUILDS",
+        {"query_service": ("lotus-core/query-service:local", str(dockerfile))},
+    )
+
+    def runner(args: list[str], **kwargs: object) -> SimpleNamespace:
+        assert args[:3] == ["docker", "image", "inspect"]
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps([_image_inspection(source_sha="c" * 40)]),
+            stderr="",
+        )
+
+    with pytest.raises(RuntimeImageSetError, match="OCI label mismatch"):
+        create_runtime_image_set(
+            services=["query_service"],
+            manifest_path=tmp_path / "runtime-images.json",
+            bundle_path=tmp_path / "runtime-images.tar",
+            source_commit_sha=SOURCE_SHA,
+            source_branch="feat/runtime-image-set",
+            repository_url="https://github.com/sgajbi/lotus-core",
+            ci_run_id="12345",
+            generated_at_utc="2026-07-13T00:00:00Z",
+            runner=runner,
         )
