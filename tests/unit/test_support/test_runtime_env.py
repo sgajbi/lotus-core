@@ -94,7 +94,7 @@ def test_prepared_runtimes_hold_disjoint_ports_until_release() -> None:
         assert first_ports.isdisjoint(second_ports)
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as contender:
             with pytest.raises(OSError):
-                contender.bind(("127.0.0.1", reserved_port))
+                contender.bind(("0.0.0.0", reserved_port))
     finally:
         first.port_reservation.release()
         second.port_reservation.release()
