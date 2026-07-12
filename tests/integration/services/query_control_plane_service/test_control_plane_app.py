@@ -811,7 +811,7 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "UTC timestamp when the latest portfolio-day financial reconciliation control"
     )
     assert support_overview["properties"]["controls_failure_reason"]["description"].startswith(
-        "Durable failure reason recorded on the latest portfolio-day financial"
+        "Reserved compatibility field. Pipeline control stages do not persist failure"
     )
     assert support_overview["properties"]["controls_latest_reconciliation_run_id"][
         "description"
