@@ -1,9 +1,11 @@
 from datetime import date
 from subprocess import CompletedProcess
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import requests
 
+from scripts.operations import latency_profile
 from scripts.operations.latency_profile import (
     RuntimeContext,
     _cases,
@@ -13,10 +15,8 @@ from scripts.operations.latency_profile import (
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
     _response_error_sample,
-    _run_compose_up,
     _wait_compose_service_completed_successfully,
 )
-from scripts.quality.ci_service_sets import LATENCY_GATE_SERVICES
 
 
 def test_percentile_single_sample() -> None:
@@ -321,7 +321,7 @@ def test_context_timeout_must_not_be_shorter_than_ready_timeout() -> None:
 
 
 def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) -> None:
-    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+    def _fake_run(cmd, check=False, capture_output=False, text=False, env=None):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
@@ -332,7 +332,7 @@ def test_raise_if_compose_service_failed_ignores_running_service(monkeypatch) ->
 
 
 def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
-    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+    def _fake_run(cmd, check=False, capture_output=False, text=False, env=None):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
@@ -350,7 +350,7 @@ def test_raise_if_compose_service_failed_raises_on_failure(monkeypatch) -> None:
 def test_wait_compose_service_completed_successfully_waits_for_zero_exit(monkeypatch) -> None:
     states = iter(["running|0\n", "exited|0\n"])
 
-    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+    def _fake_run(cmd, check=False, capture_output=False, text=False, env=None):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout=next(states), stderr="")
@@ -364,7 +364,7 @@ def test_wait_compose_service_completed_successfully_waits_for_zero_exit(monkeyp
 def test_wait_compose_service_completed_successfully_raises_on_failed_exit(
     monkeypatch,
 ) -> None:
-    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+    def _fake_run(cmd, check=False, capture_output=False, text=False, env=None):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="exited|1\n", stderr="")
@@ -382,7 +382,7 @@ def test_wait_compose_service_completed_successfully_raises_on_failed_exit(
 def test_wait_compose_service_completed_successfully_raises_on_timeout(
     monkeypatch,
 ) -> None:
-    def _fake_run(cmd, check=False, capture_output=False, text=False):  # noqa: ARG001
+    def _fake_run(cmd, check=False, capture_output=False, text=False, env=None):  # noqa: ARG001
         if cmd[:5] == ["docker", "compose", "ps", "-a", "-q"]:
             return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
         return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
@@ -400,15 +400,82 @@ def test_wait_compose_service_completed_successfully_raises_on_timeout(
         raise AssertionError("Expected seed wait to raise on timeout.")
 
 
-def test_run_compose_up_limits_started_services(monkeypatch) -> None:
-    calls: list[list[str]] = []
+def test_compose_service_state_uses_managed_project_environment(monkeypatch) -> None:
+    calls: list[tuple[list[str], dict[str, str] | None]] = []
+    managed_run = MagicMock()
+    managed_run.compose_command.return_value = [
+        "docker",
+        "compose",
+        "-p",
+        "lotus-e2e-latency-1234",
+        "ps",
+        "-a",
+        "-q",
+        "demo_data_loader",
+    ]
+    managed_run.runtime.values = {"COMPOSE_PROJECT_NAME": "lotus-e2e-latency-1234"}
 
-    def _fake_run(cmd, check=False):  # noqa: ARG001
-        calls.append(cmd)
-        return CompletedProcess(cmd, 0)
+    def _fake_run(
+        cmd,
+        check=False,
+        capture_output=False,
+        text=False,
+        env=None,
+    ):  # noqa: ARG001
+        calls.append((cmd, env))
+        if cmd[0:2] == ["docker", "compose"]:
+            return CompletedProcess(cmd, 0, stdout="container-123\n", stderr="")
+        return CompletedProcess(cmd, 0, stdout="running|0\n", stderr="")
 
     monkeypatch.setattr("scripts.operations.latency_profile.subprocess.run", _fake_run)
 
-    _run_compose_up(build=False)
+    _raise_if_compose_service_failed("demo_data_loader", managed_run)
 
-    assert calls == [["docker", "compose", "up", "-d", *LATENCY_GATE_SERVICES]]
+    assert calls[0] == (
+        managed_run.compose_command.return_value,
+        managed_run.runtime.values,
+    )
+
+
+def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
+    args = SimpleNamespace(
+        ingestion_base_url=None,
+        query_base_url=None,
+        event_replay_base_url=None,
+        query_control_plane_base_url=None,
+        skip_compose=False,
+        compose_file="docker-compose.yml",
+        compose_log_path="output/task-runs/diagnostics/latency.log",
+        build=False,
+        keep_compose=False,
+    )
+    managed_run = MagicMock()
+    managed_run.__enter__.return_value = managed_run
+    managed_run.__exit__.return_value = False
+    managed_run.runtime.endpoints = SimpleNamespace(
+        e2e_ingestion_url="http://localhost:14000",
+        e2e_query_url="http://localhost:14001",
+        e2e_event_replay_url="http://localhost:14009",
+        e2e_query_control_plane_url="http://localhost:14002",
+    )
+    prepared: list[dict[str, object]] = []
+    executed: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(latency_profile, "parse_args", lambda: args)
+    monkeypatch.setattr(
+        latency_profile,
+        "prepare_managed_compose_run",
+        lambda **kwargs: prepared.append(kwargs) or managed_run,
+    )
+    monkeypatch.setattr(
+        latency_profile,
+        "_run_latency_profile",
+        lambda *, args, run_id, managed_run: executed.append((args, managed_run)) or 0,
+    )
+
+    assert latency_profile.main() == 0
+    assert prepared[0]["scope"] == "latency-gate"
+    assert prepared[0]["services"] == tuple(latency_profile.LATENCY_GATE_SERVICES)
+    assert args.ingestion_base_url == "http://localhost:14000"
+    assert args.query_base_url == "http://localhost:14001"
+    assert executed == [(args, managed_run)]
