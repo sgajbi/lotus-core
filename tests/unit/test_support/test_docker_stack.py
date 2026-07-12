@@ -13,6 +13,7 @@ from tests.test_support.docker_stack import (
     DockerImagePullPolicy,
     DockerStackError,
     capture_compose_logs,
+    compose_down,
     compose_up,
     ensure_docker_engine_available,
     ensure_required_images_available,
@@ -560,3 +561,44 @@ def test_capture_compose_logs_writes_active_project_logs(
     assert output_path.read_text(encoding="utf-8") == (
         "service log\n\n--- docker compose logs stderr ---\ndiagnostic stderr\n"
     )
+
+
+def test_compose_diagnostics_and_teardown_use_prepared_runtime_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    runtime = prepare_test_runtime(
+        profile="e2e",
+        scope="diagnostic-project",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+        inherit_process_environment=False,
+    )
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack.ensure_docker_engine_available",
+        lambda: None,
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        calls.append((list(args), kwargs))
+        return SimpleNamespace(stdout="runtime log\n", stderr="")
+
+    monkeypatch.setattr("tests.test_support.docker_stack.subprocess.run", runner)
+
+    try:
+        capture_compose_logs(
+            "docker-compose.yml",
+            tmp_path / "compose.log",
+            runtime=runtime,
+        )
+        compose_down("docker-compose.yml", runtime=runtime)
+    finally:
+        runtime.port_reservation.release()
+
+    project_args = ["-p", runtime.endpoints.compose_project_name]
+    assert calls[0][0][2:4] == project_args
+    assert calls[0][1]["env"] is runtime.values
+    assert calls[1][0][2:4] == project_args
+    assert calls[1][1]["env"] is runtime.values
