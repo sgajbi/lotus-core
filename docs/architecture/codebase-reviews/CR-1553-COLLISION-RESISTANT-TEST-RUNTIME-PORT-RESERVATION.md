@@ -51,6 +51,9 @@ reservation handoff.
   `56.80s` in independent Compose projects without port collision or state contamination.
 - One live integration test started two PostgreSQL Compose projects concurrently in the same pytest
   process, proved disjoint host ports, and connected to both in `20.26s`.
+- `make ci-local` passed with `4,289` unit tests and zero warnings, `10` PostgreSQL unit-DB tests,
+  `135` integration-lite tests, coverage, and every configured local architecture, security, API,
+  data, event, observability, documentation, and repository guard.
 - Configured MyPy, scoped Ruff lint/format, and `git diff --check` passed.
 
 ## Compatibility
