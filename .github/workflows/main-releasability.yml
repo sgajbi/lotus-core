@@ -50,7 +50,7 @@ jobs:
       - name: Install
         run: make install-ci
       - name: Verify Dependencies
-        run: make verify-dependencies
+        run: make verify-dependencies-clean
       - name: Lint
         run: make lint
       - name: No-Alias Contract Guard
@@ -67,6 +67,14 @@ jobs:
         run: make migration-smoke
       - name: Security Audit
         run: make security-audit
+      - name: Upload dependency health evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: main-releasability-dependency-health-${{ github.run_id }}
+          path: output/dependency-health/*.json
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Warning Gate
         run: make warning-gate
 

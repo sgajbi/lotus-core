@@ -40,6 +40,11 @@ jobs:
           cache: "pip"
       - name: Install
         run: make install-ci
+      - name: Restore dependency health cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/dependency-health
+          key: dependency-health-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml', 'requirements/**/*.txt', 'tests/requirements.txt', 'src/**/pyproject.toml', 'scripts/validation/dependency_health_*.py') }}
       - name: Verify Dependencies
         run: make verify-dependencies
       - name: Lint
@@ -58,6 +63,14 @@ jobs:
         run: make migration-smoke
       - name: Security Audit
         run: make security-audit
+      - name: Upload dependency health evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: feature-lane-dependency-health-${{ github.run_id }}
+          path: output/dependency-health/*.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Warning Gate
         run: make warning-gate
 
