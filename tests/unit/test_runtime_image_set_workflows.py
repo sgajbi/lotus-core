@@ -117,3 +117,21 @@ def test_main_workflow_builds_and_consumes_one_exact_source_runtime_image_set() 
         consumers=MAIN_RUNTIME_CONSUMERS,
         artifact_name="main-runtime-image-set",
     )
+
+
+def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--build)" in makefile
+    assert (
+        "CERTIFICATION_RUNTIME_BUILD_ARGUMENT = "
+        "$(if $(filter true,$(CI)),,--runtime-build)" in makefile
+    )
+    for command in (
+        "docker_endpoint_smoke.py $(RUNTIME_BUILD_ARGUMENT)",
+        "latency_profile.py $(RUNTIME_BUILD_ARGUMENT)",
+        "performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT)",
+        "failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT)",
+        "certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)",
+    ):
+        assert command in makefile

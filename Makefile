@@ -3,6 +3,8 @@
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
+RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--build)
+CERTIFICATION_RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--runtime-build)
 
 install:
 	python scripts/development/bootstrap_dev.py
@@ -387,7 +389,7 @@ live-dpm-source-validate:
 	python scripts/validation/validate_live_dpm_source_products.py --control-base-url $${LOTUS_CORE_CONTROL_BASE_URL:-http://core-control.dev.lotus}
 
 lotus-core-validate:
-	python scripts/validation/certify_lotus_core_app.py --runtime-build
+	python scripts/validation/certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)
 
 migration-smoke:
 	python scripts/quality/migration_contract_check.py --mode alembic-sql
@@ -479,16 +481,16 @@ test-e2e-all:
 	python scripts/quality/test_manifest.py --suite e2e-all --quiet
 
 test-docker-smoke:
-	python scripts/validation/docker_endpoint_smoke.py --build
+	python scripts/validation/docker_endpoint_smoke.py $(RUNTIME_BUILD_ARGUMENT)
 
 test-latency-gate:
-	python scripts/operations/latency_profile.py --build --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
+	python scripts/operations/latency_profile.py $(RUNTIME_BUILD_ARGUMENT) --enforce --seed-completion-timeout-seconds $(LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS)
 
 test-performance-load-gate:
-	python scripts/operations/performance_load_gate.py --build --profile-tier fast --enforce
+	python scripts/operations/performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT) --profile-tier fast --enforce
 
 test-performance-load-gate-full:
-	python scripts/operations/performance_load_gate.py --build --profile-tier full --enforce
+	python scripts/operations/performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT) --profile-tier full --enforce
 
 profile-cost-history-capacity:
 	python scripts/operations/cost_history_capacity_profile.py --output output/cost-history-capacity-profile.json
@@ -497,7 +499,7 @@ profile-cost-processing-modes:
 	python scripts/operations/cost_processing_mode_capacity_profile.py --output output/cost-processing-mode-capacity-profile.json
 
 test-failure-recovery-gate:
-	python scripts/operations/failure_recovery_gate.py --build --enforce
+	python scripts/operations/failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT) --enforce
 
 test-institutional-completion-gate:
 	python scripts/validation/institutional_completion_gate.py
