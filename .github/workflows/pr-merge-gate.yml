@@ -177,8 +177,21 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
-      - name: Prebuild query-service image with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
+      - name: Build exact-source runtime image set
+        shell: bash
+        run: |
+          build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          export LOTUS_BUILD_TIMESTAMP="${build_timestamp}"
+          python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group pr-runtime-image-set
+          python scripts/release/runtime_image_set.py create \
+            --group pr-runtime-image-set \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --source-commit-sha "${GITHUB_SHA}" \
+            --source-branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+            --repository-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --ci-run-id "${GITHUB_RUN_ID}" \
+            --generated-at-utc "${build_timestamp}"
       - name: Generate runtime SBOM
         run: |
           python scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
@@ -189,34 +202,44 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pr-merge-gate-docker-build-evidence
-          path: output/build-evidence/*
+          path: |
+            output/build-evidence/*
+            output/runtime-image-set/manifest.json
           if-no-files-found: error
           retention-days: 14
+      - name: Upload runtime image set
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   e2e-smoke:
     name: PR Merge Gate / E2E Smoke
-    needs: [coverage-gate]
+    needs: [docker-build]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
       - name: Install
         run: make install-ci
-      - name: Restore Docker build cache
-        uses: actions/cache@v5
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Prebuild compose images with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group e2e-smoke
       - name: Run E2E smoke suite
         env:
           LOTUS_TEST_ENV_PROFILE: e2e
@@ -241,28 +264,28 @@ jobs:
 
   docker-smoke-contract:
     name: PR Merge Gate / Docker Smoke Contract
-    needs: [coverage-gate]
+    needs: [docker-build]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
       - name: Install
         run: make install-ci
-      - name: Restore Docker build cache
-        uses: actions/cache@v5
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Prebuild compose images with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
       - name: Run deterministic docker endpoint smoke
         run: make test-docker-smoke
       - name: Capture docker compose logs on failure
@@ -282,7 +305,7 @@ jobs:
 
   lotus-core-validation-report:
     name: PR Merge Gate / Lotus Core Validation Gate
-    needs: [coverage-gate]
+    needs: [docker-build]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -295,23 +318,23 @@ jobs:
           repository: sgajbi/lotus-platform
           path: lotus-platform
           persist-credentials: false
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
       - name: Install
         run: make install-ci
-      - name: Restore Docker build cache
-        uses: actions/cache@v5
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Prebuild compose images with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
       - name: Run lotus-core app validation gate
         run: make lotus-core-validate
       - name: Capture docker compose logs on validation gate failure
@@ -331,28 +354,28 @@ jobs:
 
   latency-gate:
     name: PR Merge Gate / Latency Gate
-    needs: [coverage-gate]
+    needs: [docker-build]
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
       - name: Install
         run: make install-ci
-      - name: Restore Docker build cache
-        uses: actions/cache@v5
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Prebuild compose images with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
       - name: Run endpoint latency gate
         env:
           DEMO_DATA_PACK_HISTORY_DAYS: "240"
@@ -376,28 +399,28 @@ jobs:
 
   performance-load-gate:
     name: PR Merge Gate / Performance Load Gate (Fast)
-    needs: [coverage-gate]
+    needs: [docker-build]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
       - name: Install
         run: make install-ci
-      - name: Restore Docker build cache
-        uses: actions/cache@v5
-        with:
-          path: .buildx-cache
-          key: ${{ runner.os }}-buildx-${{ hashFiles('docker-compose.yml', 'requirements/shared-runtime.lock.txt', 'src/**/Dockerfile', 'src/**/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-      - name: Prebuild compose images with cache
-        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
       - name: Run deterministic performance load gate
         run: make test-performance-load-gate
       - name: Capture docker compose logs on failure
