@@ -82,6 +82,8 @@ NODE20_DEPRECATED_ACTION_PINS = (
 
 EXPECTED_RUNTIME_ACTION_PINS = (
     "actions/cache@v5",
+    "actions/cache/restore@v5",
+    "actions/cache/save@v5",
     "actions/upload-artifact@v7",
     "docker/setup-buildx-action@v4",
 )
@@ -124,17 +126,30 @@ def test_dependency_health_cache_is_reused_only_before_merge() -> None:
         cache_step = next(
             step for step in steps if step.get("name") == "Restore dependency health cache"
         )
+        save_step = next(
+            step for step in steps if step.get("name") == "Save verified dependency health cache"
+        )
+        verify_index = next(
+            index for index, step in enumerate(steps) if step.get("name") == "Verify Dependencies"
+        )
+        save_index = steps.index(save_step)
+        lint_index = next(index for index, step in enumerate(steps) if step.get("name") == "Lint")
         assert key_step["id"] == "dependency-health-cache-key"
         assert key_step["run"] == (
             'echo "key=$(python scripts/validation/dependency_health_check.py '
             '--print-cache-key)" >> "$GITHUB_OUTPUT"'
         )
-        assert cache_step["uses"] == "actions/cache@v5"
+        assert cache_step["id"] == "dependency-health-cache"
+        assert cache_step["uses"] == "actions/cache/restore@v5"
         assert cache_step["with"]["path"] == ".cache/dependency-health"
         assert cache_step["with"]["key"] == (
             "dependency-health-${{ runner.os }}-"
             "${{ steps.dependency-health-cache-key.outputs.key }}"
         )
+        assert save_step["uses"] == "actions/cache/save@v5"
+        assert save_step["if"] == "steps.dependency-health-cache.outputs.cache-hit != 'true'"
+        assert save_step["with"] == cache_step["with"]
+        assert verify_index < save_index < lint_index
 
     main_text = Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
     assert "Restore dependency health cache" not in main_text
