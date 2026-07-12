@@ -16,7 +16,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 | Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
 | Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
 
-## Lane model
+## Lane Model
 
 `lotus-core` uses:
 
@@ -31,7 +31,26 @@ scheduled releasability always run `make verify-dependencies-clean`. Machine-rea
 reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the separate
 mainline clean-install report.
 
-## Repo-native lane mapping
+## Runtime Image Evidence
+
+PR Merge Gate and Main Releasability each use one exact-source runtime image set. The required
+`Validate Docker Build` job builds the workflow's service union once, records build timings, and
+uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
+institutional jobs load that bundle instead of rebuilding overlapping images.
+
+| Evidence | Location | Failure Meaning |
+|---|---|---|
+| Build timing | `output/runtime-image-set/build-metrics.json` | Compare unique builds, reused tags, and total producer time. |
+| Image-set manifest | `output/runtime-image-set/manifest.json` | Source, dependency, image, or bundle identity is incomplete or mismatched. |
+| Portable bundle | `output/runtime-image-set/images.tar` | Ephemeral same-workflow transport only; never a promoted release image. |
+| Consumer verification | `runtime_image_set.py load-verify` | Fails before stack startup on wrong SHA, tampering, stale images, or OCI-label drift. |
+
+The manifest identifies Git commit, branch, repository, CI run, generated-at time, service image
+IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle digest,
+and manifest content hash. Release publication remains separate: only Image Release pushes to GHCR,
+scans and signs images, emits attestations/SBOMs, and records digest-based promotion evidence.
+
+## Repo-Native Lane Mapping
 
 - `make ci-local`
   feature-lane parity
