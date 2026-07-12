@@ -41,6 +41,21 @@ async def test_adjustment_message_persists_outbox_and_idempotency(
             status="ACTIVE",
         )
     )
+    async_db_session.add(
+        DBTransaction(
+            transaction_id="ADJ-COST-INT-01",
+            portfolio_id="PORT-COST-INT-01",
+            instrument_id="CASH",
+            security_id="CASH",
+            transaction_date=datetime(2026, 1, 5, 10, 0, 0),
+            transaction_type="ADJUSTMENT",
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            gross_transaction_amount=Decimal("125.50"),
+            trade_currency="USD",
+            currency="USD",
+        )
+    )
     await async_db_session.commit()
 
     event = TransactionEvent(
@@ -103,12 +118,25 @@ async def test_adjustment_message_persists_outbox_and_idempotency(
         .scalars()
         .all()
     )
+    persisted_transaction = (
+        (
+            await async_db_session.execute(
+                select(DBTransaction).where(
+                    DBTransaction.transaction_id == "ADJ-COST-INT-01"
+                )
+            )
+        )
+        .scalars()
+        .one()
+    )
 
     assert len(outbox_rows) == 1
     assert outbox_rows[0].correlation_id == "corr-cost-int-01"
     assert outbox_rows[0].payload["transaction_id"] == "ADJ-COST-INT-01"
     assert len(processed_rows) == 1
     assert processed_rows[0].correlation_id == "corr-cost-int-01"
+    assert persisted_transaction.net_cost_local == Decimal("125.50")
+    assert persisted_transaction.net_cost == Decimal("125.50")
 
 
 async def test_buy_then_sell_processing_reconciles_open_lot_quantity(
