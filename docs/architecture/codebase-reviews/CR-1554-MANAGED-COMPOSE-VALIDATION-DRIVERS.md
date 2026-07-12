@@ -61,7 +61,14 @@ default-project log command.
 - Scoped Ruff lint/format, configured MyPy, workflow parsing/governance, documentation evidence,
   wiki validation, and `git diff --check` passed.
 - The failure-recovery extension passed `56` focused lifecycle/workflow tests, configured MyPy,
-  and the `227`-test operations contract suite before live runtime validation.
+  and the `227`-test operations contract suite.
+- `make test-failure-recovery-gate` completed `FULLY_DRAINED`: `100` submitted records produced
+  exactly `100` transaction, cost, cashflow, position, and processing-claim records; committed lag
+  grew by `100` and returned to `0`; replay lag and added DLQ events were `0`; recovery took
+  `8.148s`.
+- The live run captured a `2,216,235` byte log naming project
+  `lotus-integration-failure-recovery-gate-5a6b519c` and the exact Compose file before teardown,
+  then left zero project containers.
 
 ## Compatibility
 
