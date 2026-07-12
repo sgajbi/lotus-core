@@ -14,12 +14,20 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Callable
 
-from scripts.validation.dependency_health_cache import (
-    DependencyHealthCacheIdentity,
-    build_cache_identity,
-    cache_marker_matches,
-    write_cache_marker,
-)
+try:
+    from scripts.validation.dependency_health_cache import (
+        DependencyHealthCacheIdentity,
+        build_cache_identity,
+        cache_marker_matches,
+        write_cache_marker,
+    )
+except ModuleNotFoundError:
+    from dependency_health_cache import (  # type: ignore[no-redef]
+        DependencyHealthCacheIdentity,
+        build_cache_identity,
+        cache_marker_matches,
+        write_cache_marker,
+    )
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LOCK_FILE = ROOT / "requirements" / "shared-runtime.lock.txt"
