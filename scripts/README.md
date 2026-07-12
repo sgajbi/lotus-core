@@ -10,7 +10,10 @@ points; Python module paths are implementation details governed with the reposit
 3. `operations/` - production diagnostics, capacity profiles, recovery, reconciliation, and
    transaction cutover workflows.
 4. `quality/` - architecture, API, contract, security, test, and CI quality gates.
-5. `release/` - image build, SBOM, provenance, and release-manifest automation.
+5. `release/` - image build, exact-source CI image-set transport, SBOM, provenance, and
+   release-manifest automation. `prebuild_ci_images.py` owns reusable local builds and timing
+   evidence; `runtime_image_set.py` owns portable bundle creation, integrity manifests, load, and
+   exact-source verification.
 6. `validation/` - application certification and environment-backed validation.
 
 ## Naming Contract
