@@ -14,6 +14,7 @@ def test_prebuild_group_expands_to_named_services(
     tmp_path: Path,
 ) -> None:
     built: list[tuple[str, Path]] = []
+    tagged: list[tuple[str, str]] = []
 
     monkeypatch.setattr(
         "scripts.release.prebuild_ci_images.parse_args",
@@ -26,19 +27,31 @@ def test_prebuild_group_expands_to_named_services(
     )
     monkeypatch.setattr(
         "scripts.release.prebuild_ci_images._build",
-        lambda service, cache_dir: built.append((service, cache_dir)),
+        lambda service, cache_dir: (
+            built.append((service, cache_dir))
+            or {"service": service, "image_tag": service, "duration_seconds": 0.0}
+        ),
+    )
+    monkeypatch.setattr(
+        "scripts.release.prebuild_ci_images._tag_existing_image",
+        lambda source_service, target_service: (
+            tagged.append((source_service, target_service))
+            or {"service": target_service, "image_tag": target_service, "duration_seconds": 0.0}
+        ),
     )
 
     assert main() == 0
     assert [service for service, _ in built] == [
         "kafka-topic-creator",
-        "migration-runner",
         "ingestion_service",
         "query_service",
         "event_replay_service",
-        "persistence_service",
         "portfolio_transaction_processing_service",
         "pipeline_orchestrator_service",
+    ]
+    assert tagged == [
+        ("kafka-topic-creator", "migration-runner"),
+        ("kafka-topic-creator", "persistence_service"),
     ]
 
 
@@ -59,7 +72,10 @@ def test_prebuild_services_and_group_are_deduplicated(
     )
     monkeypatch.setattr(
         "scripts.release.prebuild_ci_images._build",
-        lambda service, cache_dir: built.append(service),
+        lambda service, cache_dir: (
+            built.append(service)
+            or {"service": service, "image_tag": service, "duration_seconds": 0.0}
+        ),
     )
 
     assert main() == 0
@@ -132,6 +148,7 @@ def test_prebuild_writes_machine_readable_timing_evidence(
         lambda service, cache_dir: {
             "service": service,
             "image_tag": "lotus-core/query-service:local",
+            "build_mode": "built",
             "duration_seconds": 1.25,
         },
     )
@@ -146,6 +163,7 @@ def test_prebuild_writes_machine_readable_timing_evidence(
         {
             "service": "query_service",
             "image_tag": "lotus-core/query-service:local",
+            "build_mode": "built",
             "duration_seconds": 1.25,
         }
     ]
