@@ -30,6 +30,9 @@ default-project log command.
   explicit keep-stack option.
 - Passed the exact managed environment to institutional child evidence generators and bound Docker
   smoke database cleanup plus latency seed inspection to the exact project.
+- Made latency seeding self-contained instead of relying on a previously populated shared volume.
+  The gate enables its one-shot loader explicitly, limits seed data to the measured portfolio and
+  supported 240-day history window, and uses seed-only mode before its own query-readiness check.
 - Captured project identity and compose-file identity in every diagnostic log before teardown.
 - Replaced workflow default-project log commands with driver/fixture-owned diagnostic artifacts.
 - Added an AST regression guard preventing the four drivers from recreating Compose `up`, `down`,
@@ -38,7 +41,7 @@ default-project log command.
 
 ## Measurement And Validation
 
-- `113` focused managed-runtime, driver, workflow, and Docker-stack tests passed locally.
+- `114` focused managed-runtime, driver, workflow, and Docker-stack tests passed locally.
 - A live Docker integration test starts a managed PostgreSQL project, connects through its dynamic
   port, captures project-identified service logs, tears the project down, and proves the port is no
   longer accepting connections.
@@ -47,6 +50,11 @@ default-project log command.
 - `make ci-local` passed `4,301` unit tests with zero warnings, `10` PostgreSQL tests, `135`
   integration-lite tests, combined coverage, and every configured architecture, security, API,
   data, event, observability, documentation, and repository guard.
+- `make test-docker-smoke` passed all `66` endpoint checks and produced project-identified
+  diagnostics before leaving zero project containers behind.
+- `make test-latency-gate` passed from a clean isolated project with `30/30` successful samples per
+  endpoint. The highest observed p95 was `60.12 ms` against a `320 ms` budget; the run captured a
+  `5,746,292` byte project-identified diagnostic log and left zero project containers behind.
 - Scoped Ruff lint/format, configured MyPy, workflow parsing/governance, documentation evidence,
   wiki validation, and `git diff --check` passed.
 
