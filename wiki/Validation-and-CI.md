@@ -42,6 +42,13 @@ that explicit proof suppresses runtime rebuild flags, while ordinary CI and loca
 their normal build behavior. The E2E image inventory is checked against every repo-built full-stack
 service so a newly started service cannot bypass exact-source verification.
 
+Each Compose-backed suite also owns a unique project and a held dynamic host-port reservation. The
+reservation is released only when Compose attempts startup. A host bind conflict triggers cleanup,
+a complete new dynamic port generation, refreshed database/Kafka/HTTP endpoints, and a bounded
+retry. Explicit operator port overrides are preserved. Exhausted retries name the failure class,
+attempts, reallocations, and Compose project so a collision is distinguishable from application
+startup failure.
+
 | Evidence | Location | Failure Meaning |
 |---|---|---|
 | Build timing | `output/runtime-image-set/build-metrics.json` | Compare unique builds, reused tags, and total producer time. |
