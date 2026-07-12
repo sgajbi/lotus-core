@@ -1953,6 +1953,15 @@ Most relevant current governance:
      state. When local startup requests image builds, build while reservations remain held and run
      Compose startup without `--build` only after release; do not widen the bind race with a long
      `up --build` operation.
+     Latency, performance-load, Docker-smoke, and institutional-completion drivers must compose
+     through `ManagedComposeRun`; do not restore driver-local startup/retry/teardown helpers.
+     Managed runs discard inherited parent-runtime ports, preserve explicit local endpoint URL
+     overrides, inspect the exact project, capture project/file identity before teardown, and clean
+     their stack by default. Workflow artifacts must upload the owner-produced diagnostic path and
+     must not run default-project `docker compose logs` after the driver returns. Use
+     `--skip-compose` only for an already-running target and keep-stack flags only for explicit local
+     diagnosis. Failure-recovery and app-certification diagnostic completeness remains governed by
+     #730 and must be closed with project-owned artifacts rather than implicit-project shell steps.
 140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
