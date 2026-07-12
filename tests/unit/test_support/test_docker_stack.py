@@ -251,6 +251,18 @@ def test_ensure_required_images_available_bounds_timeout_retries(
     assert pull_attempts == 3
 
 
+def test_image_pull_policy_exposes_bounded_total_duration() -> None:
+    policy = DockerImagePullPolicy(
+        max_attempts=3,
+        timeout_seconds=120,
+        initial_backoff_seconds=2,
+        max_backoff_seconds=15,
+        jitter_ratio=0.20,
+    )
+
+    assert policy.maximum_total_duration_seconds == pytest.approx(367.2)
+
+
 def test_image_pull_failure_classification_is_bounded_and_source_safe(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
