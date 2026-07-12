@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -166,7 +168,8 @@ def _swap_cache(cache_dir: Path, next_cache_dir: Path) -> None:
     next_cache_dir.rename(cache_dir)
 
 
-def _build(service: str, cache_dir: Path) -> None:
+def _build(service: str, cache_dir: Path) -> dict[str, str | float]:
+    started_at = time.perf_counter()
     tag, dockerfile = SERVICE_BUILDS[service]
     next_cache_dir = cache_dir.parent / f"{cache_dir.name}-next"
     if next_cache_dir.exists():
@@ -192,6 +195,11 @@ def _build(service: str, cache_dir: Path) -> None:
     print(f"Prebuilding {service} -> {tag}")
     _run(cmd)
     _swap_cache(cache_dir, next_cache_dir)
+    return {
+        "service": service,
+        "image_tag": tag,
+        "duration_seconds": round(time.perf_counter() - started_at, 3),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -212,6 +220,11 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(PREBUILD_GROUPS),
         help="Named CI service subset to prebuild.",
     )
+    parser.add_argument(
+        "--metrics-output",
+        type=Path,
+        help="Optional JSON output for per-service and total build duration evidence.",
+    )
     return parser.parse_args()
 
 
@@ -231,8 +244,21 @@ def main() -> int:
 
     cache_dir = (REPO_ROOT / args.cache_dir).resolve()
     cache_dir.parent.mkdir(parents=True, exist_ok=True)
-    for service in services:
-        _build(service, cache_dir)
+    metrics = [_build(service, cache_dir) for service in services]
+    if args.metrics_output:
+        metrics_output = args.metrics_output.resolve()
+        metrics_output.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": "lotus-core.runtime-image-build-metrics.v1",
+            "generated_at_utc": datetime.now(UTC).isoformat(),
+            "service_count": len(metrics),
+            "total_build_seconds": round(
+                sum(float(metric["duration_seconds"]) for metric in metrics),
+                3,
+            ),
+            "services": metrics,
+        }
+        metrics_output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
