@@ -41,6 +41,19 @@ class ManagedComposeRun:
     reset_volumes: bool = False
     _startup_attempted: bool = field(default=False, init=False, repr=False)
 
+    def compose_command(self, *args: str) -> list[str]:
+        """Build a command bound to this run's compose file and unique project."""
+
+        return [
+            "docker",
+            "compose",
+            "-f",
+            self.compose_file,
+            "-p",
+            self.runtime.endpoints.compose_project_name,
+            *args,
+        ]
+
     def __enter__(self) -> Self:
         """Start the exact managed project and return its runtime context."""
 

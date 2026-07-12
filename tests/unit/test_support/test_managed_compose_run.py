@@ -184,3 +184,28 @@ def test_startup_failure_captures_project_diagnostics_and_cleans_up(
 def test_managed_compose_run_type_is_context_manager() -> None:
     assert hasattr(ManagedComposeRun, "__enter__")
     assert hasattr(ManagedComposeRun, "__exit__")
+
+
+def test_compose_command_is_bound_to_exact_file_and_project(tmp_path: Path) -> None:
+    managed = prepare_managed_compose_run(
+        scope="inspect",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres",),
+        build=False,
+        log_path=tmp_path / "inspect.log",
+    )
+
+    try:
+        assert managed.compose_command("ps", "-q", "postgres") == [
+            "docker",
+            "compose",
+            "-f",
+            managed.compose_file,
+            "-p",
+            managed.runtime.endpoints.compose_project_name,
+            "ps",
+            "-q",
+            "postgres",
+        ]
+    finally:
+        managed.runtime.port_reservation.release()
