@@ -57,6 +57,31 @@ def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
         managed.runtime.port_reservation.release()
 
 
+def test_prepare_managed_run_enables_demo_data_only_when_requested(tmp_path: Path) -> None:
+    disabled = prepare_managed_compose_run(
+        scope="without-seed-data",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres",),
+        build=False,
+        log_path=tmp_path / "without-seed-data.log",
+    )
+    enabled = prepare_managed_compose_run(
+        scope="with-seed-data",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres", "demo_data_loader"),
+        build=False,
+        log_path=tmp_path / "with-seed-data.log",
+        enable_demo_data_pack=True,
+    )
+
+    try:
+        assert disabled.runtime.values["DEMO_DATA_PACK_ENABLED"] == "false"
+        assert enabled.runtime.values["DEMO_DATA_PACK_ENABLED"] == "true"
+    finally:
+        disabled.runtime.port_reservation.release()
+        enabled.runtime.port_reservation.release()
+
+
 def test_managed_run_starts_with_exact_runtime_and_captures_before_teardown(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

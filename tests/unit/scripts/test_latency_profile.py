@@ -483,6 +483,7 @@ def test_main_runs_profile_with_managed_dynamic_endpoints(monkeypatch) -> None:
     assert latency_profile.main() == 0
     assert prepared[0]["scope"] == "latency-gate"
     assert prepared[0]["services"] == tuple(latency_profile.LATENCY_GATE_SERVICES)
+    assert prepared[0]["enable_demo_data_pack"] is True
     assert args.ingestion_base_url == "http://localhost:14000"
     assert args.query_base_url == "http://localhost:14001"
     assert executed == [(args, managed_run)]
