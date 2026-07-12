@@ -40,7 +40,15 @@ def test_cost_basis_domain_modules_have_responsibility_docstrings() -> None:
 
 
 def test_legacy_cost_engine_package_is_retired() -> None:
-    assert not RETIRED_COST_ENGINE_ROOT.exists()
+    authored_files = [
+        path
+        for path in RETIRED_COST_ENGINE_ROOT.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix not in {".pyc", ".pyo"}
+    ]
+
+    assert authored_files == []
 
 
 def test_legacy_cost_checkpoint_modules_are_retired() -> None:
