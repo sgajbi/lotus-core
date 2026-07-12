@@ -130,8 +130,8 @@ Builds occur in disposable staging directories and receive a success marker only
 and `pip check` complete. Feature and PR lanes may restore this ignored cache; every main push and
 scheduled Main Releasability run executes the clean target. Both lanes upload the JSON evidence.
 
-Local Windows evidence on 2026-07-12 measured `221.979s` for clean bootstrap and `1.781s` plus
-`1.780s` for two unchanged verified hits, a 99.2% wall-time reduction. This is validation-tooling
+Local Windows evidence on 2026-07-12 measured `208.145s` for clean bootstrap and `1.756s` plus
+`1.887s` for two unchanged verified hits, a 99.1% wall-time reduction. This is validation-tooling
 evidence, not application runtime performance evidence.
 
 ## Required Docker Image Acquisition

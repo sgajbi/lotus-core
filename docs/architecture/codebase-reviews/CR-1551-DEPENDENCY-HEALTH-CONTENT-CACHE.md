@@ -29,12 +29,12 @@ Local Windows evidence on 2026-07-12:
 
 | Run | Result | Wall Time |
 |---|---|---:|
-| `make verify-dependencies-clean` | clean bypass, passed | `221.979s` |
-| first unchanged `make verify-dependencies` | integrity-verified hit, passed | `1.781s` |
-| second unchanged `make verify-dependencies` | integrity-verified hit, passed | `1.780s` |
-| `make security-audit` | integrity-verified hit, no known vulnerabilities | `12.278s` |
+| `make verify-dependencies-clean` | clean bypass, passed | `208.145s` |
+| first unchanged `make verify-dependencies` | integrity-verified hit, passed | `1.756s` |
+| second unchanged `make verify-dependencies` | integrity-verified hit, passed | `1.887s` |
+| `make security-audit` | integrity-verified hit, no known vulnerabilities | `8.941s` |
 
-Unchanged consistency-check wall time fell by 99.2%. This measures validation bootstrap only and is
+Unchanged consistency-check wall time fell by 99.1%. This measures validation bootstrap only and is
 not application runtime or production throughput evidence.
 
 ## Compatibility And Failure Posture
