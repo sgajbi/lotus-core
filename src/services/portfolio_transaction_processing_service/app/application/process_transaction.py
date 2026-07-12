@@ -10,7 +10,7 @@ from ..ports import (
     TransactionProcessingOutcome,
     TransactionProcessingUnitOfWorkFactory,
 )
-from .commands import ProcessTransactionCommand
+from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 
@@ -97,7 +97,18 @@ class ProcessTransactionUseCase:
                     payload_fingerprint=identity.payload_fingerprint,
                     correlation_id=metadata.correlation_id,
                 )
-                if idempotency_outcome is not TransactionIdempotencyOutcome.CLAIMED:
+                repair_delivery_claimed = (
+                    idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE
+                    and metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                    and await unit_of_work.idempotency.claim_repair_delivery(
+                        event_id=metadata.event_id,
+                        portfolio_id=transaction.portfolio_id,
+                        correlation_id=metadata.correlation_id,
+                    )
+                )
+                if repair_delivery_claimed:
+                    idempotency_observation.set_outcome(TransactionProcessingOutcome.REPLAYED)
+                elif idempotency_outcome is not TransactionIdempotencyOutcome.CLAIMED:
                     idempotency_observation.set_outcome(
                         TransactionProcessingOutcome(idempotency_outcome.value)
                     )
@@ -105,11 +116,12 @@ class ProcessTransactionUseCase:
                 TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
                 TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
             }:
-                transaction_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
-                return ProcessTransactionResult(
-                    status=TransactionProcessingStatus.DUPLICATE,
-                    input_transaction_id=transaction.transaction_id,
-                )
+                if not repair_delivery_claimed:
+                    transaction_observation.set_outcome(TransactionProcessingOutcome.DUPLICATE)
+                    return ProcessTransactionResult(
+                        status=TransactionProcessingStatus.DUPLICATE,
+                        input_transaction_id=transaction.transaction_id,
+                    )
             if idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_CONFLICT:
                 raise TransactionProcessingRejected(
                     reason_code="transaction_semantic_conflict",
@@ -159,6 +171,9 @@ class ProcessTransactionUseCase:
                             event_id=metadata.event_id,
                             correlation_id=metadata.correlation_id,
                             traceparent=metadata.traceparent,
+                            repair_existing=(
+                                metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                            ),
                         )
                     )
             with self._observer.observe(TransactionProcessingOperation.COMMIT):

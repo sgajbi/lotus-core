@@ -72,6 +72,22 @@ class SqlAlchemyTransactionIdempotencyAdapter:
         )
         return _map_semantic_claim_outcome(outcome)
 
+    async def claim_repair_delivery(
+        self,
+        *,
+        event_id: str,
+        portfolio_id: str,
+        correlation_id: str | None,
+    ) -> bool:
+        return bool(
+            await self._repository.claim_event_processing(
+                event_id=event_id,
+                portfolio_id=portfolio_id,
+                service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+                correlation_id=correlation_id,
+            )
+        )
+
 
 class SqlAlchemyTransactionProcessingUnitOfWork:
     def __init__(

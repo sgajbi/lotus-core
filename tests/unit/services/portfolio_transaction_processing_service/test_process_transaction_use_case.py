@@ -11,6 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     ProcessTransactionCommand,
     ProcessTransactionUseCase,
     TransactionEventMetadata,
+    TransactionProcessingIntent,
     TransactionProcessingRejected,
     TransactionProcessingStatus,
 )
@@ -92,11 +93,16 @@ class _Idempotency:
         self.calls = calls
         self.outcome = outcome
         self.claim_kwargs: dict = {}
+        self.repair_claimed = True
 
     async def claim(self, **kwargs) -> TransactionIdempotencyOutcome:
         self.calls.append("idempotency")
         self.claim_kwargs = kwargs
         return self.outcome
+
+    async def claim_repair_delivery(self, **_kwargs) -> bool:
+        self.calls.append("repair-idempotency")
+        return self.repair_claimed
 
 
 class _Cost:
@@ -368,6 +374,68 @@ async def test_use_case_suppresses_semantic_duplicate_from_another_physical_even
 
 
 @pytest.mark.asyncio
+async def test_use_case_reprocesses_semantic_duplicate_with_canonical_repair_intent() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+    )
+    command = replace(
+        _command(),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+        ),
+    )
+
+    observer = _RecordingObserver()
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=observer,
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.PROCESSED
+    assert calls == [
+        "enter",
+        "idempotency",
+        "repair-idempotency",
+        "cost:TX-001",
+        "position:TX-001",
+        "cashflow:TX-001:0",
+        "commit",
+    ]
+    assert observer.records[0] == (
+        TransactionProcessingOperation.IDEMPOTENCY,
+        TransactionProcessingOutcome.REPLAYED,
+    )
+
+
+@pytest.mark.asyncio
+async def test_use_case_suppresses_redelivered_canonical_repair() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+    )
+    unit_of_work.idempotency.repair_claimed = False
+    command = replace(
+        _command(),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+        ),
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    assert calls == ["enter", "idempotency", "repair-idempotency", "rollback"]
+
+
+@pytest.mark.asyncio
 async def test_use_case_rejects_material_semantic_conflict_before_financial_work() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(
@@ -389,6 +457,31 @@ async def test_use_case_rejects_material_semantic_conflict_before_financial_work
         TransactionProcessingOperation.IDEMPOTENCY,
         TransactionProcessingOutcome.SEMANTIC_CONFLICT,
     )
+
+
+@pytest.mark.asyncio
+async def test_repair_intent_does_not_bypass_material_semantic_conflict() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=TransactionIdempotencyOutcome.SEMANTIC_CONFLICT,
+    )
+    command = replace(
+        _command(),
+        metadata=replace(
+            _command().metadata,
+            processing_intent=TransactionProcessingIntent.REPAIR,
+        ),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as exc_info:
+        await ProcessTransactionUseCase(
+            lambda: unit_of_work,
+            observer=_RecordingObserver(),
+        ).execute(command)
+
+    assert exc_info.value.reason_code == "transaction_semantic_conflict"
+    assert calls == ["enter", "idempotency", "rollback"]
 
 
 @pytest.mark.asyncio

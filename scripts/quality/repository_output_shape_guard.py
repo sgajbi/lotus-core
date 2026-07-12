@@ -18,9 +18,6 @@ DATABASE_MODELS_PATH = (
 # Transitional register for public repository methods that still expose SQLAlchemy ORM rows.
 # New repository outputs should return explicit domain/read records instead of adding entries here.
 TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
-    "src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_repository.py:create_cashflow": (
-        "Cashflow",
-    ),
     "src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_rules_repository.py:get_all_rules": (
         "CashflowRule",
     ),

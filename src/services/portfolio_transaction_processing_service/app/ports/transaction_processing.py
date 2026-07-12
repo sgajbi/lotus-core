@@ -45,6 +45,14 @@ class TransactionIdempotencyPort(Protocol):
         correlation_id: str | None,
     ) -> TransactionIdempotencyOutcome: ...
 
+    async def claim_repair_delivery(
+        self,
+        *,
+        event_id: str,
+        portfolio_id: str,
+        correlation_id: str | None,
+    ) -> bool: ...
+
 
 class CostProcessingPort(Protocol):
     async def process(
@@ -64,6 +72,7 @@ class CashflowProcessingPort(Protocol):
         event_id: str,
         correlation_id: str | None,
         traceparent: str | None,
+        repair_existing: bool = False,
     ) -> CashflowProcessingResult: ...
 
 

@@ -30,6 +30,7 @@ from portfolio_common.transaction_domain.control_code_normalization import (
 )
 
 from .core.cashflow_logic import CashflowLogic
+from .core.stored_cashflow import StoredCashflow
 from .repositories.cashflow_repository import CashflowRepository
 from .repositories.cashflow_rules_repository import CashflowRuleSetVersion, CashflowRulesRepository
 
@@ -248,9 +249,14 @@ async def _stage_cashflow_calculation(
     event: TransactionEvent,
     rule: CachedCashflowRule,
     correlation_id: str,
+    repair_existing: bool,
 ) -> int:
     cashflow_to_save = CashflowLogic.calculate(event, rule, epoch=event.epoch)
-    saved = await cashflow_repo.create_cashflow(cashflow_to_save)
+    saved = (
+        await cashflow_repo.replace_cashflow(cashflow_to_save)
+        if repair_existing
+        else await cashflow_repo.create_cashflow(cashflow_to_save)
+    )
     completion_evt = _cashflow_calculated_event_from_saved_cashflow(saved, event)
     await outbox_repo.create_outbox_event(
         aggregate_type="Cashflow",
@@ -264,11 +270,11 @@ async def _stage_cashflow_calculation(
 
 
 def _cashflow_calculated_event_from_saved_cashflow(
-    saved,
+    saved: StoredCashflow,
     source_event: TransactionEvent,
 ) -> CashflowCalculatedEvent:
     return CashflowCalculatedEvent(
-        cashflow_id=saved.id,
+        cashflow_id=saved.cashflow_id,
         transaction_id=saved.transaction_id,
         portfolio_id=saved.portfolio_id,
         security_id=saved.security_id,
@@ -417,6 +423,7 @@ class CashflowCalculationWorkflow:
         event_id: str,
         correlation_id: str,
         topic: str,
+        repair_existing: bool = False,
     ) -> CashflowStageResult:
         """Stage cashflow work inside the caller-owned transaction."""
         fence_outcome = await self._fence_or_semantic_duplicate_outcome(
@@ -427,6 +434,7 @@ class CashflowCalculationWorkflow:
             semantic_event_id=_semantic_cashflow_event_id(event),
             correlation_id=correlation_id,
             topic=topic,
+            repair_existing=repair_existing,
         )
         if fence_outcome is not None:
             return CashflowStageResult(outcome=fence_outcome)
@@ -436,6 +444,7 @@ class CashflowCalculationWorkflow:
             outbox_repo=outbox_repo,
             event=event,
             correlation_id=correlation_id,
+            repair_existing=repair_existing,
         )
 
     async def _fence_or_semantic_duplicate_outcome(
@@ -448,10 +457,13 @@ class CashflowCalculationWorkflow:
         semantic_event_id: str,
         correlation_id: str,
         topic: str,
+        repair_existing: bool = False,
     ) -> CashflowProcessingOutcome | None:
         fencer = EpochFencer(db, service_name=SERVICE_NAME)
         if not await fencer.check(event):
             return CashflowProcessingOutcome.EPOCH_REJECTED
+        if repair_existing:
+            return None
         if not await self._claim_semantic_event(
             idempotency_repo,
             event,
@@ -471,6 +483,7 @@ class CashflowCalculationWorkflow:
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
         correlation_id: str,
+        repair_existing: bool = False,
     ) -> CashflowStageResult:
         event_transaction_type = _validated_cashflow_transaction_type(event)
         if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
@@ -484,6 +497,7 @@ class CashflowCalculationWorkflow:
             event,
             rule,
             correlation_id,
+            repair_existing,
         )
         return CashflowStageResult(
             outcome=CashflowProcessingOutcome.PROCESSED,

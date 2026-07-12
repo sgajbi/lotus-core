@@ -59,6 +59,8 @@ async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
 
     saved_cashflow = await repository.create_cashflow(duplicate_cashflow)
 
-    assert saved_cashflow is existing_cashflow
+    assert saved_cashflow.cashflow_id == 17
+    assert saved_cashflow.transaction_id == "TXN-001"
+    assert saved_cashflow.amount == Decimal("-1000")
     db_session.refresh.assert_not_awaited()
     db_session.execute.assert_awaited_once()

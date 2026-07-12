@@ -290,7 +290,9 @@ async def test_reprocess_transactions_omits_not_set_correlation_header(
         correlation_id_var.reset(token)
 
     assert count == 1
-    assert mock_kafka_producer.publish_message.call_args.kwargs["headers"] == []
+    assert mock_kafka_producer.publish_message.call_args.kwargs["headers"] == [
+        ("lotus-transaction-processing-intent", b"repair")
+    ]
 
 
 async def test_reprocess_transactions_reports_remaining_ids_on_partial_publish_failure(
@@ -413,4 +415,7 @@ async def test_reprocess_transactions_can_run_through_reader_and_publisher_ports
     assert count == 1
     assert reader.requested_ids == ["TXN_A"]
     assert publisher.messages[0].payload["transaction_id"] == "TXN_A"
-    assert publisher.messages[0].headers == [("correlation_id", b"corr-explicit")]
+    assert publisher.messages[0].headers == [
+        ("correlation_id", b"corr-explicit"),
+        ("lotus-transaction-processing-intent", b"repair"),
+    ]

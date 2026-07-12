@@ -68,7 +68,10 @@ def test_plan_transaction_replay_builds_payloads_and_explicit_headers() -> None:
     assert message.topic == KAFKA_TRANSACTIONS_PERSISTED_TOPIC
     assert message.key == "P-1"
     assert message.payload["transaction_id"] == "TXN1"
-    assert message.headers == [("correlation_id", b"corr-001")]
+    assert message.headers == [
+        ("correlation_id", b"corr-001"),
+        ("lotus-transaction-processing-intent", b"repair"),
+    ]
 
 
 def test_plan_transaction_replay_omits_blank_correlation_header() -> None:
@@ -77,7 +80,7 @@ def test_plan_transaction_replay_omits_blank_correlation_header() -> None:
         correlation=ReplayCorrelationMetadata(correlation_id="<not-set>"),
     )
 
-    assert plan.messages[0].headers == []
+    assert plan.messages[0].headers == [("lotus-transaction-processing-intent", b"repair")]
 
 
 def test_publish_transaction_replay_plan_reports_partial_failure_without_kafka() -> None:

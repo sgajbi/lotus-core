@@ -7,7 +7,7 @@ from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
-from portfolio_common.database_models import Cashflow, CashflowRule
+from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
@@ -27,6 +27,9 @@ from src.services.calculators.cashflow_calculator_service.app.cashflow_calculati
 )
 from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
     CashflowCalculatorConsumer,
+)
+from src.services.calculators.cashflow_calculator_service.app.core.stored_cashflow import (
+    StoredCashflow,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_repository import (  # noqa: E501
     CashflowRepository,
@@ -73,8 +76,8 @@ async def test_cashflow_calculated_event_preserves_corporate_action_linkage() ->
         parent_event_reference="PARENT-MIXED-01",
         linked_cash_transaction_id="CASH-SETTLEMENT-01",
     )
-    saved = Cashflow(
-        id=91,
+    saved = StoredCashflow(
+        cashflow_id=91,
         transaction_id=source_event.transaction_id,
         portfolio_id=source_event.portfolio_id,
         security_id=source_event.security_id,
@@ -229,8 +232,8 @@ async def test_process_message_success(
         )
     ]
 
-    mock_saved_cashflow = Cashflow(
-        id=1,
+    mock_saved_cashflow = StoredCashflow(
+        cashflow_id=1,
         transaction_id="TXN_CASHFLOW_CONSUMER",
         portfolio_id="PORT_CFC_01",
         security_id="SEC_CFC_01",
@@ -1013,8 +1016,8 @@ async def test_process_message_dividend_external_mode_still_creates_product_cash
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=21,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=21,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1163,8 +1166,8 @@ async def test_process_message_interest_external_mode_still_creates_product_cash
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=22,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=22,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1313,8 +1316,8 @@ async def test_process_message_buy_with_linked_cash_leg_still_creates_product_ca
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=23,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=23,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1397,8 +1400,8 @@ async def test_process_message_cash_in_lieu_with_linked_cash_leg_still_creates_p
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=99,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=99,
         transaction_id="TXN_CASHFLOW_CIL_LINKED_01",
         portfolio_id="PORT_CFC_01",
         security_id="SEC_CFC_01",

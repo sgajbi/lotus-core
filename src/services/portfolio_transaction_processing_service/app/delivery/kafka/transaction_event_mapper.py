@@ -5,7 +5,11 @@ from typing import Any, Iterable
 
 from portfolio_common.events import GOVERNED_EVENT_ENVELOPE_FIELDS, TransactionEvent
 
-from ...application import ProcessTransactionCommand, TransactionEventMetadata
+from ...application import (
+    ProcessTransactionCommand,
+    TransactionEventMetadata,
+    TransactionProcessingIntent,
+)
 from ...domain import BookedTransaction
 
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
@@ -40,6 +44,7 @@ def map_transaction_event(
     event_id: str,
     correlation_id: str | None = None,
     traceparent: str | None = None,
+    processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD,
 ) -> ProcessTransactionCommand:
     payload = event.model_dump(mode="python")
     domain_values = {name: payload[name] for name in _DOMAIN_FIELD_NAMES}
@@ -54,6 +59,7 @@ def map_transaction_event(
             schema_version=event.schema_version,
             correlation_id=correlation_id or event.correlation_id,
             traceparent=traceparent or event.traceparent,
+            processing_intent=processing_intent,
         ),
     )
 

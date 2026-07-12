@@ -36,6 +36,7 @@ class CashflowStagingWorkflow(Protocol):
         event_id: str,
         correlation_id: str,
         topic: str,
+        repair_existing: bool = False,
     ) -> CashflowStageResult: ...
 
 
@@ -66,6 +67,7 @@ class CashflowProcessingCompatibilityAdapter:
         event_id: str,
         correlation_id: str | None,
         traceparent: str | None,
+        repair_existing: bool = False,
     ) -> CashflowProcessingResult:
         try:
             stage_result = await self._workflow.stage_valid_event(
@@ -81,6 +83,7 @@ class CashflowProcessingCompatibilityAdapter:
                 event_id=event_id,
                 correlation_id=correlation_id or "",
                 topic=self._source_topic,
+                repair_existing=repair_existing,
             )
         except NoCashflowRuleError as exc:
             raise TransactionProcessingError(

@@ -6,12 +6,13 @@ from typing import Any
 import pytest
 from portfolio_common.database_models import Cashflow, OutboxEvent, PositionHistory, ProcessedEvent
 from portfolio_common.events import TransactionEvent
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     BookedTransactionReplayStatus,
     ReplayBookedTransactionCommand,
+    TransactionProcessingIntent,
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
@@ -113,7 +114,11 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
     assert all(message["topic"] == "transactions.persisted" for message in producer.messages)
     assert all(message["key"] == portfolio_id for message in producer.messages)
     assert all(
-        message["headers"] == [("correlation_id", correlation_id.encode("utf-8"))]
+        message["headers"]
+        == [
+            ("correlation_id", correlation_id.encode("utf-8")),
+            ("lotus-transaction-processing-intent", b"repair"),
+        ]
         for message in producer.messages
     )
     replay_events = [
@@ -197,7 +202,7 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
     ]
 
 
-async def test_replay_after_processing_ignores_processor_owned_transaction_outputs(
+async def test_replay_after_processing_repairs_missing_derived_state(
     clean_db,
     async_db_session: AsyncSession,
 ) -> None:
@@ -238,6 +243,11 @@ async def test_replay_after_processing_ignores_processor_owned_transaction_outpu
         event_id="transactions.persisted-0-9201",
         correlation_id=correlation_id,
     )
+    await async_db_session.execute(delete(Cashflow).where(Cashflow.portfolio_id == portfolio_id))
+    await async_db_session.execute(
+        delete(PositionHistory).where(PositionHistory.portfolio_id == portfolio_id)
+    )
+    await async_db_session.commit()
 
     producer = CapturingReplayProducer()
     replay_use_case = build_replay_booked_transaction_use_case(
@@ -251,11 +261,12 @@ async def test_replay_after_processing_ignores_processor_owned_transaction_outpu
         )
     )
     replay_event = TransactionEvent.model_validate(producer.messages[0]["value"])
-    duplicate_processing = await process_booked_transaction(
+    repair_processing = await process_booked_transaction(
         context=context,
         event=replay_event,
         event_id="transactions.persisted-0-9202",
         correlation_id=correlation_id,
+        processing_intent=TransactionProcessingIntent.REPAIR,
     )
 
     assert first_processing.status is TransactionProcessingStatus.PROCESSED
@@ -263,7 +274,80 @@ async def test_replay_after_processing_ignores_processor_owned_transaction_outpu
     assert replay_event.net_cost is not None
     assert replay_event.calculation_policy_id == "BUY_DEFAULT_POLICY"
     assert replay_event.external_cash_transaction_id == f"{transaction_id}-CASHLEG"
-    assert duplicate_processing.status is TransactionProcessingStatus.DUPLICATE
+    assert repair_processing.status is TransactionProcessingStatus.PROCESSED
+    assert repair_processing.cashflow_record_count > 0
+    assert repair_processing.position_record_count > 0
+
+    async with context.session_factory() as verification_session:
+        assert (
+            await _row_count(
+                verification_session,
+                select(func.count())
+                .select_from(Cashflow)
+                .where(Cashflow.portfolio_id == portfolio_id),
+            )
+            > 0
+        )
+        assert (
+            await _row_count(
+                verification_session,
+                select(func.count())
+                .select_from(PositionHistory)
+                .where(PositionHistory.portfolio_id == portfolio_id),
+            )
+            > 0
+        )
+
+
+async def test_replay_after_processing_replaces_corrupted_cashflow_state(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-REPLAY-03"
+    transaction_id = "ADJ-COMBINED-REPLAY-03"
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id="CASH",
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="ADJUSTMENT",
+        quantity="0",
+        price="0",
+        gross_amount="125.50",
+    )
+    async_db_session.add_all([portfolio_record(portfolio_id), canonical_transaction_record(event)])
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+
+    await process_booked_transaction(
+        context=context,
+        event=event,
+        event_id="transactions.persisted-0-9301",
+        correlation_id="corr-combined-replay-03",
+    )
+    original_amount = await async_db_session.scalar(
+        select(Cashflow.amount).where(Cashflow.transaction_id == transaction_id)
+    )
+    await async_db_session.execute(
+        update(Cashflow).where(Cashflow.transaction_id == transaction_id).values(amount="999999")
+    )
+    await async_db_session.commit()
+
+    repair_result = await process_booked_transaction(
+        context=context,
+        event=event,
+        event_id="transactions.persisted-0-9302",
+        correlation_id="corr-combined-replay-03",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+
+    assert repair_result.status is TransactionProcessingStatus.PROCESSED
+    assert repair_result.cashflow_record_count == 1
+    async with context.session_factory() as verification_session:
+        repaired_amount = await verification_session.scalar(
+            select(Cashflow.amount).where(Cashflow.transaction_id == transaction_id)
+        )
+    assert repaired_amount == original_amount
 
 
 async def _row_count(session: AsyncSession, statement) -> int:
