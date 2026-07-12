@@ -1894,6 +1894,14 @@ Most relevant current governance:
      Normalize `<transaction_id>-CASHLEG` only when `cash_entry_mode=AUTO_GENERATE`; caller-supplied
      external cash identifiers and generated-shaped identifiers in upstream-provided mode remain
      material conflict inputs.
+     Canonical booked-transaction replay is the only path that may continue after an identical
+     semantic claim. It must carry the exact internal `lotus-transaction-processing-intent=repair`
+     delivery header, claim a separate physical repair-delivery fence inside the combined unit of
+     work, and retain semantic-conflict and epoch rejection. Missing or unknown intent remains
+     standard duplicate behavior; malformed or repeated intent headers fail closed. Cashflow repair
+     restores the canonical transaction/epoch row under a row lock instead of allowing its existing
+     semantic fence to turn repair into a no-op. Prove missing and corrupted derived-state repair,
+     physical redelivery suppression, rollback retry, and conflict rejection against PostgreSQL.
      Existing physical-only consumers and pre-migration null semantic fences remain compatible.
      Any identity-version change requires migration, replay/downstream impact analysis, deterministic
      hash tests, PostgreSQL conflict/concurrency proof, and explicit documentation.
