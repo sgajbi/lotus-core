@@ -38,14 +38,17 @@ default-project log command.
 
 ## Measurement And Validation
 
-- Focused managed-runtime, driver, workflow, and Docker-stack tests pass locally.
+- `113` focused managed-runtime, driver, workflow, and Docker-stack tests passed locally.
 - A live Docker integration test starts a managed PostgreSQL project, connects through its dynamic
   port, captures project-identified service logs, tears the project down, and proves the port is no
   longer accepting connections.
 - The existing live concurrency test still starts two independent PostgreSQL projects and proves
   disjoint ports.
-- Final repository-native aggregate counts and CI evidence are recorded in the issue/PR evidence
-  after the bounded slice completes.
+- `make ci-local` passed `4,301` unit tests with zero warnings, `10` PostgreSQL tests, `135`
+  integration-lite tests, combined coverage, and every configured architecture, security, API,
+  data, event, observability, documentation, and repository guard.
+- Scoped Ruff lint/format, configured MyPy, workflow parsing/governance, documentation evidence,
+  wiki validation, and `git diff --check` passed.
 
 ## Compatibility
 
