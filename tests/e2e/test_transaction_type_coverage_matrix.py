@@ -73,6 +73,25 @@ def test_transaction_type_coverage_fixture_is_deduplicated_and_comprehensive():
     tax_payload = next(item for item in tx_payloads if item["transaction_type"] == "TAX")
     assert tax_payload["security_id"] == "CASH_USD_COVER_DRYRUN"
     assert tax_payload["instrument_id"] == "CASH_USD_COVER_DRYRUN"
+    cash_consideration = next(
+        item for item in tx_payloads if item["transaction_type"] == "CASH_CONSIDERATION"
+    )
+    assert cash_consideration["quantity"] == "0"
+    assert cash_consideration["price"] == "0"
+    assert cash_consideration["allocated_cost_basis_local"] == "50"
+    assert cash_consideration["allocated_cost_basis_base"] == "50"
+    cash_in_lieu = next(item for item in tx_payloads if item["transaction_type"] == "CASH_IN_LIEU")
+    assert cash_in_lieu["allocated_cost_basis_local"] == "101.50"
+    assert cash_in_lieu["allocated_cost_basis_base"] == "101.50"
+    for fx_type in ("FX_FORWARD", "FX_SPOT", "FX_SWAP"):
+        fx_payload = next(item for item in tx_payloads if item["transaction_type"] == fx_type)
+        assert fx_payload["quantity"] == "0"
+        assert fx_payload["price"] == "0"
+        assert fx_payload["pair_base_currency"] == "EUR"
+        assert fx_payload["pair_quote_currency"] == "USD"
+        assert fx_payload["buy_currency"] == "USD"
+        assert fx_payload["sell_currency"] == "EUR"
+        assert Decimal(fx_payload["contract_rate"]) > 0
 
 
 def test_cashflow_rules_cover_every_supported_transaction_type(db_engine):
@@ -113,7 +132,8 @@ def test_all_supported_transaction_types_are_ingestable_queryable_and_cashflowed
 
     poll_db_until(
         query="""
-            SELECT count(DISTINCT t.transaction_type)
+            SELECT count(DISTINCT t.transaction_type),
+                   array_agg(DISTINCT t.transaction_type ORDER BY t.transaction_type)
             FROM transactions t
             JOIN cashflows c ON c.transaction_id = t.transaction_id
             WHERE t.portfolio_id = :portfolio_id
