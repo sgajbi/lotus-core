@@ -25,10 +25,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-try:
-    from scripts.quality.ci_service_sets import DOCKER_SMOKE_SERVICES
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import DOCKER_SMOKE_SERVICES
+from scripts.quality.ci_service_sets import DOCKER_SMOKE_SERVICES  # noqa: E402
+from tests.test_support.managed_compose_run import (  # noqa: E402
+    ManagedComposeRun,
+    prepare_managed_compose_run,
+)
 
 
 @dataclass(slots=True)
@@ -71,7 +72,12 @@ def _run(cmd: list[str], cwd: Path) -> None:
         raise RuntimeError("command failed")
 
 
-def _run_capture(cmd: list[str], cwd: Path) -> str:
+def _run_capture(
+    cmd: list[str],
+    cwd: Path,
+    *,
+    environment: dict[str, str] | None = None,
+) -> str:
     completed = subprocess.run(
         cmd,
         cwd=cwd,
@@ -80,6 +86,7 @@ def _run_capture(cmd: list[str], cwd: Path) -> str:
         text=True,
         encoding="utf-8",
         errors="replace",
+        env=environment,
     )
     if completed.returncode != 0:
         print(f"Command failed ({completed.returncode}): {' '.join(cmd)}", file=sys.stderr)
@@ -89,25 +96,6 @@ def _run_capture(cmd: list[str], cwd: Path) -> str:
             print(completed.stderr, file=sys.stderr)
         raise RuntimeError("command failed")
     return completed.stdout.strip()
-
-
-def _compose_up_with_retry(*, compose_file: str, repo_root: Path, build: bool) -> None:
-    up_cmd = ["docker", "compose", "-f", compose_file, "up", "-d"]
-    if build:
-        up_cmd.append("--build")
-    up_cmd.extend(DOCKER_SMOKE_SERVICES)
-
-    attempts = 2
-    for attempt in range(1, attempts + 1):
-        try:
-            _run(up_cmd, cwd=repo_root)
-            return
-        except RuntimeError:
-            if attempt == attempts:
-                raise
-            # Handle transient Kafka/ZK startup races by recycling containers once.
-            _run(["docker", "compose", "-f", compose_file, "down"], cwd=repo_root)
-            time.sleep(5)
 
 
 def build_smoke_cleanup_sql() -> str:
@@ -151,10 +139,17 @@ def _resolve_postgres_container(
     repo_root: Path,
     compose_file: str,
     postgres_service: str,
+    managed_run: ManagedComposeRun | None = None,
 ) -> str:
+    command = (
+        managed_run.compose_command("ps", "-q", postgres_service)
+        if managed_run is not None
+        else ["docker", "compose", "-f", compose_file, "ps", "-q", postgres_service]
+    )
     container_id = _run_capture(
-        ["docker", "compose", "-f", compose_file, "ps", "-q", postgres_service],
+        command,
         cwd=repo_root,
+        environment=managed_run.runtime.values if managed_run is not None else None,
     )
     if not container_id:
         raise RuntimeError(
@@ -168,11 +163,13 @@ def _cleanup_existing_smoke_state(
     repo_root: Path,
     compose_file: str,
     postgres_service: str,
+    managed_run: ManagedComposeRun | None = None,
 ) -> None:
     postgres_container = _resolve_postgres_container(
         repo_root=repo_root,
         compose_file=compose_file,
         postgres_service=postgres_service,
+        managed_run=managed_run,
     )
     _run(
         [
@@ -365,7 +362,14 @@ def _write_report(
     return json_path, md_path
 
 
-def main() -> int:
+def _requested_endpoint(cli_value: str | None, environment_key: str) -> str | None:
+    return cli_value or os.getenv(environment_key)
+
+
+def main(
+    _args: argparse.Namespace | None = None,
+    _managed_run: ManagedComposeRun | None = None,
+) -> int:
     parser = argparse.ArgumentParser(
         description="Run deterministic lotus-core docker endpoint smoke."
     )
@@ -373,20 +377,10 @@ def main() -> int:
     parser.add_argument(
         "--compose-file", default="docker-compose.yml", help="Docker compose file path."
     )
-    parser.add_argument(
-        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
-    )
-    parser.add_argument(
-        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
-    )
-    parser.add_argument(
-        "--event-replay-base-url",
-        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
-    )
-    parser.add_argument(
-        "--query-control-plane-base-url",
-        default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
-    )
+    parser.add_argument("--ingestion-base-url")
+    parser.add_argument("--query-base-url")
+    parser.add_argument("--event-replay-base-url")
+    parser.add_argument("--query-control-plane-base-url")
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument(
         "--reset-volumes", action="store_true", help="Run docker compose down -v first."
@@ -397,24 +391,88 @@ def main() -> int:
     )
     parser.add_argument("--ready-timeout-seconds", type=int, default=180)
     parser.add_argument("--query-visible-timeout-seconds", type=int, default=120)
+    parser.add_argument("--keep-compose", action="store_true")
+    parser.add_argument(
+        "--compose-log-path",
+        default="output/task-runs/diagnostics/docker-smoke-compose.log",
+    )
     parser.add_argument(
         "--postgres-service",
         default=DEFAULT_POSTGRES_SERVICE,
         help="Docker compose postgres service name used for deterministic smoke cleanup.",
     )
-    args = parser.parse_args()
+    args = _args or parser.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
     compose_file = str((repo_root / args.compose_file).resolve())
 
-    if not args.skip_compose:
-        if args.reset_volumes:
-            _run(["docker", "compose", "-f", compose_file, "down", "-v"], cwd=repo_root)
-        _compose_up_with_retry(compose_file=compose_file, repo_root=repo_root, build=args.build)
+    if not args.skip_compose and _managed_run is None:
+        requested_endpoints = {
+            "E2E_INGESTION_URL": _requested_endpoint(
+                args.ingestion_base_url,
+                "E2E_INGESTION_URL",
+            ),
+            "E2E_QUERY_URL": _requested_endpoint(args.query_base_url, "E2E_QUERY_URL"),
+            "E2E_EVENT_REPLAY_URL": _requested_endpoint(
+                args.event_replay_base_url,
+                "E2E_EVENT_REPLAY_URL",
+            ),
+            "E2E_QUERY_CONTROL_PLANE_URL": _requested_endpoint(
+                args.query_control_plane_base_url,
+                "E2E_QUERY_CONTROL_PLANE_URL",
+            ),
+        }
+        managed_run = prepare_managed_compose_run(
+            scope="docker-smoke",
+            compose_file=compose_file,
+            services=tuple(DOCKER_SMOKE_SERVICES),
+            build=args.build,
+            log_path=repo_root / args.compose_log_path,
+            endpoint_urls=requested_endpoints,
+            keep_stack=args.keep_compose,
+            reset_volumes=args.reset_volumes,
+        )
+        endpoints = managed_run.runtime.endpoints
+        args.ingestion_base_url = (
+            requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
+        )
+        args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
+        args.event_replay_base_url = (
+            requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
+        )
+        args.query_control_plane_base_url = (
+            requested_endpoints["E2E_QUERY_CONTROL_PLANE_URL"]
+            or endpoints.e2e_query_control_plane_url
+        )
+        with managed_run:
+            return main(args, managed_run)
+
+    args.ingestion_base_url = (
+        args.ingestion_base_url
+        or _requested_endpoint(
+            None,
+            "E2E_INGESTION_URL",
+        )
+        or "http://localhost:8200"
+    )
+    args.query_base_url = (
+        args.query_base_url or _requested_endpoint(None, "E2E_QUERY_URL") or "http://localhost:8201"
+    )
+    args.event_replay_base_url = (
+        args.event_replay_base_url
+        or _requested_endpoint(None, "E2E_EVENT_REPLAY_URL")
+        or "http://localhost:8209"
+    )
+    args.query_control_plane_base_url = (
+        args.query_control_plane_base_url
+        or _requested_endpoint(None, "E2E_QUERY_CONTROL_PLANE_URL")
+        or "http://localhost:8202"
+    )
     _cleanup_existing_smoke_state(
         repo_root=repo_root,
         compose_file=compose_file,
         postgres_service=args.postgres_service,
+        managed_run=_managed_run,
     )
 
     _wait_ready(args.ingestion_base_url, args.ready_timeout_seconds)
