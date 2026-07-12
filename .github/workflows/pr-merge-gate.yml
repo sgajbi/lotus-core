@@ -291,9 +291,6 @@ jobs:
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
         run: make test-docker-smoke
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > docker-smoke-logs.txt
       - name: Upload smoke artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -302,7 +299,7 @@ jobs:
           path: |
             output/task-runs/*.json
             output/task-runs/*.md
-            docker-smoke-logs.txt
+            output/task-runs/diagnostics/docker-smoke-compose.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -387,9 +384,6 @@ jobs:
           DEMO_DATA_PACK_PORTFOLIO_IDS: "DEMO_DPM_EUR_001"
           DEMO_DATA_PACK_INGEST_ONLY: "true"
         run: make test-latency-gate
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > latency-gate-logs.txt
       - name: Upload latency artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -398,7 +392,7 @@ jobs:
           path: |
             output/task-runs/*latency-profile*.json
             output/task-runs/*latency-profile*.md
-            latency-gate-logs.txt
+            output/task-runs/diagnostics/latency-gate-compose.log
           if-no-files-found: warn
           retention-days: 14
 
@@ -429,9 +423,6 @@ jobs:
         run: make install-ci
       - name: Run deterministic performance load gate
         run: make test-performance-load-gate
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > performance-load-gate-logs.txt
       - name: Upload performance load artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -440,6 +431,6 @@ jobs:
           path: |
             output/task-runs/*performance-load-gate*.json
             output/task-runs/*performance-load-gate*.md
-            performance-load-gate-logs.txt
+            output/task-runs/diagnostics/performance-load-gate-compose.log
           if-no-files-found: warn
           retention-days: 14
