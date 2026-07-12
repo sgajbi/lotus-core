@@ -74,6 +74,7 @@ _PROFILE_SEED_PORTS: dict[str, dict[str, str]] = {
 _HOST_PORT_KEYS = tuple(
     dict.fromkeys(key for profile_ports in _PROFILE_SEED_PORTS.values() for key in profile_ports)
 )
+_COMPOSE_HOST_BIND_ADDRESS = "0.0.0.0"
 
 
 @dataclass(frozen=True)
@@ -201,7 +202,7 @@ def _reserve_host_port(used_ports: set[int]) -> tuple[socket.socket, int]:
         try:
             if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
                 reserved_socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-            reserved_socket.bind(("127.0.0.1", 0))
+            reserved_socket.bind((_COMPOSE_HOST_BIND_ADDRESS, 0))
             port = int(reserved_socket.getsockname()[1])
             if port in used_ports:
                 reserved_socket.close()
