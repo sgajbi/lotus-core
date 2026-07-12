@@ -66,8 +66,9 @@ support and all callers moved in the same commit.
 
 Issue #730 remains open for scenario shards, change-impact selection, exact-SHA selective dispatch,
 diagnostic completeness, field-level polling evidence, and timing/flake/rerun trend reporting.
-The fixed-port latency, performance-load, institutional-completion, and endpoint-smoke drivers also
-remain direct Compose callers and require a separate CLI-contract migration to prepared runtimes.
+CR-1554 subsequently migrated the fixed-port latency, performance-load, institutional-completion,
+and endpoint-smoke drivers to the prepared managed runtime. The remaining #730 work is scenario
+selection, recovery/app-certification diagnostic completeness, polling evidence, and trend reporting.
 
 ## Durable Guidance Decision
 
