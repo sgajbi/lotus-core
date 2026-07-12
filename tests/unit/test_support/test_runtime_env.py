@@ -140,12 +140,16 @@ def test_port_reallocation_updates_exported_connections_atomically() -> None:
     runtime.export_to(exported)
     original_ports = _reserved_ports(runtime)
     original_database_url = exported["HOST_DATABASE_URL"]
+    assert runtime.port_reservation.generation == 1
+    assert runtime.port_reservation.reallocation_count == 0
 
     try:
         runtime.port_reservation.reallocate()
 
         replacement_ports = _reserved_ports(runtime)
         assert replacement_ports.isdisjoint(original_ports)
+        assert runtime.port_reservation.generation == 2
+        assert runtime.port_reservation.reallocation_count == 1
         assert exported["HOST_DATABASE_URL"] != original_database_url
         assert exported["HOST_DATABASE_URL"] == runtime.endpoints.host_database_url
         assert exported["E2E_QUERY_URL"] == runtime.endpoints.e2e_query_url

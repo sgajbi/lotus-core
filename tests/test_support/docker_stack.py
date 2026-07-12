@@ -353,7 +353,6 @@ def compose_up(
     last_error: subprocess.CalledProcessError | None = None
     last_bind_conflict = False
     attempts_used = 0
-    port_reallocations = 0
     for attempt in range(1, attempts + 1):
         attempts_used = attempt
         if runtime is not None:
@@ -396,12 +395,11 @@ def compose_up(
                             f"(attempt={attempt}, compose_project="
                             f"{project_name or 'unknown'})"
                         ) from reservation_error
-                    port_reallocations += 1
                     LOGGER.warning(
                         "Reallocated test runtime host ports after Compose bind conflict.",
                         extra={
                             "attempt": attempt,
-                            "port_reallocations": port_reallocations,
+                            "port_reallocations": runtime.port_reservation.reallocation_count,
                             "compose_project": project_name or "unknown",
                         },
                     )
@@ -412,6 +410,9 @@ def compose_up(
 
     message = "docker compose up failed"
     if last_bind_conflict:
+        port_reallocations = (
+            runtime.port_reservation.reallocation_count if runtime is not None else 0
+        )
         message = (
             f"{message} (failure_class=host_port_bind_conflict, "
             f"attempts={attempts_used}, port_reallocations={port_reallocations}, "

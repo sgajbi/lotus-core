@@ -103,6 +103,7 @@ class RuntimePortReservation:
         repr=False,
     )
     _retired_ports: set[int] = field(default_factory=set, init=False, repr=False)
+    generation: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         self._reserve_new_generation()
@@ -112,6 +113,12 @@ class RuntimePortReservation:
         """Return keys whose current ports are actively held by this process."""
 
         return tuple(key for key in self.dynamic_port_keys if key in self._sockets)
+
+    @property
+    def reallocation_count(self) -> int:
+        """Return successful replacement generations after the initial reservation."""
+
+        return max(self.generation - 1, 0)
 
     def add_export_target(self, target: MutableMapping[str, str]) -> None:
         """Keep a process or subprocess environment synchronized after reallocation."""
@@ -161,6 +168,7 @@ class RuntimePortReservation:
             raise
         self.values.update(assignments)
         self._sockets = new_sockets
+        self.generation += 1
 
 
 @dataclass(frozen=True)
