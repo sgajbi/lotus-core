@@ -49,7 +49,7 @@ def _write_repo(tmp_path: Path, *, playbooks: list[dict[str, object]] | None = N
                 "guard_command": "make incident-playbook-guard",
                 "documentation_surfaces": [
                     "docs/operations/Incident-Playbooks.md",
-                    "docs/operations-runbook.md",
+                    "docs/operations/runbook.md",
                     "wiki/Operations-Runbook.md",
                     "wiki/Troubleshooting.md",
                 ],
@@ -67,7 +67,7 @@ def _write_repo(tmp_path: Path, *, playbooks: list[dict[str, object]] | None = N
     )
     for relative_path in (
         "docs/operations/Incident-Playbooks.md",
-        "docs/operations-runbook.md",
+        "docs/operations/runbook.md",
         "wiki/Operations-Runbook.md",
         "wiki/Troubleshooting.md",
     ):

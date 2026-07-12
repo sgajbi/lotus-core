@@ -70,7 +70,7 @@ metric label, or success payload shape changed.
 
 ## Documentation And Wiki Decision
 
-This architecture record, `docs/observability.md`, the codebase review ledger, and quality/refactor
+This architecture record, `docs/operations/observability.md`, the codebase review ledger, and quality/refactor
 scorecards were updated. No repo-local wiki update is required because no wiki-authored operator
 runbook currently describes metrics ingress configuration.
 

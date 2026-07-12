@@ -54,7 +54,7 @@ Focused local validation:
 
 ## Documentation, Wiki, Context, And Skill Decision
 
-Updated README, `docs/operations-runbook.md`, wiki Operations Runbook source, repository context,
+Updated README, `docs/operations/runbook.md`, wiki Operations Runbook source, repository context,
 and the codebase review ledger because operator-visible `/version` metadata and release evidence
 truth changed.
 

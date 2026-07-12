@@ -45,7 +45,7 @@ metrics, and normalized OpenAPI metadata now apply consistently.
 
 ## Documentation And Wiki Decision
 
-Updated this ledger entry, `docs/observability.md`, the quality scorecard/health report, and the
+Updated this ledger entry, `docs/operations/observability.md`, the quality scorecard/health report, and the
 repo-local Operations Runbook wiki source. No product API or downstream business contract changed.
 
 ## Follow-Up

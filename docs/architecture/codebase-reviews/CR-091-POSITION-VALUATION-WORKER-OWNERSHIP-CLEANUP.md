@@ -4,7 +4,7 @@
 
 - `src/services/calculators/position_valuation_calculator/app/*`
 - `tests/unit/services/calculators/position_valuation_calculator/*`
-- `docs/Database-Schema-Catalog.md`
+- `docs/data/database-schema-catalog.md`
 
 ## Finding
 

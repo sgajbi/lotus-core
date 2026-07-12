@@ -22,7 +22,7 @@ Clean current-state RFC and ADR references that still pointed to deleted `query_
 ## Validation
 - `rg -n "src/services/query_service/app/routers/(analytics_inputs|capabilities|integration|operations|simulation)\.py" docs/RFCs docs/architecture`
 - Remaining hits are limited to:
-  - `docs/architecture/CR-009-QUERY-CONTROL-PLANE-OWNERSHIP-REVIEW.md`
+  - `docs/architecture/codebase-reviews/CR-009-QUERY-CONTROL-PLANE-OWNERSHIP-REVIEW.md`
 
 ## Residual Risk
 - Historical RFCs that are intentionally archival may still mention older ownership if they are documenting prior state rather than current implementation. That is acceptable as long as current-state ADRs and active RFCs point to the live source tree.

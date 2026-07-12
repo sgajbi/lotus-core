@@ -17,8 +17,8 @@ def _base_catalog() -> str:
   "related_navigation": [
     "docs/standards/verified-api-examples.v1.json",
     "docs/standards/rfc-0083-implementation-ledger.json",
-    "docs/operations-runbook.md",
-    "docs/supported-features.md",
+    "docs/operations/runbook.md",
+    "docs/features/supported-features.md",
     "wiki/Architecture.md",
     "wiki/API-Surface.md",
     "wiki/Supported-Features.md"
@@ -58,6 +58,17 @@ def _base_catalog() -> str:
       "summary": "Current-state architecture map."
     },
     {
+      "path": "docs/architecture/codebase-reviews/README.md",
+      "type": "review-index",
+      "topics": ["codebase-review"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-12",
+      "related": {"issues": [], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Review record index."
+    },
+    {
       "path": "docs/architecture/runtime-boundary-decision-catalog.json",
       "type": "decision-catalog",
       "topics": ["runtime-boundaries"],
@@ -82,7 +93,7 @@ def _base_catalog() -> str:
   ],
   "coverage_rules": [
     {
-      "glob": "CR-*.md",
+      "glob": "codebase-reviews/CR-*.md",
       "type": "codebase-review-record",
       "status": "review-evidence",
       "owner": "lotus-core",
@@ -106,13 +117,14 @@ def _write_required_files(tmp_path: Path) -> None:
     for path in (
         "docs/standards/verified-api-examples.v1.json",
         "docs/standards/rfc-0083-implementation-ledger.json",
-        "docs/operations-runbook.md",
-        "docs/supported-features.md",
+        "docs/operations/runbook.md",
+        "docs/features/supported-features.md",
         "wiki/Architecture.md",
         "wiki/API-Surface.md",
         "wiki/Supported-Features.md",
     ):
         _write(tmp_path / path, "{}\n" if path.endswith(".json") else "# Doc\n")
+    _write(tmp_path / "docs/README.md", "# Documentation\n")
     _write(
         tmp_path / "docs/architecture/README.md",
         "# Index\n\n"
@@ -131,7 +143,7 @@ event/outbox flow database ownership dependency direction downstream consumers
 prohibited responsibilities
 route-contract-family-registry.json RFC-0082-contract-family-inventory.md
 RFC-0083-source-data-product-catalog.md RFC-0083-eventing-supportability-target-model.md
-docs/operations-runbook.md wiki/API-Surface.md CODEBASE-REVIEW-LEDGER.md CR-1330 CR-1331
+docs/operations/runbook.md wiki/API-Surface.md CODEBASE-REVIEW-LEDGER.md CR-1330 CR-1331
 query_service src/services/query_service ingestion_service src/services/ingestion_service
 """,
     )
@@ -153,7 +165,8 @@ query_service src/services/query_service ingestion_service src/services/ingestio
 """,
     )
     _write(tmp_path / "docs/architecture/historical.md", "# Historical\n")
-    _write(tmp_path / "docs/architecture/CR-001.md", "# Review\n")
+    _write(tmp_path / "docs/architecture/codebase-reviews/README.md", "# Reviews\n")
+    _write(tmp_path / "docs/architecture/codebase-reviews/CR-001.md", "# Review\n")
     _write(tmp_path / "docs/architecture/templates/example.md", "# Template\n")
     _write(
         tmp_path / "docs/architecture/architecture-documentation-catalog.v1.json",
@@ -178,6 +191,21 @@ def test_architecture_catalog_guard_rejects_uncataloged_architecture_doc(
     findings = find_architecture_catalog_findings(tmp_path)
 
     assert any(f.rule == "uncataloged-architecture-document" for f in findings)
+
+
+def test_architecture_catalog_guard_rejects_unowned_root_documents(
+    tmp_path: Path,
+) -> None:
+    _write_required_files(tmp_path)
+    _write(tmp_path / "docs/loose-note.md", "# Loose\n")
+    _write(tmp_path / "docs/architecture/CR-999-MISPLACED.md", "# Review\n")
+
+    findings = find_architecture_catalog_findings(tmp_path)
+
+    assert {(finding.path, finding.rule) for finding in findings} >= {
+        ("docs/loose-note.md", "misplaced-doc-root-file"),
+        ("docs/architecture/CR-999-MISPLACED.md", "misplaced-codebase-review-record"),
+    }
 
 
 def test_architecture_catalog_guard_requires_current_state_map_freshness(

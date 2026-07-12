@@ -85,7 +85,7 @@ No database schema, Kafka topic, or ingestion success response changed.
 
 Updated this architecture record, codebase review ledger, operations runbook, repository context,
 quality scorecard, and refactor health report. No repo-local wiki update is required because the
-operator-facing repair path is summarized in `docs/operations-runbook.md` and the protected API is
+operator-facing repair path is summarized in `docs/operations/runbook.md` and the protected API is
 documented in OpenAPI.
 
 ## Remaining Follow-Up

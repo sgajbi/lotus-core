@@ -7,7 +7,7 @@ contract with complete operator fields and safe-command checks.
 
 ## Finding
 
-`docs/operations-runbook.md` and wiki pages had useful operational fragments, but they did not
+`docs/operations/runbook.md` and wiki pages had useful operational fragments, but they did not
 provide a deterministic incident path for the major `lotus-core` runtime failure families. The
 missing structure made it possible to document symptoms without API checks, containment actions,
 escalation, post-incident evidence, or safe database boundaries.

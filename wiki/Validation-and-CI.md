@@ -103,7 +103,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
   release manifests, SBOM/provenance/signing/scan controls, digest-based Kubernetes references,
   same-image promotion evidence, no-build-secret posture, and the shared `/version` endpoint
 - `make supported-features-guard`
-  protects `docs/supported-features.md` and `wiki/Supported-Features.md` against unsupported
+  protects `docs/features/supported-features.md` and `wiki/Supported-Features.md` against unsupported
   capability claims, missing evidence links, stale feature status, and missing fail-closed or
   downstream ownership caveats
 - `make incident-playbook-guard`

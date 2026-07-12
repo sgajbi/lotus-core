@@ -35,7 +35,7 @@ registry references, supersession metadata, and status rationale.
 
 Added `scripts/rfc_status_ledger_guard.py` to discover RFC documents and fail when ledger metadata
 is missing, stale, duplicated, malformed, or missing transaction-specific links to
-`portfolio_common.transaction_type_registry` and `docs/supported-features.md`.
+`portfolio_common.transaction_type_registry` and `docs/features/supported-features.md`.
 
 Added focused unit tests for complete metadata, missing RFC metadata, stale metadata, missing
 transaction registry links, broken path references, and implemented entries without evidence.

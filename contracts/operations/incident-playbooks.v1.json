@@ -4,7 +4,7 @@
   "guard_command": "make incident-playbook-guard",
   "documentation_surfaces": [
     "docs/operations/Incident-Playbooks.md",
-    "docs/operations-runbook.md",
+    "docs/operations/runbook.md",
     "wiki/Operations-Runbook.md",
     "wiki/Troubleshooting.md"
   ],

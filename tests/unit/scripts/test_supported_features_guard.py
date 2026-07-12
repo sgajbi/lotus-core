@@ -47,7 +47,7 @@ def _write_repo(tmp_path: Path, *, capability: dict[str, object] | None = None) 
                 "schema_version": guard.EXPECTED_SCHEMA_VERSION,
                 "repository": "lotus-core",
                 "documentation_surfaces": [
-                    "docs/supported-features.md",
+                    "docs/features/supported-features.md",
                     "wiki/Supported-Features.md",
                 ],
                 "guard_command": "make supported-features-guard",

@@ -35,7 +35,7 @@ dashboards and alerts should use bounded labels and support APIs for key-level d
 
 ## Documentation And Wiki Decision
 
-Updated `docs/observability.md`, the position valuation operations guide, this ledger entry, and the
+Updated `docs/operations/observability.md`, the position valuation operations guide, this ledger entry, and the
 quality scorecard/health report. No wiki source change is required because the repo wiki does not
 currently enumerate the changed Prometheus metric labels.
 

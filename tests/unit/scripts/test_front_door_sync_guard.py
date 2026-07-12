@@ -10,7 +10,7 @@ def _write_front_door_fixture(repo_root: Path) -> None:
         "docs/standards/api-route-catalog.v1.json",
         "docs/standards/rfc-status-ledger.v1.json",
         "contracts/supported-features/lotus-core-supported-features.v1.json",
-        "docs/operations-runbook.md",
+        "docs/operations/runbook.md",
         "wiki/API-Surface.md",
         "wiki/Supported-Features.md",
         "wiki/Operations-Runbook.md",

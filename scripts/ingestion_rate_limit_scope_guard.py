@@ -36,7 +36,7 @@ DOC_REQUIRED_PHRASES = {
         "rate-limit scope explicit",
         "gateway-backed global enforcement claims",
     ),
-    "docs/architecture/CR-1196-INGESTION-RATE-LIMIT-SCOPE-CONTRACT.md": (
+    "docs/architecture/codebase-reviews/CR-1196-INGESTION-RATE-LIMIT-SCOPE-CONTRACT.md": (
         "local_process",
         "not a global control",
         "upstream_gateway",

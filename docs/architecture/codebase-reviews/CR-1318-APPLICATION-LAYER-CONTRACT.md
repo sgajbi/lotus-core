@@ -16,7 +16,7 @@ application modules from importing framework or infrastructure concerns.
 ## Changes
 
 1. Added `docs/standards/application-layer-contract.md`.
-2. Linked the application-layer contract from `docs/architecture.md`.
+2. Linked the application-layer contract from `docs/architecture/overview.md`.
 3. Added `scripts/application_layer_contract_guard.py`.
 4. Added unit tests for allowed pure application modules and rejected framework/infrastructure
    imports.

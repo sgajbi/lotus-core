@@ -49,6 +49,6 @@ Additional aggregate gates are recorded in the commit evidence.
 
 ## Documentation And Wiki Decision
 
-README, `docs/operations-runbook.md`, `wiki/Operations-Runbook.md`, and
+README, `docs/operations/runbook.md`, `wiki/Operations-Runbook.md`, and
 `REPOSITORY-ENGINEERING-CONTEXT.md` were updated because operator-facing health response truth
 changed. Wiki source changed and must be published after merge.

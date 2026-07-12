@@ -74,7 +74,7 @@ success DTO changed.
 
 Updated this architecture record, the codebase review ledger, operations runbook, repository
 context, quality scorecard, and refactor health report. No repo-local wiki update is required
-because health/readiness operator truth is currently summarized in `docs/operations-runbook.md` and
+because health/readiness operator truth is currently summarized in `docs/operations/runbook.md` and
 the API route remains unchanged.
 
 ## Remaining Follow-Up

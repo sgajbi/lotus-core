@@ -7,7 +7,7 @@ docs/wiki prose into a guarded evidence manifest with drift checks.
 
 ## Finding
 
-`docs/supported-features.md` and `wiki/Supported-Features.md` both described current capabilities,
+`docs/features/supported-features.md` and `wiki/Supported-Features.md` both described current capabilities,
 but validation only checked for a few required terms. That could not detect unsupported capability
 claims, missing implementation/test evidence, stale status values, missing fail-closed caveats, or
 downstream ownership drift.

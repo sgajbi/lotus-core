@@ -23,8 +23,8 @@ DOCUMENTATION_SURFACES = (
     "docs/standards/critical-path-coverage.v1.json",
     "docs/standards/front-door-sync.v1.json",
     "docs/standards/rfc-status-ledger.v1.json",
-    "docs/operations-runbook.md",
-    "docs/supported-features.md",
+    "docs/operations/runbook.md",
+    "docs/features/supported-features.md",
     "wiki/RFC-Index.md",
     "wiki/Supported-Features.md",
     "wiki/Validation-and-CI.md",
@@ -145,7 +145,7 @@ def _validate_supported_features() -> DocumentationEvidenceCheck:
 
 def _validate_runbooks() -> DocumentationEvidenceCheck:
     missing_terms: dict[str, list[str]] = {}
-    runbook_path = REPO_ROOT / "docs/operations-runbook.md"
+    runbook_path = REPO_ROOT / "docs/operations/runbook.md"
     if not runbook_path.exists():
         missing_terms[_relative(runbook_path)] = ["missing file"]
     else:
@@ -157,7 +157,7 @@ def _validate_runbooks() -> DocumentationEvidenceCheck:
     link_check = _validate_markdown_links(
         name="runbook_link_validation",
         paths=(
-            REPO_ROOT / "docs/operations-runbook.md",
+            REPO_ROOT / "docs/operations/runbook.md",
             REPO_ROOT / "wiki/Operations-Runbook.md",
         ),
     )

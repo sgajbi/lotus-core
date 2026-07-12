@@ -80,8 +80,8 @@ taxonomy fields and avoid embedding sensitive identifiers in message text.
 Documentation changed because the repository now has a new operator-facing logging taxonomy and a
 new blocking lint guard:
 
-- `docs/observability.md`
-- `docs/operations-runbook.md`
+- `docs/operations/observability.md`
+- `docs/operations/runbook.md`
 - `wiki/Operations-Runbook.md`
 - `REPOSITORY-ENGINEERING-CONTEXT.md`
 - `quality/quality_scorecard.md`

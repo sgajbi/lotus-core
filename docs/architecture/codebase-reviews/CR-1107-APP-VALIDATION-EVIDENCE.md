@@ -9,7 +9,7 @@ Create one repeatable `lotus-core` app-level validation command for supported de
 | Item | Repo evidence |
 | --- | --- |
 | Owner pattern | `lotus-core` owns portfolio, booking, transaction, ingestion, operational read, query-control-plane, source-data, support, lineage, and simulation surfaces. |
-| Source of truth | `REPOSITORY-ENGINEERING-CONTEXT.md`, `docs/supported-features.md`, `wiki/Supported-Features.md`, `docs/standards/route-contract-family-registry.json`, and `contracts/domain-data-products/lotus-core-products.v1.json`. |
+| Source of truth | `REPOSITORY-ENGINEERING-CONTEXT.md`, `docs/features/supported-features.md`, `wiki/Supported-Features.md`, `docs/standards/route-contract-family-registry.json`, and `contracts/domain-data-products/lotus-core-products.v1.json`. |
 | Closest tests | `tests/unit/scripts/test_certify_lotus_core_app.py`, `tests/integration/tools/test_demo_data_pack.py`, `tests/unit/scripts/test_validate_live_dpm_source_products.py`, and existing Docker smoke/unit guard coverage. |
 | Repo-native command | `make lotus-core-validate`. |
 | Measurable signal | JSON evidence under `output/lotus-core-validation/` with explicit pass/fail checks and runtime surface families. |

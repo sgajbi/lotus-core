@@ -9,6 +9,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = Path("docs/architecture/architecture-documentation-catalog.v1.json")
 ARCHITECTURE_DIR = Path("docs/architecture")
+CODEBASE_REVIEW_DIR = ARCHITECTURE_DIR / "codebase-reviews"
+ALLOWED_DOCS_ROOT_FILES = frozenset({"README.md"})
 CATALOG_SCHEMA_VERSION = "lotus-core.architecture-documentation-catalog.v1"
 CURRENT_STATE_MAP_PATH = Path("docs/architecture/current-state-architecture-map.md")
 RUNTIME_BOUNDARY_CATALOG_PATH = Path("docs/architecture/runtime-boundary-decision-catalog.json")
@@ -63,7 +65,7 @@ REQUIRED_CURRENT_STATE_MAP_TERMS = (
     "RFC-0082-contract-family-inventory.md",
     "RFC-0083-source-data-product-catalog.md",
     "RFC-0083-eventing-supportability-target-model.md",
-    "docs/operations-runbook.md",
+    "docs/operations/runbook.md",
     "wiki/API-Surface.md",
     "CODEBASE-REVIEW-LEDGER.md",
     "CR-1330",
@@ -107,6 +109,7 @@ def find_architecture_catalog_findings(root: Path = REPO_ROOT) -> list[Architect
     entries = payload.get("entries", [])
     rules = payload.get("coverage_rules", [])
     _validate_related_navigation(root, payload, findings)
+    _validate_documentation_structure(root, findings)
     _validate_entries(root, entries, findings)
     _validate_coverage_rules(root, rules, findings)
     _validate_architecture_coverage(root, entries, rules, findings)
@@ -114,6 +117,41 @@ def find_architecture_catalog_findings(root: Path = REPO_ROOT) -> list[Architect
     _validate_index_links(root, findings)
     _validate_current_state_architecture_map(root, entries, findings)
     return findings
+
+
+def _validate_documentation_structure(
+    root: Path,
+    findings: list[ArchitectureCatalogFinding],
+) -> None:
+    docs_root = root / "docs"
+    for path in sorted(docs_root.iterdir()):
+        if path.is_file() and path.name not in ALLOWED_DOCS_ROOT_FILES:
+            findings.append(
+                ArchitectureCatalogFinding(
+                    path.relative_to(root).as_posix(),
+                    "misplaced-doc-root-file",
+                    "move durable documentation into its owning docs subdirectory",
+                )
+            )
+
+    for path in sorted((root / ARCHITECTURE_DIR).glob("CR-*.md")):
+        findings.append(
+            ArchitectureCatalogFinding(
+                path.relative_to(root).as_posix(),
+                "misplaced-codebase-review-record",
+                f"move codebase review records under {CODEBASE_REVIEW_DIR.as_posix()}",
+            )
+        )
+
+    for required_index in (docs_root / "README.md", root / CODEBASE_REVIEW_DIR / "README.md"):
+        if not required_index.exists():
+            findings.append(
+                ArchitectureCatalogFinding(
+                    required_index.relative_to(root).as_posix(),
+                    "missing-documentation-index",
+                    "required documentation navigation index is missing",
+                )
+            )
 
 
 def _validate_related_navigation(
@@ -124,8 +162,8 @@ def _validate_related_navigation(
     required_links = {
         "docs/standards/verified-api-examples.v1.json",
         "docs/standards/rfc-0083-implementation-ledger.json",
-        "docs/operations-runbook.md",
-        "docs/supported-features.md",
+        "docs/operations/runbook.md",
+        "docs/features/supported-features.md",
         "wiki/Architecture.md",
         "wiki/API-Surface.md",
         "wiki/Supported-Features.md",

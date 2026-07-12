@@ -247,7 +247,7 @@ def _validate_documentation_surfaces(
             if status and status not in docs_text:
                 findings.append(
                     SupportedFeatureFinding(
-                        "docs/supported-features.md",
+                        "docs/features/supported-features.md",
                         f"missing status {status!r} for {capability.get('id')}",
                     )
                 )

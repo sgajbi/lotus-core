@@ -88,7 +88,7 @@ No database schema, Kafka topic, service topology, or success response model cha
 
 Updated this architecture record, the codebase review ledger, operations runbook, repository
 context, quality scorecard, and refactor health report. No repo-local wiki update is required
-because the operator-facing retry recovery truth is summarized in `docs/operations-runbook.md` and
+because the operator-facing retry recovery truth is summarized in `docs/operations/runbook.md` and
 the API route remains unchanged.
 
 ## Remaining Follow-Up

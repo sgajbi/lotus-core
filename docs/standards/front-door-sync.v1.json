@@ -31,7 +31,7 @@
     },
     {
       "id": "operations_runbook",
-      "path": "docs/operations-runbook.md",
+      "path": "docs/operations/runbook.md",
       "role": "operator runbook truth"
     }
   ],

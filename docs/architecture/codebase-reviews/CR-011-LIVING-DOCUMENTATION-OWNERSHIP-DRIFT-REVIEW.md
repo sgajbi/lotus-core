@@ -6,7 +6,7 @@ Review living documentation for stale ownership references after the RFC 81 serv
 
 Reviewed surfaces:
 
-- `docs/Database-Schema-Catalog.md`
+- `docs/data/database-schema-catalog.md`
 - `docs/features/timeseries_generator/04_Operations_Troubleshooting_Guide.md`
 - `docs/standards/durability-consistency.md`
 

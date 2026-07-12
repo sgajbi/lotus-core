@@ -47,8 +47,8 @@
         "docs/standards/bulk-upload-component-boundary-standard.md",
         "docs/standards/application-command-result-standard.md",
         "docs/standards/application-dependency-inversion-standard.md",
-        "docs/architecture/CR-1319-INGESTION-SERVICE-FRAMEWORK-BOUNDARY.md",
-        "docs/architecture/CR-1320-BULK-UPLOAD-COMPONENT-BOUNDARY.md"
+        "docs/architecture/codebase-reviews/CR-1319-INGESTION-SERVICE-FRAMEWORK-BOUNDARY.md",
+        "docs/architecture/codebase-reviews/CR-1320-BULK-UPLOAD-COMPONENT-BOUNDARY.md"
       ],
       "noRuntimeSplitRationale": "This representative adoption improves package-level design modularity inside the existing ingestion deployable. It does not introduce a new deployable service, database, queue, or operational ownership boundary."
     },
@@ -89,8 +89,8 @@
         "docs/standards/application-command-result-standard.md",
         "docs/standards/in-process-boundary-contract-standard.md",
         "docs/architecture/calculator-runtime-consolidation-decision.md",
-        "docs/architecture/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md",
-        "docs/architecture/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md"
+        "docs/architecture/codebase-reviews/CR-1431-TRANSACTION-EVENT-ANTI-CORRUPTION-BOUNDARY.md",
+        "docs/architecture/codebase-reviews/CR-1487-ATOMIC-TRANSACTION-RUNTIME-CUTOVER.md"
       ],
       "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI now use one target deployable with two consumers and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Registry/Kubernetes rollout and legacy package removal remain governed follow-up work."
     }

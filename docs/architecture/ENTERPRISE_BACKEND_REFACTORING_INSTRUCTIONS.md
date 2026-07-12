@@ -641,12 +641,12 @@ Treat documentation as part of the product.
 Update or create:
 
 - `README.md`
-- `docs/architecture.md`
-- `docs/api-governance.md`
-- `docs/observability.md`
-- `docs/security.md`
-- `docs/operations-runbook.md`
-- `docs/supported-features.md`
+- `docs/architecture/overview.md`
+- `docs/governance/api-governance.md`
+- `docs/operations/observability.md`
+- `docs/governance/security.md`
+- `docs/operations/runbook.md`
+- `docs/features/supported-features.md`
 - `docs/configuration.md`
 - `docs/local-development.md`
 - RFCs where architectural decisions changed

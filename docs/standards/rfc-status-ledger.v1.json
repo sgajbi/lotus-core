@@ -37,7 +37,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -72,7 +72,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -107,7 +107,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -142,7 +142,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -177,7 +177,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -212,7 +212,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -247,7 +247,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -282,7 +282,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -317,7 +317,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -352,7 +352,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -387,7 +387,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -422,7 +422,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -457,7 +457,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -492,7 +492,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -527,7 +527,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -562,7 +562,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -597,7 +597,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -632,7 +632,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -667,7 +667,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -702,7 +702,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -737,7 +737,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -772,7 +772,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -807,7 +807,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -842,7 +842,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -877,7 +877,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -912,7 +912,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -947,7 +947,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -982,7 +982,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1017,7 +1017,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1052,7 +1052,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1087,7 +1087,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1122,7 +1122,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1157,7 +1157,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1192,7 +1192,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1227,7 +1227,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1262,7 +1262,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1297,7 +1297,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1332,7 +1332,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1367,7 +1367,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1402,7 +1402,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1437,7 +1437,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1472,7 +1472,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1507,7 +1507,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1542,7 +1542,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1577,7 +1577,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1612,7 +1612,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1647,7 +1647,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1682,7 +1682,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1717,7 +1717,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1752,7 +1752,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1787,7 +1787,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1822,7 +1822,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1857,7 +1857,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1892,7 +1892,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1927,7 +1927,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1962,7 +1962,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -1997,7 +1997,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2032,7 +2032,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2067,7 +2067,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2102,7 +2102,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2137,7 +2137,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2172,7 +2172,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2207,7 +2207,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2242,7 +2242,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2277,7 +2277,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2312,7 +2312,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2347,7 +2347,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2382,7 +2382,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2417,7 +2417,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2452,7 +2452,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2487,7 +2487,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2522,7 +2522,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2557,7 +2557,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2592,7 +2592,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2627,7 +2627,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2662,7 +2662,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2697,7 +2697,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2732,7 +2732,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2767,7 +2767,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2802,7 +2802,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2837,7 +2837,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2872,7 +2872,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2907,7 +2907,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2942,7 +2942,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -2977,7 +2977,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3012,7 +3012,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3047,7 +3047,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3082,7 +3082,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3117,7 +3117,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3152,7 +3152,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3187,7 +3187,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3222,7 +3222,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3257,7 +3257,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3292,7 +3292,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3327,7 +3327,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3362,7 +3362,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3397,7 +3397,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3432,7 +3432,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3467,7 +3467,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3502,7 +3502,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -3547,7 +3547,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3594,7 +3594,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3641,7 +3641,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3688,7 +3688,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3735,7 +3735,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3782,7 +3782,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3829,7 +3829,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3876,7 +3876,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3923,7 +3923,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -3970,7 +3970,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4017,7 +4017,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4064,7 +4064,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4111,7 +4111,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4158,7 +4158,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4205,7 +4205,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4252,7 +4252,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4299,7 +4299,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4346,7 +4346,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4393,7 +4393,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4440,7 +4440,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4487,7 +4487,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4534,7 +4534,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4581,7 +4581,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4628,7 +4628,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4675,7 +4675,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4722,7 +4722,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4769,7 +4769,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4816,7 +4816,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4863,7 +4863,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4910,7 +4910,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -4957,7 +4957,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5004,7 +5004,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5051,7 +5051,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5098,7 +5098,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5145,7 +5145,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5192,7 +5192,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5239,7 +5239,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5286,7 +5286,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5333,7 +5333,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5380,7 +5380,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5427,7 +5427,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5474,7 +5474,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5521,7 +5521,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5568,7 +5568,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5615,7 +5615,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5662,7 +5662,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5709,7 +5709,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5756,7 +5756,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5803,7 +5803,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5850,7 +5850,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5897,7 +5897,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5944,7 +5944,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -5991,7 +5991,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6038,7 +6038,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6085,7 +6085,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6132,7 +6132,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6179,7 +6179,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6226,7 +6226,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6273,7 +6273,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6320,7 +6320,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6367,7 +6367,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6414,7 +6414,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6461,7 +6461,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6508,7 +6508,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6555,7 +6555,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6602,7 +6602,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6649,7 +6649,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6696,7 +6696,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6743,7 +6743,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6790,7 +6790,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6837,7 +6837,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6884,7 +6884,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6931,7 +6931,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -6978,7 +6978,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7025,7 +7025,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7072,7 +7072,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7119,7 +7119,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7166,7 +7166,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7213,7 +7213,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7260,7 +7260,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7307,7 +7307,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
@@ -7344,7 +7344,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7379,7 +7379,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7414,7 +7414,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7453,7 +7453,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7492,7 +7492,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7531,7 +7531,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7570,7 +7570,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7609,7 +7609,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7648,7 +7648,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7687,7 +7687,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7726,7 +7726,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7765,7 +7765,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7804,7 +7804,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7843,7 +7843,7 @@
         "wiki/RFC-Index.md"
       ],
       "supported_feature_refs": [
-        "docs/supported-features.md"
+        "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [],
       "supersedes": [],
@@ -7865,14 +7865,14 @@
       "affected_routes": [],
       "affected_data_models": [],
       "implementation_refs": [
-        "docs/operations-runbook.md",
+        "docs/operations/runbook.md",
         "docs/operations/RFC-065-Calculator-Scalability-Operations-Playbook.md"
       ],
       "test_evidence": [
         "tests/unit/scripts/test_rfc_status_ledger_guard.py"
       ],
       "docs_links": [
-        "docs/operations-runbook.md",
+        "docs/operations/runbook.md",
         "docs/operations/RFC-065-Calculator-Scalability-Operations-Playbook.md"
       ],
       "wiki_links": [

@@ -24,6 +24,18 @@ This repository owns:
 4. position, valuation, cashflow, and time-series generation foundations,
 5. query-service APIs for operational, integration, and reporting-oriented consumption.
 
+## Repository Documentation Structure
+
+`docs/README.md` is the documentation front door. Durable documents belong in purpose-owned
+subdirectories such as `architecture/`, `data/`, `features/`, `governance/`, `operations/`,
+`standards/`, and `testing/`; do not add uncategorized files directly under `docs/`.
+
+Individual codebase-review evidence records belong in
+`docs/architecture/codebase-reviews/`. Keep current status and summary evidence in
+`docs/architecture/CODEBASE-REVIEW-LEDGER.md`, and use
+`docs/architecture/CODEBASE-REVIEW-PLAYBOOK.md` for the review workflow. The architecture
+documentation catalog guard rejects root-level `CR-*` records and loose `docs/` files.
+
 ## Current-State Summary
 
 Current repository posture:
@@ -549,14 +561,14 @@ Important validation expectations:
    changes require a post-merge publication evidence plan.
 8. Supported-feature publication is manifest-backed. Keep
    `contracts/supported-features/lotus-core-supported-features.v1.json`,
-   `docs/supported-features.md`, and `wiki/Supported-Features.md` aligned through
+   `docs/features/supported-features.md`, and `wiki/Supported-Features.md` aligned through
    `make supported-features-guard`. The manifest is the canonical place to record capability
    owner, implementation modules/routes, source-data products, tests, validation evidence,
    current status, fail-closed limitations, safe demo claims, prohibited claims, and downstream
    ownership caveats.
 9. Incident playbooks are contract-backed. Keep
    `contracts/operations/incident-playbooks.v1.json`,
-   `docs/operations/Incident-Playbooks.md`, `docs/operations-runbook.md`,
+   `docs/operations/Incident-Playbooks.md`, `docs/operations/runbook.md`,
    `wiki/Operations-Runbook.md`, and `wiki/Troubleshooting.md` aligned through
    `make incident-playbook-guard`. Every runtime failure family must include symptoms, metrics,
    API checks, read-only database checks, expected fields, containment, escalation, and

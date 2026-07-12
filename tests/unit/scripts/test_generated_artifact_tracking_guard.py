@@ -14,7 +14,7 @@ def test_generated_artifact_tracking_guard_allows_authored_source_and_docs() -> 
     assert not is_forbidden_tracked_artifact("src/services/query_service/app/main.py")
     assert not is_forbidden_tracked_artifact("scripts/clean_generated_artifacts.py")
     assert not is_forbidden_tracked_artifact(
-        "docs/architecture/CR-1272-CLEAN-GENERATED-ARTIFACTS-POLICY.md"
+        "docs/architecture/codebase-reviews/CR-1272-CLEAN-GENERATED-ARTIFACTS-POLICY.md"
     )
 
 
