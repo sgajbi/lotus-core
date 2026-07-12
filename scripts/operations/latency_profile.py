@@ -25,10 +25,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-try:
-    from scripts.quality.ci_service_sets import LATENCY_GATE_SERVICES
-except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import LATENCY_GATE_SERVICES
+from scripts.quality.ci_service_sets import LATENCY_GATE_SERVICES  # noqa: E402
+from tests.test_support.managed_compose_run import (  # noqa: E402
+    ManagedComposeRun,
+    prepare_managed_compose_run,
+)
 
 
 @dataclass(frozen=True)
@@ -99,18 +100,11 @@ def _wait_ready(
     raise RuntimeError("Services were not ready before timeout.")
 
 
-def _run_compose_up(build: bool) -> None:
-    cmd = ["docker", "compose", "up", "-d"]
-    if build:
-        cmd.append("--build")
-    cmd.extend(LATENCY_GATE_SERVICES)
-    subprocess.run(cmd, check=True)
-
-
 def _raise_if_compose_service_failed(
     service_name: str,
+    managed_run: ManagedComposeRun | None = None,
 ) -> None:
-    status, exit_code = _get_compose_service_state(service_name)
+    status, exit_code = _get_compose_service_state(service_name, managed_run)
     if status == "exited" and exit_code != "0":
         raise RuntimeError(
             "Compose service "
@@ -119,12 +113,22 @@ def _raise_if_compose_service_failed(
         )
 
 
-def _get_compose_service_state(service_name: str) -> tuple[str | None, str | None]:
+def _get_compose_service_state(
+    service_name: str,
+    managed_run: ManagedComposeRun | None = None,
+) -> tuple[str | None, str | None]:
+    compose_command = (
+        managed_run.compose_command("ps", "-a", "-q", service_name)
+        if managed_run is not None
+        else ["docker", "compose", "ps", "-a", "-q", service_name]
+    )
+    environment = managed_run.runtime.values if managed_run is not None else None
     ps = subprocess.run(
-        ["docker", "compose", "ps", "-a", "-q", service_name],
+        compose_command,
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
     container_id = ps.stdout.strip()
     if not container_id:
@@ -150,10 +154,11 @@ def _wait_compose_service_completed_successfully(
     service_name: str,
     *,
     timeout_seconds: int,
+    managed_run: ManagedComposeRun | None = None,
 ) -> None:
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
-        status, exit_code = _get_compose_service_state(service_name)
+        status, exit_code = _get_compose_service_state(service_name, managed_run)
         if status == "exited":
             if exit_code == "0":
                 return
@@ -164,7 +169,7 @@ def _wait_compose_service_completed_successfully(
             )
         time.sleep(2)
 
-    status, exit_code = _get_compose_service_state(service_name)
+    status, exit_code = _get_compose_service_state(service_name, managed_run)
     if status == "exited" and exit_code == "0":
         return
     if status == "exited":
@@ -648,20 +653,10 @@ def _enforce_gate(results: list[dict[str, Any]]) -> tuple[bool, list[str]]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run lotus-core endpoint latency profiling.")
-    parser.add_argument(
-        "--ingestion-base-url", default=os.getenv("E2E_INGESTION_URL", "http://localhost:8200")
-    )
-    parser.add_argument(
-        "--query-base-url", default=os.getenv("E2E_QUERY_URL", "http://localhost:8201")
-    )
-    parser.add_argument(
-        "--event-replay-base-url",
-        default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
-    )
-    parser.add_argument(
-        "--query-control-plane-base-url",
-        default=os.getenv("E2E_QUERY_CONTROL_PLANE_URL", "http://localhost:8202"),
-    )
+    parser.add_argument("--ingestion-base-url")
+    parser.add_argument("--query-base-url")
+    parser.add_argument("--event-replay-base-url")
+    parser.add_argument("--query-control-plane-base-url")
     parser.add_argument("--portfolio-id", default="DEMO_DPM_EUR_001")
     parser.add_argument("--benchmark-id", default="BMK_GLOBAL_BALANCED_60_40")
     parser.add_argument("--warmup-runs", type=int, default=5)
@@ -687,8 +682,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--output-dir", default="output/task-runs")
+    parser.add_argument("--compose-file", default="docker-compose.yml")
+    parser.add_argument(
+        "--compose-log-path",
+        default="output/task-runs/diagnostics/latency-gate-compose.log",
+    )
     parser.add_argument("--build", action="store_true")
     parser.add_argument("--skip-compose", action="store_true")
+    parser.add_argument("--keep-compose", action="store_true")
     parser.add_argument("--enforce", action="store_true")
     parser.add_argument(
         "--include-protected-ops",
@@ -698,13 +699,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-
-    if not args.skip_compose:
-        _run_compose_up(build=args.build)
-
+def _run_latency_profile(
+    *,
+    args: argparse.Namespace,
+    run_id: str,
+    managed_run: ManagedComposeRun | None,
+) -> int:
     _wait_ready(
         base_ingestion_url=args.ingestion_base_url,
         base_event_replay_url=args.event_replay_base_url,
@@ -713,10 +713,11 @@ def main() -> int:
         timeout_seconds=args.ready_timeout_seconds,
     )
 
-    if not args.skip_compose:
+    if managed_run is not None:
         _wait_compose_service_completed_successfully(
             "demo_data_loader",
             timeout_seconds=args.seed_completion_timeout_seconds,
+            managed_run=managed_run,
         )
 
     session = requests.Session()
@@ -729,8 +730,8 @@ def main() -> int:
         timeout_seconds=max(args.context_timeout_seconds, args.ready_timeout_seconds),
         progress_check=(
             None
-            if args.skip_compose
-            else lambda: _raise_if_compose_service_failed("demo_data_loader")
+            if managed_run is None
+            else lambda: _raise_if_compose_service_failed("demo_data_loader", managed_run)
         ),
     )
 
@@ -769,6 +770,65 @@ def main() -> int:
         print("Latency gate passed.")
 
     return 0
+
+
+def _requested_endpoint(cli_value: str | None, environment_key: str) -> str | None:
+    return cli_value or os.getenv(environment_key)
+
+
+def main() -> int:
+    args = parse_args()
+    run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+    requested_endpoints = {
+        "E2E_INGESTION_URL": _requested_endpoint(
+            args.ingestion_base_url,
+            "E2E_INGESTION_URL",
+        ),
+        "E2E_QUERY_URL": _requested_endpoint(args.query_base_url, "E2E_QUERY_URL"),
+        "E2E_EVENT_REPLAY_URL": _requested_endpoint(
+            args.event_replay_base_url,
+            "E2E_EVENT_REPLAY_URL",
+        ),
+        "E2E_QUERY_CONTROL_PLANE_URL": _requested_endpoint(
+            args.query_control_plane_base_url,
+            "E2E_QUERY_CONTROL_PLANE_URL",
+        ),
+    }
+    if args.skip_compose:
+        args.ingestion_base_url = (
+            requested_endpoints["E2E_INGESTION_URL"] or "http://localhost:8200"
+        )
+        args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or "http://localhost:8201"
+        args.event_replay_base_url = (
+            requested_endpoints["E2E_EVENT_REPLAY_URL"] or "http://localhost:8209"
+        )
+        args.query_control_plane_base_url = (
+            requested_endpoints["E2E_QUERY_CONTROL_PLANE_URL"] or "http://localhost:8202"
+        )
+        return _run_latency_profile(args=args, run_id=run_id, managed_run=None)
+
+    managed_run = prepare_managed_compose_run(
+        scope="latency-gate",
+        compose_file=REPO_ROOT / args.compose_file,
+        services=tuple(LATENCY_GATE_SERVICES),
+        build=args.build,
+        log_path=REPO_ROOT / args.compose_log_path,
+        endpoint_urls=requested_endpoints,
+        keep_stack=args.keep_compose,
+    )
+    endpoints = managed_run.runtime.endpoints
+    args.ingestion_base_url = (
+        requested_endpoints["E2E_INGESTION_URL"] or endpoints.e2e_ingestion_url
+    )
+    args.query_base_url = requested_endpoints["E2E_QUERY_URL"] or endpoints.e2e_query_url
+    args.event_replay_base_url = (
+        requested_endpoints["E2E_EVENT_REPLAY_URL"] or endpoints.e2e_event_replay_url
+    )
+    args.query_control_plane_base_url = (
+        requested_endpoints["E2E_QUERY_CONTROL_PLANE_URL"] or endpoints.e2e_query_control_plane_url
+    )
+    with managed_run:
+        return _run_latency_profile(args=args, run_id=run_id, managed_run=managed_run)
 
 
 if __name__ == "__main__":
