@@ -43,6 +43,14 @@ def test_prepare_test_runtime_assigns_dynamic_ports_and_endpoints() -> None:
         assert "LOTUS_POSITION_CALCULATOR_HOST_PORT" not in runtime_env
         assert endpoints.compose_project_name == runtime_env["COMPOSE_PROJECT_NAME"]
         assert endpoints.e2e_query_control_plane_url == runtime_env["E2E_QUERY_CONTROL_PLANE_URL"]
+        assert (
+            endpoints.e2e_transaction_processing_url
+            == runtime_env["E2E_TRANSACTION_PROCESSING_URL"]
+        )
+        assert (
+            endpoints.e2e_financial_reconciliation_url
+            == runtime_env["E2E_FINANCIAL_RECONCILIATION_URL"]
+        )
     finally:
         runtime.port_reservation.release()
 
