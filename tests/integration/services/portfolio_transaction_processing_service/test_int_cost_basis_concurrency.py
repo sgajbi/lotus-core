@@ -241,9 +241,7 @@ async def test_cost_basis_processing_lock_does_not_serialize_other_security_keys
             "SEC-COST-LOCK-01",
         )
         await asyncio.wait_for(
-            CostCalculatorRepository(
-                other_security_session
-            ).acquire_cost_basis_processing_lock(
+            CostCalculatorRepository(other_security_session).acquire_cost_basis_processing_lock(
                 "PORT-COST-LOCK-02",
                 "SEC-COST-LOCK-02",
             ),

@@ -1,10 +1,43 @@
 import json
 
+from scripts.operations import transaction_processing_load_support
 from scripts.operations.performance_load_gate import (
     _build_transaction_batch,
     _evaluate_profile,
     _write_report,
 )
+
+
+class _MetricsResponse:
+    text = """# HELP lotus_core_transaction_processing_operations_total Completed operations.
+# TYPE lotus_core_transaction_processing_operations_total counter
+lotus_core_transaction_processing_operations_total{outcome="processed",stage="transaction"} 120
+lotus_core_transaction_processing_operations_total{outcome="duplicate",stage="transaction"} 60
+"""
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
+    monkeypatch,
+) -> None:
+    requested: list[tuple[str, int]] = []
+
+    def get(url: str, *, timeout: int) -> _MetricsResponse:
+        requested.append((url, timeout))
+        return _MetricsResponse()
+
+    monkeypatch.setattr(transaction_processing_load_support.requests, "get", get)
+
+    count = transaction_processing_load_support.transaction_processing_operation_count(
+        transaction_processing_base_url="http://localhost:8090",
+        stage="transaction",
+        outcome="duplicate",
+    )
+
+    assert count == 60
+    assert requested == [("http://localhost:8090/metrics", 10)]
 
 
 def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:

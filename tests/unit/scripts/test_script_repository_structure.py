@@ -38,3 +38,14 @@ def test_script_names_are_domain_descriptive() -> None:
     assert {
         path.name for path in script_files if path.name.lower().startswith("rfc")
     } == RFC_TRACKING_SCRIPT_NAMES
+
+
+def test_workflows_do_not_invoke_scripts_through_retired_root_paths() -> None:
+    script_names = {
+        path.name for path in Path("scripts").glob("*/*.py") if path.name != "__init__.py"
+    }
+    workflow_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in Path(".github/workflows").glob("*.yml")
+    )
+
+    assert not {name for name in script_names if f"scripts/{name}" in workflow_text}

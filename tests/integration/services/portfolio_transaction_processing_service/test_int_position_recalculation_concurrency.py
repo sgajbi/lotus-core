@@ -231,9 +231,7 @@ async def test_position_recalculation_lock_does_not_serialize_other_keys_or_epoc
         )
         async with other_security_session.begin():
             await asyncio.wait_for(
-                PositionRepository(
-                    other_security_session
-                ).acquire_position_history_replay_lock(
+                PositionRepository(other_security_session).acquire_position_history_replay_lock(
                     "PORT-POSITION-LOCK-02",
                     "SEC-POSITION-LOCK-02",
                     0,

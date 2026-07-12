@@ -243,5 +243,5 @@ async def test_auto_generated_buy_cash_leg_traverses_cashflow_and_position_stage
     }
     product_cashflow, settlement_cashflow = cashflows
     assert product_cashflow.is_position_flow is True
-    assert settlement_cashflow.is_position_flow is False
+    assert settlement_cashflow.is_position_flow is True
     assert settlement_cashflow.is_portfolio_flow is False

@@ -7,6 +7,7 @@ import pytest
 from portfolio_common.database_models import (
     AverageCostPoolState,
     Cashflow,
+    CostBasisProcessingState,
     OutboxEvent,
     PositionHistory,
     PositionLotState,
@@ -14,7 +15,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.transaction_domain import SELL_AVCO_POLICY_ID
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.calculators.cost_calculator_service.app.repository import (
@@ -209,6 +210,143 @@ async def test_combined_avco_disposal_reconciles_pooled_and_source_cost_basis(
         (Decimal("200"), Decimal("2200"), Decimal("2200")),
         (Decimal("150"), Decimal("1650"), Decimal("1650")),
     ]
+
+
+async def test_non_lot_avco_rebuild_repairs_source_lots_with_pool_checkpoint(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-AVCO-REBUILD-01"
+    security_id = "FO_EQ_COMBINED_AVCO_REBUILD_01"
+    events = (
+        booked_transaction_event(
+            transaction_id="BUY-COMBINED-AVCO-REBUILD-01",
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_date=datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity="100",
+            price="10",
+            gross_amount="1000",
+        ),
+        booked_transaction_event(
+            transaction_id="BUY-COMBINED-AVCO-REBUILD-02",
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_date=datetime(2026, 6, 5, 10, 0, tzinfo=timezone.utc),
+            transaction_type="BUY",
+            quantity="100",
+            price="12",
+            gross_amount="1200",
+        ),
+        booked_transaction_event(
+            transaction_id="SELL-COMBINED-AVCO-REBUILD-01",
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            transaction_date=datetime(2026, 6, 10, 10, 0, tzinfo=timezone.utc),
+            transaction_type="SELL",
+            quantity="50",
+            price="15",
+            gross_amount="750",
+        ),
+    )
+    dividend = booked_transaction_event(
+        transaction_id="DIVIDEND-COMBINED-AVCO-REBUILD-01",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc),
+        transaction_type="DIVIDEND",
+        quantity="0",
+        price="0",
+        gross_amount="30",
+        cash_entry_mode="AUTO_GENERATE",
+    )
+    async_db_session.add(portfolio_record(portfolio_id, cost_basis_method="AVCO"))
+    async_db_session.add(
+        instrument_record(
+            security_id,
+            name="Combined Processing AVCO Rebuild Equity",
+            isin="SG0000000095",
+            currency="USD",
+        )
+    )
+    context = transaction_processing_test_context(async_db_session)
+    for offset, event in enumerate(events, start=9501):
+        await persist_and_process_booked_transaction(
+            session=async_db_session,
+            context=context,
+            event=event,
+            event_id=f"transactions.persisted-0-{offset}",
+            correlation_id="corr-combined-avco-rebuild",
+        )
+
+    async with context.session_factory() as corruption_session:
+        source_lots = (
+            (
+                await corruption_session.execute(
+                    select(PositionLotState)
+                    .where(PositionLotState.portfolio_id == portfolio_id)
+                    .order_by(PositionLotState.source_transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for source_lot, quantity, cost in zip(
+            source_lots,
+            (Decimal("100"), Decimal("100")),
+            (Decimal("1000"), Decimal("1200")),
+            strict=True,
+        ):
+            source_lot.open_quantity = quantity
+            source_lot.lot_cost_local = cost
+            source_lot.lot_cost_base = cost
+        await corruption_session.execute(
+            delete(CostBasisProcessingState).where(
+                CostBasisProcessingState.portfolio_id == portfolio_id,
+                CostBasisProcessingState.security_id == security_id,
+            )
+        )
+        await corruption_session.commit()
+
+    dividend_result = await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=dividend,
+        event_id="transactions.persisted-0-9504",
+        correlation_id="corr-combined-avco-rebuild",
+    )
+
+    async with context.session_factory() as verification_session:
+        repaired_source_lots = (
+            (
+                await verification_session.execute(
+                    select(PositionLotState)
+                    .where(PositionLotState.portfolio_id == portfolio_id)
+                    .order_by(PositionLotState.source_transaction_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pool_state = await verification_session.scalar(
+            select(AverageCostPoolState).where(
+                AverageCostPoolState.portfolio_id == portfolio_id,
+                AverageCostPoolState.security_id == security_id,
+            )
+        )
+
+    assert dividend_result.status is TransactionProcessingStatus.PROCESSED
+    assert [
+        (lot.source_transaction_id, lot.open_quantity, lot.lot_cost_base)
+        for lot in repaired_source_lots
+    ] == [
+        (events[0].transaction_id, Decimal("75"), Decimal("750")),
+        (events[1].transaction_id, Decimal("75"), Decimal("900")),
+    ]
+    assert pool_state is not None
+    assert pool_state.pool_quantity == Decimal("150")
+    assert pool_state.pool_cost_base == Decimal("1650")
 
 
 async def test_avco_checkpoint_failure_rolls_back_all_combined_processing_outputs(

@@ -21,6 +21,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
+    instrument_record,
     portfolio_record,
     process_booked_transaction,
     transaction_processing_test_context,
@@ -171,8 +172,7 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
                     ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME,
                     ProcessedEvent.semantic_key
                     == (
-                        "transaction-processing:v1:PORT-COMBINED-REPLAY-01:"
-                        "ADJ-COMBINED-REPLAY-01:0"
+                        "transaction-processing:v1:PORT-COMBINED-REPLAY-01:ADJ-COMBINED-REPLAY-01:0"
                     ),
                     ProcessedEvent.payload_fingerprint.isnot(None),
                 ),
@@ -195,6 +195,75 @@ async def test_duplicate_replay_requests_preserve_single_derived_transaction_sta
         "CashflowCalculated",
         "ProcessedTransactionPersisted",
     ]
+
+
+async def test_replay_after_processing_ignores_processor_owned_transaction_outputs(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-REPLAY-02"
+    transaction_id = "BUY-COMBINED-REPLAY-02"
+    correlation_id = "corr-combined-replay-02"
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id="SEC-COMBINED-REPLAY-02",
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="10",
+        price="25",
+        gross_amount="250",
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-REPLAY-02",
+        settlement_cash_instrument_id="CASH-USD-REPLAY-02",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id),
+            instrument_record(
+                "SEC-COMBINED-REPLAY-02",
+                name="Combined replay security",
+                isin="SG0000000002",
+                currency="USD",
+            ),
+            canonical_transaction_record(event),
+        ]
+    )
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+
+    first_processing = await process_booked_transaction(
+        context=context,
+        event=event,
+        event_id="transactions.persisted-0-9201",
+        correlation_id=correlation_id,
+    )
+
+    producer = CapturingReplayProducer()
+    replay_use_case = build_replay_booked_transaction_use_case(
+        session_factory=context.session_factory,
+        kafka_producer=producer,
+    )
+    replay_result = await replay_use_case.execute(
+        ReplayBookedTransactionCommand(
+            transaction_id=transaction_id,
+            correlation_id=correlation_id,
+        )
+    )
+    replay_event = TransactionEvent.model_validate(producer.messages[0]["value"])
+    duplicate_processing = await process_booked_transaction(
+        context=context,
+        event=replay_event,
+        event_id="transactions.persisted-0-9202",
+        correlation_id=correlation_id,
+    )
+
+    assert first_processing.status is TransactionProcessingStatus.PROCESSED
+    assert replay_result.status is BookedTransactionReplayStatus.REPLAYED
+    assert replay_event.net_cost is not None
+    assert replay_event.calculation_policy_id == "BUY_DEFAULT_POLICY"
+    assert replay_event.external_cash_transaction_id == f"{transaction_id}-CASHLEG"
+    assert duplicate_processing.status is TransactionProcessingStatus.DUPLICATE
 
 
 async def _row_count(session: AsyncSession, statement) -> int:

@@ -171,7 +171,7 @@ jobs:
         run: cosign sign --yes "${{ steps.meta.outputs.image_ref }}@${{ steps.digest.outputs.image_digest }}"
       - name: Write image release manifest
         run: |
-          python scripts/write_image_release_manifest.py \
+          python scripts/release/write_image_release_manifest.py \
             --service "${{ matrix.service }}" \
             --image-name "${{ matrix.image_name }}" \
             --image-ref "${{ steps.meta.outputs.image_ref }}" \
@@ -193,7 +193,7 @@ jobs:
       - name: Render transaction processing Kubernetes release
         if: ${{ matrix.service == 'portfolio_transaction_processing_service' }}
         run: |
-          python scripts/render_transaction_processing_deployment.py \
+          python scripts/release/render_transaction_processing_deployment.py \
             --release-manifest "output/build-evidence/${{ matrix.service }}-image-release-manifest.json" \
             --output "output/build-evidence/${{ matrix.service }}-kubernetes.yaml"
       - name: Upload image release evidence

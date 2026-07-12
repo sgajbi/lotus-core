@@ -1885,6 +1885,15 @@ Most relevant current governance:
      `semantic_conflict` in bounded metrics. Identical cross-topic/offset replays return the existing
      duplicate result without another compatibility processed fact; materially changed content for
      the same portfolio/transaction/epoch fails terminally as `transaction_semantic_conflict`.
+     Fingerprint source transaction intent, not processor-owned cost/P&L outputs or deterministic
+     default lineage and policy enrichment added before persisted replay. Replay load gates must
+     measure completed duplicate outcomes through
+     `lotus_core_transaction_processing_operations_total{stage="transaction",outcome="duplicate"}`;
+     they must not wait for new `processed_events` rows because successful semantic duplicates
+     intentionally preserve the existing idempotency record.
+     Normalize `<transaction_id>-CASHLEG` only when `cash_entry_mode=AUTO_GENERATE`; caller-supplied
+     external cash identifiers and generated-shaped identifiers in upstream-provided mode remain
+     material conflict inputs.
      Existing physical-only consumers and pre-migration null semantic fences remain compatible.
      Any identity-version change requires migration, replay/downstream impact analysis, deterministic
      hash tests, PostgreSQL conflict/concurrency proof, and explicit documentation.
@@ -1907,6 +1916,9 @@ Most relevant current governance:
      key ordering is not a database fence. Preserve parallelism across different securities.
      Audit current state through the source lot's calculation policy/version plus the aggregate
      checkpoint's cost-basis method, latest calculation transaction, and engine-state version.
+     A full AVCO rebuild must refresh the complete persisted source-lot snapshot and the aggregate
+     pool checkpoint in the same caller-owned transaction. Persisting only the pool can leave source
+     lots stale and corrupt the next incremental allocation.
      Any lock-key or mutation-boundary change requires same-key PostgreSQL BUY/SELL/replay overlap
      proof, different-key non-blocking proof, exact lot/checkpoint reconciliation, bounded lock-wait
      telemetry, and deployed pool/latency evidence before cutover.

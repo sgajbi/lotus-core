@@ -8,7 +8,10 @@ from typing import Any
 from uuid import uuid4
 
 import requests  # type: ignore[import-untyped]
+from prometheus_client.parser import text_string_to_metric_families
 from sqlalchemy import Engine, text
+
+_TRANSACTION_PROCESSING_OPERATION_METRIC = "lotus_core_transaction_processing_operations_total"
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,17 +289,47 @@ def processed_event_count(*, engine: Engine, portfolio_id: str) -> int:
         )
 
 
-def wait_for_processed_event_count(
+def transaction_processing_operation_count(
     *,
-    engine: Engine,
-    portfolio_id: str,
+    transaction_processing_base_url: str,
+    stage: str,
+    outcome: str,
+) -> int:
+    response = requests.get(
+        f"{transaction_processing_base_url}/metrics",
+        timeout=10,
+    )
+    response.raise_for_status()
+    for family in text_string_to_metric_families(response.text):
+        for sample in family.samples:
+            if (
+                sample.name == _TRANSACTION_PROCESSING_OPERATION_METRIC
+                and sample.labels.get("stage") == stage
+                and sample.labels.get("outcome") == outcome
+            ):
+                return int(sample.value)
+    return 0
+
+
+def wait_for_transaction_processing_operation_count(
+    *,
+    transaction_processing_base_url: str,
+    stage: str,
+    outcome: str,
     expected_minimum: int,
     timeout_seconds: int,
 ) -> float | None:
     started = time.time()
     deadline = started + timeout_seconds
     while time.time() < deadline:
-        if processed_event_count(engine=engine, portfolio_id=portfolio_id) >= expected_minimum:
+        if (
+            transaction_processing_operation_count(
+                transaction_processing_base_url=transaction_processing_base_url,
+                stage=stage,
+                outcome=outcome,
+            )
+            >= expected_minimum
+        ):
             return round(time.time() - started, 3)
         time.sleep(1)
     return None

@@ -813,9 +813,9 @@ class CostCalculationWorkflow:
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
         mutates_lot_state = lot_behavior in LOT_STATE_MUTATING_BEHAVIORS
         incremental_opening = incremental and lot_behavior in LOT_OPENING_BEHAVIORS
-        should_update_lot_states = (
-            not incremental and cost_basis_method is CostBasisMethod.FIFO
-        ) or (mutates_lot_state and not incremental_opening)
+        should_update_lot_states = not incremental or (
+            mutates_lot_state and not incremental_opening
+        )
         if should_update_lot_states:
             update_lot_states = (
                 repo.update_selected_open_lot_states

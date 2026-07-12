@@ -71,6 +71,87 @@ def test_semantic_identity_detects_material_payload_change() -> None:
     assert changed_policy.payload_fingerprint != original.payload_fingerprint
 
 
+def test_semantic_identity_ignores_processor_owned_outputs_added_before_replay() -> None:
+    transaction = replace(
+        _transaction(),
+        calculation_policy_id=None,
+        calculation_policy_version=None,
+    )
+    enriched_after_processing = replace(
+        transaction,
+        allocated_cost_basis_base=Decimal("254"),
+        allocated_cost_basis_local=Decimal("254"),
+        gross_cost=Decimal("255"),
+        net_cost=Decimal("254"),
+        net_cost_local=Decimal("254"),
+        realized_capital_pnl_base=Decimal("1"),
+        realized_capital_pnl_local=Decimal("1"),
+        realized_fx_pnl_base=Decimal("0"),
+        realized_fx_pnl_local=Decimal("0"),
+        realized_gain_loss=Decimal("1"),
+        realized_gain_loss_local=Decimal("1"),
+        realized_total_pnl_base=Decimal("1"),
+        realized_total_pnl_local=Decimal("1"),
+        transaction_fx_rate=Decimal("1"),
+        economic_event_id="EVT-BUY-PB-001-TX-SEMANTIC-001",
+        linked_transaction_group_id="LTG-BUY-PB-001-TX-SEMANTIC-001",
+        calculation_policy_id="BUY_DEFAULT_POLICY",
+        calculation_policy_version="1.0.0",
+    )
+
+    assert build_transaction_semantic_identity(
+        enriched_after_processing
+    ) == build_transaction_semantic_identity(transaction)
+
+
+def test_semantic_identity_keeps_custom_linkage_and_policy_material() -> None:
+    transaction = _transaction()
+    original = build_transaction_semantic_identity(transaction)
+
+    for changed_transaction in (
+        replace(transaction, economic_event_id="CLIENT-EVENT-001"),
+        replace(transaction, linked_transaction_group_id="CLIENT-GROUP-001"),
+        replace(transaction, calculation_policy_id="CLIENT_POLICY"),
+        replace(transaction, calculation_policy_version="2.0.0"),
+    ):
+        changed = build_transaction_semantic_identity(changed_transaction)
+        assert changed.semantic_key == original.semantic_key
+        assert changed.payload_fingerprint != original.payload_fingerprint
+
+
+def test_semantic_identity_normalizes_only_auto_generated_cash_leg_identity() -> None:
+    transaction = replace(
+        _transaction(),
+        cash_entry_mode="AUTO_GENERATE",
+        external_cash_transaction_id=None,
+    )
+    generated_cash_leg_link = replace(
+        transaction,
+        external_cash_transaction_id="TX-SEMANTIC-001-CASHLEG",
+    )
+    caller_supplied_cash_leg_link = replace(
+        transaction,
+        external_cash_transaction_id="CLIENT-CASH-LEG-001",
+    )
+    upstream_supplied_generated_shape = replace(
+        transaction,
+        cash_entry_mode="UPSTREAM_PROVIDED",
+        external_cash_transaction_id="TX-SEMANTIC-001-CASHLEG",
+    )
+
+    original = build_transaction_semantic_identity(transaction)
+
+    assert build_transaction_semantic_identity(generated_cash_leg_link) == original
+    assert (
+        build_transaction_semantic_identity(caller_supplied_cash_leg_link).payload_fingerprint
+        != original.payload_fingerprint
+    )
+    assert (
+        build_transaction_semantic_identity(upstream_supplied_generated_shape).payload_fingerprint
+        != original.payload_fingerprint
+    )
+
+
 def test_semantic_identity_separates_processing_epochs() -> None:
     transaction = _transaction()
 

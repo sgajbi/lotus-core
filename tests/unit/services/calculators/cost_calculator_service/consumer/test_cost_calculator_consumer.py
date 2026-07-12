@@ -120,9 +120,7 @@ async def test_cost_engine_acquires_key_lock_before_reading_processing_state() -
         cost_basis_method=CostBasisMethod.FIFO,
     )
 
-    repo.acquire_cost_basis_processing_lock.assert_awaited_once_with(
-        "PORT_COST_01", "SEC_COST_01"
-    )
+    repo.acquire_cost_basis_processing_lock.assert_awaited_once_with("PORT_COST_01", "SEC_COST_01")
     assert repo.method_calls[0] == call.acquire_cost_basis_processing_lock(
         "PORT_COST_01", "SEC_COST_01"
     )
@@ -1733,7 +1731,11 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
     assert persisted_checkpoint.cost_local == Decimal("100")
     assert persisted_checkpoint.cost_base == Decimal("105")
     assert persisted_checkpoint.representative_source_transaction_id == "BUY-1"
-    repo.update_open_lot_states.assert_not_awaited()
+    repo.update_open_lot_states.assert_awaited_once_with(
+        portfolio_id="P1",
+        security_id="S1",
+        states_by_source_transaction_id=open_lot_states,
+    )
 
 
 async def test_consumer_normalizes_upstream_adjustment_cash_leg_type(

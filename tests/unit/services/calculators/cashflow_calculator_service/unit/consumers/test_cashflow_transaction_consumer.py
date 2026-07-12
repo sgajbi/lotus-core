@@ -594,9 +594,7 @@ async def test_combined_cashflow_stage_keeps_semantic_and_epoch_fence(
     cashflow_calculation_workflow._fence_or_semantic_duplicate_outcome = AsyncMock(
         return_value=None
     )
-    cashflow_calculation_workflow._stage_cashflow_processing = AsyncMock(
-        return_value=expected
-    )
+    cashflow_calculation_workflow._stage_cashflow_processing = AsyncMock(return_value=expected)
 
     result = await cashflow_calculation_workflow.stage_valid_event(
         db=mock_dependencies["db_session"],

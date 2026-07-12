@@ -53,6 +53,7 @@ def _cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
     digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, byteorder="big", signed=True)
 
+
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
     "linked_transaction_group_id",

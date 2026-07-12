@@ -499,7 +499,11 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         )
         repo.upsert_average_cost_pool_checkpoint.assert_not_awaited()
     else:
-        repo.update_open_lot_states.assert_not_awaited()
+        repo.update_open_lot_states.assert_awaited_once_with(
+            portfolio_id="P1",
+            security_id="S1",
+            states_by_source_transaction_id=calculation.open_lot_states,
+        )
         persisted_pool = repo.upsert_average_cost_pool_checkpoint.await_args.args[0]
         assert persisted_pool.quantity == Decimal("10")
         assert persisted_pool.cost_base == Decimal("100")

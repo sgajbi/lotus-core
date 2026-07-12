@@ -47,10 +47,13 @@ try:
         seed_load_context as _seed_load_context,
     )
     from scripts.operations.transaction_processing_load_support import (
-        wait_for_processed_event_count as _wait_for_processed_event_count,
+        transaction_processing_operation_count as _transaction_processing_operation_count,
     )
     from scripts.operations.transaction_processing_load_support import (
         wait_for_transaction_processing as _wait_for_transaction_processing,
+    )
+    from scripts.operations.transaction_processing_load_support import (
+        wait_for_transaction_processing_operation_count as _wait_for_operation_count,
     )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
     from transaction_processing_load_support import (
@@ -66,10 +69,13 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
         seed_load_context as _seed_load_context,
     )
     from transaction_processing_load_support import (
-        wait_for_processed_event_count as _wait_for_processed_event_count,
+        transaction_processing_operation_count as _transaction_processing_operation_count,
     )
     from transaction_processing_load_support import (
         wait_for_transaction_processing as _wait_for_transaction_processing,
+    )
+    from transaction_processing_load_support import (
+        wait_for_transaction_processing_operation_count as _wait_for_operation_count,
     )
 
 
@@ -389,6 +395,10 @@ def main() -> int:
         default=os.getenv("E2E_EVENT_REPLAY_URL", "http://localhost:8209"),
     )
     parser.add_argument(
+        "--transaction-processing-base-url",
+        default=os.getenv("E2E_TRANSACTION_PROCESSING_URL", "http://localhost:8090"),
+    )
+    parser.add_argument(
         "--host-database-url",
         default=os.getenv(
             "HOST_DATABASE_URL",
@@ -586,17 +596,22 @@ def main() -> int:
         raise TimeoutError("Replay source transactions did not complete before replay")
     replay_bursts = 4 if args.profile_tier == "fast" else 12
     replay_burst_size = 15 if args.profile_tier == "fast" else 30
-    replay_claim_baseline = _processed_event_count(engine=engine, portfolio_id=portfolio_id)
+    replay_duplicate_baseline = _transaction_processing_operation_count(
+        transaction_processing_base_url=args.transaction_processing_base_url,
+        stage="transaction",
+        outcome="duplicate",
+    )
     replay_request_count = _trigger_replay_storm(
         ingestion_base_url=args.ingestion_base_url,
         transaction_ids=replay_ids,
         bursts=replay_bursts,
         burst_size=replay_burst_size,
     )
-    replay_drain_seconds = _wait_for_processed_event_count(
-        engine=engine,
-        portfolio_id=portfolio_id,
-        expected_minimum=replay_claim_baseline + replay_request_count,
+    replay_drain_seconds = _wait_for_operation_count(
+        transaction_processing_base_url=args.transaction_processing_base_url,
+        stage="transaction",
+        outcome="duplicate",
+        expected_minimum=replay_duplicate_baseline + replay_request_count,
         timeout_seconds=args.drain_timeout_seconds,
     )
     replay_ended = time.time()
