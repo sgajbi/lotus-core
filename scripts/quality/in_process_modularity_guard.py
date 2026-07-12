@@ -231,7 +231,7 @@ def _validate_retired_legacy_folders(
                     detail="retired legacy folder paths must be non-empty strings",
                 )
             )
-        elif (root / retired_path).exists():
+        elif _contains_authored_content(root / retired_path):
             findings.append(
                 InProcessModularityFinding(
                     path=service_path,
@@ -240,6 +240,19 @@ def _validate_retired_legacy_folders(
                 )
             )
     return findings
+
+
+def _contains_authored_content(path: Path) -> bool:
+    if not path.exists():
+        return False
+    if path.is_file():
+        return path.suffix not in {".pyc", ".pyo"}
+    return any(
+        candidate.is_file()
+        and "__pycache__" not in candidate.parts
+        and candidate.suffix not in {".pyc", ".pyo"}
+        for candidate in path.rglob("*")
+    )
 
 
 def _string_field(record: dict[str, Any], field_name: str) -> str | None:
