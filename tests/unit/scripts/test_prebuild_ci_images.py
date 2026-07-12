@@ -1,3 +1,4 @@
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -20,6 +21,7 @@ def test_prebuild_group_expands_to_named_services(
             cache_dir=str(tmp_path / ".buildx-cache"),
             services=None,
             group="performance-gate",
+            metrics_output=None,
         ),
     )
     monkeypatch.setattr(
@@ -52,6 +54,7 @@ def test_prebuild_services_and_group_are_deduplicated(
             cache_dir=str(tmp_path / ".buildx-cache"),
             services=["query_service"],
             group="query-only",
+            metrics_output=None,
         ),
     )
     monkeypatch.setattr(
@@ -108,3 +111,41 @@ def test_ci_image_version_prefers_exact_commit_over_ref_name(monkeypatch) -> Non
     assert metadata["LOTUS_IMAGE_VERSION"] == source_sha
     assert metadata["LOTUS_GIT_COMMIT_SHA"] == source_sha
     assert metadata["LOTUS_GIT_BRANCH"] == "feat/runtime-image-set"
+
+
+def test_prebuild_writes_machine_readable_timing_evidence(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    metrics_path = tmp_path / "runtime-image-build-metrics.json"
+    monkeypatch.setattr(
+        "scripts.release.prebuild_ci_images.parse_args",
+        lambda: Namespace(
+            cache_dir=str(tmp_path / ".buildx-cache"),
+            services=["query_service"],
+            group=None,
+            metrics_output=metrics_path,
+        ),
+    )
+    monkeypatch.setattr(
+        "scripts.release.prebuild_ci_images._build",
+        lambda service, cache_dir: {
+            "service": service,
+            "image_tag": "lotus-core/query-service:local",
+            "duration_seconds": 1.25,
+        },
+    )
+
+    assert main() == 0
+
+    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert metrics["schema_version"] == "lotus-core.runtime-image-build-metrics.v1"
+    assert metrics["service_count"] == 1
+    assert metrics["total_build_seconds"] == 1.25
+    assert metrics["services"] == [
+        {
+            "service": "query_service",
+            "image_tag": "lotus-core/query-service:local",
+            "duration_seconds": 1.25,
+        }
+    ]
