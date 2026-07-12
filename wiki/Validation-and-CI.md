@@ -37,6 +37,9 @@ PR Merge Gate and Main Releasability each use one exact-source runtime image set
 `Validate Docker Build` job builds the workflow's service union once, records build timings, and
 uploads a one-day transport bundle. Docker smoke, E2E, latency, load, validation, recovery, and
 institutional jobs load that bundle instead of rebuilding overlapping images.
+CI Make targets suppress runtime rebuild flags after this handoff; local commands retain their
+normal build behavior. The E2E image inventory is checked against every repo-built full-stack
+service so a newly started service cannot bypass exact-source verification.
 
 | Evidence | Location | Failure Meaning |
 |---|---|---|
