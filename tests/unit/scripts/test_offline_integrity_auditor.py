@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from scripts.offline_integrity_auditor import (
+from scripts.operations.offline_integrity_auditor import (
     LedgerRow,
     PositionKey,
     SnapshotRow,

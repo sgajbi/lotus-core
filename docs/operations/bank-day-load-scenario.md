@@ -25,6 +25,7 @@ Run:
 
 ```powershell
 python scripts\bank_day_load_scenario.py `
+  --compose-project-name lotus-core-app-local `
   --portfolio-count 1000 `
   --transactions-per-portfolio 100 `
   --transaction-batch-size 2000 `
@@ -53,7 +54,7 @@ The script:
    portfolio-level timeseries to converge,
 7. samples downstream APIs,
 8. runs reconciliation checks for sampled portfolios,
-9. inspects container logs for real error lines,
+9. inspects stable Compose service logs for real error lines using the configured project/file,
 10. writes a machine-readable and human-readable evidence pack.
 
 ## Deterministic Dataset Rules
@@ -113,7 +114,7 @@ operator rules for this harness:
    portfolio aggregation.
 
 For completed runs that already converged, use
-`python scripts/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
+`python scripts/operations/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
 to collect sampled or exhaustive reconciliation evidence without reseeding data. Increase
 `--portfolio-limit` to widen the proof set; the `20260418T065154Z` institutional run was
 reconciled across all `1000` portfolios with this workflow.

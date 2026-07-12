@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.concurrency_duplicate_delivery_guard import (
+from scripts.quality.concurrency_duplicate_delivery_guard import (
     REQUIRED_SCENARIOS,
     validate_concurrency_duplicate_delivery_pack,
 )

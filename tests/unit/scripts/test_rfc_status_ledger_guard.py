@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import rfc_status_ledger_guard as guard
+from scripts.quality import rfc_status_ledger_guard as guard
 
 
 def _write_required_files(repo_root: Path) -> None:
@@ -13,7 +13,7 @@ def _write_required_files(repo_root: Path) -> None:
         "docs/rfc-transaction-specs/README.md",
         "docs/architecture/README.md",
         "wiki/RFC-Index.md",
-        "docs/supported-features.md",
+        "docs/features/supported-features.md",
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py",
         "tests/unit/scripts/test_rfc_status_ledger_guard.py",
     ):
@@ -37,7 +37,7 @@ def _entry(path: str, family: str, *, status: str = "implemented") -> dict[str, 
         "test_evidence": ["tests/unit/scripts/test_rfc_status_ledger_guard.py"],
         "docs_links": ["docs/RFCs/RFC-INDEX.md"],
         "wiki_links": ["wiki/RFC-Index.md"],
-        "supported_feature_refs": ["docs/supported-features.md"],
+        "supported_feature_refs": ["docs/features/supported-features.md"],
         "canonical_registry_refs": [],
         "supersedes": [],
         "superseded_by": [],

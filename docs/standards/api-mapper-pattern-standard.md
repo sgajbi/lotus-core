@@ -43,7 +43,7 @@ variants, then map them through a small API mapper with focused tests.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/api_mapper_pattern_guard.py`.
+`make architecture-guard` runs `scripts/quality/api_mapper_pattern_guard.py`.
 
 The guard validates representative mapper modules, prevents moved lookup mapping from returning to
 the router, blocks direct event-replay command-error HTTP conversion from being reintroduced in the

@@ -1,12 +1,23 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.database_models import CostBasisProcessingState, FxRate, PositionLotState
+from portfolio_common.database_models import (
+    AverageCostPoolState,
+    CostBasisProcessingState,
+    FxRate,
+    PositionLotState,
+)
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
+from sqlalchemy.dialects import postgresql
 
+from src.services.calculators.cost_calculator_service.app.average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+    AverageCostPoolRebuildPlan,
+    AverageCostPoolTransition,
+)
 from src.services.calculators.cost_calculator_service.app.cost_engine.domain.models.effective_fx_rate import (  # noqa: E501
     EffectiveFxRate,
 )
@@ -21,9 +32,52 @@ from src.services.calculators.cost_calculator_service.app.cost_processing_checkp
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,
+    _cost_basis_processing_lock_key,
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_acquire_cost_basis_processing_lock_uses_stable_normalized_key() -> None:
+    db_session = AsyncMock()
+    clock = MagicMock(side_effect=[10.0, 10.125])
+    repository = CostCalculatorRepository(db_session, clock=clock)
+
+    with patch(
+        "src.services.calculators.cost_calculator_service.app.repository."
+        "observe_cost_basis_processing_lock_wait"
+    ) as observe_wait:
+        await repository.acquire_cost_basis_processing_lock(" PORT_COST_01 ", " SEC01 ")
+
+    statement = db_session.execute.call_args.args[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
+    assert statement.compile().params == {
+        "lock_key": _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+    }
+    assert _cost_basis_processing_lock_key(" PORT_COST_01 ", " SEC01 ") == (
+        _cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
+    )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+
+
+async def test_acquire_cost_basis_processing_lock_records_failure_without_swallowing() -> None:
+    db_session = AsyncMock()
+    db_session.execute.side_effect = RuntimeError("lock unavailable")
+    repository = CostCalculatorRepository(
+        db_session,
+        clock=MagicMock(side_effect=[20.0, 20.25]),
+    )
+
+    with (
+        patch(
+            "src.services.calculators.cost_calculator_service.app.repository."
+            "observe_cost_basis_processing_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="lock unavailable"),
+    ):
+        await repository.acquire_cost_basis_processing_lock("P1", "S1")
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
 
 
 async def test_get_fx_rate_window_fetches_one_seed_plus_bounded_effective_window():
@@ -228,6 +282,384 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
         "ORDER BY transactions.transaction_date ASC, transactions.quantity DESC, "
         "transactions.transaction_id ASC"
     ) in compiled_query
+
+
+async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineage() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    persisted = AverageCostPoolState(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        pool_quantity=Decimal("15"),
+        pool_cost_local=Decimal("180"),
+        pool_cost_base=Decimal("195"),
+        state_version="avco-pool-v1",
+    )
+    transaction = DBTransaction(
+        transaction_id="BUY-2",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 2),
+        quantity=Decimal("10"),
+        price=Decimal("12"),
+        gross_transaction_amount=Decimal("120"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    execute_result = MagicMock()
+    execute_result.first.return_value = (persisted, transaction)
+    db_session.execute.return_value = execute_result
+
+    record = await repository.get_average_cost_pool_checkpoint_record(
+        portfolio_id=" P1 ",
+        security_id=" S1 ",
+    )
+
+    assert record is not None
+    assert record.representative_transaction is transaction
+    assert record.checkpoint == AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        quantity=Decimal("15"),
+        cost_local=Decimal("180"),
+        cost_base=Decimal("195"),
+    )
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "average_cost_pool_state.portfolio_id = 'P1'" in compiled_query
+    assert "average_cost_pool_state.security_id = 'S1'" in compiled_query
+    assert "FOR UPDATE OF average_cost_pool_state" in compiled_query
+
+
+async def test_upsert_average_cost_pool_checkpoint_is_idempotent_and_normalized() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+
+    await repository.upsert_average_cost_pool_checkpoint(
+        AverageCostPoolCheckpoint(
+            portfolio_id=" P1 ",
+            instrument_id=" I1 ",
+            security_id=" S1 ",
+            representative_source_transaction_id=" BUY-2 ",
+            quantity=Decimal("15"),
+            cost_local=Decimal("180"),
+            cost_base=Decimal("195"),
+        )
+    )
+
+    stmt = db_session.execute.call_args.args[0]
+    compiled_query = str(stmt.compile(compile_kwargs={"literal_binds": True}))
+    assert "ON CONFLICT (portfolio_id, security_id) DO UPDATE" in compiled_query
+    assert "updated_at = now()" in compiled_query
+    assert stmt.compile().params["portfolio_id"] == "P1"
+    assert stmt.compile().params["security_id"] == "S1"
+    assert stmt.compile().params["instrument_id"] == "I1"
+    assert stmt.compile().params["representative_source_transaction_id"] == "BUY-2"
+
+
+def _average_cost_checkpoint() -> AverageCostPoolCheckpoint:
+    return AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-2",
+        quantity=Decimal("15"),
+        cost_local=Decimal("180"),
+        cost_base=Decimal("195"),
+    )
+
+
+def _average_cost_source(
+    transaction_id: str,
+    *,
+    transaction_date: datetime,
+    quantity: str,
+    cost: str,
+) -> EngineTransaction:
+    return EngineTransaction(
+        transaction_id=transaction_id,
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        transaction_type="BUY",
+        transaction_date=transaction_date,
+        quantity=Decimal(quantity),
+        gross_transaction_amount=Decimal(cost),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        net_cost=Decimal(cost),
+        gross_cost=Decimal(cost),
+        realized_gain_loss=Decimal(0),
+        net_cost_local=Decimal(cost),
+        realized_gain_loss_local=Decimal(0),
+    )
+
+
+def _average_cost_rebuild_plan() -> AverageCostPoolRebuildPlan:
+    first = _average_cost_source(
+        "BUY-1",
+        transaction_date=datetime(2026, 1, 1, 10, 0),
+        quantity="10",
+        cost="100",
+    )
+    second = _average_cost_source(
+        "BUY-2",
+        transaction_date=datetime(2026, 1, 2, 10, 0),
+        quantity="5",
+        cost="80",
+    )
+    states = {
+        "BUY-1": OpenLotState(
+            quantity=Decimal("6"),
+            cost_local=Decimal("72"),
+            cost_base=Decimal("78"),
+        ),
+        "BUY-2": OpenLotState(
+            quantity=Decimal("3"),
+            cost_local=Decimal("36"),
+            cost_base=Decimal("39"),
+        ),
+    }
+    checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        states_by_source_transaction_id=states,
+    )
+    return AverageCostPoolRebuildPlan(
+        checkpoint=checkpoint,
+        processing_checkpoint=CostBasisProcessingCheckpoint.from_transaction(
+            second,
+            cost_basis_method="AVCO",
+        ),
+        source_transactions=(first, second),
+        source_states=states,
+    )
+
+
+async def test_apply_average_cost_pool_rebuild_bulk_replaces_source_and_checkpoints() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    repository.AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 1
+
+    await repository.apply_average_cost_pool_rebuild(_average_cost_rebuild_plan())
+
+    assert db_session.execute.await_count == 5
+    close_sql = str(
+        db_session.execute.call_args_list[0]
+        .args[0]
+        .compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "UPDATE position_lot_state" in close_sql
+    assert "open_quantity=0" in close_sql
+    source_upsert_sql = str(
+        db_session.execute.call_args_list[1]
+        .args[0]
+        .compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "INSERT INTO position_lot_state" in source_upsert_sql
+    assert "ON CONFLICT (source_transaction_id) DO UPDATE" in source_upsert_sql
+    assert "'BUY-1'" in source_upsert_sql
+    assert "open_quantity" in source_upsert_sql
+    assert "6" in source_upsert_sql
+    assert "INSERT INTO average_cost_pool_state" in str(
+        db_session.execute.call_args_list[3].args[0]
+    )
+    assert "INSERT INTO cost_basis_processing_state" in str(
+        db_session.execute.call_args_list[4].args[0]
+    )
+
+
+async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_source_sums() -> None:
+    db_session = AsyncMock()
+    pool_result = MagicMock()
+    pool_result.scalars.return_value.first.return_value = None
+    source_result = MagicMock()
+    source_result.one.return_value = (
+        2,
+        Decimal("9"),
+        Decimal("108"),
+        Decimal("117"),
+    )
+    db_session.execute.side_effect = [pool_result, source_result]
+
+    summary = await CostCalculatorRepository(db_session).get_average_cost_pool_persisted_summary(
+        portfolio_id=" P1 ",
+        security_id=" S1 ",
+    )
+
+    assert summary.source_count == 2
+    assert summary.source_quantity == Decimal("9")
+    assert summary.source_cost_local == Decimal("108")
+    assert summary.source_cost_base == Decimal("117")
+    assert summary.pool_quantity is None
+    source_sql = str(
+        db_session.execute.call_args_list[1]
+        .args[0]
+        .compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "trim(position_lot_state.portfolio_id) = 'P1'" in source_sql
+    assert "trim(position_lot_state.security_id) = 'S1'" in source_sql
+
+
+async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_residual() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    scale_result = MagicMock()
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = (
+        Decimal("7"),
+        Decimal("70"),
+        Decimal("77"),
+    )
+    residual_result = MagicMock(rowcount=1)
+    upsert_result = MagicMock()
+    db_session.execute.side_effect = [
+        scale_result,
+        aggregate_result,
+        residual_result,
+        upsert_result,
+    ]
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=OpenLotState(
+            quantity=Decimal("9"),
+            cost_local=Decimal("108"),
+            cost_base=Decimal("117"),
+        ),
+        explicit_sources_after={},
+    )
+
+    await repository.apply_average_cost_pool_transition(transition)
+
+    scale_sql = str(
+        db_session.execute.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "open_quantity=trunc(" in scale_sql
+    assert "position_lot_state.open_quantity * 9" in scale_sql
+    assert "CAST(15 AS NUMERIC(18, 10))" in scale_sql
+    assert "lot_cost_local=round(" in scale_sql
+    assert "position_lot_state.lot_cost_local * 108" in scale_sql
+    assert "source_transaction_id != 'BUY-2'" in scale_sql
+    residual_sql = str(
+        db_session.execute.call_args_list[2].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "source_transaction_id = 'BUY-2'" in residual_sql
+    assert "open_quantity=2" in residual_sql
+    assert "lot_cost_local=38" in residual_sql
+    assert "lot_cost_base=40" in residual_sql
+    upsert_sql = str(
+        db_session.execute.call_args_list[3].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "INSERT INTO average_cost_pool_state" in upsert_sql
+
+
+async def test_apply_average_cost_pool_transition_rejects_missing_close_sources() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    close_result = MagicMock(rowcount=0)
+    db_session.execute.return_value = close_result
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=OpenLotState(
+            quantity=Decimal(0),
+            cost_local=Decimal(0),
+            cost_base=Decimal(0),
+        ),
+        explicit_sources_after={},
+    )
+
+    with pytest.raises(ValueError, match="found no persisted source lots"):
+        await repository.apply_average_cost_pool_transition(transition)
+
+    assert db_session.execute.await_count == 1
+
+
+async def test_apply_average_cost_pool_transition_rejects_negative_residual() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    aggregate_result = MagicMock()
+    aggregate_result.one.return_value = (
+        Decimal("10"),
+        Decimal("109"),
+        Decimal("118"),
+    )
+    db_session.execute.side_effect = [MagicMock(), aggregate_result]
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=OpenLotState(
+            quantity=Decimal("9"),
+            cost_local=Decimal("108"),
+            cost_base=Decimal("117"),
+        ),
+        explicit_sources_after={},
+    )
+
+    with pytest.raises(ValueError, match="exceeds the target pool aggregate"):
+        await repository.apply_average_cost_pool_transition(transition)
+
+    assert db_session.execute.await_count == 2
+
+
+async def test_apply_average_cost_pool_transition_updates_explicit_new_source() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    new_lot = PositionLotState(
+        lot_id="LOT-BUY-3",
+        source_transaction_id="BUY-3",
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        acquisition_date=date(2026, 1, 3),
+        original_quantity=Decimal("5"),
+        open_quantity=Decimal("5"),
+        lot_cost_local=Decimal("70"),
+        lot_cost_base=Decimal("75"),
+    )
+    select_result = MagicMock()
+    select_result.scalars.return_value.all.return_value = [new_lot]
+    db_session.execute.side_effect = [select_result, MagicMock()]
+    explicit_state = OpenLotState(
+        quantity=Decimal("5"),
+        cost_local=Decimal("70"),
+        cost_base=Decimal("75"),
+    )
+    transition = AverageCostPoolTransition(
+        before=_average_cost_checkpoint(),
+        existing_sources_after=_average_cost_checkpoint().as_open_lot_state(),
+        explicit_sources_after={"BUY-3": explicit_state},
+    )
+
+    await repository.apply_average_cost_pool_transition(transition)
+
+    assert db_session.execute.await_count == 2
+    selected_update_sql = str(
+        db_session.execute.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "source_transaction_id IN ('BUY-3')" in selected_update_sql
+    checkpoint_sql = str(
+        db_session.execute.call_args_list[1].args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "'BUY-3'" in checkpoint_sql
 
 
 async def test_get_fifo_disposal_lots_streams_only_quantity_covering_oldest_lots() -> None:

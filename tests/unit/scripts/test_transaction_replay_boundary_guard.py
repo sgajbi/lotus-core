@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.transaction_replay_boundary_guard import (
+from scripts.quality.transaction_replay_boundary_guard import (
     find_transaction_replay_boundary_findings,
 )
 

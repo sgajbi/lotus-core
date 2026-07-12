@@ -8,7 +8,7 @@ from portfolio_common.source_data_products import (
     SourceDataProductDefinition,
 )
 
-from scripts import analytics_input_consumer_contract_guard as guard
+from scripts.quality import analytics_input_consumer_contract_guard as guard
 
 
 def _product(

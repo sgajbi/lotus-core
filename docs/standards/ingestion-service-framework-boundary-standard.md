@@ -31,7 +31,7 @@ batch, replay, or test execution paths that reuse the same business services.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/ingestion_service_framework_guard.py`. The guard scans the
+`make architecture-guard` runs `scripts/quality/ingestion_service_framework_guard.py`. The guard scans the
 ingestion service modules and adapter-mode policy for FastAPI imports, `Depends(...)`,
 `HTTPException`, and `status.HTTP` usage.
 

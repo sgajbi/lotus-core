@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.aggregation_scheduler_boundary_guard import (
+from scripts.quality.aggregation_scheduler_boundary_guard import (
     find_aggregation_scheduler_boundary_findings,
 )
 

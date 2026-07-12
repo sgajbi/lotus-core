@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.testability_architecture_guard import (
+from scripts.quality.testability_architecture_guard import (
     find_testability_architecture_findings,
 )
 

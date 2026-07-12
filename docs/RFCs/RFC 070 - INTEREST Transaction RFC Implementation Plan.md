@@ -67,7 +67,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py` |
 | 4 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md`, `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py` |
 | 5 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-5-QUERY-OBSERVABILITY.md`, `tests/integration/services/query_service/test_transactions_router.py` |
-| 6 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md`, `scripts/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
+| 6 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md`, `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
 
 ### Slice 0 - Gap Assessment and Characterization Baseline (docs + tests, no behavior change)
 Deliverables:
@@ -138,7 +138,7 @@ Exit Criteria:
 
 ### Slice 6 - Conformance, Suite Wiring, and Exit Report
 Deliverables:
-1. `scripts/test_manifest.py` suite entries:
+1. `scripts/quality/test_manifest.py` suite entries:
  - `transaction-interest-contract`
  - alias `transaction-interest-contract`
 2. `Makefile` targets:
@@ -156,10 +156,10 @@ Per approved slice, run relevant gates:
 1. `python -m ruff check ...`
 2. `make typecheck`
 3. targeted pytest slice suites
-4. `python scripts/migration_contract_check.py --mode alembic-sql` (if schema changed)
-5. `python scripts/openapi_quality_gate.py` (if API touched)
-6. `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
-7. `python scripts/api_vocabulary_inventory.py --validate-only` (if API touched)
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` (if schema changed)
+5. `python scripts/quality/openapi_quality_gate.py` (if API touched)
+6. `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
+7. `python scripts/quality/api_vocabulary_inventory.py --validate-only` (if API touched)
 
 ## Governance and Standards Alignment
 1. No aliases in API contracts or vocabulary inventory (RFC-0067).

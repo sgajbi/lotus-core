@@ -18,6 +18,26 @@ DB_OPERATION_LATENCY_SECONDS = Histogram(
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
 )
 
+DATABASE_POOL_CONNECTIONS = Gauge(
+    "database_pool_connections",
+    "Current database connection-pool state sampled during readiness checks.",
+    labelnames=("pool", "state"),
+)
+
+POSITION_HISTORY_REPLAY_LOCK_WAIT_SECONDS = Histogram(
+    "position_history_replay_lock_wait_seconds",
+    "Wait time for the transaction-scoped position history replay lock.",
+    labelnames=("outcome",),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
+COST_BASIS_PROCESSING_LOCK_WAIT_SECONDS = Histogram(
+    "cost_basis_processing_lock_wait_seconds",
+    "Wait time for the transaction-scoped cost-basis processing lock.",
+    labelnames=("outcome",),
+    buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30),
+)
+
 
 def db_timer(operation: str):
     """
@@ -27,6 +47,18 @@ def db_timer(operation: str):
             ...
     """
     return DB_OPERATION_LATENCY_SECONDS.labels(repository="db", method=operation).time()
+
+
+def set_database_pool_connections(*, pool: str, state: str, count: int) -> None:
+    DATABASE_POOL_CONNECTIONS.labels(pool, state).set(max(0, count))
+
+
+def observe_position_history_replay_lock_wait(*, outcome: str, seconds: float) -> None:
+    POSITION_HISTORY_REPLAY_LOCK_WAIT_SECONDS.labels(outcome=outcome).observe(max(0.0, seconds))
+
+
+def observe_cost_basis_processing_lock_wait(*, outcome: str, seconds: float) -> None:
+    COST_BASIS_PROCESSING_LOCK_WAIT_SECONDS.labels(outcome=outcome).observe(max(0.0, seconds))
 
 
 # --------------------------------------------------------------------------------------
@@ -105,6 +137,12 @@ KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL = Counter(
     "kafka_consumer_backlog_pressure_total",
     "Kafka consumer times polling paused or messages were queued because worker capacity was full.",
     labelnames=("service", "topic", "group_id", "reason"),
+)
+
+KAFKA_CONSUMER_PARTITION_LAG_MESSAGES = Gauge(
+    "kafka_consumer_partition_lag_messages",
+    "Messages between the last committed consumer offset and cached partition high watermark.",
+    labelnames=("service", "topic", "group_id", "partition"),
 )
 
 HEALTH_DEPENDENCY_CHECKS_TOTAL = Counter(
@@ -224,6 +262,22 @@ def observe_kafka_consumer_backlog_pressure(
     reason: str,
 ) -> None:
     KAFKA_CONSUMER_BACKLOG_PRESSURE_TOTAL.labels(service, topic, group_id, reason).inc()
+
+
+def set_kafka_consumer_partition_lag(
+    *,
+    service: str,
+    topic: str,
+    group_id: str,
+    partition: str,
+    lag_messages: int,
+) -> None:
+    KAFKA_CONSUMER_PARTITION_LAG_MESSAGES.labels(
+        service,
+        topic,
+        group_id,
+        partition,
+    ).set(max(0, lag_messages))
 
 
 def observe_health_dependency_check(
@@ -417,6 +471,19 @@ REPROCESSING_EPOCH_BUMPED_TOTAL = Counter(
     "reprocessing_epoch_bumped_total",
     "Total number of times a reprocessing flow was triggered by an epoch increment.",
     labelnames=("trigger",),
+)
+
+POSITION_RECALCULATION_COORDINATION_TOTAL = Counter(
+    "position_recalculation_coordination_total",
+    "Position recalculation coordination decisions by bounded outcome and reason.",
+    labelnames=("outcome", "reason"),
+)
+
+POSITION_RECALCULATION_WORK_ITEMS = Histogram(
+    "position_recalculation_work_items",
+    "Transactions rebuilt by one position recalculation decision, including coalesced zero work.",
+    labelnames=("mode",),
+    buckets=(0, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 5000),
 )
 
 REPROCESSING_WORKER_JOBS_CLAIMED_TOTAL = Counter(

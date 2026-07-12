@@ -473,7 +473,7 @@ def test_linked_internal_position_transfer_market_values_sum_to_zero(
 @patch(
     "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
 )
-def test_linked_cash_settlement_is_excluded_from_position_and_portfolio_flow_levels(
+def test_corporate_action_cash_settlement_is_excluded_from_flow_levels(
     mock_metric,
     base_transaction_event: TransactionEvent,
 ) -> None:
@@ -509,6 +509,54 @@ def test_linked_cash_settlement_is_excluded_from_position_and_portfolio_flow_lev
     assert cashflow.is_portfolio_flow is False
     assert cashflow.economic_event_id == "EVT-MIXED-01"
     assert cashflow.linked_transaction_group_id == "GROUP-MIXED-01"
+    mock_metric.labels.return_value.inc.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("originating_transaction_type", "movement_direction", "expected_amount"),
+    [
+        ("BUY", "OUTFLOW", Decimal("-275")),
+        ("SELL", "INFLOW", Decimal("275")),
+    ],
+)
+@patch(
+    "src.services.calculators.cashflow_calculator_service.app.core.cashflow_logic.CASHFLOWS_CREATED_TOTAL"
+)
+def test_linked_trade_cash_settlement_remains_a_position_flow(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    originating_transaction_type: str,
+    movement_direction: str,
+    expected_amount: Decimal,
+) -> None:
+    settlement = base_transaction_event.model_copy(
+        update={
+            "transaction_id": f"{originating_transaction_type}-CASH-SETTLEMENT-01",
+            "instrument_id": "CASH-USD",
+            "security_id": "CASH-USD",
+            "transaction_type": "ADJUSTMENT",
+            "quantity": Decimal("0"),
+            "price": Decimal("0"),
+            "gross_transaction_amount": Decimal("275"),
+            "trade_fee": Decimal("0"),
+            "movement_direction": movement_direction,
+            "originating_transaction_id": f"{originating_transaction_type}-01",
+            "originating_transaction_type": originating_transaction_type,
+            "link_type": f"{originating_transaction_type}_TO_CASH",
+        }
+    )
+    adjustment_rule = CashflowRule(
+        classification=CashflowClassification.TRANSFER,
+        timing=CashflowTiming.EOD,
+        is_position_flow=True,
+        is_portfolio_flow=False,
+    )
+
+    cashflow = CashflowLogic.calculate(settlement, adjustment_rule)
+
+    assert cashflow.amount == expected_amount
+    assert cashflow.is_position_flow is True
+    assert cashflow.is_portfolio_flow is False
     mock_metric.labels.return_value.inc.assert_called_once()
 
 

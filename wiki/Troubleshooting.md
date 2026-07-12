@@ -74,7 +74,7 @@ Use:
 
 Use targeted proof first:
 
-- `python scripts/test_manifest.py --suite integration-lite --validate-only`
+- `python scripts/quality/test_manifest.py --suite integration-lite --validate-only`
 - `make test-unit-db`
 - `make test-integration-lite`
 

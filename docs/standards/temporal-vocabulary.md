@@ -156,7 +156,7 @@ Implementation rule:
 
 The practical guard is implemented as:
 
-- `scripts/temporal_vocabulary_guard.py`
+- `scripts/quality/temporal_vocabulary_guard.py`
 - `docs/standards/temporal-vocabulary-allowlist.json`
 
 Guard requirements:
@@ -172,7 +172,7 @@ Guard requirements:
 Recommended command once implemented:
 
 ```powershell
-python scripts/temporal_vocabulary_guard.py
+python scripts/quality/temporal_vocabulary_guard.py
 ```
 
 The guard is also wired into `make lint` through `temporal-vocabulary-guard`.
@@ -182,7 +182,7 @@ The guard is also wired into `make lint` through `temporal-vocabulary-guard`.
 For this Slice 1 policy and guard pass:
 
 1. `git diff --check` is sufficient,
-2. `python scripts/temporal_vocabulary_guard.py` proves the current allowlist and scanner agree,
+2. `python scripts/quality/temporal_vocabulary_guard.py` proves the current allowlist and scanner agree,
 3. `python -m pytest tests/unit/scripts/test_temporal_vocabulary_guard.py -q` proves the guard rejects new
    ambiguous fields, enforces exact current counts, and scans router directories,
 4. no runtime tests are required,
@@ -190,7 +190,7 @@ For this Slice 1 policy and guard pass:
 
 For future Slice 1 runtime-adjacent changes:
 
-1. run `python scripts/temporal_vocabulary_guard.py`,
-2. run `python scripts/api_vocabulary_inventory.py --validate-only` when OpenAPI vocabulary changes,
-3. run `python scripts/openapi_quality_gate.py` when route or schema documentation changes,
+1. run `python scripts/quality/temporal_vocabulary_guard.py`,
+2. run `python scripts/quality/api_vocabulary_inventory.py --validate-only` when OpenAPI vocabulary changes,
+3. run `python scripts/quality/openapi_quality_gate.py` when route or schema documentation changes,
 4. run targeted contract tests for any affected DTO or router.

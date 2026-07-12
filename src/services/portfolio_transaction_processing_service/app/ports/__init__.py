@@ -1,5 +1,6 @@
 """Framework-neutral transaction processing capability ports."""
 
+from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
 from .processing_observability import (
     TransactionProcessingObservation,
     TransactionProcessingObserver,
@@ -14,6 +15,7 @@ from .transaction_processing import (
     PipelineStageProcessingPort,
     PositionProcessingPort,
     PositionProcessingResult,
+    TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
     TransactionProcessingUnitOfWork,
     TransactionProcessingUnitOfWorkFactory,
@@ -21,6 +23,7 @@ from .transaction_processing import (
 from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
+    "AverageCostPoolReconciliationPort",
     "CashflowProcessingPort",
     "BookedTransactionReplayPort",
     "CashflowProcessingResult",
@@ -29,6 +32,7 @@ __all__ = [
     "PipelineStageProcessingPort",
     "PositionProcessingPort",
     "PositionProcessingResult",
+    "TransactionIdempotencyOutcome",
     "TransactionIdempotencyPort",
     "TransactionProcessingObservation",
     "TransactionProcessingObserver",

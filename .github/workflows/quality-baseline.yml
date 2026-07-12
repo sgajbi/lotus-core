@@ -60,7 +60,7 @@ jobs:
       - name: Install import-linter
         run: python -m pip install import-linter
       - name: Import boundary gate
-        run: python scripts/import_boundary_gate.py
+        run: python scripts/quality/import_boundary_gate.py
 
   api-governance-gate:
     name: Quality Baseline / API Governance Gate
@@ -78,11 +78,11 @@ jobs:
       - name: Install repository
         run: |
           python -m pip install -U pip
-          python scripts/bootstrap_dev.py
+          python scripts/development/bootstrap_dev.py
       - name: OpenAPI quality gate
-        run: python scripts/openapi_quality_gate.py
+        run: python scripts/quality/openapi_quality_gate.py
       - name: API vocabulary gate
-        run: python scripts/api_vocabulary_inventory.py --validate-only
+        run: python scripts/quality/api_vocabulary_inventory.py --validate-only
       - name: OpenAPI Spectral gate
         run: make quality-openapi-spectral-gate
 
@@ -159,7 +159,7 @@ jobs:
       - name: Install Radon
         run: python -m pip install radon
       - name: Maintainability gate
-        run: python scripts/maintainability_gate.py src
+        run: python scripts/quality/maintainability_gate.py src
 
   complexity-gate:
     name: Quality Baseline / Complexity Gate
@@ -189,7 +189,7 @@ jobs:
       - name: Install repository
         run: |
           python -m pip install -U pip
-          python scripts/bootstrap_dev.py
+          python scripts/development/bootstrap_dev.py
       - name: Unit collection gate
         run: make quality-unit-collection-gate
 
@@ -206,7 +206,7 @@ jobs:
       - name: Install repository
         run: |
           python -m pip install -U pip
-          python scripts/bootstrap_dev.py
+          python scripts/development/bootstrap_dev.py
       - name: Integration lite collection gate
         run: make quality-integration-lite-collection-gate
 
@@ -282,7 +282,7 @@ jobs:
         run: python -m pip_audit
       - name: Import boundary baseline
         continue-on-error: true
-        run: python scripts/import_boundary_gate.py
+        run: python scripts/quality/import_boundary_gate.py
       - name: Docstring baseline
         continue-on-error: true
         run: interrogate src

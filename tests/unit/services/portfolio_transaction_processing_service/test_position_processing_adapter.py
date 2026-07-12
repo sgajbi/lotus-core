@@ -6,7 +6,6 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +41,6 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
     rebuilt_transaction = replace(transaction, transaction_id="TX-REBUILT", epoch=4)
     workflow.calculate.return_value = PositionCalculationResult(
         position_record_count=2,
-        replay_queued=True,
         rebuilt_events=(
             legacy_transaction_event_mapper.to_transaction_event(
                 rebuilt_transaction,
@@ -55,7 +53,6 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
         db_session=AsyncMock(spec=AsyncSession),
         repository=AsyncMock(spec=PositionRepository),
         position_state_repository=AsyncMock(spec=PositionStateRepository),
-        outbox_repository=AsyncMock(spec=OutboxRepository),
         workflow=workflow,
     )
 
@@ -66,9 +63,10 @@ async def test_position_adapter_returns_position_and_replay_outcome() -> None:
     )
 
     assert result.position_record_count == 2
-    assert result.replay_queued is True
+    assert result.replay_queued is False
     assert result.cashflow_rebuild_transactions == (rebuilt_transaction,)
     event = workflow.calculate.await_args.kwargs["event"]
     assert event.transaction_id == "TX-001"
     assert event.correlation_id == "corr-001"
     assert event.traceparent == "trace-001"
+    assert "outbox_repo" not in workflow.calculate.await_args.kwargs

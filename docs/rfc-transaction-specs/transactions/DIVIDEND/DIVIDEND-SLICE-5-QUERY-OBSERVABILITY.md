@@ -25,6 +25,6 @@ DIVIDEND queryability is delivered by extending existing `/portfolios/{portfolio
 ## Test and Gate Evidence
 1. `tests/integration/services/query_service/test_transactions_router.py`
 2. `tests/unit/services/query_service/services/test_transaction_service.py`
-3. `python scripts/openapi_quality_gate.py`
-4. `python scripts/api_vocabulary_inventory.py --validate-only`
-5. `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`
+3. `python scripts/quality/openapi_quality_gate.py`
+4. `python scripts/quality/api_vocabulary_inventory.py --validate-only`
+5. `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json`

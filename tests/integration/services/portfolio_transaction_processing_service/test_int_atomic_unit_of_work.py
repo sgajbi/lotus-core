@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -12,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     ProcessTransactionCommand,
     ProcessTransactionUseCase,
     TransactionEventMetadata,
+    TransactionProcessingRejected,
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
@@ -162,6 +164,51 @@ async def test_combined_use_case_commits_every_module_and_idempotency_atomically
     assert result.status is TransactionProcessingStatus.PROCESSED
     assert duplicate_result.status is TransactionProcessingStatus.DUPLICATE
     assert await _persisted_counts(session_factory, command) == (3, 1)
+
+
+async def test_semantic_fence_suppresses_republication_and_rejects_changed_payload(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    command = _command("SEMANTIC")
+    republished = replace(
+        command,
+        metadata=replace(command.metadata, event_id="transactions.replayed-4-900"),
+    )
+    conflicting = replace(
+        republished,
+        transaction=replace(
+            republished.transaction,
+            gross_transaction_amount=Decimal("256.00"),
+        ),
+        metadata=replace(republished.metadata, event_id="transactions.corrected-1-901"),
+    )
+    use_case = ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    )
+
+    first_result = await use_case.execute(command)
+    duplicate_result = await use_case.execute(republished)
+    with pytest.raises(TransactionProcessingRejected) as exc_info:
+        await use_case.execute(conflicting)
+
+    assert first_result.status is TransactionProcessingStatus.PROCESSED
+    assert duplicate_result.status is TransactionProcessingStatus.DUPLICATE
+    assert exc_info.value.reason_code == "transaction_semantic_conflict"
+    assert await _persisted_counts(session_factory, command) == (3, 1)
+    async with session_factory() as session:
+        semantic_fence_count = await session.scalar(
+            select(func.count())
+            .select_from(ProcessedEvent)
+            .where(
+                ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME,
+                ProcessedEvent.semantic_key
+                == "transaction-processing:v1:PB-UOW-SEMANTIC:TX-UOW-SEMANTIC:0",
+            )
+        )
+    assert semantic_fence_count == 1
 
 
 @pytest.mark.parametrize("fail_at", ["cost", "cashflow", "position"])

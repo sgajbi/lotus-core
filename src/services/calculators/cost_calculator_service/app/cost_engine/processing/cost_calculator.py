@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Protocol, cast
+from typing import Callable, Protocol, cast
 
 from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.transaction_domain import (
@@ -31,6 +31,9 @@ class TransactionCostStrategy(Protocol):
         disposition_engine: DispositionEngine,
         error_reporter: ErrorReporter,
     ) -> None: ...
+
+
+InvariantErrorAdder = Callable[[ErrorReporter, Transaction, str], None]
 
 
 ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES = {
@@ -81,6 +84,24 @@ def _add_cash_consideration_invariant_error(
     error_reporter.add_error(
         transaction.transaction_id,
         f"CASH_CONSIDERATION invariant violation: {message}",
+    )
+
+
+def _add_cash_in_lieu_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id,
+        f"CASH_IN_LIEU invariant violation: {message}",
+    )
+
+
+def _add_adjustment_invariant_error(
+    error_reporter: ErrorReporter, transaction: Transaction, message: str
+) -> None:
+    error_reporter.add_error(
+        transaction.transaction_id,
+        f"ADJUSTMENT invariant violation: {message}",
     )
 
 
@@ -155,6 +176,38 @@ def _transaction_fx_rate_or_one(transaction: Transaction) -> Decimal:
 
 def _transaction_total_fees(transaction: Transaction) -> Decimal:
     return transaction.fees.total_fees if transaction.fees else Decimal(0)
+
+
+def _calculate_transaction_cash_economics(
+    transaction: Transaction,
+) -> CorporateActionCashEconomics:
+    return calculate_corporate_action_cash_economics(
+        gross_proceeds_local=transaction.gross_transaction_amount,
+        fees_local=_transaction_total_fees(transaction),
+        allocated_cost_basis_local=_optional_transaction_decimal(
+            transaction, "allocated_cost_basis_local"
+        ),
+        allocated_cost_basis_base=_optional_transaction_decimal(
+            transaction, "allocated_cost_basis_base"
+        ),
+        local_currency=transaction.trade_currency,
+        base_currency=transaction.portfolio_base_currency,
+        transaction_fx_rate=_transaction_fx_rate_or_one(transaction),
+        realized_capital_pnl_local=_optional_transaction_decimal(
+            transaction, "realized_capital_pnl_local"
+        ),
+        realized_fx_pnl_local=_optional_transaction_decimal(transaction, "realized_fx_pnl_local"),
+        realized_total_pnl_local=_optional_transaction_decimal(
+            transaction, "realized_total_pnl_local"
+        ),
+        realized_capital_pnl_base=_optional_transaction_decimal(
+            transaction, "realized_capital_pnl_base"
+        ),
+        realized_fx_pnl_base=_optional_transaction_decimal(transaction, "realized_fx_pnl_base"),
+        realized_total_pnl_base=_optional_transaction_decimal(
+            transaction, "realized_total_pnl_base"
+        ),
+    )
 
 
 def _apply_zero_cost_fields(transaction: Transaction) -> None:
@@ -340,10 +393,12 @@ def _validate_sell_quantity_and_proceeds(
     return True
 
 
-def _validate_sell_availability(
+def _validate_disposal_availability(
     transaction: Transaction,
     disposition_engine: DispositionEngine,
     error_reporter: ErrorReporter,
+    *,
+    add_invariant_error: InvariantErrorAdder,
 ) -> bool:
     available_quantity = disposition_engine.get_available_quantity(
         transaction.portfolio_id, transaction.instrument_id
@@ -352,13 +407,13 @@ def _validate_sell_availability(
     if transaction.quantity <= available_quantity:
         return True
     if policy_id in SELL_ALLOW_OVERSOLD_POLICIES:
-        _add_sell_invariant_error(
+        add_invariant_error(
             error_reporter,
             transaction,
             "oversold policy is configured but not supported in current engine.",
         )
     else:
-        _add_sell_invariant_error(
+        add_invariant_error(
             error_reporter,
             transaction,
             "sell quantity exceeds available holdings under strict oversell policy.",
@@ -366,10 +421,12 @@ def _validate_sell_availability(
     return False
 
 
-def _consume_sell_cost_basis(
+def _consume_disposal_cost_basis(
     transaction: Transaction,
     disposition_engine: DispositionEngine,
     error_reporter: ErrorReporter,
+    *,
+    add_invariant_error: InvariantErrorAdder,
 ) -> tuple[Decimal, Decimal, Decimal] | None:
     cogs_base, cogs_local, consumed_quantity, error_reason = (
         disposition_engine.consume_sell_quantity(transaction)
@@ -379,10 +436,10 @@ def _consume_sell_cost_basis(
         error_reporter.add_error(transaction.transaction_id, error_reason)
         return None
     if consumed_quantity <= Decimal(0):
-        _add_sell_invariant_error(error_reporter, transaction, "consumed_quantity must be > 0.")
+        add_invariant_error(error_reporter, transaction, "consumed_quantity must be > 0.")
         return None
     if cogs_base < Decimal(0) or cogs_local < Decimal(0):
-        _add_sell_invariant_error(
+        add_invariant_error(
             error_reporter,
             transaction,
             "disposed cost basis must be non-negative.",
@@ -530,11 +587,19 @@ class SellStrategy:
             net_sell_proceeds_base=net_sell_proceeds_base,
         ):
             return
-        if not _validate_sell_availability(transaction, disposition_engine, error_reporter):
+        if not _validate_disposal_availability(
+            transaction,
+            disposition_engine,
+            error_reporter,
+            add_invariant_error=_add_sell_invariant_error,
+        ):
             return
 
-        consumed_cost_basis = _consume_sell_cost_basis(
-            transaction, disposition_engine, error_reporter
+        consumed_cost_basis = _consume_disposal_cost_basis(
+            transaction,
+            disposition_engine,
+            error_reporter,
+            add_invariant_error=_add_sell_invariant_error,
         )
         if consumed_cost_basis is None:
             return
@@ -579,6 +644,31 @@ class CashOutflowStrategy:
         fx_rate = _transaction_fx_rate_or_one(transaction)
         transaction.net_cost_local = -cash_amount_local
         transaction.net_cost = transaction.net_cost_local * fx_rate
+        transaction.gross_cost = transaction.net_cost
+        _apply_no_realized_pnl(transaction)
+
+
+class AdjustmentStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        del disposition_engine
+        direction = _normalize_code(getattr(transaction, "movement_direction", None) or "INFLOW")
+        if direction not in {"INFLOW", "OUTFLOW"}:
+            _add_adjustment_invariant_error(
+                error_reporter,
+                transaction,
+                "movement_direction must be INFLOW or OUTFLOW.",
+            )
+            return
+        signed_amount_local = _cash_movement_amount(transaction)
+        if direction == "OUTFLOW":
+            signed_amount_local = -signed_amount_local
+        transaction.net_cost_local = signed_amount_local
+        transaction.net_cost = signed_amount_local * _transaction_fx_rate_or_one(transaction)
         transaction.gross_cost = transaction.net_cost
         _apply_no_realized_pnl(transaction)
 
@@ -693,44 +783,76 @@ class CashConsiderationStrategy:
             )
             return
         try:
-            economics = calculate_corporate_action_cash_economics(
-                gross_proceeds_local=transaction.gross_transaction_amount,
-                fees_local=_transaction_total_fees(transaction),
-                allocated_cost_basis_local=_optional_transaction_decimal(
-                    transaction, "allocated_cost_basis_local"
-                ),
-                allocated_cost_basis_base=_optional_transaction_decimal(
-                    transaction, "allocated_cost_basis_base"
-                ),
-                local_currency=transaction.trade_currency,
-                base_currency=transaction.portfolio_base_currency,
-                transaction_fx_rate=_transaction_fx_rate_or_one(transaction),
-                realized_capital_pnl_local=_optional_transaction_decimal(
-                    transaction, "realized_capital_pnl_local"
-                ),
-                realized_fx_pnl_local=_optional_transaction_decimal(
-                    transaction, "realized_fx_pnl_local"
-                ),
-                realized_total_pnl_local=_optional_transaction_decimal(
-                    transaction, "realized_total_pnl_local"
-                ),
-                realized_capital_pnl_base=_optional_transaction_decimal(
-                    transaction, "realized_capital_pnl_base"
-                ),
-                realized_fx_pnl_base=_optional_transaction_decimal(
-                    transaction, "realized_fx_pnl_base"
-                ),
-                realized_total_pnl_base=_optional_transaction_decimal(
-                    transaction, "realized_total_pnl_base"
-                ),
-            )
+            economics = _calculate_transaction_cash_economics(transaction)
         except (CorporateActionCashEconomicsError, ValueError) as exc:
             _add_cash_consideration_invariant_error(error_reporter, transaction, str(exc))
             return
-        _apply_cash_consideration_economics(transaction, economics)
+        _apply_corporate_action_cash_economics(transaction, economics)
 
 
-def _apply_cash_consideration_economics(
+class CashInLieuStrategy:
+    def calculate_costs(
+        self,
+        transaction: Transaction,
+        disposition_engine: DispositionEngine,
+        error_reporter: ErrorReporter,
+    ) -> None:
+        if transaction.quantity <= Decimal(0):
+            _add_cash_in_lieu_invariant_error(
+                error_reporter,
+                transaction,
+                "quantity_delta must be greater than 0.",
+            )
+            return
+        if transaction.gross_transaction_amount <= Decimal(0):
+            _add_cash_in_lieu_invariant_error(
+                error_reporter,
+                transaction,
+                "gross cash proceeds must be greater than 0.",
+            )
+            return
+        try:
+            economics = _calculate_transaction_cash_economics(transaction)
+        except (CorporateActionCashEconomicsError, ValueError) as exc:
+            _add_cash_in_lieu_invariant_error(error_reporter, transaction, str(exc))
+            return
+        if not _validate_disposal_availability(
+            transaction,
+            disposition_engine,
+            error_reporter,
+            add_invariant_error=_add_cash_in_lieu_invariant_error,
+        ):
+            return
+        consumed = _consume_disposal_cost_basis(
+            transaction,
+            disposition_engine,
+            error_reporter,
+            add_invariant_error=_add_cash_in_lieu_invariant_error,
+        )
+        if consumed is None:
+            return
+        consumed_base, consumed_local, consumed_quantity = consumed
+        if consumed_quantity != transaction.quantity:
+            _add_cash_in_lieu_invariant_error(
+                error_reporter,
+                transaction,
+                "consumed quantity must equal fractional quantity.",
+            )
+            return
+        if (
+            consumed_local != economics.allocated_cost_basis_local
+            or consumed_base != economics.allocated_cost_basis_base
+        ):
+            _add_cash_in_lieu_invariant_error(
+                error_reporter,
+                transaction,
+                "consumed local/base basis must equal allocated fractional basis.",
+            )
+            return
+        _apply_corporate_action_cash_economics(transaction, economics)
+
+
+def _apply_corporate_action_cash_economics(
     transaction: Transaction,
     economics: CorporateActionCashEconomics,
 ) -> None:
@@ -939,7 +1061,7 @@ class CostCalculator:
             TransactionType.SPIN_OFF: PartialTransferOutStrategy(),
             TransactionType.DEMERGER_OUT: PartialTransferOutStrategy(),
             TransactionType.CASH_CONSIDERATION: CashConsiderationStrategy(),
-            TransactionType.CASH_IN_LIEU: SellStrategy(),
+            TransactionType.CASH_IN_LIEU: CashInLieuStrategy(),
             TransactionType.SPLIT: QuantityRestatementStrategy(),
             TransactionType.REVERSE_SPLIT: QuantityRestatementStrategy(),
             TransactionType.CONSOLIDATION: QuantityRestatementStrategy(),
@@ -955,7 +1077,7 @@ class CostCalculator:
             TransactionType.RIGHTS_REFUND: IncomeStrategy(),
             TransactionType.RIGHTS_SHARE_DELIVERY: SecurityInflowStrategy(),
             TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
-            TransactionType.ADJUSTMENT: DefaultStrategy(),
+            TransactionType.ADJUSTMENT: AdjustmentStrategy(),
             TransactionType.FEE: DefaultStrategy(),
             TransactionType.TAX: UnsupportedTaxStrategy(),
         }

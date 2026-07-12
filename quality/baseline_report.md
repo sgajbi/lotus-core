@@ -130,14 +130,14 @@ baselines; the remaining quality tools stay report-only until their baselines ar
 stable.
 
 CR-867 corrected the `.importlinter` contracts to enforce the intended architecture boundaries
-instead of over-broad indirect dependency rules, added `scripts/import_boundary_gate.py`, and
+instead of over-broad indirect dependency rules, added `scripts/quality/import_boundary_gate.py`, and
 promoted import-linter to an enforced quality-baseline job. The import boundary gate currently keeps
 2 contracts: query-service routers do not directly import repositories, and FastAPI dependencies in
 `portfolio_common` remain limited to approved HTTP/cross-cutting modules.
 
 CR-868 promoted the existing clean OpenAPI quality and API vocabulary gates into a dedicated
-quality-baseline API governance job. `python scripts/openapi_quality_gate.py` passes across the
-registered API services, and `python scripts/api_vocabulary_inventory.py --validate-only` validates
+quality-baseline API governance job. `python scripts/quality/openapi_quality_gate.py` passes across the
+registered API services, and `python scripts/quality/api_vocabulary_inventory.py --validate-only` validates
 the governed vocabulary inventory.
 
 CR-869 promoted the clean configured mypy baseline into a dedicated quality-baseline typecheck job
@@ -203,7 +203,7 @@ dedicated quality-baseline Deptry source dependency workflow job.
 CR-879 measured the source maintainability baseline with `python -m radon mi src -s`. Current
 source has no D/E/F maintainability modules, but it still has C-ranked hotspots in
 `portfolio_common/openapi_enrichment.py` and selected query-service repository/service modules.
-The new `make quality-maintainability-gate` target uses `scripts/maintainability_gate.py` to parse
+The new `make quality-maintainability-gate` target uses `scripts/quality/maintainability_gate.py` to parse
 Radon JSON output and fail only when a production source module drops below C. The clean no-D/E/F
 baseline is now enforced in the quality-baseline workflow while existing C hotspots remain visible
 for follow-up refactor slices.

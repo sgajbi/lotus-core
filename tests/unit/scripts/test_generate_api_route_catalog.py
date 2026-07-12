@@ -1,4 +1,4 @@
-from scripts import generate_api_route_catalog as catalog
+from scripts.generators import generate_api_route_catalog as catalog
 
 
 def _openapi_fixture() -> dict:

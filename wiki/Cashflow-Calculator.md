@@ -2,27 +2,31 @@
 
 ## Purpose
 
-The cashflow calculator materializes canonical cashflow records from processed transaction events in
-`lotus-core`.
+The cashflow module materializes canonical cashflow records inside the combined
+`portfolio_transaction_processing_service` runtime.
 
 It converts transaction semantics into normalized inflow and outflow state that downstream
 timeseries, reconciliation, and supportability surfaces can rely on.
 
 ## What it handles
 
-The current runtime centers on:
+The current app-local/CI runtime centers on:
 
-- consuming cost-processed transaction events
+- receiving the cost-enriched transaction inside `ProcessTransactionUseCase`
 - resolving cashflow rules by transaction type
 - normalizing amount sign and classification semantics
 - persisting durable cashflow rows
-- emitting cashflow completion events for downstream orchestration
+- retaining `cashflows.calculated` as a compatibility fact after atomic processing
 
-This makes the service a governed semantic transformation stage, not a simple amount copy.
+This makes the module a governed semantic transformation stage, not a simple amount copy.
 
 ## Runtime role
 
-For an eligible processed transaction event, the service:
+The active application workflow is `app/cashflow_calculation_workflow.py`, imported directly by
+target infrastructure. `app/consumers/transaction_consumer.py` is a quarantined compatibility shell
+for legacy delivery tests and must not be imported by the combined runtime.
+
+For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture
 2. resolves the effective processing transaction type
@@ -41,6 +45,12 @@ movement is the linked `ADJUSTMENT`. A linked settlement flow is persisted for c
 accounting but has both position-flow and portfolio-flow flags disabled, preventing the settlement
 record from double counting the product economics.
 
+`CASH_IN_LIEU` follows the same product-versus-cash separation but is not income. Its fractional
+product leg is a position-level `TRANSFER`, normally carrying a negative synthetic flow. The linked
+`ADJUSTMENT` is the positive cash settlement and is excluded from position/portfolio product-flow
+analytics. Equal-and-opposite linked amounts must sum to zero in settlement currency. Income-since-
+inception calculations must exclude cash-in-lieu because its economics are capital disposal.
+
 ## Data it owns
 
 Primary durable outputs include:
@@ -51,10 +61,13 @@ Primary durable outputs include:
 
 These outputs feed:
 
-- pipeline orchestration and downstream readiness
 - position and portfolio timeseries materialization
 - transaction-to-cashflow reconciliation controls
 - support and replay investigations
+
+No active in-repo consumer waits for `cashflows.calculated`. Pipeline readiness is driven by the
+atomic `transactions.cost.processed` completion fact, so restoring a cashflow readiness consumer
+would reintroduce redundant ordering and lag failure modes.
 
 ## Why it matters
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.infrastructure_adapter_layer_guard import (
+from scripts.quality.infrastructure_adapter_layer_guard import (
     find_infrastructure_adapter_layer_findings,
 )
 

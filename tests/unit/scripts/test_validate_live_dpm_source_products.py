@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import httpx
 
-from scripts import validate_live_dpm_source_products as validator
+from scripts.validation import validate_live_dpm_source_products as validator
 
 
 def _response(status_code: int, body: dict | str) -> httpx.Response:

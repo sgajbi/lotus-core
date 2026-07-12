@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.test_manifest import (
+from scripts.quality.test_manifest import (
     SUITE_PYTEST_ARGS,
     SUITE_RUNTIME_MODE,
     SUITES,

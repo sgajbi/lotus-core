@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.ingestion_store_port_guard import find_ingestion_store_port_findings
+from scripts.quality.ingestion_store_port_guard import find_ingestion_store_port_findings
 
 
 def _write(path: Path, text: str) -> None:

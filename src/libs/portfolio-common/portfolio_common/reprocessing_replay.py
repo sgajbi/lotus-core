@@ -8,6 +8,9 @@ from .config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from .events import TransactionEvent
 from .logging_utils import normalize_lineage_value
 
+TRANSACTION_PROCESSING_INTENT_HEADER = "lotus-transaction-processing-intent"
+TRANSACTION_PROCESSING_REPAIR_VALUE = b"repair"
+
 
 class ReprocessingReplayError(RuntimeError):
     def __init__(
@@ -172,5 +175,8 @@ def _transaction_replay_message(
         topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
         key=portfolio_id,
         payload=event_to_publish.model_dump(mode="json"),
-        headers=list(headers),
+        headers=[
+            *headers,
+            (TRANSACTION_PROCESSING_INTENT_HEADER, TRANSACTION_PROCESSING_REPAIR_VALUE),
+        ],
     )

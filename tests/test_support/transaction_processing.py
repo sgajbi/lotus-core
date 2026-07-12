@@ -15,6 +15,7 @@ from src.services.persistence_service.app.adapters.event_record_mapper import (
 from src.services.portfolio_transaction_processing_service.app.application import (
     ProcessTransactionResult,
     ProcessTransactionUseCase,
+    TransactionProcessingIntent,
 )
 from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     map_transaction_event,
@@ -138,11 +139,13 @@ async def process_booked_transaction(
     event: TransactionEvent,
     event_id: str,
     correlation_id: str,
+    processing_intent: TransactionProcessingIntent = TransactionProcessingIntent.STANDARD,
 ) -> ProcessTransactionResult:
     return await context.use_case.execute(
         map_transaction_event(
             event,
             event_id=event_id,
             correlation_id=correlation_id,
+            processing_intent=processing_intent,
         )
     )

@@ -57,7 +57,7 @@ make api-vocabulary-gate
 make source-data-product-contract-guard
 make route-contract-family-guard
 make domain-product-validate
-python scripts/temporal_vocabulary_guard.py
+python scripts/quality/temporal_vocabulary_guard.py
 make lint
 make migration-smoke
 git diff --check

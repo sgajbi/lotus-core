@@ -72,7 +72,7 @@ That is a production-readiness defect even when numeric correctness appears stab
 
 ### Implemented foundation
 
-1. A governed load harness exists at `scripts/bank_day_load_scenario.py`.
+1. A governed load harness exists at `scripts/operations/bank_day_load_scenario.py`.
 2. Smoke-run evidence is emitted as JSON and Markdown artifacts.
 3. A real valuation scheduler defect was discovered under load and fixed in `src/libs/portfolio-common/portfolio_common/valuation_repository_base.py`.
 4. A regression integration test now protects that defect path in `tests/integration/services/calculators/position_valuation_calculator/test_int_valuation_repo_empty_open_dates.py`.
@@ -223,10 +223,10 @@ Instead, the run points to a different defect class:
 
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
-| Realistic bank-day load generation | Implemented baseline | `scripts/bank_day_load_scenario.py`; `docs/operations/bank-day-load-scenario.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
+| Realistic bank-day load generation | Implemented baseline | `scripts/operations/bank_day_load_scenario.py`; `docs/operations/bank-day-load-scenario.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
 | Correctness under institutional load | Implemented baseline | live run `20260418T065154Z`; support-route evidence `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`; sampled reconciliation `output/task-runs/20260418T120025Z-rfc086-final-reconciliation.md`; exhaustive reconciliation `output/task-runs/20260418T122335-bank-day-load-reconciliation.md`; latest sampled reconciliation refresh `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
 | Deterministic visibility into completion state | Implemented baseline | run-scoped support contract and stage split metrics are live; `GET /support/load-runs/20260418T065154Z?business_date=2026-04-17` returned `COMPLETE` at `2026-04-18T12:00:25Z` and still returned `COMPLETE` with full coverage plus latency evidence at `2026-04-18T14:28:50Z`; evidence: `output/task-runs/20260418T120025Z-rfc086-support-route-progress.md`, `output/task-runs/20260418T142850-bank-day-load-reconciliation.md` |
-| Interruption-safe operator evidence | Implemented baseline | `scripts/bank_day_load_scenario.py`; `output/task-runs/20260418T064716Z-bank-day-load.json`; `output/task-runs/20260418T064716Z-bank-day-load.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
+| Interruption-safe operator evidence | Implemented baseline | `scripts/operations/bank_day_load_scenario.py`; `output/task-runs/20260418T064716Z-bank-day-load.json`; `output/task-runs/20260418T064716Z-bank-day-load.md`; `tests/unit/scripts/test_bank_day_load_scenario.py` |
 | Throughput adequate for institutional completion SLA | Implemented with governed completion evidence | the live run initially exposed the valuation-to-position-timeseries bottleneck, then converged to `1000/1000` snapshot, position-timeseries, and portfolio-timeseries coverage with `0` open valuation jobs and `0` open aggregation jobs; Phase 1 added stage-tail/handoff telemetry, bounded dependent propagation cleanup, and completion-lag enforcement in institutional signoff; final review evidence includes `make test-e2e-all` with `67 passed` on 2026-04-19 |
 
 ## Goals
@@ -313,7 +313,7 @@ Preferred exposure model:
 
 ### 2. Add Interruption-Safe Evidence Emission
 
-Enhance `scripts/bank_day_load_scenario.py` so that any interruption, timeout, or controlled abort writes:
+Enhance `scripts/operations/bank_day_load_scenario.py` so that any interruption, timeout, or controlled abort writes:
 
 1. DB state summary,
 2. completion percentages,
@@ -410,7 +410,7 @@ Implementation status as of 2026-04-18:
    `src/services/query_service/app/services/operations_service.py`, and
    `src/services/query_control_plane_service/app/routers/operations.py` through
    governed `GET /support/load-runs/{run_id}?business_date=YYYY-MM-DD`,
-2. completed in `scripts/bank_day_load_scenario.py` through interruption-safe JSON and
+2. completed in `scripts/operations/bank_day_load_scenario.py` through interruption-safe JSON and
    Markdown artifact emission with explicit `terminal_status`,
 3. completed with focused regressions in:
    - `tests/unit/services/query_service/repositories/test_operations_repository.py`
@@ -430,7 +430,7 @@ Phase 0 exit criteria:
 
 Phase 0 evidence:
 
-1. `python -m ruff check src/services/query_service/app/repositories/operations_repository.py src/services/query_service/app/dtos/operations_dto.py src/services/query_service/app/services/operations_service.py src/services/query_control_plane_service/app/routers/operations.py scripts/bank_day_load_scenario.py tests/unit/scripts/test_bank_day_load_scenario.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/integration/services/query_service/test_int_operations_service.py`
+1. `python -m ruff check src/services/query_service/app/repositories/operations_repository.py src/services/query_service/app/dtos/operations_dto.py src/services/query_service/app/services/operations_service.py src/services/query_control_plane_service/app/routers/operations.py scripts/operations/bank_day_load_scenario.py tests/unit/scripts/test_bank_day_load_scenario.py tests/unit/services/query_service/repositories/test_operations_repository.py tests/integration/services/query_service/test_int_operations_service.py`
 2. `python -m pytest tests/unit/scripts/test_bank_day_load_scenario.py tests/unit/services/query_service/repositories/test_operations_repository.py -q`
 3. `python -m pytest tests/integration/services/query_service/test_int_operations_service.py -q`
 
@@ -514,7 +514,7 @@ Implementation status as of 2026-04-18:
 7. post-refresh support-route evidence at `2026-04-18T12:00:25Z` shows the run in `COMPLETE`
    state with `0` open valuation jobs, `0` open aggregation jobs, `0` completed valuations still
    waiting for position-timeseries, and no pending outbox rows on the dormant completion topics.
-8. a new repo-native `scripts/bank_day_load_reconciliation_report.py` workflow now lets operators
+8. a new repo-native `scripts/operations/bank_day_load_reconciliation_report.py` workflow now lets operators
    reconcile an existing completed run without reseeding data, which reduces pressure to rerun a
    long institutional load test just to tighten correctness evidence after drain completion.
 9. scheduler/orchestration review found avoidable database churn in the

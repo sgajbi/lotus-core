@@ -1,4 +1,4 @@
-from scripts.ci_service_sets import (
+from scripts.quality.ci_service_sets import (
     DOCKER_SMOKE_SERVICES,
     E2E_SMOKE_SERVICES,
     FAILURE_RECOVERY_GATE_SERVICES,
@@ -8,9 +8,13 @@ from scripts.ci_service_sets import (
 )
 
 
-def test_docker_smoke_services_include_buy_state_calculators() -> None:
-    assert "cost_calculator_service" in DOCKER_SMOKE_SERVICES
-    assert "cashflow_calculator_service" in DOCKER_SMOKE_SERVICES
+def test_docker_smoke_services_use_the_combined_transaction_processor() -> None:
+    assert "portfolio_transaction_processing_service" in DOCKER_SMOKE_SERVICES
+    assert not {
+        "cost_calculator_service",
+        "cashflow_calculator_service",
+        "position_calculator_service",
+    }.intersection(DOCKER_SMOKE_SERVICES)
 
 
 def test_runtime_prebuild_groups_include_schema_and_topic_bootstrap_images() -> None:
@@ -26,8 +30,13 @@ def test_runtime_prebuild_groups_include_schema_and_topic_bootstrap_images() -> 
         assert group[: len(RUNTIME_BOOTSTRAP_SERVICES)] == RUNTIME_BOOTSTRAP_SERVICES
 
 
-def test_combined_target_stays_out_of_compose_runtime_sets_until_atomic_cutover() -> None:
+def test_compose_runtime_sets_use_only_the_combined_transaction_processor() -> None:
     target = "portfolio_transaction_processing_service"
+    legacy_workers = {
+        "cost_calculator_service",
+        "cashflow_calculator_service",
+        "position_calculator_service",
+    }
     for group in (
         DOCKER_SMOKE_SERVICES,
         E2E_SMOKE_SERVICES,
@@ -35,4 +44,5 @@ def test_combined_target_stays_out_of_compose_runtime_sets_until_atomic_cutover(
         PERFORMANCE_GATE_SERVICES,
         FAILURE_RECOVERY_GATE_SERVICES,
     ):
-        assert target not in group
+        assert target in group
+        assert not legacy_workers.intersection(group)

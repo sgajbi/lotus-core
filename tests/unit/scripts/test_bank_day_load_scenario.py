@@ -1,7 +1,8 @@
 from argparse import Namespace
 from decimal import Decimal
 
-from scripts.bank_day_load_scenario import (
+from scripts.operations.bank_day_load_scenario import (
+    LOG_SERVICE_NAMES,
     ApiProbeResult,
     DatabaseTieOut,
     HealthSample,
@@ -17,6 +18,11 @@ from scripts.bank_day_load_scenario import (
     expected_portfolio_market_value,
     iter_transaction_batches,
 )
+
+
+def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None:
+    assert "portfolio_transaction_processing_service" in LOG_SERVICE_NAMES
+    assert not any("calculator_service" in name for name in LOG_SERVICE_NAMES)
 
 
 def test_build_instrument_specs_cycles_currencies_and_prices() -> None:

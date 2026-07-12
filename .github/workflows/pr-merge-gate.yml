@@ -152,13 +152,13 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild query-service image with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --services query_service
       - name: Generate runtime SBOM
         run: |
-          python scripts/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
+          python scripts/release/generate_runtime_sbom.py --output output/build-evidence/shared-runtime-sbom.cdx.json
       - name: Write build provenance manifest
         run: |
-          python scripts/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
+          python scripts/release/write_build_provenance.py --dockerfile src/services/query_service/Dockerfile --image-tag lotus-core/query-service:local --output output/build-evidence/query-service-provenance.json
       - name: Upload build evidence
         uses: actions/upload-artifact@v7
         with:
@@ -190,7 +190,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group e2e-smoke
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group e2e-smoke
       - name: Run E2E smoke suite
         env:
           LOTUS_TEST_ENV_PROFILE: e2e
@@ -236,7 +236,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
       - name: Run deterministic docker endpoint smoke
         run: make test-docker-smoke
       - name: Capture docker compose logs on failure
@@ -285,7 +285,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group docker-smoke
       - name: Run lotus-core app validation gate
         run: make lotus-core-validate
       - name: Capture docker compose logs on validation gate failure
@@ -326,7 +326,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group latency-gate
       - name: Run endpoint latency gate
         env:
           DEMO_DATA_PACK_HISTORY_DAYS: "240"
@@ -371,7 +371,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
       - name: Prebuild compose images with cache
-        run: python scripts/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
+        run: python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group performance-gate
       - name: Run deterministic performance load gate
         run: make test-performance-load-gate
       - name: Capture docker compose logs on failure

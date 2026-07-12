@@ -5,7 +5,9 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
-from src.services.calculators.cost_calculator_service.app.consumer import CostCalculatorConsumer
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+    CostCalculationWorkflow,
+)
 from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
 from src.services.calculators.position_calculator.app.core.position_models import (
     PositionState as PositionStateDTO,
@@ -34,11 +36,7 @@ def test_buy_ingestion_transaction_defaults_trade_fee_to_zero() -> None:
 
 
 def test_buy_fee_transformation_to_engine_fees_structure() -> None:
-    consumer = CostCalculatorConsumer(
-        bootstrap_servers="test",
-        topic="transactions.persisted",
-        group_id="slice0",
-    )
+    workflow = CostCalculationWorkflow()
     event = TransactionEvent(
         transaction_id="BUY_SLICE0_002",
         portfolio_id="PORT_SLICE0",
@@ -54,7 +52,7 @@ def test_buy_fee_transformation_to_engine_fees_structure() -> None:
         trade_fee=Decimal("7.50"),
     )
 
-    transformed = consumer._transform_event_for_engine(event)
+    transformed = workflow._transform_event_for_engine(event)
     assert transformed["transaction_type"] == "BUY"
     assert transformed["fees"] == {"brokerage": "7.50"}
 

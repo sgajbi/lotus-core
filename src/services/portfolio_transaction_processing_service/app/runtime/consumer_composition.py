@@ -9,6 +9,10 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
 )
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.kafka_consumer_execution import (
+    KafkaConsumerExecutionProfile,
+    load_kafka_consumer_execution_profile,
+)
 
 from ..application import ProcessTransactionUseCase, ReplayBookedTransactionUseCase
 from ..delivery.kafka import (
@@ -24,6 +28,7 @@ TRANSACTION_PROCESSING_CONSUMER_GROUP = "portfolio_transaction_processing_group"
 TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP = "portfolio_transaction_replay_request_group"
 
 ConsumerFactory = Callable[..., BaseConsumer]
+ExecutionProfileLoader = Callable[[str], KafkaConsumerExecutionProfile]
 
 
 def build_transaction_processing_consumers(
@@ -32,6 +37,7 @@ def build_transaction_processing_consumers(
     replay_booked_transaction: ReplayBookedTransactionUseCase | None = None,
     transaction_consumer_factory: ConsumerFactory = TransactionProcessingConsumer,
     replay_request_consumer_factory: ConsumerFactory = BookedTransactionReplayRequestConsumer,
+    execution_profile_loader: ExecutionProfileLoader = load_kafka_consumer_execution_profile,
 ) -> tuple[BaseConsumer, BaseConsumer]:
     """Compose one live and one replay-request consumer for the final deployable."""
     process_use_case = (
@@ -44,22 +50,24 @@ def build_transaction_processing_consumers(
         if replay_booked_transaction is not None
         else build_replay_booked_transaction_use_case()
     )
-    shared = {
-        "bootstrap_servers": KAFKA_BOOTSTRAP_SERVERS,
-        "dlq_topic": KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-    }
+    live_execution_profile = execution_profile_loader(TRANSACTION_PROCESSING_CONSUMER_GROUP)
+    replay_execution_profile = execution_profile_loader(TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP)
     live_consumer = transaction_consumer_factory(
-        **shared,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
         topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
         group_id=TRANSACTION_PROCESSING_CONSUMER_GROUP,
         service_prefix="TXNPROC",
         use_case=process_use_case,
+        execution_profile=live_execution_profile,
     )
     replay_consumer = replay_request_consumer_factory(
-        **shared,
+        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+        dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
         topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
         group_id=TRANSACTION_REPLAY_REQUEST_CONSUMER_GROUP,
         service_prefix="TXNREPLAY",
         use_case=replay_use_case,
+        execution_profile=replay_execution_profile,
     )
     return live_consumer, replay_consumer

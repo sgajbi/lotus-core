@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 
 from src.services.portfolio_transaction_processing_service.app.runtime import (
     consumer_composition,
@@ -87,3 +88,25 @@ def test_composition_builds_each_application_use_case_once(monkeypatch) -> None:
     replay_builder.assert_called_once_with()
     assert calls[0][1]["use_case"] is process_use_case
     assert calls[1][1]["use_case"] is replay_use_case
+
+
+def test_composition_loads_independent_live_and_replay_execution_profiles() -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+    live_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
+    replay_profile = MagicMock(spec=KafkaConsumerExecutionProfile)
+    profile_loader = MagicMock(side_effect=[live_profile, replay_profile])
+
+    consumer_composition.build_transaction_processing_consumers(
+        process_transaction=MagicMock(),
+        replay_booked_transaction=MagicMock(),
+        transaction_consumer_factory=_recording_factory("live", calls),
+        replay_request_consumer_factory=_recording_factory("replay_request", calls),
+        execution_profile_loader=profile_loader,
+    )
+
+    assert [item.args[0] for item in profile_loader.call_args_list] == [
+        "portfolio_transaction_processing_group",
+        "portfolio_transaction_replay_request_group",
+    ]
+    assert calls[0][1]["execution_profile"] is live_profile
+    assert calls[1][1]["execution_profile"] is replay_profile

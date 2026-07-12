@@ -1,6 +1,0 @@
-sqlalchemy==2.0.51
-psycopg2-binary==2.9.12
-confluent-kafka==2.14.2
-pydantic==2.13.4
-tenacity==9.1.4
-python-dotenv==1.2.2

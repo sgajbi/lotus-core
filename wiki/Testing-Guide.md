@@ -9,7 +9,7 @@ commands that map local proof to GitHub merge-gate evidence.
 | --- | --- | --- |
 | Feature implementer | Pick the smallest credible local suite for the touched code path. | `make test`, focused pytest, or the relevant guard below |
 | PR owner | Confirm local proof maps to Feature Lane, PR Merge Gate, or Main Releasability. | `make ci-local`, `make ci`, `make ci-main` |
-| Reviewer or operator | Check whether architecture, contract, security, runtime, and source-data risks have proof. | Guard-rail commands and `scripts/test_manifest.py` |
+| Reviewer or operator | Check whether architecture, contract, security, runtime, and source-data risks have proof. | Guard-rail commands and `scripts/quality/test_manifest.py` |
 
 ## Test posture
 
@@ -71,13 +71,13 @@ Because the repo is expensive to validate fully, the normal workflow is:
 
 Suite composition is governed by:
 
-- [scripts/test_manifest.py](../scripts/test_manifest.py)
+- [scripts/quality/test_manifest.py](../scripts/quality/test_manifest.py)
 
 Useful manifest checks:
 
 ```bash
-python scripts/test_manifest.py --suite integration-lite --validate-only
-python scripts/test_manifest.py --suite integration-lite --print-args
+python scripts/quality/test_manifest.py --suite integration-lite --validate-only
+python scripts/quality/test_manifest.py --suite integration-lite --print-args
 ```
 
 Use the manifest instead of inventing ad hoc pytest selections when you need parity with CI.

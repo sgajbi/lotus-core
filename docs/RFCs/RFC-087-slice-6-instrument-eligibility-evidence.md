@@ -57,7 +57,7 @@ Results:
 | `make source-data-product-contract-guard` | Passed |
 | `make route-contract-family-guard` | Passed |
 | `make domain-product-validate` | Passed |
-| `python scripts/temporal_vocabulary_guard.py` | Passed |
+| `python scripts/quality/temporal_vocabulary_guard.py` | Passed |
 | `make migration-smoke` | Passed |
 | `make lint` | Passed |
 | `git diff --check` | Passed |

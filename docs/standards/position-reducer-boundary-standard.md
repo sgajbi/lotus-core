@@ -21,10 +21,9 @@ decision planning pure, typed, and independently testable.
 1. epoch-fencing checks,
 2. repository reads and writes,
 3. position history deletion and persistence,
-4. outbox staging,
-5. replay event ordering and publication orchestration,
-6. metric emission,
-7. compatibility adaptation between existing DTOs and the pure reducer state.
+4. deterministic current-epoch rebuild ordering,
+5. metric emission,
+6. compatibility adaptation between existing DTOs and the pure reducer state.
 
 ## Boundary Rules
 
@@ -34,7 +33,8 @@ context.
 
 The orchestration module must not reintroduce reducer-owned transaction-type sets, cash delta
 helpers, buy/sell/transfer/corporate-action state helpers, or private backdated replay decision
-helpers.
+helpers. It must not depend on an outbox repository or publish `ReprocessTransactionReplay`;
+backdated position recovery is an inline caller-owned transaction.
 
 Backdated replay planning must be deterministic from:
 
@@ -46,11 +46,12 @@ Backdated replay planning must be deterministic from:
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/position_reducer_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py`.
 
 ## Compatibility
 
 This is an in-process modularity rule. It preserves `PositionCalculator.calculate(...)`,
-`PositionCalculator.calculate_next_position(...)`, Kafka topics, outbox event payload shape,
-database schema, repository contracts, metric names, epoch-fencing behavior, replay ordering, and
-public API behavior.
+`PositionCalculator.calculate_next_position(...)`, database schema, repository contracts,
+epoch-fencing behavior, deterministic history ordering, and public API behavior. The retired,
+runtime-inactive internal replay event is intentionally removed; the unified operator replay
+request path remains unchanged.

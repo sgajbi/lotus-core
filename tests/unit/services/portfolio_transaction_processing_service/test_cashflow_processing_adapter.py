@@ -9,8 +9,11 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers import (
-    transaction_consumer as cashflow,
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+    CashflowProcessingOutcome,
+    CashflowStageResult,
+    LinkedCashLegError,
+    NoCashflowRuleError,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories import (
     cashflow_repository,
@@ -41,7 +44,7 @@ def _transaction() -> BookedTransaction:
     )
 
 
-def _adapter(stage_result: cashflow.CashflowStageResult):
+def _adapter(stage_result: CashflowStageResult):
     workflow = AsyncMock()
     workflow.stage_valid_event.return_value = stage_result
     adapter = CashflowProcessingCompatibilityAdapter(
@@ -57,8 +60,8 @@ def _adapter(stage_result: cashflow.CashflowStageResult):
 @pytest.mark.asyncio
 async def test_cashflow_adapter_preserves_source_event_and_returns_record_count() -> None:
     adapter, workflow = _adapter(
-        cashflow.CashflowStageResult(
-            outcome=cashflow.CashflowProcessingOutcome.PROCESSED,
+        CashflowStageResult(
+            outcome=CashflowProcessingOutcome.PROCESSED,
             cashflow_record_count=1,
         )
     )
@@ -80,7 +83,7 @@ async def test_cashflow_adapter_preserves_source_event_and_returns_record_count(
 @pytest.mark.asyncio
 async def test_cashflow_adapter_rejects_stale_epoch_to_roll_back_combined_work() -> None:
     adapter, _workflow = _adapter(
-        cashflow.CashflowStageResult(outcome=cashflow.CashflowProcessingOutcome.EPOCH_REJECTED)
+        CashflowStageResult(outcome=CashflowProcessingOutcome.EPOCH_REJECTED)
     )
 
     with pytest.raises(TransactionProcessingRejected) as exc_info:
@@ -99,17 +102,15 @@ async def test_cashflow_adapter_rejects_stale_epoch_to_roll_back_combined_work()
 @pytest.mark.parametrize(
     ("error", "reason_code"),
     [
-        (cashflow.NoCashflowRuleError("BUY rule missing"), "cashflow_rule_missing"),
-        (cashflow.LinkedCashLegError("linked cash leg missing"), "cashflow_contract_invalid"),
+        (NoCashflowRuleError("BUY rule missing"), "cashflow_rule_missing"),
+        (LinkedCashLegError("linked cash leg missing"), "cashflow_contract_invalid"),
     ],
 )
 async def test_cashflow_adapter_maps_terminal_policy_errors(
     error: Exception,
     reason_code: str,
 ) -> None:
-    adapter, workflow = _adapter(
-        cashflow.CashflowStageResult(outcome=cashflow.CashflowProcessingOutcome.PROCESSED)
-    )
+    adapter, workflow = _adapter(CashflowStageResult(outcome=CashflowProcessingOutcome.PROCESSED))
     workflow.stage_valid_event.side_effect = error
 
     with pytest.raises(TransactionProcessingError) as exc_info:

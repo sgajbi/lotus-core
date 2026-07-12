@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import ingestion_rate_limit_scope_guard as guard
+from scripts.quality import ingestion_rate_limit_scope_guard as guard
 
 
 def test_ingestion_rate_limit_scope_guard_accepts_current_truth() -> None:

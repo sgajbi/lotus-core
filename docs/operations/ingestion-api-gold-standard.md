@@ -8,7 +8,7 @@ This runbook summarizes the ingestion operations controls expected for productio
   - `What:` the business intent.
   - `How:` processing behavior and controls.
   - `When:` recommended operational usage context.
-- Validation gate: `python scripts/ingestion_endpoint_contract_gate.py`
+- Validation gate: `python scripts/quality/ingestion_endpoint_contract_gate.py`
 - Rate-limit scope truth gate: `make ingestion-rate-limit-scope-guard`
 - Gateway rate-limit policy gate: `make ingestion-gateway-rate-limit-policy-guard`
 

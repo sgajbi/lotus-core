@@ -2,21 +2,6 @@ from pathlib import Path
 
 WORKER_READINESS_WIRING = (
     (
-        "cost_calculator_service_web",
-        Path("src/services/calculators/cost_calculator_service/app/web.py"),
-        Path("src/services/calculators/cost_calculator_service/app/consumer_manager.py"),
-    ),
-    (
-        "position_calculator_service_web",
-        Path("src/services/calculators/position_calculator/app/web.py"),
-        Path("src/services/calculators/position_calculator/app/consumer_manager.py"),
-    ),
-    (
-        "cashflow_calculator_service_web",
-        Path("src/services/calculators/cashflow_calculator_service/app/web.py"),
-        Path("src/services/calculators/cashflow_calculator_service/app/consumer_manager.py"),
-    ),
-    (
         "position_valuation_calculator_service_web",
         Path("src/services/calculators/position_valuation_calculator/app/web.py"),
         Path("src/services/calculators/position_valuation_calculator/app/consumer_manager.py"),

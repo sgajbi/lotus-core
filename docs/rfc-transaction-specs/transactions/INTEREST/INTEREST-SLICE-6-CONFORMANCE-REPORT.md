@@ -8,7 +8,7 @@ This report closes RFC-070 execution by mapping `RFC-INTEREST-01` requirements t
 
 Delivered:
 
-- `scripts/test_manifest.py`
+- `scripts/quality/test_manifest.py`
   - `transaction-interest-contract`
   - alias `transaction-interest-contract`
 - `Makefile`
@@ -30,7 +30,7 @@ Delivered:
 | Withholding/net reconciliation primitives | COVERED | `interest_models.py`, `interest_validation.py`, `test_interest_validation.py` |
 | Query/audit visibility via existing surfaces | COVERED | `query_service/app/dtos/transaction_dto.py`, `tests/integration/services/query_service/test_transactions_router.py`, `tests/unit/services/query_service/services/test_transaction_service.py` |
 | DB propagation for INTEREST semantic fields | COVERED | `database_models.py`, `alembic/versions/d6e7f8a9b0c1_*.py`, persistence repository tests |
-| Dedicated regression gate | COVERED | `scripts/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
+| Dedicated regression gate | COVERED | `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
 
 ## Validation Evidence Executed
 
@@ -44,8 +44,8 @@ Delivered:
 - `python -m pytest -q tests/unit/services/ingestion_service/test_transaction_model.py`
 - `python -m pytest -q tests/unit/services/query_service/services/test_transaction_service.py`
 - `python -m pytest -q tests/integration/services/query_service/test_transactions_router.py`
-- `python scripts/test_manifest.py --suite transaction-interest-contract --quiet`
-- `python scripts/migration_contract_check.py --mode alembic-sql`
+- `python scripts/quality/test_manifest.py --suite transaction-interest-contract --quiet`
+- `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 - `python -m ruff check ... --ignore E501` on changed INTEREST slice files
 
 ## Residual Items

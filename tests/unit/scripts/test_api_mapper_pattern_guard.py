@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.api_mapper_pattern_guard import find_api_mapper_pattern_findings
+from scripts.quality.api_mapper_pattern_guard import find_api_mapper_pattern_findings
 
 
 def _write(path: Path, text: str) -> None:

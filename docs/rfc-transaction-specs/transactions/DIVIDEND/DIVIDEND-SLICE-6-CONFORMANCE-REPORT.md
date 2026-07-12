@@ -18,8 +18,8 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
 | Section 12 advanced timing dimensions (`EX_DATE`, `RECORD_DATE`, etc.) | Not Covered | current implementation remains transaction/settlement-date centric |
 
 ## Suite and CI Wiring Evidence
-1. Added `transaction-dividend-contract` suite in `scripts/test_manifest.py`.
-2. Added backward-compatible alias `transaction-dividend-contract` in `scripts/test_manifest.py`.
+1. Added `transaction-dividend-contract` suite in `scripts/quality/test_manifest.py`.
+2. Added backward-compatible alias `transaction-dividend-contract` in `scripts/quality/test_manifest.py`.
 3. Added `Makefile` targets:
  - `test-transaction-dividend-contract`
  - `test-transaction-dividend-contract`
@@ -27,9 +27,9 @@ This report maps RFC-DIVIDEND-01 requirements to implementation evidence deliver
  - `suite: transaction-dividend-contract`
 
 ## Validations Executed for Slice 6
-1. `python scripts/test_manifest.py --suite transaction-dividend-contract --validate-only`
+1. `python scripts/quality/test_manifest.py --suite transaction-dividend-contract --validate-only`
 2. `python -m pytest -q tests/unit/transaction_specs/test_dividend_slice0_characterization.py tests/unit/libs/portfolio_common/test_dividend_validation.py tests/unit/libs/portfolio_common/test_dividend_linkage.py tests/unit/libs/portfolio_common/test_cash_entry_mode.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py tests/integration/services/query_service/test_transactions_router.py`
-3. `python -m ruff check scripts/test_manifest.py tests/unit/transaction_specs/test_dividend_slice0_characterization.py tests/unit/libs/portfolio_common/test_dividend_validation.py tests/unit/libs/portfolio_common/test_dividend_linkage.py tests/unit/libs/portfolio_common/test_cash_entry_mode.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py tests/integration/services/query_service/test_transactions_router.py --ignore E501`
+3. `python -m ruff check scripts/quality/test_manifest.py tests/unit/transaction_specs/test_dividend_slice0_characterization.py tests/unit/libs/portfolio_common/test_dividend_validation.py tests/unit/libs/portfolio_common/test_dividend_linkage.py tests/unit/libs/portfolio_common/test_cash_entry_mode.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py tests/integration/services/query_service/test_transactions_router.py --ignore E501`
 
 ## Residual Gaps (Explicit)
 1. Withholding-tax canonical decomposition fields and reconciliation identities are not yet implemented end-to-end.

@@ -1,7 +1,8 @@
 from datetime import date
+from typing import cast
 
 from portfolio_common.database_models import PipelineStageState
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class PipelineStageRepository:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
+
+    async def acquire_transaction_stage_lock(
+        self,
+        *,
+        stage_name: str,
+        portfolio_id: str,
+        transaction_id: str,
+    ) -> None:
+        lock_identity = f"pipeline-stage:{stage_name}:{portfolio_id}:{transaction_id}"
+        await self.db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_identity, 0))"),
+            {"lock_identity": lock_identity},
+        )
 
     async def upsert_stage_flags(
         self,
@@ -74,13 +88,12 @@ class PipelineStageRepository:
                     PipelineStageState.id == stage_state.id,
                     PipelineStageState.status == "PENDING",
                     PipelineStageState.cost_event_seen.is_(True),
-                    PipelineStageState.cashflow_event_seen.is_(True),
                 )
             )
             .values(status="COMPLETED", ready_emitted_at=func.now())
         )
         result = await self.db.execute(stmt)
-        claimed = result.rowcount == 1
+        claimed = cast(int, result.rowcount) == 1
         if claimed:
             stage_state.status = "COMPLETED"
         return claimed
@@ -158,7 +171,21 @@ class PipelineStageRepository:
             PipelineStageState.portfolio_id == portfolio_id,
             PipelineStageState.business_date == business_date,
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        return cast(int | None, (await self.db.execute(stmt)).scalar_one_or_none())
+
+    async def get_latest_transaction_stage_epoch(
+        self,
+        *,
+        stage_name: str,
+        portfolio_id: str,
+        transaction_id: str,
+    ) -> int | None:
+        stmt = select(func.max(PipelineStageState.epoch)).where(
+            PipelineStageState.stage_name == stage_name,
+            PipelineStageState.portfolio_id == portfolio_id,
+            PipelineStageState.transaction_id == transaction_id,
+        )
+        return cast(int | None, (await self.db.execute(stmt)).scalar_one_or_none())
 
     @staticmethod
     def build_portfolio_stage_key(

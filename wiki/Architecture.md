@@ -15,7 +15,7 @@ flowchart LR
     QCP["query_control_plane_service<br/>analytics-input and support contracts"]
     Replay["event_replay_service<br/>DLQ, replay, audit, ops control"]
     Reconcile["financial_reconciliation_service<br/>control execution"]
-    Calc["calculators and generators<br/>position, valuation, cashflow, timeseries"]
+    Calc["transaction processing and generators<br/>cost, cashflow, position, valuation, timeseries"]
     Consumers["Gateway / Workbench / Performance / Risk / Advise / Manage / Report"]
 
     Ingress --> Store
@@ -73,9 +73,12 @@ router.
 
 Control execution and reconciliation run contracts.
 
-### calculators and generators
+### transaction processing and generators
 
-- current cost, cashflow, and position workers, planned as one transaction-processing deployable
+- one `portfolio_transaction_processing_service` deployable with separate cost, cashflow, and
+  position modules behind one atomic use case and database unit of work
+- one authoritative `transactions.cost.processed` completion input to pipeline readiness; the
+  retained `cashflows.calculated` compatibility fact is not a second prerequisite
 - independently scalable position valuation worker
 - timeseries generator
 

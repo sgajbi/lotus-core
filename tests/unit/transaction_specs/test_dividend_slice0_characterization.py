@@ -26,7 +26,9 @@ from src.services.calculators.cashflow_calculator_service.app.core.enums import 
     CashflowClassification,
     CashflowTiming,
 )
-from src.services.calculators.cost_calculator_service.app.consumer import CostCalculatorConsumer
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+    CostCalculationWorkflow,
+)
 from src.services.calculators.position_calculator.app.core.position_logic import (
     PositionCalculator,
 )
@@ -59,11 +61,7 @@ def test_dividend_ingestion_allows_zero_quantity_and_price_with_default_fee() ->
 
 
 def test_dividend_fee_transformation_to_engine_fees_structure() -> None:
-    consumer = CostCalculatorConsumer(
-        bootstrap_servers="test",
-        topic="transactions.persisted",
-        group_id="slice0",
-    )
+    workflow = CostCalculationWorkflow()
     event = TransactionEvent(
         transaction_id="DIV_SLICE0_002",
         portfolio_id="PORT_SLICE0",
@@ -79,7 +77,7 @@ def test_dividend_fee_transformation_to_engine_fees_structure() -> None:
         trade_fee=Decimal("3.25"),
     )
 
-    transformed = consumer._transform_event_for_engine(event)
+    transformed = workflow._transform_event_for_engine(event)
     assert transformed["transaction_type"] == "DIVIDEND"
     assert transformed["fees"] == {"brokerage": "3.25"}
 

@@ -1,6 +1,149 @@
 import json
 
-from scripts.performance_load_gate import _evaluate_profile, _write_report
+from scripts.operations import performance_load_gate, transaction_processing_load_support
+from scripts.operations.performance_load_gate import (
+    _build_transaction_batch,
+    _evaluate_profile,
+    _write_report,
+)
+
+
+class _MetricsResponse:
+    text = """# HELP lotus_core_transaction_processing_operations_total Completed operations.
+# TYPE lotus_core_transaction_processing_operations_total counter
+lotus_core_transaction_processing_operations_total{outcome="processed",stage="transaction"} 120
+lotus_core_transaction_processing_operations_total{outcome="duplicate",stage="transaction"} 60
+"""
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
+    monkeypatch,
+) -> None:
+    requested: list[tuple[str, int]] = []
+
+    def get(url: str, *, timeout: int) -> _MetricsResponse:
+        requested.append((url, timeout))
+        return _MetricsResponse()
+
+    monkeypatch.setattr(transaction_processing_load_support.requests, "get", get)
+
+    count = transaction_processing_load_support.transaction_processing_operation_count(
+        transaction_processing_base_url="http://localhost:8090",
+        stage="transaction",
+        outcome="duplicate",
+    )
+
+    assert count == 60
+    assert requested == [("http://localhost:8090/metrics", 10)]
+
+
+def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
+    counted: list[tuple[str, str, str]] = []
+    waited: list[tuple[str, str, str, int, int]] = []
+
+    def count(*, transaction_processing_base_url: str, stage: str, outcome: str) -> int:
+        counted.append((transaction_processing_base_url, stage, outcome))
+        return 41
+
+    def wait(
+        *,
+        transaction_processing_base_url: str,
+        stage: str,
+        outcome: str,
+        expected_minimum: int,
+        timeout_seconds: int,
+    ) -> float:
+        waited.append(
+            (
+                transaction_processing_base_url,
+                stage,
+                outcome,
+                expected_minimum,
+                timeout_seconds,
+            )
+        )
+        return 2.5
+
+    monkeypatch.setattr(performance_load_gate, "_transaction_processing_operation_count", count)
+    monkeypatch.setattr(performance_load_gate, "_wait_for_operation_count", wait)
+
+    baseline = performance_load_gate._repair_replay_completion_count(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+    drain_seconds = performance_load_gate._wait_for_repair_replay_completion(
+        transaction_processing_base_url="http://localhost:8090",
+        expected_minimum=45,
+        timeout_seconds=180,
+    )
+
+    assert baseline == 41
+    assert drain_seconds == 2.5
+    assert counted == [("http://localhost:8090", "transaction", "processed")]
+    assert waited == [("http://localhost:8090", "transaction", "processed", 45, 180)]
+
+
+def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:
+    rows = _build_transaction_batch(
+        portfolio_id="PERF_LOAD_RUN1",
+        batch_size=2,
+        seed="PERF-RUN1-steady",
+        transaction_date="2026-07-10T09:00:00Z",
+        security_prefix="PERF_RUN1_SEC",
+    )
+
+    assert {row["portfolio_id"] for row in rows} == {"PERF_LOAD_RUN1"}
+    assert [row["security_id"] for row in rows] == [
+        "PERF_RUN1_SEC_000",
+        "PERF_RUN1_SEC_001",
+    ]
+    assert [row["instrument_id"] for row in rows] == [
+        "PERF_RUN1_SEC_000",
+        "PERF_RUN1_SEC_001",
+    ]
+    assert {row["transaction_date"] for row in rows} == {"2026-07-10T09:00:00Z"}
+
+
+def test_evaluate_profile_requires_transaction_processing_drain_when_governed() -> None:
+    result = _evaluate_profile(
+        profile_name="steady_state",
+        records_submitted=10,
+        batches_submitted=1,
+        started_at=10.0,
+        ended_at=20.0,
+        baseline_health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0",
+            },
+        },
+        health={
+            "summary": {"backlog_jobs": 0},
+            "slo": {"backlog_age_seconds": 0.0},
+            "error_budget": {
+                "dlq_events_in_window": 0,
+                "dlq_budget_events_per_window": 10,
+                "replay_backlog_pressure_ratio": "0",
+            },
+        },
+        drain_seconds=None,
+        thresholds={
+            "min_throughput_rps": 0.5,
+            "max_backlog_age_increase_seconds": 1.0,
+            "max_dlq_pressure_ratio_added": 0.0,
+            "max_replay_pressure_ratio_increase": 0.0,
+            "max_drain_seconds": None,
+            "require_drain": True,
+        },
+    )
+
+    assert result.checks_passed is False
+    assert "transaction_processing_drain timeout" in result.failed_checks
 
 
 def test_evaluate_profile_uses_incremental_health_pressure_against_baseline() -> None:
@@ -135,3 +278,5 @@ def test_write_report_persists_profile_tier(tmp_path) -> None:
 
     assert payload["profile_tier"] == "full"
     assert "- Profile tier: full" in markdown
+    assert "Throughput boundary: ingestion start through combined cost" in markdown
+    assert "Transaction drain sec" in markdown

@@ -156,7 +156,7 @@ Exit Criteria:
 
 ### Slice 6 - Conformance, Suite Wiring, and Exit Report
 Deliverables:
-1. `scripts/test_manifest.py` suite entries:
+1. `scripts/quality/test_manifest.py` suite entries:
  - `transaction-dividend-contract`
  - alias `transaction-dividend-contract`
 2. `Makefile` targets:
@@ -174,10 +174,10 @@ Per approved slice, run relevant gates:
 1. `python -m ruff check ...`
 2. `make typecheck`
 3. targeted pytest slice suites
-4. `python scripts/migration_contract_check.py --mode alembic-sql` (if schema changed)
-5. `python scripts/openapi_quality_gate.py` (if API touched)
-6. `python scripts/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
-7. `python scripts/api_vocabulary_inventory.py --validate-only` (if API touched)
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` (if schema changed)
+5. `python scripts/quality/openapi_quality_gate.py` (if API touched)
+6. `python scripts/quality/api_vocabulary_inventory.py --output docs/standards/api-vocabulary/lotus-core-api-vocabulary.v1.json` (if API touched)
+7. `python scripts/quality/api_vocabulary_inventory.py --validate-only` (if API touched)
 
 If vocabulary changes are synchronized to platform catalog:
 1. run `lotus-platform/platform-contracts/api-vocabulary/validate_api_vocabulary_catalog.py`

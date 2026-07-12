@@ -2,9 +2,6 @@
   "specVersion": "1.0.0",
   "application": "lotus-core",
   "baselineCurrentStateServicePaths": [
-    "src/services/calculators/cashflow_calculator_service",
-    "src/services/calculators/cost_calculator_service",
-    "src/services/calculators/position_calculator",
     "src/services/calculators/position_valuation_calculator",
     "src/services/event_replay_service",
     "src/services/financial_reconciliation_service",
@@ -21,7 +18,7 @@
     {
       "serviceId": "portfolio_transaction_processing_service",
       "servicePath": "src/services/portfolio_transaction_processing_service",
-      "status": "runtime-consolidation-target",
+      "status": "runtime-split-approved",
       "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
       "rationaleSummary": "Replace three serial transaction calculator workers with one atomic transaction-processing runtime while retaining separate cost, cashflow, and position application/domain modules.",
       "inProcessBoundaryEvidence": [
@@ -35,48 +32,6 @@
         "reduced-partial-failure-states",
         "shared-worker-runtime"
       ],
-      "revalidationOwner": "lotus-core engineering"
-    },
-    {
-      "serviceId": "cashflow_calculator_service",
-      "servicePath": "src/services/calculators/cashflow_calculator_service",
-      "status": "runtime-consolidation-planned",
-      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
-      "rationaleSummary": "Consolidate the cashflow module into one transaction-processing deployable while preserving its domain, consumer-group, transaction, idempotency, replay, DLQ, metric, and supportability boundaries.",
-      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
-      "inProcessBoundaryEvidence": [
-        "Cashflow classification remains a bounded application/domain module.",
-        "The current worker shell duplicates cost and position startup, health, dispatcher, and packaging behavior."
-      ],
-      "runtimeBoundaryDrivers": ["shared-transaction-input", "shared-worker-runtime"],
-      "revalidationOwner": "lotus-core engineering"
-    },
-    {
-      "serviceId": "cost_calculator_service",
-      "servicePath": "src/services/calculators/cost_calculator_service",
-      "status": "runtime-consolidation-planned",
-      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
-      "rationaleSummary": "Consolidate the cost module into one transaction-processing deployable while preserving its domain, consumer-group, transaction, idempotency, replay, DLQ, metric, and supportability boundaries.",
-      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
-      "inProcessBoundaryEvidence": [
-        "Cost basis and lot-state calculation remain a bounded application/domain module.",
-        "The current worker shell duplicates cashflow and position startup, health, dispatcher, and packaging behavior."
-      ],
-      "runtimeBoundaryDrivers": ["shared-transaction-input", "shared-worker-runtime"],
-      "revalidationOwner": "lotus-core engineering"
-    },
-    {
-      "serviceId": "position_calculator_service",
-      "servicePath": "src/services/calculators/position_calculator",
-      "status": "runtime-consolidation-planned",
-      "decisionRecordPath": "docs/architecture/calculator-runtime-consolidation-decision.md",
-      "rationaleSummary": "Consolidate the position module into one transaction-processing deployable while preserving ordered mutation, epoch fencing, replay, consumer-group, transaction, idempotency, DLQ, metric, and supportability boundaries.",
-      "consolidationTargetServiceId": "portfolio_transaction_processing_service",
-      "inProcessBoundaryEvidence": [
-        "Position reduction and replay remain a bounded application/domain module.",
-        "The current worker shell duplicates cost and cashflow startup, health, dispatcher, and packaging behavior."
-      ],
-      "runtimeBoundaryDrivers": ["shared-transaction-pipeline", "shared-worker-runtime"],
       "revalidationOwner": "lotus-core engineering"
     },
     {

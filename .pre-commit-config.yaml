@@ -14,9 +14,9 @@ repos:
     rev: v0.15.1
     hooks:
       - id: ruff
-        args: ["--ignore", "E501,I001", "src/services/query_service/app", "tests/unit/services/query_service", "tests/test_support", "tests/unit/test_support", "scripts/test_manifest.py", "scripts/coverage_gate.py", "scripts/openapi_quality_gate.py", "scripts/warning_budget_gate.py"]
+        args: ["--ignore", "E501,I001", "src/services/query_service/app", "tests/unit/services/query_service", "tests/test_support", "tests/unit/test_support", "scripts/quality/test_manifest.py", "scripts/quality/coverage_gate.py", "scripts/quality/openapi_quality_gate.py", "scripts/quality/warning_budget_gate.py"]
       - id: ruff-format
-        args: ["src/services/query_service/app", "tests/unit/services/query_service", "tests/test_support", "tests/unit/test_support", "scripts/test_manifest.py", "scripts/coverage_gate.py", "scripts/openapi_quality_gate.py", "scripts/warning_budget_gate.py"]
+        args: ["src/services/query_service/app", "tests/unit/services/query_service", "tests/test_support", "tests/unit/test_support", "scripts/quality/test_manifest.py", "scripts/quality/coverage_gate.py", "scripts/quality/openapi_quality_gate.py", "scripts/quality/warning_budget_gate.py"]
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.19.1

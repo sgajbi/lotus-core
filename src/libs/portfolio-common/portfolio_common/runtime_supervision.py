@@ -8,6 +8,9 @@ from .worker_readiness import (
     register_worker_runtime_tasks,
 )
 
+DEFAULT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS = 10.0
+CONSUMER_DRAIN_GRACE_SECONDS = 1.0
+
 
 async def wait_for_shutdown_or_task_failure(
     *,
@@ -102,7 +105,7 @@ async def shutdown_runtime_components(
     consumers: Sequence[object] = (),
     stop_callbacks: Sequence[Callable[[], object]] = (),
     server=None,
-    shutdown_timeout_seconds: float = 10.0,
+    shutdown_timeout_seconds: float | None = None,
     logger=None,
 ) -> None:
     """
@@ -115,7 +118,35 @@ async def shutdown_runtime_components(
     _shutdown_consumers(consumers, logger)
     _run_stop_callbacks(stop_callbacks, logger)
     _signal_server_exit(server)
-    await _await_runtime_tasks(tasks, shutdown_timeout_seconds, logger)
+    await _await_runtime_tasks(
+        tasks,
+        _resolve_shutdown_timeout_seconds(consumers, shutdown_timeout_seconds),
+        logger,
+    )
+
+
+def _resolve_shutdown_timeout_seconds(
+    consumers: Sequence[object],
+    configured_timeout_seconds: float | None,
+) -> float:
+    if configured_timeout_seconds is not None:
+        return configured_timeout_seconds
+    consumer_drain_timeout = max(
+        (_consumer_drain_timeout_seconds(consumer) for consumer in consumers),
+        default=0.0,
+    )
+    return max(
+        DEFAULT_RUNTIME_SHUTDOWN_TIMEOUT_SECONDS,
+        consumer_drain_timeout + CONSUMER_DRAIN_GRACE_SECONDS,
+    )
+
+
+def _consumer_drain_timeout_seconds(consumer: object) -> float:
+    execution_profile = getattr(consumer, "execution_profile", None)
+    value = getattr(execution_profile, "shutdown_drain_timeout_seconds", None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return max(0.0, float(value))
 
 
 def _shutdown_consumers(consumers: Sequence[object], logger) -> None:

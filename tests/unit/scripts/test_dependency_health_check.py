@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import dependency_health_check
+from scripts.validation import dependency_health_check
 
 
 def test_discover_editable_projects_returns_sorted_project_roots(tmp_path: Path) -> None:

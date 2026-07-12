@@ -61,7 +61,6 @@ def _patch_runtime(monkeypatch):
 
 async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "ProcessedTransactionStageConsumer", _FakeSuccessConsumer)
-    monkeypatch.setattr(consumer_manager, "CashflowStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(consumer_manager, "PortfolioAggregationStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(
         consumer_manager,
@@ -81,7 +80,6 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "ProcessedTransactionStageConsumer", _FakeFailingConsumer)
-    monkeypatch.setattr(consumer_manager, "CashflowStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(consumer_manager, "PortfolioAggregationStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(
         consumer_manager,

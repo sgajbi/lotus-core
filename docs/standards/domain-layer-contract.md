@@ -34,7 +34,7 @@ Domain modules must not import:
    sessions, outbox publishers, or transport adapters;
 3. persistence models or downstream response models as domain objects.
 
-Transitional exceptions must be explicit in `scripts/domain_layer_guard.py` with a narrow rationale
+Transitional exceptions must be explicit in `scripts/quality/domain_layer_guard.py` with a narrow rationale
 and should be removed as the owning domain model is migrated.
 
 ## Current Guard

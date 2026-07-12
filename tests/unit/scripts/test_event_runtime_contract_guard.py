@@ -2,7 +2,7 @@ from pathlib import Path
 
 from portfolio_common.event_supportability import DirectKafkaTopicDefinition, EventFamilyDefinition
 
-from scripts import event_runtime_contract_guard as guard
+from scripts.quality import event_runtime_contract_guard as guard
 
 
 def test_discover_outbox_event_emissions_finds_current_runtime_outbox_contracts() -> None:
@@ -31,7 +31,8 @@ def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> N
 
     assert "dlq.persistence_service" in topics
     assert "PortfolioConsumer" in consumer_names
-    assert "CostCalculatorConsumer" in consumer_names
+    assert "TransactionProcessingConsumer" in consumer_names
+    assert "BookedTransactionReplayRequestConsumer" in consumer_names
 
 
 def test_evaluate_outbox_event_contracts_accepts_current_runtime_emissions() -> None:
@@ -97,7 +98,7 @@ def test_evaluate_outbox_event_contracts_rejects_invalid_event_catalog() -> None
             direction="outbound",
             aggregate_type="cashflow",
             topic="cashflows.calculated",
-            producer_service="cashflow_calculator_service",
+            producer_service="portfolio_transaction_processing_service",
             consumer_services=("pipeline_orchestrator_service",),
             idempotency_required=True,
             correlation_required=True,

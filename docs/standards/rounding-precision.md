@@ -23,7 +23,7 @@ This repository adopts the platform-wide mandatory standard defined in `lotus-pl
 
 ## Monetary Float Guard
 
-- CI runs python scripts/check_monetary_float_usage.py.
+- CI runs python scripts/quality/check_monetary_float_usage.py.
 - Baseline allowlist: docs/standards/monetary-float-allowlist.json.
 - The current baseline is zero active findings and an empty allowlist; stale allowlist entries fail
   the guard.

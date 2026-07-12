@@ -12,11 +12,16 @@ from portfolio_common.logging_utils import (
     normalize_lineage_value,
     traceparent_var,
 )
+from portfolio_common.reprocessing_replay import (
+    TRANSACTION_PROCESSING_INTENT_HEADER,
+    TRANSACTION_PROCESSING_REPAIR_VALUE,
+)
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from ...application import (
     ProcessTransactionUseCase,
     TransactionProcessingError,
+    TransactionProcessingIntent,
     TransactionProcessingRejected,
 )
 from .transaction_event_mapper import map_transaction_event
@@ -51,6 +56,7 @@ class TransactionProcessingConsumer(BaseConsumer):
                 event_id=event_id,
                 correlation_id=correlation_id,
                 traceparent=_message_traceparent(self, msg),
+                processing_intent=_message_processing_intent(msg),
             )
             try:
                 result = await self._use_case.execute(command)
@@ -106,6 +112,19 @@ def _message_traceparent(consumer: BaseConsumer, msg: Message) -> str | None:
             str(header_traceparent) if header_traceparent is not None else None
         ),
     )
+
+
+def _message_processing_intent(msg: Message) -> TransactionProcessingIntent:
+    intent_values = [
+        value
+        for key, value in msg.headers() or []
+        if key.strip().lower() == TRANSACTION_PROCESSING_INTENT_HEADER
+    ]
+    if not intent_values:
+        return TransactionProcessingIntent.STANDARD
+    if intent_values != [TRANSACTION_PROCESSING_REPAIR_VALUE]:
+        raise ValueError("Transaction processing intent header is invalid")
+    return TransactionProcessingIntent.REPAIR
 
 
 def _log_acknowledged_rejection(

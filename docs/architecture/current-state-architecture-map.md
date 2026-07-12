@@ -95,11 +95,11 @@ Rules:
 | Bounded context | Current owner | Primary truth | Must not own |
 | --- | --- | --- | --- |
 | portfolio/account | `query_service`, `persistence_service`, shared database models | Portfolio master, account, cash-account, holding read truth | Downstream suitability, advisory recommendations, relationship-householding outside source facts |
-| transaction booking | `ingestion_service`, `persistence_service`, calculator workers | Canonical transaction ingress, persisted transactions, transaction lifecycle signals | External OMS acknowledgement or order execution workflows |
-| positions | `position_calculator_service`, `query_service` | Position state, position history, daily snapshots | Performance attribution, risk decomposition, client-facing recommendation logic |
+| transaction booking | `ingestion_service`, `persistence_service`, `portfolio_transaction_processing_service` | Canonical transaction ingress, persisted transactions, transaction lifecycle signals | External OMS acknowledgement or order execution workflows |
+| positions | `portfolio_transaction_processing_service`, `query_service` | Position state, position history, daily snapshots | Performance attribution, risk decomposition, client-facing recommendation logic |
 | valuation | `valuation_orchestrator_service`, `position_valuation_calculator` | Valuation jobs, valuation snapshot mutation, valuation readiness | Market-data vendor ownership or performance methodology |
-| cashflow | `cashflow_calculator_service`, `query_service` | Cashflow classification, cashflow projection, rule-backed cashflow evidence | Liquidity advice, financial-planning recommendation, treasury instruction |
-| cost | `cost_calculator_service`, `query_service` | Cost basis, lot state, accrued-offset evidence, transaction cost state | Tax advice or external cost-estimate methodology |
+| cashflow | `portfolio_transaction_processing_service`, `query_service` | Cashflow classification, cashflow projection, rule-backed cashflow evidence | Liquidity advice, financial-planning recommendation, treasury instruction |
+| cost | `portfolio_transaction_processing_service`, `query_service` | Cost basis, lot state, accrued-offset evidence, transaction cost state | Tax advice or external cost-estimate methodology |
 | source-data products | `query_control_plane_service`, `query_service`, `portfolio_common.source_data_products` | RFC-0083 product identity, supportability, freshness, lineage, consumer map | Downstream analytics conclusions or duplicated data-mesh certification claims |
 | ingestion/replay | `ingestion_service`, `event_replay_service` | Write ingress, ingestion jobs, replay audit, consumer DLQ evidence | Generic downstream read models or hidden mutation paths |
 | reconciliation | `financial_reconciliation_service`, `pipeline_orchestrator_service` | Control runs, findings, control-stage status, publishability evidence | Calculator mutation or downstream report composition |
@@ -115,9 +115,7 @@ Rules:
 | `event_replay_service` | `src/services/event_replay_service` | Replay/remediation commands, ingestion operations queries, consumer DLQ replay, replay audit, ops control | Source write ingestion, generic query read plane, calculator writes |
 | `financial_reconciliation_service` | `src/services/financial_reconciliation_service` | Reconciliation run orchestration, finding policy, control execution APIs, finding persistence | Calculator mutation, portfolio/position source ownership, report composition |
 | `persistence_service` | `src/services/persistence_service` | Raw domain event decoding, canonical persistence writes, idempotency, completion publication | API read shaping, analytics inputs, downstream contract composition |
-| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Cost basis, lot state, accrued offsets, transaction cost processing and replay | Tax advice, cashflow rule ownership, position valuation |
-| `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow classification, rule lookup, cashflow persistence, DLQ-aware consumer handling | Portfolio liquidity advice, cost basis, valuation job dispatch |
-| `position_calculator_service` | `src/services/calculators/position_calculator` | Position reducer, position history, daily position snapshots, reprocessing requests | Valuation compute, performance attribution, source ingestion |
+| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, or collapsed domain policies |
 | `valuation_orchestrator_service` | `src/services/valuation_orchestrator_service` | Valuation job scheduling, reprocessing state, dispatch readiness | Valuation compute mutation, read-plane response shaping |
 | `position_valuation_calculator` | `src/services/calculators/position_valuation_calculator` | Valuation job consumption, valuation snapshot mutation, active valuation handoff | Job scheduling ownership, benchmark/performance calculations |
 | `timeseries_generator_service` | `src/services/timeseries_generator_service` | Position-timeseries generation, aggregation job staging | Portfolio aggregation policy, operational API responses |
@@ -125,15 +123,27 @@ Rules:
 | `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Stage-gate orchestration, readiness events, control-stage status, quiescence | Business calculations, source write ingestion, direct API serving |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
 | `query_control_plane_service` | `src/services/query_control_plane_service` | Analytics input contracts, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation |
-| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Implemented consolidation target with one atomic transaction use case, separate cost/cashflow/position modules, replay request handling, and aggregate health/version/observability contracts | Runtime activation or coexistence with the three legacy calculator workers before cutover, unrelated valuation ownership, or collapsed domain policies |
 
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.
 
-The combined transaction-processing row is code and image current state, not deployed topology.
-Compose and deployment manifests still run the three legacy calculator workers. The target may
-replace them only atomically after the consolidation ledger's compatibility, load, operability,
-provenance, rollback, and canonical-QA gates pass.
+App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
+transaction processor; the three legacy worker shells are absent from those inventories. Registry
+publication, controlled cluster rollout, platform observability publication, canonical QA,
+downstream stage retirement, and physical legacy package removal remain governed prerequisites
+before full production cutover is claimed.
+
+## Transitional Internal Package Roots
+
+These cataloged roots remain source dependencies of the combined image but are not deployables or
+standalone packages. Their `main.py`, `consumer_manager.py`, `web.py`, Dockerfiles, and package
+manifests are deleted; do not recreate them:
+
+| Compatibility package | Path | Current use | Removal condition |
+| --- | --- | --- | --- |
+| `cost_calculator_service` | `src/services/calculators/cost_calculator_service` | Cost workflow/domain/repository compatibility implementation behind target ports; old replay delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
+| `cashflow_calculator_service` | `src/services/calculators/cashflow_calculator_service` | Cashflow workflow/domain/repository compatibility implementation behind target ports | Move surviving code to target-owned domain names after canonical QA. |
+| `position_calculator_service` | `src/services/calculators/position_calculator` | Position domain/reducer/repository compatibility implementation behind target ports; old delivery is removed | Move surviving code to target-owned domain names after canonical QA. |
 
 ## Database Ownership
 
@@ -142,9 +152,9 @@ provenance, rollback, and canonical-QA gates pass.
 | portfolio/account/instrument/reference master | `persistence_service` and source-ingestion paths | `query_service`, `query_control_plane_service` | Core source truth. Downstream services consume contracts, not private tables. |
 | transaction ledger and business dates | `persistence_service` | `query_service`, analytics-input products | Transaction date vocabulary follows RFC-0083 temporal semantics. |
 | ingestion jobs, failures, replay audit, consumer DLQ | `ingestion_service`, `event_replay_service` | `event_replay_service`, support APIs | Operator evidence, not public business data. |
-| cost and lot state | `cost_calculator_service` | `query_service`, source-data products where declared | Calculator-owned mutation with query-service read publication. |
-| cashflows and cashflow rules | `cashflow_calculator_service` | `query_service` | Do not use for financial-planning advice. |
-| position history and snapshots | `position_calculator_service`, `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
+| cost and lot state | target cost module in `portfolio_transaction_processing_service` | `query_service`, source-data products where declared | Atomic transaction mutation with query-service read publication. |
+| cashflows and cashflow rules | target cashflow module in `portfolio_transaction_processing_service` | `query_service` | Do not use for financial-planning advice. |
+| position history and snapshots | target position module in `portfolio_transaction_processing_service`, plus `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
 | valuation jobs and reprocessing state | `valuation_orchestrator_service` | support APIs, worker consumers | Job orchestration state, not business output. |
 | position timeseries and portfolio timeseries | `timeseries_generator_service`, `portfolio_aggregation_service` | `query_service`, analytics inputs | Published with source-data product metadata where supported. |
 | reconciliation runs/findings and control stages | `financial_reconciliation_service`, `pipeline_orchestrator_service` | support and reconciliation APIs | Controls decide supportability/publishability posture. |
@@ -156,10 +166,8 @@ provenance, rollback, and canonical-QA gates pass.
 sequenceDiagram
     participant Ingest as ingestion_service
     participant Persist as persistence_service
-    participant Cost as cost_calculator_service
-    participant Cash as cashflow_calculator_service
+    participant Txn as portfolio_transaction_processing_service
     participant Pipe as pipeline_orchestrator_service
-    participant Pos as position_calculator_service
     participant ValOrch as valuation_orchestrator_service
     participant Val as position_valuation_calculator
     participant Ts as timeseries_generator_service
@@ -167,12 +175,10 @@ sequenceDiagram
     participant Recon as financial_reconciliation_service
 
     Ingest->>Persist: raw domain topics
-    Persist->>Cost: transactions.persisted
-    Persist->>Cash: transactions.persisted
-    Cost->>Pipe: transactions.cost.processed
-    Cash->>Pipe: cashflows.calculated
-    Pipe->>Pos: transaction_processing.ready
-    Pos->>ValOrch: portfolio_security_day.valuation.ready
+    Persist->>Txn: transactions.persisted
+    Txn->>Txn: atomic cost + cashflow + position
+    Txn->>Pipe: cost/cashflow compatibility events
+    Pipe->>ValOrch: portfolio_security_day.valuation.ready
     ValOrch->>Val: valuation.job.requested
     Val->>Ts: valuation.snapshot.persisted
     Ts->>Agg: portfolio_day.aggregation.job.requested
@@ -183,7 +189,7 @@ sequenceDiagram
 ```
 
 Event and outbox governance is defined by
-`RFC-0083-eventing-supportability-target-model.md`, `scripts/event_runtime_contract_guard.py`,
+`RFC-0083-eventing-supportability-target-model.md`, `scripts/quality/event_runtime_contract_guard.py`,
 `portfolio_common.event_supportability`, `portfolio_common.outbox_repository`, and
 `portfolio_common.outbox_dispatcher`.
 
@@ -209,11 +215,11 @@ Downstream-facing route-family truth lives in `RFC-0082-contract-family-inventor
 | --- | --- |
 | bounded contexts and deployables | `lotus-core-target-architecture.md`, `microservice-boundaries-and-trigger-matrix.md`, `runtime-boundary-decision-catalog.json` |
 | API catalog and route ownership | `RFC-0082-contract-family-inventory.md`, `docs/standards/route-contract-family-registry.json`, `wiki/API-Surface.md` |
-| source-data products | `RFC-0083-source-data-product-catalog.md`, `docs/supported-features.md`, `wiki/Mesh-Data-Products.md` |
-| event/outbox flow | `RFC-0083-eventing-supportability-target-model.md`, `scripts/event_runtime_contract_guard.py`, `docs/operations-runbook.md` |
+| source-data products | `RFC-0083-source-data-product-catalog.md`, `docs/features/supported-features.md`, `wiki/Mesh-Data-Products.md` |
+| event/outbox flow | `RFC-0083-eventing-supportability-target-model.md`, `scripts/quality/event_runtime_contract_guard.py`, `docs/operations/runbook.md` |
 | mapping and anti-corruption | `mapping-anti-corruption-boundary.md`, `CR-1330-API-MAPPER-PATTERN.md`, `CR-1333-MAPPING-ANTI-CORRUPTION-CONTRACT.md` |
 | runtime providers and ports | `runtime-provider-port-policy.md`, `application-port-capability-catalog.md`, `CR-1331-RUNTIME-PROVIDER-PORTS.md` |
-| supportability and incidents | `docs/operations-runbook.md`, `docs/operations/Incident-Playbooks.md`, `wiki/Operations-Runbook.md` |
+| supportability and incidents | `docs/operations/runbook.md`, `docs/operations/Incident-Playbooks.md`, `wiki/Operations-Runbook.md` |
 | review evidence | `CODEBASE-REVIEW-LEDGER.md`, `CODEBASE-REVIEW-PLAYBOOK.md`, `CR-*` records |
 
 ## Change Checklist

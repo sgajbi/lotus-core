@@ -3,15 +3,15 @@ import logging
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from enum import StrEnum
 from typing import List
 
-from portfolio_common.config import KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC
 from portfolio_common.database_models import PositionHistory, PositionState
 from portfolio_common.events import TransactionEvent, transaction_event_ordering_key
-from portfolio_common.logging_utils import correlation_id_var, normalize_lineage_value
-from portfolio_common.monitoring import REPROCESSING_EPOCH_BUMPED_TOTAL
-from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.monitoring import (
+    POSITION_RECALCULATION_COORDINATION_TOTAL,
+    POSITION_RECALCULATION_WORK_ITEMS,
+    REPROCESSING_EPOCH_BUMPED_TOTAL,
+)
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing import EpochFencer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,20 +30,12 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class PositionCalculationResult:
     position_record_count: int = 0
-    replay_queued: bool = False
     rebuilt_events: tuple[TransactionEvent, ...] = ()
-
-
-class BackdatedPositionHandling(StrEnum):
-    QUEUE_REPLAY = "queue_replay"
-    REBUILD_INLINE = "rebuild_inline"
 
 
 class PositionCalculator:
     """
-    Handles position recalculation. Detects back-dated transactions and triggers
-    a full reprocessing by incrementing the key's epoch and re-emitting all
-    historical events for that key via the outbox pattern for atomicity.
+    Handles position recalculation and atomic current-epoch backdated rebuilds.
     """
 
     @classmethod
@@ -53,9 +45,6 @@ class PositionCalculator:
         db_session: AsyncSession,
         repo: PositionRepository,
         position_state_repo: PositionStateRepository,
-        outbox_repo: OutboxRepository,
-        *,
-        backdated_handling: BackdatedPositionHandling = BackdatedPositionHandling.QUEUE_REPLAY,
     ) -> PositionCalculationResult:
         """
         Orchestrates recalculation and reprocessing triggers for a single transaction event.
@@ -85,27 +74,36 @@ class PositionCalculator:
         if replay_decision.should_queue_replay:
             if replay_decision.replay_watermark_date is None:
                 raise RuntimeError("Backdated replay decision did not include a replay watermark.")
-            if backdated_handling is BackdatedPositionHandling.REBUILD_INLINE:
-                return await cls._rebuild_backdated_position_history(
-                    event=event,
-                    repo=repo,
-                    position_state_repo=position_state_repo,
-                    current_state=current_state,
-                    effective_completed_date=replay_decision.effective_completed_date,
-                    replay_watermark_date=replay_decision.replay_watermark_date,
-                    latest_position_history_date=latest_position_history_date,
+            if await repo.is_transaction_materialized(
+                portfolio_id,
+                security_id,
+                event.transaction_id,
+                current_state.epoch,
+            ):
+                POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                    outcome="coalesced",
+                    reason="already_materialized",
+                ).inc()
+                POSITION_RECALCULATION_WORK_ITEMS.labels(mode="coalesced").observe(0)
+                logger.info(
+                    "Coalesced backdated position trigger already materialized in current epoch.",
+                    extra={
+                        "portfolio_id": portfolio_id,
+                        "security_id": security_id,
+                        "transaction_id": event.transaction_id,
+                        "epoch": current_state.epoch,
+                    },
                 )
-            replay_queued = await cls._queue_backdated_replay(
+                return PositionCalculationResult()
+            return await cls._rebuild_backdated_position_history(
                 event=event,
                 repo=repo,
                 position_state_repo=position_state_repo,
-                outbox_repo=outbox_repo,
                 current_state=current_state,
                 effective_completed_date=replay_decision.effective_completed_date,
                 replay_watermark_date=replay_decision.replay_watermark_date,
                 latest_position_history_date=latest_position_history_date,
             )
-            return PositionCalculationResult(replay_queued=replay_queued)
 
         position_record_count = await cls._recalculate_position_history(
             event=event,
@@ -120,44 +118,6 @@ class PositionCalculator:
     async def _event_epoch_is_current(event: TransactionEvent, db_session: AsyncSession) -> bool:
         fencer = EpochFencer(db_session, service_name="position-calculator")
         return bool(await fencer.check(event))
-
-    @classmethod
-    async def _queue_backdated_replay(
-        cls,
-        *,
-        event: TransactionEvent,
-        repo: PositionRepository,
-        position_state_repo: PositionStateRepository,
-        outbox_repo: OutboxRepository,
-        current_state,
-        effective_completed_date: date,
-        replay_watermark_date: date,
-        latest_position_history_date: date | None,
-    ) -> bool:
-        new_state = await cls._advance_backdated_epoch(
-            event=event,
-            position_state_repo=position_state_repo,
-            current_state=current_state,
-            effective_completed_date=effective_completed_date,
-            replay_watermark_date=replay_watermark_date,
-            latest_position_history_date=latest_position_history_date,
-            backdated_handling=BackdatedPositionHandling.QUEUE_REPLAY,
-        )
-        if new_state is None:
-            return False
-
-        events_to_replay = await cls._ordered_backdated_transaction_events(event, repo)
-        logger.info(
-            "Atomically queuing "
-            f"{len(events_to_replay)} events for reprocessing replay "
-            f"in Epoch {new_state.epoch}"
-        )
-        await cls._publish_backdated_replay_events(
-            events_to_replay=events_to_replay,
-            outbox_repo=outbox_repo,
-            replay_epoch=new_state.epoch,
-        )
-        return True
 
     @classmethod
     async def _rebuild_backdated_position_history(
@@ -178,7 +138,6 @@ class PositionCalculator:
             effective_completed_date=effective_completed_date,
             replay_watermark_date=replay_watermark_date,
             latest_position_history_date=latest_position_history_date,
-            backdated_handling=BackdatedPositionHandling.REBUILD_INLINE,
         )
         if new_state is None:
             return PositionCalculationResult()
@@ -189,6 +148,9 @@ class PositionCalculator:
             new_state.epoch,
         )
         events_to_rebuild = await cls._ordered_backdated_transaction_events(event, repo)
+        POSITION_RECALCULATION_WORK_ITEMS.labels(mode="inline_rebuild").observe(
+            len(events_to_rebuild)
+        )
         if not events_to_rebuild:
             return PositionCalculationResult()
         for event_to_rebuild in events_to_rebuild:
@@ -237,16 +199,13 @@ class PositionCalculator:
         effective_completed_date: date,
         replay_watermark_date: date,
         latest_position_history_date: date | None,
-        backdated_handling: BackdatedPositionHandling,
     ) -> PositionState | None:
         cls._log_backdated_replay_detected(
             event=event,
             current_state=current_state,
             effective_completed_date=effective_completed_date,
             latest_position_history_date=latest_position_history_date,
-            backdated_handling=backdated_handling,
         )
-        REPROCESSING_EPOCH_BUMPED_TOTAL.labels(trigger="backdated_transaction").inc()
         new_state = await position_state_repo.increment_epoch_and_reset_watermark(
             event.portfolio_id,
             event.security_id,
@@ -254,7 +213,17 @@ class PositionCalculator:
             replay_watermark_date,
         )
         if new_state is None:
+            POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                outcome="coalesced",
+                reason="stale_epoch",
+            ).inc()
             cls._log_stale_backdated_replay(event, current_state.epoch)
+        else:
+            REPROCESSING_EPOCH_BUMPED_TOTAL.labels(trigger="backdated_transaction").inc()
+            POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
+                outcome="epoch_advanced",
+                reason="backdated_transaction",
+            ).inc()
         return new_state
 
     @staticmethod
@@ -264,7 +233,6 @@ class PositionCalculator:
         current_state,
         effective_completed_date: date,
         latest_position_history_date: date | None,
-        backdated_handling: BackdatedPositionHandling,
     ) -> None:
         logger.warning(
             "Back-dated transaction detected. Advancing position recovery epoch.",
@@ -278,7 +246,7 @@ class PositionCalculator:
                 if latest_position_history_date
                 else None,
                 "current_epoch": current_state.epoch,
-                "backdated_handling": backdated_handling.value,
+                "backdated_handling": "inline_rebuild",
             },
         )
 
@@ -309,25 +277,6 @@ class PositionCalculator:
             events_to_replay.append(event)
         events_to_replay.sort(key=transaction_event_ordering_key)
         return events_to_replay
-
-    @staticmethod
-    async def _publish_backdated_replay_events(
-        *,
-        events_to_replay: list[TransactionEvent],
-        outbox_repo: OutboxRepository,
-        replay_epoch: int,
-    ) -> None:
-        replay_correlation_id = normalize_lineage_value(correlation_id_var.get())
-        for event_to_publish in events_to_replay:
-            event_to_publish.epoch = replay_epoch
-            await outbox_repo.create_outbox_event(
-                aggregate_type="ReprocessTransaction",
-                aggregate_id=str(event_to_publish.portfolio_id),
-                event_type="ReprocessTransactionReplay",
-                topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-                payload=event_to_publish.model_dump(mode="json"),
-                correlation_id=replay_correlation_id,
-            )
 
     @classmethod
     async def _recalculate_position_history(

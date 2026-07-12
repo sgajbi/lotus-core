@@ -371,7 +371,7 @@ plan. It does not change runtime behavior, schemas, generated OpenAPI, or persis
 Slice 2 route classification enforcement is recorded in:
 
 - `docs/standards/route-contract-family-registry.json`
-- `scripts/route_contract_family_guard.py`
+- `scripts/quality/route_contract_family_guard.py`
 - `tests/unit/scripts/test_route_contract_family_guard.py`
 
 The guard parses active FastAPI router decorators and fails when a route is added, removed, or renamed
@@ -424,7 +424,7 @@ Slice 6 source-data product catalog modeling is recorded in:
 - `docs/architecture/RFC-0083-source-data-product-catalog.md`
 - `src/libs/portfolio-common/portfolio_common/source_data_products.py`
 - `tests/unit/libs/portfolio-common/test_source_data_products.py`
-- `scripts/source_data_product_contract_guard.py`
+- `scripts/quality/source_data_product_contract_guard.py`
 - `tests/unit/scripts/test_source_data_product_contract_guard.py`
 
 The catalog defines priority source-data product names, versions, route-family ownership, serving
@@ -455,7 +455,7 @@ Slice 8 endpoint consolidation disposition is recorded in:
 
 - `docs/architecture/RFC-0083-endpoint-consolidation-disposition.md`
 - `docs/standards/endpoint-consolidation-watchlist.json`
-- `scripts/endpoint_consolidation_watchlist_guard.py`
+- `scripts/quality/endpoint_consolidation_watchlist_guard.py`
 - `tests/unit/scripts/test_endpoint_consolidation_watchlist_guard.py`
 - `src/services/query_service/app/routers/reporting.py`
 - `tests/integration/services/query_service/test_main_app.py`
@@ -501,7 +501,7 @@ Slice 10 eventing and supportability target modeling is recorded in:
 - `src/libs/portfolio-common/portfolio_common/event_supportability.py`
 - `src/libs/portfolio-common/portfolio_common/events.py`
 - `tests/unit/libs/portfolio-common/test_event_supportability.py`
-- `scripts/event_runtime_contract_guard.py`
+- `scripts/quality/event_runtime_contract_guard.py`
 - `tests/unit/scripts/test_event_runtime_contract_guard.py`
 - `src/libs/portfolio-common/portfolio_common/outbox_repository.py`
 - `tests/unit/libs/portfolio-common/test_outbox_repository.py`
@@ -523,7 +523,7 @@ Slice 11 production-readiness closure is recorded in:
 
 - `docs/architecture/RFC-0083-production-readiness-closure.md`
 - `docs/standards/rfc-0083-implementation-ledger.json`
-- `scripts/rfc0083_closure_guard.py`
+- `scripts/quality/rfc0083_closure_guard.py`
 - `tests/unit/scripts/test_rfc0083_closure_guard.py`
 
 The closure ledger records the implemented RFC-0083 target-model artifacts for every slice and the

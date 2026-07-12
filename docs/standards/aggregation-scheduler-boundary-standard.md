@@ -42,7 +42,7 @@ Kafka producer creation must stay behind the shared `portfolio_common.event_publ
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/aggregation_scheduler_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/aggregation_scheduler_boundary_guard.py`.
 
 ## Compatibility
 

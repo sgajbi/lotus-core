@@ -1232,7 +1232,7 @@ gateway/workbench integration work.
    implementation.
 2. The old design assumption that core would expose one composed DPM context route is no longer
    treated as the target state.
-3. Prose-only live proof has been replaced with `scripts/validate_live_dpm_source_products.py` and
+3. Prose-only live proof has been replaced with `scripts/validation/validate_live_dpm_source_products.py` and
    `make live-dpm-source-validate`.
 
 ### Testing And Evidence
@@ -1241,8 +1241,8 @@ Local validation evidence captured in this audit:
 
 1. `python -m pytest tests/unit/scripts/test_validate_live_dpm_source_products.py -q` passed with
    5 tests.
-2. `python -m ruff check scripts/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
-3. `python -m ruff format --check scripts/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
+2. `python -m ruff check scripts/validation/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
+3. `python -m ruff format --check scripts/validation/validate_live_dpm_source_products.py tests/unit/scripts/test_validate_live_dpm_source_products.py` passed.
 4. `make source-data-product-contract-guard` passed.
 5. `make domain-product-validate` passed.
 6. The RFC37-WTBD-004 portfolio-universe extension added focused service, router, source-product

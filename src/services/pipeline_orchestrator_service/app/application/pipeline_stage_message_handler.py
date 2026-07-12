@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from types import TracebackType
 from typing import Protocol
 
 from portfolio_common.events import (
-    CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
@@ -14,15 +13,6 @@ from portfolio_common.events import (
 
 
 class PipelineStageUnitOfWork(Protocol):
-    async def __aenter__(self) -> PipelineStageUnitOfWork: ...
-
-    async def __aexit__(
-        self,
-        _exc_type: type[BaseException] | None,
-        _exc: BaseException | None,
-        _traceback: TracebackType | None,
-    ) -> bool | None: ...
-
     async def claim_event_processing(
         self,
         event_id: str,
@@ -34,12 +24,6 @@ class PipelineStageUnitOfWork(Protocol):
     async def register_processed_transaction(
         self,
         event: TransactionEvent,
-        correlation_id: str | None,
-    ) -> None: ...
-
-    async def register_cashflow_calculated(
-        self,
-        event: CashflowCalculatedEvent,
         correlation_id: str | None,
     ) -> None: ...
 
@@ -56,7 +40,7 @@ class PipelineStageUnitOfWork(Protocol):
     ) -> None: ...
 
 
-PipelineStageUnitOfWorkFactory = Callable[[], PipelineStageUnitOfWork]
+PipelineStageUnitOfWorkFactory = Callable[[], AbstractAsyncContextManager[PipelineStageUnitOfWork]]
 
 
 @dataclass(frozen=True)
@@ -82,21 +66,6 @@ class PipelineStageMessageHandler:
             service_name="pipeline-orchestrator-processed-txn",
             correlation_id=correlation_id,
             register=lambda uow: uow.register_processed_transaction(event, correlation_id),
-        )
-
-    async def handle_cashflow_calculated(
-        self,
-        *,
-        event_id: str,
-        event: CashflowCalculatedEvent,
-        correlation_id: str | None,
-    ) -> PipelineStageHandleResult:
-        return await self._handle(
-            event_id=event_id,
-            portfolio_id=event.portfolio_id,
-            service_name="pipeline-orchestrator-cashflow",
-            correlation_id=correlation_id,
-            register=lambda uow: uow.register_cashflow_calculated(event, correlation_id),
         )
 
     async def handle_portfolio_aggregation_completed(

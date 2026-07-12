@@ -2,6 +2,7 @@
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -159,6 +160,13 @@ class PositionHistory(Base):
             "epoch",
             position_date.desc(),
             id.desc(),
+        ),
+        Index(
+            "ix_pos_hist_norm_port_sec_epoch_txn",
+            func.trim(portfolio_id),
+            func.trim(security_id),
+            "epoch",
+            func.trim(transaction_id),
         ),
         Index(
             "ix_pos_hist_port_norm_sec_date_id",
@@ -1747,6 +1755,59 @@ class CostBasisProcessingState(Base):
     )
 
 
+class AverageCostPoolState(Base):
+    """Durable AVCO aggregate used for bounded ordered processing."""
+
+    __tablename__ = "average_cost_pool_state"
+
+    portfolio_id = Column(
+        String,
+        ForeignKey("portfolios.portfolio_id"),
+        primary_key=True,
+        nullable=False,
+    )
+    security_id = Column(String, primary_key=True, nullable=False)
+    instrument_id = Column(String, nullable=False)
+    representative_source_transaction_id = Column(
+        String,
+        ForeignKey("transactions.transaction_id"),
+        nullable=True,
+    )
+    pool_quantity = Column(Numeric(18, 10), nullable=False)
+    pool_cost_local = Column(Numeric(18, 10), nullable=False)
+    pool_cost_base = Column(Numeric(18, 10), nullable=False)
+    state_version = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "pool_quantity >= 0",
+            name="ck_average_cost_pool_state_quantity_nonnegative",
+        ),
+        CheckConstraint(
+            "pool_cost_local >= 0",
+            name="ck_average_cost_pool_state_local_cost_nonnegative",
+        ),
+        CheckConstraint(
+            "pool_cost_base >= 0",
+            name="ck_average_cost_pool_state_base_cost_nonnegative",
+        ),
+        CheckConstraint(
+            "pool_quantity = 0 OR representative_source_transaction_id IS NOT NULL",
+            name="ck_average_cost_pool_state_positive_source",
+        ),
+        Index(
+            "ix_average_cost_pool_state_updated_key",
+            updated_at.desc(),
+            portfolio_id,
+            security_id,
+        ),
+    )
+
+
 class AccruedIncomeOffsetState(Base):
     __tablename__ = "accrued_income_offset_state"
 
@@ -1866,11 +1927,20 @@ class ProcessedEvent(Base):
     correlation_id = Column(String, nullable=True)
     correlation_missing_reason = Column(String, nullable=True)
     alternate_lookup_key = Column(String, nullable=True)
+    semantic_key = Column(String, nullable=True)
+    payload_fingerprint = Column(String, nullable=True)
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("event_id", "service_name", name="_event_service_uc"),
         Index("ix_processed_events_alternate_lookup_key", "alternate_lookup_key"),
+        Index(
+            "uq_processed_events_service_semantic_key",
+            "service_name",
+            "semantic_key",
+            unique=True,
+            postgresql_where=semantic_key.isnot(None),
+        ),
     )
 
 

@@ -292,11 +292,11 @@ The following surfaces are acceptable today but should receive explicit review b
 
 1. Add explicit route-description checks or documentation review for watchlist surfaces when they change.
 2. Add consumer conformance tests for `lotus-performance` analytics-input usage. Completed through
-   `scripts/analytics_input_consumer_contract_guard.py`, which verifies that declared
+   `scripts/quality/analytics_input_consumer_contract_guard.py`, which verifies that declared
    `lotus-performance` source-data products stay on the query control plane and that the governed
    analytics cash-flow vocabulary remains canonical.
 3. Add consumer conformance notes for `lotus-risk` upstream dependency usage. Completed through
-   `scripts/analytics_input_consumer_contract_guard.py`, which verifies that declared `lotus-risk`
+   `scripts/quality/analytics_input_consumer_contract_guard.py`, which verifies that declared `lotus-risk`
    source-data products cover operational holdings, transaction windows, snapshot state,
    analytics-input market/reference products, and evidence products on the governed serving planes.
 
@@ -311,7 +311,7 @@ The following surfaces are acceptable today but should receive explicit review b
 This inventory now has an RFC-0083 Slice 2 machine-readable enforcement companion:
 
 1. `docs/standards/route-contract-family-registry.json`
-2. `scripts/route_contract_family_guard.py`
+2. `scripts/quality/route_contract_family_guard.py`
 3. `make route-contract-family-guard`
 
 Recommended validation for route-family changes:

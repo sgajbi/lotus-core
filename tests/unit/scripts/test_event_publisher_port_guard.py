@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.event_publisher_port_guard import find_event_publisher_port_findings
+from scripts.quality.event_publisher_port_guard import find_event_publisher_port_findings
 
 
 def _write(path: Path, text: str) -> None:

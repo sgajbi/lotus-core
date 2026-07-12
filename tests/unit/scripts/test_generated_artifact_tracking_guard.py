@@ -1,4 +1,4 @@
-from scripts.generated_artifact_tracking_guard import (
+from scripts.quality.generated_artifact_tracking_guard import (
     find_forbidden_tracked_artifacts,
     is_forbidden_tracked_artifact,
 )
@@ -12,9 +12,9 @@ def test_generated_artifact_tracking_guard_flags_build_outputs() -> None:
 
 def test_generated_artifact_tracking_guard_allows_authored_source_and_docs() -> None:
     assert not is_forbidden_tracked_artifact("src/services/query_service/app/main.py")
-    assert not is_forbidden_tracked_artifact("scripts/clean_generated_artifacts.py")
+    assert not is_forbidden_tracked_artifact("scripts/development/clean_generated_artifacts.py")
     assert not is_forbidden_tracked_artifact(
-        "docs/architecture/CR-1272-CLEAN-GENERATED-ARTIFACTS-POLICY.md"
+        "docs/architecture/codebase-reviews/CR-1272-CLEAN-GENERATED-ARTIFACTS-POLICY.md"
     )
 
 

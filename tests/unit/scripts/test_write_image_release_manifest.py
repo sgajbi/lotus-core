@@ -1,4 +1,4 @@
-from scripts.write_image_release_manifest import SCHEMA_VERSION, build_release_manifest
+from scripts.release.write_image_release_manifest import SCHEMA_VERSION, build_release_manifest
 
 FULL_SHA = "a" * 40
 IMAGE_DIGEST = "sha256:" + "b" * 64

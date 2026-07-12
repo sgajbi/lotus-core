@@ -1,8 +1,10 @@
 # services/calculators/position_calculator/app/repositories/position_repository.py
 import hashlib
 import logging
+from collections.abc import Callable
 from datetime import date, datetime, time
-from typing import List, Optional
+from time import monotonic
+from typing import List, Optional, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.database_models import (
@@ -12,6 +14,7 @@ from portfolio_common.database_models import (
     Transaction,
 )
 from portfolio_common.identifiers import normalize_lookup_identifier
+from portfolio_common.monitoring import observe_position_history_replay_lock_wait
 from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +37,9 @@ class PositionRepository:
     Handles all database interactions for position calculation.
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
+        self._clock = clock
 
     @async_timed(repository="PositionRepository", method="acquire_position_history_replay_lock")
     async def acquire_position_history_replay_lock(
@@ -50,8 +54,41 @@ class PositionRepository:
         algorithm from concurrent workers without adding a durable lock table.
         """
         lock_key = _position_history_replay_lock_key(portfolio_id, security_id, epoch)
-        await self.db.execute(
-            text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+        started_at = self._clock()
+        try:
+            await self.db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+            )
+        except BaseException:
+            wait_seconds = max(0.0, self._clock() - started_at)
+            observe_position_history_replay_lock_wait(
+                outcome="failed",
+                seconds=wait_seconds,
+            )
+            logger.warning(
+                "Position history replay lock acquisition failed.",
+                extra={
+                    "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                    "security_id": normalize_lookup_identifier(security_id),
+                    "epoch": epoch,
+                    "lock_wait_seconds": wait_seconds,
+                },
+                exc_info=True,
+            )
+            raise
+        wait_seconds = max(0.0, self._clock() - started_at)
+        observe_position_history_replay_lock_wait(
+            outcome="acquired",
+            seconds=wait_seconds,
+        )
+        logger.info(
+            "Position history replay lock acquired.",
+            extra={
+                "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                "security_id": normalize_lookup_identifier(security_id),
+                "epoch": epoch,
+                "lock_wait_seconds": wait_seconds,
+            },
         )
 
     @async_timed(repository="PositionRepository", method="get_latest_completed_snapshot_date")
@@ -70,7 +107,7 @@ class PositionRepository:
             DailyPositionSnapshot.epoch == epoch,
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return cast(Optional[date], result.scalar_one_or_none())
 
     @async_timed(repository="PositionRepository", method="get_latest_position_history_date")
     async def get_latest_position_history_date(
@@ -90,7 +127,30 @@ class PositionRepository:
             PositionHistory.epoch == epoch,
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return cast(Optional[date], result.scalar_one_or_none())
+
+    @async_timed(repository="PositionRepository", method="is_transaction_materialized")
+    async def is_transaction_materialized(
+        self,
+        portfolio_id: str,
+        security_id: str,
+        transaction_id: str,
+        epoch: int,
+    ) -> bool:
+        """Return whether the current epoch already contains this transaction lineage."""
+        stmt = (
+            select(PositionHistory.id)
+            .where(
+                func.trim(PositionHistory.portfolio_id)
+                == normalize_lookup_identifier(portfolio_id),
+                func.trim(PositionHistory.security_id) == normalize_lookup_identifier(security_id),
+                func.trim(PositionHistory.transaction_id)
+                == normalize_lookup_identifier(transaction_id),
+                PositionHistory.epoch == epoch,
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none() is not None
 
     # --- EXISTING METHOD ---
     @async_timed(repository="PositionRepository", method="find_open_security_ids_as_of")
@@ -128,7 +188,7 @@ class PositionRepository:
         )
 
         result = await self.db.execute(stmt)
-        security_ids = result.scalars().all()
+        security_ids = [str(security_id) for security_id in result.scalars().all()]
         logger.info(
             "Found "
             f"{len(security_ids)} open security positions for portfolio "
@@ -156,7 +216,7 @@ class PositionRepository:
             .order_by(Transaction.transaction_date.asc(), Transaction.transaction_id.asc())
         )
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[Transaction], list(result.scalars().all()))
 
     @async_timed(repository="PositionRepository", method="get_latest_business_date")
     async def get_latest_business_date(self) -> Optional[date]:
@@ -167,8 +227,7 @@ class PositionRepository:
             BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
         )
         result = await self.db.execute(stmt)
-        latest_date = result.scalar_one_or_none()
-        return latest_date
+        return cast(Optional[date], result.scalar_one_or_none())
 
     @async_timed(repository="PositionRepository", method="get_last_position_before")
     async def get_last_position_before(
@@ -207,7 +266,7 @@ class PositionRepository:
         )
 
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return cast(List[Transaction], list(result.scalars().all()))
 
     @async_timed(repository="PositionRepository", method="get_transaction_by_id")
     async def get_transaction_by_id(

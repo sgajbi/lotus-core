@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from scripts.cost_history_capacity_profile import (
+from scripts.operations.cost_history_capacity_profile import (
     SCHEMA_VERSION,
     build_capacity_timeline,
     run_capacity_profile,

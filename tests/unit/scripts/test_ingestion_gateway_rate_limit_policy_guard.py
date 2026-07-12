@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import ingestion_gateway_rate_limit_policy_guard as guard
+from scripts.quality import ingestion_gateway_rate_limit_policy_guard as guard
 
 
 def test_gateway_rate_limit_policy_guard_accepts_current_truth() -> None:

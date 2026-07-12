@@ -36,7 +36,7 @@ record keys and published-record count.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/event_publisher_port_guard.py`. The guard blocks governed
+`make architecture-guard` runs `scripts/quality/event_publisher_port_guard.py`. The guard blocks governed
 ingestion and valuation application publisher paths from importing `KafkaProducer` or
 `get_kafka_producer` directly.
 

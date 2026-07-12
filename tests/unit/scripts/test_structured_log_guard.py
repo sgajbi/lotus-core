@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.structured_log_guard import evaluate_structured_log_guard
+from scripts.quality.structured_log_guard import evaluate_structured_log_guard
 
 
 def test_structured_log_guard_rejects_f_string_messages(tmp_path: Path) -> None:

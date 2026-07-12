@@ -21,7 +21,7 @@ Run `unit`, `integration`, and `e2e` suites with isolated Docker resources so su
 
 ## How It Works
 
-- `scripts/test_manifest.py` assigns a profile by suite:
+- `scripts/quality/test_manifest.py` assigns a profile by suite:
   - `unit`, `unit-db` -> `unit`
   - integration and transaction contract suites -> `integration`
   - `e2e-smoke` -> `e2e`

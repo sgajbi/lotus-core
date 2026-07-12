@@ -1,6 +1,6 @@
 import json
 
-from scripts.bank_day_load_reconciliation_report import (
+from scripts.operations.bank_day_load_reconciliation_report import (
     ExistingRunReconciliationReport,
     ProbeLatencySummary,
     ReconciliationSummary,
@@ -8,7 +8,7 @@ from scripts.bank_day_load_reconciliation_report import (
     _summarize_probe_group,
     _write_report,
 )
-from scripts.bank_day_load_scenario import ApiProbeResult, SamplePortfolioResult
+from scripts.operations.bank_day_load_scenario import ApiProbeResult, SamplePortfolioResult
 
 
 def test_summarize_probe_group_aggregates_matching_endpoints() -> None:

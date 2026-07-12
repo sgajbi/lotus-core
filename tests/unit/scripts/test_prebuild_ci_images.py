@@ -1,7 +1,7 @@
 from argparse import Namespace
 from pathlib import Path
 
-from scripts.prebuild_ci_images import main, provenance_build_args
+from scripts.release.prebuild_ci_images import main, provenance_build_args
 
 
 def test_prebuild_group_expands_to_named_services(
@@ -11,7 +11,7 @@ def test_prebuild_group_expands_to_named_services(
     built: list[tuple[str, Path]] = []
 
     monkeypatch.setattr(
-        "scripts.prebuild_ci_images.parse_args",
+        "scripts.release.prebuild_ci_images.parse_args",
         lambda: Namespace(
             cache_dir=str(tmp_path / ".buildx-cache"),
             services=None,
@@ -19,7 +19,7 @@ def test_prebuild_group_expands_to_named_services(
         ),
     )
     monkeypatch.setattr(
-        "scripts.prebuild_ci_images._build",
+        "scripts.release.prebuild_ci_images._build",
         lambda service, cache_dir: built.append((service, cache_dir)),
     )
 
@@ -31,7 +31,7 @@ def test_prebuild_group_expands_to_named_services(
         "query_service",
         "event_replay_service",
         "persistence_service",
-        "position_calculator_service",
+        "portfolio_transaction_processing_service",
         "pipeline_orchestrator_service",
     ]
 
@@ -43,7 +43,7 @@ def test_prebuild_services_and_group_are_deduplicated(
     built: list[str] = []
 
     monkeypatch.setattr(
-        "scripts.prebuild_ci_images.parse_args",
+        "scripts.release.prebuild_ci_images.parse_args",
         lambda: Namespace(
             cache_dir=str(tmp_path / ".buildx-cache"),
             services=["query_service"],
@@ -51,7 +51,7 @@ def test_prebuild_services_and_group_are_deduplicated(
         ),
     )
     monkeypatch.setattr(
-        "scripts.prebuild_ci_images._build",
+        "scripts.release.prebuild_ci_images._build",
         lambda service, cache_dir: built.append(service),
     )
 

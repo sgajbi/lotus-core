@@ -4,7 +4,7 @@
   "guard_command": "make incident-playbook-guard",
   "documentation_surfaces": [
     "docs/operations/Incident-Playbooks.md",
-    "docs/operations-runbook.md",
+    "docs/operations/runbook.md",
     "wiki/Operations-Runbook.md",
     "wiki/Troubleshooting.md"
   ],
@@ -48,7 +48,7 @@
       ],
       "repository_native_commands": [
         "make test-ops-contract",
-        "python scripts/docker_endpoint_smoke.py --skip-compose --output-dir output/incident-evidence"
+        "python scripts/validation/docker_endpoint_smoke.py --skip-compose --output-dir output/incident-evidence"
       ],
       "expected_response_fields": [
         "job_id",

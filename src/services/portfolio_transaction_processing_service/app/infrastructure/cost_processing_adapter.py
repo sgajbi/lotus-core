@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from portfolio_common.outbox_repository import OutboxRepository
 
-from src.services.calculators.cost_calculator_service.app.consumer import (
-    FxRateNotFoundError,
-    InstrumentReferenceUnavailableError,
-    UpstreamCashLegUnavailableError,
-)
 from src.services.calculators.cost_calculator_service.app.cost_calculation_processor import (
     CostCalculationEventProcessor,
     CostCalculationWorkflowPort,
     PortfolioNotFoundError,
+)
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
+    FxRateNotFoundError,
+    InstrumentReferenceUnavailableError,
+    UpstreamCashLegUnavailableError,
 )
 from src.services.calculators.cost_calculator_service.app.repository import (
     CostCalculatorRepository,

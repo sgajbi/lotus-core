@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.upload_component_boundary_guard import (
+from scripts.quality.upload_component_boundary_guard import (
     find_upload_component_boundary_findings,
 )
 

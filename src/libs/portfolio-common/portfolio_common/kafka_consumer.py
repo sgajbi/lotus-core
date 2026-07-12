@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Dict, Iterator, Optional
 from uuid import uuid4
 
-from confluent_kafka import Consumer, Message
+from confluent_kafka import Consumer, Message, TopicPartition
 from pydantic import ValidationError
 
 from .config import (
@@ -47,6 +47,7 @@ from .monitoring import (
     observe_kafka_consumer_poll_idle_duration,
     observe_kafka_consumer_processing_duration,
     set_kafka_consumer_in_flight,
+    set_kafka_consumer_partition_lag,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,9 @@ class BaseConsumer(ABC):
                 extra={"group_id": group_id, "override_keys": sorted(runtime_overrides.keys())},
             )
         self._running = True
+        self._run_active = False
+        self._shutdown_started = False
+        self._shutdown_finalized = False
         self._dlq_failure_attempts: dict[str, int] = {}
         self._dlq_failure_max_attempts = KAFKA_CONSUMER_DLQ_FAILURE_MAX_ATTEMPTS
         self._retryable_failure_attempts: dict[str, tuple[int, float]] = {}
@@ -598,6 +602,7 @@ class BaseConsumer(ABC):
         The main consumer loop. Polls for messages, processes them, handles errors,
         and commits offsets.
         """
+        self._run_active = True
         try:
             self._initialize_consumer()
             loop = asyncio.get_running_loop()
@@ -616,6 +621,7 @@ class BaseConsumer(ABC):
             self._record_consumer_event("critical_loop_exit", "unhandled_exception")
             raise
         finally:
+            self._run_active = False
             self.shutdown()
 
     async def _run_serial_consumer_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -657,11 +663,19 @@ class BaseConsumer(ABC):
 
     async def _poll_next_message(self, loop: asyncio.AbstractEventLoop) -> Message | None:
         started_at = time.monotonic()
-        msg = await loop.run_in_executor(
-            None,
-            self._consumer.poll,
-            self.execution_profile.poll_timeout_seconds,
-        )
+        consumer = self._consumer
+        if consumer is None:
+            raise RuntimeError("Kafka consumer must be initialized before polling.")
+        try:
+            msg = await loop.run_in_executor(
+                None,
+                consumer.poll,
+                self.execution_profile.poll_timeout_seconds,
+            )
+        except Exception:
+            if not self._running:
+                return None
+            raise
         if msg is None:
             observe_kafka_consumer_poll_idle_duration(
                 service=self._metric_service_label(),
@@ -1049,6 +1063,7 @@ class BaseConsumer(ABC):
     def _commit_after_dlq_publication(self, msg: Message) -> None:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
+            self._observe_committed_message_lag(msg)
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "dlq_publication")
             self._log_consumer_event(
@@ -1064,6 +1079,7 @@ class BaseConsumer(ABC):
     def _commit_after_successful_processing(self, msg: Message) -> bool:
         try:
             self._consumer.commit(message=msg, asynchronous=False)
+            self._observe_committed_message_lag(msg)
             return True
         except Exception as commit_error:
             self._record_consumer_event("commit_failed", "successful_processing")
@@ -1077,6 +1093,38 @@ class BaseConsumer(ABC):
                 error_type=type(commit_error).__name__,
             )
             return False
+
+    def _observe_committed_message_lag(self, msg: Message) -> None:
+        consumer = self._consumer
+        if consumer is None:
+            return
+        try:
+            topic = msg.topic()
+            partition = msg.partition()
+            offset = msg.offset()
+            if (
+                not isinstance(topic, str)
+                or isinstance(partition, bool)
+                or not isinstance(partition, int)
+                or isinstance(offset, bool)
+                or not isinstance(offset, int)
+            ):
+                return
+            _, high_watermark = consumer.get_watermark_offsets(
+                TopicPartition(topic, partition),
+                cached=True,
+            )
+            if isinstance(high_watermark, bool) or not isinstance(high_watermark, int):
+                return
+            set_kafka_consumer_partition_lag(
+                service=self._metric_service_label(),
+                topic=topic,
+                group_id=self._consumer_config["group.id"],
+                partition=str(partition),
+                lag_messages=max(0, high_watermark - offset - 1),
+            )
+        except Exception:
+            return
 
     def _log_dlq_publication_failed(self, msg: Message) -> None:
         self._log_consumer_event(
@@ -1154,7 +1202,18 @@ class BaseConsumer(ABC):
         )
 
     def shutdown(self):
-        """Gracefully shuts down the consumer."""
+        """Stop polling, drain active work, and then release Kafka resources."""
+        if self._shutdown_finalized:
+            return
+        self._start_shutdown()
+        if self._run_active:
+            return
+        self._finalize_shutdown()
+
+    def _start_shutdown(self) -> None:
+        if self._shutdown_started:
+            return
+        self._shutdown_started = True
         self._log_consumer_event(
             logging.INFO,
             "Kafka consumer shutdown started.",
@@ -1165,6 +1224,12 @@ class BaseConsumer(ABC):
         self._running = False
         if self._consumer:
             self._wakeup_consumer_for_shutdown()
+
+    def _finalize_shutdown(self) -> None:
+        if self._shutdown_finalized:
+            return
+        self._shutdown_finalized = True
+        if self._consumer:
             self._close_consumer_for_shutdown()
         if self._producer:
             self._flush_dlq_producer_for_shutdown()

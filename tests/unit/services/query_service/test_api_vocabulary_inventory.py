@@ -1,4 +1,4 @@
-from scripts.api_vocabulary_inventory import (
+from scripts.quality.api_vocabulary_inventory import (
     _build_attribute_catalog,
     _extract_request_fields,
     validate_inventory,

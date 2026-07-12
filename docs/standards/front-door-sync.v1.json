@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus-core.front-door-sync.v1",
   "repository": "lotus-core",
-  "guard_command": "python scripts/front_door_sync_guard.py",
+  "guard_command": "python scripts/quality/front_door_sync_guard.py",
   "description": "Governed front-door synchronization contract for README, wiki navigation, durable docs, and PR documentation decisions.",
   "canonical_sources": [
     {
@@ -31,7 +31,7 @@
     },
     {
       "id": "operations_runbook",
-      "path": "docs/operations-runbook.md",
+      "path": "docs/operations/runbook.md",
       "role": "operator runbook truth"
     }
   ],

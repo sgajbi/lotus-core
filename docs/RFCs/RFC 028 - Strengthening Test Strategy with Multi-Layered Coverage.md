@@ -19,14 +19,14 @@ RFC 028 aimed to reduce production risk by:
 Current implementation is now complete against RFC-028 scope:
 1. Unit suites widely use real `TransactionEvent`/Pydantic models.
 2. Core test infrastructure is stronger (manifest-driven suites, docker-backed fixtures).
-3. RFC-specific artifacts are now present (`docs/testing_strategy.md`, `docs/incidents/incident_to_coverage.md`) and consumer-boundary integration is codified via persistence consume-process-persist tests.
+3. RFC-specific artifacts are now present (`docs/testing/testing-strategy.md`, `docs/incidents/incident_to_coverage.md`) and consumer-boundary integration is codified via persistence consume-process-persist tests.
 
 ## Original Requested Requirements (Preserved)
 
 Original RFC 028 requested:
 1. Prohibit mock-only stand-ins for domain event models in unit tests.
 2. Add consumer-level integration tests using dedicated DB + ephemeral Kafka broker.
-3. Add `docs/testing_strategy.md` and `docs/incidents/incident_to_coverage.md`.
+3. Add `docs/testing/testing-strategy.md` and `docs/incidents/incident_to_coverage.md`.
 4. Update service developer docs to explain the new test layer.
 
 ## Current Implementation Reality
@@ -42,10 +42,10 @@ Evidence:
 - `tests/unit/transaction_specs/test_buy_slice0_characterization.py`
 - `tests/unit/transaction_specs/test_sell_slice0_characterization.py`
 - `tests/conftest.py`
-- `docs/testing_strategy.md`
+- `docs/testing/testing-strategy.md`
 - `docs/incidents/incident_to_coverage.md`
 - `tests/integration/services/persistence_service/consumers/test_transaction_consumer_boundary.py`
-- `scripts/test_manifest.py`
+- `scripts/quality/test_manifest.py`
 - `.github/workflows/ci.yml`
 
 ## Requirement-to-Implementation Traceability
@@ -54,7 +54,7 @@ Evidence:
 | --- | --- | --- |
 | Domain-valid event models in unit tests | Broadly implemented in major suites | unit tests listed above |
 | Consumer-level integration layer with ephemeral broker | Implemented as dedicated consume-process-persist boundary coverage (DB-backed, consumer entrypoint) | `tests/integration/services/persistence_service/consumers/test_transaction_consumer_boundary.py`; `tests/conftest.py` |
-| Testing strategy doc | Implemented | `docs/testing_strategy.md` |
+| Testing strategy doc | Implemented | `docs/testing/testing-strategy.md` |
 | Incident-to-coverage mapping doc | Implemented | `docs/incidents/incident_to_coverage.md` |
 
 ## Design Reasoning and Trade-offs
@@ -83,7 +83,7 @@ No open deltas remain for RFC-028.
 1. Domain-event instantiation in unit suites (examples listed above).
 2. CI matrix execution paths:
    - `.github/workflows/ci.yml`
-   - `Makefile` / `scripts/test_manifest.py`
+   - `Makefile` / `scripts/quality/test_manifest.py`
 
 ## Original Acceptance Criteria Alignment
 

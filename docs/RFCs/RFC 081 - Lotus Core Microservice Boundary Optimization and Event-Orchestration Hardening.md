@@ -429,6 +429,10 @@ The highest-priority change is explicit event-gate orchestration. It delivers th
 
 ## 15. Implementation Progress (2026-03-07)
 
+> Superseded runtime note (2026-07-10): the dual cost/cashflow consumer foundation below is
+> historical. CR-1488 makes the unified runtime's `ProcessedTransactionPersisted` event the single
+> authoritative transaction-completion input and removes the pipeline cashflow consumer.
+
 ### 15.1 Delivered in this iteration (Phase 1 foundation)
 
 - Added new `pipeline_orchestrator_service` runtime surface:

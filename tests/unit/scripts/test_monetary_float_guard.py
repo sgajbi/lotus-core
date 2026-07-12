@@ -1,7 +1,7 @@
 import json
 import sys
 
-from scripts.check_monetary_float_usage import main, scan_repo
+from scripts.quality.check_monetary_float_usage import main, scan_repo
 
 
 def test_monetary_float_guard_flags_money_like_float_conversion(tmp_path):
@@ -31,6 +31,31 @@ def test_monetary_float_guard_ignores_operational_delay_conversions(tmp_path):
     )
 
     assert scan_repo(tmp_path) == []
+
+
+def test_monetary_float_guard_ignores_time_dimension_on_cost_metric(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "monitoring.py"
+    source_file.write_text(
+        "def observe_cost_basis_lock(*, outcome: str, seconds: float) -> None:\n"
+        "    histogram.labels(outcome).observe(seconds)\n",
+        encoding="utf-8",
+    )
+
+    assert scan_repo(tmp_path) == []
+
+
+def test_monetary_float_guard_still_flags_cost_amount_annotation(tmp_path):
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    source_file = source_dir / "cost.py"
+    source_file.write_text(
+        "def calculate_cost(*, amount: float) -> None:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    assert scan_repo(tmp_path) == ["src/cost.py:1:def calculate_cost(*, amount: float) -> None:"]
 
 
 def test_monetary_float_guard_ignores_generic_parser_value_conversion(tmp_path):

@@ -11,7 +11,6 @@ CONTROL_BLOCKING_STATUSES = frozenset({"FAILED", "REQUIRES_REPLAY"})
 class TransactionStageState(Protocol):
     status: str
     cost_event_seen: bool
-    cashflow_event_seen: bool
 
 
 @dataclass(frozen=True)
@@ -31,12 +30,7 @@ def decide_transaction_stage_readiness(
     if not stage.cost_event_seen:
         return TransactionStageReadinessDecision(
             should_complete=False,
-            reason_code="missing_cost_event",
-        )
-    if not stage.cashflow_event_seen:
-        return TransactionStageReadinessDecision(
-            should_complete=False,
-            reason_code="missing_cashflow_event",
+            reason_code="missing_transaction_processing_event",
         )
     return TransactionStageReadinessDecision(
         should_complete=True,
@@ -54,3 +48,12 @@ def should_emit_control_stage_for_epoch(
     event_epoch: int,
 ) -> bool:
     return latest_epoch is None or latest_epoch == event_epoch
+
+
+def should_register_transaction_stage_for_epoch(
+    *,
+    latest_epoch: int | None,
+    event_epoch: int,
+) -> bool:
+    """Accept the current/new transaction epoch and reject superseded delivery epochs."""
+    return latest_epoch is None or event_epoch >= latest_epoch

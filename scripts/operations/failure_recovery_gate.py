@@ -1,0 +1,646 @@
+"""Prove bounded recovery of the unified transaction-processing runtime.
+
+The gate pauses the combined cost, cashflow, and position consumer, submits valid
+transactions, proves committed Kafka lag grows, resumes the consumer, and then
+requires exact persistence and zero-lag recovery.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
+from pathlib import Path
+from typing import Any, cast
+
+import requests  # type: ignore[import-untyped]
+from portfolio_common.config import (
+    KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+    KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
+)
+from sqlalchemy import Engine, create_engine
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
+    from scripts.operations.transaction_processing_load_support import (
+        TransactionProcessingCounts,
+        ingest_transactions,
+        seed_load_context,
+        transaction_processing_counts,
+        wait_for_database_count,
+    )
+    from scripts.quality.ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+    from transaction_processing_cutover_offsets import KafkaOffsetStore
+    from transaction_processing_load_support import (
+        TransactionProcessingCounts,
+        ingest_transactions,
+        seed_load_context,
+        transaction_processing_counts,
+        wait_for_database_count,
+    )
+
+TRANSACTION_PROCESSING_GROUP = "portfolio_transaction_processing_group"
+TRANSACTION_REPLAY_GROUP = "portfolio_transaction_replay_request_group"
+
+
+class RecoveryMode(StrEnum):
+    FULLY_DRAINED = "FULLY_DRAINED"
+    FAILED_RECOVERY = "FAILED_RECOVERY"
+
+
+@dataclass(slots=True)
+class RecoveryResult:
+    run_id: str
+    started_at: str
+    ended_at: str
+    interruption_service: str
+    interruption_container_id: str
+    requested_interruption_seconds: int
+    actual_interruption_seconds: float
+    transaction_topic: str
+    consumer_group: str
+    records_submitted: int
+    source_persistence_seconds: float
+    baseline_consumer_lag: int
+    peak_consumer_lag_during_interruption: int
+    consumer_lag_growth: int
+    consumer_lag_after_recovery: int
+    baseline_replay_consumer_lag: int
+    replay_consumer_lag_after_recovery: int
+    transaction_processing_recovery_seconds: float | None
+    transaction_count: int
+    cost_count: int
+    cashflow_count: int
+    position_count: int
+    processing_claim_count: int
+    dlq_events_added_during_recovery: int
+    recovery_mode: str
+    checks_passed: bool
+    failed_checks: list[str]
+
+
+def _evaluate_recovery_result(
+    *,
+    records_submitted: int,
+    baseline_consumer_lag: int,
+    consumer_lag_growth: int,
+    consumer_lag_after_recovery: int,
+    baseline_replay_consumer_lag: int,
+    replay_consumer_lag_after_recovery: int,
+    transaction_processing_recovery_seconds: float | None,
+    max_recovery_seconds: int,
+    counts: TransactionProcessingCounts,
+    dlq_events_added_during_recovery: int,
+) -> tuple[RecoveryMode, list[str]]:
+    failed_checks: list[str] = []
+    if consumer_lag_growth < records_submitted:
+        failed_checks.append(
+            "transaction consumer lag growth "
+            f"{consumer_lag_growth} was below submitted records {records_submitted}"
+        )
+    if transaction_processing_recovery_seconds is None:
+        failed_checks.append("transaction processing did not fully recover before timeout")
+    elif transaction_processing_recovery_seconds > max_recovery_seconds:
+        failed_checks.append(
+            "transaction processing recovery "
+            f"{transaction_processing_recovery_seconds:.2f}s exceeded "
+            f"{max_recovery_seconds}s"
+        )
+    if consumer_lag_after_recovery > baseline_consumer_lag:
+        failed_checks.append(
+            "transaction consumer lag after recovery "
+            f"{consumer_lag_after_recovery} exceeded baseline {baseline_consumer_lag}"
+        )
+    if replay_consumer_lag_after_recovery > baseline_replay_consumer_lag:
+        failed_checks.append(
+            "transaction replay consumer lag after recovery "
+            f"{replay_consumer_lag_after_recovery} exceeded baseline "
+            f"{baseline_replay_consumer_lag}"
+        )
+
+    exact_counts = {
+        "transaction": counts.transaction_count,
+        "cost": counts.cost_count,
+        "cashflow": counts.cashflow_count,
+        "position": counts.position_count,
+    }
+    for name, actual in exact_counts.items():
+        if actual != records_submitted:
+            failed_checks.append(
+                f"{name} completion count {actual} did not equal submitted {records_submitted}"
+            )
+    if counts.processing_claim_count < records_submitted:
+        failed_checks.append(
+            "transaction processing claim count "
+            f"{counts.processing_claim_count} was below submitted {records_submitted}"
+        )
+    if dlq_events_added_during_recovery:
+        failed_checks.append(
+            f"failure recovery added {dlq_events_added_during_recovery} DLQ events"
+        )
+    if failed_checks:
+        return RecoveryMode.FAILED_RECOVERY, failed_checks
+    return RecoveryMode.FULLY_DRAINED, failed_checks
+
+
+def _run_capture(cmd: list[str], cwd: Path) -> str:
+    completed = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"Command failed ({completed.returncode}): {' '.join(cmd)}\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+    return completed.stdout
+
+
+def _wait_ready(
+    *,
+    ingestion_base_url: str,
+    event_replay_base_url: str,
+    query_base_url: str,
+    timeout_seconds: int,
+) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            ingestion = requests.get(f"{ingestion_base_url}/health/ready", timeout=5)
+            replay = requests.get(f"{event_replay_base_url}/health/ready", timeout=5)
+            query = requests.get(f"{query_base_url}/health/ready", timeout=5)
+            if (
+                ingestion.status_code == 200
+                and replay.status_code == 200
+                and query.status_code == 200
+            ):
+                return
+        except requests.RequestException:
+            pass
+        time.sleep(2)
+    raise TimeoutError("Services did not become ready before timeout.")
+
+
+def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
+    headers = {"X-Lotus-Ops-Token": ops_token}
+    error_budget = requests.get(
+        f"{event_replay_base_url}/ingestion/health/error-budget?lookback_minutes=60",
+        headers=headers,
+        timeout=20,
+    )
+    if error_budget.status_code != 200:
+        raise RuntimeError(
+            f"Health endpoint failed status={error_budget.status_code}: {error_budget.text[:200]}"
+        )
+    return cast(dict[str, Any], error_budget.json())
+
+
+def _compose_command(
+    *, compose_file: str, compose_project_name: str | None, arguments: list[str]
+) -> list[str]:
+    command = ["docker", "compose"]
+    if compose_project_name:
+        command.extend(["-p", compose_project_name])
+    command.extend(["-f", compose_file, *arguments])
+    return command
+
+
+def _resolve_interruption_container(
+    *,
+    repo_root: Path,
+    compose_file: str,
+    compose_project_name: str | None,
+    interruption_service: str,
+) -> str:
+    target = interruption_service.strip()
+    if not target:
+        raise ValueError("interruption service cannot be empty")
+    container_id = _run_capture(
+        _compose_command(
+            compose_file=compose_file,
+            compose_project_name=compose_project_name,
+            arguments=["ps", "-q", target],
+        ),
+        cwd=repo_root,
+    ).strip()
+    if not container_id:
+        raise RuntimeError(f"Compose service is not running: {target}")
+    return container_id
+
+
+def _set_container_pause(*, container_id: str, paused: bool, repo_root: Path) -> None:
+    operation = "pause" if paused else "unpause"
+    _run_capture(["docker", operation, container_id], cwd=repo_root)
+
+
+def _consumer_lag(*, store: KafkaOffsetStore, consumer_group: str, transaction_topic: str) -> int:
+    snapshot = store.snapshot(group_id=consumer_group, topic=transaction_topic)
+    return sum(
+        max(partition.high_watermark - max(partition.committed_offset, 0), 0)
+        for partition in snapshot.partitions
+    )
+
+
+def _wait_for_lag_growth(
+    *,
+    store: KafkaOffsetStore,
+    consumer_group: str,
+    transaction_topic: str,
+    baseline_lag: int,
+    expected_growth: int,
+    timeout_seconds: int,
+) -> int:
+    peak_lag = baseline_lag
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        current_lag = _consumer_lag(
+            store=store,
+            consumer_group=consumer_group,
+            transaction_topic=transaction_topic,
+        )
+        peak_lag = max(peak_lag, current_lag)
+        if peak_lag - baseline_lag >= expected_growth:
+            return peak_lag
+        time.sleep(1)
+    return peak_lag
+
+
+def _wait_for_full_recovery(
+    *,
+    store: KafkaOffsetStore,
+    engine: Engine,
+    consumer_group: str,
+    transaction_topic: str,
+    baseline_lag: int,
+    portfolio_id: str,
+    transaction_id_prefix: str,
+    expected_records: int,
+    timeout_seconds: int,
+) -> tuple[float | None, TransactionProcessingCounts, int]:
+    started = time.time()
+    deadline = started + timeout_seconds
+    counts = transaction_processing_counts(
+        engine=engine,
+        portfolio_id=portfolio_id,
+        transaction_id_prefix=transaction_id_prefix,
+    )
+    consumer_lag = _consumer_lag(
+        store=store,
+        consumer_group=consumer_group,
+        transaction_topic=transaction_topic,
+    )
+    while time.time() < deadline:
+        counts = transaction_processing_counts(
+            engine=engine,
+            portfolio_id=portfolio_id,
+            transaction_id_prefix=transaction_id_prefix,
+        )
+        consumer_lag = _consumer_lag(
+            store=store,
+            consumer_group=consumer_group,
+            transaction_topic=transaction_topic,
+        )
+        domain_complete = all(
+            count == expected_records
+            for count in (
+                counts.transaction_count,
+                counts.cost_count,
+                counts.cashflow_count,
+                counts.position_count,
+            )
+        )
+        if (
+            domain_complete
+            and counts.processing_claim_count >= expected_records
+            and consumer_lag <= baseline_lag
+        ):
+            return round(time.time() - started, 3), counts, consumer_lag
+        time.sleep(1)
+    return None, counts, consumer_lag
+
+
+def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Path]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    recovery_seconds: float | str = (
+        result.transaction_processing_recovery_seconds
+        if result.transaction_processing_recovery_seconds is not None
+        else "timeout"
+    )
+    json_path = output_dir / f"{result.run_id}-failure-recovery-gate.json"
+    markdown_path = output_dir / f"{result.run_id}-failure-recovery-gate.md"
+    json_path.write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
+
+    lines = [
+        f"# Failure Recovery Gate {result.run_id}",
+        "",
+        "- Boundary: unified cost, cashflow, and position transaction processing",
+        "- Completion: exact domain persistence, idempotency claims, and committed Kafka lag",
+        f"- Overall passed: {result.checks_passed}",
+        f"- Recovery mode: `{result.recovery_mode}`",
+        f"- Interrupted service: `{result.interruption_service}`",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| records_submitted | {result.records_submitted} |",
+        f"| source_persistence_seconds | {result.source_persistence_seconds:.3f} |",
+        f"| requested_interruption_seconds | {result.requested_interruption_seconds} |",
+        f"| actual_interruption_seconds | {result.actual_interruption_seconds:.3f} |",
+        f"| baseline_consumer_lag | {result.baseline_consumer_lag} |",
+        (
+            "| peak_consumer_lag_during_interruption | "
+            f"{result.peak_consumer_lag_during_interruption} |"
+        ),
+        f"| consumer_lag_growth | {result.consumer_lag_growth} |",
+        f"| consumer_lag_after_recovery | {result.consumer_lag_after_recovery} |",
+        f"| baseline_replay_consumer_lag | {result.baseline_replay_consumer_lag} |",
+        (f"| replay_consumer_lag_after_recovery | {result.replay_consumer_lag_after_recovery} |"),
+        f"| transaction_processing_recovery_seconds | {recovery_seconds} |",
+        f"| transaction_count | {result.transaction_count} |",
+        f"| cost_count | {result.cost_count} |",
+        f"| cashflow_count | {result.cashflow_count} |",
+        f"| position_count | {result.position_count} |",
+        f"| processing_claim_count | {result.processing_claim_count} |",
+        f"| dlq_events_added_during_recovery | {result.dlq_events_added_during_recovery} |",
+    ]
+    if result.failed_checks:
+        lines.extend(["", "## Failed checks"])
+        lines.extend(f"- {check}" for check in result.failed_checks)
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return json_path, markdown_path
+
+
+def _load_test_runtime_helpers():
+    from tests.test_support.docker_stack import compose_down, compose_up, wait_for_migration_runner
+    from tests.test_support.runtime_env import build_test_runtime_env
+
+    return compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Prove unified transaction-processing failure recovery."
+    )
+    parser.add_argument("--repo-root", default=".")
+    parser.add_argument("--compose-file", default="docker-compose.yml")
+    parser.add_argument("--compose-project-name", default=None)
+    parser.add_argument("--ingestion-base-url", default=None)
+    parser.add_argument("--query-base-url", default=None)
+    parser.add_argument("--event-replay-base-url", default=None)
+    parser.add_argument(
+        "--host-database-url",
+        default="postgresql://user:password@localhost:55432/portfolio_db",
+    )
+    parser.add_argument("--kafka-bootstrap-servers", default="localhost:9092")
+    parser.add_argument("--transaction-topic", default=KAFKA_TRANSACTIONS_PERSISTED_TOPIC)
+    parser.add_argument("--consumer-group", default=TRANSACTION_PROCESSING_GROUP)
+    parser.add_argument(
+        "--replay-topic",
+        default=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
+    )
+    parser.add_argument("--replay-consumer-group", default=TRANSACTION_REPLAY_GROUP)
+    parser.add_argument("--ops-token", default="lotus-core-ops-local")
+    parser.add_argument("--output-dir", default="output/task-runs")
+    parser.add_argument("--build", action="store_true")
+    parser.add_argument("--skip-compose", action="store_true")
+    parser.add_argument("--keep-stack-up", action="store_true")
+    parser.add_argument("--ready-timeout-seconds", type=int, default=240)
+    parser.add_argument("--interruption-seconds", type=int, default=25)
+    parser.add_argument("--backlog-build-timeout-seconds", type=int, default=120)
+    parser.add_argument("--recovery-timeout-seconds", type=int, default=480)
+    parser.add_argument("--max-recovery-seconds", type=int, default=420)
+    parser.add_argument("--batches", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=25)
+    parser.add_argument(
+        "--interruption-service",
+        "--interruption-container",
+        dest="interruption_service",
+        default="portfolio_transaction_processing_service",
+    )
+    parser.add_argument("--enforce", action="store_true")
+    return parser
+
+
+def main() -> int:
+    args = _build_parser().parse_args()
+    repo_root = Path(args.repo_root).resolve()
+    run_started_at = datetime.now(UTC)
+    run_id = run_started_at.strftime("%Y%m%dT%H%M%SZ")
+    business_date = run_started_at.date().isoformat()
+    transaction_date = f"{business_date}T09:00:00Z"
+    portfolio_id = f"FAIL_RECOVERY_{run_id}"
+    security_prefix = f"FAIL_{run_id[-9:-1]}_SEC"
+    transaction_seed = f"FAIL-{run_id}"
+    transaction_id_prefix = f"TX_{transaction_seed}"
+
+    compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env = (
+        _load_test_runtime_helpers()
+    )
+    runtime_env, endpoints = build_test_runtime_env(
+        profile="integration",
+        scope="failure-recovery-gate",
+        env=os.environ.copy(),
+        preserve_existing=True,
+    )
+    os.environ.update(runtime_env)
+    if args.compose_project_name:
+        os.environ["COMPOSE_PROJECT_NAME"] = args.compose_project_name
+
+    ingestion_base_url = args.ingestion_base_url or endpoints.e2e_ingestion_url
+    query_base_url = args.query_base_url or endpoints.e2e_query_url
+    event_replay_base_url = args.event_replay_base_url or endpoints.e2e_event_replay_url
+    engine = create_engine(args.host_database_url, pool_pre_ping=True)
+    offset_store = KafkaOffsetStore(
+        bootstrap_servers=args.kafka_bootstrap_servers,
+        timeout_seconds=10,
+    )
+
+    try:
+        if not args.skip_compose:
+            compose_up(
+                args.compose_file,
+                build=args.build,
+                services=list(FAILURE_RECOVERY_GATE_SERVICES),
+            )
+            wait_for_migration_runner(
+                args.compose_file,
+                timeout_seconds=args.ready_timeout_seconds,
+            )
+        _wait_ready(
+            ingestion_base_url=ingestion_base_url,
+            event_replay_base_url=event_replay_base_url,
+            query_base_url=query_base_url,
+            timeout_seconds=args.ready_timeout_seconds,
+        )
+        seed_load_context(
+            engine=engine,
+            ingestion_base_url=ingestion_base_url,
+            run_id=run_id,
+            portfolio_id=portfolio_id,
+            security_prefix=security_prefix,
+            business_date=business_date,
+            timeout_seconds=args.ready_timeout_seconds,
+        )
+
+        baseline_health = _get_health_snapshot(
+            event_replay_base_url=event_replay_base_url,
+            ops_token=args.ops_token,
+        )
+        baseline_consumer_lag = _consumer_lag(
+            store=offset_store,
+            consumer_group=args.consumer_group,
+            transaction_topic=args.transaction_topic,
+        )
+        baseline_replay_consumer_lag = _consumer_lag(
+            store=offset_store,
+            consumer_group=args.replay_consumer_group,
+            transaction_topic=args.replay_topic,
+        )
+        interruption_container_id = _resolve_interruption_container(
+            repo_root=repo_root,
+            compose_file=args.compose_file,
+            compose_project_name=args.compose_project_name,
+            interruption_service=args.interruption_service,
+        )
+
+        interruption_started = time.time()
+        _set_container_pause(
+            container_id=interruption_container_id,
+            paused=True,
+            repo_root=repo_root,
+        )
+        try:
+            transaction_ids, _ = ingest_transactions(
+                ingestion_base_url=ingestion_base_url,
+                portfolio_id=portfolio_id,
+                batches=args.batches,
+                batch_size=args.batch_size,
+                sleep_seconds_between_batches=0,
+                seed_prefix=transaction_seed,
+                security_prefix=security_prefix,
+                transaction_date=transaction_date,
+            )
+            records_submitted = len(transaction_ids)
+            source_wait_started = time.time()
+            wait_for_database_count(
+                engine=engine,
+                sql="SELECT count(*) FROM transactions WHERE transaction_id LIKE :pattern",
+                params={"pattern": f"{transaction_id_prefix}%"},
+                expected=records_submitted,
+                label="failure recovery source persistence",
+                timeout_seconds=args.ready_timeout_seconds,
+            )
+            source_persistence_seconds = round(time.time() - source_wait_started, 3)
+            peak_consumer_lag = _wait_for_lag_growth(
+                store=offset_store,
+                consumer_group=args.consumer_group,
+                transaction_topic=args.transaction_topic,
+                baseline_lag=baseline_consumer_lag,
+                expected_growth=records_submitted,
+                timeout_seconds=args.backlog_build_timeout_seconds,
+            )
+            minimum_resume_at = interruption_started + args.interruption_seconds
+            if time.time() < minimum_resume_at:
+                time.sleep(minimum_resume_at - time.time())
+        finally:
+            _set_container_pause(
+                container_id=interruption_container_id,
+                paused=False,
+                repo_root=repo_root,
+            )
+        actual_interruption_seconds = round(time.time() - interruption_started, 3)
+
+        recovery_seconds, counts, lag_after_recovery = _wait_for_full_recovery(
+            store=offset_store,
+            engine=engine,
+            consumer_group=args.consumer_group,
+            transaction_topic=args.transaction_topic,
+            baseline_lag=baseline_consumer_lag,
+            portfolio_id=portfolio_id,
+            transaction_id_prefix=transaction_id_prefix,
+            expected_records=records_submitted,
+            timeout_seconds=args.recovery_timeout_seconds,
+        )
+        recovery_health = _get_health_snapshot(
+            event_replay_base_url=event_replay_base_url,
+            ops_token=args.ops_token,
+        )
+        baseline_dlq = int(baseline_health.get("dlq_events_in_window", 0))
+        recovery_dlq = int(recovery_health.get("dlq_events_in_window", 0))
+        dlq_events_added = max(recovery_dlq - baseline_dlq, 0)
+        replay_consumer_lag_after_recovery = _consumer_lag(
+            store=offset_store,
+            consumer_group=args.replay_consumer_group,
+            transaction_topic=args.replay_topic,
+        )
+        consumer_lag_growth = max(peak_consumer_lag - baseline_consumer_lag, 0)
+        recovery_mode, failed_checks = _evaluate_recovery_result(
+            records_submitted=records_submitted,
+            baseline_consumer_lag=baseline_consumer_lag,
+            consumer_lag_growth=consumer_lag_growth,
+            consumer_lag_after_recovery=lag_after_recovery,
+            baseline_replay_consumer_lag=baseline_replay_consumer_lag,
+            replay_consumer_lag_after_recovery=replay_consumer_lag_after_recovery,
+            transaction_processing_recovery_seconds=recovery_seconds,
+            max_recovery_seconds=args.max_recovery_seconds,
+            counts=counts,
+            dlq_events_added_during_recovery=dlq_events_added,
+        )
+
+        ended_at = datetime.now(UTC)
+        result = RecoveryResult(
+            run_id=run_id,
+            started_at=run_started_at.isoformat(),
+            ended_at=ended_at.isoformat(),
+            interruption_service=args.interruption_service,
+            interruption_container_id=interruption_container_id,
+            requested_interruption_seconds=args.interruption_seconds,
+            actual_interruption_seconds=actual_interruption_seconds,
+            transaction_topic=args.transaction_topic,
+            consumer_group=args.consumer_group,
+            records_submitted=records_submitted,
+            source_persistence_seconds=source_persistence_seconds,
+            baseline_consumer_lag=baseline_consumer_lag,
+            peak_consumer_lag_during_interruption=peak_consumer_lag,
+            consumer_lag_growth=consumer_lag_growth,
+            consumer_lag_after_recovery=lag_after_recovery,
+            baseline_replay_consumer_lag=baseline_replay_consumer_lag,
+            replay_consumer_lag_after_recovery=replay_consumer_lag_after_recovery,
+            transaction_processing_recovery_seconds=recovery_seconds,
+            transaction_count=counts.transaction_count,
+            cost_count=counts.cost_count,
+            cashflow_count=counts.cashflow_count,
+            position_count=counts.position_count,
+            processing_claim_count=counts.processing_claim_count,
+            dlq_events_added_during_recovery=dlq_events_added,
+            recovery_mode=recovery_mode.value,
+            checks_passed=not failed_checks,
+            failed_checks=failed_checks,
+        )
+        json_path, markdown_path = _write_report(
+            output_dir=repo_root / args.output_dir,
+            result=result,
+        )
+        print(f"Wrote failure recovery JSON report: {json_path}")
+        print(f"Wrote failure recovery Markdown report: {markdown_path}")
+        if args.enforce and not result.checks_passed:
+            return 1
+        return 0
+    finally:
+        offset_store.close()
+        engine.dispose()
+        if not args.skip_compose and not args.keep_stack_up:
+            compose_down(args.compose_file)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

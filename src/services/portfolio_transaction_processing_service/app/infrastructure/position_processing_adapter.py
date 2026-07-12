@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Protocol
 
 from portfolio_common.events import TransactionEvent
-from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +21,6 @@ class PositionStagingWorkflow(Protocol):
         db_session: AsyncSession,
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
-        outbox_repo: OutboxRepository,
     ) -> position_logic.PositionCalculationResult: ...
 
 
@@ -35,15 +33,12 @@ class CombinedPositionCalculationWorkflow:
         db_session: AsyncSession,
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
-        outbox_repo: OutboxRepository,
     ) -> position_logic.PositionCalculationResult:
         return await position_logic.PositionCalculator.calculate(
             event=event,
             db_session=db_session,
             repo=repo,
             position_state_repo=position_state_repo,
-            outbox_repo=outbox_repo,
-            backdated_handling=position_logic.BackdatedPositionHandling.REBUILD_INLINE,
         )
 
 
@@ -56,13 +51,11 @@ class PositionProcessingCompatibilityAdapter:
         db_session: AsyncSession,
         repository: position_repository.PositionRepository,
         position_state_repository: PositionStateRepository,
-        outbox_repository: OutboxRepository,
         workflow: PositionStagingWorkflow = CombinedPositionCalculationWorkflow,
     ) -> None:
         self._db_session = db_session
         self._repository = repository
         self._position_state_repository = position_state_repository
-        self._outbox_repository = outbox_repository
         self._workflow = workflow
 
     async def process(
@@ -81,11 +74,10 @@ class PositionProcessingCompatibilityAdapter:
             db_session=self._db_session,
             repo=self._repository,
             position_state_repo=self._position_state_repository,
-            outbox_repo=self._outbox_repository,
         )
         return PositionProcessingResult(
             position_record_count=stage_result.position_record_count,
-            replay_queued=stage_result.replay_queued,
+            replay_queued=False,
             cashflow_rebuild_transactions=tuple(
                 to_booked_transaction(event) for event in stage_result.rebuilt_events
             ),

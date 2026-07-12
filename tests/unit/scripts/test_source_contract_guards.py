@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import config_access_guard, no_alias_contract_guard
+from scripts.quality import config_access_guard, no_alias_contract_guard
 
 
 def test_config_access_guard_ignores_generated_build_artifacts() -> None:

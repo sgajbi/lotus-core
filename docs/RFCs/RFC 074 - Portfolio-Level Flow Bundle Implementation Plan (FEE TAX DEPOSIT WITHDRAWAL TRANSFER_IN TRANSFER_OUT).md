@@ -177,9 +177,9 @@ Per approved slice, run:
 1. `python -m ruff check ...`
 2. `make typecheck`
 3. targeted pytest suites for impacted modules
-4. `python scripts/migration_contract_check.py --mode alembic-sql` (if schema or seed touched)
-5. `python scripts/openapi_quality_gate.py` (if API touched)
-6. `python scripts/api_vocabulary_inventory.py --validate-only` (if API touched)
+4. `python scripts/quality/migration_contract_check.py --mode alembic-sql` (if schema or seed touched)
+5. `python scripts/quality/openapi_quality_gate.py` (if API touched)
+6. `python scripts/quality/api_vocabulary_inventory.py --validate-only` (if API touched)
 
 Bundle acceptance run:
 1. new bundle suite (unit + integration);

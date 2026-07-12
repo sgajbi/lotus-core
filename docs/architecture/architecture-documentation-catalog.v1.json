@@ -15,8 +15,8 @@
   "related_navigation": [
     "README.md",
     "REPOSITORY-ENGINEERING-CONTEXT.md",
-    "docs/supported-features.md",
-    "docs/operations-runbook.md",
+    "docs/features/supported-features.md",
+    "docs/operations/runbook.md",
     "docs/standards/verified-api-examples.v1.json",
     "docs/standards/rfc-0083-implementation-ledger.json",
     "wiki/Architecture.md",
@@ -46,6 +46,17 @@
       "related": {"issues": [620], "rfcs": [], "prs": []},
       "truth_role": "current-state-truth",
       "summary": "Task-oriented front door for the architecture documentation set."
+    },
+    {
+      "path": "docs/architecture/overview.md",
+      "type": "architecture-overview",
+      "topics": ["architecture", "service-boundaries", "dependency-direction"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-12",
+      "related": {"issues": [685], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Repository architecture overview and navigation into detailed current-state contracts."
     },
     {
       "path": "docs/architecture/current-state-architecture-map.md",
@@ -235,6 +246,17 @@
       "summary": "Durable ledger for architecture, issue-fix, and refactor evidence."
     },
     {
+      "path": "docs/architecture/codebase-reviews/README.md",
+      "type": "review-index",
+      "topics": ["codebase-review", "review-evidence", "repository-organization"],
+      "status": "active",
+      "owner": "lotus-core",
+      "freshness_date": "2026-07-12",
+      "related": {"issues": [685, 723], "rfcs": [], "prs": []},
+      "truth_role": "current-state-truth",
+      "summary": "Canonical location and repository contract for individual codebase review records."
+    },
+    {
       "path": "docs/architecture/RFC-0082-contract-family-inventory.md",
       "type": "rfc-inventory",
       "topics": ["api-contracts", "route-families", "downstream-consumers"],
@@ -402,7 +424,7 @@
   ],
   "coverage_rules": [
     {
-      "glob": "CR-*.md",
+      "glob": "codebase-reviews/CR-*.md",
       "type": "codebase-review-record",
       "status": "review-evidence",
       "owner": "lotus-core",

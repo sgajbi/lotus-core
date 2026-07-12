@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.events import (
-    CashflowCalculatedEvent,
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
     TransactionEvent,
@@ -34,6 +33,13 @@ class _RepoStub:
         self.force_claim_result: bool | None = None
         self.control_stage = None
         self.latest_control_epoch: int | None = None
+        self.latest_transaction_epoch: int | None = None
+        self.transaction_stage_locks: list[tuple[str, str, str]] = []
+
+    async def acquire_transaction_stage_lock(self, **kwargs):
+        self.transaction_stage_locks.append(
+            (kwargs["stage_name"], kwargs["portfolio_id"], kwargs["transaction_id"])
+        )
 
     async def upsert_stage_flags(self, **kwargs):
         if self._stage is None:
@@ -88,6 +94,9 @@ class _RepoStub:
     async def get_latest_portfolio_control_stage_epoch(self, **kwargs):
         return self.latest_control_epoch
 
+    async def get_latest_transaction_stage_epoch(self, **kwargs):
+        return self.latest_transaction_epoch
+
 
 def _txn_event() -> TransactionEvent:
     return TransactionEvent(
@@ -121,37 +130,29 @@ def _fx_contract_event(component_type: str) -> TransactionEvent:
     )
 
 
-def _cashflow_event() -> CashflowCalculatedEvent:
-    return CashflowCalculatedEvent(
-        cashflow_id=1,
-        transaction_id="TXN-PIPE-1",
-        portfolio_id="PORT-1",
-        security_id="SEC-1",
-        cashflow_date=date(2026, 3, 7),
-        epoch=0,
-        amount=Decimal("-1000"),
-        currency="USD",
-        classification="INVESTMENT_OUTFLOW",
-        timing="BOD",
-        is_position_flow=True,
-        is_portfolio_flow=False,
-        calculation_type="TRANSACTION_BASED",
-    )
-
-
 @pytest.mark.asyncio
-async def test_only_single_signal_does_not_emit_completion_event():
+async def test_atomic_transaction_processing_signal_emits_completion_events():
     repo = _RepoStub()
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
     await service.register_processed_transaction(_txn_event(), correlation_id="corr-1")
 
-    outbox_repo.create_outbox_event.assert_not_called()
+    assert outbox_repo.create_outbox_event.await_count == 2
+    calls = outbox_repo.create_outbox_event.await_args_list
+    completion_payload = calls[0].kwargs["payload"]
+    readiness_payload = calls[1].kwargs["payload"]
+    assert completion_payload["transaction_id"] == "TXN-PIPE-1"
+    assert completion_payload["cost_event_seen"] is True
+    assert completion_payload["cashflow_event_seen"] is True
+    assert completion_payload["readiness_reason"] == "atomic_transaction_processing_completed"
+    assert readiness_payload["portfolio_id"] == "PORT-1"
+    assert readiness_payload["security_id"] == "SEC-1"
+    assert readiness_payload["readiness_reason"] == "atomic_transaction_processing_completed"
 
 
 @pytest.mark.asyncio
-async def test_fx_contract_lifecycle_processed_signal_emits_without_cashflow():
+async def test_fx_contract_lifecycle_uses_atomic_transaction_completion_signal():
     repo = _RepoStub()
     outbox_repo = AsyncMock()
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
@@ -166,29 +167,9 @@ async def test_fx_contract_lifecycle_processed_signal_emits_without_cashflow():
     readiness_payload = calls[1].kwargs["payload"]
     assert completion_payload["transaction_id"] == "TXN-PIPE-FX_CONTRACT_OPEN"
     assert completion_payload["cashflow_event_seen"] is True
-    assert completion_payload["readiness_reason"] == "cost_completed_non_cashflow"
+    assert completion_payload["readiness_reason"] == "atomic_transaction_processing_completed"
     assert readiness_payload["security_id"] == "FXC-PIPE-1"
-    assert readiness_payload["readiness_reason"] == "cost_completed_non_cashflow"
-
-
-@pytest.mark.asyncio
-async def test_cost_and_cashflow_signals_emit_single_completion_event():
-    repo = _RepoStub()
-    outbox_repo = AsyncMock()
-    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
-
-    await service.register_processed_transaction(_txn_event(), correlation_id="corr-2")
-    await service.register_cashflow_calculated(_cashflow_event(), correlation_id="corr-2")
-
-    assert outbox_repo.create_outbox_event.await_count == 2
-    calls = outbox_repo.create_outbox_event.await_args_list
-    completion_payload = calls[0].kwargs["payload"]
-    readiness_payload = calls[1].kwargs["payload"]
-    assert completion_payload["transaction_id"] == "TXN-PIPE-1"
-    assert completion_payload["stage_name"] == "TRANSACTION_PROCESSING"
-    assert completion_payload["readiness_reason"] == "cost_and_cashflow_completed"
-    assert readiness_payload["portfolio_id"] == "PORT-1"
-    assert readiness_payload["security_id"] == "SEC-1"
+    assert readiness_payload["readiness_reason"] == "atomic_transaction_processing_completed"
 
 
 @pytest.mark.asyncio
@@ -199,8 +180,21 @@ async def test_no_emit_when_stage_claim_lost_to_competing_worker():
     service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
 
     await service.register_processed_transaction(_txn_event(), correlation_id="corr-3")
-    await service.register_cashflow_calculated(_cashflow_event(), correlation_id="corr-3")
 
+    outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stale_processed_transaction_epoch_does_not_complete_readiness() -> None:
+    repo = _RepoStub()
+    repo.latest_transaction_epoch = 1
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_processed_transaction(_txn_event(), correlation_id="corr-stale")
+
+    assert repo._stage is None
+    assert repo.transaction_stage_locks == [("TRANSACTION_PROCESSING", "PORT-1", "TXN-PIPE-1")]
     outbox_repo.create_outbox_event.assert_not_called()
 
 

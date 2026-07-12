@@ -1,23 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers import (
-    transaction_consumer as cashflow,
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (
+    CashflowCalculationWorkflow,
 )
-from src.services.calculators.cost_calculator_service.app.consumer import (
+from src.services.calculators.cost_calculator_service.app.cost_calculation_workflow import (
     CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
 
@@ -25,7 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message() -> None:
     session_factory = MagicMock(spec=lambda: AsyncSession())
     cost_workflow = CostCalculationWorkflow()
-    cashflow_workflow = cashflow.CashflowCalculationWorkflow()
+    cashflow_workflow = CashflowCalculationWorkflow()
     factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=session_factory,
         cost_workflow=cost_workflow,
@@ -42,6 +45,26 @@ def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message
     assert first._cashflow_workflow is second._cashflow_workflow is cashflow_workflow
     assert not hasattr(cost_workflow, "_consumer_config")
     assert not hasattr(cashflow_workflow, "_consumer_config")
+
+
+def test_target_infrastructure_does_not_import_legacy_cost_delivery() -> None:
+    infrastructure_root = Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure"
+    )
+
+    for source_path in infrastructure_root.rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        assert "cost_calculator_service.app.consumer" not in source
+
+
+def test_target_infrastructure_does_not_import_legacy_cashflow_delivery() -> None:
+    infrastructure_root = Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure"
+    )
+
+    for source_path in infrastructure_root.rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        assert "cashflow_calculator_service.app.consumers" not in source
 
 
 def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
@@ -77,3 +100,18 @@ def test_replay_use_case_builder_composes_canonical_repository_dependencies() ->
     assert isinstance(replayer, ReprocessingRepository)
     assert replayer.db is session
     assert replayer.kafka_producer is kafka_producer
+
+
+def test_average_cost_reconciliation_builder_uses_target_application_boundary() -> None:
+    session_factory = MagicMock(spec=lambda: AsyncSession())
+
+    use_case = build_reconcile_average_cost_pools_use_case(
+        session_factory=session_factory,
+    )
+
+    assert isinstance(
+        use_case._reconciliation,
+        SqlAlchemyAverageCostPoolReconciliationAdapter,
+    )
+    assert use_case._reconciliation._session_factory is session_factory
+    assert isinstance(use_case._reconciliation._workflow, CostCalculationWorkflow)

@@ -47,7 +47,7 @@ Use these when the task is about drift, cleanup, ownership review, or historical
 
 1. [Codebase Review Playbook](./CODEBASE-REVIEW-PLAYBOOK.md)
 2. [Codebase Review Ledger](./CODEBASE-REVIEW-LEDGER.md)
-3. `CR-*` review records in this directory for targeted architecture and contract cleanup slices
+3. [`codebase-reviews/`](./codebase-reviews/README.md) for targeted architecture and contract cleanup evidence
 
 Do not treat every `CR-*` document as mandatory reading. Use the file name to jump directly to the
 relevant review stream.

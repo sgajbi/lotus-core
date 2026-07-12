@@ -1,8 +1,9 @@
 # libs/portfolio-common/portfolio_common/idempotency_repository.py
 import logging
+from enum import StrEnum
 from typing import Optional
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +11,13 @@ from .database_models import ProcessedEvent
 from .durable_correlation import durable_correlation_diagnostics
 
 logger = logging.getLogger(__name__)
+
+
+class SemanticEventClaimOutcome(StrEnum):
+    CLAIMED = "claimed"
+    PHYSICAL_DUPLICATE = "physical_duplicate"
+    SEMANTIC_DUPLICATE = "semantic_duplicate"
+    SEMANTIC_CONFLICT = "semantic_conflict"
 
 
 class IdempotencyRepository:
@@ -42,7 +50,7 @@ class IdempotencyRepository:
             )
         )
         result = await self.db.execute(stmt)
-        return result.scalar()
+        return bool(result.scalar())
 
     async def mark_event_processed(
         self,
@@ -118,3 +126,72 @@ class IdempotencyRepository:
             service_name=service_name,
             correlation_id=correlation_id,
         )
+
+    async def claim_semantic_event_processing(
+        self,
+        *,
+        event_id: str,
+        portfolio_id: str,
+        service_name: str,
+        semantic_key: str,
+        payload_fingerprint: str,
+        correlation_id: Optional[str] = None,
+    ) -> SemanticEventClaimOutcome:
+        """Atomically claim physical and semantic identity in the caller's transaction."""
+        diagnostics = durable_correlation_diagnostics(
+            correlation_id=correlation_id,
+            record_family="processed_event",
+            event_id=event_id,
+            service_name=service_name,
+            portfolio_id=portfolio_id,
+        )
+        stmt = (
+            pg_insert(ProcessedEvent)
+            .values(
+                event_id=event_id,
+                portfolio_id=portfolio_id,
+                service_name=service_name,
+                correlation_id=diagnostics.correlation_id,
+                correlation_missing_reason=diagnostics.correlation_missing_reason,
+                alternate_lookup_key=diagnostics.alternate_lookup_key,
+                semantic_key=semantic_key,
+                payload_fingerprint=payload_fingerprint,
+            )
+            .on_conflict_do_nothing()
+            .returning(ProcessedEvent.id)
+        )
+        inserted_id = (await self.db.execute(stmt)).scalar_one_or_none()
+        if inserted_id is not None:
+            return SemanticEventClaimOutcome.CLAIMED
+
+        existing_rows = (
+            await self.db.execute(
+                select(
+                    ProcessedEvent.event_id,
+                    ProcessedEvent.semantic_key,
+                    ProcessedEvent.payload_fingerprint,
+                ).where(
+                    ProcessedEvent.service_name == service_name,
+                    or_(
+                        ProcessedEvent.event_id == event_id,
+                        ProcessedEvent.semantic_key == semantic_key,
+                    ),
+                )
+            )
+        ).all()
+        for existing_event_id, existing_semantic_key, existing_fingerprint in existing_rows:
+            if (
+                existing_event_id == event_id
+                and existing_semantic_key is None
+                and existing_fingerprint is None
+            ):
+                return SemanticEventClaimOutcome.PHYSICAL_DUPLICATE
+            if existing_fingerprint != payload_fingerprint:
+                return SemanticEventClaimOutcome.SEMANTIC_CONFLICT
+            if existing_event_id == event_id:
+                if existing_semantic_key != semantic_key:
+                    return SemanticEventClaimOutcome.SEMANTIC_CONFLICT
+                return SemanticEventClaimOutcome.PHYSICAL_DUPLICATE
+            if existing_semantic_key == semantic_key:
+                return SemanticEventClaimOutcome.SEMANTIC_DUPLICATE
+        raise RuntimeError("Semantic event claim conflicted without a matching durable fence")

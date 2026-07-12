@@ -72,8 +72,8 @@ Legacy/outdated naming in earlier RFC language has been normalized:
 | Shared config library | Shared defaults/topics/runtime knobs centralized | Implemented | `src/libs/portfolio-common/portfolio_common/config.py` |
 | Typed settings usage | Implemented for active service hotspots and policy surfaces | Implemented | `src/services/ingestion_service/app/settings.py`; `src/services/query_service/app/settings.py`; `src/services/calculators/position_valuation_calculator/app/settings.py` |
 | Fail-fast startup validation | Implemented through typed parsing/guarded defaults in service settings modules | Implemented | settings modules + unit tests |
-| Eliminate ad-hoc env access | Implemented for service modules in scope, with direct env reads confined to approved settings/config modules | Implemented | `scripts/config_access_guard.py`; `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`; `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py` |
-| Consistent conventions and governance | Repo-wide guardrail enforced in CI/local lint path | Implemented | `scripts/config_access_guard.py`; `Makefile` |
+| Eliminate ad-hoc env access | Implemented for service modules in scope, with direct env reads confined to approved settings/config modules | Implemented | `scripts/quality/config_access_guard.py`; `src/services/calculators/position_valuation_calculator/app/core/valuation_scheduler.py`; `src/services/calculators/position_valuation_calculator/app/core/reprocessing_worker.py` |
+| Consistent conventions and governance | Repo-wide guardrail enforced in CI/local lint path | Implemented | `scripts/quality/config_access_guard.py`; `Makefile` |
 
 ## Configuration Layering Model (Target Standard)
 The target model clarified by this RFC:
@@ -133,7 +133,7 @@ Current evidence supporting partial completion:
    - `src/services/ingestion_service/app/settings.py`
    - `tests/unit/services/ingestion_service/test_settings.py`
 6. Config access guardrail:
-   - `scripts/config_access_guard.py`
+   - `scripts/quality/config_access_guard.py`
    - `Makefile` (`config-access-guard`)
 7. Query-service typed settings migration:
    - `src/services/query_service/app/settings.py`

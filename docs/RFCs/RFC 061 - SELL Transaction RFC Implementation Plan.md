@@ -39,7 +39,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 | Calculation and invariants | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
 | Disposal/cash-linkage behavior | Implemented | slice-4 artifact; calculator/query tests |
 | Query + observability completion | Implemented | `tests/integration/services/query_service/test_sell_state_router.py`; slice-5 artifact |
-| CI conformance gate | Implemented | `scripts/test_manifest.py` (`transaction-sell-contract`); `.github/workflows/ci.yml` |
+| CI conformance gate | Implemented | `scripts/quality/test_manifest.py` (`transaction-sell-contract`); `.github/workflows/ci.yml` |
 
 ## Design Reasoning and Trade-offs
 1. Slice-by-slice rollout minimized accounting regression risk.
@@ -63,7 +63,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 2. `tests/unit/libs/portfolio_common/test_sell_validation.py`
 3. `tests/unit/libs/portfolio_common/test_sell_linkage.py`
 4. `tests/integration/services/query_service/test_sell_state_router.py`
-5. `scripts/test_manifest.py` and `.github/workflows/ci.yml` (`transaction-sell-contract`)
+5. `scripts/quality/test_manifest.py` and `.github/workflows/ci.yml` (`transaction-sell-contract`)
 
 ## Original Acceptance Criteria Alignment
 1. Slice execution and evidence trail: aligned.

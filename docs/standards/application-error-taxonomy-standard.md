@@ -32,7 +32,7 @@ The ingestion upload use case is the first representative path:
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_error_taxonomy_guard.py`. The guard protects
+`make architecture-guard` runs `scripts/quality/application_error_taxonomy_guard.py`. The guard protects
 the representative upload application service from reintroducing FastAPI imports,
 `HTTPException`, or HTTP status mapping.
 

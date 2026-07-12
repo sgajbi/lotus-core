@@ -34,7 +34,7 @@ through the workflows.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_workflow_policy_guard.py`. The guard protects
+`make architecture-guard` runs `scripts/quality/application_workflow_policy_guard.py`. The guard protects
 the representative ingestion command path from bypassing `IdempotencyWorkflow` and `AuditWorkflow`
 after those policies exist.
 

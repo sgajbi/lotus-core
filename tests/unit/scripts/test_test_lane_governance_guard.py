@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import test_lane_governance_guard as guard
+from scripts.quality import test_lane_governance_guard as guard
 
 
 def _write(path: Path, content: str) -> None:
@@ -75,11 +75,11 @@ def _write_minimal_repo(repo_root: Path, contract: dict[str, object]) -> Path:
     )
     _write(
         repo_root / "Makefile",
-        "test:\n\tpython scripts/test_manifest.py --suite unit\n"
-        "test-e2e-smoke:\n\tpython scripts/test_manifest.py --suite e2e-smoke\n",
+        "test:\n\tpython scripts/quality/test_manifest.py --suite unit\n"
+        "test-e2e-smoke:\n\tpython scripts/quality/test_manifest.py --suite e2e-smoke\n",
     )
     _write(
-        repo_root / "scripts/test_manifest.py",
+        repo_root / "scripts/quality/test_manifest.py",
         "SUITES = {'unit': ['tests/unit'], 'e2e-smoke': ['tests/e2e/test_smoke.py']}\n"
         "SUITE_RUNTIME_MODE = {'unit': 'unit', 'e2e-smoke': 'live_worker'}\n"
         "SUITE_ENV_PROFILE = {'unit': 'unit', 'e2e-smoke': 'e2e'}\n"
@@ -139,7 +139,7 @@ def test_test_lane_governance_guard_rejects_unit_lane_runtime_drift(tmp_path: Pa
     contract = _minimal_contract()
     contract_path = _write_minimal_repo(tmp_path, contract)
     _write(
-        tmp_path / "scripts/test_manifest.py",
+        tmp_path / "scripts/quality/test_manifest.py",
         "SUITES = {'unit': ['tests/e2e/test_smoke.py']}\n"
         "SUITE_RUNTIME_MODE = {'unit': 'unit'}\n"
         "SUITE_ENV_PROFILE = {'unit': 'unit'}\n"

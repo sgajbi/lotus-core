@@ -51,7 +51,7 @@ only through the runtime-boundary decision record and catalog required by
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/proof_builder_pattern_guard.py`.
+`make architecture-guard` runs `scripts/quality/proof_builder_pattern_guard.py`.
 
 The guard validates the standard, the shared typed contract module, the focused tests, and that
 routers or repositories do not import the shared proof-builder contracts directly.

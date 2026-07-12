@@ -30,7 +30,7 @@ clients.
 
 ## Enforcement
 
-`make architecture-guard` enforces this contract through `scripts/architecture_boundary_guard.py`.
+`make architecture-guard` enforces this contract through `scripts/quality/architecture_boundary_guard.py`.
 Current legacy router dependencies are listed in
 `docs/standards/api-layer-router-boundary-exceptions.json`. The exception registry is transitional:
 

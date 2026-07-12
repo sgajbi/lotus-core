@@ -29,6 +29,6 @@ calls and should migrate behind the same provider ports when those workflows are
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/runtime_provider_port_guard.py`, which verifies the shared
+`make architecture-guard` runs `scripts/quality/runtime_provider_port_guard.py`, which verifies the shared
 provider module, the representative workflow usage, and the absence of direct runtime capability
 calls in provider-migrated workflows.

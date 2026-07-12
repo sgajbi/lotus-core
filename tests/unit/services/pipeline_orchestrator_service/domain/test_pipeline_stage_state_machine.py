@@ -4,6 +4,7 @@ from src.services.pipeline_orchestrator_service.app.domain.pipeline_stage_state_
     decide_transaction_stage_readiness,
     is_control_stage_blocking,
     should_emit_control_stage_for_epoch,
+    should_register_transaction_stage_for_epoch,
 )
 
 
@@ -20,19 +21,19 @@ def test_transaction_stage_waits_for_missing_cost_signal_without_outbox_dependen
     )
 
     assert decision.should_complete is False
-    assert decision.reason_code == "missing_cost_event"
+    assert decision.reason_code == "missing_transaction_processing_event"
 
 
-def test_transaction_stage_waits_for_missing_cashflow_signal_without_outbox_dependency() -> None:
+def test_transaction_stage_uses_authoritative_processing_signal_without_cashflow_fan_in() -> None:
     decision = decide_transaction_stage_readiness(
         _Stage(status="PENDING", cost_event_seen=True, cashflow_event_seen=False)
     )
 
-    assert decision.should_complete is False
-    assert decision.reason_code == "missing_cashflow_event"
+    assert decision.should_complete is True
+    assert decision.reason_code == "ready"
 
 
-def test_transaction_stage_is_ready_when_cost_and_cashflow_are_seen() -> None:
+def test_transaction_stage_is_ready_when_compatibility_flags_are_seen() -> None:
     decision = decide_transaction_stage_readiness(
         _Stage(status="PENDING", cost_event_seen=True, cashflow_event_seen=True)
     )
@@ -60,3 +61,10 @@ def test_control_stage_latest_epoch_blocks_stale_emission() -> None:
     assert should_emit_control_stage_for_epoch(latest_epoch=None, event_epoch=2) is True
     assert should_emit_control_stage_for_epoch(latest_epoch=2, event_epoch=2) is True
     assert should_emit_control_stage_for_epoch(latest_epoch=3, event_epoch=2) is False
+
+
+def test_transaction_stage_epoch_fence_accepts_current_or_newer_events_only() -> None:
+    assert should_register_transaction_stage_for_epoch(latest_epoch=None, event_epoch=0) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=1) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=2) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=0) is False

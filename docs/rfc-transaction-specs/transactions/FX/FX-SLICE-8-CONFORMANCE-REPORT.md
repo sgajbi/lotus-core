@@ -4,7 +4,7 @@
 Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's standard regression surfaces and by recording the final requirement-to-evidence mapping for `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP`.
 
 ## Delivered in Slice 8
-1. Dedicated manifest suite added in [scripts/test_manifest.py](C:\Users\Sandeep\projects\lotus-core\scripts\test_manifest.py):
+1. Dedicated manifest suite added in [scripts/quality/test_manifest.py](C:\Users\Sandeep\projects\lotus-core\scripts\test_manifest.py):
  - `transaction-fx-contract`
  - alias `transaction-fx-contract`
 2. Dedicated local targets added in [Makefile](C:\Users\Sandeep\projects\lotus-core\Makefile):
@@ -57,7 +57,7 @@ Completed local gates:
  - Result: `3 passed`
 4. `python -m pytest tests/integration/services/persistence_service/repositories/test_repositories.py::test_instrument_repository_persists_fx_contract_fields tests/integration/services/query_service/test_transactions_router.py -q`
  - Result: `6 passed`
-5. `python scripts/test_manifest.py --suite transaction-fx-contract --quiet`
+5. `python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet`
  - Result: `195 passed`
 6. `python -m ruff check src/services/persistence_service/app/consumers/base_consumer.py src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py tests/unit/services/persistence_service/consumers/test_persistence_instrument_consumer.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py tests/integration/services/persistence_service/repositories/test_repositories.py`
  - Result: passed
@@ -85,7 +85,7 @@ generic cost engine strategy table still emitted a pending error for `FX_SPOT`, 
 4. `CASH_LOT_COST_METHOD` remains deferred and is explicitly rejected instead of being silently
    simulated.
 5. Focused proof passed with 68 shared-helper, engine, and characterization tests; both
-   `python scripts/test_manifest.py --suite transaction-fx-contract --quiet` and
+   `python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet` and
    `make test-transaction-fx-contract` passed at 336 tests.
 
 ## Accepted Residuals

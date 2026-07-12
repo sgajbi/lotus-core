@@ -21,7 +21,7 @@ SQLAlchemy helpers.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/ingestion_store_port_guard.py`. The guard blocks
+`make architecture-guard` runs `scripts/quality/ingestion_store_port_guard.py`. The guard blocks
 `IngestionJobService` from directly calling job creation/idempotency and replay-audit helper
 functions that bypass the new store ports.
 

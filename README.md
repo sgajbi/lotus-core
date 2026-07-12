@@ -105,7 +105,7 @@ Current repo truth:
    `contracts/supported-features/lotus-core-supported-features.v1.json` and
    `make supported-features-guard`.
 8. Dependency hygiene now uses current stable compatible pins with no vulnerability ignores; see
-   [CR-1123](docs/architecture/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
+   [CR-1123](docs/architecture/codebase-reviews/CR-1123-STABLE-COMPATIBLE-DEPENDENCY-REFRESH.md).
 9. Production-like deployments default to the governed service-local enterprise security profile:
    write authorization, read authorization, read auditing, capability-rule enforcement, and
    runtime configuration enforcement are on unless explicitly overridden through
@@ -125,6 +125,11 @@ Current repo truth:
     and provenance attestations, exported with CycloneDX SBOM artifacts, and recorded in per-image
     release manifests that use digest references for Kubernetes deployment and same-image promotion
     evidence across `dev`, `uat`, and `prod`.
+12. App-local Compose and every Compose-backed CI runtime lane use one
+    `portfolio_transaction_processing_service` for atomic cost, cashflow, and position processing.
+    The internal modules remain separate, valuation remains independently deployable, and the
+    Kubernetes source plus CI release renderer use the target digest. Registry/cluster proof and
+    legacy package removal are still governed follow-up work.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use
@@ -156,7 +161,7 @@ flowchart LR
     Query["query_service<br/>operational read plane"]
     QCP["query_control_plane_service<br/>analytics-input, support, lineage, policy"]
     Replay["event_replay_service<br/>DLQ, replay, audit, ops control"]
-    Calc["calculators and generators<br/>position, valuation, cashflow, timeseries"]
+    Calc["transaction processing and generators<br/>cost, cashflow, position, valuation, timeseries"]
     Downstream["Gateway / Workbench / Performance / Risk / Advise / Manage / Report"]
 
     Ingress --> Store
@@ -182,10 +187,14 @@ Primary runtime surfaces:
   replay, ingestion-health, DLQ, and operations control-plane contracts
 - `financial_reconciliation_service`
   reconciliation and control execution contracts
-- calculators and generators
-  current position, valuation, cashflow, and time-series materialization; cost, cashflow, and
-  position are moving toward one transaction-processing deployable while valuation remains
-  independently scalable
+- `portfolio_transaction_processing_service`
+  one app-local/CI deployable and one transaction for cost, cashflow, position,
+  semantic idempotency, and compatibility outbox effects; `transactions.cost.processed` is the
+  authoritative atomic
+  completion input to pipeline readiness, while `cashflows.calculated` remains a compatibility fact;
+  valuation remains independently scalable
+- valuation and generators
+  valuation, position/portfolio time-series, and portfolio aggregation remain separate runtimes
 
 Primary architecture references:
 
@@ -204,8 +213,8 @@ Primary architecture references:
 | `src/services/ingestion_service/` | Source-data and adapter write ingress. Keep routers as HTTP binding/response adapters; put write-mode, rate-limit, idempotent job lifecycle, publish/persist, failure marking, and bookkeeping orchestration behind ingestion command handlers. |
 | `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
 | `src/services/persistence_service/` | Persistence orchestration. |
-| `src/services/portfolio_transaction_processing_service/` | Target combined cost, cashflow, and position runtime; currently hosts the compatibility consumer registry while application/domain migration proceeds. |
-| `src/services/calculators/` | Transitional cost, cashflow, position, and independent valuation implementations. Remove the first three only after combined-runtime parity; valuation remains independently deployable. |
+| `src/services/portfolio_transaction_processing_service/` | Active app-local/CI combined cost, cashflow, and position runtime with layered delivery, application, domain/ports, infrastructure, and runtime packages. |
+| `src/services/calculators/` | Transitional internal cost, cashflow, and position modules imported by the combined runtime, plus independently deployable valuation. Move the first three behind target-owned package names before deleting legacy shells. |
 | `src/services/timeseries_generator_service/` | Position and portfolio time-series generation. |
 | `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
 | `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
@@ -233,6 +242,7 @@ App-local isolated stack:
 docker compose up -d
 python -m tools.kafka_setup
 python -m alembic upgrade head
+curl http://localhost:8090/health/ready
 ```
 
 Important runtime note:

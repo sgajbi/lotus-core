@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts import metric_vocabulary_guard as guard
+from scripts.quality import metric_vocabulary_guard as guard
 
 
 def test_metric_vocabulary_guard_accepts_current_truth() -> None:

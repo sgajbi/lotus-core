@@ -46,7 +46,7 @@ exceptions fail the architecture guard.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/in_process_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/in_process_boundary_guard.py`.
 
 The guard scans `src/services/**/app/domain`, `app/application`, `app/use_cases`, `app/ports`,
 `app/adapters`, and `app/proof_builders`. It blocks new forbidden imports and runtime factory

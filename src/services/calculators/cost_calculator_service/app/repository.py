@@ -1,12 +1,17 @@
 # services/calculators/cost_calculator_service/app/repository.py
+import hashlib
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, fields
 from datetime import date
 from decimal import Decimal
+from time import monotonic
 from typing import Any, List, Optional, cast
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
+    AverageCostPoolState,
     CostBasisProcessingState,
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
@@ -21,15 +26,33 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
-from sqlalchemy import func, or_, select
+from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait
+from portfolio_common.utils import async_timed
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from .average_cost_pool_checkpoint import (
+    AverageCostPoolCheckpoint,
+    AverageCostPoolRebuildPlan,
+    AverageCostPoolTransition,
+)
 from .cost_engine.domain.models.effective_fx_rate import EffectiveFxRate
 from .cost_engine.domain.models.transaction import Transaction as EngineTransaction
 from .cost_engine.processing.cost_objects import OpenLotState
 from .cost_processing_checkpoint import CostBasisProcessingCheckpoint
+
+logger = logging.getLogger(__name__)
+
+
+def _cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
+    normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+    normalized_security_id = normalize_lookup_identifier(security_id)
+    lock_scope = f"cost-basis-processing:{normalized_portfolio_id}:{normalized_security_id}"
+    digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, byteorder="big", signed=True)
+
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -142,6 +165,23 @@ class OpenLotCheckpointRecord:
     cost_base: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class AverageCostPoolCheckpointRecord:
+    checkpoint: AverageCostPoolCheckpoint
+    representative_transaction: DBTransaction | None
+
+
+@dataclass(frozen=True, slots=True)
+class AverageCostPoolPersistedSummary:
+    source_count: int
+    source_quantity: Decimal
+    source_cost_local: Decimal
+    source_cost_base: Decimal
+    pool_quantity: Decimal | None
+    pool_cost_local: Decimal | None
+    pool_cost_base: Decimal | None
+
+
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
     if fees is None:
         return {}
@@ -199,9 +239,72 @@ def _excluded_update_fields(insert_stmt: Any, immutable_fields: set[str]) -> dic
     return {c.name: c for c in insert_stmt.excluded if c.name not in immutable_fields}
 
 
+def _scaled_persisted_value(
+    column: Any,
+    *,
+    before: Decimal,
+    after: Decimal,
+    round_down: bool,
+) -> Any:
+    if after == before:
+        return column
+    if after == Decimal(0):
+        return Decimal(0)
+    if before <= Decimal(0):
+        raise ValueError("Average cost source scaling requires a positive prior aggregate")
+    scaled = column * after / before
+    return func.trunc(scaled, 10) if round_down else func.round(scaled, 10)
+
+
 class CostCalculatorRepository:
-    def __init__(self, db: AsyncSession):
+    AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 500
+
+    def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
+        self._clock = clock
+
+    @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
+    async def acquire_cost_basis_processing_lock(
+        self,
+        portfolio_id: str,
+        security_id: str,
+    ) -> None:
+        """Serialize cost-basis state transitions for one portfolio/security key."""
+        lock_key = _cost_basis_processing_lock_key(portfolio_id, security_id)
+        started_at = self._clock()
+        try:
+            await self.db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
+            )
+        except BaseException:
+            wait_seconds = max(0.0, self._clock() - started_at)
+            observe_cost_basis_processing_lock_wait(
+                outcome="failed",
+                seconds=wait_seconds,
+            )
+            logger.warning(
+                "Cost-basis processing lock acquisition failed.",
+                extra={
+                    "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                    "security_id": normalize_lookup_identifier(security_id),
+                    "lock_wait_seconds": wait_seconds,
+                },
+                exc_info=True,
+            )
+            raise
+        wait_seconds = max(0.0, self._clock() - started_at)
+        observe_cost_basis_processing_lock_wait(
+            outcome="acquired",
+            seconds=wait_seconds,
+        )
+        logger.info(
+            "Cost-basis processing lock acquired.",
+            extra={
+                "portfolio_id": normalize_lookup_identifier(portfolio_id),
+                "security_id": normalize_lookup_identifier(security_id),
+                "lock_wait_seconds": wait_seconds,
+            },
+        )
 
     async def get_portfolio(self, portfolio_id: str) -> Optional[Portfolio]:
         """Fetches a portfolio by its portfolio_id string."""
@@ -325,6 +428,280 @@ class CostCalculatorRepository:
                 },
             )
         )
+
+    async def get_average_cost_pool_checkpoint_record(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+    ) -> AverageCostPoolCheckpointRecord | None:
+        stmt = (
+            select(AverageCostPoolState, DBTransaction)
+            .outerjoin(
+                DBTransaction,
+                DBTransaction.transaction_id
+                == AverageCostPoolState.representative_source_transaction_id,
+            )
+            .where(
+                AverageCostPoolState.portfolio_id == normalize_lookup_identifier(portfolio_id),
+                AverageCostPoolState.security_id == normalize_lookup_identifier(security_id),
+            )
+            .with_for_update(of=AverageCostPoolState)
+        )
+        row = (await self.db.execute(stmt)).first()
+        if row is None:
+            return None
+        state, representative_transaction = row
+        return AverageCostPoolCheckpointRecord(
+            checkpoint=AverageCostPoolCheckpoint(
+                portfolio_id=state.portfolio_id,
+                instrument_id=state.instrument_id,
+                security_id=state.security_id,
+                representative_source_transaction_id=(state.representative_source_transaction_id),
+                quantity=state.pool_quantity,
+                cost_local=state.pool_cost_local,
+                cost_base=state.pool_cost_base,
+                state_version=state.state_version,
+            ),
+            representative_transaction=representative_transaction,
+        )
+
+    async def upsert_average_cost_pool_checkpoint(
+        self,
+        checkpoint: AverageCostPoolCheckpoint,
+    ) -> None:
+        payload = {
+            "portfolio_id": normalize_lookup_identifier(checkpoint.portfolio_id),
+            "security_id": normalize_lookup_identifier(checkpoint.security_id),
+            "instrument_id": normalize_lookup_identifier(checkpoint.instrument_id),
+            "representative_source_transaction_id": (
+                normalize_lookup_identifier(checkpoint.representative_source_transaction_id)
+                if checkpoint.representative_source_transaction_id
+                else None
+            ),
+            "pool_quantity": checkpoint.quantity,
+            "pool_cost_local": checkpoint.cost_local,
+            "pool_cost_base": checkpoint.cost_base,
+            "state_version": checkpoint.state_version,
+        }
+        stmt = pg_insert(AverageCostPoolState).values(**payload)
+        await self.db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["portfolio_id", "security_id"],
+                set_={
+                    field_name: getattr(stmt.excluded, field_name)
+                    for field_name in payload
+                    if field_name not in {"portfolio_id", "security_id"}
+                }
+                | {"updated_at": func.now()},
+            )
+        )
+
+    async def apply_average_cost_pool_transition(
+        self,
+        transition: AverageCostPoolTransition,
+    ) -> None:
+        await self._scale_existing_average_cost_sources(transition)
+        if transition.explicit_sources_after:
+            await self.update_selected_open_lot_states(
+                portfolio_id=transition.before.portfolio_id,
+                security_id=transition.before.security_id,
+                states_by_source_transaction_id=dict(transition.explicit_sources_after),
+            )
+        await self.upsert_average_cost_pool_checkpoint(transition.after)
+
+    async def apply_average_cost_pool_rebuild(
+        self,
+        plan: AverageCostPoolRebuildPlan,
+    ) -> None:
+        checkpoint = plan.checkpoint
+        normalized_portfolio_id = normalize_lookup_identifier(checkpoint.portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(checkpoint.security_id)
+        await self.db.execute(
+            update(PositionLotState)
+            .where(
+                func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+                func.trim(PositionLotState.security_id) == normalized_security_id,
+            )
+            .values(
+                open_quantity=Decimal(0),
+                lot_cost_local=Decimal(0),
+                lot_cost_base=Decimal(0),
+                updated_at=func.now(),
+            )
+        )
+
+        payloads = []
+        for source_transaction in plan.source_transactions:
+            payload = _buy_lot_payload(source_transaction)
+            state = plan.source_states.get(source_transaction.transaction_id)
+            payload.update(
+                open_quantity=state.quantity if state is not None else Decimal(0),
+                lot_cost_local=state.cost_local if state is not None else Decimal(0),
+                lot_cost_base=state.cost_base if state is not None else Decimal(0),
+            )
+            payloads.append(payload)
+        for offset in range(0, len(payloads), self.AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE):
+            stmt = pg_insert(PositionLotState).values(
+                payloads[offset : offset + self.AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE]
+            )
+            await self.db.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=["source_transaction_id"],
+                    set_=_excluded_update_fields(
+                        stmt,
+                        {"id", "lot_id", "source_transaction_id"},
+                    ),
+                )
+            )
+
+        await self.upsert_average_cost_pool_checkpoint(checkpoint)
+        await self.upsert_cost_basis_processing_checkpoint(plan.processing_checkpoint)
+
+    async def get_average_cost_pool_persisted_summary(
+        self,
+        *,
+        portfolio_id: str,
+        security_id: str,
+    ) -> AverageCostPoolPersistedSummary:
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        pool = (
+            (
+                await self.db.execute(
+                    select(AverageCostPoolState).where(
+                        AverageCostPoolState.portfolio_id == normalized_portfolio_id,
+                        AverageCostPoolState.security_id == normalized_security_id,
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        source_count, source_quantity, source_cost_local, source_cost_base = (
+            await self.db.execute(
+                select(
+                    func.count(PositionLotState.id),
+                    func.coalesce(func.sum(PositionLotState.open_quantity), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_local), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_base), Decimal(0)),
+                ).where(
+                    func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+                    func.trim(PositionLotState.security_id) == normalized_security_id,
+                )
+            )
+        ).one()
+        return AverageCostPoolPersistedSummary(
+            source_count=int(source_count),
+            source_quantity=source_quantity,
+            source_cost_local=source_cost_local,
+            source_cost_base=source_cost_base,
+            pool_quantity=pool.pool_quantity if pool is not None else None,
+            pool_cost_local=pool.pool_cost_local if pool is not None else None,
+            pool_cost_base=pool.pool_cost_base if pool is not None else None,
+        )
+
+    async def _scale_existing_average_cost_sources(
+        self,
+        transition: AverageCostPoolTransition,
+    ) -> None:
+        before = transition.before
+        after = transition.existing_sources_after
+        if before.quantity == Decimal(0) or after == before.as_open_lot_state():
+            return
+
+        predicates = [
+            func.trim(PositionLotState.portfolio_id)
+            == normalize_lookup_identifier(before.portfolio_id),
+            func.trim(PositionLotState.security_id)
+            == normalize_lookup_identifier(before.security_id),
+        ]
+        explicit_source_ids = set(transition.explicit_sources_after)
+        if explicit_source_ids:
+            predicates.append(PositionLotState.source_transaction_id.not_in(explicit_source_ids))
+
+        if after.quantity == Decimal(0):
+            result = await self.db.execute(
+                update(PositionLotState)
+                .where(*predicates)
+                .values(
+                    open_quantity=Decimal(0),
+                    lot_cost_local=Decimal(0),
+                    lot_cost_base=Decimal(0),
+                    updated_at=func.now(),
+                )
+            )
+            if result.rowcount < 1:
+                raise ValueError("Average cost pool close found no persisted source lots")
+            return
+
+        representative_source_id = before.representative_source_transaction_id
+        if representative_source_id is None:
+            raise ValueError("Open average cost pool has no representative source")
+        non_residual_predicates = [
+            *predicates,
+            PositionLotState.source_transaction_id != representative_source_id,
+        ]
+        await self.db.execute(
+            update(PositionLotState)
+            .where(*non_residual_predicates)
+            .values(
+                open_quantity=_scaled_persisted_value(
+                    PositionLotState.open_quantity,
+                    before=before.quantity,
+                    after=after.quantity,
+                    round_down=True,
+                ),
+                lot_cost_local=_scaled_persisted_value(
+                    PositionLotState.lot_cost_local,
+                    before=before.cost_local,
+                    after=after.cost_local,
+                    round_down=False,
+                ),
+                lot_cost_base=_scaled_persisted_value(
+                    PositionLotState.lot_cost_base,
+                    before=before.cost_base,
+                    after=after.cost_base,
+                    round_down=False,
+                ),
+                updated_at=func.now(),
+            )
+        )
+        allocated_quantity, allocated_cost_local, allocated_cost_base = (
+            await self.db.execute(
+                select(
+                    func.coalesce(func.sum(PositionLotState.open_quantity), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_local), Decimal(0)),
+                    func.coalesce(func.sum(PositionLotState.lot_cost_base), Decimal(0)),
+                ).where(*non_residual_predicates)
+            )
+        ).one()
+        residual_state = OpenLotState(
+            quantity=after.quantity - allocated_quantity,
+            cost_local=after.cost_local - allocated_cost_local,
+            cost_base=after.cost_base - allocated_cost_base,
+        )
+        if (
+            residual_state.quantity < Decimal(0)
+            or residual_state.cost_local < Decimal(0)
+            or residual_state.cost_base < Decimal(0)
+        ):
+            raise ValueError("Average cost source allocation exceeds the target pool aggregate")
+        residual_result = await self.db.execute(
+            update(PositionLotState)
+            .where(
+                *predicates,
+                PositionLotState.source_transaction_id == representative_source_id,
+            )
+            .values(
+                open_quantity=residual_state.quantity,
+                lot_cost_local=residual_state.cost_local,
+                lot_cost_base=residual_state.cost_base,
+                updated_at=func.now(),
+            )
+        )
+        if residual_result.rowcount != 1:
+            raise ValueError("Average cost pool representative source was not updated exactly once")
 
     async def get_open_lot_checkpoint_records(
         self, *, portfolio_id: str, security_id: str

@@ -1,10 +1,14 @@
 """Concrete transaction processing infrastructure adapters."""
 
+from .average_cost_pool_reconciliation_adapter import (
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
+)
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
 from .composition import (
     CanonicalBookedTransactionReplayerFactory,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
+    build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter
@@ -33,11 +37,13 @@ __all__ = [
     "PipelineStageProcessingCompatibilityAdapter",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
+    "SqlAlchemyAverageCostPoolReconciliationAdapter",
     "SqlAlchemyBookedTransactionReplayAdapter",
     "SqlAlchemyTransactionIdempotencyAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWork",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
     "build_process_transaction_use_case",
+    "build_reconcile_average_cost_pools_use_case",
     "build_replay_booked_transaction_use_case",
 ]

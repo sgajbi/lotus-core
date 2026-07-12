@@ -13,7 +13,6 @@ from portfolio_common.event_supportability import (
     RECONCILIATION_CONTROL_EVENT,
     RECONCILIATION_EVIDENCE_BUNDLE,
     SOURCE_INGESTION_EVENT,
-    SUPPORTABILITY_RECOVERY_EVENT,
     SUPPORTABILITY_SURFACE_DEFINITIONS,
     DirectKafkaTopicDefinition,
     EventFamilyDefinition,
@@ -240,6 +239,19 @@ def test_runtime_outbox_events_are_cataloged_with_current_topics() -> None:
         assert definition.topic == topic
 
 
+def test_transaction_event_ownership_uses_unified_runtime_boundary() -> None:
+    raw_transaction = get_event_family_definition("RawTransactionPersisted")
+    processed_transaction = get_event_family_definition("ProcessedTransactionPersisted")
+    cashflow = get_event_family_definition("CashflowCalculated")
+
+    assert raw_transaction.consumer_services == ("portfolio_transaction_processing_service",)
+    assert processed_transaction.producer_service == ("portfolio_transaction_processing_service")
+    assert processed_transaction.consumer_services == ("pipeline_orchestrator_service",)
+    assert cashflow.producer_service == "portfolio_transaction_processing_service"
+    assert cashflow.consumer_services == ()
+    assert cashflow.runtime_active is False
+
+
 def test_runtime_pipeline_events_are_cataloged_with_current_topics() -> None:
     expected_topics = {
         "TransactionProcessingCompleted": "transaction_processing.ready",
@@ -276,12 +288,20 @@ def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
         assert definition.correlation_header_supported is True
 
 
-def test_replay_event_is_cataloged_as_supportability_recovery() -> None:
-    definition = get_event_family_definition("ReprocessTransactionReplay")
+def test_retired_internal_position_replay_event_is_not_an_active_contract() -> None:
+    with pytest.raises(KeyError, match="Unknown event family definition"):
+        get_event_family_definition("ReprocessTransactionReplay")
 
-    assert definition.family == SUPPORTABILITY_RECOVERY_EVENT
-    assert definition.topic == "transactions.cost.processed"
-    assert INGESTION_EVIDENCE_BUNDLE in definition.supportability_evidence
+
+def test_transaction_reprocessing_commands_target_unified_runtime() -> None:
+    direct_topics = {definition.name: definition for definition in DIRECT_KAFKA_TOPIC_DEFINITIONS}
+
+    assert direct_topics["TransactionReprocessingRequested"].consumer_services == (
+        "portfolio_transaction_processing_service",
+    )
+    assert direct_topics["TransactionReprocessingPersistedReplay"].consumer_services == (
+        "portfolio_transaction_processing_service",
+    )
 
 
 def test_validation_rejects_event_without_schema_versioning() -> None:

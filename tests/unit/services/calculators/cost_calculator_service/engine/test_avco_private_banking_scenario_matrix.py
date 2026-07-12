@@ -55,6 +55,7 @@ def _raw_transaction(
     quantity: str,
     gross_amount: str,
     price: str = "0",
+    **extra_fields: str,
 ) -> dict[str, str]:
     return {
         "transaction_id": transaction_id,
@@ -70,6 +71,7 @@ def _raw_transaction(
         "portfolio_base_currency": "USD",
         "transaction_fx_rate": "1",
         "trade_fee": "0",
+        **extra_fields,
     }
 
 
@@ -144,6 +146,14 @@ def test_avco_lot_inflow_families_open_source_basis(transaction_type: str) -> No
 @pytest.mark.parametrize("transaction_type", sorted(AVCO_LOT_OUTFLOW_TYPES | {"TRANSFER_OUT"}))
 def test_avco_lot_outflow_families_consume_source_basis(transaction_type: str) -> None:
     gross_amount = "600" if transaction_type == "CASH_IN_LIEU" else "0"
+    cash_in_lieu_fields = (
+        {
+            "allocated_cost_basis_local": "400",
+            "allocated_cost_basis_base": "400",
+        }
+        if transaction_type == "CASH_IN_LIEU"
+        else {}
+    )
     processed, errors, states = _process(
         _seed_buy(),
         _raw_transaction(
@@ -152,6 +162,7 @@ def test_avco_lot_outflow_families_consume_source_basis(transaction_type: str) -
             transaction_date="2026-01-02T00:00:00Z",
             quantity="40",
             gross_amount=gross_amount,
+            **cash_in_lieu_fields,
         ),
     )
 

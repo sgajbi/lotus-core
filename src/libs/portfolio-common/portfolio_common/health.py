@@ -13,10 +13,14 @@ from sqlalchemy import text
 
 from .build_metadata import BuildMetadataResponse, build_metadata_payload
 from .config import KAFKA_BOOTSTRAP_SERVERS
-from .db import AsyncSessionLocal
+from .db import AsyncSessionLocal, get_async_engine
 from .downstream_access import DownstreamAccessPolicy, load_downstream_access_policy
 from .logging_utils import log_operation_event
-from .monitoring import observe_health_dependency_check, set_health_readiness_state
+from .monitoring import (
+    observe_health_dependency_check,
+    set_database_pool_connections,
+    set_health_readiness_state,
+)
 from .runtime_settings import env_str
 from .worker_readiness import (
     WORKER_RUNTIME_DEPENDENCY,
@@ -147,6 +151,7 @@ async def check_db_health() -> bool:
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 await session.execute(text("SELECT 1"))
+        _observe_async_database_pool_snapshot()
         return True
     except Exception:
         log_operation_event(
@@ -160,6 +165,25 @@ async def check_db_health() -> bool:
             dependency="database",
         )
         return False
+
+
+def _observe_async_database_pool_snapshot() -> None:
+    try:
+        pool = get_async_engine().sync_engine.pool
+        states = (
+            ("configured_capacity", pool.size()),
+            ("checked_in", pool.checkedin()),
+            ("checked_out", pool.checkedout()),
+            ("overflow", pool.overflow()),
+        )
+        for state, count in states:
+            set_database_pool_connections(
+                pool="async",
+                state=state,
+                count=max(0, int(count)),
+            )
+    except Exception:
+        return
 
 
 async def check_kafka_health(policy: DownstreamAccessPolicy | None = None) -> bool:

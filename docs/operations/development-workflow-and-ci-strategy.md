@@ -35,6 +35,11 @@ Run on every PR and push to `main`:
 4. Latency gate.
 5. Performance load gate (fast tier).
 
+Replay-storm drain is complete only when the transaction-processing duplicate outcome counter
+advances by the submitted replay count. A semantic duplicate reuses its existing `processed_events`
+record, so row growth is not a valid replay-completion signal. DLQ pressure, backlog pressure, and
+drain completion remain enforced independently.
+
 Goal: quick, meaningful confidence for developer velocity.
 
 ### Tier 2: Full Institutional Gates (heavy)

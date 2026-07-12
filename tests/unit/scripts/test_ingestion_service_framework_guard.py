@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.ingestion_service_framework_guard import (
+from scripts.quality.ingestion_service_framework_guard import (
     find_ingestion_service_framework_findings,
 )
 

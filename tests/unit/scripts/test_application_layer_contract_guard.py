@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.application_layer_contract_guard import (
+from scripts.quality.application_layer_contract_guard import (
     find_application_layer_contract_findings,
 )
 

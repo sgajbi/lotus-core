@@ -1,26 +1,35 @@
 # tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py  # noqa: E501
 import asyncio
+import inspect
 import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import pytest
-from portfolio_common.database_models import Cashflow, CashflowRule
+from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
+from src.services.calculators.cashflow_calculator_service.app import (
+    cashflow_calculation_workflow as cashflow_workflow,
+)
+from src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow import (  # noqa: E501
     CachedCashflowRule,
     CashflowCalculationWorkflow,
-    CashflowCalculatorConsumer,
     CashflowProcessingOutcome,
     CashflowStageResult,
     LinkedCashLegError,
     NoCashflowRuleError,
     _cashflow_calculated_event_from_saved_cashflow,
+)
+from src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer import (  # noqa: E501
+    CashflowCalculatorConsumer,
+)
+from src.services.calculators.cashflow_calculator_service.app.core.stored_cashflow import (
+    StoredCashflow,
 )
 from src.services.calculators.cashflow_calculator_service.app.repositories.cashflow_repository import (  # noqa: E501
     CashflowRepository,
@@ -43,6 +52,12 @@ async def test_cashflow_workflow_constructs_without_kafka_delivery_runtime() -> 
     assert not hasattr(workflow, "_consumer_config")
 
 
+async def test_cashflow_workflow_does_not_depend_on_retired_delivery_subclass() -> None:
+    workflow_source = inspect.getsource(CashflowCalculationWorkflow)
+
+    assert "CashflowCalculatorConsumer" not in workflow_source
+
+
 async def test_cashflow_calculated_event_preserves_corporate_action_linkage() -> None:
     source_event = TransactionEvent(
         transaction_id="CA-CASH-01",
@@ -61,8 +76,8 @@ async def test_cashflow_calculated_event_preserves_corporate_action_linkage() ->
         parent_event_reference="PARENT-MIXED-01",
         linked_cash_transaction_id="CASH-SETTLEMENT-01",
     )
-    saved = Cashflow(
-        id=91,
+    saved = StoredCashflow(
+        cashflow_id=91,
         transaction_id=source_event.transaction_id,
         portfolio_id=source_event.portfolio_id,
         security_id=source_event.security_id,
@@ -90,12 +105,8 @@ async def test_cashflow_calculated_event_preserves_corporate_action_linkage() ->
 @pytest.fixture(autouse=True)
 def reset_cache():
     """Resets the module-level cache before each test to ensure isolation."""
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
-    transaction_consumer._cashflow_rule_cache_state = None
-    transaction_consumer._cashflow_rule_cache_lock = None
+    cashflow_workflow._cashflow_rule_cache_state = None
+    cashflow_workflow._cashflow_rule_cache_lock = None
     yield
 
 
@@ -110,6 +121,11 @@ def cashflow_consumer():
     )
     consumer._send_to_dlq_async = AsyncMock()
     return consumer
+
+
+@pytest.fixture
+def cashflow_calculation_workflow() -> CashflowCalculationWorkflow:
+    return CashflowCalculationWorkflow()
 
 
 @pytest.fixture
@@ -174,7 +190,7 @@ def mock_dependencies():
             return_value=mock_outbox_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=mock_rules_repo,
         ),
     ):
@@ -216,8 +232,8 @@ async def test_process_message_success(
         )
     ]
 
-    mock_saved_cashflow = Cashflow(
-        id=1,
+    mock_saved_cashflow = StoredCashflow(
+        cashflow_id=1,
         transaction_id="TXN_CASHFLOW_CONSUMER",
         portfolio_id="PORT_CFC_01",
         security_id="SEC_CFC_01",
@@ -234,7 +250,7 @@ async def test_process_message_success(
     mock_cashflow_repo.create_cashflow.return_value = mock_saved_cashflow
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -347,7 +363,7 @@ async def test_process_message_sends_to_dlq_if_rule_not_found(
     mock_rules_repo.get_all_rules.return_value = []
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -387,7 +403,7 @@ async def test_process_message_skips_stale_epoch_event(
 
     # Mock the fencer to return False, indicating a stale event
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = False
@@ -433,7 +449,7 @@ async def test_process_message_skips_replay_event_when_canonical_state_was_remov
     mock_cashflow_repo.transaction_exists.return_value = False
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -498,7 +514,7 @@ async def test_process_message_skips_duplicate_cross_topic_cashflow_publication(
     mock_cashflow_repo.transaction_exists.return_value = True
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -569,7 +585,7 @@ async def test_cashflow_unit_of_work_finalizer_rolls_back_rejected_outcomes(
 
 
 async def test_combined_cashflow_stage_keeps_semantic_and_epoch_fence(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
     mock_kafka_message,
     mock_dependencies,
 ):
@@ -578,10 +594,12 @@ async def test_combined_cashflow_stage_keeps_semantic_and_epoch_fence(
         outcome=CashflowProcessingOutcome.PROCESSED,
         cashflow_record_count=1,
     )
-    cashflow_consumer._fence_or_semantic_duplicate_outcome = AsyncMock(return_value=None)
-    cashflow_consumer._stage_cashflow_processing = AsyncMock(return_value=expected)
+    cashflow_calculation_workflow._fence_or_semantic_duplicate_outcome = AsyncMock(
+        return_value=None
+    )
+    cashflow_calculation_workflow._stage_cashflow_processing = AsyncMock(return_value=expected)
 
-    result = await cashflow_consumer.stage_valid_event(
+    result = await cashflow_calculation_workflow.stage_valid_event(
         db=mock_dependencies["db_session"],
         cashflow_repo=mock_dependencies["cashflow_repo"],
         idempotency_repo=mock_dependencies["idempotency_repo"],
@@ -593,23 +611,25 @@ async def test_combined_cashflow_stage_keeps_semantic_and_epoch_fence(
     )
 
     assert result == expected
-    fence_call = cashflow_consumer._fence_or_semantic_duplicate_outcome.await_args.kwargs
+    fence_call = (
+        cashflow_calculation_workflow._fence_or_semantic_duplicate_outcome.await_args.kwargs
+    )
     assert fence_call["semantic_event_id"] == ("cashflow:PORT_CFC_01:TXN_CASHFLOW_CONSUMER:1")
-    cashflow_consumer._stage_cashflow_processing.assert_awaited_once()
+    cashflow_calculation_workflow._stage_cashflow_processing.assert_awaited_once()
 
 
 async def test_combined_cashflow_stage_stops_on_epoch_rejection(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
     mock_kafka_message,
     mock_dependencies,
 ):
     event = TransactionEvent.model_validate_json(mock_kafka_message.value())
-    cashflow_consumer._fence_or_semantic_duplicate_outcome = AsyncMock(
+    cashflow_calculation_workflow._fence_or_semantic_duplicate_outcome = AsyncMock(
         return_value=CashflowProcessingOutcome.EPOCH_REJECTED
     )
-    cashflow_consumer._stage_cashflow_processing = AsyncMock()
+    cashflow_calculation_workflow._stage_cashflow_processing = AsyncMock()
 
-    result = await cashflow_consumer.stage_valid_event(
+    result = await cashflow_calculation_workflow.stage_valid_event(
         db=mock_dependencies["db_session"],
         cashflow_repo=mock_dependencies["cashflow_repo"],
         idempotency_repo=mock_dependencies["idempotency_repo"],
@@ -621,16 +641,12 @@ async def test_combined_cashflow_stage_stops_on_epoch_rejection(
     )
 
     assert result == CashflowStageResult(outcome=CashflowProcessingOutcome.EPOCH_REJECTED)
-    cashflow_consumer._stage_cashflow_processing.assert_not_awaited()
+    cashflow_calculation_workflow._stage_cashflow_processing.assert_not_awaited()
 
 
 async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
     rules_repo.get_all_rules.side_effect = [
@@ -659,22 +675,28 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
     ]
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             side_effect=[10.0, 11.0, 400.0, 401.0, 402.0, 403.0],
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.observe_cashflow_rule_cache_event"
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.observe_cashflow_rule_cache_event"
         ) as cache_metric,
     ):
-        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
-        second_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
-        third_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        first_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
+        second_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
+        third_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
         assert first_rule is not None
         assert second_rule is not None
         assert third_rule is not None
@@ -695,12 +717,8 @@ async def test_get_rule_for_transaction_uses_ttl_cache_then_refreshes(
 
 
 async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
     rules_repo.get_all_rules.return_value = [
@@ -718,17 +736,19 @@ async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
     )
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             return_value=100.0,
         ),
     ):
-        rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, " buy ")
+        rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, " buy "
+        )
 
         assert rule is not None
         assert rule.classification == "INVESTMENT_OUTFLOW"
@@ -737,12 +757,8 @@ async def test_get_rule_for_transaction_normalizes_rule_and_request_keys(
 
 
 async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
     rules_repo.get_all_rules.side_effect = [
@@ -771,20 +787,22 @@ async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
     )
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 300),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             side_effect=[100.0, 110.0],
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.observe_cashflow_rule_cache_event"
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.observe_cashflow_rule_cache_event"
         ) as cache_metric,
     ):
-        rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "DIVIDEND")
+        rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "DIVIDEND"
+        )
         assert rule is not None
         assert rule.classification == "INCOME"
         assert isinstance(rule, CachedCashflowRule)
@@ -801,12 +819,8 @@ async def test_get_rule_for_transaction_missing_rule_forces_immediate_refresh(
 
 
 async def test_invalidate_cashflow_rule_cache_forces_reload(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
     rules_repo.get_all_rules.side_effect = [
@@ -835,21 +849,25 @@ async def test_invalidate_cashflow_rule_cache_forces_reload(
     )
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             side_effect=[5.0, 6.0, 7.0, 8.0],
         ),
     ):
-        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        first_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
         assert first_rule is not None
         assert first_rule.timing == "BOD"
-        transaction_consumer.invalidate_cashflow_rule_cache()
-        reloaded_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        cashflow_workflow.invalidate_cashflow_rule_cache()
+        reloaded_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
         assert reloaded_rule is not None
         assert reloaded_rule.timing == "EOD"
         assert rules_repo.get_all_rules.await_count == 2
@@ -857,7 +875,7 @@ async def test_invalidate_cashflow_rule_cache_forces_reload(
 
 
 async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
@@ -876,10 +894,12 @@ async def test_load_cashflow_rules_cache_returns_session_safe_rule_snapshots(
     )
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
         return_value=rules_repo,
     ):
-        cache_state = await cashflow_consumer._load_cashflow_rules_cache(mock_db_session)
+        cache_state = await cashflow_calculation_workflow._load_cashflow_rules_cache(
+            mock_db_session
+        )
 
     rule = cache_state.rules_by_transaction_type["FX_CASH_SETTLEMENT_BUY"]
     assert isinstance(rule, CachedCashflowRule)
@@ -927,7 +947,7 @@ async def test_process_message_skips_non_cash_fx_contract_lifecycle_components(
     mock_idempotency_repo.claim_event_processing.side_effect = [True, True]
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -996,8 +1016,8 @@ async def test_process_message_dividend_external_mode_still_creates_product_cash
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=21,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=21,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1013,7 +1033,7 @@ async def test_process_message_dividend_external_mode_still_creates_product_cash
     )
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1075,7 +1095,7 @@ async def test_process_message_dividend_external_mode_without_link_sends_to_dlq(
     mock_idempotency_repo.claim_event_processing.side_effect = [True, True]
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1146,8 +1166,8 @@ async def test_process_message_interest_external_mode_still_creates_product_cash
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=22,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=22,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1163,7 +1183,7 @@ async def test_process_message_interest_external_mode_still_creates_product_cash
     )
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1225,7 +1245,7 @@ async def test_process_message_interest_external_mode_without_link_sends_to_dlq(
     mock_idempotency_repo.claim_event_processing.side_effect = [True, True]
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1296,8 +1316,8 @@ async def test_process_message_buy_with_linked_cash_leg_still_creates_product_ca
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=23,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=23,
         transaction_id=event.transaction_id,
         portfolio_id=event.portfolio_id,
         security_id=event.security_id,
@@ -1313,7 +1333,7 @@ async def test_process_message_buy_with_linked_cash_leg_still_creates_product_ca
     )
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1380,8 +1400,8 @@ async def test_process_message_cash_in_lieu_with_linked_cash_leg_still_creates_p
             is_portfolio_flow=False,
         )
     ]
-    mock_cashflow_repo.create_cashflow.return_value = Cashflow(
-        id=99,
+    mock_cashflow_repo.create_cashflow.return_value = StoredCashflow(
+        cashflow_id=99,
         transaction_id="TXN_CASHFLOW_CIL_LINKED_01",
         portfolio_id="PORT_CFC_01",
         security_id="SEC_CFC_01",
@@ -1397,7 +1417,7 @@ async def test_process_message_cash_in_lieu_with_linked_cash_leg_still_creates_p
     )
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1457,7 +1477,7 @@ async def test_process_message_fee_auto_generate_mode_sends_to_dlq(
     mock_idempotency_repo.claim_event_processing.side_effect = [True, True]
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1520,7 +1540,7 @@ async def test_process_message_cash_consideration_missing_parent_reference_sends
     mock_idempotency_repo.claim_event_processing.side_effect = [True, True]
 
     with patch(
-        "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.EpochFencer"
+        "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.EpochFencer"
     ) as mock_fencer_class:
         mock_fencer_instance = AsyncMock()
         mock_fencer_instance.check.return_value = True
@@ -1550,12 +1570,8 @@ async def test_process_message_cash_consideration_missing_parent_reference_sends
 
 
 async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     mock_db_session = AsyncMock(spec=AsyncSession)
     rules_repo = AsyncMock(spec=CashflowRulesRepository)
     rules_repo.get_all_rules.return_value = [
@@ -1573,19 +1589,19 @@ async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
     )
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             side_effect=[100.0, 101.0, 102.0, 103.0, 104.0, 105.0],
         ),
     ):
         results = await asyncio.gather(
-            cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY"),
-            cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY"),
+            cashflow_calculation_workflow._get_rule_for_transaction(mock_db_session, "BUY"),
+            cashflow_calculation_workflow._get_rule_for_transaction(mock_db_session, "BUY"),
         )
         assert results[0] is not None
         assert results[1] is not None
@@ -1594,12 +1610,8 @@ async def test_get_rule_for_transaction_concurrent_refresh_loads_rules_once(
 
 
 async def test_get_rule_for_transaction_reloads_when_source_version_changes(
-    cashflow_consumer: CashflowCalculatorConsumer,
+    cashflow_calculation_workflow: CashflowCalculationWorkflow,
 ):
-    from src.services.calculators.cashflow_calculator_service.app.consumers import (
-        transaction_consumer,
-    )
-
     first_updated_at = datetime(2026, 4, 10, 8, 0, tzinfo=timezone.utc)
     second_updated_at = datetime(2026, 4, 10, 9, 0, tzinfo=timezone.utc)
     mock_db_session = AsyncMock(spec=AsyncSession)
@@ -1632,18 +1644,22 @@ async def test_get_rule_for_transaction_reloads_when_source_version_changes(
     ]
 
     with (
-        patch.object(transaction_consumer, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
+        patch.object(cashflow_workflow, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.CashflowRulesRepository",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.CashflowRulesRepository",
             return_value=rules_repo,
         ),
         patch(
-            "src.services.calculators.cashflow_calculator_service.app.consumers.transaction_consumer.time.monotonic",
+            "src.services.calculators.cashflow_calculator_service.app.cashflow_calculation_workflow.time.monotonic",
             side_effect=[10.0, 11.0, 12.0, 13.0],
         ),
     ):
-        first_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
-        second_rule = await cashflow_consumer._get_rule_for_transaction(mock_db_session, "BUY")
+        first_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
+        second_rule = await cashflow_calculation_workflow._get_rule_for_transaction(
+            mock_db_session, "BUY"
+        )
 
     assert first_rule is not None
     assert second_rule is not None

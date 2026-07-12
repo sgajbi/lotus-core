@@ -1,4 +1,4 @@
-from scripts import maintainability_gate as gate
+from scripts.quality import maintainability_gate as gate
 
 
 def test_maintainability_violations_accepts_a_through_c_modules() -> None:

@@ -4,7 +4,7 @@ import copy
 import json
 from pathlib import Path
 
-from scripts import event_contract_test_pack_guard as guard
+from scripts.quality import event_contract_test_pack_guard as guard
 
 
 def _write_repo(tmp_path: Path) -> None:
@@ -20,7 +20,8 @@ def _write_repo(tmp_path: Path) -> None:
             encoding="utf-8",
         )
     (tmp_path / "Makefile").write_text(
-        "event-contract-test-pack-guard:\n\tpython scripts/event_contract_test_pack_guard.py\n",
+        "event-contract-test-pack-guard:\n"
+        "\tpython scripts/quality/event_contract_test_pack_guard.py\n",
         encoding="utf-8",
     )
 

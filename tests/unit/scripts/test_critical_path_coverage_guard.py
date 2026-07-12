@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts import critical_path_coverage_guard as guard
+from scripts.quality import critical_path_coverage_guard as guard
 
 
 def _minimal_contract() -> dict[str, object]:

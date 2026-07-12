@@ -32,7 +32,7 @@ still carry direct repository/session dependencies and remain follow-up migratio
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/application_dependency_inversion_guard.py` together with
+`make architecture-guard` runs `scripts/quality/application_dependency_inversion_guard.py` together with
 the catalog and specific port-regression guards.
 
 The guard fails if a protected application module reintroduces direct SQLAlchemy sessions, concrete

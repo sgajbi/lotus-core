@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.prebuild_ci_images import SERVICE_BUILDS
+from scripts.release.prebuild_ci_images import SERVICE_BUILDS
 
 GOVERNED_RUNTIME_WORKFLOWS = (
     Path(".github/workflows/pr-merge-gate.yml"),

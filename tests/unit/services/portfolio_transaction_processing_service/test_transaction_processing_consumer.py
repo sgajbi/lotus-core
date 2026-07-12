@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from src.services.portfolio_transaction_processing_service.app.application import (
     ProcessTransactionResult,
     TransactionProcessingError,
+    TransactionProcessingIntent,
     TransactionProcessingRejected,
     TransactionProcessingStatus,
 )
@@ -81,7 +82,34 @@ async def test_consumer_maps_source_lineage_and_invokes_combined_use_case_once()
     assert command.metadata.traceparent == (
         "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
     )
+    assert command.metadata.processing_intent is TransactionProcessingIntent.STANDARD
     use_case.execute.assert_awaited_once()
+
+
+async def test_consumer_maps_canonical_repair_header_to_application_intent() -> None:
+    use_case = AsyncMock()
+    use_case.execute.return_value = ProcessTransactionResult(
+        status=TransactionProcessingStatus.PROCESSED,
+        input_transaction_id="TX-001",
+    )
+    message = _message()
+    message.headers.return_value.append(("lotus-transaction-processing-intent", b"repair"))
+
+    await _consumer(use_case).process_message(message)
+
+    command = use_case.execute.await_args.args[0]
+    assert command.metadata.processing_intent is TransactionProcessingIntent.REPAIR
+
+
+async def test_consumer_rejects_unknown_processing_intent_header() -> None:
+    use_case = AsyncMock()
+    message = _message()
+    message.headers.return_value.append(("lotus-transaction-processing-intent", b"force"))
+
+    with pytest.raises(ValueError, match="processing intent"):
+        await _consumer(use_case).process_message(message)
+
+    use_case.execute.assert_not_awaited()
 
 
 async def test_consumer_converts_retryable_application_error() -> None:

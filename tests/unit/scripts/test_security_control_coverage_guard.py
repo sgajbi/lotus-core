@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts import security_control_coverage_guard as guard
+from scripts.quality import security_control_coverage_guard as guard
 
 
 def _write(path: Path, text: str) -> None:

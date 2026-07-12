@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -34,9 +34,14 @@ async def test_get_latest_completed_snapshot_date_trims_portfolio_and_security_i
 
 async def test_acquire_position_history_replay_lock_uses_stable_normalized_key():
     db_session = AsyncMock()
-    repository = PositionRepository(db_session)
+    clock = MagicMock(side_effect=[10.0, 10.125])
+    repository = PositionRepository(db_session, clock=clock)
 
-    await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
+    with patch(
+        "src.services.calculators.position_calculator.app.repositories.position_repository."
+        "observe_position_history_replay_lock_wait"
+    ) as observe_wait:
+        await repository.acquire_position_history_replay_lock(" PORT_COST_01 ", " SEC01 ", 42)
 
     statement = db_session.execute.call_args.args[0]
     assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
@@ -46,6 +51,52 @@ async def test_acquire_position_history_replay_lock_uses_stable_normalized_key()
     assert _position_history_replay_lock_key(" PORT_COST_01 ", " SEC01 ", 42) == (
         _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
     )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+
+
+async def test_acquire_position_history_replay_lock_records_failure_without_swallowing():
+    db_session = AsyncMock()
+    db_session.execute.side_effect = RuntimeError("lock unavailable")
+    repository = PositionRepository(
+        db_session,
+        clock=MagicMock(side_effect=[20.0, 20.25]),
+    )
+
+    with (
+        patch(
+            "src.services.calculators.position_calculator.app.repositories.position_repository."
+            "observe_position_history_replay_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="lock unavailable"),
+    ):
+        await repository.acquire_position_history_replay_lock("P1", "S1", 7)
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
+
+
+async def test_is_transaction_materialized_uses_normalized_key_epoch_and_transaction() -> None:
+    db_session = AsyncMock()
+    execute_result = MagicMock()
+    execute_result.scalar_one_or_none.return_value = 42
+    db_session.execute.return_value = execute_result
+    repository = PositionRepository(db_session)
+
+    materialized = await repository.is_transaction_materialized(
+        " PORT_COST_01 ",
+        " SEC01 ",
+        " TX01 ",
+        7,
+    )
+
+    assert materialized is True
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_history.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC01'" in compiled_query
+    assert "trim(position_history.transaction_id) = 'TX01'" in compiled_query
+    assert "position_history.epoch = 7" in compiled_query
+    assert "LIMIT 1" in compiled_query
 
 
 async def test_find_open_security_ids_as_of_trims_portfolio_and_security_id_partition():

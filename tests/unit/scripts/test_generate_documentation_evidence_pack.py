@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from scripts import generate_documentation_evidence_pack as pack
+from scripts.generators import generate_documentation_evidence_pack as pack
 
 
 def _args(tmp_path: Path, **overrides) -> argparse.Namespace:
@@ -13,7 +13,7 @@ def _args(tmp_path: Path, **overrides) -> argparse.Namespace:
         "output_dir": tmp_path,
         "json_output": tmp_path / "documentation-evidence-pack.json",
         "runtime_profile": "unit-docs",
-        "invocation_command": "python scripts/generate_documentation_evidence_pack.py",
+        "invocation_command": "python scripts/generators/generate_documentation_evidence_pack.py",
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -79,7 +79,7 @@ def test_documentation_evidence_pack_fails_when_command_fails(tmp_path: Path, mo
     def fake_run(command, **_kwargs):
         if command[:2] == ["git", "rev-parse"]:
             return Completed(0)
-        return Completed(1 if "scripts/api_vocabulary_inventory.py" in command else 0)
+        return Completed(1 if "scripts/quality/api_vocabulary_inventory.py" in command else 0)
 
     monkeypatch.setattr(pack.subprocess, "run", fake_run)
 

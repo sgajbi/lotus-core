@@ -1,11 +1,89 @@
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import portfolio_common.health as health_module
 import pytest
 from fastapi import HTTPException
 
 pytestmark = pytest.mark.asyncio
+
+
+class _AsyncContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, _exc_type, _exc, _traceback):
+        return None
+
+
+class _HealthySession(_AsyncContext):
+    def begin(self):
+        return _AsyncContext()
+
+    async def execute(self, _statement):
+        return None
+
+
+async def test_db_health_observes_pool_after_success(monkeypatch):
+    observe_pool = MagicMock()
+    monkeypatch.setattr(health_module, "AsyncSessionLocal", _HealthySession)
+    monkeypatch.setattr(
+        health_module,
+        "_observe_async_database_pool_snapshot",
+        observe_pool,
+        raising=False,
+    )
+
+    assert await health_module.check_db_health() is True
+    observe_pool.assert_called_once_with()
+
+
+async def test_async_database_pool_snapshot_uses_bounded_states(monkeypatch):
+    pool = MagicMock()
+    pool.size.return_value = 10
+    pool.checkedin.return_value = 7
+    pool.checkedout.return_value = 3
+    pool.overflow.return_value = -2
+    engine = MagicMock()
+    engine.sync_engine.pool = pool
+    observe_connections = MagicMock()
+    monkeypatch.setattr(
+        health_module, "get_async_engine", MagicMock(return_value=engine), raising=False
+    )
+    monkeypatch.setattr(
+        health_module,
+        "set_database_pool_connections",
+        observe_connections,
+        raising=False,
+    )
+
+    health_module._observe_async_database_pool_snapshot()
+
+    assert observe_connections.call_args_list == [
+        call(pool="async", state="configured_capacity", count=10),
+        call(pool="async", state="checked_in", count=7),
+        call(pool="async", state="checked_out", count=3),
+        call(pool="async", state="overflow", count=0),
+    ]
+
+
+async def test_database_pool_metric_failure_does_not_change_db_readiness(monkeypatch):
+    pool = MagicMock()
+    pool.size.return_value = 10
+    pool.checkedin.return_value = 7
+    pool.checkedout.return_value = 3
+    pool.overflow.return_value = 0
+    engine = MagicMock()
+    engine.sync_engine.pool = pool
+    monkeypatch.setattr(health_module, "AsyncSessionLocal", _HealthySession)
+    monkeypatch.setattr(health_module, "get_async_engine", MagicMock(return_value=engine))
+    monkeypatch.setattr(
+        health_module,
+        "set_database_pool_connections",
+        MagicMock(side_effect=RuntimeError("metrics unavailable")),
+    )
+
+    assert await health_module.check_db_health() is True
 
 
 @pytest.fixture(autouse=True)

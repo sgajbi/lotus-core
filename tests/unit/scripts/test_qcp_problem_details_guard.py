@@ -3,7 +3,7 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-from scripts import qcp_problem_details_guard as guard
+from scripts.quality import qcp_problem_details_guard as guard
 
 
 def _write_router(tmp_path: Path, content: str) -> Path:

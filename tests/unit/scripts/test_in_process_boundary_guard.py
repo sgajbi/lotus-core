@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from scripts.in_process_boundary_guard import find_in_process_boundary_findings
+from scripts.quality.in_process_boundary_guard import find_in_process_boundary_findings
 
 
 def _write(path: Path, text: str) -> None:

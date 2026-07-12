@@ -32,7 +32,7 @@ deduplication, or reconstruct correlation headers locally.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/transaction_replay_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/transaction_replay_boundary_guard.py`.
 
 ## Compatibility
 
