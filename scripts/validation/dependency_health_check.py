@@ -120,6 +120,20 @@ def _cache_implementation_files(root: Path) -> tuple[Path, ...]:
     )
 
 
+def dependency_health_identity(
+    *,
+    root: Path = ROOT,
+    installer_version: str | None = None,
+) -> DependencyHealthCacheIdentity:
+    """Resolve the canonical cache identity used by local and CI cache consumers."""
+    resolved_root = root.resolve()
+    return build_cache_identity(
+        resolved_root,
+        installer_version=installer_version or version("pip"),
+        implementation_files=_cache_implementation_files(resolved_root),
+    )
+
+
 def _build_environment(
     venv_dir: Path,
     *,
@@ -257,12 +271,11 @@ def run_dependency_health(
         cache_root or Path(os.getenv("LOTUS_DEPENDENCY_HEALTH_CACHE_DIR", DEFAULT_CACHE_ROOT))
     ).resolve()
     resolved_report_path = (report_path or DEFAULT_REPORT_FILE).resolve()
-    resolved_installer_version = installer_version or version("pip")
-    identity = build_cache_identity(
-        resolved_root,
-        installer_version=resolved_installer_version,
-        implementation_files=_cache_implementation_files(resolved_root),
+    identity = dependency_health_identity(
+        root=resolved_root,
+        installer_version=installer_version,
     )
+    resolved_installer_version = identity.installer_version
     cache_dir = resolved_cache_root / identity.key
     resolved_cache_root.mkdir(parents=True, exist_ok=True)
 
@@ -379,7 +392,16 @@ def main() -> int:
         type=Path,
         help="Override the machine-readable dependency-health report path.",
     )
+    parser.add_argument(
+        "--print-cache-key",
+        action="store_true",
+        help="Print the canonical cache key without creating or validating an environment.",
+    )
     args = parser.parse_args()
+
+    if args.print_cache_key:
+        print(dependency_health_identity().key)
+        return 0
 
     run_dependency_health(
         skip_audit=args.skip_audit,

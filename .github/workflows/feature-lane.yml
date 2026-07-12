@@ -40,11 +40,14 @@ jobs:
           cache: "pip"
       - name: Install
         run: make install-ci
+      - name: Resolve dependency health cache key
+        id: dependency-health-cache-key
+        run: echo "key=$(python scripts/validation/dependency_health_check.py --print-cache-key)" >> "$GITHUB_OUTPUT"
       - name: Restore dependency health cache
         uses: actions/cache@v5
         with:
           path: .cache/dependency-health
-          key: dependency-health-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('pyproject.toml', 'requirements/**/*.txt', 'tests/requirements.txt', 'src/**/pyproject.toml', 'scripts/validation/dependency_health_*.py') }}
+          key: dependency-health-${{ runner.os }}-${{ steps.dependency-health-cache-key.outputs.key }}
       - name: Verify Dependencies
         run: make verify-dependencies
       - name: Lint

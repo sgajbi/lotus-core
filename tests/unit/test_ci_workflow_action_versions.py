@@ -118,20 +118,23 @@ def test_dependency_health_cache_is_reused_only_before_merge() -> None:
     ):
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8")) or {}
         steps = workflow["jobs"]["lint-typecheck-contracts-security"]["steps"]
+        key_step = next(
+            step for step in steps if step.get("name") == "Resolve dependency health cache key"
+        )
         cache_step = next(
             step for step in steps if step.get("name") == "Restore dependency health cache"
         )
+        assert key_step["id"] == "dependency-health-cache-key"
+        assert key_step["run"] == (
+            'echo "key=$(python scripts/validation/dependency_health_check.py '
+            '--print-cache-key)" >> "$GITHUB_OUTPUT"'
+        )
         assert cache_step["uses"] == "actions/cache@v5"
         assert cache_step["with"]["path"] == ".cache/dependency-health"
-        cache_key = cache_step["with"]["key"]
-        for cache_input in (
-            "pyproject.toml",
-            "requirements/**/*.txt",
-            "tests/requirements.txt",
-            "src/**/pyproject.toml",
-            "scripts/validation/dependency_health_*.py",
-        ):
-            assert cache_input in cache_key
+        assert cache_step["with"]["key"] == (
+            "dependency-health-${{ runner.os }}-"
+            "${{ steps.dependency-health-cache-key.outputs.key }}"
+        )
 
     main_text = Path(".github/workflows/main-releasability.yml").read_text(encoding="utf-8")
     assert "Restore dependency health cache" not in main_text
