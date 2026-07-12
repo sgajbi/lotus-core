@@ -1899,9 +1899,11 @@ Most relevant current governance:
      delivery header, claim a separate physical repair-delivery fence inside the combined unit of
      work, and retain semantic-conflict and epoch rejection. Missing or unknown intent remains
      standard duplicate behavior; malformed or repeated intent headers fail closed. Cashflow repair
-     restores the canonical transaction/epoch row under a row lock instead of allowing its existing
-     semantic fence to turn repair into a no-op. Prove missing and corrupted derived-state repair,
-     physical redelivery suppression, rollback retry, and conflict rejection against PostgreSQL.
+     restores the canonical transaction/epoch row through an atomic PostgreSQL conflict-update
+     keyed by the existing unique constraint instead of allowing its semantic fence to turn repair
+     into a no-op or using a check-then-insert race for a missing row. Prove missing, corrupted, and
+     concurrent derived-state repair, physical redelivery suppression, rollback retry, and conflict
+     rejection against PostgreSQL.
      Existing physical-only consumers and pre-migration null semantic fences remain compatible.
      Any identity-version change requires migration, replay/downstream impact analysis, deterministic
      hash tests, PostgreSQL conflict/concurrency proof, and explicit documentation.

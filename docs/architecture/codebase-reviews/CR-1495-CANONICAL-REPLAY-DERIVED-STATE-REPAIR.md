@@ -28,8 +28,9 @@ repair derived state even though replay publication succeeded.
   unit of work before financial processing. Redelivery of the same Kafka offset remains a no-op,
   while rollback releases the repair claim for retry.
 - Cashflow repair bypasses only the already-proven semantic cashflow fence, retains epoch fencing,
-  and restores the canonical transaction/epoch row under a database row lock. Existing rows are
-  replaced from recalculated values; missing rows are inserted.
+  and restores the canonical transaction/epoch row with one PostgreSQL conflict-update statement
+  keyed by `_transaction_epoch_uc`. Existing rows are replaced from recalculated values and
+  concurrent missing-row repairs converge without a check-then-insert race.
 - Cashflow create and repair repositories return an immutable `StoredCashflow` record. The new
   path does not expose SQLAlchemy rows, and the prior `create_cashflow` transitional output-shape
   exception is removed.
@@ -49,7 +50,8 @@ semantic transaction already exists.
 - `210` replay, transaction-processing, cashflow, and output-shape unit tests passed.
 - `3` PostgreSQL replay scenarios passed, including missing cashflow/position restoration and
   replacement of a corrupted existing cashflow.
-- The complete transaction-processing contract passed `36` scenarios.
+- A two-session PostgreSQL scenario proved concurrent missing-row repairs converge on one row.
+- The complete transaction-processing contract passed `37` scenarios.
 - Focused MyPy and Ruff checks passed.
 - Transaction replay, event runtime, repository output-shape, strict architecture, domain,
   application, port, adapter, repository-transaction, image-provenance, and documentation catalog

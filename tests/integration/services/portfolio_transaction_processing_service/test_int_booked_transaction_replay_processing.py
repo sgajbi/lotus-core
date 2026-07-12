@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -9,6 +11,9 @@ from portfolio_common.events import TransactionEvent
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.calculators.cashflow_calculator_service.app.repositories import (
+    cashflow_repository,
+)
 from src.services.portfolio_transaction_processing_service.app.application import (
     BookedTransactionReplayStatus,
     ReplayBookedTransactionCommand,
@@ -348,6 +353,67 @@ async def test_replay_after_processing_replaces_corrupted_cashflow_state(
             select(Cashflow.amount).where(Cashflow.transaction_id == transaction_id)
         )
     assert repaired_amount == original_amount
+
+
+async def test_concurrent_missing_cashflow_repairs_converge_on_one_row(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-REPLAY-04"
+    transaction_id = "ADJ-COMBINED-REPLAY-04"
+    event = booked_transaction_event(
+        transaction_id=transaction_id,
+        portfolio_id=portfolio_id,
+        security_id="CASH",
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="ADJUSTMENT",
+        quantity="0",
+        price="0",
+        gross_amount="125.50",
+    )
+    async_db_session.add_all([portfolio_record(portfolio_id), canonical_transaction_record(event)])
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+
+    async def repair(amount: Decimal) -> int:
+        async with context.session_factory() as session, session.begin():
+            stored = await cashflow_repository.CashflowRepository(session).replace_cashflow(
+                Cashflow(
+                    transaction_id=transaction_id,
+                    portfolio_id=portfolio_id,
+                    security_id="CASH",
+                    cashflow_date=event.transaction_date.date(),
+                    epoch=0,
+                    amount=amount,
+                    currency="USD",
+                    classification="TRANSFER",
+                    timing="EOD",
+                    calculation_type="NET",
+                    is_position_flow=True,
+                    is_portfolio_flow=False,
+                )
+            )
+            return stored.cashflow_id
+
+    stored_ids = await asyncio.gather(
+        repair(Decimal("125.50")),
+        repair(Decimal("125.50")),
+    )
+
+    assert stored_ids[0] == stored_ids[1]
+    async with context.session_factory() as verification_session:
+        assert (
+            await _row_count(
+                verification_session,
+                select(func.count())
+                .select_from(Cashflow)
+                .where(
+                    Cashflow.transaction_id == transaction_id,
+                    Cashflow.epoch == 0,
+                ),
+            )
+            == 1
+        )
 
 
 async def _row_count(session: AsyncSession, statement) -> int:
