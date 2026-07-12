@@ -150,7 +150,9 @@ once by the workflow's `Validate Docker Build` producer, exported as one portabl
 loaded by each Docker-backed consumer. Every consumer verifies the bundle digest, manifest content
 hash, source SHA, compose and dependency-lock hashes, dependency-closure hash, image IDs, and OCI
 source labels before stack startup. The producer also emits per-service and total build timings.
-CI Make targets omit runtime rebuild flags, while local invocations keep their build defaults. The
+Workflow consumers that successfully verify a shared runtime image set export
+`LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true`; only that explicit handoff makes Make targets omit runtime
+rebuild flags. Ordinary CI and local invocations keep their build defaults. The
 E2E service-set contract must equal every repo-built image started by `FULL_STACK_SERVICES`; adding a
 service to the test stack without adding it to the image set is a blocking regression.
 

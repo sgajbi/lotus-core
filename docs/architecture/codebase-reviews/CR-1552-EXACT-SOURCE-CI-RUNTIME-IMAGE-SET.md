@@ -24,8 +24,9 @@ Dockerfile but were built separately with identical metadata.
 - Expanded each workflow's existing `Validate Docker Build` job into the sole image-set producer.
 - Replaced per-consumer Buildx/cache/prebuild blocks with artifact download and exact-SHA
   `load-verify` steps across PR and main Docker-backed jobs.
-- Made CI runtime Make targets omit `--build` and `--runtime-build` after artifact verification;
-  local invocations retain their existing build-by-default behavior.
+- Made workflow consumers export `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` only after artifact
+  verification succeeds. Runtime Make targets omit `--build` and `--runtime-build` only for that
+  explicit handoff; ordinary CI and local invocations retain build-by-default behavior.
 - Bound the E2E image set to every repo-built service started by `FULL_STACK_SERVICES`, including
   financial reconciliation, so no E2E service can be rebuilt outside the verified artifact.
 - Added manifest evidence for source commit, branch, repository, CI run, generated-at time, image
@@ -65,13 +66,14 @@ vendor images remain governed by bounded pull/inspection logic and are not copie
 ## Validation
 
 - Real query-service build, export, reload, and verification: passed.
-- Runtime image-set unit tests: `5 passed`.
+- Runtime image-set and workflow handoff regression cohort: `22 passed`.
 - Prebuild, service-union, workflow, action-version, and main-workflow focused tests: passed.
 - `make ci-local`: passed with `4,278` unit tests, `10` DB tests, `135` integration-lite tests,
   aggregate/changed/critical coverage, and all local lane guards.
 - `make quality-workflow-governance-gate`: `20 passed`.
 - Workflow YAML parsing and `actionlint`: passed.
-- CI/local Make dry runs prove CI omits rebuild flags and local commands retain them.
+- Make dry runs prove generic `CI=true` retains rebuild flags and only
+  `LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true` suppresses them.
 - Review regressions prove E2E image inventory equals all repo-built full-stack services.
 - Scoped Ruff lint/format and `git diff --check`: passed.
 - Wiki professional-page audit and repository documentation gates: passed.

@@ -3,8 +3,8 @@
 
 LATENCY_SEED_COMPLETION_TIMEOUT_SECONDS ?= 900
 OPENAPI_ARTIFACT_DIR ?= output/openapi
-RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--build)
-CERTIFICATION_RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--runtime-build)
+RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--build)
+CERTIFICATION_RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--runtime-build)
 
 install:
 	python scripts/development/bootstrap_dev.py
