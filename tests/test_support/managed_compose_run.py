@@ -14,7 +14,11 @@ from tests.test_support.docker_stack import (
     compose_down,
     compose_up,
 )
-from tests.test_support.runtime_env import PreparedTestRuntime, prepare_test_runtime
+from tests.test_support.runtime_env import (
+    PreparedTestRuntime,
+    prepare_test_runtime,
+    profile_seed_ports,
+)
 
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _ENDPOINT_PORT_KEYS = {
@@ -128,6 +132,8 @@ def prepare_managed_compose_run(
 
     runtime_environment = dict(os.environ)
     runtime_environment.pop("COMPOSE_PROJECT_NAME", None)
+    for inherited_port_key in profile_seed_ports("e2e"):
+        runtime_environment.pop(inherited_port_key, None)
     for endpoint_key, endpoint_url in (endpoint_urls or {}).items():
         port_key = _ENDPOINT_PORT_KEYS.get(endpoint_key)
         if port_key is None or not endpoint_url:
