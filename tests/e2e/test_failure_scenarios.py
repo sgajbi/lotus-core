@@ -11,6 +11,10 @@ from confluent_kafka import Consumer
 from portfolio_common.config import KAFKA_BOOTSTRAP_SERVERS, KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
 from sqlalchemy import exc, text
 
+from scripts.quality.ci_service_sets import (
+    E2E_RECOVERY_HEALTH_PORT_ENV,
+    E2E_RECOVERY_SERVICES,
+)
 from tests.test_support.output_control import emit_test_output
 
 from .api_client import E2EApiClient
@@ -23,14 +27,8 @@ def _compose_args(*compose_args: str) -> list[str]:
 
 def _core_service_health_urls() -> list[str]:
     return [
-        f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_POSITION_CALCULATOR_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_CASHFLOW_CALCULATOR_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_COST_CALCULATOR_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_POSITION_VALUATION_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_TIMESERIES_GENERATOR_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_INGESTION_HOST_PORT']}/health/ready",
-        f"http://localhost:{os.environ['LOTUS_QUERY_HOST_PORT']}/health/ready",
+        f"http://localhost:{os.environ[E2E_RECOVERY_HEALTH_PORT_ENV[service]]}/health/ready"
+        for service in E2E_RECOVERY_SERVICES
     ]
 
 
@@ -241,17 +239,7 @@ def test_db_outage_recovery(
     # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
     emit_test_output("\n--- Restarting all core services after DB outage scenario ---")
     subprocess.run(
-        _compose_args(
-            "restart",
-            "ingestion_service",
-            "query_service",
-            "persistence_service",
-            "position_calculator_service",
-            "cashflow_calculator_service",
-            "cost_calculator_service",
-            "position_valuation_calculator",
-            "timeseries_generator_service",
-        ),
+        _compose_args("restart", *E2E_RECOVERY_SERVICES),
         check=True,
         capture_output=True,
     )
