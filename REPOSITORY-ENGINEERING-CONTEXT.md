@@ -1909,10 +1909,13 @@ Most relevant current governance:
      external cash identifiers and generated-shaped identifiers in upstream-provided mode remain
      material conflict inputs.
      Canonical booked-transaction replay is the only path that may continue after an identical
-     semantic claim. It must carry the exact internal `lotus-transaction-processing-intent=repair`
-     delivery header, claim a separate physical repair-delivery fence inside the combined unit of
-     work, and retain semantic-conflict and epoch rejection. Missing or unknown intent remains
-     standard duplicate behavior; malformed or repeated intent headers fail closed. Cashflow repair
+     semantic claim or an explicit canonical correction. It must carry the exact internal
+     `lotus-transaction-processing-intent=repair` delivery header. Identical repair payloads claim
+     a separate physical repair-delivery fence; materially corrected payloads claim an immutable
+     `transaction-correction:v1` semantic identity containing the canonical SHA-256 fingerprint,
+     preserving the original semantic row and every distinct correction row. A standard changed
+     delivery, correction-identity conflict, missing or unknown intent remains fail-closed;
+     malformed or repeated intent headers fail closed too. Cashflow repair
      restores the canonical transaction/epoch row through an atomic PostgreSQL conflict-update
      keyed by the existing unique constraint instead of allowing its semantic fence to turn repair
      into a no-op or using a check-then-insert race for a missing row. Prove missing, corrupted, and
@@ -1952,7 +1955,8 @@ Most relevant current governance:
      epoch advancement. Record `coalesced/already_materialized`, do not read full history, advance
      epoch, delete/reinsert positions, or publish replay events, and keep normal ordered processing
      free of this extra query. This is safe because combined semantic idempotency rejects materially
-     changed content for the same transaction identity and the cost-basis key lock serializes the
+     changed content outside the explicit correction workflow; an accepted correction has its own
+     immutable identity and executes the governed rebuild. The cost-basis key lock serializes the
      caller-owned units of work. Any change requires concurrent committed backdated-trigger proof,
      exact current-epoch quantities/cost, one-winner epoch evidence, zero active-runtime replay
      fan-out, bounded recalculation work-volume metrics, and migration/index validation.
