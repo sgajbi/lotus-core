@@ -82,6 +82,8 @@ def _assert_runtime_image_consumers(
         assert "prebuild_ci_images.py" not in commands
         assert "runtime_image_set.py load-verify" in commands
         assert '--expected-commit-sha "${GITHUB_SHA}"' in commands
+        assert "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" in commands
+        assert '>> "${GITHUB_ENV}"' in commands
         download = next(
             step for step in _steps(job) if step.get("name") == "Download runtime image set"
         )
@@ -122,11 +124,15 @@ def test_main_workflow_builds_and_consumes_one_exact_source_runtime_image_set() 
 def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert "RUNTIME_BUILD_ARGUMENT = $(if $(filter true,$(CI)),,--build)" in makefile
+    assert (
+        "RUNTIME_BUILD_ARGUMENT = "
+        "$(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--build)" in makefile
+    )
     assert (
         "CERTIFICATION_RUNTIME_BUILD_ARGUMENT = "
-        "$(if $(filter true,$(CI)),,--runtime-build)" in makefile
+        "$(if $(filter true,$(LOTUS_RUNTIME_IMAGE_SET_VERIFIED)),,--runtime-build)" in makefile
     )
+    assert "$(filter true,$(CI))" not in makefile
     for command in (
         "docker_endpoint_smoke.py $(RUNTIME_BUILD_ARGUMENT)",
         "latency_profile.py $(RUNTIME_BUILD_ARGUMENT)",

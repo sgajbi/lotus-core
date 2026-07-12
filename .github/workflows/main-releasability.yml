@@ -226,6 +226,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic docker endpoint smoke
@@ -267,6 +268,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run endpoint latency gate
@@ -312,6 +314,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic performance load gate
@@ -380,6 +383,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run full E2E suite
@@ -423,6 +427,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic full performance load gate
@@ -464,6 +469,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run deterministic failure recovery gate
@@ -510,6 +516,7 @@ jobs:
             --manifest output/runtime-image-set/manifest.json \
             --bundle output/runtime-image-set/images.tar \
             --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
       - name: Install
         run: make install-ci
       - name: Run governed institutional completion gate
