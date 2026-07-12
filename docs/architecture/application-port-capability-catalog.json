@@ -154,9 +154,9 @@
         "src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py"
       ],
       "guard_scripts": [
-        "scripts/application_layer_contract_guard.py",
-        "scripts/repository_output_shape_guard.py",
-        "scripts/repository_transaction_boundary_guard.py"
+        "scripts/quality/application_layer_contract_guard.py",
+        "scripts/quality/repository_output_shape_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
@@ -181,8 +181,8 @@
         "src/services/query_control_plane_service/app/application/core_snapshot/service.py"
       ],
       "guard_scripts": [
-        "scripts/architecture_boundary_guard.py",
-        "scripts/repository_output_shape_guard.py"
+        "scripts/quality/architecture_boundary_guard.py",
+        "scripts/quality/repository_output_shape_guard.py"
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
