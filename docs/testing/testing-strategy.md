@@ -179,6 +179,13 @@ for child-owned Compose. Tests must cover overlapping runtime lifetimes, concurr
 forced bind conflict, endpoint refresh, explicit-override preservation, and exhausted-retry
 diagnostics.
 
+Operational validation drivers must use `ManagedComposeRun` rather than constructing Compose
+lifecycle commands. The managed owner captures logs with explicit project and compose-file identity
+before teardown. Inherited pytest or parent-process host ports are not operator overrides; only
+explicit endpoint/database URLs may pin local ports. Keep `--skip-compose` for external targets and
+an explicit keep-stack option for local diagnosis. The AST ownership test blocks direct `up`,
+`down`, or `logs` command reconstruction in governed drivers.
+
 ## Quality Gates
 
 1. No new endpoint without explicit success + error contract tests.

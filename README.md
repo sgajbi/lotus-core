@@ -134,6 +134,10 @@ Current repo truth:
     records build timings and exports an integrity manifest; each Docker-backed job verifies source
     SHA, dependency closure, bundle digest, image IDs, and OCI labels before startup. This ephemeral
     transport does not publish images or replace the signed GHCR release lane.
+14. Compose-backed validation owns a unique project, reserved dynamic ports, runtime-derived
+    endpoints, project-identified diagnostics, and teardown through one managed runtime contract.
+    Explicit endpoint URLs and `--skip-compose` support operator-owned external targets; ordinary
+    managed runs do not inherit another test process's project or host ports.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use
