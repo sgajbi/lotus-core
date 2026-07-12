@@ -65,6 +65,20 @@ class DockerImagePullPolicy:
             base_delay + jitter(0.0, jitter_ceiling),
         )
 
+    @property
+    def maximum_total_duration_seconds(self) -> float:
+        """Return the maximum pull time including timeouts and retry delays."""
+        retry_budget = sum(
+            min(
+                self.max_backoff_seconds,
+                self.initial_backoff_seconds
+                * (2 ** max(0, failed_attempt - 1))
+                * (1 + self.jitter_ratio),
+            )
+            for failed_attempt in range(1, self.max_attempts)
+        )
+        return self.max_attempts * self.timeout_seconds + retry_budget
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -212,7 +226,8 @@ def _pull_required_image(
             raise DockerStackError(
                 "Failed to pull required Docker image "
                 f"'{image}' (failure_class={last_failure.value}, attempts={attempt}, "
-                f"elapsed_seconds={elapsed_seconds})"
+                f"elapsed_seconds={elapsed_seconds}, "
+                f"budget_seconds={policy.maximum_total_duration_seconds})"
             ) from pull_error
 
         sleeper(policy.retry_delay_seconds(attempt, jitter))
