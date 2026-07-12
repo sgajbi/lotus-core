@@ -1865,7 +1865,11 @@ Most relevant current governance:
      identities. Static event guards must resolve dependency-injected consumer factory defaults so
      target DLQ wiring cannot disappear from certification. Full-stack tests must allocate the
      target's `LOTUS_TRANSACTION_PROCESSING_HOST_PORT`; never reintroduce deleted calculator ports
-     or rely on the app-local default when parallel stacks may run.
+     or rely on the app-local default when parallel stacks may run. Compose-backed recovery restart
+     sets and health checks must derive from `scripts/quality/ci_service_sets.py`, not duplicate a
+     local service list. Any operational driver that calls `build_test_runtime_env(...)` must use
+     the returned PostgreSQL, Kafka, and HTTP endpoints by default; fixed local endpoints are valid
+     only as explicit operator overrides after dynamic runtime allocation.
 140. Active target cost composition imports
      `cost_calculator_service.app.cost_calculation_workflow`, never the compatibility
      `app.consumer` module. Keep cost policy, financial staging, AVCO/FIFO state, corporate-action
