@@ -130,6 +130,10 @@ Current repo truth:
     The internal modules remain separate, valuation remains independently deployable, and the
     Kubernetes source plus CI release renderer use the target digest. Legacy transaction-calculator
     packages are removed locally; registry/cluster proof remains governed release work.
+13. PR and main runtime gates consume one exact-source image set per workflow SHA. The producer
+    records build timings and exports an integrity manifest; each Docker-backed job verifies source
+    SHA, dependency closure, bundle digest, image IDs, and OCI labels before startup. This ephemeral
+    transport does not publish images or replace the signed GHCR release lane.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
 For detailed source-data products and boundary caveats, use

@@ -847,12 +847,16 @@ Most relevant current governance:
     consumers, pipeline readiness, reconciliation, and future supportability code must use
     `portfolio_common.transaction_domain.requires_cashflow_processing(...)` instead of duplicating
     local FX lifecycle skip lists.
-48. Runtime CI gates that bring up the compose-backed stack must prebuild schema/topic bootstrap
-    images with the app service images. Keep `kafka-topic-creator` and `migration-runner` in the
-    shared runtime prebuild subset for Docker smoke, E2E smoke, latency, performance,
-    failure-recovery, and institutional-completion gates. E2E diagnostics should be captured by the
-    pytest fixture through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level
-    `docker compose logs` capture is only fallback evidence after fixture ownership is gone.
+48. Runtime CI gates that bring up the compose-backed stack consume one exact-source image set per
+    workflow SHA. The existing `Validate Docker Build` job is the sole producer after coverage; it
+    builds the ordered PR or main service union, coalesces services that use the same Dockerfile,
+    exports one portable bundle, and publishes build timings plus a deterministic integrity
+    manifest. Every Docker-backed consumer must download and run `runtime_image_set.py load-verify`
+    against `GITHUB_SHA` before startup. Keep `kafka-topic-creator` and `migration-runner` in the
+    runtime image set for Docker smoke, E2E, latency, performance, failure-recovery, and
+    institutional-completion gates. E2E diagnostics should be captured by the pytest fixture
+    through `LOTUS_TESTS_COMPOSE_LOG_FILE` before compose teardown; workflow-level `docker compose
+    logs` capture is only fallback evidence after fixture ownership is gone.
     Service Dockerfiles must keep the governed image provenance block: OCI labels and matching
     runtime environment values for Git commit SHA, Git branch, build timestamp, repo URL, image
     version, image digest, and CI pipeline/run ID. `configure_standard_http_app` registers
@@ -860,11 +864,13 @@ Most relevant current governance:
     OCI label map used for release-manifest parity checks. `/health/live` and `/health/ready`
     expose a bounded runtime block with the same build metadata, service app version, environment,
     runtime profile, started-at time, and uptime for safe incident diagnostics.
-    `scripts/release/prebuild_ci_images.py` supplies build args in CI, `scripts/release/write_build_provenance.py`
-    records the same metadata in build evidence, `.github/workflows/image-release.yml` is the only
-    image-push path, and `scripts/release/write_image_release_manifest.py` records digest, OCI label
-    parity, SBOM, scan, signing, provenance-attestation, digest-deploy, and same-image-promotion
-    evidence across `dev`, `uat`, and `prod`. `make image-provenance-guard` blocks drift,
+    `scripts/release/prebuild_ci_images.py` supplies build args and timing evidence in CI,
+    `scripts/release/runtime_image_set.py` owns ephemeral cross-job transport and exact-source
+    verification, and `scripts/release/write_build_provenance.py` records matching build evidence.
+    `.github/workflows/image-release.yml` remains the only image-push path, and
+    `scripts/release/write_image_release_manifest.py` records digest, OCI label parity, SBOM, scan,
+    signing, provenance-attestation, digest-deploy, and same-image-promotion evidence across `dev`,
+    `uat`, and `prod`. `make image-provenance-guard` blocks drift,
     including secret-like Dockerfile/workflow build ARG or ENV additions. Local builds may report
     `LOTUS_IMAGE_DIGEST=unknown` until a release lane or deploy manifest supplies the resolved
     digest.
