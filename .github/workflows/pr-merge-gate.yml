@@ -250,9 +250,6 @@ jobs:
           HOST_DATABASE_URL: postgresql://user:password@localhost:57432/portfolio_db
           LOTUS_TESTS_COMPOSE_LOG_FILE: output/e2e-smoke/e2e-smoke-logs.txt
         run: make test-e2e-smoke
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > e2e-smoke-logs.txt
       - name: Upload E2E smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v7
@@ -260,7 +257,6 @@ jobs:
           name: pr-merge-gate-e2e-smoke-artifacts
           path: |
             output/e2e-smoke/*
-            e2e-smoke-logs.txt
           if-no-files-found: warn
           retention-days: 14
 
@@ -338,9 +334,6 @@ jobs:
         run: make install-ci
       - name: Run lotus-core app validation gate
         run: make lotus-core-validate
-      - name: Capture docker compose logs on validation gate failure
-        if: failure()
-        run: docker compose logs > lotus-core-validation-logs.txt || true
       - name: Upload lotus-core validation evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -349,7 +342,7 @@ jobs:
           path: |
             output/lotus-core-validation/*.json
             output/lotus-core-validation/*.md
-            lotus-core-validation-logs.txt
+            output/task-runs/diagnostics/*.log
           if-no-files-found: warn
           retention-days: 14
 
