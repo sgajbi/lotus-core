@@ -252,3 +252,17 @@ def test_create_runtime_image_set_rejects_stale_oci_source_label(
             generated_at_utc="2026-07-13T00:00:00Z",
             runner=runner,
         )
+
+
+def test_load_and_verify_runtime_image_set_rejects_non_object_manifest(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "runtime-images.json"
+    bundle_path = tmp_path / "runtime-images.tar"
+    manifest_path.write_text("[]\n", encoding="utf-8")
+    bundle_path.write_bytes(b"bundle")
+
+    with pytest.raises(RuntimeImageSetError, match="manifest must be a JSON object"):
+        load_and_verify_runtime_image_set(
+            manifest_path=manifest_path,
+            bundle_path=bundle_path,
+            expected_commit_sha=SOURCE_SHA,
+        )
