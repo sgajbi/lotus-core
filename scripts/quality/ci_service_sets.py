@@ -87,6 +87,21 @@ E2E_RECOVERY_HEALTH_PORT_ENV: dict[str, str] = {
     "portfolio_aggregation_service": "LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT",
 }
 
+PR_RUNTIME_IMAGE_SET_SERVICES: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        (
+            *DOCKER_SMOKE_SERVICES,
+            *E2E_SMOKE_SERVICES,
+            *LATENCY_GATE_SERVICES,
+            *PERFORMANCE_GATE_SERVICES,
+        )
+    )
+)
+
+MAIN_RUNTIME_IMAGE_SET_SERVICES: tuple[str, ...] = tuple(
+    dict.fromkeys((*PR_RUNTIME_IMAGE_SET_SERVICES, *INSTITUTIONAL_COMPLETION_GATE_SERVICES))
+)
+
 PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "query-only": QUERY_BUILD_SERVICES,
     "docker-smoke": DOCKER_SMOKE_SERVICES,
@@ -95,4 +110,6 @@ PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "performance-gate": PERFORMANCE_GATE_SERVICES,
     "failure-recovery-gate": FAILURE_RECOVERY_GATE_SERVICES,
     "institutional-completion-gate": INSTITUTIONAL_COMPLETION_GATE_SERVICES,
+    "pr-runtime-image-set": PR_RUNTIME_IMAGE_SET_SERVICES,
+    "main-runtime-image-set": MAIN_RUNTIME_IMAGE_SET_SERVICES,
 }

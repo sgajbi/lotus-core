@@ -6,7 +6,9 @@ from scripts.quality.ci_service_sets import (
     FAILURE_RECOVERY_GATE_SERVICES,
     INSTITUTIONAL_COMPLETION_GATE_SERVICES,
     LATENCY_GATE_SERVICES,
+    MAIN_RUNTIME_IMAGE_SET_SERVICES,
     PERFORMANCE_GATE_SERVICES,
+    PR_RUNTIME_IMAGE_SET_SERVICES,
     RUNTIME_BOOTSTRAP_SERVICES,
 )
 from tests.e2e.test_failure_scenarios import _core_service_health_urls
@@ -70,3 +72,26 @@ def test_e2e_recovery_health_checks_use_combined_transaction_runtime(monkeypatch
 
     assert "http://localhost:8190/health/ready" in health_urls
     assert len(health_urls) == len(E2E_RECOVERY_SERVICES)
+
+
+def test_pr_runtime_image_set_is_the_ordered_union_of_required_pr_gates() -> None:
+    expected = tuple(
+        dict.fromkeys(
+            (
+                *DOCKER_SMOKE_SERVICES,
+                *E2E_SMOKE_SERVICES,
+                *LATENCY_GATE_SERVICES,
+                *PERFORMANCE_GATE_SERVICES,
+            )
+        )
+    )
+
+    assert PR_RUNTIME_IMAGE_SET_SERVICES == expected
+    assert len(PR_RUNTIME_IMAGE_SET_SERVICES) == len(set(PR_RUNTIME_IMAGE_SET_SERVICES))
+
+
+def test_main_runtime_image_set_includes_full_certification_services() -> None:
+    assert MAIN_RUNTIME_IMAGE_SET_SERVICES == tuple(
+        dict.fromkeys((*PR_RUNTIME_IMAGE_SET_SERVICES, *INSTITUTIONAL_COMPLETION_GATE_SERVICES))
+    )
+    assert "financial_reconciliation_service" in MAIN_RUNTIME_IMAGE_SET_SERVICES
