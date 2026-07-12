@@ -500,6 +500,7 @@ services:
 
 
 def test_wait_for_migration_runner_success() -> None:
+    calls: list[tuple[list[str], object | None]] = []
     responses = iter(
         [
             SimpleNamespace(returncode=0, stdout="", stderr=""),
@@ -509,13 +510,36 @@ def test_wait_for_migration_runner_success() -> None:
     )
 
     def runner(args, **kwargs):  # noqa: ANN001
+        calls.append((list(args), kwargs.get("env")))
         return next(responses)
+
+    runtime = SimpleNamespace(
+        endpoints=SimpleNamespace(compose_project_name="isolated-migration-proof"),
+        values={"COMPOSE_PROJECT_NAME": "isolated-migration-proof"},
+    )
 
     wait_for_migration_runner(
         "docker-compose.yml",
         timeout_seconds=1,
         poll_seconds=0,
         runner=runner,
+        runtime=runtime,
+    )
+
+    assert calls[1] == (
+        [
+            "docker",
+            "compose",
+            "-p",
+            "isolated-migration-proof",
+            "-f",
+            "docker-compose.yml",
+            "ps",
+            "--status=exited",
+            "-q",
+            "migration-runner",
+        ],
+        runtime.values,
     )
 
 
