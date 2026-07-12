@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import (
@@ -39,9 +39,13 @@ try:
         transaction_processing_counts,
         wait_for_database_count,
     )
-    from scripts.quality.ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+    from scripts.quality.ci_service_sets import (
+        FAILURE_RECOVERY_GATE_SERVICES as _FAILURE_RECOVERY_GATE_SERVICES,
+    )
 except ModuleNotFoundError:  # pragma: no cover - direct script execution
-    from ci_service_sets import FAILURE_RECOVERY_GATE_SERVICES
+    from ci_service_sets import (  # type: ignore[no-redef]
+        FAILURE_RECOVERY_GATE_SERVICES as _FAILURE_RECOVERY_GATE_SERVICES,
+    )
     from transaction_processing_cutover_offsets import KafkaOffsetStore
     from transaction_processing_load_support import (
         TransactionProcessingCounts,
@@ -53,6 +57,27 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution
 
 TRANSACTION_PROCESSING_GROUP = "portfolio_transaction_processing_group"
 TRANSACTION_REPLAY_GROUP = "portfolio_transaction_replay_request_group"
+
+
+class RuntimeConnectionEndpoints(Protocol):
+    """Generated host endpoints required by the failure-recovery driver."""
+
+    host_database_url: str
+    kafka_bootstrap_servers: str
+
+
+def _resolve_runtime_connections(
+    *,
+    requested_host_database_url: str | None,
+    requested_kafka_bootstrap_servers: str | None,
+    endpoints: RuntimeConnectionEndpoints,
+) -> tuple[str, str]:
+    """Prefer explicit operator endpoints and otherwise use the isolated test runtime."""
+
+    return (
+        requested_host_database_url or endpoints.host_database_url,
+        requested_kafka_bootstrap_servers or endpoints.kafka_bootstrap_servers,
+    )
 
 
 class RecoveryMode(StrEnum):
@@ -398,9 +423,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--event-replay-base-url", default=None)
     parser.add_argument(
         "--host-database-url",
-        default="postgresql://user:password@localhost:55432/portfolio_db",
+        default=None,
     )
-    parser.add_argument("--kafka-bootstrap-servers", default="localhost:9092")
+    parser.add_argument("--kafka-bootstrap-servers", default=None)
     parser.add_argument("--transaction-topic", default=KAFKA_TRANSACTIONS_PERSISTED_TOPIC)
     parser.add_argument("--consumer-group", default=TRANSACTION_PROCESSING_GROUP)
     parser.add_argument(
@@ -458,9 +483,14 @@ def main() -> int:
     ingestion_base_url = args.ingestion_base_url or endpoints.e2e_ingestion_url
     query_base_url = args.query_base_url or endpoints.e2e_query_url
     event_replay_base_url = args.event_replay_base_url or endpoints.e2e_event_replay_url
-    engine = create_engine(args.host_database_url, pool_pre_ping=True)
+    host_database_url, kafka_bootstrap_servers = _resolve_runtime_connections(
+        requested_host_database_url=args.host_database_url,
+        requested_kafka_bootstrap_servers=args.kafka_bootstrap_servers,
+        endpoints=endpoints,
+    )
+    engine = create_engine(host_database_url, pool_pre_ping=True)
     offset_store = KafkaOffsetStore(
-        bootstrap_servers=args.kafka_bootstrap_servers,
+        bootstrap_servers=kafka_bootstrap_servers,
         timeout_seconds=10,
     )
 
@@ -469,7 +499,7 @@ def main() -> int:
             compose_up(
                 args.compose_file,
                 build=args.build,
-                services=list(FAILURE_RECOVERY_GATE_SERVICES),
+                services=list(_FAILURE_RECOVERY_GATE_SERVICES),
             )
             wait_for_migration_runner(
                 args.compose_file,
