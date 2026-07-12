@@ -36,10 +36,13 @@ reservation handoff.
   successfully claimed the current generation.
 - Added bounded exhausted-retry diagnostics containing failure class, attempt count, reallocation
   count, and Compose project identity.
+- Made the reservation the source authority for port generation and reallocation evidence.
+- Split local image build from startup so builds run while reservations remain held and startup
+  never widens the bind-race interval with `up --build`.
 
 ## Measurement And Validation
 
-- `56` focused runtime-environment, Docker-stack, failure-recovery, test-manifest, and live
+- `59` focused runtime-environment, Docker-stack, failure-recovery, test-manifest, and live
   isolation tests passed.
 - Eight concurrently prepared runtimes held globally disjoint active port sets.
 - Controlled bind-conflict tests proved one full reallocation and successful retry, plus bounded
@@ -60,6 +63,8 @@ support and all callers moved in the same commit.
 
 Issue #730 remains open for scenario shards, change-impact selection, exact-SHA selective dispatch,
 diagnostic completeness, field-level polling evidence, and timing/flake/rerun trend reporting.
+The fixed-port latency, performance-load, institutional-completion, and endpoint-smoke drivers also
+remain direct Compose callers and require a separate CLI-contract migration to prepared runtimes.
 
 ## Durable Guidance Decision
 

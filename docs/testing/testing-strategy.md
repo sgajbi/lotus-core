@@ -170,6 +170,9 @@ port generation, refreshes exported database, Kafka, and HTTP connection metadat
 within the configured bound. Same-process concurrent projects use separate subprocess environments;
 they do not race by mutating process-global Compose identity.
 
+Local image builds run while reservations remain held. Compose startup releases the ports only
+after the separate build succeeds and never combines the startup attempt with `--build`.
+
 Explicit port overrides are operator intent and are never changed automatically. Suite launchers
 must let the pytest child prepare and own reservations; a parent process must not preallocate ports
 for child-owned Compose. Tests must cover overlapping runtime lifetimes, concurrent preparation,
