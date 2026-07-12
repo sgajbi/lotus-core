@@ -161,6 +161,20 @@ def test_main_dependency_health_lane_forces_clean_install_and_retains_evidence()
     assert "clean-install-report.json" in makefile_text
 
 
+def test_local_main_parity_uses_clean_dependency_health_lane() -> None:
+    makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
+    target_dependencies = {
+        target: dependencies.split()
+        for line in makefile_lines
+        if ":" in line and not line.startswith(("\t", "#", "."))
+        for target, dependencies in (line.split(":", maxsplit=1),)
+    }
+
+    assert target_dependencies["ci"][0] == "verify-dependencies"
+    assert target_dependencies["ci-main"][0] == "verify-dependencies-clean"
+    assert "ci" not in target_dependencies["ci-main"]
+
+
 def test_workflows_opt_into_node24_action_runtime() -> None:
     missing_opt_in = [
         str(workflow_path)
