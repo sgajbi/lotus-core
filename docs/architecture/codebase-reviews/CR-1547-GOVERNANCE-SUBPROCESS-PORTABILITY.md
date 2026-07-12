@@ -28,7 +28,8 @@ No runtime behavior, API, database migration, or deployment contract changed.
 
 - Migration and architecture-script unit cohort: `28 passed`.
 - Repository-native migration smoke: passed with one Alembic head.
-- Focused Ruff lint: passed; formatting rerun pending after the stale test correction.
+- Focused Ruff lint and formatting: passed.
+- Zero-warning unit gate: `4,238 passed`, `10 deselected`, zero warnings.
 
 ## Documentation Decision
 

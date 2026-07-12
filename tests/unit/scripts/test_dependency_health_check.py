@@ -50,3 +50,11 @@ def test_pip_audit_command_scopes_to_site_packages_path_without_ignores() -> Non
         "--path",
         str(site_packages),
     ]
+
+
+def test_tooling_lock_pins_secure_setuptools_bootstrap() -> None:
+    tooling_requirements = dependency_health_check.TOOLING_LOCK_FILE.read_text(
+        encoding="utf-8"
+    ).splitlines()
+
+    assert "setuptools==83.0.0" in tooling_requirements
