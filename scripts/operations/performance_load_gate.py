@@ -189,6 +189,31 @@ def _trigger_replay_storm(
     return submitted
 
 
+def _repair_replay_completion_count(*, transaction_processing_base_url: str) -> int:
+    """Return completed canonical repairs, which finish as processed transactions."""
+    return _transaction_processing_operation_count(
+        transaction_processing_base_url=transaction_processing_base_url,
+        stage="transaction",
+        outcome="processed",
+    )
+
+
+def _wait_for_repair_replay_completion(
+    *,
+    transaction_processing_base_url: str,
+    expected_minimum: int,
+    timeout_seconds: int,
+) -> float | None:
+    """Wait until canonical repair deliveries complete the unified processing flow."""
+    return _wait_for_operation_count(
+        transaction_processing_base_url=transaction_processing_base_url,
+        stage="transaction",
+        outcome="processed",
+        expected_minimum=expected_minimum,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[str, Any]:
     headers = {"X-Lotus-Ops-Token": ops_token}
     summary = requests.get(
@@ -596,10 +621,8 @@ def main() -> int:
         raise TimeoutError("Replay source transactions did not complete before replay")
     replay_bursts = 4 if args.profile_tier == "fast" else 12
     replay_burst_size = 15 if args.profile_tier == "fast" else 30
-    replay_duplicate_baseline = _transaction_processing_operation_count(
+    replay_completion_baseline = _repair_replay_completion_count(
         transaction_processing_base_url=args.transaction_processing_base_url,
-        stage="transaction",
-        outcome="duplicate",
     )
     replay_request_count = _trigger_replay_storm(
         ingestion_base_url=args.ingestion_base_url,
@@ -607,11 +630,9 @@ def main() -> int:
         bursts=replay_bursts,
         burst_size=replay_burst_size,
     )
-    replay_drain_seconds = _wait_for_operation_count(
+    replay_drain_seconds = _wait_for_repair_replay_completion(
         transaction_processing_base_url=args.transaction_processing_base_url,
-        stage="transaction",
-        outcome="duplicate",
-        expected_minimum=replay_duplicate_baseline + replay_request_count,
+        expected_minimum=replay_completion_baseline + replay_request_count,
         timeout_seconds=args.drain_timeout_seconds,
     )
     replay_ended = time.time()

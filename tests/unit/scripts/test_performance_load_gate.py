@@ -1,6 +1,6 @@
 import json
 
-from scripts.operations import transaction_processing_load_support
+from scripts.operations import performance_load_gate, transaction_processing_load_support
 from scripts.operations.performance_load_gate import (
     _build_transaction_batch,
     _evaluate_profile,
@@ -38,6 +38,51 @@ def test_transaction_processing_operation_count_reads_bounded_duplicate_metric(
 
     assert count == 60
     assert requested == [("http://localhost:8090/metrics", 10)]
+
+
+def test_repair_replay_completion_uses_processed_transaction_outcome(monkeypatch) -> None:
+    counted: list[tuple[str, str, str]] = []
+    waited: list[tuple[str, str, str, int, int]] = []
+
+    def count(*, transaction_processing_base_url: str, stage: str, outcome: str) -> int:
+        counted.append((transaction_processing_base_url, stage, outcome))
+        return 41
+
+    def wait(
+        *,
+        transaction_processing_base_url: str,
+        stage: str,
+        outcome: str,
+        expected_minimum: int,
+        timeout_seconds: int,
+    ) -> float:
+        waited.append(
+            (
+                transaction_processing_base_url,
+                stage,
+                outcome,
+                expected_minimum,
+                timeout_seconds,
+            )
+        )
+        return 2.5
+
+    monkeypatch.setattr(performance_load_gate, "_transaction_processing_operation_count", count)
+    monkeypatch.setattr(performance_load_gate, "_wait_for_operation_count", wait)
+
+    baseline = performance_load_gate._repair_replay_completion_count(
+        transaction_processing_base_url="http://localhost:8090"
+    )
+    drain_seconds = performance_load_gate._wait_for_repair_replay_completion(
+        transaction_processing_base_url="http://localhost:8090",
+        expected_minimum=45,
+        timeout_seconds=180,
+    )
+
+    assert baseline == 41
+    assert drain_seconds == 2.5
+    assert counted == [("http://localhost:8090", "transaction", "processed")]
+    assert waited == [("http://localhost:8090", "transaction", "processed", 45, 180)]
 
 
 def test_transaction_batch_uses_the_seeded_portfolio_and_instrument_namespace() -> None:

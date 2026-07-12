@@ -1886,11 +1886,13 @@ Most relevant current governance:
      duplicate result without another compatibility processed fact; materially changed content for
      the same portfolio/transaction/epoch fails terminally as `transaction_semantic_conflict`.
      Fingerprint source transaction intent, not processor-owned cost/P&L outputs or deterministic
-     default lineage and policy enrichment added before persisted replay. Replay load gates must
-     measure completed duplicate outcomes through
+     default lineage and policy enrichment added before persisted replay. Ordinary duplicate-
+     delivery load gates must measure completed duplicate outcomes through
      `lotus_core_transaction_processing_operations_total{stage="transaction",outcome="duplicate"}`;
      they must not wait for new `processed_events` rows because successful semantic duplicates
-     intentionally preserve the existing idempotency record.
+     intentionally preserve the existing idempotency record. Canonical repair replay is different:
+     it intentionally completes the unified financial flow and its drain probe must wait for the
+     incremental `stage="transaction",outcome="processed"` count.
      Normalize `<transaction_id>-CASHLEG` only when `cash_entry_mode=AUTO_GENERATE`; caller-supplied
      external cash identifiers and generated-shaped identifiers in upstream-provided mode remain
      material conflict inputs.

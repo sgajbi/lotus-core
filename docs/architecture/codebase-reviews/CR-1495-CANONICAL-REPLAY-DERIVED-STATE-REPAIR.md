@@ -34,6 +34,9 @@ repair derived state even though replay publication succeeded.
 - Cashflow create and repair repositories return an immutable `StoredCashflow` record. The new
   path does not expose SQLAlchemy rows, and the prior `create_cashflow` transitional output-shape
   exception is removed.
+- Runtime load proof treats canonical replay as completed repair work: its drain probe waits for
+  incremental `transaction/processed` outcomes. Ordinary duplicate-delivery proof continues to
+  use `transaction/duplicate`; the two operational intents are not conflated.
 
 The Kafka topic ACL and the governed reprocessing ingress remain the authorization boundary for
 the internal repair marker. The marker is not accepted from an API DTO or transaction payload.
@@ -56,6 +59,8 @@ semantic transaction already exists.
 - Transaction replay, event runtime, repository output-shape, strict architecture, domain,
   application, port, adapter, repository-transaction, image-provenance, and documentation catalog
   guards passed.
+- The performance-gate regression cohort passed `7` tests and now asserts the repair-replay
+  completion metric explicitly. Full fast-tier runtime evidence is pending the corrected PR gate.
 
 ## Durable Guidance Decision
 
