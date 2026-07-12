@@ -24,6 +24,7 @@ def test_prepare_test_runtime_assigns_dynamic_ports_and_endpoints() -> None:
         scope="tx-fx",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
     runtime_env = runtime.values
     endpoints = runtime.endpoints
@@ -56,6 +57,7 @@ def test_prepare_test_runtime_preserves_explicit_overrides_during_reallocation()
             "LOTUS_QUERY_HOST_PORT": "18401",
         },
         preserve_existing=True,
+        inherit_process_environment=False,
     )
     runtime_env = runtime.values
     endpoints = runtime.endpoints
@@ -79,12 +81,14 @@ def test_prepared_runtimes_hold_disjoint_ports_until_release() -> None:
         scope="concurrent-a",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
     second = prepare_test_runtime(
         profile="integration",
         scope="concurrent-b",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
 
     first_ports = _reserved_ports(first)
@@ -110,6 +114,7 @@ def test_concurrent_runtime_preparation_holds_globally_disjoint_ports() -> None:
             scope=f"concurrent-{index}",
             env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
             preserve_existing=False,
+            inherit_process_environment=False,
         )
 
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -130,6 +135,7 @@ def test_port_reallocation_updates_exported_connections_atomically() -> None:
         scope="bind-retry",
         env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
         preserve_existing=False,
+        inherit_process_environment=False,
     )
     runtime.export_to(exported)
     original_ports = _reserved_ports(runtime)
@@ -143,6 +149,24 @@ def test_port_reallocation_updates_exported_connections_atomically() -> None:
         assert exported["HOST_DATABASE_URL"] != original_database_url
         assert exported["HOST_DATABASE_URL"] == runtime.endpoints.host_database_url
         assert exported["E2E_QUERY_URL"] == runtime.endpoints.e2e_query_url
+    finally:
+        runtime.port_reservation.release()
+
+
+def test_partial_overrides_retain_process_environment_for_subprocesses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOTUS_TEST_PROCESS_CONTEXT_SENTINEL", "available")
+
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="subprocess-context",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+    )
+
+    try:
+        assert runtime.values["LOTUS_TEST_PROCESS_CONTEXT_SENTINEL"] == "available"
     finally:
         runtime.port_reservation.release()
 

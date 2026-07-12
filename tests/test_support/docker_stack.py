@@ -18,7 +18,7 @@ import yaml
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
 
-from tests.test_support.runtime_env import RuntimePortReservation
+from tests.test_support.runtime_env import PreparedTestRuntime
 
 
 class DockerStackError(RuntimeError):
@@ -104,11 +104,15 @@ _RETRYABLE_PULL_MARKERS = (
 )
 
 
-def _compose_base_args(compose_file: str) -> list[str]:
-    project_name = os.getenv("COMPOSE_PROJECT_NAME")
+def _compose_base_args(
+    compose_file: str,
+    *,
+    project_name: str | None = None,
+) -> list[str]:
+    selected_project = project_name or os.getenv("COMPOSE_PROJECT_NAME")
     args = ["docker", "compose"]
-    if project_name:
-        args.extend(["-p", project_name])
+    if selected_project:
+        args.extend(["-p", selected_project])
     args.extend(["-f", compose_file])
     return args
 
@@ -304,22 +308,26 @@ def compose_up(
     retries: int = 2,
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-    port_reservation: RuntimePortReservation | None = None,
+    runtime: PreparedTestRuntime | None = None,
 ) -> None:
+    project_name = runtime.endpoints.compose_project_name if runtime is not None else None
+    compose_environment = runtime.values if runtime is not None else None
+    compose_args = _compose_base_args(compose_file, project_name=project_name)
     ensure_docker_engine_available(runner)
     ensure_required_images_available(compose_file, runner)
-    _remove_stale_project_containers(compose_file, runner)
+    _remove_stale_project_containers(compose_file, runner, project_name=project_name)
     try:
         runner(
-            [*_compose_base_args(compose_file), "down", "--remove-orphans"],
+            [*compose_args, "down", "--remove-orphans"],
             check=False,
             capture_output=True,
+            env=compose_environment,
         )
     except subprocess.CalledProcessError:
         # Best-effort cleanup only. Continue with bring-up retries.
         pass
 
-    args = [*_compose_base_args(compose_file), "up"]
+    args = [*compose_args, "up"]
     if build:
         args.append("--build")
     args.append("-d")
@@ -333,10 +341,15 @@ def compose_up(
     port_reallocations = 0
     for attempt in range(1, attempts + 1):
         attempts_used = attempt
-        if port_reservation is not None:
-            port_reservation.release()
+        if runtime is not None:
+            runtime.port_reservation.release()
         try:
-            runner(args, check=True, capture_output=True)
+            runner(
+                args,
+                check=True,
+                capture_output=True,
+                env=compose_environment,
+            )
             return
         except subprocess.CalledProcessError as exc:
             last_error = exc
@@ -346,26 +359,27 @@ def compose_up(
             can_retry = attempt < attempts and (
                 removed_conflicts
                 or _is_retryable_compose_up_error(stderr)
-                or (last_bind_conflict and port_reservation is not None)
+                or (last_bind_conflict and runtime is not None)
             )
             if can_retry:
                 try:
                     runner(
-                        [*_compose_base_args(compose_file), "down", "--remove-orphans"],
+                        [*compose_args, "down", "--remove-orphans"],
                         check=False,
                         capture_output=True,
+                        env=compose_environment,
                     )
                 except subprocess.CalledProcessError:
                     # Retry path should not fail due to cleanup issues.
                     pass
-                if last_bind_conflict and port_reservation is not None:
+                if last_bind_conflict and runtime is not None:
                     try:
-                        port_reservation.reallocate()
+                        runtime.port_reservation.reallocate()
                     except OSError as reservation_error:
                         raise DockerStackError(
                             "docker compose host-port reallocation failed "
                             f"(attempt={attempt}, compose_project="
-                            f"{os.getenv('COMPOSE_PROJECT_NAME', 'unknown')})"
+                            f"{project_name or 'unknown'})"
                         ) from reservation_error
                     port_reallocations += 1
                     LOGGER.warning(
@@ -373,10 +387,7 @@ def compose_up(
                         extra={
                             "attempt": attempt,
                             "port_reallocations": port_reallocations,
-                            "compose_project": os.getenv(
-                                "COMPOSE_PROJECT_NAME",
-                                "unknown",
-                            ),
+                            "compose_project": project_name or "unknown",
                         },
                     )
                 if retry_wait_seconds > 0:
@@ -389,7 +400,7 @@ def compose_up(
         message = (
             f"{message} (failure_class=host_port_bind_conflict, "
             f"attempts={attempts_used}, port_reallocations={port_reallocations}, "
-            f"compose_project={os.getenv('COMPOSE_PROJECT_NAME', 'unknown')})"
+            f"compose_project={project_name or 'unknown'})"
         )
     if last_error:
         details = _process_error_text(last_error).strip()
@@ -509,25 +520,47 @@ def wait_for_kafka_metadata(
     )
 
 
-def compose_down(compose_file: str) -> None:
+def compose_down(
+    compose_file: str,
+    *,
+    runtime: PreparedTestRuntime | None = None,
+) -> None:
     ensure_docker_engine_available()
+    project_name = runtime.endpoints.compose_project_name if runtime is not None else None
     subprocess.run(
-        [*_compose_base_args(compose_file), "down", "-v", "--remove-orphans"],
+        [
+            *_compose_base_args(compose_file, project_name=project_name),
+            "down",
+            "-v",
+            "--remove-orphans",
+        ],
         check=False,
         capture_output=True,
+        env=runtime.values if runtime is not None else None,
     )
 
 
-def capture_compose_logs(compose_file: str, output_path: str | Path) -> None:
+def capture_compose_logs(
+    compose_file: str,
+    output_path: str | Path,
+    *,
+    runtime: PreparedTestRuntime | None = None,
+) -> None:
     """Capture logs for the active compose project before teardown."""
     ensure_docker_engine_available()
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
+    project_name = runtime.endpoints.compose_project_name if runtime is not None else None
     result = subprocess.run(
-        [*_compose_base_args(compose_file), "logs", "--no-color"],
+        [
+            *_compose_base_args(compose_file, project_name=project_name),
+            "logs",
+            "--no-color",
+        ],
         check=False,
         capture_output=True,
         text=True,
+        env=runtime.values if runtime is not None else None,
     )
     log_text = result.stdout
     if result.stderr:
@@ -550,13 +583,21 @@ def _remove_conflicting_named_containers(
 def _remove_stale_project_containers(
     compose_file: str,
     runner: Callable[..., subprocess.CompletedProcess],
+    *,
+    project_name: str | None = None,
 ) -> None:
-    project_name = os.getenv("COMPOSE_PROJECT_NAME")
-    if not project_name:
-        project_name = Path(compose_file).resolve().parent.name
+    selected_project = project_name or os.getenv("COMPOSE_PROJECT_NAME")
+    if not selected_project:
+        selected_project = Path(compose_file).resolve().parent.name
     try:
         ps = runner(
-            ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project_name}"],
+            [
+                "docker",
+                "ps",
+                "-aq",
+                "--filter",
+                f"label=com.docker.compose.project={selected_project}",
+            ],
             check=False,
             capture_output=True,
             text=True,
