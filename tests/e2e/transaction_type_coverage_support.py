@@ -81,7 +81,10 @@ def build_transaction_payloads(
         gross = Decimal("100")
         trade_fee = Decimal("0")
 
-        if tx_type in {"DIVIDEND", "INTEREST"}:
+        if tx_type == "CASH_CONSIDERATION":
+            quantity = Decimal("0")
+            price = Decimal("0")
+        elif tx_type in {"DIVIDEND", "INTEREST"}:
             quantity = Decimal("0")
             price = Decimal("0")
         elif tx_type == "ADJUSTMENT":
@@ -108,6 +111,41 @@ def build_transaction_payloads(
             "linked_transaction_group_id": f"LTG-{portfolio_id}",
             "trade_fee": str(trade_fee),
         }
+        if tx_type in {"FX_FORWARD", "FX_SPOT", "FX_SWAP"}:
+            event.update(
+                {
+                    "settlement_date": iso_z(ts),
+                    "component_type": (
+                        "FX_CASH_SETTLEMENT_BUY" if tx_type == "FX_SPOT" else "FX_CONTRACT_OPEN"
+                    ),
+                    "component_id": f"{tx_id}-COMPONENT",
+                    "calculation_policy_id": "FX_DEFAULT_POLICY",
+                    "calculation_policy_version": "1.0.0",
+                    "quantity": "0",
+                    "price": "0",
+                    "pair_base_currency": "EUR",
+                    "pair_quote_currency": "USD",
+                    "fx_rate_quote_convention": "QUOTE_PER_BASE",
+                    "buy_currency": "USD",
+                    "sell_currency": "EUR",
+                    "buy_amount": "110",
+                    "sell_amount": "100",
+                    "contract_rate": "1.10",
+                    "spot_exposure_model": "NONE",
+                    "fx_realized_pnl_mode": "NONE",
+                }
+            )
+            if tx_type == "FX_SPOT":
+                event["fx_cash_leg_role"] = "BUY"
+                event["linked_fx_cash_leg_id"] = f"{tx_id}-SELL"
+                event["settlement_status"] = "SETTLED"
+            else:
+                event["fx_contract_id"] = f"{tx_id}-CONTRACT"
+                event["fx_contract_open_transaction_id"] = tx_id
+            if tx_type == "FX_SWAP":
+                event["swap_event_id"] = f"{tx_id}-SWAP"
+                event["near_leg_group_id"] = f"{tx_id}-NEAR"
+                event["far_leg_group_id"] = f"{tx_id}-FAR"
         if tx_type == "ADJUSTMENT":
             event["movement_direction"] = "INFLOW"
             event["adjustment_reason"] = "TEST_COVERAGE"
@@ -121,6 +159,11 @@ def build_transaction_payloads(
             link_ref = f"{portfolio_id}_ADJ_LINK_00"
             event["linked_cash_transaction_id"] = link_ref
             event["external_cash_transaction_id"] = link_ref
+            event["allocated_cost_basis_local"] = "50"
+            event["allocated_cost_basis_base"] = "50"
+        elif tx_type == "CASH_IN_LIEU":
+            event["allocated_cost_basis_local"] = "101.50"
+            event["allocated_cost_basis_base"] = "101.50"
 
         payloads.append(event)
 
