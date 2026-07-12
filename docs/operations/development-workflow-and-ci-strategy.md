@@ -49,6 +49,26 @@ Run on schedule, manual dispatch, and mainline validation:
 
 Goal: production-readiness evidence without slowing every PR loop.
 
+## Exact-Source Runtime Image Sets
+
+PR Merge Gate and Main Releasability each build one governed runtime image set after coverage
+passes. The existing `Validate Docker Build` job is the sole producer for that workflow SHA:
+
+1. `prebuild_ci_images.py` builds the ordered service union once, coalesces identical Dockerfiles,
+   and writes per-service timing evidence.
+2. `runtime_image_set.py create` exports one portable Docker bundle and a manifest containing the
+   source commit, branch, repository, CI run, generated-at time, service image IDs, Dockerfile
+   hashes, compose hash, dependency-lock hash, dependency-closure hash, bundle digest, and content
+   hash.
+3. Docker-backed jobs download the same one-day transport artifact and run `load-verify` against
+   `GITHUB_SHA` before installing or starting the stack.
+4. Verification fails before test execution on source-SHA, bundle, manifest, dependency, image-ID,
+   or OCI-label mismatch.
+
+The portable bundle is ephemeral CI transport and is never a release or environment-promotion
+image. CI-only release publication, vulnerability scanning, signing, attestation, and digest-based
+deployment remain owned by `.github/workflows/image-release.yml`.
+
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.
 2. After merge:

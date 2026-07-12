@@ -145,10 +145,15 @@ connection failures, and rate limits are retryable; unknown, authentication, aut
 missing-manifest errors fail immediately. Final errors expose image, failure class, attempt count,
 elapsed time, and policy budget without raw registry/authentication output.
 
-GitHub-hosted matrix jobs do not share a Docker daemon, so a workflow-level pre-pull cannot be
-truthfully reused across cells. Existing BuildKit prebuild caches remain responsible for repo-built
-images; the shared test helper owns bounded external-image acquisition. Revisit cross-job image
-distribution only if a governed registry mirror or runner-level immutable image cache is introduced.
+GitHub-hosted jobs do not share a Docker daemon. Repo-built application images are therefore built
+once by the workflow's `Validate Docker Build` producer, exported as one portable artifact, and
+loaded by each Docker-backed consumer. Every consumer verifies the bundle digest, manifest content
+hash, source SHA, compose and dependency-lock hashes, dependency-closure hash, image IDs, and OCI
+source labels before stack startup. The producer also emits per-service and total build timings.
+
+External vendor images are not copied into that bundle. The shared test helper still owns bounded
+inspection and acquisition for immutable Postgres, Kafka, Prometheus, and other external images.
+This separation avoids treating a CI transport artifact as a registry mirror or release image.
 
 ## Quality Gates
 
