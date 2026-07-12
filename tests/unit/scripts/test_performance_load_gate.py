@@ -1,4 +1,9 @@
 import json
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
 
 from scripts.operations import performance_load_gate, transaction_processing_load_support
 from scripts.operations.performance_load_gate import (
@@ -280,3 +285,62 @@ def test_write_report_persists_profile_tier(tmp_path) -> None:
     assert "- Profile tier: full" in markdown
     assert "Throughput boundary: ingestion start through combined cost" in markdown
     assert "Transaction drain sec" in markdown
+
+
+def test_main_reenters_under_managed_dynamic_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    for environment_key in (
+        "E2E_INGESTION_URL",
+        "E2E_QUERY_URL",
+        "E2E_EVENT_REPLAY_URL",
+        "E2E_TRANSACTION_PROCESSING_URL",
+        "HOST_DATABASE_URL",
+    ):
+        monkeypatch.delenv(environment_key, raising=False)
+    args = SimpleNamespace(
+        repo_root=str(tmp_path),
+        compose_file="docker-compose.yml",
+        ingestion_base_url=None,
+        query_base_url=None,
+        event_replay_base_url=None,
+        transaction_processing_base_url=None,
+        host_database_url=None,
+        skip_compose=False,
+        build=False,
+        compose_log_path="output/task-runs/diagnostics/performance-load.log",
+        keep_compose=False,
+    )
+    managed_run = MagicMock()
+    managed_run.__enter__.return_value = managed_run
+    managed_run.__exit__.return_value = False
+    managed_run.runtime.endpoints = SimpleNamespace(
+        e2e_ingestion_url="http://localhost:16000",
+        e2e_query_url="http://localhost:16001",
+        e2e_event_replay_url="http://localhost:16009",
+        e2e_transaction_processing_url="http://localhost:16090",
+        host_database_url="postgresql://user:password@localhost:16432/portfolio_db",
+    )
+    prepared: list[dict[str, object]] = []
+    reentered: list[tuple[object, object]] = []
+    original_main = performance_load_gate.main
+
+    monkeypatch.setattr(
+        performance_load_gate,
+        "prepare_managed_compose_run",
+        lambda **kwargs: prepared.append(kwargs) or managed_run,
+    )
+    monkeypatch.setattr(
+        performance_load_gate,
+        "main",
+        lambda args, managed: reentered.append((args, managed)) or 0,
+    )
+
+    assert original_main(args, None) == 0
+    assert prepared[0]["scope"] == "performance-load-gate"
+    assert prepared[0]["services"] == tuple(performance_load_gate.PERFORMANCE_GATE_SERVICES)
+    assert args.ingestion_base_url == "http://localhost:16000"
+    assert args.transaction_processing_base_url == "http://localhost:16090"
+    assert args.host_database_url.endswith("localhost:16432/portfolio_db")
+    assert reentered == [(args, managed_run)]
