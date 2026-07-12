@@ -54,6 +54,7 @@ def _assert_runtime_image_producer(
     producer = jobs["docker-build"]  # type: ignore[index]
     commands = _run_commands(producer)
     assert f"prebuild_ci_images.py --cache-dir .buildx-cache --group {group}" in commands
+    assert "--metrics-output output/runtime-image-set/build-metrics.json" in commands
     assert "runtime_image_set.py create" in commands
     assert '--source-commit-sha "${GITHUB_SHA}"' in commands
     upload = next(

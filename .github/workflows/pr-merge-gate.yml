@@ -182,7 +182,8 @@ jobs:
         run: |
           build_timestamp="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
           export LOTUS_BUILD_TIMESTAMP="${build_timestamp}"
-          python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group pr-runtime-image-set
+          python scripts/release/prebuild_ci_images.py --cache-dir .buildx-cache --group pr-runtime-image-set \
+            --metrics-output output/runtime-image-set/build-metrics.json
           python scripts/release/runtime_image_set.py create \
             --group pr-runtime-image-set \
             --manifest output/runtime-image-set/manifest.json \
