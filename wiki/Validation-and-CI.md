@@ -25,10 +25,11 @@ smallest evidence command for a change, then cite generated artifacts from the r
 3. `Main Releasability Gate`
 
 Feature and PR lanes may restore `.cache/dependency-health` using a key derived from Python,
-platform, installer, dependency/packaging manifests, locks, and the cache implementation. Main and
-scheduled releasability always run `make verify-dependencies-clean`. Machine-readable clean and
-audit reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the
-separate mainline clean-install report.
+platform, installer, dependency/packaging manifests, locks, and the cache implementation. A verified
+miss is saved immediately after dependency proof rather than after unrelated job gates. Main and
+scheduled releasability always run `make verify-dependencies-clean`. Machine-readable clean and audit
+reports are uploaded from `output/dependency-health/`; a cache hit never substitutes for the separate
+mainline clean-install report.
 
 ## Repo-native lane mapping
 

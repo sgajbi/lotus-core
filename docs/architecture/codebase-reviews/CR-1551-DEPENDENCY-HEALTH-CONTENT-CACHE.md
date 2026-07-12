@@ -20,6 +20,8 @@ then repeated the same bootstrap for security audit despite unchanged interprete
 - Added explicit `--no-cache`, cache/report overrides, and separate clean/audit JSON reports.
 - Feature and PR workflows restore the ignored cache; main and scheduled releasability invoke the
   explicit clean target and upload both evidence files.
+- Feature and PR workflows save a newly verified cache immediately after dependency proof instead
+  of deferring publication until unrelated lint, architecture, migration, audit, and test gates pass.
 - Local main-parity execution expands the shared CI gate set directly from `ci-main` and starts with
   `verify-dependencies-clean`; it cannot inherit the cacheable `ci` dependency prerequisite.
 - Added deterministic invalidation, corruption, interpreter/platform/installer, failure,
@@ -50,6 +52,8 @@ truth. Main and scheduled lanes remain mandatory clean-install proof.
 
 - Cache identity and execution tests: `17 passed`.
 - Workflow/cache evidence tests plus dependency tests: `37 passed`.
+- Explicit restore/save action pins, miss-only publication, and verify-before-save-before-lint
+  ordering are enforced by workflow governance tests; local `actionlint` passed.
 - Local main-parity dependency graph: `ci-main` resolves `verify-dependencies-clean` directly and
   does not depend on `ci`; the focused workflow-governance cohort passed `20` tests.
 - Real clean, two-hit, and cached-audit commands: passed with measurements above.
