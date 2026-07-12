@@ -146,7 +146,9 @@ def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
 def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
     expected_jobs = {
         PR_WORKFLOW: {
+            "e2e-smoke": "output/e2e-smoke/*",
             "docker-smoke-contract": "output/task-runs/diagnostics/docker-smoke-compose.log",
+            "lotus-core-validation-report": "output/task-runs/diagnostics/*.log",
             "latency-gate": "output/task-runs/diagnostics/latency-gate-compose.log",
             "performance-load-gate": (
                 "output/task-runs/diagnostics/performance-load-gate-compose.log"
@@ -158,6 +160,8 @@ def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
             "performance-load-gate": (
                 "output/task-runs/diagnostics/performance-load-gate-compose.log"
             ),
+            "integration-all": "output/integration-all/integration-all-compose.log",
+            "e2e-all": "output/e2e-all/e2e-all-compose.log",
             "performance-load-gate-full": (
                 "output/task-runs/diagnostics/performance-load-gate-compose.log"
             ),
