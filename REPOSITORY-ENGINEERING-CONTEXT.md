@@ -2224,6 +2224,23 @@ Most relevant current governance:
      evidence time. Preserve fail-closed precedence and keep mandate approval, suitability,
      valuation, tax advice, liquidity analysis, execution quality, best execution, and OMS
      acknowledgement outside this readiness product.
+170. Dependency-health proof uses a content-addressed ignored environment under
+     `.cache/dependency-health`. Its SHA-256 identity covers Python implementation/version,
+     platform, invoking pip version, root/service packaging manifests, dependency/test/tooling
+     inputs, and cache implementation files. Reuse requires an exact marker, existing interpreter,
+     and successful `pip check`; failed or corrupt staging never receives a success marker.
+     `make verify-dependencies` is the reusable feature/PR path, while
+     `make verify-dependencies-clean` is the mandatory main/scheduled clean-install path. Keep the
+     clean-install and audit JSON reports separate under `output/dependency-health/` so cache reuse
+     cannot overwrite clean proof. Do not add a cache input without extending deterministic
+     invalidation tests and the CI cache key.
+171. Required external Docker images for compose-backed tests use
+     `DockerImagePullPolicy`: three attempts, explicit 120-second subprocess timeout, exponential
+     backoff with bounded jitter, retryable timeout/rate-limit/transient-registry classification,
+     permanent fail-fast behavior, and source-safe diagnostics. Do not expose raw pull stderr,
+     registry tokens, or authentication URLs. GitHub matrix cells have isolated Docker daemons;
+     retain per-cell bounded acquisition unless a governed registry mirror or runner-level
+     immutable image cache provides truthful shared evidence.
 
 ## Context Maintenance Rule
 

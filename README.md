@@ -262,6 +262,12 @@ Important runtime note:
   PR merge gate parity
 - `make ci-main`
   main releasability parity
+- `make verify-dependencies`
+  integrity-check and reuse the content-addressed dependency-health environment when inputs match
+- `make verify-dependencies-clean`
+  force clean dependency installation proof without weakening the reusable feature/PR path
+- `make security-audit`
+  audit the verified dependency-health environment and write machine-readable evidence
 - `make test`
   targeted unit gate
 - `make test-unit-db`
