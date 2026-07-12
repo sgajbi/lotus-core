@@ -128,6 +128,7 @@ def prepare_managed_compose_run(
     enable_demo_data_pack: bool = False,
     demo_data_pack_portfolio_ids: tuple[str, ...] = (),
     demo_data_pack_history_days: int | None = None,
+    demo_data_pack_ingest_only: bool = False,
     keep_stack: bool = False,
     reset_volumes: bool = False,
 ) -> ManagedComposeRun:
@@ -152,6 +153,8 @@ def prepare_managed_compose_run(
             )
         if demo_data_pack_history_days is not None:
             runtime_environment["DEMO_DATA_PACK_HISTORY_DAYS"] = str(demo_data_pack_history_days)
+        if demo_data_pack_ingest_only:
+            runtime_environment["DEMO_DATA_PACK_INGEST_ONLY"] = "true"
 
     runtime = prepare_test_runtime(
         profile="e2e",
