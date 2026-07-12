@@ -1,3 +1,5 @@
+"""Operate isolated Docker Compose test stacks with bounded recovery and diagnostics."""
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +17,8 @@ import requests
 import yaml
 from confluent_kafka import KafkaException
 from confluent_kafka.admin import AdminClient
+
+from tests.test_support.runtime_env import RuntimePortReservation
 
 
 class DockerStackError(RuntimeError):
@@ -270,6 +274,19 @@ def _is_retryable_compose_up_error(stderr: str) -> bool:
     return any(marker in lowered for marker in retryable_markers)
 
 
+def _is_host_port_bind_error(stderr: str) -> bool:
+    bind_markers = (
+        "address already in use",
+        "port is already allocated",
+        "failed to bind host port",
+        "bind for 0.0.0.0",
+        "listen tcp",
+        "only one usage of each socket address",
+    )
+    lowered = stderr.lower()
+    return any(marker in lowered for marker in bind_markers)
+
+
 def should_build_images() -> bool:
     return os.getenv("LOTUS_TESTS_DOCKER_BUILD", "false").strip().lower() in {
         "1",
@@ -287,6 +304,7 @@ def compose_up(
     retries: int = 2,
     retry_wait_seconds: int = 5,
     runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    port_reservation: RuntimePortReservation | None = None,
 ) -> None:
     ensure_docker_engine_available(runner)
     ensure_required_images_available(compose_file, runner)
@@ -310,15 +328,27 @@ def compose_up(
 
     attempts = max(1, retries + 1)
     last_error: subprocess.CalledProcessError | None = None
-    for _ in range(attempts):
+    last_bind_conflict = False
+    attempts_used = 0
+    port_reallocations = 0
+    for attempt in range(1, attempts + 1):
+        attempts_used = attempt
+        if port_reservation is not None:
+            port_reservation.release()
         try:
             runner(args, check=True, capture_output=True)
             return
         except subprocess.CalledProcessError as exc:
             last_error = exc
-            stderr = (exc.stderr or b"").decode("utf-8", errors="ignore").lower()
+            stderr = _process_error_text(exc)
+            last_bind_conflict = _is_host_port_bind_error(stderr)
             removed_conflicts = _remove_conflicting_named_containers(stderr, runner)
-            if removed_conflicts or _is_retryable_compose_up_error(stderr):
+            can_retry = attempt < attempts and (
+                removed_conflicts
+                or _is_retryable_compose_up_error(stderr)
+                or (last_bind_conflict and port_reservation is not None)
+            )
+            if can_retry:
                 try:
                     runner(
                         [*_compose_base_args(compose_file), "down", "--remove-orphans"],
@@ -328,14 +358,41 @@ def compose_up(
                 except subprocess.CalledProcessError:
                     # Retry path should not fail due to cleanup issues.
                     pass
+                if last_bind_conflict and port_reservation is not None:
+                    try:
+                        port_reservation.reallocate()
+                    except OSError as reservation_error:
+                        raise DockerStackError(
+                            "docker compose host-port reallocation failed "
+                            f"(attempt={attempt}, compose_project="
+                            f"{os.getenv('COMPOSE_PROJECT_NAME', 'unknown')})"
+                        ) from reservation_error
+                    port_reallocations += 1
+                    LOGGER.warning(
+                        "Reallocated test runtime host ports after Compose bind conflict.",
+                        extra={
+                            "attempt": attempt,
+                            "port_reallocations": port_reallocations,
+                            "compose_project": os.getenv(
+                                "COMPOSE_PROJECT_NAME",
+                                "unknown",
+                            ),
+                        },
+                    )
                 if retry_wait_seconds > 0:
                     time.sleep(retry_wait_seconds)
                 continue
             break
 
     message = "docker compose up failed"
+    if last_bind_conflict:
+        message = (
+            f"{message} (failure_class=host_port_bind_conflict, "
+            f"attempts={attempts_used}, port_reallocations={port_reallocations}, "
+            f"compose_project={os.getenv('COMPOSE_PROJECT_NAME', 'unknown')})"
+        )
     if last_error:
-        details = (last_error.stderr or b"").decode("utf-8", errors="ignore").strip()
+        details = _process_error_text(last_error).strip()
         message = f"{message}: {details}"
     raise DockerStackError(message)
 

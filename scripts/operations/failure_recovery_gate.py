@@ -406,9 +406,9 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
 
 def _load_test_runtime_helpers():
     from tests.test_support.docker_stack import compose_down, compose_up, wait_for_migration_runner
-    from tests.test_support.runtime_env import build_test_runtime_env
+    from tests.test_support.runtime_env import prepare_test_runtime
 
-    return compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env
+    return compose_down, compose_up, wait_for_migration_runner, prepare_test_runtime
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -467,32 +467,21 @@ def main() -> int:
     transaction_seed = f"FAIL-{run_id}"
     transaction_id_prefix = f"TX_{transaction_seed}"
 
-    compose_down, compose_up, wait_for_migration_runner, build_test_runtime_env = (
+    compose_down, compose_up, wait_for_migration_runner, prepare_test_runtime = (
         _load_test_runtime_helpers()
     )
-    runtime_env, endpoints = build_test_runtime_env(
+    source_env = os.environ.copy()
+    if args.compose_project_name:
+        source_env["COMPOSE_PROJECT_NAME"] = args.compose_project_name
+    runtime = prepare_test_runtime(
         profile="integration",
         scope="failure-recovery-gate",
-        env=os.environ.copy(),
+        env=source_env,
         preserve_existing=True,
     )
-    os.environ.update(runtime_env)
-    if args.compose_project_name:
-        os.environ["COMPOSE_PROJECT_NAME"] = args.compose_project_name
-
-    ingestion_base_url = args.ingestion_base_url or endpoints.e2e_ingestion_url
-    query_base_url = args.query_base_url or endpoints.e2e_query_url
-    event_replay_base_url = args.event_replay_base_url or endpoints.e2e_event_replay_url
-    host_database_url, kafka_bootstrap_servers = _resolve_runtime_connections(
-        requested_host_database_url=args.host_database_url,
-        requested_kafka_bootstrap_servers=args.kafka_bootstrap_servers,
-        endpoints=endpoints,
-    )
-    engine = create_engine(host_database_url, pool_pre_ping=True)
-    offset_store = KafkaOffsetStore(
-        bootstrap_servers=kafka_bootstrap_servers,
-        timeout_seconds=10,
-    )
+    runtime.export_to(os.environ)
+    engine = None
+    offset_store = None
 
     try:
         if not args.skip_compose:
@@ -500,11 +489,29 @@ def main() -> int:
                 args.compose_file,
                 build=args.build,
                 services=list(_FAILURE_RECOVERY_GATE_SERVICES),
+                port_reservation=runtime.port_reservation,
             )
             wait_for_migration_runner(
                 args.compose_file,
                 timeout_seconds=args.ready_timeout_seconds,
             )
+        else:
+            runtime.port_reservation.release()
+
+        endpoints = runtime.endpoints
+        ingestion_base_url = args.ingestion_base_url or endpoints.e2e_ingestion_url
+        query_base_url = args.query_base_url or endpoints.e2e_query_url
+        event_replay_base_url = args.event_replay_base_url or endpoints.e2e_event_replay_url
+        host_database_url, kafka_bootstrap_servers = _resolve_runtime_connections(
+            requested_host_database_url=args.host_database_url,
+            requested_kafka_bootstrap_servers=args.kafka_bootstrap_servers,
+            endpoints=endpoints,
+        )
+        engine = create_engine(host_database_url, pool_pre_ping=True)
+        offset_store = KafkaOffsetStore(
+            bootstrap_servers=kafka_bootstrap_servers,
+            timeout_seconds=10,
+        )
         _wait_ready(
             ingestion_base_url=ingestion_base_url,
             event_replay_base_url=event_replay_base_url,
@@ -538,7 +545,7 @@ def main() -> int:
         interruption_container_id = _resolve_interruption_container(
             repo_root=repo_root,
             compose_file=args.compose_file,
-            compose_project_name=args.compose_project_name,
+            compose_project_name=endpoints.compose_project_name,
             interruption_service=args.interruption_service,
         )
 
@@ -666,8 +673,11 @@ def main() -> int:
             return 1
         return 0
     finally:
-        offset_store.close()
-        engine.dispose()
+        runtime.port_reservation.release()
+        if offset_store is not None:
+            offset_store.close()
+        if engine is not None:
+            engine.dispose()
         if not args.skip_compose and not args.keep_stack_up:
             compose_down(args.compose_file)
 

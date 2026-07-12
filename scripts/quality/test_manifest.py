@@ -12,8 +12,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tests.test_support.runtime_env import build_test_runtime_env  # noqa: E402
-
 
 def _discover_integration_lite() -> list[str]:
     query_integration_root = Path("tests/integration/services/query_service")
@@ -228,12 +226,9 @@ def run_suite(
 
     env = os.environ.copy()
     env_profile = SUITE_ENV_PROFILE.get(name, "unit")
-    env, _ = build_test_runtime_env(
-        profile=env_profile,
-        scope=name,
-        env=env,
-        preserve_existing=True,
-    )
+    env.setdefault("LOTUS_TEST_ENV_PROFILE", env_profile)
+    env.setdefault("LOTUS_TEST_SCOPE", name)
+    env.setdefault("LOTUS_TEST_DYNAMIC_PORTS", "true")
     env["LOTUS_TEST_RUNTIME_MODE"] = SUITE_RUNTIME_MODE.get(name, "unit")
     if coverage_file:
         env["COVERAGE_FILE"] = coverage_file
