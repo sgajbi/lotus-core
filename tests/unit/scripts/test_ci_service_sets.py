@@ -1,11 +1,15 @@
 from scripts.quality.ci_service_sets import (
     DOCKER_SMOKE_SERVICES,
+    E2E_RECOVERY_HEALTH_PORT_ENV,
+    E2E_RECOVERY_SERVICES,
     E2E_SMOKE_SERVICES,
     FAILURE_RECOVERY_GATE_SERVICES,
+    INSTITUTIONAL_COMPLETION_GATE_SERVICES,
     LATENCY_GATE_SERVICES,
     PERFORMANCE_GATE_SERVICES,
     RUNTIME_BOOTSTRAP_SERVICES,
 )
+from tests.e2e.test_failure_scenarios import _core_service_health_urls
 
 
 def test_docker_smoke_services_use_the_combined_transaction_processor() -> None:
@@ -43,6 +47,26 @@ def test_compose_runtime_sets_use_only_the_combined_transaction_processor() -> N
         LATENCY_GATE_SERVICES,
         PERFORMANCE_GATE_SERVICES,
         FAILURE_RECOVERY_GATE_SERVICES,
+        E2E_RECOVERY_SERVICES,
     ):
         assert target in group
         assert not legacy_workers.intersection(group)
+
+
+def test_e2e_recovery_restarts_only_long_running_application_services() -> None:
+    assert not set(RUNTIME_BOOTSTRAP_SERVICES).intersection(E2E_RECOVERY_SERVICES)
+    assert set(E2E_RECOVERY_SERVICES) == set(INSTITUTIONAL_COMPLETION_GATE_SERVICES).difference(
+        RUNTIME_BOOTSTRAP_SERVICES
+    )
+    assert set(E2E_RECOVERY_HEALTH_PORT_ENV) == set(E2E_RECOVERY_SERVICES)
+
+
+def test_e2e_recovery_health_checks_use_combined_transaction_runtime(monkeypatch) -> None:
+    for index, name in enumerate(E2E_RECOVERY_HEALTH_PORT_ENV.values(), start=8100):
+        monkeypatch.setenv(name, str(index))
+    monkeypatch.setenv("LOTUS_TRANSACTION_PROCESSING_HOST_PORT", "8190")
+
+    health_urls = _core_service_health_urls()
+
+    assert "http://localhost:8190/health/ready" in health_urls
+    assert len(health_urls) == len(E2E_RECOVERY_SERVICES)

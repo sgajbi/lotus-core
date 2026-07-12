@@ -66,6 +66,27 @@ INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = (
     "financial_reconciliation_service",
 )
 
+E2E_RECOVERY_SERVICES: tuple[str, ...] = tuple(
+    service
+    for service in INSTITUTIONAL_COMPLETION_GATE_SERVICES
+    if service not in RUNTIME_BOOTSTRAP_SERVICES
+)
+
+E2E_RECOVERY_HEALTH_PORT_ENV: dict[str, str] = {
+    "ingestion_service": "LOTUS_INGESTION_HOST_PORT",
+    "event_replay_service": "LOTUS_EVENT_REPLAY_HOST_PORT",
+    "financial_reconciliation_service": "LOTUS_FINANCIAL_RECONCILIATION_HOST_PORT",
+    "query_service": "LOTUS_QUERY_HOST_PORT",
+    "query_control_plane_service": "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT",
+    "persistence_service": "LOTUS_PERSISTENCE_HOST_PORT",
+    "portfolio_transaction_processing_service": "LOTUS_TRANSACTION_PROCESSING_HOST_PORT",
+    "pipeline_orchestrator_service": "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT",
+    "position_valuation_calculator": "LOTUS_POSITION_VALUATION_HOST_PORT",
+    "timeseries_generator_service": "LOTUS_TIMESERIES_GENERATOR_HOST_PORT",
+    "valuation_orchestrator_service": "LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT",
+    "portfolio_aggregation_service": "LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT",
+}
+
 PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "query-only": QUERY_BUILD_SERVICES,
     "docker-smoke": DOCKER_SMOKE_SERVICES,
