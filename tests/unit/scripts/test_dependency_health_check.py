@@ -123,6 +123,24 @@ def test_dependency_health_cli_supports_repo_native_direct_execution() -> None:
     assert "--no-cache" in result.stdout
 
 
+def test_dependency_health_cli_prints_canonical_cache_key_only() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/dependency_health_check.py",
+            "--print-cache-key",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert len(result.stdout.strip()) == 64
+    assert set(result.stdout.strip()) <= set("0123456789abcdef")
+
+
 def test_dependency_health_cache_miss_builds_and_publishes_verified_environment(
     tmp_path: Path,
 ) -> None:
