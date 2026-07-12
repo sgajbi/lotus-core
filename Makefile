@@ -543,9 +543,11 @@ check: lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabula
 coverage-gate:
 	python scripts/quality/coverage_gate.py
 
-ci: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate migration-smoke test-pr-suites coverage-gate security-audit test-pr-runtime-gates
+CI_GATES := lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate migration-smoke test-pr-suites coverage-gate security-audit test-pr-runtime-gates
 
-ci-main: ci test-release-gates
+ci: verify-dependencies $(CI_GATES)
+
+ci-main: verify-dependencies-clean $(CI_GATES) test-release-gates
 
 ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate test-unit-db test-integration-lite coverage-gate
 
