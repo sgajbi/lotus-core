@@ -32,19 +32,19 @@ from tests.test_support.pipeline_quiescence import (
     recover_reprocessing_activity_for_test_cleanup,
     wait_for_pipeline_quiescence,
 )
-from tests.test_support.runtime_env import build_test_runtime_env, infer_test_profile
+from tests.test_support.runtime_env import infer_test_profile, prepare_test_runtime
 from tests.test_support.runtime_modes import detect_runtime_modes
 
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-_runtime_env, _runtime_endpoints = build_test_runtime_env(
+_test_runtime = prepare_test_runtime(
     profile=os.getenv("LOTUS_TEST_ENV_PROFILE", infer_test_profile()),
     scope=os.getenv("LOTUS_TEST_SCOPE", "pytest"),
     preserve_existing=True,
 )
-os.environ.update(_runtime_env)
+_test_runtime.export_to(os.environ)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -182,6 +182,7 @@ def docker_services(request):  # noqa: ARG001
             services=test_services,
             retries=compose_retries,
             retry_wait_seconds=compose_retry_wait,
+            port_reservation=_test_runtime.port_reservation,
         )
 
         emit_test_output("\n--- Waiting for database migrations to complete ---")
@@ -257,6 +258,7 @@ def docker_services(request):  # noqa: ARG001
         pytest.fail(str(exc))
 
     finally:
+        _test_runtime.port_reservation.release()
         compose_log_file = os.getenv("LOTUS_TESTS_COMPOSE_LOG_FILE")
         if compose_log_file:
             emit_test_output(f"\n--- Capturing Docker compose logs to {compose_log_file} ---")
@@ -291,7 +293,7 @@ def db_engine(docker_services):
     """
     db_url = os.getenv(
         "HOST_DATABASE_URL",
-        _runtime_endpoints.host_database_url,
+        _test_runtime.endpoints.host_database_url,
     )
 
     # Wait for the database to be connectable

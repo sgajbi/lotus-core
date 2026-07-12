@@ -1,3 +1,5 @@
+"""Tests for bounded, diagnosable Docker Compose test-stack operation."""
+
 from __future__ import annotations
 
 import subprocess
@@ -20,6 +22,7 @@ from tests.test_support.docker_stack import (
     wait_for_kafka_metadata,
     wait_for_migration_runner,
 )
+from tests.test_support.runtime_env import prepare_test_runtime
 
 
 def test_should_build_images_default_false(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -108,6 +111,77 @@ def test_compose_up_retries_on_migration_runner_exit() -> None:
     assert len(ps_calls) == 1
     assert len(down_calls) == 2
     assert len(up_calls) == 2
+
+
+def test_compose_up_reallocates_reserved_ports_after_bind_race() -> None:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="bind-race",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+    )
+    attempted_query_ports: list[str] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
+        if "up" in args:
+            attempted_query_ports.append(runtime.values["LOTUS_QUERY_HOST_PORT"])
+            if len(attempted_query_ports) == 1:
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=args,
+                    stderr=(b"failed to bind host port for 0.0.0.0:32001: address already in use"),
+                )
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    compose_up(
+        "docker-compose.yml",
+        build=False,
+        retries=1,
+        retry_wait_seconds=0,
+        runner=runner,
+        port_reservation=runtime.port_reservation,
+    )
+
+    assert len(attempted_query_ports) == 2
+    assert attempted_query_ports[0] != attempted_query_ports[1]
+    assert runtime.port_reservation.reserved_port_keys == ()
+
+
+def test_compose_up_reports_exhausted_host_port_reallocation() -> None:
+    runtime = prepare_test_runtime(
+        profile="integration",
+        scope="bind-race-exhausted",
+        env={"LOTUS_TEST_DYNAMIC_PORTS": "true"},
+        preserve_existing=False,
+    )
+
+    def runner(args, **kwargs):  # noqa: ANN001, ARG001
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
+        if "up" in args:
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=args,
+                stderr=b"Bind for 0.0.0.0:32001 failed: port is already allocated",
+            )
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    with pytest.raises(
+        DockerStackError,
+        match=("failure_class=host_port_bind_conflict, attempts=2, port_reallocations=1"),
+    ):
+        compose_up(
+            "docker-compose.yml",
+            build=False,
+            retries=1,
+            retry_wait_seconds=0,
+            runner=runner,
+            port_reservation=runtime.port_reservation,
+        )
+
+    runtime.port_reservation.release()
 
 
 def test_ensure_required_images_available_pulls_missing_image(
