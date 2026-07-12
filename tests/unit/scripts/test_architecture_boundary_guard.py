@@ -297,7 +297,7 @@ def test_advisory_application_rejects_direct_uuid_import(tmp_path, monkeypatch) 
     )
     source.parent.mkdir(parents=True)
     source.write_text("import uuid\n", encoding="utf-8")
-    monkeypatch.setattr("scripts.architecture_boundary_guard.ROOT", tmp_path)
+    monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
 
     assert _scan_for_disallowed_imports([source], rules=DIRECT_IMPORT_BOUNDARY_RULES) == [
         "src/services/query_control_plane_service/app/application/advisory_simulation/"
