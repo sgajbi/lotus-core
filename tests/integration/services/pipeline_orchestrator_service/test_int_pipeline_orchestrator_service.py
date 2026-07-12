@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 from unittest.mock import patch
@@ -115,3 +116,60 @@ async def test_emit_if_ready_skips_outbox_after_losing_stage_ownership(
     assert stage is not None
     assert stage.status == "COMPLETED"
     assert stage.ready_emitted_at is not None
+
+
+async def test_stale_processed_transaction_does_not_create_superseded_epoch_readiness(
+    clean_db, async_db_session: AsyncSession
+):
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    transaction = _transaction_event()
+    async with session_factory() as current_session, session_factory() as stale_session:
+        current_service = PipelineOrchestratorService(
+            repo=PipelineStageRepository(current_session),
+            outbox_repo=OutboxRepository(current_session),
+        )
+        stale_service = PipelineOrchestratorService(
+            repo=PipelineStageRepository(stale_session),
+            outbox_repo=OutboxRepository(stale_session),
+        )
+        await current_service.register_processed_transaction(
+            transaction.model_copy(update={"epoch": 1}),
+            correlation_id="corr-current-epoch",
+        )
+        stale_task = asyncio.create_task(
+            stale_service.register_processed_transaction(
+                transaction,
+                correlation_id="corr-stale-epoch",
+            )
+        )
+        await asyncio.sleep(0.1)
+        assert stale_task.done() is False
+
+        await current_session.commit()
+        await asyncio.wait_for(stale_task, timeout=2)
+        await stale_session.commit()
+
+    async with session_factory() as verification_session:
+        stale_stage = await verification_session.scalar(
+            select(PipelineStageState).where(
+                PipelineStageState.stage_name == "TRANSACTION_PROCESSING",
+                PipelineStageState.transaction_id == transaction.transaction_id,
+                PipelineStageState.epoch == 0,
+            )
+        )
+        readiness_count = int(
+            await verification_session.scalar(
+                select(func.count())
+                .select_from(OutboxEvent)
+                .where(
+                    OutboxEvent.event_type.in_(
+                        ["TransactionProcessingCompleted", "PortfolioDayReadyForValuation"]
+                    ),
+                    OutboxEvent.payload["epoch"].as_integer() == 0,
+                )
+            )
+            or 0
+        )
+
+    assert stale_stage is None
+    assert readiness_count == 0

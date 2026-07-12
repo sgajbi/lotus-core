@@ -197,3 +197,31 @@ async def test_get_latest_portfolio_control_stage_epoch_returns_highest_epoch(
     )
 
     assert latest_epoch == 4
+
+
+async def test_get_latest_transaction_stage_epoch_is_scoped_to_exact_transaction(
+    async_db_session: AsyncSession, clean_db
+):
+    repo = PipelineStageRepository(async_db_session)
+
+    for transaction_id, epoch in (("TXN-EPOCH-1", 1), ("TXN-EPOCH-1", 3), ("TXN-EPOCH-2", 7)):
+        await repo.upsert_stage_flags(
+            stage_name="TRANSACTION_PROCESSING",
+            transaction_id=transaction_id,
+            portfolio_id="PORT-EPOCH-1",
+            security_id="SEC-EPOCH-1",
+            business_date=date(2026, 3, 7),
+            epoch=epoch,
+            source_event_type="processed_transaction",
+            cost_event_seen=True,
+            cashflow_event_seen=True,
+        )
+    await async_db_session.commit()
+
+    latest_epoch = await repo.get_latest_transaction_stage_epoch(
+        stage_name="TRANSACTION_PROCESSING",
+        portfolio_id="PORT-EPOCH-1",
+        transaction_id="TXN-EPOCH-1",
+    )
+
+    assert latest_epoch == 3

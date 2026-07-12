@@ -4,6 +4,7 @@ from src.services.pipeline_orchestrator_service.app.domain.pipeline_stage_state_
     decide_transaction_stage_readiness,
     is_control_stage_blocking,
     should_emit_control_stage_for_epoch,
+    should_register_transaction_stage_for_epoch,
 )
 
 
@@ -60,3 +61,10 @@ def test_control_stage_latest_epoch_blocks_stale_emission() -> None:
     assert should_emit_control_stage_for_epoch(latest_epoch=None, event_epoch=2) is True
     assert should_emit_control_stage_for_epoch(latest_epoch=2, event_epoch=2) is True
     assert should_emit_control_stage_for_epoch(latest_epoch=3, event_epoch=2) is False
+
+
+def test_transaction_stage_epoch_fence_accepts_current_or_newer_events_only() -> None:
+    assert should_register_transaction_stage_for_epoch(latest_epoch=None, event_epoch=0) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=1) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=2) is True
+    assert should_register_transaction_stage_for_epoch(latest_epoch=1, event_epoch=0) is False

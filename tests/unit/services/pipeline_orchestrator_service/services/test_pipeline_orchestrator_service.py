@@ -33,6 +33,13 @@ class _RepoStub:
         self.force_claim_result: bool | None = None
         self.control_stage = None
         self.latest_control_epoch: int | None = None
+        self.latest_transaction_epoch: int | None = None
+        self.transaction_stage_locks: list[tuple[str, str, str]] = []
+
+    async def acquire_transaction_stage_lock(self, **kwargs):
+        self.transaction_stage_locks.append(
+            (kwargs["stage_name"], kwargs["portfolio_id"], kwargs["transaction_id"])
+        )
 
     async def upsert_stage_flags(self, **kwargs):
         if self._stage is None:
@@ -86,6 +93,9 @@ class _RepoStub:
 
     async def get_latest_portfolio_control_stage_epoch(self, **kwargs):
         return self.latest_control_epoch
+
+    async def get_latest_transaction_stage_epoch(self, **kwargs):
+        return self.latest_transaction_epoch
 
 
 def _txn_event() -> TransactionEvent:
@@ -171,6 +181,20 @@ async def test_no_emit_when_stage_claim_lost_to_competing_worker():
 
     await service.register_processed_transaction(_txn_event(), correlation_id="corr-3")
 
+    outbox_repo.create_outbox_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stale_processed_transaction_epoch_does_not_complete_readiness() -> None:
+    repo = _RepoStub()
+    repo.latest_transaction_epoch = 1
+    outbox_repo = AsyncMock()
+    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
+
+    await service.register_processed_transaction(_txn_event(), correlation_id="corr-stale")
+
+    assert repo._stage is None
+    assert repo.transaction_stage_locks == [("TRANSACTION_PROCESSING", "PORT-1", "TXN-PIPE-1")]
     outbox_repo.create_outbox_event.assert_not_called()
 
 

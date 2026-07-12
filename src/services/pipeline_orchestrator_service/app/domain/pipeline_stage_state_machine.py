@@ -48,3 +48,12 @@ def should_emit_control_stage_for_epoch(
     event_epoch: int,
 ) -> bool:
     return latest_epoch is None or latest_epoch == event_epoch
+
+
+def should_register_transaction_stage_for_epoch(
+    *,
+    latest_epoch: int | None,
+    event_epoch: int,
+) -> bool:
+    """Accept the current/new transaction epoch and reject superseded delivery epochs."""
+    return latest_epoch is None or event_epoch >= latest_epoch

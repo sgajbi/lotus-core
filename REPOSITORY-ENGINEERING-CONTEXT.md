@@ -1855,6 +1855,10 @@ Most relevant current governance:
      work as cost, cashflow, position, idempotency, and outbox effects. Pipeline transaction
      readiness consumes only that fact; do not restore a `cashflows.calculated` prerequisite,
      consumer group, second idempotency claim, or transaction-type-specific readiness branch.
+     Inline backdated recovery may register a newer stage epoch before an older cost outbox event is
+     dispatched. Serialize readiness registration for the exact stage/portfolio/transaction key,
+     compare the incoming epoch with the latest registered epoch under that transaction-scoped lock,
+     and reject only older epochs. Never emit superseded transaction or valuation readiness.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary

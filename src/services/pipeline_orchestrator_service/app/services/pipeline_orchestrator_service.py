@@ -17,6 +17,7 @@ from ..domain.pipeline_stage_state_machine import (
     TRANSACTION_PROCESSING_STAGE,
     decide_transaction_stage_readiness,
     should_emit_control_stage_for_epoch,
+    should_register_transaction_stage_for_epoch,
 )
 from ..domain.pipeline_stage_state_machine import (
     is_control_stage_blocking as is_control_stage_blocking_status,
@@ -34,13 +35,29 @@ class PipelineOrchestratorService:
         event: TransactionEvent,
         correlation_id: str | None,
     ) -> None:
+        event_epoch = event.epoch or 0
+        await self.repo.acquire_transaction_stage_lock(
+            stage_name=TRANSACTION_PROCESSING_STAGE,
+            portfolio_id=event.portfolio_id,
+            transaction_id=event.transaction_id,
+        )
+        latest_epoch = await self.repo.get_latest_transaction_stage_epoch(
+            stage_name=TRANSACTION_PROCESSING_STAGE,
+            portfolio_id=event.portfolio_id,
+            transaction_id=event.transaction_id,
+        )
+        if not should_register_transaction_stage_for_epoch(
+            latest_epoch=latest_epoch,
+            event_epoch=event_epoch,
+        ):
+            return
         stage = await self.repo.upsert_stage_flags(
             stage_name=TRANSACTION_PROCESSING_STAGE,
             transaction_id=event.transaction_id,
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
             business_date=event.transaction_date.date(),
-            epoch=event.epoch or 0,
+            epoch=event_epoch,
             source_event_type="processed_transaction",
             cost_event_seen=True,
             cashflow_event_seen=True,
