@@ -1,10 +1,13 @@
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.validation import dependency_health_check
 from scripts.validation.dependency_health_cache import build_cache_identity, write_cache_marker
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _write_dependency_inputs(root: Path) -> None:
@@ -101,6 +104,23 @@ def test_tooling_lock_pins_secure_setuptools_bootstrap() -> None:
     ).splitlines()
 
     assert "setuptools==83.0.0" in tooling_requirements
+
+
+def test_dependency_health_cli_supports_repo_native_direct_execution() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/validation/dependency_health_check.py",
+            "--help",
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "--no-cache" in result.stdout
 
 
 def test_dependency_health_cache_miss_builds_and_publishes_verified_environment(
