@@ -138,8 +138,8 @@ def resolve_build_metadata() -> dict[str, str]:
         "LOTUS_REPO_URL": _resolve_repo_url(),
         "LOTUS_IMAGE_VERSION": (
             os.getenv("LOTUS_IMAGE_VERSION", "").strip()
-            or os.getenv("GITHUB_REF_NAME", "").strip()
             or os.getenv("GITHUB_SHA", "").strip()
+            or os.getenv("GITHUB_REF_NAME", "").strip()
             or _command_output(["git", "rev-parse", "HEAD"])
             or "unknown"
         ),

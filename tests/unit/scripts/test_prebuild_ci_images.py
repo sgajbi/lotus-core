@@ -1,7 +1,11 @@
 from argparse import Namespace
 from pathlib import Path
 
-from scripts.release.prebuild_ci_images import main, provenance_build_args
+from scripts.release.prebuild_ci_images import (
+    main,
+    provenance_build_args,
+    resolve_build_metadata,
+)
 
 
 def test_prebuild_group_expands_to_named_services(
@@ -88,3 +92,19 @@ def test_provenance_build_args_include_required_image_metadata() -> None:
         "--build-arg",
         "LOTUS_CI_RUN_ID=987654",
     ]
+
+
+def test_ci_image_version_prefers_exact_commit_over_ref_name(monkeypatch) -> None:
+    source_sha = "a" * 40
+    monkeypatch.delenv("LOTUS_IMAGE_VERSION", raising=False)
+    monkeypatch.setenv("GITHUB_SHA", source_sha)
+    monkeypatch.setenv("GITHUB_REF_NAME", "123/merge")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/runtime-image-set")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "sgajbi/lotus-core")
+    monkeypatch.setenv("GITHUB_RUN_ID", "12345")
+
+    metadata = resolve_build_metadata()
+
+    assert metadata["LOTUS_IMAGE_VERSION"] == source_sha
+    assert metadata["LOTUS_GIT_COMMIT_SHA"] == source_sha
+    assert metadata["LOTUS_GIT_BRANCH"] == "feat/runtime-image-set"
