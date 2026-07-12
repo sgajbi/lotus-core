@@ -36,6 +36,27 @@ def test_prepare_managed_run_owns_unique_project_and_honors_local_endpoint_port(
         managed.runtime.port_reservation.release()
 
 
+def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("LOTUS_POSTGRES_HOST_PORT", "15432")
+
+    managed = prepare_managed_compose_run(
+        scope="fresh-ports",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres",),
+        build=False,
+        log_path=tmp_path / "fresh-ports.log",
+    )
+
+    try:
+        assert managed.runtime.values["LOTUS_POSTGRES_HOST_PORT"] != "15432"
+        assert "LOTUS_POSTGRES_HOST_PORT" in managed.runtime.port_reservation.reserved_port_keys
+    finally:
+        managed.runtime.port_reservation.release()
+
+
 def test_managed_run_starts_with_exact_runtime_and_captures_before_teardown(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
