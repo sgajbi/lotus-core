@@ -52,12 +52,14 @@ collision is distinguishable from application startup failure.
 Local image builds complete while reservations remain held; the subsequent startup does not use
 `up --build`. This keeps build duration outside the host-bind race interval.
 
-Latency, performance-load, Docker-smoke, and institutional-completion are managed validation runs.
-Each allocates a fresh project and ports, derives its service/database endpoints from that runtime,
-captures a log naming the exact project and compose file, and then tears down. CI uploads those
-owner-produced logs from `output/task-runs/diagnostics/`; a post-run default-project log command is
-not valid evidence. External targets remain available through `--skip-compose`, and keeping a stack
-requires an explicit local diagnosis flag.
+Latency, performance-load, Docker-smoke, institutional-completion, and failure-recovery are managed
+validation runs. Each allocates a fresh project and ports, derives its service/database endpoints
+from that runtime, captures a log naming the exact project and compose file, and then tears down.
+Failure recovery also binds migration polling and interruption lookup to that project and writes
+`output/task-runs/diagnostics/failure-recovery-gate-compose.log`. CI uploads owner-produced logs
+from `output/task-runs/diagnostics/`; a post-run default-project log command is not valid evidence.
+External targets remain available through `--skip-compose`, and keeping a stack requires an
+explicit local diagnosis flag.
 
 | Evidence | Location | Failure Meaning |
 |---|---|---|

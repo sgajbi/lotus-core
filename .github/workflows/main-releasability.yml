@@ -459,9 +459,6 @@ jobs:
         run: make install-ci
       - name: Run deterministic failure recovery gate
         run: make test-failure-recovery-gate
-      - name: Capture docker compose logs on failure
-        if: failure()
-        run: docker compose logs > failure-recovery-gate-logs.txt
       - name: Upload failure recovery artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -470,7 +467,7 @@ jobs:
           path: |
             output/task-runs/*failure-recovery-gate*.json
             output/task-runs/*failure-recovery-gate*.md
-            failure-recovery-gate-logs.txt
+            output/task-runs/diagnostics/failure-recovery-gate-compose.log
           if-no-files-found: warn
           retention-days: 30
 

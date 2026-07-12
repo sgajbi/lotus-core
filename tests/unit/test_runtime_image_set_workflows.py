@@ -165,6 +165,9 @@ def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
             "performance-load-gate-full": (
                 "output/task-runs/diagnostics/performance-load-gate-compose.log"
             ),
+            "failure-recovery-gate": (
+                "output/task-runs/diagnostics/failure-recovery-gate-compose.log"
+            ),
             "institutional-completion-gate": (
                 "output/task-runs/diagnostics/institutional-completion-compose.log"
             ),

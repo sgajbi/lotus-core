@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MANAGED_DRIVERS = (
     REPO_ROOT / "scripts" / "operations" / "latency_profile.py",
     REPO_ROOT / "scripts" / "operations" / "performance_load_gate.py",
+    REPO_ROOT / "scripts" / "operations" / "failure_recovery_gate.py",
     REPO_ROOT / "scripts" / "validation" / "docker_endpoint_smoke.py",
     REPO_ROOT / "scripts" / "validation" / "institutional_completion_gate.py",
 )
