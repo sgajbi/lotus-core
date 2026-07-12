@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_support.docker_stack import compose_down, compose_up
+from tests.test_support.managed_compose_run import prepare_managed_compose_run
 from tests.test_support.runtime_env import PreparedTestRuntime, prepare_test_runtime
 
 pytestmark = pytest.mark.integration_db
@@ -37,7 +38,7 @@ def _start_postgres(compose_file: Path, runtime: PreparedTestRuntime) -> None:
     )
 
 
-def test_concurrent_compose_projects_claim_disjoint_reserved_ports(tmp_path: Path) -> None:
+def _write_postgres_compose(tmp_path: Path) -> Path:
     compose_file = tmp_path / "compose.port-isolation.yml"
     compose_file.write_text(
         """
@@ -53,6 +54,11 @@ services:
 """.strip(),
         encoding="utf-8",
     )
+    return compose_file
+
+
+def test_concurrent_compose_projects_claim_disjoint_reserved_ports(tmp_path: Path) -> None:
+    compose_file = _write_postgres_compose(tmp_path)
     runtimes = [
         prepare_test_runtime(
             profile="integration",
@@ -75,3 +81,27 @@ services:
         for runtime in runtimes:
             compose_down(str(compose_file), runtime=runtime)
             runtime.port_reservation.release()
+
+
+def test_managed_compose_run_captures_project_logs_before_teardown(tmp_path: Path) -> None:
+    compose_file = _write_postgres_compose(tmp_path)
+    log_path = tmp_path / "diagnostics" / "managed-postgres.log"
+    managed = prepare_managed_compose_run(
+        scope="live-managed-postgres",
+        compose_file=compose_file,
+        services=("postgres",),
+        build=False,
+        log_path=log_path,
+    )
+    postgres_port = int(managed.runtime.values["LOTUS_POSTGRES_HOST_PORT"])
+    project_name = managed.runtime.endpoints.compose_project_name
+
+    with managed:
+        _wait_for_tcp(postgres_port)
+
+    diagnostic_text = log_path.read_text(encoding="utf-8")
+    assert f"compose_project={project_name}" in diagnostic_text
+    assert "postgres" in diagnostic_text.lower()
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(1)
+        assert probe.connect_ex(("127.0.0.1", postgres_port)) != 0
