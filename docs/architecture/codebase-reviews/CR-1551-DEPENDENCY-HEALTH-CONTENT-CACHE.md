@@ -15,6 +15,8 @@ then repeated the same bootstrap for security audit despite unchanged interprete
 
 - Added a deterministic SHA-256 identity covering interpreter, platform, installer, root/service
   packaging manifests, dependency/test/tooling inputs, and cache implementation files.
+- Feature and PR key-resolution steps fail before cache access unless the command succeeds and
+  returns the canonical 64-character lowercase SHA-256 shape; an empty shared key cannot be used.
 - Added exact marker, interpreter, and `pip check` integrity checks.
 - Build in disposable staging and publish only after successful installation and consistency proof.
 - Added explicit `--no-cache`, cache/report overrides, and separate clean/audit JSON reports.
@@ -54,6 +56,8 @@ truth. Main and scheduled lanes remain mandatory clean-install proof.
 - Workflow/cache evidence tests plus dependency tests: `37 passed`.
 - Explicit restore/save action pins, miss-only publication, and verify-before-save-before-lint
   ordering are enforced by workflow governance tests; local `actionlint` passed.
+- Fail-closed cache-key assignment and SHA-256 output-shape checks are enforced in both reusable
+  lanes by the same workflow governance cohort.
 - Local main-parity dependency graph: `ci-main` resolves `verify-dependencies-clean` directly and
   does not depend on `ci`; the focused workflow-governance cohort passed `20` tests.
 - Real clean, two-hit, and cached-audit commands: passed with measurements above.
