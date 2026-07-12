@@ -17,6 +17,9 @@ found no second direct `docker pull`; this helper is the shared acquisition boun
 - Added immutable `DockerImagePullPolicy` with bounded attempts, timeout, exponential backoff, and
   jitter plus an inspectable maximum 367.2-second default budget.
 - Classified timeout, rate-limit, and transient registry/network failures as retryable.
+- Recognized Docker daemon and Go client connection-timeout variants, including
+  `connect: connection timed out` and `Client.Timeout exceeded while awaiting headers`, through the
+  same bounded retry path.
 - Kept unknown, authentication, authorization, and missing-manifest failures permanent and
   fail-fast.
 - Replaced raw stderr output with image, failure class, attempt, outcome, and elapsed diagnostics.
@@ -33,7 +36,7 @@ runner-level immutable cache.
 
 ## Validation
 
-- `tests/unit/test_support/test_docker_stack.py`: `21 passed`.
+- `tests/unit/test_support/test_docker_stack.py`: `25 passed`.
 - Scoped Ruff lint and format: passed.
 - Same-pattern direct Docker-pull scan: only the governed helper and its tests remain.
 
