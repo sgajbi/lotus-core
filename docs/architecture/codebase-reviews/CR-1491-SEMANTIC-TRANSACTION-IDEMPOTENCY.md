@@ -23,15 +23,25 @@ recalculating it.
 - The combined unit of work classifies claims as `claimed`, `physical_duplicate`,
   `semantic_duplicate`, or `semantic_conflict` before any financial module executes.
 - Identical duplicates return the existing `DUPLICATE` processing status. Material conflicts raise
-  terminal `transaction_semantic_conflict` for shared DLQ handling.
+  terminal `transaction_semantic_conflict` for shared DLQ handling unless they arrive through the
+  explicit canonical repair workflow.
+- A material repair payload claims an immutable `transaction-correction:v1` semantic key containing
+  its canonical SHA-256 fingerprint. The original semantic fence and every distinct correction
+  remain separate auditable rows; identical correction replay retains the physical repair-delivery
+  fence.
 - Metrics use the bounded claim outcomes and contain no portfolio or transaction labels.
 
 ## Compatibility
 
-The event schema, topic, public API, and ordinary successful result are unchanged. The intentional
-behavior change is that a second identical replay no longer emits another
+The event schema, topic, public API, and ordinary successful result are unchanged. Intentional
+behavior changes are that a second identical replay no longer emits another
 `ProcessedTransactionPersisted` compatibility event or reruns position processing. Pre-migration
 physical fences have null semantic fields and remain valid physical duplicates after deployment.
+
+Standard materially changed deliveries still fail terminally. The existing operational
+reprocessing API remains the explicit correction path: its internal repair header permits a new
+canonical payload to execute under a payload-specific immutable correction fence instead of being
+silently skipped or mutating the original claim.
 
 This supersedes CR-1455's expectation of one compatibility processed event per distinct replay
 offset. Replay publication remains auditable at its control boundary; repeated financial-state
@@ -50,6 +60,9 @@ schema rollback because the new worker reads and writes those fields.
 - Unified use case, adapter, consumer, and observability cohort: `21` tests.
 - Repository-native transaction-processing contract: `27 passed` in `113.76s` against PostgreSQL
   after rebuilding the migration-runner image.
+- Correction extension: `72` focused domain/use-case/position tests, `2` PostgreSQL correction
+  tests, repository-native transaction-processing contract `39 passed`, and the correction-to-
+  current-valuation E2E scenario passed in `66.59s` after rebuilding the combined runtime image.
 - Ruff, MyPy, Alembic single-head, migration contract, architecture boundary, in-process modularity,
   and in-process boundary checks passed.
 
