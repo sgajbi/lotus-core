@@ -578,7 +578,13 @@ def capture_compose_logs(
         text=True,
         env=runtime.values if runtime is not None else None,
     )
-    log_text = result.stdout
+    log_text = (
+        "--- lotus compose diagnostics ---\n"
+        f"compose_project={project_name or os.getenv('COMPOSE_PROJECT_NAME') or 'default'}\n"
+        f"compose_file={compose_file}\n"
+        "--- service logs ---\n"
+        f"{result.stdout}"
+    )
     if result.stderr:
         log_text = f"{log_text}\n--- docker compose logs stderr ---\n{result.stderr}"
     destination.write_text(log_text, encoding="utf-8")

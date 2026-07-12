@@ -628,7 +628,13 @@ def test_capture_compose_logs_writes_active_project_logs(
         ]
     ]
     assert output_path.read_text(encoding="utf-8") == (
-        "service log\n\n--- docker compose logs stderr ---\ndiagnostic stderr\n"
+        "--- lotus compose diagnostics ---\n"
+        "compose_project=lotus-e2e-test\n"
+        "compose_file=docker-compose.yml\n"
+        "--- service logs ---\n"
+        "service log\n"
+        "\n--- docker compose logs stderr ---\n"
+        "diagnostic stderr\n"
     )
 
 
