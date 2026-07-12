@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
+    build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
 
@@ -159,3 +160,26 @@ def test_semantic_identity_separates_processing_epochs() -> None:
     original = build_transaction_semantic_identity(transaction)
 
     assert next_epoch.semantic_key != original.semantic_key
+
+
+def test_correction_identity_is_payload_specific_and_preserves_base_fingerprint() -> None:
+    transaction = _transaction()
+    corrected = replace(
+        transaction, quantity=Decimal("12"), gross_transaction_amount=Decimal("306")
+    )
+
+    original_correction = build_transaction_correction_identity(transaction)
+    corrected_correction = build_transaction_correction_identity(corrected)
+
+    assert (
+        original_correction.payload_fingerprint
+        == build_transaction_semantic_identity(transaction).payload_fingerprint
+    )
+    assert (
+        corrected_correction.payload_fingerprint
+        == build_transaction_semantic_identity(corrected).payload_fingerprint
+    )
+    assert original_correction.semantic_key != corrected_correction.semantic_key
+    assert corrected_correction.semantic_key.startswith(
+        "transaction-correction:v1:PB-001:TX-SEMANTIC-001:3:sha256:"
+    )

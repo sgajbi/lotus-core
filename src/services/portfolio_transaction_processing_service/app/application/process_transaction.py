@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from ..domain import BookedTransaction, build_transaction_semantic_identity
+from ..domain import (
+    BookedTransaction,
+    build_transaction_correction_identity,
+    build_transaction_semantic_identity,
+)
 from ..ports import (
     PositionProcessingResult,
     TransactionIdempotencyOutcome,
@@ -97,6 +101,22 @@ class ProcessTransactionUseCase:
                     payload_fingerprint=identity.payload_fingerprint,
                     correlation_id=metadata.correlation_id,
                 )
+                correction_claimed = False
+                if (
+                    idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_CONFLICT
+                    and metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                ):
+                    identity = build_transaction_correction_identity(transaction)
+                    idempotency_outcome = await unit_of_work.idempotency.claim(
+                        event_id=metadata.event_id,
+                        portfolio_id=transaction.portfolio_id,
+                        semantic_key=identity.semantic_key,
+                        payload_fingerprint=identity.payload_fingerprint,
+                        correlation_id=metadata.correlation_id,
+                    )
+                    correction_claimed = (
+                        idempotency_outcome is TransactionIdempotencyOutcome.CLAIMED
+                    )
                 repair_delivery_claimed = (
                     idempotency_outcome is TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE
                     and metadata.processing_intent is TransactionProcessingIntent.REPAIR
@@ -106,7 +126,7 @@ class ProcessTransactionUseCase:
                         correlation_id=metadata.correlation_id,
                     )
                 )
-                if repair_delivery_claimed:
+                if correction_claimed or repair_delivery_claimed:
                     idempotency_observation.set_outcome(TransactionProcessingOutcome.REPLAYED)
                 elif idempotency_outcome is not TransactionIdempotencyOutcome.CLAIMED:
                     idempotency_observation.set_outcome(
@@ -149,6 +169,7 @@ class ProcessTransactionUseCase:
                             processed_transaction,
                             correlation_id=metadata.correlation_id,
                             traceparent=metadata.traceparent,
+                            rebuild_existing=correction_claimed,
                         )
                     )
             rebuilt_transactions = _rebuilt_position_transactions(position_results)

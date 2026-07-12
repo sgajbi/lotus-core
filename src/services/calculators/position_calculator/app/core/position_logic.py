@@ -45,6 +45,8 @@ class PositionCalculator:
         db_session: AsyncSession,
         repo: PositionRepository,
         position_state_repo: PositionStateRepository,
+        *,
+        rebuild_existing: bool = False,
     ) -> PositionCalculationResult:
         """
         Orchestrates recalculation and reprocessing triggers for a single transaction event.
@@ -74,11 +76,8 @@ class PositionCalculator:
         if replay_decision.should_queue_replay:
             if replay_decision.replay_watermark_date is None:
                 raise RuntimeError("Backdated replay decision did not include a replay watermark.")
-            if await repo.is_transaction_materialized(
-                portfolio_id,
-                security_id,
-                event.transaction_id,
-                current_state.epoch,
+            if not rebuild_existing and await repo.is_transaction_materialized(
+                portfolio_id, security_id, event.transaction_id, current_state.epoch
             ):
                 POSITION_RECALCULATION_COORDINATION_TOTAL.labels(
                     outcome="coalesced",

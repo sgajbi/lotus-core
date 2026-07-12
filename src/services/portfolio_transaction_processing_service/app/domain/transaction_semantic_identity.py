@@ -10,6 +10,7 @@ from typing import Any
 from .booked_transaction import BookedTransaction
 
 TRANSACTION_SEMANTIC_IDENTITY_VERSION = "v1"
+TRANSACTION_CORRECTION_IDENTITY_VERSION = "v1"
 _PROCESSOR_OWNED_OUTPUT_FIELDS = frozenset(
     {
         "allocated_cost_basis_base",
@@ -72,6 +73,28 @@ def build_transaction_semantic_identity(
     return TransactionSemanticIdentity(
         semantic_key=semantic_key,
         payload_fingerprint=payload_fingerprint,
+    )
+
+
+def build_transaction_correction_identity(
+    transaction: BookedTransaction,
+) -> TransactionSemanticIdentity:
+    """Build an immutable identity for one explicit canonical correction payload."""
+
+    base_identity = build_transaction_semantic_identity(transaction)
+    semantic_key = ":".join(
+        (
+            "transaction-correction",
+            TRANSACTION_CORRECTION_IDENTITY_VERSION,
+            transaction.portfolio_id.strip(),
+            transaction.transaction_id.strip(),
+            str(transaction.epoch or 0),
+            base_identity.payload_fingerprint,
+        )
+    )
+    return TransactionSemanticIdentity(
+        semantic_key=semantic_key,
+        payload_fingerprint=base_identity.payload_fingerprint,
     )
 
 

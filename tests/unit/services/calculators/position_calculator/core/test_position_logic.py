@@ -10,7 +10,10 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from portfolio_common.position_state_repository import PositionStateRepository
 
-from src.services.calculators.position_calculator.app.core.position_logic import PositionCalculator
+from src.services.calculators.position_calculator.app.core.position_logic import (
+    PositionCalculationResult,
+    PositionCalculator,
+)
 from src.services.calculators.position_calculator.app.core.position_models import (
     PositionState as PositionStateDTO,
 )
@@ -410,6 +413,37 @@ async def test_calculate_coalesces_backdated_event_already_materialized_in_curre
     mock_coordination_metric.labels.return_value.inc.assert_called_once_with()
     mock_work_metric.labels.assert_called_once_with(mode="coalesced")
     mock_work_metric.labels.return_value.observe.assert_called_once_with(0)
+
+
+@pytest.mark.asyncio
+@patch.object(PositionCalculator, "_rebuild_backdated_position_history", new_callable=AsyncMock)
+@patch("src.services.calculators.position_calculator.app.core.position_logic.EpochFencer")
+async def test_calculate_rebuilds_materialized_backdated_event_for_explicit_correction(
+    mock_fencer_class: MagicMock,
+    mock_rebuild: AsyncMock,
+    mock_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    sample_event: TransactionEvent,
+) -> None:
+    mock_fencer_class.return_value.check = AsyncMock(return_value=True)
+    mock_rebuild.return_value = PositionCalculationResult(position_record_count=2)
+    sample_event.epoch = None
+    current_state = PositionState(watermark_date=date(2025, 8, 25), epoch=3)
+    mock_state_repo.get_or_create_state.return_value = current_state
+    mock_repo.get_latest_position_history_date.return_value = date(2025, 8, 25)
+    mock_repo.is_transaction_materialized.return_value = True
+
+    result = await PositionCalculator.calculate(
+        sample_event,
+        AsyncMock(),
+        mock_repo,
+        mock_state_repo,
+        rebuild_existing=True,
+    )
+
+    assert result.position_record_count == 2
+    mock_repo.is_transaction_materialized.assert_not_awaited()
+    mock_rebuild.assert_awaited_once()
 
 
 @pytest.mark.asyncio

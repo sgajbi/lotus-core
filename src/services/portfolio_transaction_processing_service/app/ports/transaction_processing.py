@@ -83,6 +83,7 @@ class PositionProcessingPort(Protocol):
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        rebuild_existing: bool = False,
     ) -> PositionProcessingResult: ...
 
 

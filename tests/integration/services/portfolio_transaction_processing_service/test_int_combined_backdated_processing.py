@@ -12,12 +12,14 @@ from portfolio_common.database_models import (
     PositionHistory,
     PositionLotState,
     PositionState,
+    ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
+    TransactionProcessingIntent,
     TransactionProcessingStatus,
 )
 from tests.test_support.transaction_processing import (
@@ -25,6 +27,7 @@ from tests.test_support.transaction_processing import (
     instrument_record,
     persist_and_process_booked_transaction,
     portfolio_record,
+    process_booked_transaction,
     transaction_processing_test_context,
 )
 
@@ -208,6 +211,128 @@ async def test_backdated_transaction_rebuilds_current_epoch_without_legacy_repla
         stage.transaction_id for stage in current_pipeline_stages
     }
     assert legacy_replay_event_count == 0
+
+
+async def test_explicit_correction_rebuilds_already_materialized_position_history(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    portfolio_id = "PORT-COMBINED-CORRECTION-01"
+    security_id = "SEC-COMBINED-CORRECTION-01"
+    first_buy = booked_transaction_event(
+        transaction_id="BUY-COMBINED-CORRECTION-DAY1",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="100",
+        price="100",
+        gross_amount="10000",
+    )
+    later_buy = booked_transaction_event(
+        transaction_id="BUY-COMBINED-CORRECTION-DAY3",
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        transaction_date=datetime(2026, 1, 7, 10, 0, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity="50",
+        price="120",
+        gross_amount="6000",
+    )
+    async_db_session.add_all(
+        [
+            portfolio_record(portfolio_id),
+            instrument_record(
+                security_id,
+                name="Combined Correction Equity",
+                isin="SG0000000299",
+                currency="USD",
+            ),
+        ]
+    )
+    await async_db_session.commit()
+    context = transaction_processing_test_context(async_db_session)
+    await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=first_buy,
+        event_id="transactions.persisted-0-9291",
+        correlation_id="corr-combined-correction-01",
+    )
+    await persist_and_process_booked_transaction(
+        session=async_db_session,
+        context=context,
+        event=later_buy,
+        event_id="transactions.persisted-0-9292",
+        correlation_id="corr-combined-correction-01",
+    )
+
+    await async_db_session.execute(
+        update(DBTransaction)
+        .where(DBTransaction.transaction_id == first_buy.transaction_id)
+        .values(quantity=Decimal("120"), gross_transaction_amount=Decimal("12000"))
+    )
+    await async_db_session.commit()
+    corrected_first_buy = first_buy.model_copy(
+        update={
+            "quantity": Decimal("120"),
+            "gross_transaction_amount": Decimal("12000"),
+        }
+    )
+
+    correction_result = await process_booked_transaction(
+        context=context,
+        event=corrected_first_buy,
+        event_id="transactions.persisted-0-9293",
+        correlation_id="corr-combined-correction-01",
+        processing_intent=TransactionProcessingIntent.REPAIR,
+    )
+
+    assert correction_result.status is TransactionProcessingStatus.PROCESSED
+    assert correction_result.position_record_count == 2
+    async with context.session_factory() as verification_session:
+        state = (
+            await verification_session.execute(
+                select(PositionState).where(
+                    PositionState.portfolio_id == portfolio_id,
+                    PositionState.security_id == security_id,
+                )
+            )
+        ).scalar_one()
+        positions = (
+            (
+                await verification_session.execute(
+                    select(PositionHistory)
+                    .where(
+                        PositionHistory.portfolio_id == portfolio_id,
+                        PositionHistory.security_id == security_id,
+                        PositionHistory.epoch == state.epoch,
+                    )
+                    .order_by(PositionHistory.position_date)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        correction_fence_count = int(
+            await verification_session.scalar(
+                select(func.count())
+                .select_from(ProcessedEvent)
+                .where(
+                    ProcessedEvent.service_name == "portfolio-transaction-processing",
+                    ProcessedEvent.semantic_key.like("transaction-correction:v1:%"),
+                )
+            )
+            or 0
+        )
+
+    assert state.epoch == 1
+    assert [position.quantity for position in positions] == [Decimal("120"), Decimal("170")]
+    assert [position.cost_basis for position in positions] == [
+        Decimal("12000"),
+        Decimal("18000"),
+    ]
+    assert correction_fence_count == 1
 
 
 @pytest.mark.parametrize(

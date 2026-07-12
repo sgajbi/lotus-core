@@ -21,6 +21,7 @@ class PositionStagingWorkflow(Protocol):
         db_session: AsyncSession,
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
+        rebuild_existing: bool = False,
     ) -> position_logic.PositionCalculationResult: ...
 
 
@@ -33,12 +34,14 @@ class CombinedPositionCalculationWorkflow:
         db_session: AsyncSession,
         repo: position_repository.PositionRepository,
         position_state_repo: PositionStateRepository,
+        rebuild_existing: bool = False,
     ) -> position_logic.PositionCalculationResult:
         return await position_logic.PositionCalculator.calculate(
             event=event,
             db_session=db_session,
             repo=repo,
             position_state_repo=position_state_repo,
+            rebuild_existing=rebuild_existing,
         )
 
 
@@ -64,6 +67,7 @@ class PositionProcessingCompatibilityAdapter:
         *,
         correlation_id: str | None,
         traceparent: str | None,
+        rebuild_existing: bool = False,
     ) -> PositionProcessingResult:
         stage_result = await self._workflow.calculate(
             event=to_transaction_event(
@@ -74,6 +78,7 @@ class PositionProcessingCompatibilityAdapter:
             db_session=self._db_session,
             repo=self._repository,
             position_state_repo=self._position_state_repository,
+            rebuild_existing=rebuild_existing,
         )
         return PositionProcessingResult(
             position_record_count=stage_result.position_record_count,
