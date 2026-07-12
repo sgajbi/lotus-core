@@ -162,11 +162,13 @@ This separation avoids treating a CI transport artifact as a registry mirror or 
 
 ## Compose Runtime Port Isolation
 
-Compose-backed suites use one `PreparedTestRuntime` per project. Dynamically selected TCP ports stay
-bound by `RuntimePortReservation` through image inspection and cleanup, then release immediately
-before Compose startup. If Docker reports a host bind conflict, the helper cleans the failed
-project attempt, reserves a completely new dynamic port generation, refreshes exported database,
-Kafka, and HTTP connection metadata, and retries within the configured bound.
+Compose-backed suites use one `PreparedTestRuntime` per project and pass that complete runtime to
+Compose helpers. Dynamically selected TCP ports stay bound by `RuntimePortReservation` through
+image inspection and cleanup, then release immediately before Compose startup. If Docker reports a
+host bind conflict, the helper cleans the failed project attempt, reserves a completely new dynamic
+port generation, refreshes exported database, Kafka, and HTTP connection metadata, and retries
+within the configured bound. Same-process concurrent projects use separate subprocess environments;
+they do not race by mutating process-global Compose identity.
 
 Explicit port overrides are operator intent and are never changed automatically. Suite launchers
 must let the pytest child prepare and own reservations; a parent process must not preallocate ports

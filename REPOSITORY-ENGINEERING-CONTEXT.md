@@ -1941,12 +1941,15 @@ Most relevant current governance:
      or rely on the app-local default when parallel stacks may run. Compose-backed recovery restart
      sets and health checks must derive from `scripts/quality/ci_service_sets.py`, not duplicate a
      local service list. Compose-backed tests and operational drivers must call
-     `prepare_test_runtime(...)`, export its environment, and pass its `RuntimePortReservation` to
-     `compose_up(...)`. Dynamic ports remain bound until each startup attempt; a recognized bind
-     conflict reallocates the complete dynamic generation and refreshes PostgreSQL, Kafka, and HTTP
-     endpoints before retry. Fixed endpoints remain valid only as explicit operator overrides and
-     must never be changed by automatic reallocation. The suite launcher must let the pytest child
-     own reservations rather than allocating and releasing ports in its parent process.
+     `prepare_test_runtime(...)`, export its environment when process-global consumers require it,
+     and pass the complete `PreparedTestRuntime` to Compose helpers. Dynamic ports remain bound
+     until each startup attempt; a recognized bind conflict reallocates the complete dynamic
+     generation and refreshes PostgreSQL, Kafka, and HTTP endpoints before retry. Fixed endpoints
+     remain valid only as explicit operator overrides and must never be changed by automatic
+     reallocation. The suite launcher must let the pytest child own reservations rather than
+     allocating and releasing ports in its parent process. Concurrent same-process projects must
+     use their prepared runtime as the subprocess environment instead of mutating shared process
+     state.
 140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and

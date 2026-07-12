@@ -26,6 +26,8 @@ reservation handoff.
 - Removed the allocate-then-release helper and the obsolete `build_test_runtime_env` API.
 - Made endpoint and connection metadata derive from the current port generation.
 - Made exported environments refresh atomically after reallocation.
+- Passed the complete prepared runtime into Compose helpers so concurrent same-process projects use
+  independent project identity and subprocess environments without global-environment mutation.
 - Added explicit host-bind failure classification and complete dynamic-port reallocation before a
   bounded retry.
 - Preserved caller-supplied fixed ports across automatic reallocation.
@@ -37,12 +39,15 @@ reservation handoff.
 
 ## Measurement And Validation
 
-- `54` focused runtime-environment, Docker-stack, failure-recovery, and test-manifest tests passed.
+- `56` focused runtime-environment, Docker-stack, failure-recovery, test-manifest, and live
+  isolation tests passed.
 - Eight concurrently prepared runtimes held globally disjoint active port sets.
 - Controlled bind-conflict tests proved one full reallocation and successful retry, plus bounded
   failure after retry exhaustion.
 - A concurrent live run passed `135` integration-lite tests in `6.76s` and `10` unit-DB tests in
   `56.80s` in independent Compose projects without port collision or state contamination.
+- One live integration test started two PostgreSQL Compose projects concurrently in the same pytest
+  process, proved disjoint host ports, and connected to both in `20.26s`.
 - Configured MyPy, scoped Ruff lint/format, and `git diff --check` passed.
 
 ## Compatibility

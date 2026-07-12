@@ -72,14 +72,16 @@ deployment remain owned by `.github/workflows/image-release.yml`.
 ## Concurrent Compose Isolation
 
 Repository-native Compose suites prepare a unique project and hold every dynamically assigned host
-port until startup. `compose_up(...)` receives the runtime reservation, releases it immediately
-before Docker claims the ports, and replaces the complete dynamic port generation after a
-recognized bind conflict. Exhausted retries report `host_port_bind_conflict`, attempt count,
-reallocation count, and Compose project identity.
+port until startup. `compose_up(...)` receives the complete `PreparedTestRuntime` so project name,
+subprocess environment, current endpoints, and reservation ownership cannot drift. It releases the
+reservation immediately before Docker claims the ports and replaces the complete dynamic port
+generation after a recognized bind conflict. Exhausted retries report
+`host_port_bind_conflict`, attempt count, reallocation count, and Compose project identity.
 
 Do not restore free-port probing that closes sockets before startup, preallocate child-suite ports
-in `test_manifest.py`, or retry a bind conflict with unchanged dynamic assignments. Preserve fixed
-port environment values only for explicit operator-controlled runtimes.
+in `test_manifest.py`, mutate shared process environment for same-process concurrent projects, or
+retry a bind conflict with unchanged dynamic assignments. Preserve fixed port environment values
+only for explicit operator-controlled runtimes.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.
