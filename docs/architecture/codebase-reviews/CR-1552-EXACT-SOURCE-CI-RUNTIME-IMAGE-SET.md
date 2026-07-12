@@ -24,6 +24,10 @@ Dockerfile but were built separately with identical metadata.
 - Expanded each workflow's existing `Validate Docker Build` job into the sole image-set producer.
 - Replaced per-consumer Buildx/cache/prebuild blocks with artifact download and exact-SHA
   `load-verify` steps across PR and main Docker-backed jobs.
+- Made CI runtime Make targets omit `--build` and `--runtime-build` after artifact verification;
+  local invocations retain their existing build-by-default behavior.
+- Bound the E2E image set to every repo-built service started by `FULL_STACK_SERVICES`, including
+  financial reconciliation, so no E2E service can be rebuilt outside the verified artifact.
 - Added manifest evidence for source commit, branch, repository, CI run, generated-at time, image
   IDs, Dockerfile hashes, Compose hash, dependency-lock hash, dependency-closure hash, bundle
   digest, and canonical content hash.
@@ -67,6 +71,8 @@ vendor images remain governed by bounded pull/inspection logic and are not copie
   aggregate/changed/critical coverage, and all local lane guards.
 - `make quality-workflow-governance-gate`: `20 passed`.
 - Workflow YAML parsing and `actionlint`: passed.
+- CI/local Make dry runs prove CI omits rebuild flags and local commands retain them.
+- Review regressions prove E2E image inventory equals all repo-built full-stack services.
 - Scoped Ruff lint/format and `git diff --check`: passed.
 - Wiki professional-page audit and repository documentation gates: passed.
 - Repo-wiki check-only: expected drift only for `Validation-and-CI.md`; publish after merge.
