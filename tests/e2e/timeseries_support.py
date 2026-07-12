@@ -44,12 +44,12 @@ EXPECTED_PORTFOLIO_TIMESERIES = {
     "2025-08-28": {
         "beginning_market_value": Decimal("0"),
         "ending_market_value": Decimal("5720"),
-        "valuation_status": "restated",
+        "valuation_status": "final",
     },
     "2025-08-29": {
         "beginning_market_value": Decimal("6240"),
         "ending_market_value": Decimal("6575"),
-        "valuation_status": "restated",
+        "valuation_status": "final",
     },
 }
 
