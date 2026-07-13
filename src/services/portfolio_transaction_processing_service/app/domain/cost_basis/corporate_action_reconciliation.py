@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from typing import Iterable
 
 from portfolio_common.ca_bundle_a_constants import (
@@ -17,11 +18,20 @@ from ..transaction.corporate_action import is_bundle_a_corporate_action
 DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE = Decimal("0.01")
 
 
+class CorporateActionBasisReconciliationStatus(StrEnum):
+    """Classify completeness and conservation of one corporate-action group."""
+
+    BALANCED = "balanced"
+    BASIS_MISMATCH = "basis_mismatch"
+    INSUFFICIENT_CASH_BASIS = "insufficient_cash_basis"
+    INSUFFICIENT_LEGS = "insufficient_legs"
+
+
 @dataclass(frozen=True, slots=True)
 class CorporateActionBasisReconciliation:
     """Summarize basis conservation for one linked corporate-action group."""
 
-    status: str
+    status: CorporateActionBasisReconciliationStatus
     source_leg_count: int
     target_leg_count: int
     cash_consideration_count: int
@@ -113,11 +123,15 @@ def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
             totals.cash_basis_local += transaction.allocated_cost_basis_local
 
 
-def _status(totals: _BasisTotals, net_delta: Decimal, tolerance: Decimal) -> str:
+def _status(
+    totals: _BasisTotals,
+    net_delta: Decimal,
+    tolerance: Decimal,
+) -> CorporateActionBasisReconciliationStatus:
     if totals.source_leg_count == 0 or totals.target_leg_count == 0:
-        return "insufficient_legs"
+        return CorporateActionBasisReconciliationStatus.INSUFFICIENT_LEGS
     if totals.missing_cash_basis_count > 0:
-        return "insufficient_cash_basis"
+        return CorporateActionBasisReconciliationStatus.INSUFFICIENT_CASH_BASIS
     if abs(net_delta) <= tolerance:
-        return "balanced"
-    return "basis_mismatch"
+        return CorporateActionBasisReconciliationStatus.BALANCED
+    return CorporateActionBasisReconciliationStatus.BASIS_MISMATCH

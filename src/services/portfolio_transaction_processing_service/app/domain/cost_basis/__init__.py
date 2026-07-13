@@ -36,6 +36,7 @@ from .corporate_action_cash_economics import (
 from .corporate_action_reconciliation import (
     DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     CorporateActionBasisReconciliation,
+    CorporateActionBasisReconciliationStatus,
     missing_corporate_action_dependencies,
     reconcile_corporate_action_basis,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "CorporateActionCashEconomics",
     "CorporateActionCashEconomicsError",
     "CorporateActionBasisReconciliation",
+    "CorporateActionBasisReconciliationStatus",
     "CostBasisCalculator",
     "COST_BASIS_STATE_VERSION",
     "CostBasisProcessingCheckpoint",
