@@ -170,20 +170,23 @@ def _semantic_cashflow_event_id(event: TransactionEvent) -> str:
     return f"cashflow:{event.portfolio_id}:{event.transaction_id}:{event.epoch or 0}"
 
 
-def _validated_cashflow_transaction_type(event: TransactionEvent) -> str:
+def _validated_cashflow_transaction_type(
+    event: TransactionEvent,
+    booked_transaction: BookedTransaction,
+) -> str:
     event_transaction_type = resolve_effective_processing_transaction_type(event)
     if is_ca_bundle_a_transaction_type(event_transaction_type):
         assert_ca_bundle_a_transaction_valid(event)
-    assert_cash_entry_mode_supported(to_booked_transaction(event))
-    _assert_linked_cash_leg_contract(event)
+    assert_cash_entry_mode_supported(booked_transaction)
+    _assert_linked_cash_leg_contract(booked_transaction)
     return str(event_transaction_type)
 
 
-def _assert_linked_cash_leg_contract(event: TransactionEvent) -> None:
-    has_linked_cash_leg = bool((event.external_cash_transaction_id or "").strip())
+def _assert_linked_cash_leg_contract(transaction: BookedTransaction) -> None:
+    has_linked_cash_leg = bool((transaction.external_cash_transaction_id or "").strip())
     if (
-        event.cash_entry_mode is not None
-        and is_upstream_provided_cash_entry_mode(event.cash_entry_mode)
+        transaction.cash_entry_mode is not None
+        and is_upstream_provided_cash_entry_mode(transaction.cash_entry_mode)
         and not has_linked_cash_leg
     ):
         raise LinkedCashLegError(
@@ -499,7 +502,8 @@ class CashflowCalculationWorkflow:
         repair_existing: bool = False,
         booked_transaction: BookedTransaction | None = None,
     ) -> CashflowStageResult:
-        event_transaction_type = _validated_cashflow_transaction_type(event)
+        booked_transaction = booked_transaction or to_booked_transaction(event)
+        event_transaction_type = _validated_cashflow_transaction_type(event, booked_transaction)
         if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
             return CashflowStageResult(
                 outcome=CashflowProcessingOutcome.NON_CASHFLOW_LIFECYCLE_EVENT
@@ -509,7 +513,7 @@ class CashflowCalculationWorkflow:
             cashflow_repo,
             outbox_repo,
             event,
-            booked_transaction or to_booked_transaction(event),
+            booked_transaction,
             rule,
             correlation_id,
             repair_existing,
