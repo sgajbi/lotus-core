@@ -10,10 +10,10 @@ from portfolio_common.source_data_product_metadata import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.cashflow_projection_dto import CashflowProjectionPoint, CashflowProjectionResponse
 from ..repositories.cashflow_repository import CashflowRepository
 from .cashflow_evidence_window import read_cashflow_evidence_window
-from .decimal_amounts import decimal_or_zero
 
 logger = logging.getLogger(__name__)
 

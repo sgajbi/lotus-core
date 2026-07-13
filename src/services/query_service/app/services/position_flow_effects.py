@@ -7,7 +7,7 @@ from portfolio_common.transaction_type_registry import (
     production_transaction_types_for_position_effects,
 )
 
-from .decimal_amounts import decimal_or_zero
+from ..domain.strict_decimal import decimal_or_zero
 
 POSITION_INCREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects("increase")
 POSITION_DECREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects("decrease")

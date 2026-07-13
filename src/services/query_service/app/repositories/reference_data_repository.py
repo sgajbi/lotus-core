@@ -10,7 +10,7 @@ from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..services.decimal_amounts import decimal_or_none
+from ..domain.strict_decimal import decimal_or_none
 from .currency_query_expressions import currency_code_sql_expr
 
 

@@ -1,3 +1,5 @@
+"""Parse required source decimals while rejecting malformed non-empty values."""
+
 from __future__ import annotations
 
 from decimal import Decimal

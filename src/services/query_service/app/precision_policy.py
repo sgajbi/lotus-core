@@ -1,7 +1,7 @@
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any
 
-from .services.decimal_amounts import decimal_or_none
+from .domain.strict_decimal import decimal_or_none
 
 ROUNDING_POLICY_VERSION = "1.1.0"
 ROUNDING_MODE = ROUND_HALF_EVEN

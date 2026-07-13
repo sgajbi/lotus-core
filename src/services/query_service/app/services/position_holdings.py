@@ -9,10 +9,10 @@ from portfolio_common.source_data_product_metadata import (
     stable_content_hash,
 )
 
+from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.position_dto import PortfolioPositionsResponse, Position
 from ..dtos.valuation_dto import ValuationData
 from ..repositories.identifier_normalization import normalize_security_id
-from .decimal_amounts import decimal_or_zero
 
 HeldSinceRequest = tuple[int, str, int, date]
 PositionRowResult = tuple[Any, Any, Any]

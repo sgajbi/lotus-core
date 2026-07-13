@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from .decimal_amounts import decimal_or_none
+from ..domain.strict_decimal import decimal_or_none
 
 
 def as_decimal(value: Any) -> Decimal:
