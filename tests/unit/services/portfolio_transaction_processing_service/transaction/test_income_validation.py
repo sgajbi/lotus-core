@@ -67,6 +67,7 @@ def test_dividend_validation_reports_every_compatible_reason_code() -> None:
     assert {issue.code for issue in issues} == set(DividendValidationReasonCode) - {
         DividendValidationReasonCode.INVALID_DATE_ORDER,
         DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
+        DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
     }
 
 
@@ -96,6 +97,7 @@ def test_interest_validation_reports_every_compatible_reason_code() -> None:
     assert {issue.code for issue in issues} == set(InterestValidationReasonCode) - {
         InterestValidationReasonCode.INVALID_DATE_ORDER,
         InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT,
+        InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
     }
 
 
@@ -158,3 +160,27 @@ def test_interest_validation_rejects_net_interest_reconciliation_mismatch() -> N
     assert mismatch.code.value == "INTEREST_015_NET_RECONCILIATION_MISMATCH"
     assert mismatch.field == "net_interest_amount"
     assert mismatch.message.endswith("before transaction fees.")
+
+
+def test_dividend_validation_rejects_non_positive_net_settlement() -> None:
+    issues = validate_dividend_transaction(
+        replace(_income("DIVIDEND"), trade_fee=Decimal("123.45"))
+    )
+
+    assert DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT in {
+        issue.code for issue in issues
+    }
+
+
+def test_interest_income_validation_rejects_non_positive_net_settlement() -> None:
+    transaction = replace(
+        _income("INTEREST"),
+        withholding_tax_amount=Decimal("23.45"),
+        net_interest_amount=Decimal("100"),
+        trade_fee=Decimal("100"),
+        interest_direction="INCOME",
+    )
+
+    assert InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT in {
+        issue.code for issue in validate_interest_transaction(transaction)
+    }

@@ -2,6 +2,8 @@
 
 from enum import StrEnum
 
+from ..settlement.reason_codes import SettlementCashRejectionReasonCode
+
 
 class BuyValidationReasonCode(StrEnum):
     """Identify canonical BUY validation failures."""
@@ -29,6 +31,9 @@ class SellValidationReasonCode(StrEnum):
     INVALID_DATE_ORDER = "SELL_007_INVALID_DATE_ORDER"
     MISSING_LINKAGE_IDENTIFIER = "SELL_008_MISSING_LINKAGE_IDENTIFIER"
     MISSING_POLICY_METADATA = "SELL_009_MISSING_POLICY_METADATA"
+    NON_POSITIVE_NET_SETTLEMENT = (
+        SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT.value
+    )
 
 
 class DividendValidationReasonCode(StrEnum):
@@ -46,6 +51,9 @@ class DividendValidationReasonCode(StrEnum):
     MISSING_POLICY_METADATA = "DIVIDEND_010_MISSING_POLICY_METADATA"
     MISSING_EXTERNAL_CASH_LINK = "DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK"
     MISSING_SETTLEMENT_CASH_ACCOUNT = "DIVIDEND_012_MISSING_SETTLEMENT_CASH_ACCOUNT"
+    NON_POSITIVE_NET_SETTLEMENT = (
+        SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT.value
+    )
 
 
 class InterestValidationReasonCode(StrEnum):
@@ -67,6 +75,9 @@ class InterestValidationReasonCode(StrEnum):
     NEGATIVE_OTHER_DEDUCTIONS = "INTEREST_014_NEGATIVE_OTHER_DEDUCTIONS"
     NET_INTEREST_RECONCILIATION_MISMATCH = "INTEREST_015_NET_RECONCILIATION_MISMATCH"
     MISSING_SETTLEMENT_CASH_ACCOUNT = "INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT"
+    NON_POSITIVE_NET_SETTLEMENT = (
+        SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT.value
+    )
 
 
 TransactionValidationReasonCode = (

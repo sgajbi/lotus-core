@@ -9,6 +9,7 @@ from portfolio_common.domain.transaction_control_codes import (
 )
 
 from ..booked import BookedTransaction
+from ..settlement import SettlementCashValidationError, calculate_settlement_cash_movement
 from .issues import TransactionValidationIssue
 from .reason_codes import BuyValidationReasonCode, SellValidationReasonCode
 
@@ -29,6 +30,7 @@ class TradeValidationPolicy:
     invalid_date_order_code: TradeValidationReasonCode
     missing_linkage_code: TradeValidationReasonCode
     missing_policy_code: TradeValidationReasonCode
+    non_positive_net_settlement_code: SellValidationReasonCode | None = None
 
 
 def validate_buy_transaction(
@@ -104,6 +106,21 @@ def _validate_trade_transaction(
                 ),
             )
         )
+    if (
+        policy.non_positive_net_settlement_code is not None
+        and normalize_transaction_control_code(transaction.transaction_type)
+        == policy.transaction_type
+    ):
+        try:
+            calculate_settlement_cash_movement(transaction)
+        except SettlementCashValidationError as exc:
+            issues.append(
+                TransactionValidationIssue(
+                    code=policy.non_positive_net_settlement_code,
+                    field=exc.field,
+                    message=exc.message,
+                )
+            )
     if not transaction.trade_currency:
         issues.append(
             TransactionValidationIssue(
@@ -189,4 +206,5 @@ _SELL_VALIDATION_POLICY = TradeValidationPolicy(
     invalid_date_order_code=SellValidationReasonCode.INVALID_DATE_ORDER,
     missing_linkage_code=SellValidationReasonCode.MISSING_LINKAGE_IDENTIFIER,
     missing_policy_code=SellValidationReasonCode.MISSING_POLICY_METADATA,
+    non_positive_net_settlement_code=SellValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT,
 )

@@ -33,6 +33,7 @@ def test_sell_validation_reason_codes_remain_stable() -> None:
         "SELL_007_INVALID_DATE_ORDER",
         "SELL_008_MISSING_LINKAGE_IDENTIFIER",
         "SELL_009_MISSING_POLICY_METADATA",
+        "SELL_010_NON_POSITIVE_NET_SETTLEMENT",
     ]
 
 
@@ -50,6 +51,7 @@ def test_dividend_validation_reason_codes_remain_stable() -> None:
         "DIVIDEND_010_MISSING_POLICY_METADATA",
         "DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK",
         "DIVIDEND_012_MISSING_SETTLEMENT_CASH_ACCOUNT",
+        "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT",
     ]
 
 
@@ -71,4 +73,5 @@ def test_interest_validation_reason_codes_remain_stable() -> None:
         "INTEREST_014_NEGATIVE_OTHER_DEDUCTIONS",
         "INTEREST_015_NET_RECONCILIATION_MISMATCH",
         "INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT",
+        "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT",
     ]

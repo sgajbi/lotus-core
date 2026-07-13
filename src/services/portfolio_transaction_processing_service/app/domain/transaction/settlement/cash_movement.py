@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import StrEnum
 from typing import Callable
 
 from portfolio_common.domain.transaction_control_codes import (
@@ -17,14 +16,7 @@ from portfolio_common.transaction_fee_components import (
 
 from ..booked import BookedTransaction
 from .interest import calculate_interest_settlement_economics
-
-
-class SettlementCashRejectionReasonCode(StrEnum):
-    """Identify stable non-positive ordinary settlement failures."""
-
-    SELL_NON_POSITIVE_NET_SETTLEMENT = "SELL_010_NON_POSITIVE_NET_SETTLEMENT"
-    DIVIDEND_NON_POSITIVE_NET_SETTLEMENT = "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
-    INTEREST_NON_POSITIVE_NET_SETTLEMENT = "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"
+from .reason_codes import SettlementCashRejectionReasonCode
 
 
 @dataclass(frozen=True, slots=True)
