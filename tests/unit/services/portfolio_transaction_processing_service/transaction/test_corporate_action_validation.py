@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+import pytest
+
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     corporate_action,
@@ -35,6 +37,18 @@ def test_bundle_a_validation_accepts_normalized_spin_off() -> None:
     transaction = replace(_booked_transaction(), transaction_type=" spin_off ")
 
     assert corporate_action.is_bundle_a_corporate_action(transaction.transaction_type) is True
+    assert corporate_action.validate_bundle_a_corporate_action(transaction) == ()
+
+
+@pytest.mark.parametrize(
+    "transaction_type",
+    ("SPIN_OFF", "SPIN_IN", "DEMERGER_OUT", "DEMERGER_IN", "CASH_CONSIDERATION"),
+)
+def test_bundle_a_validation_accepts_every_supported_family(transaction_type: str) -> None:
+    transaction = _booked_transaction(transaction_type)
+    if transaction_type == "CASH_CONSIDERATION":
+        transaction = replace(transaction, linked_cash_transaction_id="CASH_LEG_01")
+
     assert corporate_action.validate_bundle_a_corporate_action(transaction) == ()
 
 
