@@ -72,6 +72,7 @@ PATH_LIST_FIELDS = {
 }
 IMPLEMENTED_STATUSES = {"active_current_state", "implemented", "partially_implemented"}
 INDEX_STATUS_TO_LEDGER_STATUS = {
+    "Accepted": "active_current_state",
     "Implemented": "implemented",
     "Partially Implemented": "partially_implemented",
     "In Progress": "partially_implemented",
@@ -121,18 +122,27 @@ def load_ledger(path: Path = LEDGER_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def load_rfc_index_statuses(path: Path = RFC_INDEX_PATH) -> dict[str, str]:
+def load_rfc_index_statuses(path: Path = RFC_INDEX_PATH) -> tuple[dict[str, str], list[str]]:
     statuses: dict[str, str] = {}
+    errors: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.startswith("| RFC-"):
             continue
         cells = [cell.strip() for cell in line.split("|")]
         if len(cells) < 6:
+            errors.append(f"RFC index contains malformed row: {line}")
             continue
-        expected_status = INDEX_STATUS_TO_LEDGER_STATUS.get(cells[4])
-        if expected_status is not None:
-            statuses[cells[1]] = expected_status
-    return statuses
+        rfc_id = cells[1]
+        current_status = cells[4]
+        expected_status = INDEX_STATUS_TO_LEDGER_STATUS.get(current_status)
+        if expected_status is None:
+            errors.append(f"RFC index {rfc_id} uses unmapped current status {current_status!r}")
+            continue
+        if rfc_id in statuses:
+            errors.append(f"RFC index contains duplicate current-status row for {rfc_id}")
+            continue
+        statuses[rfc_id] = expected_status
+    return statuses, errors
 
 
 def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> list[str]:
@@ -177,10 +187,14 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         errors.append("RFC ledger is missing metadata for: " + ", ".join(missing))
     if stale:
         errors.append("RFC ledger contains stale metadata for: " + ", ".join(stale))
+    index_statuses, index_errors = load_rfc_index_statuses(
+        repo_root / "docs" / "RFCs" / "RFC-INDEX.md"
+    )
+    errors.extend(index_errors)
     errors.extend(
         _index_status_errors(
             valid_entries,
-            index_statuses=load_rfc_index_statuses(repo_root / "docs" / "RFCs" / "RFC-INDEX.md"),
+            index_statuses=index_statuses,
         )
     )
     return errors

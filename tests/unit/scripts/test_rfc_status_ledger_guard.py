@@ -167,3 +167,60 @@ def test_rfc_status_ledger_rejects_status_that_conflicts_with_rfc_index(tmp_path
     errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
 
     assert any("status must be 'implemented' to match the RFC index" in error for error in errors)
+
+
+def test_rfc_status_ledger_maps_accepted_index_status_to_active_current_state(
+    tmp_path: Path,
+) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        "| RFC ID | Title | Original | Current | Classification | Evidence | Next |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| RFC-083 | Event taxonomy | Implemented | Accepted | Current | evidence | maintain |\n",
+        encoding="utf-8",
+    )
+    ledger = _ledger()
+    ledger["entries"][4]["rfc_id"] = "RFC-083"  # type: ignore[index]
+    ledger["entries"][4]["status"] = "active_current_state"  # type: ignore[index]
+
+    assert guard.evaluate_ledger(ledger, repo_root=tmp_path) == []
+
+
+def test_rfc_status_ledger_rejects_unmapped_index_status(tmp_path: Path) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        "| RFC ID | Title | Original | Current | Classification | Evidence | Next |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| RFC-001 | First | Draft | Experimental | Gap | evidence | decide |\n",
+        encoding="utf-8",
+    )
+
+    errors = guard.evaluate_ledger(_ledger(), repo_root=tmp_path)
+
+    assert "RFC index RFC-001 uses unmapped current status 'Experimental'" in errors
+
+
+def test_rfc_status_ledger_rejects_malformed_index_row(tmp_path: Path) -> None:
+    _write_required_files(tmp_path)
+    malformed_row = "| RFC-001 | First | Draft |"
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        malformed_row + "\n",
+        encoding="utf-8",
+    )
+
+    errors = guard.evaluate_ledger(_ledger(), repo_root=tmp_path)
+
+    assert f"RFC index contains malformed row: {malformed_row}" in errors
+
+
+def test_rfc_status_ledger_rejects_duplicate_index_row(tmp_path: Path) -> None:
+    _write_required_files(tmp_path)
+    index_row = "| RFC-001 | First | Draft | Implemented | Current | evidence | maintain |"
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        index_row + "\n" + index_row + "\n",
+        encoding="utf-8",
+    )
+
+    errors = guard.evaluate_ledger(_ledger(), repo_root=tmp_path)
+
+    assert "RFC index contains duplicate current-status row for RFC-001" in errors
