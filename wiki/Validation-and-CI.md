@@ -178,8 +178,9 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
 - `make test-transaction-processing-contract`
   protects atomic combined cost, cashflow, position, replay, rollback, fee, FX, multi-lot,
   backdated correction, epoch rebuild, and one-event-per-input behavior
-- required external Docker images use bounded retry only for classified registry/network failures;
-  permanent tag/auth errors fail immediately and raw registry output is never returned
+- required external Docker images use bounded retry for classified registry/network and unknown
+  failures; explicit permanent tag/auth errors fail immediately, unknown failures fail closed after
+  the bounded budget, and raw registry output is never returned
 - `make profile-cost-processing-modes`
   characterizes ordered lot-opening append, state-dependent disposal append, and deterministic
   backdated rebuild without claiming database or Kafka throughput
