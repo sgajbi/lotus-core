@@ -2535,7 +2535,7 @@
       "title": "Repository Lint Debt Hardening Plan",
       "family": "core",
       "path": "docs/RFCs/RFC 073 - Repository Lint Debt Hardening Plan.md",
-      "status": "partially_implemented",
+      "status": "implemented",
       "owner": "lotus-core",
       "affected_services": [
         "lotus-core"
@@ -2563,7 +2563,7 @@
       "supersedes": [],
       "superseded_by": [],
       "deprecation_relationship": "none",
-      "status_rationale": "Status seeded from docs/RFCs/RFC-INDEX.md."
+      "status_rationale": "Repository-wide Ruff check and format enforcement is active through the canonical make lint target."
     },
     {
       "rfc_id": "RFC-074",
@@ -3025,7 +3025,7 @@
       "title": "Repository Lint Debt Hardening Plan",
       "family": "core",
       "path": "docs/RFCs/RFC-073-SLICE-0-LINT-BASELINE.md",
-      "status": "partially_implemented",
+      "status": "implemented",
       "owner": "lotus-core",
       "affected_services": [
         "lotus-core"
@@ -3053,7 +3053,7 @@
       "supersedes": [],
       "superseded_by": [],
       "deprecation_relationship": "none",
-      "status_rationale": "Status seeded from docs/RFCs/RFC-INDEX.md."
+      "status_rationale": "The baseline and all planned lint-debt burn-down slices are complete, with repository-wide enforcement active."
     },
     {
       "rfc_id": "RFC-083",
