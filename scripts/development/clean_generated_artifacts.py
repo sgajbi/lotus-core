@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import shutil
 import sys
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -78,6 +80,8 @@ DISPOSABLE_FILE_PREFIXES = {
 DISPOSABLE_DIR_SUFFIXES = {
     ".egg-info",
 }
+DIRECTORY_REMOVE_MAX_ATTEMPTS = 3
+DIRECTORY_REMOVE_RETRY_SECONDS = 0.1
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
@@ -115,6 +119,44 @@ def _is_disposable_dir(path: Path) -> bool:
     return name in RECURSIVE_DISPOSABLE_DIR_NAMES or any(
         name.endswith(suffix) for suffix in DISPOSABLE_DIR_SUFFIXES
     )
+
+
+def _remove_directory_with_retry(
+    target: Path,
+    *,
+    remover: Callable[[Path], None] = shutil.rmtree,
+    sleeper: Callable[[float], None] = time.sleep,
+    max_attempts: int = DIRECTORY_REMOVE_MAX_ATTEMPTS,
+    retry_seconds: float = DIRECTORY_REMOVE_RETRY_SECONDS,
+) -> None:
+    """Remove a directory with bounded retry for transient file-system races."""
+
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+    for attempt in range(1, max_attempts + 1):
+        try:
+            remover(target)
+            return
+        except OSError as exc:
+            if not target.exists():
+                return
+            retryable = isinstance(exc, (FileNotFoundError, PermissionError)) or (
+                exc.errno == errno.ENOTEMPTY or getattr(exc, "winerror", None) == 145
+            )
+            if not retryable:
+                raise
+            if attempt == max_attempts:
+                raise
+            sleeper(retry_seconds)
+
+
+def _directory_removal_path(target: Path) -> Path:
+    """Return an extended-length Windows path for deeply nested artifacts."""
+
+    resolved = target.resolve(strict=False)
+    if os.name != "nt" or str(resolved).startswith("\\\\?\\"):
+        return resolved
+    return Path(f"\\\\?\\{resolved}")
 
 
 def discover_cleanup_targets(repo_root: Path = REPO_ROOT) -> list[Path]:
@@ -172,7 +214,7 @@ def remove_cleanup_targets(
         if target.is_symlink() or target.is_file():
             target.unlink()
         elif target.is_dir():
-            shutil.rmtree(target)
+            _remove_directory_with_retry(_directory_removal_path(target))
     return removed
 
 

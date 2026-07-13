@@ -1,8 +1,8 @@
 # CR-1272 Clean Generated Artifacts Policy
 
 - Date: 2026-07-04
-- Status: Hardened locally
-- GitHub issues: #699, #649 pattern review
+- Status: Merged foundation; Windows long-path handling hardened locally
+- GitHub issues: #699, #649 pattern review, #739
 
 ## Objective
 
@@ -19,6 +19,10 @@ virtual environments, and dependency directories.
 
 This hardens the reusable platform pattern for future agents: cleanup behavior belongs in a safe
 script with focused tests, not an inline shell or Python one-liner.
+
+The #739 extension preserves the same containment checks, converts verified Windows directory
+targets to extended-length `\\?\` paths, and retries transient removal races within a strict bound.
+Targets removed concurrently count as complete; persistent failures remain blocking.
 
 ## Pattern Review
 
@@ -46,6 +50,9 @@ the repo-native validation commands when needed.
     preservation
   - dry-run behavior
   - outside-repository deletion refusal
+  - Windows extended-length path adaptation
+  - transient removal recovery and concurrent completion
+  - bounded persistent-failure propagation
 
 ## Documentation Decision
 
@@ -57,6 +64,8 @@ Updated:
 
 No wiki source change: this is a local developer/agent cleanup command and does not change
 operator-facing runtime behavior, API support, source-data product truth, or public feature claims.
+No central skill/context change is required: the existing Windows filesystem safety contract already
+requires one-shell, verified-path cleanup; this fix strengthens the repo-native implementation.
 
 ## Validation Evidence
 
@@ -77,3 +86,5 @@ operator-facing runtime behavior, API support, source-data product truth, or pub
   passed, including the new cleanup script lint/format checks and existing repository guards.
 - `make quality-wiki-docs-gate`
   passed.
+- The #739 extension passed `10` focused cleanup tests and a real `make clean` run that removed `259`
+  governed artifacts, including the previously undeletable dependency-health virtualenv path.

@@ -1,3 +1,4 @@
+import errno
 from pathlib import Path
 
 import pytest
@@ -96,3 +97,138 @@ def test_remove_cleanup_targets_refuses_outside_repo_paths(tmp_path: Path) -> No
 
     assert outside_path.exists()
     outside_path.unlink()
+
+
+def test_directory_cleanup_retries_transient_removal_race(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+    attempts = 0
+
+    def transient_remover(path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise FileNotFoundError("descendant disappeared during removal")
+        clean.shutil.rmtree(path)
+
+    clean._remove_directory_with_retry(
+        target,
+        remover=transient_remover,
+        sleeper=lambda _seconds: None,
+    )
+
+    assert attempts == 2
+    assert not target.exists()
+
+
+def test_directory_cleanup_uses_extended_length_path_on_windows(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "artifact-cache"
+
+    removal_path = clean._directory_removal_path(target)
+
+    assert str(removal_path).startswith("\\\\?\\")
+    assert str(removal_path).endswith(str(target.resolve()))
+
+
+def test_directory_cleanup_accepts_concurrent_completion(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+
+    def concurrent_remover(path: Path) -> None:
+        clean.shutil.rmtree(path)
+        raise FileNotFoundError("another actor completed removal")
+
+    clean._remove_directory_with_retry(
+        target,
+        remover=concurrent_remover,
+        sleeper=lambda _seconds: None,
+    )
+
+    assert not target.exists()
+
+
+def test_directory_cleanup_retries_transient_permission_race(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+    attempts = 0
+
+    def transient_permission(path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise PermissionError("file handle still closing")
+        clean.shutil.rmtree(path)
+
+    clean._remove_directory_with_retry(
+        target,
+        remover=transient_permission,
+        sleeper=lambda _seconds: None,
+    )
+
+    assert attempts == 2
+    assert not target.exists()
+
+
+def test_directory_cleanup_fails_closed_on_persistent_permission_error(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+    attempts = 0
+
+    def persistent_remover(_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise PermissionError("directory access denied")
+
+    with pytest.raises(PermissionError, match="directory access denied"):
+        clean._remove_directory_with_retry(
+            target,
+            remover=persistent_remover,
+            sleeper=lambda _seconds: None,
+            max_attempts=3,
+        )
+
+    assert attempts == 3
+    assert target.exists()
+
+
+def test_directory_cleanup_bounds_repeated_descendant_races(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+    attempts = 0
+
+    def missing_descendant(_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise FileNotFoundError("descendant repeatedly disappeared")
+
+    with pytest.raises(FileNotFoundError, match="repeatedly disappeared"):
+        clean._remove_directory_with_retry(
+            target,
+            remover=missing_descendant,
+            sleeper=lambda _seconds: None,
+            max_attempts=3,
+        )
+
+    assert attempts == 3
+    assert target.exists()
+
+
+def test_directory_cleanup_does_not_retry_unclassified_os_error(tmp_path: Path) -> None:
+    target = tmp_path / "output"
+    _write(target / "artifact.txt")
+    attempts = 0
+
+    def invalid_remover(_path: Path) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise OSError(errno.EINVAL, "invalid removal request")
+
+    with pytest.raises(OSError, match="invalid removal request"):
+        clean._remove_directory_with_retry(
+            target,
+            remover=invalid_remover,
+            sleeper=lambda _seconds: None,
+        )
+
+    assert attempts == 1
+    assert target.exists()
