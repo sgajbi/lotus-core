@@ -1,15 +1,17 @@
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.events import TransactionEvent
-
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BookedTransaction,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
-    build_fx_contract_instrument_event,
+    build_fx_contract_instrument,
 )
 
 
-def _fx_contract_event() -> TransactionEvent:
-    return TransactionEvent(
+def _fx_contract_transaction() -> BookedTransaction:
+    return BookedTransaction(
         transaction_id="FX-OPEN-001",
         portfolio_id="PORT-FX-1",
         instrument_id="TEMP-INST",
@@ -34,15 +36,14 @@ def _fx_contract_event() -> TransactionEvent:
     )
 
 
-def test_build_fx_contract_instrument_event_from_contract_component() -> None:
-    event = _fx_contract_event().model_copy(
-        update={
-            "component_type": " fx_contract_open ",
-            "buy_currency": " usd ",
-            "sell_currency": " eur ",
-        }
+def test_build_fx_contract_instrument_from_contract_component() -> None:
+    transaction = replace(
+        _fx_contract_transaction(),
+        component_type=" fx_contract_open ",
+        buy_currency=" usd ",
+        sell_currency=" eur ",
     )
-    instrument = build_fx_contract_instrument_event(event)
+    instrument = build_fx_contract_instrument(transaction)
 
     assert instrument is not None
     assert instrument.security_id == "FXC-2026-0001"
@@ -60,6 +61,6 @@ def test_build_fx_contract_instrument_event_from_contract_component() -> None:
     assert instrument.contract_rate == Decimal("1.095")
 
 
-def test_build_fx_contract_instrument_event_returns_none_for_cash_component() -> None:
-    event = _fx_contract_event().model_copy(update={"component_type": " fx_cash_settlement_buy "})
-    assert build_fx_contract_instrument_event(event) is None
+def test_build_fx_contract_instrument_returns_none_for_cash_component() -> None:
+    transaction = replace(_fx_contract_transaction(), component_type=" fx_cash_settlement_buy ")
+    assert build_fx_contract_instrument(transaction) is None

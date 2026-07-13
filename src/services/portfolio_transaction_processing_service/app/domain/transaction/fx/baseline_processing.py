@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
-from portfolio_common.events import TransactionEvent
 
+from ..booked import BookedTransaction
 from .models import FxCanonicalTransaction
 from .validation import validate_fx_transaction
 
@@ -19,13 +20,11 @@ class UnsupportedFxRealizedPnlModeError(ValueError):
     """Raised when baseline FX processing is asked to simulate advanced P&L modes."""
 
 
-def build_fx_processed_event(event: TransactionEvent) -> TransactionEvent:
-    """
-    Establishes explicit baseline processing semantics for FX rows until
-    richer realized-P&L and valuation treatment is implemented.
-    """
-    update = build_fx_baseline_processing_update(event)
-    return event.model_copy(update=update)
+def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTransaction:
+    """Apply explicit baseline cost and realized-P&L semantics to an FX component."""
+
+    update = build_fx_baseline_processing_update(transaction)
+    return replace(transaction, **update)
 
 
 def build_fx_baseline_processing_update(source: object) -> dict[str, object]:
@@ -115,10 +114,10 @@ def _resolve_total_pnl(
     return total_pnl if total_pnl is not None else capital_pnl + fx_pnl
 
 
-def assert_fx_processed_event_valid(
-    event: TransactionEvent, *, strict_metadata: bool = True
+def assert_fx_processed_transaction_valid(
+    transaction: BookedTransaction, *, strict_metadata: bool = True
 ) -> None:
-    canonical = FxCanonicalTransaction.from_transaction(event)
+    canonical = FxCanonicalTransaction.from_transaction(transaction)
     issues = validate_fx_transaction(canonical, strict_metadata=strict_metadata)
     if issues:
         message = "; ".join(f"{issue.code}:{issue.field}" for issue in issues)
