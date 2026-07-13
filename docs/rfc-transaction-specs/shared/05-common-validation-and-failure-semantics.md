@@ -35,3 +35,19 @@ All failures must produce:
 - lifecycle stage
 - correlation id
 - economic event id where available
+
+## Ordinary Settlement Rejections
+
+Fee-equal or fee-dominated SELL, DIVIDEND, and INTEREST income settlement is a non-retryable
+`HARD_REJECT`. The application must reject it before opening the combined transaction-processing
+unit of work, and defensive direct-adapter paths must preserve the same result.
+
+Diagnostics expose only the stable family reason code, portfolio and transaction identity,
+transaction type, failing field, available proceeds, resolved fee, and net settlement amount. They
+must not expose raw payloads, exception text, credentials, or infrastructure details.
+
+| Family | Stable reason code |
+|---|---|
+| SELL | `SELL_010_NON_POSITIVE_NET_SETTLEMENT` |
+| DIVIDEND | `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` |
+| INTEREST income | `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT` |

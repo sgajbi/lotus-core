@@ -34,6 +34,12 @@ Implemented reason codes:
 - `INTEREST_009_MISSING_LINKAGE_IDENTIFIER`
 - `INTEREST_010_MISSING_POLICY_METADATA`
 - `INTEREST_011_MISSING_EXTERNAL_CASH_LINK`
+- `INTEREST_012_INVALID_INTEREST_DIRECTION`
+- `INTEREST_013_NEGATIVE_WITHHOLDING_TAX`
+- `INTEREST_014_NEGATIVE_OTHER_DEDUCTIONS`
+- `INTEREST_015_NET_RECONCILIATION_MISMATCH`
+- `INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT`
+- `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`
 
 ## Validation Behavior
 
@@ -48,6 +54,12 @@ Implemented reason codes:
 - transaction date must not be after settlement date
 - strict metadata mode requires linkage and policy metadata
 - `cash_entry_mode=UPSTREAM_PROVIDED` requires `external_cash_transaction_id`
+- `cash_entry_mode=AUTO_GENERATE` requires `settlement_cash_account_id`
+- interest direction, deduction signs, and explicit pre-fee net interest reconcile deterministically
+- income settlement must remain strictly positive after resolved transaction fees
+
+`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT` is a non-retryable runtime rejection performed before
+financial writes. It is not repaired by applying an absolute-value inflow sign.
 
 ## Shared-Doc Conformance Note (Slice 1)
 
