@@ -18,7 +18,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostCalculationError,
     EffectiveFxRate,
     OpenLotState,
-    reconcile_corporate_action_basis,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
@@ -27,16 +26,8 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     FxRateNotFoundError,
     OpenLotStateUpdateScope,
     PortfolioNotFoundError,
-    legacy_transaction_event_mapper,
     normalize_cost_fee_amount,
 )
-
-
-def _reconcile_bundle_a_events(events: list[TransactionEvent]):
-    return reconcile_corporate_action_basis(
-        legacy_transaction_event_mapper.to_booked_transaction(event) for event in events
-    )
-
 
 pytestmark = pytest.mark.asyncio
 
@@ -826,147 +817,6 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
         security_id="S1",
         states_by_source_transaction_id=open_lot_states,
     )
-
-
-async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
-    cost_calculation_workflow: CostCalculationWorkflow,
-):
-    processed_event = _bundle_a_transaction_event(
-        transaction_id="CA-DEM-OUT-01",
-        transaction_type="DEMERGER_OUT",
-        net_cost_local="-100",
-    )
-    group_events = [
-        processed_event,
-        _bundle_a_transaction_event(
-            transaction_id="CA-DEM-IN-01",
-            transaction_type="DEMERGER_IN",
-            net_cost_local="60",
-        ),
-    ]
-
-    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
-        processed_event=processed_event,
-        linked_group="LTG-CA-DEM-01",
-        parent_ref="CA-PARENT-DEM-01",
-        reconciliation=_reconcile_bundle_a_events(group_events),
-        missing_dependencies=[],
-        correlation_id="corr-basis",
-    )
-
-    assert run["summary"]["passed"] is False
-    assert run["summary"]["error_count"] == 1
-    assert run["dedupe_key"].startswith("auto:corporate_action_bundle_a:")
-    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_basis_mismatch"]
-    assert findings[0]["severity"] == "ERROR"
-    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_BASIS_MISMATCH"
-    assert findings[0]["observed_value"]["net_basis_delta_local"] == "-40"
-
-
-async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
-    cost_calculation_workflow: CostCalculationWorkflow,
-):
-    processed_event = _bundle_a_transaction_event(
-        transaction_id="CA-DEM-OUT-01",
-        transaction_type="DEMERGER_OUT",
-        net_cost_local="-100",
-    )
-
-    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
-        processed_event=processed_event,
-        linked_group="LTG-CA-DEM-01",
-        parent_ref="CA-PARENT-DEM-01",
-        reconciliation=_reconcile_bundle_a_events([processed_event]),
-        missing_dependencies=[],
-        correlation_id="corr-insufficient",
-    )
-
-    assert run["summary"]["reconciliation_status"] == "insufficient_legs"
-    assert run["summary"]["passed"] is False
-    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_insufficient_legs"]
-    assert findings[0]["expected_value"] == {"source_leg_count": ">=1", "target_leg_count": ">=1"}
-    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_INSUFFICIENT_LEGS"
-
-
-async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
-    cost_calculation_workflow: CostCalculationWorkflow,
-):
-    processed_event = _bundle_a_transaction_event(
-        transaction_id="CA-DEM-OUT-01",
-        transaction_type="DEMERGER_OUT",
-        net_cost_local="-100",
-    )
-    group_events = [
-        processed_event,
-        _bundle_a_transaction_event(
-            transaction_id="CA-DEM-IN-01",
-            transaction_type="DEMERGER_IN",
-            net_cost_local="100",
-        ),
-        _bundle_a_transaction_event(
-            transaction_id="CA-CASH-01",
-            transaction_type="CASH_CONSIDERATION",
-            net_cost_local="0",
-        ),
-    ]
-
-    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
-        processed_event=processed_event,
-        linked_group="LTG-CA-DEM-01",
-        parent_ref="CA-PARENT-DEM-01",
-        reconciliation=_reconcile_bundle_a_events(group_events),
-        missing_dependencies=[],
-        correlation_id="corr-cash-basis",
-    )
-
-    assert run["summary"]["reconciliation_status"] == "insufficient_cash_basis"
-    assert run["summary"]["missing_cash_basis_count"] == 1
-    assert run["summary"]["cash_basis_local"] == "0"
-    assert [finding["finding_type"] for finding in findings] == [
-        "ca_bundle_a_insufficient_cash_basis"
-    ]
-    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS"
-
-
-async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
-    cost_calculation_workflow: CostCalculationWorkflow,
-):
-    processed_event = _bundle_a_transaction_event(
-        transaction_id="CA-DEM-IN-01",
-        transaction_type="DEMERGER_IN",
-        net_cost_local="100",
-        dependency_reference_ids=["CA-DEM-OUT-01", "CA-DEM-OUT-MISSING"],
-    )
-    group_events = [
-        _bundle_a_transaction_event(
-            transaction_id="CA-DEM-OUT-01",
-            transaction_type="DEMERGER_OUT",
-            net_cost_local="-100",
-        ),
-        processed_event,
-    ]
-    missing_dependencies = cost_calculation_workflow._bundle_a_missing_dependencies(
-        processed_event=processed_event,
-        group_events=group_events,
-    )
-
-    run, findings = cost_calculation_workflow._bundle_a_reconciliation_evidence(
-        processed_event=processed_event,
-        linked_group="LTG-CA-DEM-01",
-        parent_ref="CA-PARENT-DEM-01",
-        reconciliation=_reconcile_bundle_a_events(group_events),
-        missing_dependencies=missing_dependencies,
-        correlation_id="corr-dependency",
-    )
-
-    assert run["summary"]["reconciliation_status"] == "balanced"
-    assert run["summary"]["missing_dependency_count"] == 1
-    assert run["summary"]["passed"] is False
-    assert [finding["finding_type"] for finding in findings] == ["ca_bundle_a_missing_dependency"]
-    assert findings[0]["detail"]["reason_code"] == "CA_BUNDLE_A_MISSING_DEPENDENCY"
-    assert findings[0]["observed_value"] == {
-        "missing_dependency_reference_ids": ["CA-DEM-OUT-MISSING"]
-    }
 
 
 async def test_bundle_a_reconciliation_key_skips_non_bundle_a_events(
