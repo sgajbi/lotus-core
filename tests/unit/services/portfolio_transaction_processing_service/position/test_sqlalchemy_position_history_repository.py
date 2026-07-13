@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import PositionHistory, Transaction
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.portfolio_transaction_processing_service.app.domain import PositionHistoryRecord
 from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
+    _position_history_replay_lock_key,
 )
 
 
@@ -119,3 +120,150 @@ def test_repository_excludes_production_unused_legacy_reads() -> None:
     assert not hasattr(repository, "find_open_security_ids_as_of")
     assert not hasattr(repository, "get_latest_business_date")
     assert not hasattr(repository, "get_transaction_by_id")
+
+
+@pytest.mark.asyncio
+async def test_latest_completed_snapshot_date_normalizes_position_key() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = date(2026, 5, 28)
+    session.execute.return_value = result
+    repository = SqlAlchemyPositionHistoryRepository(session)
+
+    latest_date = await repository.latest_completed_snapshot_date(
+        portfolio_id=" PORT_COST_01 ", security_id=" SEC01 ", epoch=42
+    )
+
+    assert latest_date == date(2026, 5, 28)
+    compiled_query = str(
+        session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(daily_position_snapshots.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(daily_position_snapshots.security_id) = 'SEC01'" in compiled_query
+    assert "daily_position_snapshots.epoch = 42" in compiled_query
+
+
+@pytest.mark.asyncio
+async def test_acquire_replay_lock_uses_stable_normalized_key() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    repository = SqlAlchemyPositionHistoryRepository(
+        session,
+        clock=MagicMock(side_effect=[10.0, 10.125]),
+    )
+
+    with patch(
+        "src.services.portfolio_transaction_processing_service.app.infrastructure."
+        "sqlalchemy_position_history_repository.observe_position_history_replay_lock_wait"
+    ) as observe_wait:
+        await repository.acquire_replay_lock(
+            portfolio_id=" PORT_COST_01 ", security_id=" SEC01 ", epoch=42
+        )
+
+    statement = session.execute.call_args.args[0]
+    assert str(statement) == "SELECT pg_advisory_xact_lock(:lock_key)"
+    assert statement.compile().params == {
+        "lock_key": _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
+    }
+    assert _position_history_replay_lock_key(" PORT_COST_01 ", " SEC01 ", 42) == (
+        _position_history_replay_lock_key("PORT_COST_01", "SEC01", 42)
+    )
+    observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+
+
+@pytest.mark.asyncio
+async def test_acquire_replay_lock_records_failure_without_swallowing() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = RuntimeError("lock unavailable")
+    repository = SqlAlchemyPositionHistoryRepository(
+        session,
+        clock=MagicMock(side_effect=[20.0, 20.25]),
+    )
+
+    with (
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure."
+            "sqlalchemy_position_history_repository.observe_position_history_replay_lock_wait"
+        ) as observe_wait,
+        pytest.raises(RuntimeError, match="lock unavailable"),
+    ):
+        await repository.acquire_replay_lock(portfolio_id="P1", security_id="S1", epoch=7)
+
+    observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
+
+
+@pytest.mark.asyncio
+async def test_contains_transaction_normalizes_lineage_and_position_key() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = 42
+    session.execute.return_value = result
+    repository = SqlAlchemyPositionHistoryRepository(session)
+
+    materialized = await repository.contains_transaction(
+        portfolio_id=" PORT_COST_01 ",
+        security_id=" SEC01 ",
+        transaction_id=" TX01 ",
+        epoch=7,
+    )
+
+    assert materialized is True
+    compiled_query = str(
+        session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_history.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC01'" in compiled_query
+    assert "trim(position_history.transaction_id) = 'TX01'" in compiled_query
+    assert "position_history.epoch = 7" in compiled_query
+    assert "LIMIT 1" in compiled_query
+
+
+@pytest.mark.asyncio
+async def test_list_transactions_from_normalizes_key_and_orders_deterministically() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = []
+    session.execute.return_value = result
+    repository = SqlAlchemyPositionHistoryRepository(session)
+
+    transactions = await repository.list_transactions_from(
+        portfolio_id=" PORT_COST_01 ",
+        security_id=" SEC01 ",
+        transaction_date=date(2026, 5, 28),
+    )
+
+    assert transactions == ()
+    compiled_query = str(
+        session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(transactions.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(transactions.security_id) = 'SEC01'" in compiled_query
+    assert "transactions.transaction_date >= '2026-05-28 00:00:00'" in compiled_query
+    assert (
+        "ORDER BY transactions.transaction_date ASC, transactions.transaction_id ASC"
+        in compiled_query
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_records_from_normalizes_key_and_epoch() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.rowcount = 3
+    session.execute.return_value = result
+    repository = SqlAlchemyPositionHistoryRepository(session)
+
+    deleted_count = await repository.delete_records_from(
+        portfolio_id=" PORT_COST_01 ",
+        security_id=" SEC01 ",
+        position_date=date(2026, 5, 28),
+        epoch=42,
+    )
+
+    assert deleted_count == 3
+    compiled_query = str(
+        session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "trim(position_history.portfolio_id) = 'PORT_COST_01'" in compiled_query
+    assert "trim(position_history.security_id) = 'SEC01'" in compiled_query
+    assert "position_history.position_date >= '2026-05-28'" in compiled_query
+    assert "position_history.epoch = 42" in compiled_query
