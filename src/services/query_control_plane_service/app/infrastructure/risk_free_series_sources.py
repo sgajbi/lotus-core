@@ -3,8 +3,8 @@
 from datetime import date
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import RiskFreeSeries
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

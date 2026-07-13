@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     DailyPositionSnapshot,
     FxRate,
@@ -14,6 +13,7 @@ from portfolio_common.database_models import (
     PositionHistory,
     PositionState,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
