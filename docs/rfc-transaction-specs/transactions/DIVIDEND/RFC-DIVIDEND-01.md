@@ -178,6 +178,7 @@ The following invariants are mandatory for every valid `DIVIDEND`.
 * `withholding_tax_base >= 0`
 * `net_dividend_local >= 0`
 * `net_dividend_base >= 0`
+* settlement cash after resolved transaction fees must be strictly greater than zero
 * `net_dividend = gross_dividend - withholding_tax - other_receipt_deductions`
 * realized capital P&L local = `0`
 * realized FX P&L local = `0`

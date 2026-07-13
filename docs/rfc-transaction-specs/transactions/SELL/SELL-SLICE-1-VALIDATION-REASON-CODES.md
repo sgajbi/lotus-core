@@ -13,9 +13,10 @@ This document defines the initial SELL validation reason-code catalog introduced
 | `SELL_007_INVALID_DATE_ORDER` | `transaction_date` | Trade date must not be after settlement date. |
 | `SELL_008_MISSING_LINKAGE_IDENTIFIER` | `economic_event_id` | Strict mode requires linkage identifiers. |
 | `SELL_009_MISSING_POLICY_METADATA` | `calculation_policy_id` | Strict mode requires policy id and version. |
+| `SELL_010_NON_POSITIVE_NET_SETTLEMENT` | `trade_fee` | Resolved transaction fees leave zero or negative settlement proceeds. |
 
 ## Notes
 
 - Slice 1 introduces this catalog and validator foundation.
-- Runtime strict enforcement in live ingestion flow is staged for later slices.
+- Runtime processing rejects `SELL_010_NON_POSITIVE_NET_SETTLEMENT` before financial writes.
 - Strict mode is currently available through domain validator invocation (`strict_metadata=True`).

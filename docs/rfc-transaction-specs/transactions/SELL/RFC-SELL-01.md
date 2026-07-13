@@ -176,7 +176,7 @@ The following invariants are mandatory for every valid `SELL`.
 * `quantity_delta < 0`
 * `disposed_quantity > 0`
 * `gross_proceeds_local >= 0`
-* `dirty_settlement_amount_local >= 0`
+* `dirty_settlement_amount_local > 0` after resolved transaction fees
 * `disposed_cost_basis_local >= 0`
 * `disposed_cost_basis_base >= 0`
 * `realized_total_pnl = realized_capital_pnl + realized_fx_pnl`

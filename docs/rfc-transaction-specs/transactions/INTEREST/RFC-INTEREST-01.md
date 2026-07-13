@@ -181,6 +181,7 @@ The following invariants are mandatory for every valid `INTEREST`.
 * `net_interest = gross_interest - withholding_tax - other_interest_deductions`
 * `net_interest` excludes separately reported transaction fees
 * income settlement cash subtracts transaction fees; expense settlement cash adds them
+* income settlement cash after resolved transaction fees must be strictly greater than zero
 * realized capital P&L local = `0`
 * realized FX P&L local = `0`
 * realized total P&L local = `0`

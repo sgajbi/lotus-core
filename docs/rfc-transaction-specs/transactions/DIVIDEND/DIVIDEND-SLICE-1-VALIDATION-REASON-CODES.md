@@ -14,9 +14,12 @@ This document defines the initial DIVIDEND validation reason-code catalog introd
 | `DIVIDEND_008_INVALID_DATE_ORDER` | `transaction_date` | Booking date must not be after settlement date. |
 | `DIVIDEND_009_MISSING_LINKAGE_IDENTIFIER` | `economic_event_id` | Strict mode requires linkage identifiers. |
 | `DIVIDEND_010_MISSING_POLICY_METADATA` | `calculation_policy_id` | Strict mode requires policy id and version. |
+| `DIVIDEND_011_MISSING_EXTERNAL_CASH_LINK` | `external_cash_transaction_id` | Upstream-provided cash mode requires the linked cash transaction. |
+| `DIVIDEND_012_MISSING_SETTLEMENT_CASH_ACCOUNT` | `settlement_cash_account_id` | Auto-generated cash mode requires a settlement cash account. |
+| `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` | `trade_fee` | Resolved transaction fees leave zero or negative settlement proceeds. |
 
 ## Notes
 
 - Slice 1 introduces this catalog and validator foundation.
-- Runtime strict enforcement in live ingestion flow is staged for later slices.
+- Runtime processing rejects `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT` before financial writes.
 - Strict mode is currently available through domain validator invocation (`strict_metadata=True`).
