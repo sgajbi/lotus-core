@@ -56,7 +56,7 @@ pythonpath = [
 ]
 addopts = "--strict-markers --import-mode=importlib"
 minversion = "6.0"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "module"
 asyncio_default_test_loop_scope = "module"
 markers = [
     "asyncio: mark a test as being an asyncio test",
