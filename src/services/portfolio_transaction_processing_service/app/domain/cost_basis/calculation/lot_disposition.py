@@ -3,7 +3,7 @@
 import logging
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import required_decimal
+from portfolio_common.domain.decimal_amount import required_decimal
 
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .cost_basis_strategies import CostBasisStrategy

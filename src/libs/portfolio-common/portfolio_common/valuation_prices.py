@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import required_decimal
+from portfolio_common.domain.decimal_amount import required_decimal
 
 
 def resolve_valuation_unit_price(

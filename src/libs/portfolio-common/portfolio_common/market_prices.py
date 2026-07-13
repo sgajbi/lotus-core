@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 
 def coerce_positive_market_price_or_none(price: object) -> Decimal | None:

@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import Callable, Protocol, cast
 
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.transaction_type_registry import (
     get_transaction_type_definition,
     is_production_booking_transaction_type,
