@@ -20,11 +20,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
+    calculate_next_position_state,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
-    PositionCalculationWorkflow,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.legacy_transaction_event_mapper import (  # noqa: E501
+    to_booked_transaction,
 )
 
 FIXTURE_PATH = Path("tests/fixtures/cross-product-transaction-golden-scenarios.v1.json")
@@ -72,11 +75,11 @@ def test_equity_buy_sell_golden_position_and_cost_relief() -> None:
         quantity=Decimal("0"), cost_basis=Decimal("0"), cost_basis_local=Decimal("0")
     )
 
-    after_buy = PositionCalculationWorkflow.calculate_next_position(
-        state, _event(buy, net_cost="1000")
+    after_buy = calculate_next_position_state(
+        state, to_booked_transaction(_event(buy, net_cost="1000"))
     )
-    after_sell = PositionCalculationWorkflow.calculate_next_position(
-        after_buy, _event(sell, net_cost="-400")
+    after_sell = calculate_next_position_state(
+        after_buy, to_booked_transaction(_event(sell, net_cost="-400"))
     )
 
     expected = scenario["expected"]
@@ -104,7 +107,7 @@ def test_dividend_golden_cashflow_preserves_position_and_income_amount(monkeypat
         cost_basis_local=Decimal("1000"),
     )
     event = _event(dividend)
-    next_state = PositionCalculationWorkflow.calculate_next_position(state, event)
+    next_state = calculate_next_position_state(state, to_booked_transaction(event))
     cashflow = CashflowCalculator.calculate(
         event,
         CashflowRule(
@@ -130,8 +133,8 @@ def test_transfer_golden_position_and_cost_delta() -> None:
         cost_basis_local=Decimal("100"),
     )
 
-    after_in = PositionCalculationWorkflow.calculate_next_position(state, _event(transfer_in))
-    after_out = PositionCalculationWorkflow.calculate_next_position(after_in, _event(transfer_out))
+    after_in = calculate_next_position_state(state, to_booked_transaction(_event(transfer_in)))
+    after_out = calculate_next_position_state(after_in, to_booked_transaction(_event(transfer_out)))
 
     assert after_out.quantity == Decimal("99")
     assert after_out.cost_basis == Decimal("105")
@@ -153,14 +156,14 @@ def test_fund_golden_subscription_distribution_reinvestment_and_redemption(
     )
     state = PositionStateDTO()
 
-    after_subscription = PositionCalculationWorkflow.calculate_next_position(
-        state, _event(subscription)
+    after_subscription = calculate_next_position_state(
+        state, to_booked_transaction(_event(subscription))
     )
-    after_reinvestment = PositionCalculationWorkflow.calculate_next_position(
-        after_subscription, _event(reinvestment)
+    after_reinvestment = calculate_next_position_state(
+        after_subscription, to_booked_transaction(_event(reinvestment))
     )
-    after_redemption = PositionCalculationWorkflow.calculate_next_position(
-        after_reinvestment, _event(redemption)
+    after_redemption = calculate_next_position_state(
+        after_reinvestment, to_booked_transaction(_event(redemption))
     )
     distribution_cashflow = CashflowCalculator.calculate(
         _event(distribution),
@@ -199,9 +202,9 @@ def test_option_and_structured_product_golden_target_gap_and_coupon_cashflow(
 
     exercise_out_definition = get_transaction_type_definition(exercise_out["transaction_type"])
     exercise_in_definition = get_transaction_type_definition(exercise_in["transaction_type"])
-    structured_coupon_state = PositionCalculationWorkflow.calculate_next_position(
+    structured_coupon_state = calculate_next_position_state(
         PositionStateDTO(quantity=Decimal("10"), cost_basis=Decimal("1000")),
-        _event(structured_coupon),
+        to_booked_transaction(_event(structured_coupon)),
     )
     structured_coupon_cashflow = CashflowCalculator.calculate(
         _event(structured_coupon),
@@ -231,11 +234,13 @@ def test_correction_golden_cancel_and_rebook_restates_position() -> None:
     original, cancel, rebook = scenario["input_events"]
     state = PositionStateDTO()
 
-    after_original = PositionCalculationWorkflow.calculate_next_position(state, _event(original))
-    after_cancel = PositionCalculationWorkflow.calculate_next_position(
-        after_original, _event(cancel)
+    after_original = calculate_next_position_state(state, to_booked_transaction(_event(original)))
+    after_cancel = calculate_next_position_state(
+        after_original, to_booked_transaction(_event(cancel))
     )
-    after_rebook = PositionCalculationWorkflow.calculate_next_position(after_cancel, _event(rebook))
+    after_rebook = calculate_next_position_state(
+        after_cancel, to_booked_transaction(_event(rebook))
+    )
 
     expected = scenario["expected"]
     assert after_original.quantity == Decimal("100")
