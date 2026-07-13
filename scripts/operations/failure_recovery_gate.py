@@ -561,6 +561,7 @@ def _prepare_failure_recovery_managed_run(
             "E2E_EVENT_REPLAY_URL": args.event_replay_base_url,
             "HOST_DATABASE_URL": args.host_database_url,
         },
+        allocate_dynamic_ports=not args.skip_compose,
         keep_stack=args.keep_stack_up,
     )
 

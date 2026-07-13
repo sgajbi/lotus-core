@@ -161,6 +161,7 @@ def test_prepare_failure_recovery_run_owns_integration_runtime_and_diagnostics(
             "E2E_EVENT_REPLAY_URL": "http://127.0.0.1:18102",
             "HOST_DATABASE_URL": "postgresql://localhost:15432/portfolio_db",
         },
+        "allocate_dynamic_ports": True,
         "keep_stack": True,
     }
 
@@ -194,6 +195,7 @@ def test_prepare_failure_recovery_external_run_preserves_environment_project(
     _prepare_failure_recovery_managed_run(args=args, repo_root=tmp_path)
 
     assert captured["compose_project_name"] == "existing-operator-stack"
+    assert captured["allocate_dynamic_ports"] is False
 
 
 def test_runtime_connections_default_to_generated_isolated_endpoints() -> None:
