@@ -1015,7 +1015,7 @@ def _validate_canonical_fx_transaction(
     error_reporter: CostCalculationErrorCollector,
 ) -> bool:
     try:
-        canonical = FxCanonicalTransaction.model_validate(transaction.model_dump(mode="python"))
+        canonical = FxCanonicalTransaction.from_transaction(transaction)
     except ValueError as exc:
         error_reporter.add_error(
             transaction.transaction_id,

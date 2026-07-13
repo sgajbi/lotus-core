@@ -1,8 +1,11 @@
 """Canonical foreign-exchange transaction values and controlled vocabularies."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, cast
+from typing import Any, Protocol
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.domain.transaction_control_codes import (
@@ -12,7 +15,6 @@ from portfolio_common.domain.transaction_control_codes import (
 from portfolio_common.transaction_type_registry import (
     production_transaction_types_for_lifecycle_families,
 )
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FX_BUSINESS_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("fx")
 FX_COMPONENT_TYPES = {
@@ -27,156 +29,218 @@ FX_SPOT_EXPOSURE_MODELS = {"NONE", "FX_CONTRACT"}
 FX_REALIZED_PNL_MODES = {"NONE", "UPSTREAM_PROVIDED", "CASH_LOT_COST_METHOD"}
 
 
-class FxCanonicalTransaction(BaseModel):
-    """
-    Slice 1 canonical FX contract foundation.
-    Models one persisted FX component row with the metadata required to keep
-    business type, component semantics, and linkage explicit.
-    """
+def _optional_source_value(source: object, field_name: str) -> Any:
+    """Read an optional extension value from a structurally compatible source."""
 
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    return getattr(source, field_name, None)
 
-    transaction_id: str = Field(..., description="Unique transaction identifier.")
-    transaction_type: str = Field(..., description="Canonical FX business transaction type.")
-    component_type: str = Field(..., description="Canonical FX component type.")
-    component_id: str = Field(..., description="Unique component identifier within the FX group.")
-    linked_component_ids: Optional[list[str]] = Field(
-        default=None,
-        description="Other FX component identifiers linked to this component.",
-    )
 
-    portfolio_id: str = Field(..., description="Portfolio identifier.")
-    instrument_id: str = Field(..., description="Instrument identifier.")
-    security_id: str = Field(..., description="Security identifier.")
+class FxTransactionSource(Protocol):
+    """Structural input required to build canonical FX transaction values."""
 
-    transaction_date: datetime = Field(..., description="Trade or booking timestamp.")
-    settlement_date: Optional[datetime] = Field(
-        default=None,
-        description="Settlement or maturity timestamp for this FX component.",
-    )
+    transaction_id: str
+    transaction_type: str
+    component_type: str | None
+    component_id: str | None
+    linked_component_ids: tuple[str, ...] | list[str] | None
+    portfolio_id: str
+    instrument_id: str
+    security_id: str
+    transaction_date: datetime
+    settlement_date: datetime | None
+    quantity: Decimal
+    price: Decimal
+    gross_transaction_amount: Decimal
+    trade_currency: str
+    currency: str
+    pair_base_currency: str | None
+    pair_quote_currency: str | None
+    fx_rate_quote_convention: str | None
+    buy_currency: str | None
+    sell_currency: str | None
+    buy_amount: Decimal | None
+    sell_amount: Decimal | None
+    contract_rate: Decimal | None
+    economic_event_id: str | None
+    linked_transaction_group_id: str | None
+    calculation_policy_id: str | None
+    calculation_policy_version: str | None
+    fx_cash_leg_role: str | None
+    linked_fx_cash_leg_id: str | None
+    settlement_status: str | None
+    fx_contract_id: str | None
+    fx_contract_open_transaction_id: str | None
+    fx_contract_close_transaction_id: str | None
+    settlement_of_fx_contract_id: str | None
+    swap_event_id: str | None
+    near_leg_group_id: str | None
+    far_leg_group_id: str | None
+    spot_exposure_model: str | None
+    fx_realized_pnl_mode: str | None
+    realized_capital_pnl_local: Decimal | None
+    realized_fx_pnl_local: Decimal | None
+    realized_total_pnl_local: Decimal | None
+    realized_capital_pnl_base: Decimal | None
+    realized_fx_pnl_base: Decimal | None
+    realized_total_pnl_base: Decimal | None
 
-    quantity: Decimal = Field(
-        ..., description="Canonical FX foundation requires quantity to remain zero."
-    )
-    price: Decimal = Field(
-        ..., description="Canonical FX foundation requires price to remain zero."
-    )
-    gross_transaction_amount: Decimal = Field(
-        ..., description="Gross transaction amount for the persisted FX component row."
-    )
 
-    trade_currency: str = Field(..., description="Trade currency code.")
-    currency: str = Field(..., description="Book currency code.")
-    pair_base_currency: str = Field(..., description="Currency pair base currency.")
-    pair_quote_currency: str = Field(..., description="Currency pair quote currency.")
-    fx_rate_quote_convention: str = Field(..., description="Explicit FX rate quote convention.")
+@dataclass(frozen=True, slots=True, kw_only=True)
+class FxCanonicalTransaction:
+    """Immutable canonical economics for one persisted FX component."""
 
-    buy_currency: str = Field(..., description="Currency received at settlement.")
-    sell_currency: str = Field(..., description="Currency delivered at settlement.")
-    buy_amount: Decimal = Field(..., description="Positive magnitude of bought currency.")
-    sell_amount: Decimal = Field(..., description="Positive magnitude of sold currency.")
-    contract_rate: Decimal = Field(..., description="Contractual FX rate.")
+    transaction_id: str
+    transaction_type: str
+    component_type: str
+    component_id: str
+    portfolio_id: str
+    instrument_id: str
+    security_id: str
+    transaction_date: datetime
+    quantity: Decimal
+    price: Decimal
+    gross_transaction_amount: Decimal
+    trade_currency: str
+    currency: str
+    pair_base_currency: str
+    pair_quote_currency: str
+    fx_rate_quote_convention: str
+    buy_currency: str
+    sell_currency: str
+    buy_amount: Decimal
+    sell_amount: Decimal
+    contract_rate: Decimal
+    linked_component_ids: tuple[str, ...] | None = None
+    settlement_date: datetime | None = None
+    economic_event_id: str | None = None
+    linked_transaction_group_id: str | None = None
+    calculation_policy_id: str | None = None
+    calculation_policy_version: str | None = None
+    fx_cash_leg_role: str | None = None
+    linked_fx_cash_leg_id: str | None = None
+    settlement_status: str | None = None
+    fx_contract_id: str | None = None
+    fx_contract_open_transaction_id: str | None = None
+    fx_contract_close_transaction_id: str | None = None
+    settlement_of_fx_contract_id: str | None = None
+    swap_event_id: str | None = None
+    near_leg_group_id: str | None = None
+    far_leg_group_id: str | None = None
+    spot_exposure_model: str | None = None
+    fx_realized_pnl_mode: str | None = None
+    realized_capital_pnl_local: Decimal | None = None
+    realized_fx_pnl_local: Decimal | None = None
+    realized_total_pnl_local: Decimal | None = None
+    realized_capital_pnl_base: Decimal | None = None
+    realized_fx_pnl_base: Decimal | None = None
+    realized_total_pnl_base: Decimal | None = None
 
-    @field_validator(
-        "trade_currency",
-        "currency",
-        "pair_base_currency",
-        "pair_quote_currency",
-        "buy_currency",
-        "sell_currency",
-        mode="before",
-    )
+    def __post_init__(self) -> None:
+        for field_name in (
+            "trade_currency",
+            "currency",
+            "pair_base_currency",
+            "pair_quote_currency",
+            "buy_currency",
+            "sell_currency",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                normalize_currency_code(getattr(self, field_name)),
+            )
+        for field_name in (
+            "transaction_type",
+            "component_type",
+            "fx_rate_quote_convention",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                normalize_transaction_control_code(getattr(self, field_name)),
+            )
+        for field_name in (
+            "fx_cash_leg_role",
+            "settlement_status",
+            "spot_exposure_model",
+            "fx_realized_pnl_mode",
+        ):
+            object.__setattr__(
+                self,
+                field_name,
+                normalize_optional_transaction_control_code(getattr(self, field_name)),
+            )
+        if self.linked_component_ids is not None:
+            object.__setattr__(self, "linked_component_ids", tuple(self.linked_component_ids))
+
     @classmethod
-    def _normalize_currency_code(cls, value: object) -> str:
-        return cast(str, normalize_currency_code(value))
+    def from_transaction(cls, source: FxTransactionSource) -> FxCanonicalTransaction:
+        """Copy FX-relevant values from a booked transaction or event adapter."""
 
-    @field_validator(
-        "transaction_type",
-        "component_type",
-        "fx_rate_quote_convention",
-        mode="before",
-    )
-    @classmethod
-    def _normalize_transaction_control_code(cls, value: str | None) -> str:
-        return cast(str, normalize_transaction_control_code(value))
-
-    economic_event_id: Optional[str] = Field(
-        default=None, description="Economic event id shared by all FX components."
-    )
-    linked_transaction_group_id: Optional[str] = Field(
-        default=None, description="Linked group id shared by related FX components."
-    )
-    calculation_policy_id: Optional[str] = Field(
-        default=None, description="Resolved policy identifier."
-    )
-    calculation_policy_version: Optional[str] = Field(
-        default=None, description="Resolved policy version."
-    )
-
-    fx_cash_leg_role: Optional[str] = Field(
-        default=None, description="BUY or SELL role for settlement cash components."
-    )
-    linked_fx_cash_leg_id: Optional[str] = Field(
-        default=None, description="Opposite FX cash-leg transaction identifier."
-    )
-    settlement_status: Optional[str] = Field(
-        default=None, description="Settlement status for FX cash components."
-    )
-
-    @field_validator(
-        "fx_cash_leg_role",
-        "settlement_status",
-        "spot_exposure_model",
-        "fx_realized_pnl_mode",
-        mode="before",
-    )
-    @classmethod
-    def _normalize_optional_transaction_control_code(cls, value: str | None) -> str | None:
-        return cast(str | None, normalize_optional_transaction_control_code(value))
-
-    fx_contract_id: Optional[str] = Field(
-        default=None, description="Stable FX contract identifier."
-    )
-    fx_contract_open_transaction_id: Optional[str] = Field(
-        default=None, description="Linked contract-open transaction identifier."
-    )
-    fx_contract_close_transaction_id: Optional[str] = Field(
-        default=None, description="Linked contract-close transaction identifier."
-    )
-    settlement_of_fx_contract_id: Optional[str] = Field(
-        default=None,
-        description="FX contract identifier that the settlement component closes or settles.",
-    )
-
-    swap_event_id: Optional[str] = Field(default=None, description="Stable FX swap identifier.")
-    near_leg_group_id: Optional[str] = Field(
-        default=None, description="Near-leg group id for FX swaps."
-    )
-    far_leg_group_id: Optional[str] = Field(
-        default=None, description="Far-leg group id for FX swaps."
-    )
-
-    spot_exposure_model: Optional[str] = Field(
-        default=None, description="Policy-driven spot exposure model."
-    )
-    fx_realized_pnl_mode: Optional[str] = Field(
-        default=None, description="Policy-driven realized FX P&L mode."
-    )
-    realized_capital_pnl_local: Optional[Decimal] = Field(
-        default=None, description="Realized capital P&L in local currency. Must be zero for FX."
-    )
-    realized_fx_pnl_local: Optional[Decimal] = Field(
-        default=None, description="Realized FX P&L in local currency."
-    )
-    realized_total_pnl_local: Optional[Decimal] = Field(
-        default=None, description="Total realized P&L in local currency."
-    )
-    realized_capital_pnl_base: Optional[Decimal] = Field(
-        default=None, description="Realized capital P&L in base currency. Must be zero for FX."
-    )
-    realized_fx_pnl_base: Optional[Decimal] = Field(
-        default=None, description="Realized FX P&L in base currency."
-    )
-    realized_total_pnl_base: Optional[Decimal] = Field(
-        default=None, description="Total realized P&L in base currency."
-    )
+        return cls(
+            transaction_id=source.transaction_id,
+            transaction_type=source.transaction_type,
+            component_type=source.component_type or "",
+            component_id=source.component_id or "",
+            linked_component_ids=tuple(source.linked_component_ids)
+            if source.linked_component_ids is not None
+            else None,
+            portfolio_id=source.portfolio_id,
+            instrument_id=source.instrument_id,
+            security_id=source.security_id,
+            transaction_date=source.transaction_date,
+            settlement_date=source.settlement_date,
+            quantity=source.quantity,
+            price=source.price,
+            gross_transaction_amount=source.gross_transaction_amount,
+            trade_currency=source.trade_currency,
+            currency=source.currency,
+            pair_base_currency=source.pair_base_currency or "",
+            pair_quote_currency=source.pair_quote_currency or "",
+            fx_rate_quote_convention=source.fx_rate_quote_convention or "",
+            buy_currency=source.buy_currency or "",
+            sell_currency=source.sell_currency or "",
+            buy_amount=source.buy_amount or Decimal(0),
+            sell_amount=source.sell_amount or Decimal(0),
+            contract_rate=source.contract_rate or Decimal(0),
+            economic_event_id=_optional_source_value(source, "economic_event_id"),
+            linked_transaction_group_id=_optional_source_value(
+                source, "linked_transaction_group_id"
+            ),
+            calculation_policy_id=_optional_source_value(source, "calculation_policy_id"),
+            calculation_policy_version=_optional_source_value(
+                source, "calculation_policy_version"
+            ),
+            fx_cash_leg_role=_optional_source_value(source, "fx_cash_leg_role"),
+            linked_fx_cash_leg_id=_optional_source_value(source, "linked_fx_cash_leg_id"),
+            settlement_status=_optional_source_value(source, "settlement_status"),
+            fx_contract_id=_optional_source_value(source, "fx_contract_id"),
+            fx_contract_open_transaction_id=_optional_source_value(
+                source, "fx_contract_open_transaction_id"
+            ),
+            fx_contract_close_transaction_id=_optional_source_value(
+                source, "fx_contract_close_transaction_id"
+            ),
+            settlement_of_fx_contract_id=_optional_source_value(
+                source, "settlement_of_fx_contract_id"
+            ),
+            swap_event_id=_optional_source_value(source, "swap_event_id"),
+            near_leg_group_id=_optional_source_value(source, "near_leg_group_id"),
+            far_leg_group_id=_optional_source_value(source, "far_leg_group_id"),
+            spot_exposure_model=_optional_source_value(source, "spot_exposure_model"),
+            fx_realized_pnl_mode=_optional_source_value(source, "fx_realized_pnl_mode"),
+            realized_capital_pnl_local=_optional_source_value(
+                source, "realized_capital_pnl_local"
+            ),
+            realized_fx_pnl_local=_optional_source_value(source, "realized_fx_pnl_local"),
+            realized_total_pnl_local=_optional_source_value(
+                source, "realized_total_pnl_local"
+            ),
+            realized_capital_pnl_base=_optional_source_value(
+                source, "realized_capital_pnl_base"
+            ),
+            realized_fx_pnl_base=_optional_source_value(source, "realized_fx_pnl_base"),
+            realized_total_pnl_base=_optional_source_value(
+                source, "realized_total_pnl_base"
+            ),
+        )

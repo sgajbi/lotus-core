@@ -9,8 +9,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 
 
 def test_fx_transaction_model_normalizes_control_codes() -> None:
-    txn = FxCanonicalTransaction.model_validate(
-        {
+    txn = FxCanonicalTransaction(
+        **{
             "transaction_id": "FX_001",
             "transaction_type": " fx_forward ",
             "component_type": " fx_cash_settlement_buy ",
@@ -49,8 +49,8 @@ def test_fx_transaction_model_normalizes_control_codes() -> None:
 
 
 def test_fx_transaction_model_preserves_implicit_optional_modes() -> None:
-    txn = FxCanonicalTransaction.model_validate(
-        {
+    txn = FxCanonicalTransaction(
+        **{
             "transaction_id": "FX_002",
             "transaction_type": "FX_SPOT",
             "component_type": "FX_CONTRACT_OPEN",

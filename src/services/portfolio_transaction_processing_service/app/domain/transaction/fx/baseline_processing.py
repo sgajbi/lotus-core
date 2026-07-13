@@ -118,7 +118,7 @@ def _resolve_total_pnl(
 def assert_fx_processed_event_valid(
     event: TransactionEvent, *, strict_metadata: bool = True
 ) -> None:
-    canonical = FxCanonicalTransaction.model_validate(event.model_dump(mode="python"))
+    canonical = FxCanonicalTransaction.from_transaction(event)
     issues = validate_fx_transaction(canonical, strict_metadata=strict_metadata)
     if issues:
         message = "; ".join(f"{issue.code}:{issue.field}" for issue in issues)

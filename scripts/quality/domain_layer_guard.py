@@ -30,11 +30,7 @@ DISALLOWED_IMPORT_PARTS = {
 
 DOMAIN_GLOBS = ("src/services/**/domain/**/*.py",)
 
-TRANSITIONAL_ALLOWLIST = {
-    "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/models.py": {
-        "pydantic"
-    },
-}
+TRANSITIONAL_ALLOWLIST: dict[str, set[str]] = {}
 
 
 @dataclass(frozen=True, slots=True)

@@ -9,8 +9,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 
 
 def test_fx_transaction_model_normalizes_currency_fields() -> None:
-    txn = FxCanonicalTransaction.model_validate(
-        {
+    txn = FxCanonicalTransaction(
+        **{
             "transaction_id": "FX_001",
             "transaction_type": "FX_SPOT",
             "component_type": "FX_CONTRACT_OPEN",
