@@ -13,7 +13,10 @@ from portfolio_common.transaction_fee_components import (
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from ..transaction.booked import BookedTransaction
-from ..transaction.settlement.interest import calculate_interest_settlement_economics
+from ..transaction.settlement import (
+    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    calculate_settlement_cash_movement,
+)
 from .types import CashflowCalculationType, CashflowClassification
 
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})
@@ -175,8 +178,6 @@ def _base_cashflow_amount(
     transaction: BookedTransaction,
     transaction_type: str,
 ) -> Decimal:
-    if transaction_type == "INTEREST":
-        return calculate_interest_settlement_economics(transaction).settlement_cash_amount
     trade_fee = _resolve_cashflow_trade_fee(transaction)
     if transaction_type in {"BUY", "FEE"}:
         return transaction.gross_transaction_amount + trade_fee
@@ -190,12 +191,15 @@ def _resolve_cashflow_economics(
 ) -> _CashflowEconomics:
     if transaction.has_synthetic_flow:
         return _synthetic_transfer_economics(transaction, rule)
-    amount = _signed_cashflow_amount(
-        transaction,
-        rule,
-        transaction_type,
-        _base_cashflow_amount(transaction, transaction_type),
-    )
+    if transaction_type in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
+        amount = calculate_settlement_cash_movement(transaction).signed_amount
+    else:
+        amount = _signed_cashflow_amount(
+            transaction,
+            rule,
+            transaction_type,
+            _base_cashflow_amount(transaction, transaction_type),
+        )
     return _CashflowEconomics(
         amount=amount,
         currency=transaction.currency,
@@ -236,8 +240,6 @@ def _signed_cashflow_amount(
     transaction_type: str,
     amount: Decimal,
 ) -> Decimal:
-    if transaction_type == "INTEREST":
-        return _signed_interest_amount(transaction, amount)
     if transaction_type == "ADJUSTMENT":
         return _signed_adjustment_amount(transaction, amount)
     if _normalize_classification(rule.classification) == CashflowClassification.TRANSFER.value:
@@ -251,11 +253,6 @@ def _signed_by_classification(
 ) -> Decimal:
     sign_factor = _CLASSIFICATION_SIGN_FACTORS.get(_normalize_classification(classification), -1)
     return abs(amount) if sign_factor > 0 else -abs(amount)
-
-
-def _signed_interest_amount(transaction: BookedTransaction, amount: Decimal) -> Decimal:
-    direction = _normalize_code(transaction.interest_direction, default="INCOME")
-    return -abs(amount) if direction == "EXPENSE" else abs(amount)
 
 
 def _signed_adjustment_amount(transaction: BookedTransaction, amount: Decimal) -> Decimal:
