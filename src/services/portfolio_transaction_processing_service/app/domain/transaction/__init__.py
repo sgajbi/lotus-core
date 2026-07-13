@@ -13,6 +13,10 @@ from .booking_metadata import (
     SELL_FIFO_POLICY_ID,
     enrich_booking_metadata,
 )
+from .processing_type import (
+    requires_cashflow_processing,
+    resolve_effective_processing_transaction_type,
+)
 from .semantic_identity import (
     TRANSACTION_CORRECTION_IDENTITY_VERSION,
     TRANSACTION_SEMANTIC_IDENTITY_VERSION,
@@ -100,6 +104,8 @@ __all__ = [
     "is_portfolio_level_cash_flow",
     "is_upstream_provided_cash_entry_mode",
     "resolve_cash_entry_mode",
+    "requires_cashflow_processing",
+    "resolve_effective_processing_transaction_type",
     "should_generate_settlement_cash_leg",
     "validate_upstream_cash_leg_pairing",
     "validate_buy_transaction",

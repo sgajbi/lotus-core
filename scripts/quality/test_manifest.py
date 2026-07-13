@@ -110,7 +110,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/libs/portfolio_common/test_fx_validation.py",
         "tests/unit/libs/portfolio_common/test_fx_linkage.py",
         "tests/unit/libs/portfolio_common/test_fx_contract_instrument.py",
-        "tests/unit/libs/portfolio_common/test_effective_processing_type.py",
+        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_processing_type.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py",
         "tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py",

@@ -35,6 +35,7 @@ RETIRED_MODULES = {
     "portfolio_common.infrastructure.persistence.timeseries_repository",
     "portfolio_common.timeseries_repository_base",
     "portfolio_common.transaction_domain.control_code_normalization",
+    "portfolio_common.transaction_domain.effective_processing_type",
     "services.portfolio_aggregation_service.app.repositories.timeseries_repository",
     "src.services.portfolio_aggregation_service.app.repositories.timeseries_repository",
     "services.timeseries_generator_service.app.repositories.timeseries_repository",
@@ -48,6 +49,7 @@ RETIRED_PATHS = {
     PACKAGE_ROOT / "timeseries_repository_base.py",
     PACKAGE_ROOT / "infrastructure" / "persistence" / "timeseries_repository.py",
     PACKAGE_ROOT / "transaction_domain" / "control_code_normalization.py",
+    PACKAGE_ROOT / "transaction_domain" / "effective_processing_type.py",
     REPO_ROOT
     / "src"
     / "services"

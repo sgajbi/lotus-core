@@ -20,16 +20,14 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.monitoring import observe_cashflow_rule_cache_event
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
-from portfolio_common.transaction_domain import (
-    requires_cashflow_processing,
-    resolve_effective_processing_transaction_type,
-)
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import CashflowCalculationContext, StoredCashflow
 from ..domain.transaction import (
     assert_cash_entry_mode_supported,
     is_upstream_provided_cash_entry_mode,
+    requires_cashflow_processing,
+    resolve_effective_processing_transaction_type,
 )
 from ..domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
