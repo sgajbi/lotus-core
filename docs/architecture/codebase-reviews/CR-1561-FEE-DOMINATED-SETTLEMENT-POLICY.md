@@ -90,11 +90,14 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
   complete 72-case PostgreSQL transaction-processing contract in 253.72 seconds. Domain vectors
   prove pre-policy SELL, DIVIDEND, and INTEREST economics only under historical rebuild context;
   application and adapter tests prove explicit context routing through every layer.
+- The third review fix-forward aligned the shared transaction RFC with the implemented
+  idempotency-first, pre-financial-work rejection boundary; a same-pattern search found no other
+  settlement document that claimed rejection precedes the combined unit of work.
 - Focused Ruff, RFC status ledger, and diff checks passed.
 - Governed SELL, DIVIDEND, and INTEREST contracts passed 152, 303, and 330 cases.
 - The complete PostgreSQL transaction-processing contract passed 72 cases in 253.72 seconds after
   both review fixes.
-- `make ci-local` passed 4,408 zero-warning unit tests, 10 unit-DB tests, and 136
+- Final `make ci-local` passed 4,414 zero-warning unit tests, 10 unit-DB tests, and 136
   integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
 - Configured MyPy, architecture, application error taxonomy, security-control coverage, event,
   image-provenance, OpenAPI, API-vocabulary, documentation, wiki, Ruff, and diff gates passed.
