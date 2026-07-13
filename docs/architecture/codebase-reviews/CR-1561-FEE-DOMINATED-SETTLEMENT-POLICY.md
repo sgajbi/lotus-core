@@ -40,6 +40,11 @@ negative proceeds are non-retryable hard rejections with stable family codes.
   physical and semantic duplicates remain harmless acknowledgements. Newly claimed and repair
   deliveries are rejected before cost, position, cashflow, or commit; the uncommitted claim rolls
   back with the unit of work. Direct adapter paths preserve the same application rejection.
+- Added an explicit cashflow calculation context for position-history rebuild rows. Current
+  bookings always use the strict policy, while source-owned historical rebuild rows reproduce their
+  pre-policy economics so a valid backdated correction cannot roll back or dead-letter solely
+  because previously accepted history predates this policy. The application derives this context
+  only from rebuilt transaction identities; repair intent is not used as a policy bypass.
 - Preserved bounded reason codes through terminal consumer handling without leaking raw payloads,
   credentials, or infrastructure detail.
 - Added independent Decimal golden vectors plus pure domain, validator, adapter, consumer,
@@ -81,9 +86,14 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
 - Three PostgreSQL positive generated-settlement reconciliation cases passed in 86.19 seconds.
 - Review fix-forward proof passed 18 application cases plus two PostgreSQL historical physical and
   semantic duplicate cases; neither duplicate created financial outbox or idempotency state.
+- The second review fix-forward passed 116 focused cashflow/application/adapter cases and the
+  complete 72-case PostgreSQL transaction-processing contract in 253.72 seconds. Domain vectors
+  prove pre-policy SELL, DIVIDEND, and INTEREST economics only under historical rebuild context;
+  application and adapter tests prove explicit context routing through every layer.
 - Focused Ruff, RFC status ledger, and diff checks passed.
 - Governed SELL, DIVIDEND, and INTEREST contracts passed 152, 303, and 330 cases.
-- The complete PostgreSQL transaction-processing contract passed 70 cases in 296.59 seconds.
+- The complete PostgreSQL transaction-processing contract passed 72 cases in 253.72 seconds after
+  both review fixes.
 - `make ci-local` passed 4,408 zero-warning unit tests, 10 unit-DB tests, and 136
   integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
 - Configured MyPy, architecture, application error taxonomy, security-control coverage, event,
