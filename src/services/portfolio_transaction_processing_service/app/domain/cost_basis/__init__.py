@@ -40,6 +40,11 @@ from .processing_checkpoint import (
     COST_BASIS_STATE_VERSION,
     CostBasisProcessingCheckpoint,
 )
+from .reconciliation import (
+    AverageCostPoolKey,
+    AverageCostPoolReconciliationAssessment,
+    AverageCostPoolReconciliationStatus,
+)
 from .transaction_type import TransactionType
 
 __all__ = [
@@ -47,6 +52,9 @@ __all__ = [
     "AverageCostPool",
     "AverageCostPoolCheckpoint",
     "AverageCostPoolRebuildPlan",
+    "AverageCostPoolKey",
+    "AverageCostPoolReconciliationAssessment",
+    "AverageCostPoolReconciliationStatus",
     "AverageCostSourceAllocation",
     "AverageCostSourceContribution",
     "AverageCostPoolTransition",

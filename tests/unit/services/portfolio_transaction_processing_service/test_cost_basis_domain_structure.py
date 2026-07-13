@@ -56,6 +56,10 @@ def test_legacy_cost_checkpoint_modules_are_retired() -> None:
     assert not (LEGACY_COST_APPLICATION_ROOT / "cost_processing_checkpoint.py").exists()
 
 
+def test_average_cost_pool_reconciliation_is_cost_basis_owned() -> None:
+    assert not (COST_BASIS_DOMAIN_ROOT.parent / "average_cost_pool_reconciliation.py").exists()
+
+
 def test_legacy_cost_transaction_processor_is_retired() -> None:
     assert not (LEGACY_COST_APPLICATION_ROOT / "transaction_processor.py").exists()
     assert not (LEGACY_COST_APPLICATION_ROOT / "cost_calculation_processor.py").exists()

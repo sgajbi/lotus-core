@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..domain.average_cost_pool_reconciliation import (
+from ..domain.cost_basis.reconciliation import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
 )

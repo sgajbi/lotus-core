@@ -1,6 +1,6 @@
 """Transaction processing domain models and policies."""
 
-from .average_cost_pool_reconciliation import (
+from .cost_basis import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
