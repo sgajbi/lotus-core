@@ -90,10 +90,11 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
   complete 72-case PostgreSQL transaction-processing contract in 253.72 seconds. Domain vectors
   prove pre-policy SELL, DIVIDEND, and INTEREST economics only under historical rebuild context;
   application and adapter tests prove explicit context routing through every layer.
-- Documentation review fix-forward aligned the shared transaction RFC and repository engineering
-  context with the implemented idempotency-first, pre-financial-work rejection boundary. The final
-  exact-phrase audit across repository context, transaction RFCs, docs, and wiki found no remaining
-  claim that this settlement rejection precedes the combined unit of work.
+- Documentation review fix-forward aligned the shared transaction RFC, repository engineering
+  context, and transaction-processing wiki with the implemented idempotency-first,
+  pre-financial-work rejection boundary. The final exact-phrase audit across repository context,
+  transaction RFCs, docs, wiki, and README found no remaining claim that this settlement rejection
+  precedes the combined unit of work.
 - Focused Ruff, RFC status ledger, and diff checks passed.
 - Governed SELL, DIVIDEND, and INTEREST contracts passed 152, 303, and 330 cases.
 - The complete PostgreSQL transaction-processing contract passed 72 cases in 253.72 seconds after
