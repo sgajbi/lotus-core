@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.reference_data_paging import ReferencePageMetadata
 from portfolio_common.request_fingerprints import request_fingerprint as build_request_fingerprint

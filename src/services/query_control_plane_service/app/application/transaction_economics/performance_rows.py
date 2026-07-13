@@ -6,7 +6,7 @@ from collections import defaultdict
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.performance_component_economics import (
