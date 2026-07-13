@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from portfolio_common.transaction_domain.fx_linkage import (
     FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
@@ -23,9 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CASH_OUTFLOW_TRANSACTION_TYPES as COST_SORTCASH_OUTFLOW_TRANSACTION_TYPES,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
-    transaction_type as cost_transaction_type,
-)
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     CASH_POSITION_DELTA_TRANSACTION_TYPES,
     POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES,
@@ -49,12 +48,15 @@ from src.services.query_service.app.services.position_flow_effects import (
 )
 
 
-def test_registry_classifies_every_cost_engine_transaction_type() -> None:
-    cost_basis_types = {
-        transaction_type.value for transaction_type in cost_transaction_type.TransactionType
-    }
+def test_cost_domain_does_not_define_second_transaction_type_vocabulary() -> None:
+    repository_root = Path(__file__).resolve().parents[4]
+    duplicate_vocabulary = (
+        repository_root
+        / "src/services/portfolio_transaction_processing_service/app/domain/cost_basis"
+        / "transaction_type.py"
+    )
 
-    assert cost_basis_types <= TRANSACTION_TYPE_CODES
+    assert not duplicate_vocabulary.exists()
 
 
 def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> None:

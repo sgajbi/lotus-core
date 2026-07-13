@@ -21,7 +21,6 @@ from ..corporate_action_cash_economics import (
     calculate_corporate_action_cash_economics,
 )
 from ..models.cost_basis_transaction import CostBasisTransaction
-from ..transaction_type import TransactionType
 from .calculation_errors import CostCalculationErrorCollector
 from .lot_disposition import LotDispositionEngine
 
@@ -44,11 +43,7 @@ ACCRUED_INTEREST_EXCLUDED_FROM_BOOK_COST_POLICIES = {
 SELL_ALLOW_OVERSOLD_POLICIES = {
     "SELL_ALLOW_OVERSOLD_POLICY",
 }
-FX_BASELINE_TRANSACTION_TYPES = {
-    TransactionType.FX_SPOT.value,
-    TransactionType.FX_FORWARD.value,
-    TransactionType.FX_SWAP.value,
-}
+FX_BASELINE_TRANSACTION_TYPES = {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}
 
 
 def _is_accrued_interest_excluded_from_book_cost(transaction: CostBasisTransaction) -> bool:
@@ -139,7 +134,7 @@ def _cash_movement_amount(transaction: CostBasisTransaction) -> Decimal:
 
 def _cash_outflow_book_cost(transaction: CostBasisTransaction) -> Decimal:
     cash_amount = _cash_movement_amount(transaction)
-    if _normalize_code(transaction.transaction_type) != TransactionType.FEE.value:
+    if _normalize_code(transaction.transaction_type) != "FEE":
         return cash_amount
     total_fees = transaction.fees.total_fees if transaction.fees else Decimal(0)
     return cash_amount + total_fees
@@ -168,9 +163,7 @@ def _normalize_currency_code(currency_code: str) -> str:
     return _normalize_code(currency_code)
 
 
-def _normalize_transaction_type(transaction_type: str | TransactionType) -> str:
-    if isinstance(transaction_type, TransactionType):
-        return cast(str, transaction_type.value)
+def _normalize_transaction_type(transaction_type: str) -> str:
     return str(transaction_type).strip().upper()
 
 
@@ -1051,47 +1044,47 @@ class CostBasisCalculator:
     ):
         self._disposition_engine = disposition_engine
         self._error_reporter = error_reporter
-        self._strategies: dict[TransactionType, TransactionCostStrategy] = {
-            TransactionType.BUY: BuyStrategy(),
-            TransactionType.SELL: SellStrategy(),
-            TransactionType.FX_SPOT: FxBaselineStrategy(),
-            TransactionType.FX_FORWARD: FxBaselineStrategy(),
-            TransactionType.FX_SWAP: FxBaselineStrategy(),
-            TransactionType.INTEREST: InterestStrategy(),
-            TransactionType.DIVIDEND: DividendStrategy(),
-            TransactionType.DEPOSIT: CashInflowStrategy(),
-            TransactionType.TRANSFER_IN: SecurityInflowStrategy(),
-            TransactionType.TRANSFER_OUT: SecurityOutflowStrategy(),
-            TransactionType.MERGER_IN: SecurityInflowStrategy(),
-            TransactionType.EXCHANGE_IN: SecurityInflowStrategy(),
-            TransactionType.REPLACEMENT_IN: SecurityInflowStrategy(),
-            TransactionType.MERGER_OUT: SecurityOutflowStrategy(),
-            TransactionType.EXCHANGE_OUT: SecurityOutflowStrategy(),
-            TransactionType.REPLACEMENT_OUT: SecurityOutflowStrategy(),
-            TransactionType.SPIN_IN: SecurityInflowStrategy(),
-            TransactionType.DEMERGER_IN: SecurityInflowStrategy(),
-            TransactionType.SPIN_OFF: PartialTransferOutStrategy(),
-            TransactionType.DEMERGER_OUT: PartialTransferOutStrategy(),
-            TransactionType.CASH_CONSIDERATION: CashConsiderationStrategy(),
-            TransactionType.CASH_IN_LIEU: CashInLieuStrategy(),
-            TransactionType.SPLIT: QuantityRestatementStrategy(),
-            TransactionType.REVERSE_SPLIT: QuantityRestatementStrategy(),
-            TransactionType.CONSOLIDATION: QuantityRestatementStrategy(),
-            TransactionType.BONUS_ISSUE: QuantityRestatementStrategy(),
-            TransactionType.STOCK_DIVIDEND: QuantityRestatementStrategy(),
-            TransactionType.RIGHTS_ANNOUNCE: DefaultStrategy(),
-            TransactionType.RIGHTS_ALLOCATE: SecurityInflowStrategy(),
-            TransactionType.RIGHTS_EXPIRE: SecurityOutflowStrategy(),
-            TransactionType.RIGHTS_ADJUSTMENT: DefaultStrategy(),
-            TransactionType.RIGHTS_SELL: SecurityOutflowStrategy(),
-            TransactionType.RIGHTS_SUBSCRIBE: SecurityOutflowStrategy(),
-            TransactionType.RIGHTS_OVERSUBSCRIBE: SecurityOutflowStrategy(),
-            TransactionType.RIGHTS_REFUND: IncomeStrategy(),
-            TransactionType.RIGHTS_SHARE_DELIVERY: SecurityInflowStrategy(),
-            TransactionType.WITHDRAWAL: SecurityOutflowStrategy(),
-            TransactionType.ADJUSTMENT: AdjustmentStrategy(),
-            TransactionType.FEE: DefaultStrategy(),
-            TransactionType.TAX: UnsupportedTaxStrategy(),
+        self._strategies: dict[str, TransactionCostStrategy] = {
+            "BUY": BuyStrategy(),
+            "SELL": SellStrategy(),
+            "FX_SPOT": FxBaselineStrategy(),
+            "FX_FORWARD": FxBaselineStrategy(),
+            "FX_SWAP": FxBaselineStrategy(),
+            "INTEREST": InterestStrategy(),
+            "DIVIDEND": DividendStrategy(),
+            "DEPOSIT": CashInflowStrategy(),
+            "TRANSFER_IN": SecurityInflowStrategy(),
+            "TRANSFER_OUT": SecurityOutflowStrategy(),
+            "MERGER_IN": SecurityInflowStrategy(),
+            "EXCHANGE_IN": SecurityInflowStrategy(),
+            "REPLACEMENT_IN": SecurityInflowStrategy(),
+            "MERGER_OUT": SecurityOutflowStrategy(),
+            "EXCHANGE_OUT": SecurityOutflowStrategy(),
+            "REPLACEMENT_OUT": SecurityOutflowStrategy(),
+            "SPIN_IN": SecurityInflowStrategy(),
+            "DEMERGER_IN": SecurityInflowStrategy(),
+            "SPIN_OFF": PartialTransferOutStrategy(),
+            "DEMERGER_OUT": PartialTransferOutStrategy(),
+            "CASH_CONSIDERATION": CashConsiderationStrategy(),
+            "CASH_IN_LIEU": CashInLieuStrategy(),
+            "SPLIT": QuantityRestatementStrategy(),
+            "REVERSE_SPLIT": QuantityRestatementStrategy(),
+            "CONSOLIDATION": QuantityRestatementStrategy(),
+            "BONUS_ISSUE": QuantityRestatementStrategy(),
+            "STOCK_DIVIDEND": QuantityRestatementStrategy(),
+            "RIGHTS_ANNOUNCE": DefaultStrategy(),
+            "RIGHTS_ALLOCATE": SecurityInflowStrategy(),
+            "RIGHTS_EXPIRE": SecurityOutflowStrategy(),
+            "RIGHTS_ADJUSTMENT": DefaultStrategy(),
+            "RIGHTS_SELL": SecurityOutflowStrategy(),
+            "RIGHTS_SUBSCRIBE": SecurityOutflowStrategy(),
+            "RIGHTS_OVERSUBSCRIBE": SecurityOutflowStrategy(),
+            "RIGHTS_REFUND": IncomeStrategy(),
+            "RIGHTS_SHARE_DELIVERY": SecurityInflowStrategy(),
+            "WITHDRAWAL": SecurityOutflowStrategy(),
+            "ADJUSTMENT": AdjustmentStrategy(),
+            "FEE": DefaultStrategy(),
+            "TAX": UnsupportedTaxStrategy(),
         }
 
     def _validate_fx(self, t: CostBasisTransaction) -> bool:
@@ -1102,50 +1095,49 @@ class CostBasisCalculator:
             return
         try:
             transaction.transaction_type = _normalize_transaction_type(transaction.transaction_type)
-            if transaction.transaction_type not in TransactionType.list():
+            if get_transaction_type_definition(transaction.transaction_type) is None:
                 self._error_reporter.add_error(
                     transaction.transaction_id,
                     f"Unknown transaction type '{transaction.transaction_type}'.",
                 )
                 return
-            transaction_type_enum = TransactionType(transaction.transaction_type)
         except ValueError:
             self._error_reporter.add_error(
                 transaction.transaction_id,
                 f"Unknown transaction type '{transaction.transaction_type}'.",
             )
             return
-        strategy = self._resolve_strategy(transaction_type_enum, transaction)
+        strategy = self._resolve_strategy(transaction.transaction_type, transaction)
         if strategy is None:
             return
         strategy.calculate_costs(transaction, self._disposition_engine, self._error_reporter)
 
     def _resolve_strategy(
-        self, transaction_type: TransactionType, transaction: CostBasisTransaction
+        self, transaction_type: str, transaction: CostBasisTransaction
     ) -> TransactionCostStrategy | None:
-        if not is_production_booking_transaction_type(transaction_type.value):
-            definition = get_transaction_type_definition(transaction_type.value)
+        if not is_production_booking_transaction_type(transaction_type):
+            definition = get_transaction_type_definition(transaction_type)
             support_status = (
                 definition.calculation_support_status if definition is not None else "unknown"
             )
             self._error_reporter.add_error(
                 transaction.transaction_id,
                 "CostBasisTransaction type "
-                f"'{transaction_type.value}' is not allowed for production booking "
+                f"'{transaction_type}' is not allowed for production booking "
                 f"(registry_status={support_status}).",
             )
             return None
 
         if _is_cash_instrument(transaction):
             if transaction_type in {
-                TransactionType.SELL,
-                TransactionType.WITHDRAWAL,
-                TransactionType.FEE,
-                TransactionType.TAX,
-                TransactionType.TRANSFER_OUT,
-                TransactionType.MERGER_OUT,
-                TransactionType.EXCHANGE_OUT,
-                TransactionType.REPLACEMENT_OUT,
+                "SELL",
+                "WITHDRAWAL",
+                "FEE",
+                "TAX",
+                "TRANSFER_OUT",
+                "MERGER_OUT",
+                "EXCHANGE_OUT",
+                "REPLACEMENT_OUT",
             }:
                 return CashOutflowStrategy()
 
@@ -1153,6 +1145,6 @@ class CostBasisCalculator:
         if strategy is None:
             self._error_reporter.add_error(
                 transaction.transaction_id,
-                f"No cost calculation strategy is registered for '{transaction_type.value}'.",
+                f"No cost calculation strategy is registered for '{transaction_type}'.",
             )
         return strategy

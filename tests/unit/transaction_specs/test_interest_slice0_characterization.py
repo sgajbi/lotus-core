@@ -14,7 +14,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
     CostCalculationErrorCollector,
-    TransactionType,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
@@ -90,7 +89,7 @@ def test_interest_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
         portfolio_id="PORT_SLICE0",
         instrument_id="BOND_10Y_USD",
         security_id="BOND_10Y_USD",
-        transaction_type=TransactionType.INTEREST,
+        transaction_type="INTEREST",
         transaction_date=datetime(2026, 2, 20),
         quantity=Decimal("0"),
         price=Decimal("0"),

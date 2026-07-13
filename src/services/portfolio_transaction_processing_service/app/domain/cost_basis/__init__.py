@@ -52,7 +52,6 @@ from .reconciliation import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from .transaction_type import TransactionType
 
 __all__ = [
     "AverageCostBasisStrategy",
@@ -89,7 +88,6 @@ __all__ = [
     "OpenLotState",
     "CostBasisTransaction",
     "TransactionOrderKey",
-    "TransactionType",
     "calculate_corporate_action_cash_economics",
     "missing_corporate_action_dependencies",
     "reconcile_corporate_action_basis",

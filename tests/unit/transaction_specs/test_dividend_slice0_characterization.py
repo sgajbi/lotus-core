@@ -14,7 +14,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
     CostCalculationErrorCollector,
-    TransactionType,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
@@ -90,7 +89,7 @@ def test_dividend_cost_calculation_current_behavior_zero_cost_and_no_realized_pn
         portfolio_id="PORT_SLICE0",
         instrument_id="SEC_EQ_US_001",
         security_id="SEC_EQ_US_001",
-        transaction_type=TransactionType.DIVIDEND,
+        transaction_type="DIVIDEND",
         transaction_date=datetime(2026, 1, 20),
         quantity=Decimal("0"),
         price=Decimal("0"),
