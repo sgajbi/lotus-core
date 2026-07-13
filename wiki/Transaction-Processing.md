@@ -55,6 +55,10 @@ Zero or negative proceeds are non-retryable hard rejections with stable family c
 normalization must never turn invalid proceeds into an apparent inflow. Generated settlement legs
 and persisted product cashflows consume the same policy result.
 
+The DIVIDEND row documents current runtime gross-amount behavior, not closure of canonical
+net-dividend, withholding-tax, or return-of-capital decomposition; that work remains tracked under
+#448. FX fee currency and two-leg settlement ownership remain a separate decision under #754.
+
 ## INTEREST Settlement Economics
 
 For INTEREST, `net_interest_amount` is after withholding tax and other interest deductions but

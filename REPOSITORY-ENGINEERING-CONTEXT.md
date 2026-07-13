@@ -2322,6 +2322,10 @@ Most relevant current governance:
      cashflows, validators, adapters, and independent Decimal golden vectors must consume or prove
      this one policy. BUY, FEE, FX, ADJUSTMENT, and corporate-action cash retain their documented
      family-specific representations; do not broaden this rule without a separate domain decision.
+     Preserve bounded application reason codes through Kafka DLQ and operations-API evidence. The
+     current DIVIDEND available-proceeds input remains booked gross amount pending net-dividend,
+     withholding, and return-of-capital work under #448; FX fee currency and two-leg ownership
+     remain separate under #754.
 
 ## Context Maintenance Rule
 
