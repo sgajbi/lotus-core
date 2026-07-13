@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import pytest
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 from src.services.query_service.app.services.position_flow_effects import (
     CASH_POSITION_DECREASE_TRANSACTION_TYPES,
