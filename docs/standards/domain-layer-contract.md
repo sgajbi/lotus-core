@@ -12,8 +12,13 @@ Use one of these package shapes:
 
 1. Service-owned domain logic: `src/services/<service>/app/domain/`.
 2. Nested bounded contexts inside a service: `src/services/<service>/app/<context>/domain/`.
-3. Shared bounded context logic: `src/libs/portfolio-common/portfolio_common/<context>_domain/`.
-4. Shared value objects: `src/libs/portfolio-common/portfolio_common/domain_value_objects.py`.
+3. Shared bounded-context logic: `src/libs/portfolio-common/portfolio_common/domain/<context>/`.
+4. Shared value objects: self-explanatory modules under the owning shared domain context, such as
+   `src/libs/portfolio-common/portfolio_common/domain/financial/amounts.py`.
+
+Do not add flat `*_domain.py`, `domain_value_objects.py`, `utils.py`, or `helpers.py` buckets. A
+shared domain placement requires multiple genuine consumers; service-owned calculation policy stays
+inside that service's domain package.
 
 ## Allowed Dependencies
 
@@ -55,4 +60,5 @@ Current pure-domain examples include:
 2. financial reconciliation run lifecycle policy;
 3. financial reconciliation position-valuation policy and domain finding objects;
 4. cost-basis transaction, fee, and calculation-error domain models;
-5. shared value objects in `portfolio_common.domain_value_objects`.
+5. shared currency, money, FX-rate, quantity, and unit-price values in
+   `portfolio_common.domain.financial.amounts`.

@@ -270,8 +270,8 @@ Current repository posture:
     objects in `financial_reconciliation_service.app.domain.reconciliation_policies`; the
     application service must load evidence, invoke the policy, and map domain findings to
     persistence rows through `financial_reconciliation_service.app.adapters`.
-    Shared private-banking value objects now live in
-    `portfolio_common.domain_value_objects` for `CurrencyCode`, `MoneyAmount`, `FxRate`,
+    Shared private-banking financial amount objects now live in
+    `portfolio_common.domain.financial.amounts` for `CurrencyCode`, `MoneyAmount`, `FxRate`,
     `CurrencyBasis`, `Quantity`, `UnitPrice`, and named monetary aliases. New calculation and
     reporting-currency paths should normalize DTO/ORM primitives into these value objects at the
     boundary, keep domain rules framework-free, and serialize back to primitive payloads only at
