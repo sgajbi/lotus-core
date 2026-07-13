@@ -2278,6 +2278,16 @@ Most relevant current governance:
      URLs. GitHub matrix cells have isolated Docker daemons;
      retain per-cell bounded acquisition unless a governed registry mirror or runner-level
      immutable image cache provides truthful shared evidence.
+172. Canonical cashflow amount, fee, sign, timing, level, transfer, income, synthetic-flow, and
+     corporate-action duplicate-flow semantics live in
+     `portfolio_transaction_processing_service.app.domain.cashflow.calculation`. The policy consumes
+     `BookedTransaction` plus immutable `CashflowRule` and returns `CalculatedCashflow`; it must not
+     import event DTOs, SQLAlchemy models/sessions, repositories, metrics, logging adapters, or
+     infrastructure packages. Event mapping and observability remain in infrastructure, while the
+     cashflow repository maps calculated results to existing SQLAlchemy rows. Preserve the
+     `CashflowCalculator` event/ORM facade only as a bounded compatibility path while callers migrate;
+     do not add new production callers to it. Domain monitoring imports are rejected by the global
+     in-process boundary guard.
 
 ## Context Maintenance Rule
 
