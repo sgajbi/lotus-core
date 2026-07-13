@@ -1,10 +1,8 @@
 """Stage cost-basis effects inside the unified transaction-processing boundary."""
 
-import hashlib
-import json
 import logging
 from bisect import bisect_right
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -34,7 +32,9 @@ from portfolio_common.transaction_fee_components import resolve_transaction_trad
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
 from ..application import (
+    CORPORATE_ACTION_RECONCILIATION_TYPE,
     CostBasisTimelineProcessor,
+    build_corporate_action_reconciliation_evidence,
     build_cost_basis_timeline_processor,
 )
 from ..domain.cost_basis import (
@@ -76,8 +76,6 @@ from .legacy_transaction_event_mapper import (
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-BUNDLE_A_RECONCILIATION_TYPE = "corporate_action_bundle_a"
-BUNDLE_A_REQUEST_OWNER = "cost-calculator"
 INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES = {
     ADJUSTMENT_TRANSACTION_TYPE,
     "FX_SPOT",
@@ -179,11 +177,6 @@ def _apply_engine_fee_fields(
         return
 
     event_dict["trade_fee"] = "0"
-
-
-def _stable_bundle_a_digest(payload: dict[str, object]) -> str:
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()[:24]
 
 
 class FxRateNotFoundError(Exception):
@@ -1141,14 +1134,17 @@ class CostCalculationWorkflow:
             reconciliation=reconciliation,
             missing_dependencies=missing_dependencies,
         )
-        run, findings = self._bundle_a_reconciliation_evidence(
-            processed_event=processed_event,
-            linked_group=linked_group,
-            parent_ref=parent_ref,
+        evidence = build_corporate_action_reconciliation_evidence(
+            processed_transaction=to_booked_transaction(processed_event),
+            linked_transaction_group_id=linked_group,
+            parent_event_reference=parent_ref,
             reconciliation=reconciliation,
-            missing_dependencies=missing_dependencies,
+            missing_dependency_reference_ids=missing_dependencies,
             correlation_id=correlation_id,
+            completed_at=datetime.now().astimezone(),
         )
+        run = asdict(evidence.run)
+        findings = [asdict(finding) for finding in evidence.findings]
         await repo.record_bundle_a_reconciliation_evidence(run=run, findings=findings)
         self._observe_bundle_a_reconciliation(findings)
         reconciled_bundle_groups.add(group_key)
@@ -1202,317 +1198,9 @@ class CostCalculationWorkflow:
         )
 
     @staticmethod
-    def _bundle_a_reconciliation_evidence(
-        *,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-        missing_dependencies: list[str],
-        correlation_id: str | None,
-    ) -> tuple[dict[str, object], list[dict[str, object]]]:
-        summary = CostCalculationWorkflow._bundle_a_reconciliation_summary(
-            reconciliation=reconciliation,
-            missing_dependencies=missing_dependencies,
-        )
-        evidence_signature = _stable_bundle_a_digest(
-            {
-                "portfolio_id": processed_event.portfolio_id,
-                "linked_transaction_group_id": linked_group,
-                "parent_event_reference": parent_ref,
-                "status": reconciliation.status,
-                "source_basis_out_local": str(reconciliation.source_basis_out_local),
-                "target_basis_in_local": str(reconciliation.target_basis_in_local),
-                "cash_basis_local": str(reconciliation.cash_basis_local),
-                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-                "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
-                "basis_tolerance": str(reconciliation.basis_tolerance),
-                "missing_dependency_reference_ids": missing_dependencies,
-            }
-        )
-        run_id = f"recon-ca-bundle-a-{evidence_signature}"
-        run = {
-            "run_id": run_id,
-            "reconciliation_type": BUNDLE_A_RECONCILIATION_TYPE,
-            "portfolio_id": processed_event.portfolio_id,
-            "business_date": processed_event.transaction_date.date(),
-            "epoch": processed_event.epoch,
-            "status": "COMPLETED",
-            "requested_by": BUNDLE_A_REQUEST_OWNER,
-            "dedupe_key": f"auto:{BUNDLE_A_RECONCILIATION_TYPE}:{evidence_signature}",
-            "correlation_id": correlation_id,
-            "tolerance": reconciliation.basis_tolerance,
-            "summary": summary,
-            "failure_reason": None,
-            "completed_at": datetime.now().astimezone(),
-        }
-        findings = CostCalculationWorkflow._bundle_a_reconciliation_findings(
-            run_id=run_id,
-            evidence_signature=evidence_signature,
-            processed_event=processed_event,
-            linked_group=linked_group,
-            parent_ref=parent_ref,
-            reconciliation=reconciliation,
-            missing_dependencies=missing_dependencies,
-        )
-        return run, findings
-
-    @staticmethod
-    def _bundle_a_reconciliation_summary(
-        *,
-        reconciliation: Any,
-        missing_dependencies: list[str],
-    ) -> dict[str, object]:
-        finding_count = int(reconciliation.status != "balanced") + int(bool(missing_dependencies))
-        return {
-            "examined_count": (
-                reconciliation.source_leg_count
-                + reconciliation.target_leg_count
-                + reconciliation.cash_consideration_count
-            ),
-            "finding_count": finding_count,
-            "error_count": finding_count,
-            "warning_count": 0,
-            "passed": finding_count == 0,
-            "reconciliation_status": reconciliation.status,
-            "source_leg_count": reconciliation.source_leg_count,
-            "target_leg_count": reconciliation.target_leg_count,
-            "cash_consideration_count": reconciliation.cash_consideration_count,
-            "source_basis_out_local": str(reconciliation.source_basis_out_local),
-            "target_basis_in_local": str(reconciliation.target_basis_in_local),
-            "cash_basis_local": str(reconciliation.cash_basis_local),
-            "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
-            "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-            "missing_dependency_count": len(missing_dependencies),
-        }
-
-    @staticmethod
-    def _bundle_a_reconciliation_findings(
-        *,
-        run_id: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-        missing_dependencies: list[str],
-    ) -> list[dict[str, object]]:
-        findings: list[dict[str, object]] = []
-        if reconciliation.status == "basis_mismatch":
-            findings.append(
-                CostCalculationWorkflow._bundle_a_basis_mismatch_finding(
-                    run_id=run_id,
-                    evidence_signature=evidence_signature,
-                    processed_event=processed_event,
-                    linked_group=linked_group,
-                    parent_ref=parent_ref,
-                    reconciliation=reconciliation,
-                )
-            )
-        if reconciliation.status == "insufficient_legs":
-            findings.append(
-                CostCalculationWorkflow._bundle_a_insufficient_legs_finding(
-                    run_id=run_id,
-                    evidence_signature=evidence_signature,
-                    processed_event=processed_event,
-                    linked_group=linked_group,
-                    parent_ref=parent_ref,
-                    reconciliation=reconciliation,
-                )
-            )
-        if reconciliation.status == "insufficient_cash_basis":
-            findings.append(
-                CostCalculationWorkflow._bundle_a_insufficient_cash_basis_finding(
-                    run_id=run_id,
-                    evidence_signature=evidence_signature,
-                    processed_event=processed_event,
-                    linked_group=linked_group,
-                    parent_ref=parent_ref,
-                    reconciliation=reconciliation,
-                )
-            )
-        if missing_dependencies:
-            findings.append(
-                CostCalculationWorkflow._bundle_a_missing_dependencies_finding(
-                    run_id=run_id,
-                    evidence_signature=evidence_signature,
-                    processed_event=processed_event,
-                    linked_group=linked_group,
-                    parent_ref=parent_ref,
-                    reconciliation=reconciliation,
-                    missing_dependencies=missing_dependencies,
-                )
-            )
-        return findings
-
-    @staticmethod
-    def _bundle_a_basis_mismatch_finding(
-        *,
-        run_id: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-    ) -> dict[str, object]:
-        return CostCalculationWorkflow._bundle_a_finding(
-            run_id=run_id,
-            finding_type="ca_bundle_a_basis_mismatch",
-            evidence_signature=evidence_signature,
-            processed_event=processed_event,
-            expected_value={"net_basis_delta_local_abs": f"<= {reconciliation.basis_tolerance}"},
-            observed_value={
-                "source_basis_out_local": str(reconciliation.source_basis_out_local),
-                "target_basis_in_local": str(reconciliation.target_basis_in_local),
-                "cash_basis_local": str(reconciliation.cash_basis_local),
-                "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
-            },
-            detail=CostCalculationWorkflow._bundle_a_finding_detail(
-                linked_group=linked_group,
-                parent_ref=parent_ref,
-                reconciliation=reconciliation,
-                reason_code="CA_BUNDLE_A_BASIS_MISMATCH",
-            ),
-        )
-
-    @staticmethod
-    def _bundle_a_insufficient_cash_basis_finding(
-        *,
-        run_id: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-    ) -> dict[str, object]:
-        return CostCalculationWorkflow._bundle_a_finding(
-            run_id=run_id,
-            finding_type="ca_bundle_a_insufficient_cash_basis",
-            evidence_signature=evidence_signature,
-            processed_event=processed_event,
-            expected_value={"missing_cash_basis_count": 0},
-            observed_value={
-                "cash_consideration_count": reconciliation.cash_consideration_count,
-                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-                "cash_basis_local": str(reconciliation.cash_basis_local),
-            },
-            detail=CostCalculationWorkflow._bundle_a_finding_detail(
-                linked_group=linked_group,
-                parent_ref=parent_ref,
-                reconciliation=reconciliation,
-                reason_code="CA_BUNDLE_A_INSUFFICIENT_CASH_BASIS",
-            ),
-        )
-
-    @staticmethod
-    def _bundle_a_insufficient_legs_finding(
-        *,
-        run_id: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-    ) -> dict[str, object]:
-        return CostCalculationWorkflow._bundle_a_finding(
-            run_id=run_id,
-            finding_type="ca_bundle_a_insufficient_legs",
-            evidence_signature=evidence_signature,
-            processed_event=processed_event,
-            expected_value={"source_leg_count": ">=1", "target_leg_count": ">=1"},
-            observed_value={
-                "source_leg_count": reconciliation.source_leg_count,
-                "target_leg_count": reconciliation.target_leg_count,
-            },
-            detail=CostCalculationWorkflow._bundle_a_finding_detail(
-                linked_group=linked_group,
-                parent_ref=parent_ref,
-                reconciliation=reconciliation,
-                reason_code="CA_BUNDLE_A_INSUFFICIENT_LEGS",
-            ),
-        )
-
-    @staticmethod
-    def _bundle_a_missing_dependencies_finding(
-        *,
-        run_id: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-        missing_dependencies: list[str],
-    ) -> dict[str, object]:
-        return CostCalculationWorkflow._bundle_a_finding(
-            run_id=run_id,
-            finding_type="ca_bundle_a_missing_dependency",
-            evidence_signature=evidence_signature,
-            processed_event=processed_event,
-            expected_value={"dependency_reference_ids": "present in linked Bundle A group"},
-            observed_value={"missing_dependency_reference_ids": missing_dependencies},
-            detail={
-                **CostCalculationWorkflow._bundle_a_finding_detail(
-                    linked_group=linked_group,
-                    parent_ref=parent_ref,
-                    reconciliation=reconciliation,
-                    reason_code="CA_BUNDLE_A_MISSING_DEPENDENCY",
-                ),
-                "missing_dependency_reference_ids": missing_dependencies,
-            },
-        )
-
-    @staticmethod
-    def _bundle_a_finding(
-        *,
-        run_id: str,
-        finding_type: str,
-        evidence_signature: str,
-        processed_event: TransactionEvent,
-        expected_value: dict[str, object],
-        observed_value: dict[str, object],
-        detail: dict[str, object],
-    ) -> dict[str, object]:
-        return {
-            "finding_id": f"finding-{finding_type}-{evidence_signature}",
-            "run_id": run_id,
-            "reconciliation_type": BUNDLE_A_RECONCILIATION_TYPE,
-            "finding_type": finding_type,
-            "severity": "ERROR",
-            "portfolio_id": processed_event.portfolio_id,
-            "security_id": processed_event.security_id,
-            "transaction_id": processed_event.transaction_id,
-            "business_date": processed_event.transaction_date.date(),
-            "epoch": processed_event.epoch,
-            "expected_value": expected_value,
-            "observed_value": observed_value,
-            "detail": detail,
-        }
-
-    @staticmethod
-    def _bundle_a_finding_detail(
-        *,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-        reason_code: str,
-    ) -> dict[str, object]:
-        return {
-            "reason_code": reason_code,
-            "linked_transaction_group_id": linked_group,
-            "parent_event_reference": parent_ref,
-            "reconciliation_status": reconciliation.status,
-            "source_leg_count": reconciliation.source_leg_count,
-            "target_leg_count": reconciliation.target_leg_count,
-            "cash_consideration_count": reconciliation.cash_consideration_count,
-            "cash_basis_local": str(reconciliation.cash_basis_local),
-            "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-            "basis_tolerance": str(reconciliation.basis_tolerance),
-        }
-
-    @staticmethod
     def _observe_bundle_a_reconciliation(findings: list[dict[str, object]]) -> None:
         observe_financial_reconciliation_run(
-            BUNDLE_A_RECONCILIATION_TYPE,
+            CORPORATE_ACTION_RECONCILIATION_TYPE,
             "COMPLETED",
             0.0,
             [SimpleNamespace(severity=finding["severity"]) for finding in findings],
