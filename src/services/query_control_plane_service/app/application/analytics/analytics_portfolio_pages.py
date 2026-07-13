@@ -10,6 +10,8 @@ from decimal import Decimal
 
 from portfolio_common.currency_codes import normalize_currency_code
 
+from ...domain.analytics import PositionValuationObservation
+
 
 class AnalyticsPortfolioPageError(RuntimeError):
     pass
@@ -37,10 +39,10 @@ def portfolio_observation_page_scope(
 def portfolio_row_buckets(
     *,
     page_dates: list[date],
-    position_rows: list[object],
-) -> dict[date, list[object]]:
+    position_rows: list[PositionValuationObservation],
+) -> dict[date, list[PositionValuationObservation]]:
     page_date_set = set(page_dates)
-    row_buckets: dict[date, list[object]] = defaultdict(list)
+    row_buckets: dict[date, list[PositionValuationObservation]] = defaultdict(list)
     for row in position_rows:
         if row.valuation_date in page_date_set:
             row_buckets[row.valuation_date].append(row)
@@ -65,15 +67,13 @@ def portfolio_to_reporting_observation_rate(
 
 def position_to_portfolio_observation_rate(
     *,
-    row: object,
+    row: PositionValuationObservation,
     valuation_date: date,
     portfolio_currency: str,
     position_to_portfolio_rates: dict[str, dict[date, Decimal]],
 ) -> Decimal:
     position_currency = (
-        normalize_currency_code(str(getattr(row, "position_currency")))
-        if getattr(row, "position_currency", None)
-        else ""
+        normalize_currency_code(row.position_currency) if row.position_currency else ""
     )
     if not position_currency or position_currency == portfolio_currency:
         return Decimal("1")

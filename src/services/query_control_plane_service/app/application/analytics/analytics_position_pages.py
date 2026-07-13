@@ -10,6 +10,7 @@ from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.analytics_inputs import PositionAnalyticsTimeseriesRequest
+from ...domain.analytics import PositionValuationObservation, PriorPositionValuation
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ def position_dimension_filters(
 
 def position_page_scope(
     *,
-    rows_page: list[object],
+    rows_page: list[PositionValuationObservation],
     fallback_start_date: date,
 ) -> PositionPageScope:
     page_dates = sorted({row.valuation_date for row in rows_page})
@@ -50,7 +51,7 @@ def position_page_scope(
 
 def previous_position_eod_by_security(
     *,
-    previous_rows: list[object],
+    previous_rows: list[PriorPositionValuation],
     first_page_date: date,
 ) -> dict[str, Decimal]:
     previous_date = first_page_date - timedelta(days=1)

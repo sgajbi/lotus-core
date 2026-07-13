@@ -15,6 +15,7 @@ from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.analytics_inputs import CashFlowObservation
+from ...domain.analytics import AnalyticsCashflowEvidence, PositionValuationObservation
 
 
 class AnalyticsCashFlowError(RuntimeError):
@@ -22,7 +23,7 @@ class AnalyticsCashFlowError(RuntimeError):
 
 
 def build_cash_flow_observation(
-    row: object,
+    row: AnalyticsCashflowEvidence,
     *,
     amount: Decimal,
 ) -> CashFlowObservation:
@@ -41,7 +42,7 @@ def build_cash_flow_observation(
 
 
 def portfolio_cash_flows_for_dates(
-    cashflow_rows: list[object],
+    cashflow_rows: list[AnalyticsCashflowEvidence],
     *,
     reporting_currency: str,
     portfolio_currency: str,
@@ -71,7 +72,7 @@ def portfolio_cash_flows_for_dates(
 
 
 def position_cash_flows_for_keys(
-    cashflow_rows: list[object],
+    cashflow_rows: list[AnalyticsCashflowEvidence],
 ) -> dict[tuple[str, date], list[CashFlowObservation]]:
     flows_by_key: dict[tuple[str, date], list[CashFlowObservation]] = defaultdict(list)
     for row in cashflow_rows:
@@ -96,20 +97,21 @@ def has_only_internal_flows(cash_flows: list[CashFlowObservation]) -> bool:
 
 
 def effective_beginning_market_value(
-    row: object,
+    row: PositionValuationObservation,
     *,
     previous_eod_market_value: Decimal | None,
     cash_flows: list[CashFlowObservation],
     has_portfolio_external_flow: bool,
 ) -> Decimal:
-    stored_beginning = decimal_or_zero(row.bod_market_value)
-    ending = decimal_or_zero(row.eod_market_value)
-    bod_position_flow = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
+    stored_beginning: Decimal = decimal_or_zero(row.bod_market_value)
+    ending: Decimal = decimal_or_zero(row.eod_market_value)
+    bod_position_flow: Decimal = decimal_or_zero(row.bod_cashflow_position)
 
     if has_prior_eod_continuity(
         previous_eod_market_value=previous_eod_market_value,
         bod_position_flow=bod_position_flow,
     ):
+        assert previous_eod_market_value is not None
         return previous_eod_market_value
 
     has_internal_position_flow = has_only_internal_flows(cash_flows)
@@ -127,6 +129,7 @@ def effective_beginning_market_value(
         has_portfolio_external_flow=has_portfolio_external_flow,
         has_internal_position_flow=has_internal_position_flow,
     ):
+        assert previous_eod_market_value is not None
         return previous_eod_market_value + bod_position_flow
 
     if is_new_internally_funded_position(
@@ -140,9 +143,9 @@ def effective_beginning_market_value(
     return stored_beginning
 
 
-def is_cash_book_position(row: object) -> bool:
-    asset_class = str(getattr(row, "asset_class", "") or "").strip().casefold()
-    security_id = str(getattr(row, "security_id", "") or "").strip().upper()
+def is_cash_book_position(row: PositionValuationObservation) -> bool:
+    asset_class = str(row.asset_class or "").strip().casefold()
+    security_id = row.security_id.strip().upper()
     return asset_class == "cash" or security_id.startswith("CASH_")
 
 
@@ -160,7 +163,7 @@ def has_prior_eod_continuity(
 
 def is_internal_cash_book_settlement(
     *,
-    row: object,
+    row: PositionValuationObservation,
     has_portfolio_external_flow: bool,
     has_internal_position_flow: bool,
 ) -> bool:

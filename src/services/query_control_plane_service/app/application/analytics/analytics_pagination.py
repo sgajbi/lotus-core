@@ -16,6 +16,7 @@ from ...contracts.analytics_inputs import (
     PositionAnalyticsTimeseriesRequest,
     QualityDiagnostics,
 )
+from ...domain.analytics import PositionValuationObservation
 
 
 class AnalyticsPaginationError(RuntimeError):
@@ -36,7 +37,7 @@ def portfolio_timeseries_scope_fingerprint(
     resolved_window: AnalyticsWindow,
     reporting_currency: str,
 ) -> str:
-    return request_fingerprint(
+    fingerprint: str = request_fingerprint(
         {
             "endpoint": "portfolio-timeseries",
             "portfolio_id": portfolio_id,
@@ -46,6 +47,7 @@ def portfolio_timeseries_scope_fingerprint(
             "reporting_currency": reporting_currency,
         }
     )
+    return fingerprint
 
 
 def portfolio_timeseries_cursor_date(
@@ -91,7 +93,7 @@ def position_timeseries_scope_fingerprint(
     resolved_window: AnalyticsWindow,
     reporting_currency: str,
 ) -> str:
-    return request_fingerprint(
+    fingerprint: str = request_fingerprint(
         {
             "endpoint": "position-timeseries",
             "portfolio_id": portfolio_id,
@@ -108,6 +110,7 @@ def position_timeseries_scope_fingerprint(
             "include_cash_flows": request.include_cash_flows,
         }
     )
+    return fingerprint
 
 
 def position_timeseries_cursor(
@@ -132,7 +135,7 @@ def position_timeseries_cursor(
 def position_timeseries_next_page_token(
     *,
     has_more: bool,
-    rows_page: list[object],
+    rows_page: list[PositionValuationObservation],
     snapshot_epoch: int,
     request_scope_fingerprint: str,
     encode_page_token: Callable[[dict], str],
