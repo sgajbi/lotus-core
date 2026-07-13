@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -41,6 +42,29 @@ def test_legacy_mapper_round_trips_every_domain_field() -> None:
     assert mapper.to_booked_transaction(event) == transaction
     assert event.correlation_id == "corr-001"
     assert event.traceparent == "trace-001"
+
+
+def test_legacy_mapper_applies_domain_fields_without_losing_event_envelope() -> None:
+    transaction = _transaction()
+    event = mapper.to_transaction_event(
+        transaction,
+        correlation_id="corr-001",
+        traceparent="trace-001",
+    )
+    enriched = replace(
+        transaction,
+        economic_event_id="EVENT-001",
+        linked_transaction_group_id="GROUP-001",
+        calculation_policy_id="POLICY-001",
+        calculation_policy_version="2.0.0",
+    )
+
+    updated_event = mapper.with_booked_transaction_fields(event, enriched)
+
+    assert updated_event.correlation_id == event.correlation_id
+    assert updated_event.traceparent == event.traceparent
+    assert mapper.to_booked_transaction(updated_event) == enriched
+    assert mapper.to_booked_transaction(event) == transaction
 
 
 def test_legacy_mapper_rejects_external_field_drift() -> None:

@@ -35,6 +35,17 @@ def to_booked_transaction(event: TransactionEvent) -> BookedTransaction:
     return BookedTransaction(**domain_values)
 
 
+def with_booked_transaction_fields(
+    event: TransactionEvent,
+    transaction: BookedTransaction,
+) -> TransactionEvent:
+    """Return the event envelope carrying the supplied domain transaction fields."""
+
+    payload = event.model_dump(mode="python")
+    payload.update({name: getattr(transaction, name) for name in _DOMAIN_FIELD_NAMES})
+    return TransactionEvent.model_validate(payload)
+
+
 def validate_legacy_transaction_event_mapping_contract(
     external_field_names: set[str] | None = None,
 ) -> None:
