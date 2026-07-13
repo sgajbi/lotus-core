@@ -844,14 +844,18 @@ class CostCalculatorRepository:
         result = await self.db.execute(stmt)
         return result.scalars().first()
 
-    async def get_bundle_a_group_transactions(
-        self, *, portfolio_id: str, linked_transaction_group_id: str, parent_event_reference: str
-    ) -> List[DBTransaction]:
+    async def load_group(
+        self, key: CorporateActionReconciliationKey
+    ) -> tuple[BookedTransaction, ...]:
+        """Load a linked corporate-action group as immutable domain transactions."""
+
         stmt = (
             select(DBTransaction)
-            .where(DBTransaction.portfolio_id == portfolio_id)
-            .where(DBTransaction.linked_transaction_group_id == linked_transaction_group_id)
-            .where(DBTransaction.parent_event_reference == parent_event_reference)
+            .where(DBTransaction.portfolio_id == key.portfolio_id)
+            .where(
+                DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id
+            )
+            .where(DBTransaction.parent_event_reference == key.parent_event_reference)
             .where(
                 DBTransaction.transaction_type.in_(
                     ("SPIN_OFF", "SPIN_IN", "DEMERGER_OUT", "DEMERGER_IN", "CASH_CONSIDERATION")
@@ -859,34 +863,14 @@ class CostCalculatorRepository:
             )
         )
         result = await self.db.execute(stmt)
-        return list(result.scalars().all())
-
-    async def load_group(
-        self, key: CorporateActionReconciliationKey
-    ) -> tuple[BookedTransaction, ...]:
-        """Load a linked corporate-action group as immutable domain transactions."""
-
-        rows = await self.get_bundle_a_group_transactions(
-            portfolio_id=key.portfolio_id,
-            linked_transaction_group_id=key.linked_transaction_group_id,
-            parent_event_reference=key.parent_event_reference,
-        )
+        rows = result.scalars().all()
         return tuple(to_booked_transaction(TransactionEvent.model_validate(row)) for row in rows)
 
     async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
         """Map typed reconciliation evidence to the existing persistence contract."""
 
-        await self.record_bundle_a_reconciliation_evidence(
-            run=asdict(evidence.run),
-            findings=[asdict(finding) for finding in evidence.findings],
-        )
-
-    async def record_bundle_a_reconciliation_evidence(
-        self,
-        *,
-        run: dict[str, object],
-        findings: list[dict[str, object]],
-    ) -> None:
+        run = asdict(evidence.run)
+        findings = [asdict(finding) for finding in evidence.findings]
         run_stmt = pg_insert(FinancialReconciliationRun).values(**run)
         await self.db.execute(
             run_stmt.on_conflict_do_update(
