@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from .config import DEFAULT_BUSINESS_CALENDAR_CODE
-from .currency_codes import normalize_currency_code
 from .database_models import (
     BusinessDate,
     DailyPositionSnapshot,
@@ -21,6 +20,7 @@ from .database_models import (
     PositionHistory,
     PositionState,
 )
+from .domain.currency import normalize_currency_code
 from .identifiers import normalize_lookup_identifier
 from .utils import async_timed
 from .valuation_snapshot_contiguity import (

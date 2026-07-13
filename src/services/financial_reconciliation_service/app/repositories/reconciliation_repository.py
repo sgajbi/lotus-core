@@ -5,7 +5,6 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     Cashflow,
     CashflowRule,
@@ -19,6 +18,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.logging_utils import normalize_lineage_value
 from sqlalchemy import and_, func, select
 from sqlalchemy.exc import IntegrityError

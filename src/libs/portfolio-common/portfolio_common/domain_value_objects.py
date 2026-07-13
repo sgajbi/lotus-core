@@ -6,8 +6,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.decimal_amounts import decimal_or_none, required_decimal
+from portfolio_common.domain.currency import normalize_currency_code
 
 DEFAULT_MONEY_QUANTUM = Decimal("0.01")
 
