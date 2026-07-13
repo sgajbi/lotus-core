@@ -125,8 +125,11 @@
       "owner": "lotus-core",
       "status": "supported",
       "implementation_modules": [
-        "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py",
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_calculation_workflow.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/position",
+        "src/services/portfolio_transaction_processing_service/app/application/position_history.py",
+        "src/services/portfolio_transaction_processing_service/app/ports/position_history.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_history_repository.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_recalculation_state_store.py",
         "src/services/calculators/position_valuation_calculator",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_calculation.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py",

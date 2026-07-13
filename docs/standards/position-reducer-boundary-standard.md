@@ -16,15 +16,19 @@ decision planning pure, typed, and independently testable.
 7. effective completed-date selection for backdated replay decisions,
 8. replay watermark planning for original backdated transactions.
 
-`portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow`
-owns:
+`portfolio_transaction_processing_service.app.application.position_history` owns:
 
-1. epoch-fencing checks,
-2. repository reads and writes,
-3. position history deletion and persistence,
-4. deterministic current-epoch rebuild ordering,
-5. metric emission,
-6. compatibility adaptation between existing DTOs and the pure reducer state.
+1. one-load epoch-fencing decisions,
+2. current versus backdated materialization decisions,
+3. replay-window coordination and compare-and-set epoch advancement,
+4. deterministic history construction through domain policy,
+5. caller-owned transaction sequencing through ports.
+
+`app/ports/position_history.py` owns repository, recalculation-state, and observation contracts.
+`app/infrastructure/sqlalchemy_position_history_repository.py`,
+`sqlalchemy_position_recalculation_state_store.py`, and
+`prometheus_position_history_observer.py` own SQLAlchemy mapping, persistence, shared state access,
+metrics, and structured support logs.
 
 ## Boundary Rules
 
@@ -32,10 +36,11 @@ The reducer must not import database sessions, SQLAlchemy, repositories, outbox 
 metrics, epoch-fencing orchestration, persistence models, Pydantic DTOs, or request correlation
 context.
 
-The orchestration module must not reintroduce reducer-owned transaction-type sets, cash delta
+The application module must not reintroduce reducer-owned transaction-type sets, cash delta
 helpers, buy/sell/transfer/corporate-action state helpers, or private backdated replay decision
-helpers. It must not depend on an outbox repository or publish `ReprocessTransactionReplay`;
-backdated position recovery is an inline caller-owned transaction.
+helpers. It must not import SQLAlchemy, ORM models, event DTOs, metrics, logging, or concrete
+repositories. It must not depend on an outbox repository or publish `ReprocessTransactionReplay`;
+backdated position recovery remains an inline caller-owned transaction.
 
 Backdated replay planning must be deterministic from:
 
@@ -53,8 +58,8 @@ position domain policy belongs under the cohesive `domain/position/` package.
 
 ## Compatibility
 
-This is an in-process modularity rule. It preserves `PositionCalculationWorkflow.calculate(...)`,
-`PositionCalculationWorkflow.calculate_next_position(...)`, database schema, repository contracts,
-epoch-fencing behavior, deterministic history ordering, and public API behavior. The retired,
-runtime-inactive internal replay event is intentionally removed; the unified operator replay
-request path remains unchanged.
+This is an in-process modularity rule. The production unit of work now calls
+`PositionHistoryProcessor` with `BookedTransaction` directly. Public APIs, event contracts,
+database schema, caller-owned commit/rollback behavior, epoch semantics, deterministic history
+ordering, and downstream cashflow rebuild inputs are unchanged. The former workflow and repository
+remain only for PostgreSQL integration-test migration and are not production-composed.
