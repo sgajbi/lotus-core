@@ -3,9 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-POSITION_LOGIC_MODULE = Path(
-    "src/services/portfolio_transaction_processing_service/app/infrastructure/"
-    "position_calculation_workflow.py"
+POSITION_APPLICATION_MODULE = Path(
+    "src/services/portfolio_transaction_processing_service/app/application/position_history.py"
 )
 POSITION_REDUCER_MODULE = Path(
     "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py"
@@ -13,6 +12,16 @@ POSITION_REDUCER_MODULE = Path(
 LEGACY_POSITION_DOMAIN_MODULES = (
     Path("src/services/portfolio_transaction_processing_service/app/domain/position_history.py"),
     Path("src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py"),
+)
+LEGACY_POSITION_INFRASTRUCTURE_MODULES = (
+    Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "position_calculation_workflow.py"
+    ),
+    Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "position_repository.py"
+    ),
 )
 
 REQUIRED_REDUCER_SNIPPETS = (
@@ -35,38 +44,28 @@ FORBIDDEN_REDUCER_SNIPPETS = {
     "BaseModel": "pure position reducers must not depend on Pydantic DTOs",
     "sqlalchemy": "pure position reducers must not import SQLAlchemy",
 }
-REQUIRED_LOGIC_SNIPPETS = (
-    "calculate_next_position_state",
-    "plan_backdated_recalculation",
-    "PositionBalanceState",
-    "EpochFencer",
-    "REPROCESSING_EPOCH_BUMPED_TOTAL",
+REQUIRED_APPLICATION_SNIPPETS = (
+    "class PositionHistoryProcessor",
+    "PositionHistoryRepository",
+    "PositionRecalculationStateStore",
+    "PositionHistoryObserver",
+    "build_position_history",
 )
-FORBIDDEN_LOGIC_SNIPPETS = {
-    "OutboxRepository": "position orchestration must not depend on the retired replay outbox",
-    "ReprocessTransactionReplay": "retired position replay events must not be reintroduced",
-    "def _queue_backdated_replay": "backdated position recovery must rebuild inline",
-    "def _publish_backdated_replay_events": "backdated position recovery must rebuild inline",
-    "CASH_POSITION_DELTA_TRANSACTION_TYPES": (
-        "position transaction type policy belongs in position_reducer.py"
+FORBIDDEN_APPLICATION_SNIPPETS = {
+    "AsyncSession": "position application policy must not depend on database sessions",
+    "sqlalchemy": "position application policy must not import SQLAlchemy",
+    "portfolio_common.database_models": (
+        "position application policy must not depend on persistence models"
     ),
-    "POSITION_TRANSFER_TRANSACTION_TYPES": (
-        "position transaction type policy belongs in position_reducer.py"
+    "TransactionEvent": "position application policy must not depend on event DTOs",
+    "PositionStateRepository": "position application policy must depend on its state-store port",
+    "SqlAlchemyPositionHistoryRepository": (
+        "position application policy must depend on its repository port"
     ),
-    "SAME_INSTRUMENT_CORPORATE_ACTION_TYPES": (
-        "position transaction type policy belongs in position_reducer.py"
+    "PrometheusPositionHistoryObserver": (
+        "position application policy must depend on its observer port"
     ),
-    "def _cash_position_deltas": "cash reducer helpers belong in position_reducer.py",
-    "def _buy_position_state": "buy reducer helpers belong in position_reducer.py",
-    "def _sell_position_state": "sell reducer helpers belong in position_reducer.py",
-    "def _transfer_position_state": "transfer reducer helpers belong in position_reducer.py",
-    "def _same_instrument_action_state": (
-        "corporate-action reducer helpers belong in position_reducer.py"
-    ),
-    "def _needs_original_backdated_replay": (
-        "backdated replay decisions belong in position_reducer.py"
-    ),
-    "def _effective_completed_date": "effective-date planning belongs in position_reducer.py",
+    "import logging": "position application policy must observe through its port",
 }
 
 
@@ -107,16 +106,25 @@ def find_position_reducer_boundary_findings(
     findings.extend(
         _required_snippet_findings(
             root=root,
-            relative_path=POSITION_LOGIC_MODULE,
-            snippets=REQUIRED_LOGIC_SNIPPETS,
+            relative_path=POSITION_APPLICATION_MODULE,
+            snippets=REQUIRED_APPLICATION_SNIPPETS,
         )
     )
     findings.extend(
         _forbidden_snippet_findings(
             root=root,
-            relative_path=POSITION_LOGIC_MODULE,
-            snippets=FORBIDDEN_LOGIC_SNIPPETS,
+            relative_path=POSITION_APPLICATION_MODULE,
+            snippets=FORBIDDEN_APPLICATION_SNIPPETS,
         )
+    )
+    findings.extend(
+        PositionReducerBoundaryFinding(
+            path=legacy_path.as_posix(),
+            snippet="<legacy-position-infrastructure-module>",
+            reason="position orchestration and persistence use application ports and adapters",
+        )
+        for legacy_path in LEGACY_POSITION_INFRASTRUCTURE_MODULES
+        if (root / legacy_path).exists()
     )
     return findings
 
