@@ -160,6 +160,12 @@ def test_interest_validation_rejects_net_interest_reconciliation_mismatch() -> N
     assert mismatch.code.value == "INTEREST_015_NET_RECONCILIATION_MISMATCH"
     assert mismatch.field == "net_interest_amount"
     assert mismatch.message.endswith("before transaction fees.")
+    assert [issue.code for issue in validate_interest_transaction(transaction)].count(
+        InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
+    ) == 1
+    assert InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT not in {
+        issue.code for issue in validate_interest_transaction(transaction)
+    }
 
 
 def test_dividend_validation_rejects_non_positive_net_settlement() -> None:

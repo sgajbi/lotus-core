@@ -160,6 +160,28 @@ def test_interest_income_rejects_fee_that_consumes_net_interest(fee: Decimal) ->
     assert raised.value.net_settlement_amount == Decimal("8") - fee
 
 
+def test_interest_rejects_explicit_net_that_does_not_reconcile() -> None:
+    transaction = _transaction(
+        "INTEREST",
+        gross_transaction_amount=Decimal("10"),
+        withholding_tax_amount=Decimal("2"),
+        net_interest_amount=Decimal("100"),
+        interest_direction="INCOME",
+        trade_fee=Decimal("50"),
+    )
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_settlement_cash_movement(transaction)
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.INTEREST_NET_RECONCILIATION_MISMATCH
+    )
+    assert raised.value.field == "net_interest_amount"
+    assert raised.value.available_proceeds == Decimal("8")
+    assert raised.value.fee_amount == Decimal("50")
+    assert raised.value.net_settlement_amount == Decimal("-42")
+
+
 def test_decimal_precision_is_not_quantized_by_settlement_policy() -> None:
     movement = calculate_settlement_cash_movement(
         _transaction(
