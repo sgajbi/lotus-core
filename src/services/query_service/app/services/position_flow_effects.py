@@ -3,23 +3,20 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
+from portfolio_common.transaction_type_registry import (
+    production_transaction_types_for_position_effects,
+)
 
 from .decimal_amounts import decimal_or_zero
 
-
-def _transaction_types_with_position_effect(position_effect: str) -> frozenset[str]:
-    return frozenset(
-        code
-        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
-        if definition.production_booking_allowed and definition.position_effect == position_effect
-    )
-
-
-POSITION_INCREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("increase")
-POSITION_DECREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("decrease")
-CASH_POSITION_INCREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("cash_increase")
-CASH_POSITION_DECREASE_TRANSACTION_TYPES = _transaction_types_with_position_effect("cash_decrease")
+POSITION_INCREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects("increase")
+POSITION_DECREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects("decrease")
+CASH_POSITION_INCREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects(
+    "cash_increase"
+)
+CASH_POSITION_DECREASE_TRANSACTION_TYPES = production_transaction_types_for_position_effects(
+    "cash_decrease"
+)
 
 
 def transaction_quantity_effect_decimal(

@@ -16,6 +16,7 @@ from portfolio_common.transaction_type_registry import (
     is_production_booking_transaction_type,
     is_registered_transaction_type,
     production_transaction_types_for_lifecycle_families,
+    production_transaction_types_for_position_effects,
     require_registered_transaction_type,
 )
 
@@ -135,6 +136,27 @@ def test_fx_business_transaction_types_are_registry_derived_once() -> None:
         "fx"
     )
     assert FX_LINKAGE_BUSINESS_TRANSACTION_TYPES is FX_BUSINESS_TRANSACTION_TYPES
+
+
+@pytest.mark.parametrize(
+    "position_effect",
+    ["increase", "decrease", "cash_increase", "cash_decrease"],
+)
+def test_position_effect_selector_returns_production_registry_codes(position_effect: str) -> None:
+    expected = frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed and definition.position_effect == position_effect
+    )
+
+    assert production_transaction_types_for_position_effects(position_effect) == expected
+
+
+def test_position_effect_selector_normalizes_and_combines_effects() -> None:
+    assert (
+        production_transaction_types_for_position_effects(" INCREASE ", "cash_increase")
+        == POSITION_INCREASE_TRANSACTION_TYPES | CASH_POSITION_INCREASE_TRANSACTION_TYPES
+    )
 
 
 def test_portfolio_flow_no_auto_generate_types_are_registry_derived() -> None:
