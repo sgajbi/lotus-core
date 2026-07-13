@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
@@ -55,8 +56,9 @@ def test_validate_fx_transaction_happy_path() -> None:
 
 
 def test_validate_fx_transaction_normalizes_control_codes() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "transaction_type": " fx_forward ",
             "component_type": " fx_contract_open ",
             "fx_rate_quote_convention": " quote_per_base ",
@@ -71,8 +73,9 @@ def test_validate_fx_transaction_normalizes_control_codes() -> None:
 
 
 def test_validate_fx_transaction_normalizes_cash_leg_role() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "component_type": " fx_cash_settlement_buy ",
             "fx_cash_leg_role": " buy ",
             "linked_fx_cash_leg_id": "FX-CASH-SELL-001",
@@ -85,33 +88,34 @@ def test_validate_fx_transaction_normalizes_cash_leg_role() -> None:
 
 
 def test_validate_fx_transaction_rejects_unknown_business_type() -> None:
-    txn = _base_txn().model_copy(update={"transaction_type": "BUY"})
+    txn = replace(_base_txn(), transaction_type="BUY")
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.INVALID_TRANSACTION_TYPE for i in issues)
 
 
 def test_validate_fx_transaction_rejects_unknown_component_type() -> None:
-    txn = _base_txn().model_copy(update={"component_type": "UNKNOWN"})
+    txn = replace(_base_txn(), component_type="UNKNOWN")
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.INVALID_COMPONENT_TYPE for i in issues)
 
 
 def test_validate_fx_transaction_rejects_non_zero_quantity_and_price() -> None:
-    txn = _base_txn().model_copy(update={"quantity": Decimal("1"), "price": Decimal("2")})
+    txn = replace(_base_txn(), quantity=Decimal("1"), price=Decimal("2"))
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.NON_ZERO_QUANTITY for i in issues)
     assert any(i.code == FxValidationReasonCode.NON_ZERO_PRICE for i in issues)
 
 
 def test_validate_fx_transaction_requires_distinct_currencies() -> None:
-    txn = _base_txn().model_copy(update={"buy_currency": "USD", "sell_currency": "USD"})
+    txn = replace(_base_txn(), buy_currency="USD", sell_currency="USD")
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.SAME_CURRENCY_NOT_ALLOWED for i in issues)
 
 
 def test_validate_fx_transaction_requires_positive_amounts_and_rate() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "buy_amount": Decimal("0"),
             "sell_amount": Decimal("-1"),
             "contract_rate": Decimal("0"),
@@ -124,8 +128,9 @@ def test_validate_fx_transaction_requires_positive_amounts_and_rate() -> None:
 
 
 def test_validate_fx_transaction_requires_cash_leg_linkage_for_settlement_components() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "component_type": "FX_CASH_SETTLEMENT_BUY",
             "fx_cash_leg_role": None,
             "linked_fx_cash_leg_id": None,
@@ -139,14 +144,15 @@ def test_validate_fx_transaction_requires_cash_leg_linkage_for_settlement_compon
 def test_validate_fx_transaction_requires_contract_id_for_forwards_and_contract_components() -> (
     None
 ):
-    txn = _base_txn().model_copy(update={"fx_contract_id": None})
+    txn = replace(_base_txn(), fx_contract_id=None)
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.MISSING_FX_CONTRACT_ID for i in issues)
 
 
 def test_validate_fx_transaction_requires_swap_group_identifiers() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "transaction_type": "FX_SWAP",
             "swap_event_id": None,
             "near_leg_group_id": None,
@@ -158,8 +164,9 @@ def test_validate_fx_transaction_requires_swap_group_identifiers() -> None:
 
 
 def test_validate_fx_transaction_rejects_non_distinct_swap_groups() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "transaction_type": " fx_swap ",
             "swap_event_id": "FXSWAP-001",
             "near_leg_group_id": "FXSWAP-001-LEG",
@@ -171,8 +178,9 @@ def test_validate_fx_transaction_rejects_non_distinct_swap_groups() -> None:
 
 
 def test_validate_fx_transaction_rejects_invalid_policy_modes() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "spot_exposure_model": "BAD",
             "fx_realized_pnl_mode": "BAD",
         }
@@ -183,8 +191,9 @@ def test_validate_fx_transaction_rejects_invalid_policy_modes() -> None:
 
 
 def test_validate_fx_transaction_rejects_non_zero_capital_pnl_and_total_mismatch() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "realized_capital_pnl_local": Decimal("1"),
             "realized_total_pnl_base": Decimal("999"),
         }
@@ -195,8 +204,9 @@ def test_validate_fx_transaction_rejects_non_zero_capital_pnl_and_total_mismatch
 
 
 def test_validate_fx_transaction_strict_metadata() -> None:
-    txn = _base_txn().model_copy(
-        update={
+    txn = replace(
+        _base_txn(),
+        **{
             "economic_event_id": None,
             "linked_transaction_group_id": None,
             "calculation_policy_id": None,

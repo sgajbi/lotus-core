@@ -31,7 +31,7 @@ def test_domain_layer_guard_rejects_framework_and_repository_imports(tmp_path: P
     ]
 
 
-def test_domain_layer_guard_keeps_fx_model_pydantic_allowlist_explicit(
+def test_domain_layer_guard_rejects_framework_models_in_fx_domain(
     tmp_path: Path,
 ) -> None:
     _write(
@@ -48,5 +48,6 @@ def test_domain_layer_guard_keeps_fx_model_pydantic_allowlist_explicit(
     findings = find_domain_import_findings(tmp_path)
 
     assert [finding.path for finding in findings] == [
-        "src/services/example_service/app/domain/new_models.py"
+        "src/services/example_service/app/domain/new_models.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/models.py",
     ]
