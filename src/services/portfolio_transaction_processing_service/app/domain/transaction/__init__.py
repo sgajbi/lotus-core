@@ -22,6 +22,8 @@ from .semantic_identity import (
 )
 from .settlement import (
     ADJUSTMENT_TRANSACTION_TYPE,
+    GENERATED_CASH_LEG_TRANSACTION_TYPES,
+    PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES,
     CashEntryMode,
     GeneratedCashLegError,
     UpstreamCashLegPairingError,
@@ -59,9 +61,11 @@ __all__ = [
     "DIVIDEND_DEFAULT_POLICY_VERSION",
     "DividendValidationReasonCode",
     "GeneratedCashLegError",
+    "GENERATED_CASH_LEG_TRANSACTION_TYPES",
     "INTEREST_DEFAULT_POLICY_ID",
     "INTEREST_DEFAULT_POLICY_VERSION",
     "InterestValidationReasonCode",
+    "PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES",
     "SELL_AVCO_POLICY_ID",
     "SELL_DEFAULT_POLICY_VERSION",
     "SELL_FIFO_POLICY_ID",

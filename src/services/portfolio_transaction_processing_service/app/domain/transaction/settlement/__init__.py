@@ -10,6 +10,7 @@ from .cash_entry import (
 )
 from .generated_cash_leg import (
     ADJUSTMENT_TRANSACTION_TYPE,
+    GENERATED_CASH_LEG_TRANSACTION_TYPES,
     GeneratedCashLegError,
     build_generated_settlement_cash_leg,
     should_generate_settlement_cash_leg,
@@ -25,6 +26,7 @@ __all__ = [
     "ADJUSTMENT_TRANSACTION_TYPE",
     "CashEntryMode",
     "GeneratedCashLegError",
+    "GENERATED_CASH_LEG_TRANSACTION_TYPES",
     "PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES",
     "UpstreamCashLegPairingError",
     "UpstreamCashLegPairingIssue",

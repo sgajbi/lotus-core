@@ -1,15 +1,8 @@
 import pytest
-from portfolio_common.transaction_domain.adjustment_cash_leg import (
-    AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES,
-    _adjustment_resolvers,
-)
 from portfolio_common.transaction_domain.fx_linkage import (
     FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
 )
 from portfolio_common.transaction_domain.fx_models import FX_BUSINESS_TRANSACTION_TYPES
-from portfolio_common.transaction_domain.portfolio_flow_guardrails import (
-    PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES,
-)
 from portfolio_common.transaction_type_registry import (
     INCOME_RECOGNITION_TRANSACTION_TYPES,
     MIGRATION_ONLY,
@@ -40,6 +33,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
     SAME_INSTRUMENT_CORPORATE_ACTION_TYPES,
     SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    GENERATED_CASH_LEG_TRANSACTION_TYPES,
+    PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
@@ -69,7 +66,7 @@ def test_registry_classifies_local_position_and_cashflow_rule_table_types() -> N
         | CASH_POSITION_DELTA_TRANSACTION_TYPES
         | POSITION_TRANSFER_TRANSACTION_TYPES
         | POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES
-        | AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES
+        | GENERATED_CASH_LEG_TRANSACTION_TYPES
         | SAME_INSTRUMENT_CORPORATE_ACTION_TYPES
         | SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES
         | POSITION_INCREASE_TRANSACTION_TYPES
@@ -146,9 +143,9 @@ def test_portfolio_flow_no_auto_generate_types_are_registry_derived() -> None:
         and definition.lifecycle_family in {"cash_movement", "expense", "transfer"}
     }
 
-    assert PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES == registry_portfolio_flow_types
+    assert PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES == registry_portfolio_flow_types
     assert (
-        PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES
+        PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES
         == production_transaction_types_for_lifecycle_families(
             "cash_movement", "expense", "transfer"
         )
@@ -165,8 +162,7 @@ def test_auto_generated_adjustment_cash_leg_types_are_registry_derived_and_imple
         and definition.settlement_behavior == "requires_cash_leg"
     }
 
-    assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == registry_auto_generate_types
-    assert AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES == frozenset(_adjustment_resolvers())
+    assert GENERATED_CASH_LEG_TRANSACTION_TYPES == registry_auto_generate_types
 
 
 def test_cost_sort_cash_dependency_sets_are_registry_compatible() -> None:
