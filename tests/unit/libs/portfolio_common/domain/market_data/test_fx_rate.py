@@ -1,6 +1,8 @@
+"""Tests for shared foreign-exchange rate validation policy."""
+
 from decimal import Decimal
 
-from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
 
 
 def test_coerce_positive_fx_rate_accepts_decimal_and_string_inputs():

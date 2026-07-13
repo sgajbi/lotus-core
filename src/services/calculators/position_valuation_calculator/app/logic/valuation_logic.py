@@ -5,9 +5,13 @@ from decimal import Decimal
 from typing import Optional, Tuple
 
 from portfolio_common.domain.decimal_amount import required_decimal
-from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
-from portfolio_common.market_prices import coerce_positive_market_price_or_none
-from portfolio_common.valuation_prices import resolve_valuation_unit_price
+from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
+from portfolio_common.domain.market_data.market_price import (
+    coerce_positive_market_price_or_none,
+)
+from portfolio_common.domain.market_data.valuation_unit_price import (
+    resolve_valuation_unit_price,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +117,8 @@ class ValuationLogic:
         instrument_to_portfolio_fx_rate: Optional[Decimal] = None,
     ) -> ValuationComponents | None:
         quantity = required_decimal(quantity, field_name="quantity")
-        market_price = coerce_positive_market_price_or_none(market_price)
-        if market_price is None:
+        normalized_market_price = coerce_positive_market_price_or_none(market_price)
+        if normalized_market_price is None:
             logger.warning(
                 "Non-positive market price for %s/%s. Cannot value.",
                 price_currency,
@@ -139,7 +143,7 @@ class ValuationLogic:
             )
 
         # 1. Determine the price in the instrument's currency
-        valuation_price_local = market_price
+        valuation_price_local = normalized_market_price
         if price_currency != instrument_currency:
             normalized_price_fx_rate = ValuationLogic._positive_fx_rate_or_none(
                 price_to_instrument_fx_rate,
@@ -148,7 +152,7 @@ class ValuationLogic:
             )
             if normalized_price_fx_rate is None:
                 return None
-            valuation_price_local = market_price * normalized_price_fx_rate
+            valuation_price_local = normalized_market_price * normalized_price_fx_rate
 
         valuation_price_local = resolve_valuation_unit_price(
             market_price=valuation_price_local,
