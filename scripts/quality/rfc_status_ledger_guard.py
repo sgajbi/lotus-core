@@ -156,10 +156,12 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         return errors + ["ledger entries must be a list"]
 
     entries_by_path: dict[str, dict[str, Any]] = {}
+    valid_entries: list[dict[str, Any]] = []
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             errors.append(f"entry {index} must be an object")
             continue
+        valid_entries.append(entry)
         path = entry.get("path")
         if not isinstance(path, str) or not path.strip():
             errors.append(f"entry {index} must define non-empty path")
@@ -177,7 +179,7 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         errors.append("RFC ledger contains stale metadata for: " + ", ".join(stale))
     errors.extend(
         _index_status_errors(
-            entries,
+            valid_entries,
             index_statuses=load_rfc_index_statuses(repo_root / "docs" / "RFCs" / "RFC-INDEX.md"),
         )
     )
