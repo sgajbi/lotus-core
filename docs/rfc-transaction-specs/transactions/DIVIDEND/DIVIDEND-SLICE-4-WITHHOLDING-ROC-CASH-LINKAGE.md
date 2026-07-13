@@ -8,7 +8,7 @@ Slice 4 implements the dual cash-entry mode requirement for `DIVIDEND` without i
 This slice focuses on deterministic linkage semantics and replay-safe behavior. Withholding/ROC decomposition remains reserved for subsequent extension on top of this linkage contract.
 
 ## Implemented Changes
-1. Canonical mode helpers in `portfolio_common.transaction_domain.cash_entry_mode`:
+1. Canonical mode helpers in `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_entry`:
  - `normalize_cash_entry_mode`
  - `is_upstream_provided_cash_entry_mode`
  - constants for supported modes (`AUTO_GENERATE`, `UPSTREAM_PROVIDED`)

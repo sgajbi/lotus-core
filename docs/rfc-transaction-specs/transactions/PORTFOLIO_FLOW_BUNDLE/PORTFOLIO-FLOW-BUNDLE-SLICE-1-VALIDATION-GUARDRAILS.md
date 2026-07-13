@@ -17,10 +17,10 @@ Primary rule:
 
 ## Implemented Changes
 
-1. Added `portfolio_common.transaction_domain.portfolio_flow_guardrails`:
- - `PORTFOLIO_FLOW_NO_AUTO_GENERATE_TRANSACTION_TYPES`
- - `is_portfolio_flow_no_auto_generate_transaction_type(...)`
- - `assert_portfolio_flow_cash_entry_mode_allowed(...)`
+1. Added `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_entry`:
+ - `PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES`
+ - `is_portfolio_level_cash_flow(...)`
+ - `assert_cash_entry_mode_supported(...)`
 2. Exported guardrail APIs through `portfolio_common.transaction_domain.__init__`.
 3. Enforced guardrail in cost calculator consumer before emission/linkage handling.
 4. Enforced guardrail in cashflow calculator consumer before mode-specific processing.

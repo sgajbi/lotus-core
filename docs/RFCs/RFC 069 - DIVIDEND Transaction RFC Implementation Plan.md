@@ -93,9 +93,9 @@ Exit Criteria:
 
 ### Slice 1 - Canonical DIVIDEND Validation + Reason Codes
 Deliverables:
-1. `portfolio_common.transaction_domain.dividend_models`
-2. `portfolio_common.transaction_domain.dividend_reason_codes`
-3. `portfolio_common.transaction_domain.dividend_validation`
+1. `portfolio_transaction_processing_service.app.domain.transaction.booked`
+2. `portfolio_transaction_processing_service.app.domain.transaction.validation.reason_codes`
+3. `portfolio_transaction_processing_service.app.domain.transaction.validation.income`
 4. Tests mirroring BUY/SELL validator coverage patterns.
 5. `docs/rfc-transaction-specs/transactions/DIVIDEND/DIVIDEND-SLICE-1-VALIDATION-REASON-CODES.md`
 

@@ -16,7 +16,7 @@ RFC-074 bundle types:
 | Requirement | Evidence |
 |---|---|
 | Bundled single-iteration implementation | RFC slice artifacts `SLICE-0` through `SLICE-6` under `docs/rfc-transaction-specs/transactions/PORTFOLIO_FLOW_BUNDLE/` |
-| No `AUTO_GENERATE` support for bundle types | `portfolio_common.transaction_domain.portfolio_flow_guardrails`; consumer enforcement in cost/cashflow services; guardrail unit tests |
+| No `AUTO_GENERATE` support for bundle types | `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_entry`; consumer enforcement in cost/cashflow services; guardrail unit tests |
 | Portfolio-flow classification alignment | Alembic migration `a9c4d2e8f1b7_feat_align_tax_cashflow_rule_portfolio_flow.py`; bundle slice-2 test |
 | Calculator semantics harmonized | Position calculator update in `position_logic.py`; bundle tests and existing position logic tests |
 | Query/service projection alignment | Query service updates in `core_snapshot_service.py` and `simulation_service.py`; query service unit tests |

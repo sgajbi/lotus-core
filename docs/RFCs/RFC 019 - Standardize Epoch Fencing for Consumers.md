@@ -37,12 +37,12 @@ Current behavior:
 Evidence:
 - `src/libs/portfolio-common/portfolio_common/reprocessing.py`
 - `src/libs/portfolio-common/portfolio_common/monitoring.py`
-- `src/services/calculators/position_calculator/app/core/position_logic.py`
-- `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
 - `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`
 - `tests/unit/libs/portfolio-common/test_reprocessing.py`
-- `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+- `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
 - `tests/unit/services/timeseries_generator_service/timeseries-generator-service/consumers/test_position_timeseries_consumer.py`
 - `docs/features/reprocessing_engine/05_Developer_Guide.md`
 

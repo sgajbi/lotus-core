@@ -19,9 +19,9 @@ This slice hardens deterministic disposal behavior and cash-linkage metadata pro
 ## Evidence
 
 - Unit tests:
-  - `tests/unit/libs/portfolio_common/test_sell_linkage.py`
-  - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
-  - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`
 
 ## Notes
 

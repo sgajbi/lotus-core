@@ -41,13 +41,14 @@ Delivered:
 
 Validation evidence:
 1. `pytest` targeted unit suites:
- - `tests/unit/libs/portfolio_common/test_adjustment_cash_leg.py`
- - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
- - `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
- - `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
- - `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
- - `tests/unit/libs/portfolio_common/test_dividend_validation.py`
- - `tests/unit/libs/portfolio_common/test_interest_validation.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_generated_cash_leg.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_upstream_cash_leg_pairing.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
 2. Migration contract gate:
  - `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 

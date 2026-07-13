@@ -35,10 +35,10 @@ The RFC should now be treated as a delivery record with follow-on enhancements, 
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
 | Slice artifact trail | Implemented | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-0-GAP-ASSESSMENT.md` .. `BUY-SLICE-6-CONFORMANCE-REPORT.md` |
-| Canonical BUY validation + reason codes | Implemented | `tests/unit/libs/portfolio_common/test_buy_validation.py`; slice-1 artifact |
+| Canonical BUY validation + reason codes | Implemented | `tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py`; slice-1 artifact |
 | Metadata persistence/linkage | Implemented | `tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py`; calculator/persistence tests |
-| Calculation invariants and BUY semantics | Implemented | `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`; slice-3 artifact |
-| Lot and accrued-offset durability | Implemented | `src/services/calculators/cost_calculator_service/app/repository.py`; `tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py` |
+| Calculation invariants and BUY semantics | Implemented | `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`; slice-3 artifact |
+| Lot and accrued-offset durability | Implemented | `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py`; `tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py` |
 | Query/read-model and supportability | Implemented | `src/services/query_service/app/routers/buy_state.py`; `tests/integration/services/query_service/test_buy_state_router.py` |
 | Dedicated conformance gate | Implemented with accepted residuals | `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md`; `scripts/quality/test_manifest.py` (`transaction-buy-contract`) |
 
@@ -63,9 +63,9 @@ The RFC should now be treated as a delivery record with follow-on enhancements, 
 
 ## Test and Validation Evidence
 1. `tests/unit/transaction_specs/test_buy_slice0_characterization.py`
-2. `tests/unit/libs/portfolio_common/test_buy_validation.py`
+2. `tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py`
 3. `tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py`
-4. `tests/integration/services/calculators/cost_calculator_service/test_int_cost_repository_lot_offset.py`
+4. `tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py`
 5. `tests/integration/services/query_service/test_buy_state_router.py`
 6. `docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md`
 
