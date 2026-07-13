@@ -1,18 +1,31 @@
-"""Build persistence-neutral evidence for corporate-action basis reconciliation."""
+"""Coordinate and build evidence for corporate-action basis reconciliation."""
 
 import hashlib
 import json
-from dataclasses import dataclass
-from datetime import date, datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Sequence
 
 from ..domain.cost_basis import (
+    DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     CorporateActionBasisReconciliation,
     CorporateActionBasisReconciliationStatus,
+    missing_corporate_action_dependencies,
+    reconcile_corporate_action_basis,
 )
 from ..domain.transaction import BookedTransaction
+from ..domain.transaction.corporate_action import is_bundle_a_corporate_action
+from ..ports.corporate_action_reconciliation import (
+    CorporateActionReconciliationEvidence,
+    CorporateActionReconciliationFindingEvidence,
+    CorporateActionReconciliationKey,
+    CorporateActionReconciliationObservation,
+    CorporateActionReconciliationObserver,
+    CorporateActionReconciliationRepository,
+    CorporateActionReconciliationRunEvidence,
+)
 
 CORPORATE_ACTION_RECONCILIATION_TYPE = "corporate_action_bundle_a"
 CORPORATE_ACTION_RECONCILIATION_REQUEST_OWNER = "cost-calculator"
@@ -36,50 +49,108 @@ class CorporateActionReconciliationReasonCode(StrEnum):
     MISSING_DEPENDENCY = "CA_BUNDLE_A_MISSING_DEPENDENCY"
 
 
-@dataclass(frozen=True, slots=True)
-class CorporateActionReconciliationRunEvidence:
-    """Describe one deterministic corporate-action reconciliation run."""
+class CorporateActionReconciliationCoordinator:
+    """Reconcile each complete linked corporate-action group once per processing batch."""
 
-    run_id: str
-    reconciliation_type: str
-    portfolio_id: str
-    business_date: date
-    epoch: int | None
-    status: str
-    requested_by: str
-    dedupe_key: str
-    correlation_id: str | None
-    tolerance: Decimal
-    summary: dict[str, object]
-    failure_reason: str | None
-    completed_at: datetime
+    def __init__(
+        self,
+        repository: CorporateActionReconciliationRepository,
+        *,
+        observer: CorporateActionReconciliationObserver | None = None,
+        clock: Callable[[], datetime] | None = None,
+        basis_tolerance: Decimal = DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
+    ) -> None:
+        self._repository = repository
+        self._observer = observer
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._basis_tolerance = basis_tolerance
+        self._reconciled_groups: set[CorporateActionReconciliationKey] = set()
+
+    async def reconcile(
+        self,
+        processed_transaction: BookedTransaction,
+        *,
+        correlation_id: str | None,
+    ) -> CorporateActionReconciliationEvidence | None:
+        """Persist and observe evidence when the transaction identifies a new complete group."""
+
+        key = _reconciliation_key(processed_transaction)
+        if key is None or key in self._reconciled_groups:
+            return None
+
+        group_transactions = await self._repository.load_group(key)
+        reconciliation = reconcile_corporate_action_basis(
+            group_transactions,
+            basis_tolerance=self._basis_tolerance,
+        )
+        missing_dependencies = missing_corporate_action_dependencies(
+            processed_transaction,
+            {transaction.transaction_id for transaction in group_transactions},
+        )
+        evidence = build_corporate_action_reconciliation_evidence(
+            processed_transaction=processed_transaction,
+            linked_transaction_group_id=key.linked_transaction_group_id,
+            parent_event_reference=key.parent_event_reference,
+            reconciliation=reconciliation,
+            missing_dependency_reference_ids=missing_dependencies,
+            correlation_id=correlation_id,
+            completed_at=self._clock(),
+        )
+        await self._repository.save_evidence(evidence)
+        if self._observer is not None:
+            self._observer.observe(
+                _observation(
+                    key=key,
+                    processed_transaction=processed_transaction,
+                    reconciliation=reconciliation,
+                    missing_dependencies=missing_dependencies,
+                    evidence=evidence,
+                )
+            )
+        self._reconciled_groups.add(key)
+        return evidence
 
 
-@dataclass(frozen=True, slots=True)
-class CorporateActionReconciliationFindingEvidence:
-    """Describe one deterministic support finding from a reconciliation run."""
-
-    finding_id: str
-    run_id: str
-    reconciliation_type: str
-    finding_type: CorporateActionReconciliationFindingType
-    severity: str
-    portfolio_id: str
-    security_id: str
-    transaction_id: str
-    business_date: date
-    epoch: int | None
-    expected_value: dict[str, object]
-    observed_value: dict[str, object]
-    detail: dict[str, object]
+def _reconciliation_key(
+    transaction: BookedTransaction,
+) -> CorporateActionReconciliationKey | None:
+    if not is_bundle_a_corporate_action(transaction.transaction_type):
+        return None
+    linked_group = (transaction.linked_transaction_group_id or "").strip()
+    parent_reference = (transaction.parent_event_reference or "").strip()
+    if not linked_group or not parent_reference:
+        return None
+    return CorporateActionReconciliationKey(
+        portfolio_id=transaction.portfolio_id,
+        linked_transaction_group_id=linked_group,
+        parent_event_reference=parent_reference,
+    )
 
 
-@dataclass(frozen=True, slots=True)
-class CorporateActionReconciliationEvidence:
-    """Group the run and findings produced by one reconciliation assessment."""
-
-    run: CorporateActionReconciliationRunEvidence
-    findings: tuple[CorporateActionReconciliationFindingEvidence, ...]
+def _observation(
+    *,
+    key: CorporateActionReconciliationKey,
+    processed_transaction: BookedTransaction,
+    reconciliation: CorporateActionBasisReconciliation,
+    missing_dependencies: tuple[str, ...],
+    evidence: CorporateActionReconciliationEvidence,
+) -> CorporateActionReconciliationObservation:
+    return CorporateActionReconciliationObservation(
+        key=key,
+        processed_transaction=processed_transaction,
+        reconciliation_status=reconciliation.status,
+        source_leg_count=reconciliation.source_leg_count,
+        target_leg_count=reconciliation.target_leg_count,
+        cash_consideration_count=reconciliation.cash_consideration_count,
+        source_basis_out_local=reconciliation.source_basis_out_local,
+        target_basis_in_local=reconciliation.target_basis_in_local,
+        cash_basis_local=reconciliation.cash_basis_local,
+        missing_cash_basis_count=reconciliation.missing_cash_basis_count,
+        net_basis_delta_local=reconciliation.net_basis_delta_local,
+        basis_tolerance=reconciliation.basis_tolerance,
+        missing_dependency_reference_ids=missing_dependencies,
+        finding_severities=tuple(finding.severity for finding in evidence.findings),
+    )
 
 
 def build_corporate_action_reconciliation_evidence(
