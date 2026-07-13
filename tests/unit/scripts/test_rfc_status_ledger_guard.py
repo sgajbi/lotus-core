@@ -14,7 +14,7 @@ def _write_required_files(repo_root: Path) -> None:
         "docs/architecture/README.md",
         "wiki/RFC-Index.md",
         "docs/features/supported-features.md",
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py",
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py",
         "tests/unit/scripts/test_rfc_status_ledger_guard.py",
     ):
         file_path = repo_root / path

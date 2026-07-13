@@ -3550,7 +3550,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3597,7 +3597,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3644,7 +3644,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3691,7 +3691,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3738,7 +3738,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3785,7 +3785,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3832,7 +3832,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3879,7 +3879,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3926,7 +3926,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -3973,7 +3973,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4020,7 +4020,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4067,7 +4067,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4114,7 +4114,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4161,7 +4161,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4208,7 +4208,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4255,7 +4255,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4302,7 +4302,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4349,7 +4349,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4396,7 +4396,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4443,7 +4443,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4490,7 +4490,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4537,7 +4537,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4584,7 +4584,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4631,7 +4631,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4678,7 +4678,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4725,7 +4725,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4772,7 +4772,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4819,7 +4819,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4866,7 +4866,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4913,7 +4913,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -4960,7 +4960,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5007,7 +5007,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5054,7 +5054,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5101,7 +5101,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5148,7 +5148,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5195,7 +5195,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5242,7 +5242,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5289,7 +5289,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5336,7 +5336,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5383,7 +5383,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5430,7 +5430,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5477,7 +5477,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5524,7 +5524,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5571,7 +5571,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5618,7 +5618,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5665,7 +5665,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5712,7 +5712,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5759,7 +5759,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5806,7 +5806,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5853,7 +5853,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5900,7 +5900,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5947,7 +5947,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -5994,7 +5994,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6041,7 +6041,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6088,7 +6088,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6135,7 +6135,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6182,7 +6182,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6229,7 +6229,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6276,7 +6276,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6323,7 +6323,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6370,7 +6370,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6417,7 +6417,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6464,7 +6464,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6511,7 +6511,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6558,7 +6558,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6605,7 +6605,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6652,7 +6652,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6699,7 +6699,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6746,7 +6746,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6793,7 +6793,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6840,7 +6840,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6887,7 +6887,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6934,7 +6934,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -6981,7 +6981,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7028,7 +7028,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7075,7 +7075,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7122,7 +7122,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7169,7 +7169,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7216,7 +7216,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7263,7 +7263,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],
@@ -7310,7 +7310,7 @@
         "docs/features/supported-features.md"
       ],
       "canonical_registry_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "supersedes": [],
       "superseded_by": [],

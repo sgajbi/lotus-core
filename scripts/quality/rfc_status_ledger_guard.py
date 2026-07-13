@@ -81,7 +81,9 @@ INDEX_STATUS_TO_LEDGER_STATUS = {
     "Deprecated": "deprecated",
     "Archived": "archived",
 }
-TRANSACTION_REGISTRY = "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+TRANSACTION_REGISTRY = (
+    "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
+)
 SUPPORTED_FEATURES_DOC = "docs/features/supported-features.md"
 
 
