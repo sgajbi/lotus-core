@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issues: #750, contributes to #719 and #731
-Status: Locally focused validated; aggregate CI pending
+Status: Locally validated; PR proof pending
 
 ## Objective
 
@@ -66,17 +66,30 @@ topology, reason code, or downstream response shape changes. Consumers that trea
 
 ## Validation
 
-- Pure settlement, validation, generated-leg, and cashflow adapter cohorts passed.
+- Pure settlement, validation, generated-leg, cashflow, methodology, and golden-vector cohorts
+  passed.
 - PostgreSQL combined processing proof passed for explicit and derived source shapes.
 - Independent golden vectors cover income and expense explicit/derived fee-bearing cases; focused
   policy and validation tests cover invalid direction and reconciliation rejection.
 - The governed INTEREST contract passed 314 cases.
-- Repository-native local CI, PR checks, and exact-main proof are recorded when complete.
+- Repository-native local CI passed 4,355 unit tests with zero warnings, 10 unit-DB tests, and 136
+  integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
+- Configured MyPy, architecture, domain-layer, in-process boundary, image provenance, OpenAPI,
+  API-vocabulary, documentation, wiki, Ruff, and diff gates passed.
+- PR checks and exact-main proof remain pending.
+
+## Same-Pattern Follow-up
+
+The review also found that fee-dominated SELL, DIVIDEND, or INTEREST income can produce a
+non-positive intermediate magnitude that absolute-value signing may mask. Issue #752 owns the
+required cross-family product and ledger decision; it is intentionally not folded into this
+single-family correction.
 
 ## Documentation Decision
 
 The canonical INTEREST RFC, conformance report, performance-component methodology, OpenAPI field
 descriptions, repository context, review ledger, and existing transaction/cashflow wiki pages change
-because calculation truth changed. README, API route inventory, database catalog, migrations,
-supported-feature claims, and central platform skills/context do not change: entrypoints, shapes,
-storage, public capability, and platform-wide workflow guidance remain unchanged.
+because calculation truth changed. The repeatable source-shape and fee-direction lesson is promoted
+to the platform-owned transaction skill in lotus-platform PR #521. README, API route inventory,
+database catalog, migrations, supported-feature claims, central context, and skill routing do not
+change: entrypoints, shapes, storage, public capability, and task routing remain unchanged.
