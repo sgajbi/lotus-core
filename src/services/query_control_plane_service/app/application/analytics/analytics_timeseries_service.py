@@ -11,8 +11,8 @@ from time import perf_counter
 from typing import Any, cast
 from uuid import uuid4
 
-from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from portfolio_common.monitoring import (
     ANALYTICS_EXPORT_JOB_DURATION_SECONDS,
