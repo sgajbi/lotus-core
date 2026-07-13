@@ -112,6 +112,30 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "aggregation.timeseries-market-data-reader",
+      "capability_family": "repository-reader",
+      "owner_service": "portfolio_aggregation_service",
+      "port_module": "src/services/portfolio_aggregation_service/app/ports/timeseries_market_data.py",
+      "port_symbols": [
+        "TimeseriesMarketDataPort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "qcp.portfolio-tax-lot-reader",
       "capability_family": "repository-reader",
       "owner_service": "query_control_plane_service",
