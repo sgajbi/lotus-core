@@ -4,8 +4,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import BenchmarkCompositionSeries, BenchmarkDefinition
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

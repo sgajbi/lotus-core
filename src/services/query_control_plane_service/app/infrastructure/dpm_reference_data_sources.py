@@ -4,7 +4,6 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     FxRate,
     InstrumentEligibilityProfile,
@@ -13,6 +12,7 @@ from portfolio_common.database_models import (
     ModelPortfolioTarget,
     PortfolioMandateBinding,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.source_lifecycle_predicates import (
     DISCRETIONARY_MANDATE_TYPE,
     MODEL_PORTFOLIO_TARGET_ACTIVE,
