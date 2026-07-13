@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,6 @@ from ..dtos.liquidity_ladder_dto import (
     PortfolioLiquidityLadderTotals,
 )
 from ..repositories.cashflow_repository import CashflowRepository
-from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
 from .cashflow_evidence_window import read_cashflow_evidence_window
 from .control_code_normalization import normalize_control_code

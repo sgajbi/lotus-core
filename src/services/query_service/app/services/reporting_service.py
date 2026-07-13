@@ -7,6 +7,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.portfolio_allocation import (
     AllocationInputRow,
     calculate_allocation_views,
@@ -29,7 +30,6 @@ from ..dtos.reporting_dto import (
     ReportingPortfolioSummary,
     ReportingScope,
 )
-from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import (
     InstrumentLookthroughComponentRow,

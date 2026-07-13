@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 
 from ..dtos.transaction_dto import (
     PortfolioRealizedTaxSummaryResponse,
     RealizedTaxCurrencyTotal,
 )
-from ..repositories.currency_codes import normalize_currency_code
 from .transaction_metadata import ledger_data_quality_status
 
 ConvertAmount = Callable[..., Awaitable[Decimal]]

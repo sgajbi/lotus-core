@@ -5,13 +5,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, cast
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
-from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
