@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issues: #719, #466
-Status: Fixed locally; aggregate validation and PR proof pending
+Status: Locally validated; PR proof pending
 
 ## Objective
 
@@ -49,15 +49,18 @@ leg through an immutable mapping path.
 ## Validation
 
 - Service transaction, shared-library, and remaining FX cohort: `803 passed`.
-- Full unit manifest collection: `4,329 collected`, with no deleted-module import failures.
+- Full repository-native local CI passed: `4,330` unit tests with zero warnings, `10` database
+  tests, and `135` integration-lite tests.
+- Coverage validation passed at `97.79%` aggregate coverage and `91.24%` branch coverage; the
+  critical-path coverage guard passed with the service-owned transaction test paths.
 - Focused booking, settlement, workflow, validation, mapper, and registry cohorts passed throughout
   the slice, including 39 settlement/workflow cases, 26 cashflow-policy cases, and 68 replacement
   transaction/FX cases.
 - Ruff lint/format and focused MyPy passed for the new domain and touched workflows. A broad direct
   MyPy invocation exposed five pre-existing CA/effective-processing findings outside this slice;
   the repository-native configured typecheck remains the aggregate authority.
-- Transaction manifest validation and critical-path coverage guard passed with service-owned test
-  paths.
+- BUY, SELL, DIVIDEND, INTEREST, and combined transaction-processing aggregate suites passed `979`
+  cases.
 
 ## Documentation Decision
 
