@@ -49,15 +49,17 @@ did not change because the public surface and platform-wide operating contract a
 - Legacy cashflow calculator compatibility: 59 cases passed.
 - Interest, dividend, cross-product, and portfolio-flow transaction specifications: 34 cases
   passed.
-- Cashflow adapter, staging, calculation, and repository cohorts passed 67 and 65 cases across the
-  command and persistence-boundary slices; the final focused cross-module cohort passed 112 cases.
+- Cashflow adapter, staging, calculation, repository, transaction specification, and portfolio-flow
+  cohorts passed 120 cases in the final focused cross-module run.
 - Concrete PostgreSQL combined BUY/SELL lifecycle: 2 cases passed.
 - Complete PostgreSQL transaction-processing contract: 52 cases passed.
 - `make ci-local` passed dependency integrity, Ruff, zero-warning, MyPy, architecture, OpenAPI,
-  API-vocabulary, unit DB, integration-lite, and coverage gates: 4,336 unit, 10 DB, and 135
+  API-vocabulary, unit DB, integration-lite, and coverage gates: 4,338 unit, 10 DB, and 135
   integration-lite cases passed; aggregate measured coverage was 97.79% with 91.24% branch
   coverage.
-- Domain-layer, in-process boundary, documentation, wiki-source, and diff checks passed.
+- Domain-layer, in-process boundary, documentation, and diff checks passed. The pre-merge wiki
+  check reported only `Cashflow-Calculator.md`, the expected authored source change that must not
+  be published before merge.
 
 PR CI, exact-branch validation, and post-merge exact-main proof remain required before this bounded
 slice is complete. Issue #719 remains open for the broader cost/position workflow, port, replay,
@@ -70,3 +72,8 @@ from returning anywhere under service domain packages. Four existing QCP applica
 import monitoring directly; that is application observability-port work outside this transaction
 cashflow slice and remains under the broader application decomposition backlog rather than being
 silently folded into #719.
+
+The audit also found that the curated `make lint` path list did not include transaction-processing
+production code. The immediate changed files were checked and formatted directly; issue #745 now
+tracks repository-wide changed-file lint and format enforcement so this omission cannot recur
+silently.
