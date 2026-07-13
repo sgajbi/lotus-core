@@ -15,6 +15,10 @@ from .generated_cash_leg import (
     build_generated_settlement_cash_leg,
     should_generate_settlement_cash_leg,
 )
+from .interest import (
+    InterestSettlementEconomics,
+    calculate_interest_settlement_economics,
+)
 from .upstream_pairing import (
     UpstreamCashLegPairingError,
     UpstreamCashLegPairingIssue,
@@ -27,12 +31,14 @@ __all__ = [
     "CashEntryMode",
     "GeneratedCashLegError",
     "GENERATED_CASH_LEG_TRANSACTION_TYPES",
+    "InterestSettlementEconomics",
     "PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES",
     "UpstreamCashLegPairingError",
     "UpstreamCashLegPairingIssue",
     "assert_cash_entry_mode_supported",
     "assert_upstream_cash_leg_pairing",
     "build_generated_settlement_cash_leg",
+    "calculate_interest_settlement_economics",
     "is_portfolio_level_cash_flow",
     "is_upstream_provided_cash_entry_mode",
     "resolve_cash_entry_mode",
