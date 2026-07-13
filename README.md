@@ -270,6 +270,8 @@ Important runtime note:
   PR merge gate parity
 - `make ci-main`
   main releasability parity
+- `make lint`
+  repository-wide Ruff check and format proof plus the governed domain and contract guards
 - `make verify-dependencies`
   integrity-check and reuse the content-addressed dependency-health environment when inputs match
 - `make verify-dependencies-clean`

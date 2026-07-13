@@ -550,29 +550,31 @@ Use these commands as the primary local contract:
    `make ci`
 4. main releasability parity
    `make ci-main`
-5. targeted unit gate
+5. repository-wide lint and format plus governed contract guards
+   `make lint`
+6. targeted unit gate
    `make test`
-6. database-backed unit gate
+7. database-backed unit gate
    `make test-unit-db`
-7. integration-lite suite
+8. integration-lite suite
    `make test-integration-lite`
-8. boundary mapping conformance
+9. boundary mapping conformance
    `make test-boundary-mapping-conformance`
-9. E2E smoke
+10. E2E smoke
    `make test-e2e-smoke`
-10. Docker smoke
+11. Docker smoke
    `make test-docker-smoke`
-11. repo-native domain-product validation
+12. repo-native domain-product validation
    `make domain-product-validate`
-12. app-level supported-surface validation
+13. app-level supported-surface validation
    `make lotus-core-validate`
-13. documentation release evidence pack
+14. documentation release evidence pack
    `make docs-evidence-pack`
-14. verified API example catalog
+15. verified API example catalog
    `make api-example-catalog-guard`
-15. generated API route catalog
+16. generated API route catalog
    `make api-route-catalog-guard`
-16. front-door synchronization guard
+17. front-door synchronization guard
    `make front-door-sync-guard`
 
 ## Validation And CI Expectations

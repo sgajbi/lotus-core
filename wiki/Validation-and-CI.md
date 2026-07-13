@@ -88,6 +88,8 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
   PR merge gate parity
 - `make ci-main`
   main push releasability parity
+- `make lint`
+  complete-repository Ruff check and format proof plus governed domain and contract guards
 - `make test-institutional-release-gates`
   scheduled/manual institutional completion and sign-off parity
 - `make test-transaction-processing-contract`

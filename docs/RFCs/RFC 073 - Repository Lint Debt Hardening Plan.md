@@ -2,9 +2,9 @@
 
 | Field | Value |
 | --- | --- |
-| Status | In Progress |
+| Status | Completed |
 | Created | 2026-03-05 |
-| Last Updated | 2026-03-05 |
+| Last Updated | 2026-07-13 |
 | Owners | lotus-core engineering |
 | Depends On | RFC-029 engineering baseline; RFC-066 production-readiness discipline |
 | Related Standards | CI quality gates; modularity and maintainability standards |
@@ -22,12 +22,12 @@ The plan runs as a dedicated stream in parallel with feature RFCs and uses stric
 | 1 | Completed | Runtime-critical scope now Ruff-clean: `python -m ruff check src/services/calculators src/services/persistence_service src/libs/portfolio-common src/services/calculators/cost_calculator_service/app/cost_engine --statistics` |
 | 2 | Completed | Test scope now Ruff-clean: `python -m ruff check tests --statistics` |
 | 3 | Completed | Scripts/tooling scope now Ruff-clean: `python -m ruff check scripts --statistics` |
-| 4 | Pending | CI/global gate tightening |
+| 4 | Completed | `make lint` delegates to repository-wide Ruff check and format targets; Feature, PR, and main workflows call that canonical target. |
 
 ## Baseline (2026-03-05)
 1. Full-repo Ruff run reports significant pre-existing violations (import order, line length, unused imports).
 2. RFC-070/071 governance and test gates are passing, but repo-wide lint debt remains a structural maintenance risk.
-3. Current workflows rely on targeted lint in active domains rather than a fully clean global baseline.
+3. At baseline, workflows relied on targeted lint in active domains rather than a fully clean global baseline. This historical gap is closed by Slice 4.
 
 ## Goals
 1. Establish predictable, incremental lint hardening with measurable progress.
@@ -230,6 +230,16 @@ Deliverables:
 Exit Criteria:
 1. CI enforces new baseline.
 2. Residual debt is explicitly owned and scheduled.
+
+Slice 4 Completion Notes:
+1. `make lint` delegates to `quality-ruff-gate` and `quality-ruff-format-gate`, which run Ruff check
+   and format validation over the complete repository.
+2. Feature Lane, PR Merge Gate, and Main Releasability already invoke `make lint`, so the widened
+   scope applies consistently without workflow-specific path lists.
+3. Regression tests prove that added, renamed, deleted, and space-containing Python paths remain in
+   scope and that the Make target cannot regress to a curated file list.
+4. Closure validation passed repository-wide Ruff check and format, the complete `make lint` guard
+   chain, and the focused CI-governance test module.
 
 ## Operating Rules
 1. Lint slices are separate from feature slices by default.
