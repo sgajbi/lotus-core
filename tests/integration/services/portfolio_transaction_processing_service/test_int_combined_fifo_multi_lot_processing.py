@@ -6,7 +6,9 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import Cashflow, PositionHistory, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.transaction_domain import SELL_FIFO_POLICY_ID
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SELL_FIFO_POLICY_ID,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -14,7 +14,9 @@ from portfolio_common.database_models import (
     ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.transaction_domain import SELL_AVCO_POLICY_ID
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SELL_AVCO_POLICY_ID,
+)
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
