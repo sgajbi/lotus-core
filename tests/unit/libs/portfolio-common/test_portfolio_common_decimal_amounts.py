@@ -37,6 +37,15 @@ def test_decimal_or_none_returns_none_for_invalid_values() -> None:
     assert decimal_or_none("not-a-number") is None
 
 
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_decimal_converters_reject_non_finite_values(value: str) -> None:
+    assert decimal_or_none(value) is None
+    assert decimal_or_none(Decimal(value)) is None
+    assert decimal_or_zero(value) == Decimal("0")
+    with pytest.raises(ValueError, match="amount is required"):
+        required_decimal(value, field_name="amount")
+
+
 def test_decimal_or_zero_defaults_missing_blank_and_invalid_values() -> None:
     assert decimal_or_zero(None) == Decimal("0")
     assert decimal_or_zero(" ") == Decimal("0")

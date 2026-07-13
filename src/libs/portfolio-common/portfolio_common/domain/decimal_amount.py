@@ -11,14 +11,15 @@ def decimal_or_none(value: object) -> Decimal | None:
     if value is None:
         return None
     if isinstance(value, Decimal):
-        return value
+        return value if value.is_finite() else None
     normalized = str(value).strip()
     if not normalized:
         return None
     try:
-        return Decimal(normalized)
+        decimal_value = Decimal(normalized)
     except (InvalidOperation, ValueError):
         return None
+    return decimal_value if decimal_value.is_finite() else None
 
 
 def decimal_or_zero(value: object) -> Decimal:
