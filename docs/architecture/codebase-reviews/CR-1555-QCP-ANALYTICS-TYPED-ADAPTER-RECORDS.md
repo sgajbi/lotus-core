@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issue: #717
-Status: Locally validated; aggregate and PR proof pending
+Status: Locally validated; PR proof pending
 
 ## Objective
 
@@ -40,8 +40,8 @@ from production adapters.
   the analytics export, timeseries, and unit-of-work adapters; `56 source files` pass.
 - Dynamic repository output: position, prior-EOD, cashflow, FX, portfolio, and export persistence
   objects are mapped before crossing an application port.
-- Focused validation completed so far: `142 passed` across the combined analytics cohort, including
-  `77 passed` after typed fake-port conversion.
+- Focused validation: `289 passed` across the QCP analytics application, domain, and infrastructure
+  cohort, including typed fake-port and adapter mapping coverage.
 
 ## Compatibility
 
@@ -54,10 +54,11 @@ runtime topology, or downstream contract changed.
 
 - Issue strict MyPy command: passed with zero findings.
 - `make typecheck`: passed for 56 configured source files.
-- QCP analytics application/domain/infrastructure focused tests: 142 passed.
+- QCP analytics application/domain/infrastructure focused tests: 289 passed.
 - Scoped Ruff lint/format and `git diff --check`: passed.
-- Architecture, source-product, analytics-consumer, repository-output, API, aggregate local CI, and
-  PR evidence remain required before fixed-local and merge closure claims.
+- Architecture, source-product, analytics-consumer, repository-output, mapping, application-layer,
+  OpenAPI, API vocabulary, no-alias, boundary-mapping, documentation, wiki-quality, and aggregate
+  local CI gates passed. PR and exact-main evidence remain required before merge closure.
 
 ## Same-Pattern Review
 
