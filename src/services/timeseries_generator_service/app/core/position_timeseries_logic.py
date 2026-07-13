@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.domain.analytics.cashflow_semantics import (
     normalize_cashflow_timing,
     normalize_position_flow_amount,
 )
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from ..domain.timeseries_records import (
     PositionCashflowRecord,
