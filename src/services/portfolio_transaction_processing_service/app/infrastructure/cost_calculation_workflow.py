@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
@@ -1020,8 +1020,8 @@ class CostCalculationWorkflow:
         reconciled_bundle_groups: set[tuple[str, str]] = set()
         for processed_event in events_to_publish:
             await self._validate_upstream_cash_leg(processed_event=processed_event, repo=repo)
-            emitted_events.append(processed_event)
             booked_transaction = to_booked_transaction(processed_event)
+            generated_cash_leg = None
             if should_generate_settlement_cash_leg(booked_transaction):
                 generated_cash_leg = to_transaction_event(
                     build_generated_settlement_cash_leg(booked_transaction),
@@ -1029,8 +1029,16 @@ class CostCalculationWorkflow:
                     traceparent=None,
                 )
                 await repo.create_or_update_transaction_event(generated_cash_leg)
-                processed_event.external_cash_transaction_id = generated_cash_leg.transaction_id
+                processed_event = with_booked_transaction_fields(
+                    processed_event,
+                    replace(
+                        booked_transaction,
+                        external_cash_transaction_id=generated_cash_leg.transaction_id,
+                    ),
+                )
                 await repo.create_or_update_transaction_event(processed_event)
+            emitted_events.append(processed_event)
+            if generated_cash_leg is not None:
                 emitted_events.append(generated_cash_leg)
 
             await self._record_bundle_a_reconciliation_diagnostics(

@@ -627,7 +627,8 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
     assert generated_cash_leg.gross_transaction_amount == Decimal("25.00")
     assert generated_cash_leg.movement_direction == "INFLOW"
     assert generated_cash_leg.originating_transaction_id == "DIV-GENERATED-01"
-    assert product_leg.external_cash_transaction_id == "DIV-GENERATED-01-CASHLEG"
+    assert emitted[0].external_cash_transaction_id == "DIV-GENERATED-01-CASHLEG"
+    assert product_leg.external_cash_transaction_id is None
     assert repo.create_or_update_transaction_event.await_count == 2
 
 
