@@ -1,9 +1,11 @@
+"""Enrich foreign-exchange transaction components with deterministic linkage."""
+
 from typing import cast
 
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 from portfolio_common.events import TransactionEvent
 
-from .fx_models import FX_BUSINESS_TRANSACTION_TYPES
+from .models import FX_BUSINESS_TRANSACTION_TYPES
 
 FX_DEFAULT_POLICY_ID = "FX_DEFAULT_POLICY"
 FX_DEFAULT_POLICY_VERSION = "1.0.0"

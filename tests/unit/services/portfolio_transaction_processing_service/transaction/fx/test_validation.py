@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.transaction_domain import (
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxCanonicalTransaction,
     FxValidationReasonCode,
     validate_fx_transaction,

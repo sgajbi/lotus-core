@@ -1,3 +1,5 @@
+"""Build synthetic instrument identity for foreign-exchange contract components."""
+
 from __future__ import annotations
 
 from datetime import date

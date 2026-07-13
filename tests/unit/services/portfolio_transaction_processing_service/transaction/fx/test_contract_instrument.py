@@ -2,7 +2,10 @@ from datetime import datetime
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import build_fx_contract_instrument_event
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    build_fx_contract_instrument_event,
+)
 
 
 def _fx_contract_event() -> TransactionEvent:

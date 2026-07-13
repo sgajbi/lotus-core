@@ -2,7 +2,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FX_DEFAULT_POLICY_ID,
     FX_DEFAULT_POLICY_VERSION,
     enrich_fx_transaction_metadata,

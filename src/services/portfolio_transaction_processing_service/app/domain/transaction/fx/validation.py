@@ -1,10 +1,12 @@
+"""Validate canonical foreign-exchange transaction economics and linkage."""
+
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
 
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
-from .fx_models import (
+from .models import (
     FX_BUSINESS_TRANSACTION_TYPES,
     FX_CASH_LEG_ROLES,
     FX_COMPONENT_TYPES,
@@ -13,7 +15,7 @@ from .fx_models import (
     FX_SPOT_EXPOSURE_MODELS,
     FxCanonicalTransaction,
 )
-from .fx_reason_codes import FxValidationReasonCode
+from .reason_codes import FxValidationReasonCode
 
 
 @dataclass(frozen=True)

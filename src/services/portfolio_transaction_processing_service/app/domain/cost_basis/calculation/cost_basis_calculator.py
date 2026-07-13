@@ -4,17 +4,17 @@ from decimal import Decimal
 from typing import Callable, Protocol, cast
 
 from portfolio_common.decimal_amounts import decimal_or_none
-from portfolio_common.transaction_domain import (
-    FxCanonicalTransaction,
-    UnsupportedFxRealizedPnlModeError,
-    build_fx_baseline_processing_update,
-    validate_fx_transaction,
-)
 from portfolio_common.transaction_type_registry import (
     get_transaction_type_definition,
     is_production_booking_transaction_type,
 )
 
+from ...transaction.fx import (
+    FxCanonicalTransaction,
+    UnsupportedFxRealizedPnlModeError,
+    build_fx_baseline_processing_update,
+    validate_fx_transaction,
+)
 from ..corporate_action_cash_economics import (
     CorporateActionCashEconomics,
     CorporateActionCashEconomicsError,

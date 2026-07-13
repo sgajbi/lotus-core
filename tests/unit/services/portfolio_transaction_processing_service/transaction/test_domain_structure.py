@@ -85,3 +85,9 @@ def test_shared_corporate_action_modules_are_retired() -> None:
         for path in RETIRED_SHARED_CORPORATE_ACTION_MODULES
         if path.exists()
     ] == []
+
+
+def test_shared_transaction_domain_package_is_retired() -> None:
+    """Keep transaction economics under its single production owner."""
+
+    assert not any(SHARED_TRANSACTION_DOMAIN_ROOT.rglob("*.py"))
