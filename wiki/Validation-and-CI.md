@@ -14,6 +14,7 @@ smallest evidence command for a change, then cite generated artifacts from the r
 | Dependency consistency | `make verify-dependencies` | Reuses only an exact, integrity-checked environment. |
 | Clean dependency proof | `make verify-dependencies-clean` | Always bootstraps without a cache read; required on main. |
 | Vulnerability posture | `make security-audit` | Rechecks the environment and runs `pip-audit`. |
+| Static application boundaries | `make typecheck` | Includes the complete QCP analytics application/domain/ports boundary and its SQL adapters. |
 | Documentation truth | `make docs-evidence-pack` | Captures README, wiki, API, RFC, supported-feature, and runbook checks in one manifest. |
 
 ## Lane Model
@@ -95,6 +96,8 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
   exact-key dependency-health cache with marker and `pip check` integrity proof
 - `make verify-dependencies-clean`
   operator/mainline clean-install proof and explicit cache bypass
+- `make typecheck`
+  configured static boundary proof, including QCP analytics adapter-record and port conformance
 
 ## Important gates
 
