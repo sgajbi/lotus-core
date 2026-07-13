@@ -64,7 +64,10 @@ from ..ports import (
 )
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
-from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
+from .legacy_transaction_event_mapper import (
+    to_booked_transaction,
+    with_booked_transaction_fields,
+)
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -374,11 +377,7 @@ class CostCalculationWorkflow:
             to_booked_transaction(event),
             cost_basis_method=cost_basis_method,
         )
-        event = to_transaction_event(
-            booked_transaction,
-            correlation_id=event.correlation_id,
-            traceparent=event.traceparent,
-        )
+        event = with_booked_transaction_fields(event, booked_transaction)
         event = enrich_fx_transaction_metadata(event)
         if is_ca_bundle_a_transaction_type(event.transaction_type):
             assert_ca_bundle_a_transaction_valid(event)
