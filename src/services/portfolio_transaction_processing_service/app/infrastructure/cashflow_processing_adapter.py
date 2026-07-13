@@ -34,6 +34,7 @@ class CashflowStagingWorkflow(Protocol):
         correlation_id: str,
         topic: str,
         repair_existing: bool = False,
+        booked_transaction: BookedTransaction | None = None,
     ) -> CashflowStageResult: ...
 
 
@@ -81,6 +82,7 @@ class CashflowProcessingCompatibilityAdapter:
                 correlation_id=correlation_id or "",
                 topic=self._source_topic,
                 repair_existing=repair_existing,
+                booked_transaction=transaction,
             )
         except NoCashflowRuleError as exc:
             raise TransactionProcessingError(

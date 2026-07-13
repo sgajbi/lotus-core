@@ -62,8 +62,9 @@ async def test_cashflow_adapter_preserves_source_event_and_returns_record_count(
         )
     )
 
+    transaction = _transaction()
     result = await adapter.process(
-        _transaction(),
+        transaction,
         event_id="transactions.persisted-0-42",
         correlation_id="corr-001",
         traceparent="trace-001",
@@ -74,6 +75,7 @@ async def test_cashflow_adapter_preserves_source_event_and_returns_record_count(
     assert stage_call["event_id"] == "transactions.persisted-0-42"
     assert stage_call["event"].correlation_id == "corr-001"
     assert stage_call["event"].traceparent == "trace-001"
+    assert stage_call["booked_transaction"] is transaction
 
 
 @pytest.mark.asyncio
