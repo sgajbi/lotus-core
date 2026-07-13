@@ -4,26 +4,38 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Protocol
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
-from ...contracts.analytics_inputs import PositionTimeseriesRow
+from ...contracts.analytics_inputs import CashFlowObservation, PositionTimeseriesRow
+from ...domain.analytics import PositionValuationObservation
 from .analytics_cash_flows import effective_beginning_market_value, has_external_flow
 from .analytics_fx_rates import portfolio_to_reporting_rate, position_to_portfolio_rate
 from .analytics_quality import quality_status_from_epoch
 
 
+class PositionPageSupportInputs(Protocol):
+    """Typed supporting evidence required to assemble position observations."""
+
+    previous_eod_by_security: dict[str, Decimal]
+    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
+    fx_rates: dict[date, Decimal]
+    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
+    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
+
+
 def position_response_rows(
     *,
     portfolio_id: str,
-    rows_page: list[object],
+    rows_page: list[PositionValuationObservation],
     portfolio_currency: str,
     reporting_currency: str,
     dimensions: list[str],
     include_cash_flows: bool,
-    support_inputs: object,
+    support_inputs: PositionPageSupportInputs,
 ) -> tuple[list[PositionTimeseriesRow], dict[str, int]]:
     quality_distribution: dict[str, int] = {}
     response_rows: list[PositionTimeseriesRow] = []
@@ -61,12 +73,12 @@ def position_response_rows(
 def position_response_row(
     *,
     portfolio_id: str,
-    row: object,
+    row: PositionValuationObservation,
     portfolio_currency: str,
     reporting_currency: str,
     dimensions: list[str],
     include_cash_flows: bool,
-    support_inputs: object,
+    support_inputs: PositionPageSupportInputs,
     previous_eod_by_security: dict[str, Decimal],
 ) -> PositionTimeseriesRow:
     quality = quality_status_from_epoch(int(row.epoch))
