@@ -275,11 +275,44 @@ async def test_semantic_fence_suppresses_republication_and_rejects_changed_paylo
 
 
 @pytest.mark.parametrize(
-    ("transaction_type", "gross_amount", "fee_amount", "withholding_tax", "reason_code"),
+    (
+        "transaction_type",
+        "gross_amount",
+        "fee_amount",
+        "withholding_tax",
+        "net_interest",
+        "corrected_net_interest",
+        "reason_code",
+    ),
     [
-        ("SELL", "100", "100", None, "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
-        ("DIVIDEND", "100", "100.01", None, "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
-        ("INTEREST", "10", "8", "2", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
+        ("SELL", "100", "100", None, None, None, "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
+        (
+            "DIVIDEND",
+            "100",
+            "100.01",
+            None,
+            None,
+            None,
+            "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT",
+        ),
+        (
+            "INTEREST",
+            "10",
+            "8",
+            "2",
+            None,
+            None,
+            "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT",
+        ),
+        (
+            "INTEREST",
+            "10",
+            "50",
+            "2",
+            "100",
+            "8",
+            "INTEREST_015_NET_RECONCILIATION_MISMATCH",
+        ),
     ],
 )
 async def test_fee_dominated_settlement_replay_leaves_no_state_before_corrected_delivery(
@@ -289,6 +322,8 @@ async def test_fee_dominated_settlement_replay_leaves_no_state_before_corrected_
     gross_amount: str,
     fee_amount: str,
     withholding_tax: str | None,
+    net_interest: str | None,
+    corrected_net_interest: str | None,
     reason_code: str,
 ) -> None:
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
@@ -303,6 +338,7 @@ async def test_fee_dominated_settlement_replay_leaves_no_state_before_corrected_
             withholding_tax_amount=(
                 Decimal(withholding_tax) if withholding_tax is not None else None
             ),
+            net_interest_amount=(Decimal(net_interest) if net_interest is not None else None),
             interest_direction=("INCOME" if transaction_type == "INTEREST" else None),
         ),
     )
@@ -320,7 +356,15 @@ async def test_fee_dominated_settlement_replay_leaves_no_state_before_corrected_
 
     corrected_command = replace(
         rejected_command,
-        transaction=replace(rejected_command.transaction, trade_fee=Decimal("1")),
+        transaction=replace(
+            rejected_command.transaction,
+            trade_fee=Decimal("1"),
+            net_interest_amount=(
+                Decimal(corrected_net_interest)
+                if corrected_net_interest is not None
+                else rejected_command.transaction.net_interest_amount
+            ),
+        ),
     )
     corrected_result = await use_case.execute(corrected_command)
     duplicate_result = await use_case.execute(corrected_command)
