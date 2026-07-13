@@ -33,6 +33,23 @@ The validation functions currently provide contract-conformance evidence. This o
 not activate new runtime rejection behavior. Any future validation cutover requires an intentional
 behavior decision, compatibility review, tests, and contract documentation.
 
+## INTEREST Settlement Economics
+
+For INTEREST, `net_interest_amount` is after withholding tax and other interest deductions but
+before separately reported transaction fees. One domain policy now owns reconciliation, generated
+cash-leg, and persisted cashflow arithmetic:
+
+| Direction | Settlement cash magnitude |
+| --- | --- |
+| `INCOME` | `net_interest_amount - transaction_fee` |
+| `EXPENSE` | `net_interest_amount + transaction_fee` |
+
+Cashflow sign records the income inflow or expense outflow. An explicit conforming net amount and
+the equivalent derived net amount must produce the same settlement cash. This corrected the prior
+fee-bearing source-shape difference; it did not rename fields, reason codes, events, or database
+columns. Downstream consumers needing settled cash should use the linked cashflow amount rather than
+treating `net_interest_amount` as fee-inclusive cash.
+
 ## Shared-Library Boundary
 
 `portfolio_common.transaction_domain` does not own ordinary BUY, SELL, DIVIDEND, or INTEREST models
@@ -54,7 +71,8 @@ For a new transaction type:
 
 The consolidation preserves public APIs, OpenAPI, event fields and versions, topic names, database
 schema, generated product/cash event ordering, and downstream responses. It changes internal code
-ownership and removes duplicate extension points.
+ownership and removes duplicate extension points. INTEREST fee-bearing settlement amounts are the
+documented intentional behavior correction described above.
 
 ## Evidence
 

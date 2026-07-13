@@ -37,6 +37,13 @@ Cash-entry mode validation, generated settlement-leg economics, and upstream pro
 are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event
 DTOs remain at the infrastructure boundary and are not domain inputs.
 
+INTEREST settlement uses a shared transaction-domain policy. `net_interest_amount` excludes
+transaction fees: income cashflow subtracts the fee and expense cashflow adds it before applying the
+cashflow sign. Explicit and derived pre-fee net amounts are therefore source-shape invariant. When
+supporting a discrepancy, compare gross interest, withholding tax, other deductions, resolved fee
+components, direction, and the linked cashflow amount; do not infer final settlement cash from
+`net_interest_amount` alone.
+
 For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture

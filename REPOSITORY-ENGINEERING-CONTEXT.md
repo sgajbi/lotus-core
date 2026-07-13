@@ -2302,6 +2302,15 @@ Most relevant current governance:
      `CashflowCalculator` event/ORM facade only as a bounded compatibility path while callers migrate;
      do not add new production callers to it. Domain monitoring imports are rejected by the global
      in-process boundary guard.
+173. Canonical INTEREST net and settlement-cash semantics live in
+     `portfolio_transaction_processing_service.app.domain.transaction.settlement.interest`.
+     `net_interest_amount` means gross interest less withholding tax and other interest deductions,
+     before separately reported transaction fees. Income settlement subtracts the resolved fee;
+     expense settlement adds it; cashflow sign then represents inflow or outflow. Validation,
+     generated settlement legs, and cashflow materialization must consume this one policy so
+     equivalent explicit and derived net-interest inputs remain invariant. Preserve the stable
+     `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code and keep the independent Decimal golden
+     vectors in the governed INTEREST contract when extending this methodology.
 
 ## Context Maintenance Rule
 
