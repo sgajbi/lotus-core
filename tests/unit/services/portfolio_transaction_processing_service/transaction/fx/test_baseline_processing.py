@@ -1,17 +1,20 @@
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.events import TransactionEvent
 
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BookedTransaction,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     UnsupportedFxRealizedPnlModeError,
-    build_fx_processed_event,
+    build_fx_processed_transaction,
 )
 
 
-def _fx_event(**updates: object) -> TransactionEvent:
-    event = TransactionEvent(
+def _fx_transaction(**updates: object) -> BookedTransaction:
+    transaction = BookedTransaction(
         transaction_id="FX-BASELINE-001",
         portfolio_id="PORT-FX-1",
         instrument_id="FXC-EURUSD-001",
@@ -35,11 +38,11 @@ def _fx_event(**updates: object) -> TransactionEvent:
         fx_contract_id="FXC-2026-0001",
         fx_realized_pnl_mode="NONE",
     )
-    return event.model_copy(update=updates)
+    return replace(transaction, **updates)
 
 
-def test_build_fx_processed_event_normalizes_none_realized_pnl_mode() -> None:
-    event = _fx_event(
+def test_build_fx_processed_transaction_normalizes_none_realized_pnl_mode() -> None:
+    transaction = _fx_transaction(
         fx_realized_pnl_mode=" none ",
         realized_capital_pnl_local=Decimal("10"),
         realized_fx_pnl_local=Decimal("20"),
@@ -49,7 +52,7 @@ def test_build_fx_processed_event_normalizes_none_realized_pnl_mode() -> None:
         realized_total_pnl_base=Decimal("30"),
     )
 
-    processed = build_fx_processed_event(event)
+    processed = build_fx_processed_transaction(transaction)
 
     assert processed.fx_realized_pnl_mode == "NONE"
     assert processed.realized_capital_pnl_local == Decimal("0")
@@ -60,8 +63,8 @@ def test_build_fx_processed_event_normalizes_none_realized_pnl_mode() -> None:
     assert processed.realized_total_pnl_base == Decimal("0")
 
 
-def test_build_fx_processed_event_normalizes_upstream_provided_realized_pnl_mode() -> None:
-    event = _fx_event(
+def test_build_fx_processed_transaction_normalizes_upstream_provided_mode() -> None:
+    transaction = _fx_transaction(
         fx_realized_pnl_mode=" upstream_provided ",
         realized_capital_pnl_local=Decimal("0"),
         realized_fx_pnl_local=Decimal("20"),
@@ -69,18 +72,18 @@ def test_build_fx_processed_event_normalizes_upstream_provided_realized_pnl_mode
         realized_fx_pnl_base=Decimal("25"),
     )
 
-    processed = build_fx_processed_event(event)
+    processed = build_fx_processed_transaction(transaction)
 
     assert processed.fx_realized_pnl_mode == "UPSTREAM_PROVIDED"
     assert processed.realized_total_pnl_local == Decimal("20")
     assert processed.realized_total_pnl_base == Decimal("25")
 
 
-def test_build_fx_processed_event_rejects_unsupported_cash_lot_mode() -> None:
-    event = _fx_event(fx_realized_pnl_mode=" cash_lot_cost_method ")
+def test_build_fx_processed_transaction_rejects_unsupported_cash_lot_mode() -> None:
+    transaction = _fx_transaction(fx_realized_pnl_mode=" cash_lot_cost_method ")
 
     with pytest.raises(
         UnsupportedFxRealizedPnlModeError,
         match="CASH_LOT_COST_METHOD.*supported modes are NONE and UPSTREAM_PROVIDED",
     ):
-        build_fx_processed_event(event)
+        build_fx_processed_transaction(transaction)

@@ -52,9 +52,9 @@ from ..domain.transaction.corporate_action import (
     is_bundle_a_corporate_action,
 )
 from ..domain.transaction.fx import (
-    assert_fx_processed_event_valid,
-    build_fx_contract_instrument_event,
-    build_fx_processed_event,
+    assert_fx_processed_transaction_valid,
+    build_fx_contract_instrument,
+    build_fx_processed_transaction,
     enrich_fx_transaction_metadata,
 )
 from ..ports import (
@@ -68,6 +68,7 @@ from .booked_transaction_event_mapper import (
 )
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
+from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -379,8 +380,8 @@ class CostCalculationWorkflow:
             to_booked_transaction(event),
             cost_basis_method=cost_basis_method,
         )
+        booked_transaction = enrich_fx_transaction_metadata(booked_transaction)
         event = with_booked_transaction_fields(event, booked_transaction)
-        event = enrich_fx_transaction_metadata(event)
         if is_bundle_a_corporate_action(event.transaction_type):
             assert_bundle_a_corporate_action_valid(booked_transaction)
         return event, _normalize_event_code(event.transaction_type), cost_basis_method
@@ -428,13 +429,14 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         repo: CostCalculatorRepository,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
-        processed_event = build_fx_processed_event(event)
-        assert_fx_processed_event_valid(processed_event)
+        processed_transaction = build_fx_processed_transaction(to_booked_transaction(event))
+        assert_fx_processed_transaction_valid(processed_transaction)
+        processed_event = with_booked_transaction_fields(event, processed_transaction)
         await repo.create_or_update_transaction_event(processed_event)
         instrument_events = []
-        contract_instrument = build_fx_contract_instrument_event(processed_event)
+        contract_instrument = build_fx_contract_instrument(processed_transaction)
         if contract_instrument is not None:
-            instrument_events.append(contract_instrument)
+            instrument_events.append(to_fx_contract_instrument_event(contract_instrument))
         return [processed_event], instrument_events
 
     async def _build_cost_basis_events_to_publish(

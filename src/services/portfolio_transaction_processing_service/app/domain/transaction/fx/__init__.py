@@ -2,15 +2,16 @@
 
 from .baseline_processing import (
     UnsupportedFxRealizedPnlModeError,
-    assert_fx_processed_event_valid,
+    assert_fx_processed_transaction_valid,
     build_fx_baseline_processing_update,
-    build_fx_processed_event,
+    build_fx_processed_transaction,
 )
 from .contract_instrument import (
     FX_CONTRACT_ASSET_CLASS,
     FX_CONTRACT_PRODUCT_TYPE,
-    build_fx_contract_instrument_event,
-    is_fx_contract_component_event,
+    FxContractInstrument,
+    build_fx_contract_instrument,
+    is_fx_contract_component,
 )
 from .linkage import (
     FX_DEFAULT_POLICY_ID,
@@ -42,11 +43,12 @@ __all__ = [
     "enrich_fx_transaction_metadata",
     "FX_CONTRACT_ASSET_CLASS",
     "FX_CONTRACT_PRODUCT_TYPE",
-    "is_fx_contract_component_event",
-    "build_fx_contract_instrument_event",
-    "build_fx_processed_event",
+    "FxContractInstrument",
+    "is_fx_contract_component",
+    "build_fx_contract_instrument",
+    "build_fx_processed_transaction",
     "build_fx_baseline_processing_update",
-    "assert_fx_processed_event_valid",
+    "assert_fx_processed_transaction_valid",
     "UnsupportedFxRealizedPnlModeError",
     "FxValidationError",
     "FxValidationIssue",
