@@ -13,7 +13,7 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
-from portfolio_common.transaction_type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
+from portfolio_common.domain.transaction.type_registry import INCOME_RECOGNITION_TRANSACTION_TYPES
 from portfolio_common.utils import async_timed
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession

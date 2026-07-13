@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.transaction_type_registry import (
+from portfolio_common.domain.transaction.type_registry import (
     production_transaction_types_for_position_effects,
 )
 
