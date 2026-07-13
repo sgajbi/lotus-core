@@ -1,5 +1,8 @@
 # CR-979: CA Bundle A Transaction Validation Boundary
 
+> Historical evidence note: CR-1565 moved this policy and its tests from shared-library paths to
+> the transaction-processing corporate-action domain. Commands below record the original review.
+
 Date: 2026-06-05
 
 ## Scope

@@ -2364,6 +2364,13 @@ Most relevant current governance:
      belong beside the registry. Local sets are acceptable only for explicit domain policy such as
      ordering, same-instrument quantity treatment, generated-leg behavior, or basis transfer, and
      must have registry-conformance tests plus a documented reason they are not generic metadata.
+179. Corporate-action basis-transfer classification and linked-leg ordering are owned by
+     `portfolio_transaction_processing_service.app.domain.transaction.corporate_action`.
+     Cost-basis and position-history ordering consume that policy over explicit transaction model
+     fields. Do not restore `portfolio_common.ca_bundle_a_constants`,
+     `portfolio_common.ca_bundle_a_ordering`, or the unused
+     `portfolio_common.events.transaction_event_ordering_key`. Shared event models own payload and
+     boundary normalization, not calculation replay ordering.
 
 ## Context Maintenance Rule
 

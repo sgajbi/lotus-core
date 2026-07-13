@@ -1,5 +1,8 @@
 # CR-990: CA Bundle A Dependency Ordering Helper Boundary
 
+> Historical evidence note: CR-1565 moved ordering policy and tests into the transaction-processing
+> corporate-action domain. Commands below are retained as original review evidence.
+
 Date: 2026-06-05
 
 ## Scope

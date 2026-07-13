@@ -148,18 +148,18 @@ Executed suites include:
 
 ## 8. Evidence
 
-- `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/transaction_type.py`
+- `src/libs/portfolio-common/portfolio_common/transaction_type_registry.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
 - `src/services/query_service/app/services/position_flow_effects.py`
-- `src/libs/portfolio-common/portfolio_common/ca_bundle_a_ordering.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/ordering.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/transaction_ordering.py`
 - `alembic/versions/d8e9f0a1b2c3_feat_add_ca_expansion_cashflow_rules.py`
 - `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 - `tests/unit/services/query_service/services/test_position_flow_effects.py`
-- `tests/unit/libs/portfolio-common/test_events.py`
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_ordering.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cost/test_sorter.py`
 
 ## 9. Current Status

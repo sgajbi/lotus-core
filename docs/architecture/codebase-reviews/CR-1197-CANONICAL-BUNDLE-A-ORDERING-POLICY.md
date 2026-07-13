@@ -1,5 +1,9 @@
 # CR-1197: Canonical Bundle A Ordering Policy
 
+> Historical evidence note: CR-1565 moved the canonical policy from `portfolio_common` into the
+> transaction-processing corporate-action domain after the unified runtime became the sole owner.
+> Original commands below remain audit evidence.
+
 Date: 2026-06-30
 
 ## Objective

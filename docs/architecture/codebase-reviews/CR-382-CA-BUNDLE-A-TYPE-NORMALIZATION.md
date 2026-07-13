@@ -1,5 +1,9 @@
 # CR-382: CA Bundle A Type Normalization
 
+> Historical evidence note: the shared modules and test paths below were current when this review
+> ran. CR-1565 moved the policy and current tests into the transaction-processing corporate-action
+> domain; the original commands remain as audit history.
+
 Date: 2026-05-28
 
 ## Scope
