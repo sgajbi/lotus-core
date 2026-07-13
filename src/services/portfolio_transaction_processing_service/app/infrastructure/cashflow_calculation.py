@@ -12,15 +12,15 @@ from portfolio_common.monitoring import CASHFLOWS_CREATED_TOTAL
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import (
-    CalculatedCashflow,
-    CashflowRule,
-    calculate_transaction_cashflow,
-)
-from ..domain.cashflow import (
     TRANSFER_INFLOW_TRANSACTION_TYPES as TRANSFER_INFLOW_TRANSACTION_TYPES,
 )
 from ..domain.cashflow import (
     TRANSFER_OUTFLOW_TRANSACTION_TYPES as TRANSFER_OUTFLOW_TRANSACTION_TYPES,
+)
+from ..domain.cashflow import (
+    CalculatedCashflow,
+    CashflowRule,
+    calculate_transaction_cashflow,
 )
 from .legacy_transaction_event_mapper import to_booked_transaction
 
