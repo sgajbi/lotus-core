@@ -1,5 +1,5 @@
 import pytest
-from portfolio_common.currency_codes import (
+from portfolio_common.domain.currency import (
     normalize_currency_code,
     normalize_optional_currency_code,
 )
