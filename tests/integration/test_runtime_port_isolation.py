@@ -128,9 +128,10 @@ def test_managed_compose_run_preserves_diagnostics_after_controlled_failure(
             raise RuntimeError("controlled validation failure")
 
     diagnostic_text = log_path.read_text(encoding="utf-8")
-    assert log_path.stat().st_size > 1024
+    assert diagnostic_text.startswith("--- lotus compose diagnostics ---\n")
     assert f"compose_project={project_name}" in diagnostic_text
     assert f"compose_file={compose_file.resolve()}" in diagnostic_text
+    assert "--- service logs ---" in diagnostic_text
     assert "postgres" in diagnostic_text.lower()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         probe.settimeout(1)
