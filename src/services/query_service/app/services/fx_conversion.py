@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.domain_value_objects import CurrencyCode, FxRate, MoneyAmount
+from portfolio_common.domain.financial.amounts import CurrencyCode, FxRate, MoneyAmount
 
 from ..domain.strict_decimal import decimal_or_none
 

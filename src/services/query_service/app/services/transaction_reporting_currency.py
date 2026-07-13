@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.domain_value_objects import CurrencyBasis, CurrencyCode, MoneyAmount
+from portfolio_common.domain.financial.amounts import CurrencyBasis, CurrencyCode, MoneyAmount
 
 from ..dtos.transaction_dto import TransactionRecord
 

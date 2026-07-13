@@ -2,7 +2,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.domain_value_objects import CurrencyBasis
+from portfolio_common.domain.financial.amounts import CurrencyBasis
 
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 from src.services.query_service.app.services.transaction_reporting_currency import (
