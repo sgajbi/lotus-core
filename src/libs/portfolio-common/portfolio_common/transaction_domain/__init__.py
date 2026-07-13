@@ -1,11 +1,5 @@
 """Expose cross-capability FX and effective-processing compatibility contracts."""
 
-from .effective_processing_type import (
-    FX_COMPONENT_PROCESSING_TYPES,
-    NON_CASHFLOW_PROCESSING_TYPES,
-    requires_cashflow_processing,
-    resolve_effective_processing_transaction_type,
-)
 from .fx_baseline_processing import (
     UnsupportedFxRealizedPnlModeError,
     assert_fx_processed_event_valid,
@@ -36,10 +30,6 @@ from .fx_reason_codes import FxValidationReasonCode
 from .fx_validation import FxValidationError, FxValidationIssue, validate_fx_transaction
 
 __all__ = [
-    "FX_COMPONENT_PROCESSING_TYPES",
-    "NON_CASHFLOW_PROCESSING_TYPES",
-    "requires_cashflow_processing",
-    "resolve_effective_processing_transaction_type",
     "FX_BUSINESS_TRANSACTION_TYPES",
     "FX_COMPONENT_TYPES",
     "FX_CASH_LEG_ROLES",

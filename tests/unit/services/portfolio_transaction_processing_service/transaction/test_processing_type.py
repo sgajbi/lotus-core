@@ -2,7 +2,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
 )
