@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -5,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.operations.failure_recovery_gate import (
+    RecoveryFieldEvidence,
     RecoveryMode,
+    RecoveryPollingEvidence,
+    RecoveryResult,
     _compose_command,
     _consumer_lag,
     _evaluate_recovery_result,
@@ -14,6 +18,7 @@ from scripts.operations.failure_recovery_gate import (
     _resolve_runtime_connections,
     _set_container_pause,
     _wait_for_full_recovery,
+    _write_report,
 )
 from scripts.operations.transaction_processing_load_support import TransactionProcessingCounts
 
@@ -26,6 +31,77 @@ def _complete_counts(records: int) -> TransactionProcessingCounts:
         position_count=records,
         processing_claim_count=records,
     )
+
+
+def test_recovery_report_serializes_field_and_terminal_evidence(tmp_path: Path) -> None:
+    polling = RecoveryPollingEvidence(
+        poll_count=1,
+        last_observed_at="2026-07-13T00:00:00+00:00",
+        fields=(
+            RecoveryFieldEvidence(
+                field="transaction_count",
+                actual=3,
+                expected=2,
+                comparison="equals",
+                satisfied=False,
+                last_changed_at="2026-07-13T00:00:00+00:00",
+            ),
+        ),
+        terminal_reason="transaction_count exceeded exact target: actual=3 expected=2",
+    )
+    result = RecoveryResult(
+        run_id="20260713T000000Z",
+        started_at="2026-07-13T00:00:00+00:00",
+        ended_at="2026-07-13T00:00:01+00:00",
+        interruption_service="portfolio_transaction_processing_service",
+        interruption_container_id="container-id",
+        requested_interruption_seconds=1,
+        actual_interruption_seconds=1.0,
+        transaction_topic="transactions.persisted.v1",
+        consumer_group="portfolio_transaction_processing_group",
+        records_submitted=2,
+        source_persistence_seconds=0.1,
+        baseline_consumer_lag=0,
+        peak_consumer_lag_during_interruption=2,
+        consumer_lag_growth=2,
+        consumer_lag_after_recovery=1,
+        baseline_replay_consumer_lag=0,
+        replay_consumer_lag_after_recovery=0,
+        transaction_processing_recovery_seconds=None,
+        transaction_count=3,
+        cost_count=0,
+        cashflow_count=0,
+        position_count=0,
+        processing_claim_count=0,
+        dlq_events_added_during_recovery=0,
+        recovery_polling=polling,
+        recovery_mode=RecoveryMode.FAILED_RECOVERY.value,
+        checks_passed=False,
+        failed_checks=["recovery polling stopped early"],
+    )
+
+    json_path, markdown_path = _write_report(output_dir=tmp_path, result=result)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["recovery_polling"] == {
+        "poll_count": 1,
+        "last_observed_at": "2026-07-13T00:00:00+00:00",
+        "fields": [
+            {
+                "field": "transaction_count",
+                "actual": 3,
+                "expected": 2,
+                "comparison": "equals",
+                "satisfied": False,
+                "last_changed_at": "2026-07-13T00:00:00+00:00",
+            }
+        ],
+        "terminal_reason": ("transaction_count exceeded exact target: actual=3 expected=2"),
+    }
+    markdown = markdown_path.read_text(encoding="utf-8")
+    assert "## Recovery field evidence" in markdown
+    assert "| transaction_count | 3 | equals | 2 | False |" in markdown
+    assert "transaction_count exceeded exact target" in markdown
 
 
 def test_prepare_failure_recovery_run_owns_integration_runtime_and_diagnostics(
