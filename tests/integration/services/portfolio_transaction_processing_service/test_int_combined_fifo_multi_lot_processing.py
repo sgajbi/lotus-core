@@ -6,14 +6,14 @@ from decimal import Decimal
 import pytest
 from portfolio_common.database_models import Cashflow, PositionHistory, PositionLotState
 from portfolio_common.database_models import Transaction as DBTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
-    SELL_FIFO_POLICY_ID,
-)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SELL_FIFO_POLICY_ID,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,

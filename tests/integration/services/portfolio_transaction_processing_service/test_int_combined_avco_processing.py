@@ -14,14 +14,14 @@ from portfolio_common.database_models import (
     ProcessedEvent,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
-    SELL_AVCO_POLICY_ID,
-)
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SELL_AVCO_POLICY_ID,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,

@@ -8,13 +8,13 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
 from portfolio_common.outbox_repository import OutboxRepository
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BUY_DEFAULT_POLICY_ID,
     BUY_DEFAULT_POLICY_VERSION,
 )
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
     CostCalculatorRepository,
