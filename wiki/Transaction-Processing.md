@@ -3,6 +3,8 @@
 `portfolio_transaction_processing_service` is the single runtime owner for atomic cost, cashflow,
 and position mutation after a transaction is persisted. It keeps those financial policies
 modular while sharing one transaction boundary, idempotency decision, and compatibility outbox.
+Current scope is the implemented combined transaction worker and its service-owned ordinary
+transaction domain; valuation, timeseries, and downstream analytics remain separate capabilities.
 
 ## Processing Flow
 
@@ -29,9 +31,29 @@ These policies consume `BookedTransaction`. Existing event envelopes are mapped 
 infrastructure, where schema version, event type, correlation, trace, and other governed metadata
 must be preserved.
 
-The validation functions currently provide contract-conformance evidence. This ownership move did
-not activate new runtime rejection behavior. Any future validation cutover requires an intentional
-behavior decision, compatibility review, tests, and contract documentation.
+Most validation functions remain contract-conformance evidence. The one active settlement boundary
+is non-positive proceeds after resolved fees for SELL, DIVIDEND, and INTEREST income. The application
+rejects that condition before opening the financial unit of work; other strict-metadata validators
+remain conformance-only until an intentional behavior decision, compatibility review, tests, and
+contract documentation activate them.
+
+## Ordinary Settlement Cash
+
+One transaction-domain policy resolves fee precedence, signed cash amount, and ledger direction:
+
+| Transaction | Signed settlement cash |
+| --- | --- |
+| BUY | `-(gross amount + resolved fee)` |
+| SELL | `gross proceeds - resolved fee` |
+| DIVIDEND | `gross dividend - resolved fee` |
+| INTEREST income | `pre-fee net interest - resolved fee` |
+| INTEREST expense | `-(pre-fee net interest + resolved fee)` |
+
+Component fee fields take precedence over aggregate `trade_fee` when any component is present.
+SELL, DIVIDEND, and INTEREST income must remain strictly positive before the inflow sign is applied.
+Zero or negative proceeds are non-retryable hard rejections with stable family codes; absolute-value
+normalization must never turn invalid proceeds into an apparent inflow. Generated settlement legs
+and persisted product cashflows consume the same policy result.
 
 ## INTEREST Settlement Economics
 
@@ -70,9 +92,10 @@ For a new transaction type:
 ## Compatibility
 
 The consolidation preserves public APIs, OpenAPI, event fields and versions, topic names, database
-schema, generated product/cash event ordering, and downstream responses. It changes internal code
-ownership and removes duplicate extension points. INTEREST fee-bearing settlement amounts are the
-documented intentional behavior correction described above.
+schema, generated product/cash event ordering, and downstream response shapes. It changes internal
+code ownership and removes duplicate extension points. INTEREST fee-bearing settlement arithmetic
+and rejection of fee-equal or fee-dominated SELL, DIVIDEND, and INTEREST income are documented
+intentional behavior corrections.
 
 ## Evidence
 
