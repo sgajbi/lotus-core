@@ -13,6 +13,7 @@ from portfolio_common.transaction_fee_components import (
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from ..transaction.booked import BookedTransaction
+from ..transaction.settlement.interest import calculate_interest_settlement_economics
 from .types import CashflowCalculationType, CashflowClassification
 
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})
@@ -174,24 +175,12 @@ def _base_cashflow_amount(
     transaction: BookedTransaction,
     transaction_type: str,
 ) -> Decimal:
-    trade_fee = _resolve_cashflow_trade_fee(transaction)
     if transaction_type == "INTEREST":
-        return _interest_cashflow_amount(transaction, trade_fee)
+        return calculate_interest_settlement_economics(transaction).settlement_cash_amount
+    trade_fee = _resolve_cashflow_trade_fee(transaction)
     if transaction_type in {"BUY", "FEE"}:
         return transaction.gross_transaction_amount + trade_fee
     return transaction.gross_transaction_amount - trade_fee
-
-
-def _interest_cashflow_amount(
-    transaction: BookedTransaction,
-    trade_fee: Decimal,
-) -> Decimal:
-    deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
-        transaction.other_interest_deductions_amount or Decimal(0)
-    )
-    if transaction.net_interest_amount is not None:
-        return transaction.net_interest_amount
-    return transaction.gross_transaction_amount - deductions - trade_fee
 
 
 def _resolve_cashflow_economics(
