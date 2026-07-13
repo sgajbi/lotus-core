@@ -1,6 +1,15 @@
 """Framework-neutral transaction processing capability ports."""
 
 from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
+from .corporate_action_reconciliation import (
+    CorporateActionReconciliationEvidence,
+    CorporateActionReconciliationFindingEvidence,
+    CorporateActionReconciliationKey,
+    CorporateActionReconciliationObservation,
+    CorporateActionReconciliationObserver,
+    CorporateActionReconciliationRepository,
+    CorporateActionReconciliationRunEvidence,
+)
 from .cost_basis_observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
@@ -40,6 +49,13 @@ __all__ = [
     "CashflowProcessingResult",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
+    "CorporateActionReconciliationEvidence",
+    "CorporateActionReconciliationFindingEvidence",
+    "CorporateActionReconciliationKey",
+    "CorporateActionReconciliationObservation",
+    "CorporateActionReconciliationObserver",
+    "CorporateActionReconciliationRepository",
+    "CorporateActionReconciliationRunEvidence",
     "CostProcessingPort",
     "CostProcessingResult",
     "PipelineStageProcessingPort",

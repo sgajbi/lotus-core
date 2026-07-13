@@ -7,6 +7,7 @@ from .commands import (
 )
 from .corporate_action_reconciliation import (
     CORPORATE_ACTION_RECONCILIATION_TYPE,
+    CorporateActionReconciliationCoordinator,
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
     CorporateActionReconciliationFindingType,
@@ -42,6 +43,7 @@ __all__ = [
     "BookedTransactionReplayInvariantViolation",
     "BookedTransactionReplayStatus",
     "CORPORATE_ACTION_RECONCILIATION_TYPE",
+    "CorporateActionReconciliationCoordinator",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
     "CorporateActionReconciliationFindingType",
