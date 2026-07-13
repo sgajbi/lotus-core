@@ -59,6 +59,34 @@ def test_prepare_managed_run_does_not_inherit_parent_runtime_ports(
         managed.runtime.port_reservation.release()
 
 
+def test_prepare_external_run_preserves_exported_runtime_ports(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "external-core-stack")
+    monkeypatch.setenv("LOTUS_POSTGRES_HOST_PORT", "15432")
+    monkeypatch.setenv("LOTUS_KAFKA_EXTERNAL_PORT", "19092")
+    monkeypatch.setenv("LOTUS_INGESTION_HOST_PORT", "18100")
+
+    managed = prepare_managed_compose_run(
+        profile="integration",
+        scope="external-failure-recovery",
+        compose_project_name="external-core-stack",
+        compose_file=tmp_path / "docker-compose.yml",
+        services=("postgres", "kafka", "ingestion_service"),
+        build=False,
+        log_path=tmp_path / "external-compose.log",
+        allocate_dynamic_ports=False,
+    )
+
+    assert managed.runtime.endpoints.compose_project_name == "external-core-stack"
+    assert managed.runtime.values["LOTUS_POSTGRES_HOST_PORT"] == "15432"
+    assert managed.runtime.values["LOTUS_KAFKA_EXTERNAL_PORT"] == "19092"
+    assert managed.runtime.values["LOTUS_INGESTION_HOST_PORT"] == "18100"
+    assert managed.runtime.values["LOTUS_TEST_DYNAMIC_PORTS"] == "false"
+    assert not managed.runtime.port_reservation.reserved_port_keys
+
+
 def test_prepare_managed_run_supports_profile_and_explicit_project_name(
     tmp_path: Path,
 ) -> None:

@@ -127,6 +127,7 @@ def prepare_managed_compose_run(
     build: bool,
     log_path: str | Path,
     endpoint_urls: dict[str, str | None] | None = None,
+    allocate_dynamic_ports: bool = True,
     enable_demo_data_pack: bool = False,
     demo_data_pack_portfolio_ids: tuple[str, ...] = (),
     demo_data_pack_history_days: int | None = None,
@@ -143,9 +144,10 @@ def prepare_managed_compose_run(
         runtime_environment["COMPOSE_PROJECT_NAME"] = compose_project_name
     runtime_environment["LOTUS_TEST_ENV_PROFILE"] = selected_profile
     runtime_environment["LOTUS_TEST_SCOPE"] = scope.strip().lower() or selected_profile
-    runtime_environment["LOTUS_TEST_DYNAMIC_PORTS"] = "true"
-    for inherited_port_key in profile_seed_ports(selected_profile):
-        runtime_environment.pop(inherited_port_key, None)
+    runtime_environment["LOTUS_TEST_DYNAMIC_PORTS"] = "true" if allocate_dynamic_ports else "false"
+    if allocate_dynamic_ports:
+        for inherited_port_key in profile_seed_ports(selected_profile):
+            runtime_environment.pop(inherited_port_key, None)
     for endpoint_key, endpoint_url in (endpoint_urls or {}).items():
         port_key = _ENDPOINT_PORT_KEYS.get(endpoint_key)
         if port_key is None or not endpoint_url:
