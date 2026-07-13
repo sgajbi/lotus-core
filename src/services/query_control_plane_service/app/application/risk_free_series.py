@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 
 from ..contracts.risk_free_series import (
     RiskFreeSeriesPoint,

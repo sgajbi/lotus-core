@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.runtime_providers import Clock
 from portfolio_common.source_data_product_metadata import (
     source_data_product_runtime_metadata,
