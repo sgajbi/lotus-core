@@ -1,6 +1,10 @@
-from decimal import Decimal
+"""Verify Query Service strict decimal source parsing."""
 
-from src.services.query_service.app.services.decimal_amounts import decimal_or_none, decimal_or_zero
+from decimal import Decimal, InvalidOperation
+
+import pytest
+
+from src.services.query_service.app.domain.strict_decimal import decimal_or_none, decimal_or_zero
 
 
 class _StringCountedAmount:
@@ -49,3 +53,9 @@ def test_decimal_or_none_stringifies_non_decimal_values_once() -> None:
 
     assert decimal_or_none(value) == Decimal("3.50")
     assert value.string_call_count == 1
+
+
+@pytest.mark.parametrize("converter", [decimal_or_none, decimal_or_zero])
+def test_decimal_conversion_rejects_malformed_non_empty_values(converter) -> None:
+    with pytest.raises(InvalidOperation):
+        converter("not-a-decimal")

@@ -14,6 +14,7 @@ from portfolio_common.portfolio_allocation import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain.strict_decimal import decimal_or_none, decimal_or_zero
 from ..dtos.reporting_dto import (
     AllocationBucket,
     AllocationLookThroughInfo,
@@ -37,7 +38,6 @@ from ..repositories.reporting_repository import (
 )
 from .cash_balance_service import CashBalanceResolver
 from .control_code_normalization import normalize_control_code
-from .decimal_amounts import decimal_or_none, decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
 
 ZERO = Decimal("0")

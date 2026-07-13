@@ -8,7 +8,7 @@ from portfolio_common.database_models import SimulationChange, SimulationSession
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..services.decimal_amounts import decimal_or_none
+from ..domain.strict_decimal import decimal_or_none
 
 
 class SimulationRepository:

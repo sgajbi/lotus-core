@@ -11,11 +11,11 @@ from portfolio_common.request_fingerprints import request_fingerprint
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.reporting_dto import CashAccountBalanceRecord, CashBalancesResponse, CashBalancesTotals
 from ..repositories.identifier_normalization import normalize_security_id
 from ..repositories.reporting_repository import ReportingRepository
 from .control_code_normalization import normalize_control_code
-from .decimal_amounts import decimal_or_zero
 from .fx_conversion import CachedFxRateConverter
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 

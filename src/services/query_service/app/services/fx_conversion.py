@@ -7,7 +7,7 @@ from typing import Any
 
 from portfolio_common.domain_value_objects import CurrencyCode, FxRate, MoneyAmount
 
-from .decimal_amounts import decimal_or_none
+from ..domain.strict_decimal import decimal_or_none
 
 
 class CachedFxRateConverter:

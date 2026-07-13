@@ -10,6 +10,7 @@ from portfolio_common.reconciliation_quality import COMPLETE, PARTIAL, UNKNOWN
 from portfolio_common.source_data_product_metadata import source_data_product_runtime_metadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..domain.strict_decimal import decimal_or_zero
 from ..dtos.liquidity_ladder_dto import (
     AssetLiquidityTierExposure,
     LiquidityLadderBucket,
@@ -20,7 +21,6 @@ from ..repositories.cashflow_repository import CashflowRepository
 from ..repositories.reporting_repository import ReportingRepository, ReportingSnapshotRow
 from .cashflow_evidence_window import read_cashflow_evidence_window
 from .control_code_normalization import normalize_control_code
-from .decimal_amounts import decimal_or_zero
 from .snapshot_evidence import latest_snapshot_evidence_timestamp
 
 ZERO = Decimal("0")
