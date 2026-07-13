@@ -3,7 +3,7 @@
 from decimal import Decimal
 from typing import cast
 
-from portfolio_common.decimal_amounts import decimal_or_zero
+from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.transaction_type_registry import (
     production_transaction_types_for_position_effects,
 )

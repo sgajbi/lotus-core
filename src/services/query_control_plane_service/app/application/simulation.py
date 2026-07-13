@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.runtime_providers import Clock, IdGenerator
 
 from ..domain.simulation import SimulationChange, SimulationPositionBaseline, SimulationSession

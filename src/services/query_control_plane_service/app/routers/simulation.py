@@ -1,6 +1,6 @@
 # src/services/query_control_plane_service/app/routers/simulation.py
 from fastapi import APIRouter, Depends, Path, status
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from ..application.simulation import (
     CreateSimulationSessionCommand,
