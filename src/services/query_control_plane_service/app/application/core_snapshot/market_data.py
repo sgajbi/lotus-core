@@ -6,8 +6,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, cast
 
-from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 from ...ports.core_snapshot import CoreSnapshotSourceReader
 from .errors import CoreSnapshotUnavailableSectionError
