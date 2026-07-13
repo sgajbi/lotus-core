@@ -3,7 +3,8 @@ from decimal import Decimal
 
 import pytest
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import (
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     UnsupportedFxRealizedPnlModeError,
     build_fx_processed_event,
 )

@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.transaction_domain.fx_models import FxCanonicalTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    FxCanonicalTransaction,
+)
 
 
 def test_fx_transaction_model_normalizes_control_codes() -> None:

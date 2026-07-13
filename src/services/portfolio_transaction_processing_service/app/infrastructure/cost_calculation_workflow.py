@@ -20,12 +20,6 @@ from portfolio_common.monitoring import (
     SELL_LIFECYCLE_STAGE_TOTAL,
 )
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.transaction_domain import (
-    assert_fx_processed_event_valid,
-    build_fx_contract_instrument_event,
-    build_fx_processed_event,
-    enrich_fx_transaction_metadata,
-)
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
@@ -56,6 +50,12 @@ from ..domain.transaction import (
 from ..domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
     is_bundle_a_corporate_action,
+)
+from ..domain.transaction.fx import (
+    assert_fx_processed_event_valid,
+    build_fx_contract_instrument_event,
+    build_fx_processed_event,
+    enrich_fx_transaction_metadata,
 )
 from ..ports import (
     CorporateActionReconciliationObserver,

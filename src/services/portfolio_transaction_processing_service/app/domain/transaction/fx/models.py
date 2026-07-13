@@ -1,8 +1,8 @@
+"""Canonical foreign-exchange transaction values and controlled vocabularies."""
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, cast
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.domain.transaction_control_codes import (
@@ -12,6 +12,7 @@ from portfolio_common.domain.transaction_control_codes import (
 from portfolio_common.transaction_type_registry import (
     production_transaction_types_for_lifecycle_families,
 )
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 FX_BUSINESS_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("fx")
 FX_COMPONENT_TYPES = {

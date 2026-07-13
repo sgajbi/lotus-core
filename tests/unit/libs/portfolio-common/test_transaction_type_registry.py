@@ -1,10 +1,6 @@
 from pathlib import Path
 
 import pytest
-from portfolio_common.transaction_domain.fx_linkage import (
-    FX_BUSINESS_TRANSACTION_TYPES as FX_LINKAGE_BUSINESS_TRANSACTION_TYPES,
-)
-from portfolio_common.transaction_domain.fx_models import FX_BUSINESS_TRANSACTION_TYPES
 from portfolio_common.transaction_type_registry import (
     INCOME_RECOGNITION_TRANSACTION_TYPES,
     MIGRATION_ONLY,
@@ -36,6 +32,12 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     GENERATED_CASH_LEG_TRANSACTION_TYPES,
     PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    FX_BUSINESS_TRANSACTION_TYPES,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    linkage as fx_linkage,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
@@ -135,7 +137,7 @@ def test_fx_business_transaction_types_are_registry_derived_once() -> None:
     assert FX_BUSINESS_TRANSACTION_TYPES == production_transaction_types_for_lifecycle_families(
         "fx"
     )
-    assert FX_LINKAGE_BUSINESS_TRANSACTION_TYPES is FX_BUSINESS_TRANSACTION_TYPES
+    assert fx_linkage.FX_BUSINESS_TRANSACTION_TYPES is FX_BUSINESS_TRANSACTION_TYPES
 
 
 @pytest.mark.parametrize(

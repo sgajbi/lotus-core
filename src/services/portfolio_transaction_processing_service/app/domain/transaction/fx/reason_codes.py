@@ -1,3 +1,5 @@
+"""Stable validation reason codes for foreign-exchange transactions."""
+
 from enum import StrEnum
 
 
