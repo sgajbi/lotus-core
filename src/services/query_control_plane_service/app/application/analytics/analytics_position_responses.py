@@ -20,11 +20,22 @@ from .analytics_quality import quality_status_from_epoch
 class PositionPageSupportInputs(Protocol):
     """Typed supporting evidence required to assemble position observations."""
 
-    previous_eod_by_security: dict[str, Decimal]
-    position_to_portfolio_rates: dict[str, dict[date, Decimal]]
-    fx_rates: dict[date, Decimal]
-    position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
-    portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
+    @property
+    def previous_eod_by_security(self) -> dict[str, Decimal]: ...
+
+    @property
+    def position_to_portfolio_rates(self) -> dict[str, dict[date, Decimal]]: ...
+
+    @property
+    def fx_rates(self) -> dict[date, Decimal]: ...
+
+    @property
+    def position_cashflows_by_key(
+        self,
+    ) -> dict[tuple[str, date], list[CashFlowObservation]]: ...
+
+    @property
+    def portfolio_cashflows_by_date(self) -> dict[date, list[CashFlowObservation]]: ...
 
 
 def position_response_rows(
