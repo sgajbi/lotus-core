@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     BenchmarkCompositionSeries,
     BenchmarkDefinition,
@@ -30,6 +29,7 @@ from portfolio_common.database_models import (
     RiskFreeSeries,
     SustainabilityPreferenceProfile,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
