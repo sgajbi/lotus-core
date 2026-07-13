@@ -15,7 +15,7 @@ from portfolio_common.monitoring import (
 )
 
 from ..domain.booked_transaction import BookedTransaction
-from ..domain.position_history import PositionRecalculationState
+from ..domain.position.history import PositionRecalculationState
 from ..ports.position_history import PositionRecalculationReason, PositionReplayMode
 
 logger = logging.getLogger(__name__)

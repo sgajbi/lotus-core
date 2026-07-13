@@ -19,7 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (

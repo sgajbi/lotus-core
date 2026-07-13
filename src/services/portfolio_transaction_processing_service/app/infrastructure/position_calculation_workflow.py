@@ -17,7 +17,7 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing import EpochFencer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.position_reducer import (
+from ..domain.position.reducer import (
     PositionBalanceState,
     calculate_next_position_state,
     plan_backdated_recalculation,

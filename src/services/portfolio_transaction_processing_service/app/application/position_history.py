@@ -6,12 +6,12 @@ from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from ..domain.booked_transaction import BookedTransaction
-from ..domain.position_history import (
+from ..domain.position.history import (
     PositionHistoryRecord,
     PositionRecalculationState,
     build_position_history,
 )
-from ..domain.position_reducer import plan_backdated_recalculation
+from ..domain.position.reducer import plan_backdated_recalculation
 from ..ports.position_history import (
     PositionHistoryObserver,
     PositionHistoryRepository,

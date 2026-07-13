@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.position_history import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.history import (
     PositionHistoryInvariantError,
     PositionHistoryRecord,
     PositionRecalculationState,

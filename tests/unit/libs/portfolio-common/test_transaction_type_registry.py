@@ -33,7 +33,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     transaction_type as cost_transaction_type,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     CASH_POSITION_DELTA_TRANSACTION_TYPES,
     POSITION_TRANSFER_INFLOW_TRANSACTION_TYPES,
     POSITION_TRANSFER_TRANSACTION_TYPES,

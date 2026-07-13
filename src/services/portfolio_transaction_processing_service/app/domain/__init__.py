@@ -6,7 +6,7 @@ from .average_cost_pool_reconciliation import (
     AverageCostPoolReconciliationStatus,
 )
 from .booked_transaction import BookedTransaction
-from .position_history import (
+from .position import (
     PositionHistoryInvariantError,
     PositionHistoryRecord,
     PositionRecalculationState,
