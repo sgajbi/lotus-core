@@ -751,7 +751,6 @@ def main() -> int:
             max_recovery_seconds=args.max_recovery_seconds,
             counts=counts,
             dlq_events_added_during_recovery=dlq_events_added,
-            recovery_polling=recovery_polling,
         )
 
         ended_at = datetime.now(UTC)
@@ -780,6 +779,7 @@ def main() -> int:
             position_count=counts.position_count,
             processing_claim_count=counts.processing_claim_count,
             dlq_events_added_during_recovery=dlq_events_added,
+            recovery_polling=recovery_polling,
             recovery_mode=recovery_mode.value,
             checks_passed=not failed_checks,
             failed_checks=failed_checks,
