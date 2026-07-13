@@ -107,6 +107,9 @@ Recovery reports expose each transaction, cost, cashflow, position, claim, and c
 predicate with actual value, target, comparison, satisfaction, and source UTC last-change time.
 Retain these fields when extending recovery conditions so timeout evidence identifies what stopped
 changing rather than returning only a generic timeout.
+Exact-count overshoot and DLQ growth relative to the pre-interruption baseline are terminal. The
+gate records the source-safe terminal reason and exits polling immediately instead of consuming the
+remaining timeout budget.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.

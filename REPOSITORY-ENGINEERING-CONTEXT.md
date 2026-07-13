@@ -1964,8 +1964,10 @@ Most relevant current governance:
      diagnosis. Failure recovery must pass its prepared runtime to migration polling and capture
      `output/task-runs/diagnostics/failure-recovery-gate-compose.log` before teardown.
      Its JSON and Markdown reports must retain field-level actual/target/comparison/satisfaction
-     evidence plus source UTC last-change timestamps. App certification delegates runtime ownership
-     to the managed Docker-smoke driver; do not add a second lifecycle owner around it.
+     evidence plus source UTC last-change timestamps. Exact-count overshoot and source-owned DLQ
+     growth are terminal evidence and must stop polling before another sleep. App certification
+     delegates runtime ownership to the managed Docker-smoke driver; do not add a second lifecycle
+     owner around it.
 140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
