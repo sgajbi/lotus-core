@@ -1,6 +1,10 @@
+"""Tests for shared market-price validation policy."""
+
 from decimal import Decimal
 
-from portfolio_common.market_prices import coerce_positive_market_price_or_none
+from portfolio_common.domain.market_data.market_price import (
+    coerce_positive_market_price_or_none,
+)
 
 
 def test_coerce_positive_market_price_accepts_decimal_and_string_inputs():

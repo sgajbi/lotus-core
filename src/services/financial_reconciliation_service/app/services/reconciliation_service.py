@@ -7,7 +7,7 @@ from typing import Any
 
 from portfolio_common.database_models import FinancialReconciliationFinding
 from portfolio_common.domain.decimal_amount import decimal_or_none, required_decimal
-from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
+from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 from portfolio_common.runtime_providers import (
     IdGenerator,

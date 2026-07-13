@@ -1,3 +1,5 @@
+"""Valuation unit-price policy shared by valuation and reconciliation."""
+
 from decimal import Decimal
 
 from portfolio_common.domain.decimal_amount import required_decimal

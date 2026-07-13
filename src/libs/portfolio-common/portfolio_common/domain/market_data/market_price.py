@@ -1,3 +1,5 @@
+"""Market-price validation policy shared by calculation boundaries."""
+
 from decimal import Decimal
 
 from portfolio_common.domain.decimal_amount import decimal_or_none

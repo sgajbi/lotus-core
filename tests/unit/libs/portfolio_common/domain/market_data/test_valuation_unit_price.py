@@ -1,7 +1,11 @@
+"""Tests for shared valuation unit-price policy."""
+
 from decimal import Decimal
 
 import pytest
-from portfolio_common.valuation_prices import resolve_valuation_unit_price
+from portfolio_common.domain.market_data.valuation_unit_price import (
+    resolve_valuation_unit_price,
+)
 
 
 def test_resolve_valuation_unit_price_preserves_equity_price():

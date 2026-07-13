@@ -7,8 +7,12 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.domain.decimal_amount import required_decimal
-from portfolio_common.market_prices import coerce_positive_market_price_or_none
-from portfolio_common.valuation_prices import resolve_valuation_unit_price
+from portfolio_common.domain.market_data.market_price import (
+    coerce_positive_market_price_or_none,
+)
+from portfolio_common.domain.market_data.valuation_unit_price import (
+    resolve_valuation_unit_price,
+)
 
 DEFAULT_VALUE_TOLERANCE = Decimal("0.0001")
 
