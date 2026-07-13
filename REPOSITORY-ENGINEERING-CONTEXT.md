@@ -2398,6 +2398,13 @@ Most relevant current governance:
      position, cashflow, settlement, FX P&L, or corporate-action reconciliation, in that service's
      domain package; shared placement requires demonstrated cross-boundary ownership rather than
      convenience.
+182. Framework-independent market-data policies shared by valuation, reconciliation, and
+     aggregation belong under `portfolio_common.domain.market_data`, with singular domain modules
+     such as `fx_rate`, `market_price`, and `valuation_unit_price` and tests mirroring that package.
+     Do not restore flat `portfolio_common.fx_rates`, `market_prices`, or `valuation_prices` roots.
+     Product-specific quote conventions and valuation methodology require an explicit governed
+     domain decision; the current legacy bond quote heuristic remains tracked under #451 and must
+     not be generalized during structural moves.
 
 ## Context Maintenance Rule
 
