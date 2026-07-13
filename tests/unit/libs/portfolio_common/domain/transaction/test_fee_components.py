@@ -1,7 +1,9 @@
+"""Verify canonical transaction fee component economics."""
+
 from decimal import Decimal
 
 import pytest
-from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
+from portfolio_common.domain.transaction.fee_components import resolve_transaction_trade_fee
 
 
 def test_resolve_transaction_trade_fee_preserves_explicit_fee_without_components() -> None:
