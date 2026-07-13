@@ -1,17 +1,28 @@
-from typing import Any
+"""Order linked corporate-action and rights lifecycle transaction legs."""
 
-from .ca_bundle_a_constants import (
-    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
-    CA_BUNDLE_A_SOURCE_OUT_TYPES,
-    CA_BUNDLE_A_TARGET_IN_TYPES,
-    normalize_ca_bundle_a_transaction_type,
+from typing import Protocol
+
+from .classification import (
+    CASH_CONSIDERATION_TRANSACTION_TYPE,
+    SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
+    TARGET_BASIS_TRANSFER_TRANSACTION_TYPES,
+    normalize_corporate_action_transaction_type,
 )
 
-_SOURCE_OUT_RANK_TYPES = CA_BUNDLE_A_SOURCE_OUT_TYPES | {
+
+class CorporateActionOrderable(Protocol):
+    """Expose the fields required for deterministic linked-leg ordering."""
+
+    transaction_type: str
+    child_sequence_hint: int | None
+    target_instrument_id: str | None
+
+
+_SOURCE_OUT_RANK_TYPES = SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES | {
     "RIGHTS_ANNOUNCE",
     "RIGHTS_ALLOCATE",
 }
-_TARGET_IN_RANK_TYPES = CA_BUNDLE_A_TARGET_IN_TYPES | {
+_TARGET_IN_RANK_TYPES = TARGET_BASIS_TRANSFER_TRANSACTION_TYPES | {
     "RIGHTS_SUBSCRIBE",
     "RIGHTS_OVERSUBSCRIBE",
     "RIGHTS_SELL",
@@ -19,7 +30,7 @@ _TARGET_IN_RANK_TYPES = CA_BUNDLE_A_TARGET_IN_TYPES | {
     "RIGHTS_ADJUSTMENT",
 }
 _CASH_CONSIDERATION_RANK_TYPES = {
-    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
+    CASH_CONSIDERATION_TRANSACTION_TYPE,
     "RIGHTS_SHARE_DELIVERY",
 }
 _DEPENDENCY_RANK_BY_TYPE = {
@@ -30,9 +41,8 @@ _DEPENDENCY_RANK_BY_TYPE = {
 }
 
 
-def ca_bundle_a_dependency_rank(event: Any) -> int:
-    """
-    Deterministic dependency rank for Bundle A child legs.
+def corporate_action_dependency_rank(transaction: CorporateActionOrderable) -> int:
+    """Return the deterministic dependency rank for linked lifecycle legs.
 
     Lower ranks are processed first:
     0: source-out legs / rights announce-allocate stages
@@ -41,20 +51,20 @@ def ca_bundle_a_dependency_rank(event: Any) -> int:
     3: rights refund stage
     4: non-Bundle-A / unknown
     """
-    transaction_type = normalize_ca_bundle_a_transaction_type(
-        getattr(event, "transaction_type", "")
-    )
+    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
     return _DEPENDENCY_RANK_BY_TYPE.get(transaction_type, 4)
 
 
-def ca_bundle_a_target_order_key(event: Any) -> tuple[int, str]:
-    """
-    Deterministic ordering for multi-target children.
+def corporate_action_target_order_key(
+    transaction: CorporateActionOrderable,
+) -> tuple[int, str]:
+    """Return deterministic sequence and instrument ordering for target legs.
+
     Priority:
     1) child_sequence_hint (when present, otherwise very large sentinel)
     2) target_instrument_id (lexicographic fallback)
     """
-    child_sequence_hint = getattr(event, "child_sequence_hint", None)
-    target_instrument_id = str(getattr(event, "target_instrument_id", "") or "")
+    child_sequence_hint = transaction.child_sequence_hint
+    target_instrument_id = str(transaction.target_instrument_id or "")
     sequence = int(child_sequence_hint) if child_sequence_hint is not None else 2_147_483_647
     return (sequence, target_instrument_id)

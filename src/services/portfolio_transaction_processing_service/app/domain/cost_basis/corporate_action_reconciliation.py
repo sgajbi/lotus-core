@@ -5,15 +5,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Iterable
 
-from portfolio_common.ca_bundle_a_constants import (
-    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
-    CA_BUNDLE_A_SOURCE_OUT_TYPES,
-    CA_BUNDLE_A_TARGET_IN_TYPES,
-    normalize_ca_bundle_a_transaction_type,
-)
-
 from ..transaction import BookedTransaction
 from ..transaction.corporate_action import is_bundle_a_corporate_action
+from ..transaction.corporate_action.classification import (
+    CASH_CONSIDERATION_TRANSACTION_TYPE,
+    SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
+    TARGET_BASIS_TRANSFER_TRANSACTION_TYPES,
+    normalize_corporate_action_transaction_type,
+)
 
 DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE = Decimal("0.01")
 
@@ -97,22 +96,22 @@ def missing_corporate_action_dependencies(
 
 
 def _accumulate(totals: _BasisTotals, transaction: BookedTransaction) -> None:
-    transaction_type = normalize_ca_bundle_a_transaction_type(transaction.transaction_type)
-    if transaction_type in CA_BUNDLE_A_SOURCE_OUT_TYPES:
+    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
+    if transaction_type in SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES:
         totals.source_leg_count += 1
         totals.source_basis_out_local += abs(
             transaction.net_cost_local
             if transaction.net_cost_local is not None
             else transaction.gross_transaction_amount
         )
-    elif transaction_type in CA_BUNDLE_A_TARGET_IN_TYPES:
+    elif transaction_type in TARGET_BASIS_TRANSFER_TRANSACTION_TYPES:
         totals.target_leg_count += 1
         totals.target_basis_in_local += abs(
             transaction.net_cost_local
             if transaction.net_cost_local is not None
             else transaction.gross_transaction_amount
         )
-    elif transaction_type == CA_BUNDLE_A_CASH_CONSIDERATION_TYPE:
+    elif transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
         totals.cash_consideration_count += 1
         if (
             transaction.allocated_cost_basis_local is None

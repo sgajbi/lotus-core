@@ -3,11 +3,10 @@
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.ca_bundle_a_ordering import (
-    ca_bundle_a_dependency_rank,
-    ca_bundle_a_target_order_key,
+from ...transaction.corporate_action.ordering import (
+    corporate_action_dependency_rank,
+    corporate_action_target_order_key,
 )
-
 from ..models.cost_basis_transaction import CostBasisTransaction
 
 _DEFAULT_CASH_DEPENDENCY_RANK = 1
@@ -23,13 +22,13 @@ TransactionOrderKey = tuple[datetime, int, int, int, str, Decimal, str]
 
 def transaction_order_key(transaction: CostBasisTransaction) -> TransactionOrderKey:
     """Return the canonical total ordering used by cost calculation and replay."""
-    target_sequence, target_instrument_id = ca_bundle_a_target_order_key(transaction)
+    target_sequence, target_instrument_id = corporate_action_target_order_key(transaction)
     order_quantity = getattr(transaction, "source_lot_order_quantity", transaction.quantity)
     if not isinstance(order_quantity, Decimal):
         order_quantity = Decimal(str(order_quantity))
     return (
         transaction.transaction_date,
-        ca_bundle_a_dependency_rank(transaction),
+        corporate_action_dependency_rank(transaction),
         _cash_dependency_rank(transaction),
         target_sequence,
         target_instrument_id,
