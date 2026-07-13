@@ -106,9 +106,9 @@ Executed suites include:
 ## 8. Evidence
 
 - `src/libs/portfolio-common/portfolio_common/ca_bundle_a_ordering.py`
-- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/sorter.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/transaction_ordering.py`
 - `tests/unit/libs/portfolio-common/test_events.py`
-- `tests/unit/services/calculators/cost_calculator_service/engine/test_sorter.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cost/test_sorter.py`
 
 ## 9. Current Status
 
