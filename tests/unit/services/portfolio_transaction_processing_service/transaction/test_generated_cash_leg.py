@@ -9,6 +9,8 @@ import pytest
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
     GeneratedCashLegError,
+    SettlementCashRejectionReasonCode,
+    SettlementCashValidationError,
     build_generated_settlement_cash_leg,
     should_generate_settlement_cash_leg,
 )
@@ -133,6 +135,37 @@ def test_generated_cash_leg_preserves_upstream_linkage_and_policy() -> None:
     assert cash_leg.linked_transaction_group_id == "GROUP-UPSTREAM"
     assert cash_leg.calculation_policy_id == "POLICY-UPSTREAM"
     assert cash_leg.calculation_policy_version == "2.0.0"
+
+
+def test_generated_cash_leg_uses_component_fee_precedence() -> None:
+    transaction = replace(
+        _dividend_transaction(),
+        transaction_type="SELL",
+        trade_fee=Decimal("99.00"),
+        brokerage=Decimal("1.25"),
+        stamp_duty=Decimal("0.75"),
+    )
+
+    cash_leg = build_generated_settlement_cash_leg(transaction)
+
+    assert cash_leg.gross_transaction_amount == Decimal("98.00")
+    assert cash_leg.movement_direction == "INFLOW"
+
+
+@pytest.mark.parametrize("fee", [Decimal("100.00"), Decimal("100.01")])
+def test_generated_cash_leg_rejects_non_positive_net_settlement(fee: Decimal) -> None:
+    transaction = replace(
+        _dividend_transaction(),
+        transaction_type="SELL",
+        trade_fee=fee,
+    )
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        build_generated_settlement_cash_leg(transaction)
+
+    assert raised.value.reason_code is (
+        SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT
+    )
 
 
 def test_generated_cash_leg_rejects_ineligible_transaction() -> None:
