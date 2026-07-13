@@ -109,7 +109,6 @@ class ProcessTransactionUseCase:
     ) -> ProcessTransactionResult:
         transaction = command.transaction
         metadata = command.metadata
-        _validate_ordinary_settlement_cash(transaction)
         async with self._unit_of_work_factory() as unit_of_work:
             identity = build_transaction_semantic_identity(transaction)
             with self._observer.observe(
@@ -176,6 +175,7 @@ class ProcessTransactionUseCase:
                     retryable=False,
                 )
 
+            _validate_ordinary_settlement_cash(transaction)
             with self._observer.observe(TransactionProcessingOperation.COST):
                 cost_result = await unit_of_work.cost.process(
                     transaction,

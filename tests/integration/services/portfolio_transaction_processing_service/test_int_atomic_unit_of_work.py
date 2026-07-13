@@ -171,6 +171,64 @@ async def test_combined_use_case_commits_every_module_and_idempotency_atomically
     assert await _persisted_counts(session_factory, command) == (3, 1)
 
 
+@pytest.mark.parametrize("republished", [False, True])
+async def test_historical_fee_dominated_delivery_remains_an_idempotent_duplicate(
+    clean_db,
+    async_db_session: AsyncSession,
+    republished: bool,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    command = _command("HISTORICAL-FEE-DOMINATED")
+    command = replace(
+        command,
+        transaction=replace(
+            command.transaction,
+            transaction_type="SELL",
+            gross_transaction_amount=Decimal("100"),
+            trade_fee=Decimal("100"),
+        ),
+    )
+    identity = build_transaction_semantic_identity(command.transaction)
+    historical_event_id = (
+        "transactions.persisted-0-historical" if republished else command.metadata.event_id
+    )
+    async with session_factory() as session:
+        session.add(
+            ProcessedEvent(
+                event_id=historical_event_id,
+                portfolio_id=command.transaction.portfolio_id,
+                service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
+                correlation_id="corr-historical",
+                semantic_key=identity.semantic_key,
+                payload_fingerprint=identity.payload_fingerprint,
+            )
+        )
+        await session.commit()
+
+    result = await ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    async with session_factory() as session:
+        outbox_count = await session.scalar(
+            select(func.count())
+            .select_from(OutboxEvent)
+            .where(OutboxEvent.aggregate_id == command.transaction.transaction_id)
+        )
+        idempotency_count = await session.scalar(
+            select(func.count())
+            .select_from(ProcessedEvent)
+            .where(
+                ProcessedEvent.service_name == TRANSACTION_PROCESSING_SERVICE_NAME,
+                ProcessedEvent.semantic_key == identity.semantic_key,
+            )
+        )
+    assert int(outbox_count or 0) == 0
+    assert int(idempotency_count or 0) == 1
+
+
 async def test_semantic_fence_suppresses_republication_and_rejects_changed_payload(
     clean_db,
     async_db_session: AsyncSession,

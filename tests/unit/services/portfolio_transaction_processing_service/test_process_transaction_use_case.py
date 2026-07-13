@@ -378,6 +378,41 @@ async def test_use_case_suppresses_semantic_duplicate_from_another_physical_even
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "idempotency_outcome",
+    [
+        TransactionIdempotencyOutcome.PHYSICAL_DUPLICATE,
+        TransactionIdempotencyOutcome.SEMANTIC_DUPLICATE,
+    ],
+)
+async def test_use_case_acknowledges_historical_fee_dominated_duplicates(
+    idempotency_outcome: TransactionIdempotencyOutcome,
+) -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(
+        calls=calls,
+        idempotency_outcome=idempotency_outcome,
+    )
+    command = replace(
+        _command(),
+        transaction=replace(
+            _command().transaction,
+            transaction_type="SELL",
+            gross_transaction_amount=Decimal("100"),
+            trade_fee=Decimal("100"),
+        ),
+    )
+
+    result = await ProcessTransactionUseCase(
+        lambda: unit_of_work,
+        observer=_RecordingObserver(),
+    ).execute(command)
+
+    assert result.status is TransactionProcessingStatus.DUPLICATE
+    assert calls == ["enter", "idempotency", "rollback"]
+
+
+@pytest.mark.asyncio
 async def test_use_case_reprocesses_semantic_duplicate_with_canonical_repair_intent() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(
@@ -478,7 +513,7 @@ async def test_use_case_rejects_material_semantic_conflict_before_financial_work
         ("INTEREST", "10", "8", "2", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
     ],
 )
-async def test_use_case_rejects_non_positive_settlement_before_opening_unit_of_work(
+async def test_use_case_rejects_non_positive_settlement_before_financial_work(
     transaction_type: str,
     gross_amount: str,
     fee_amount: str,
@@ -517,12 +552,16 @@ async def test_use_case_rejects_non_positive_settlement_before_opening_unit_of_w
         "fee_amount": fee_amount,
         "net_settlement_amount": ("0" if fee_amount in {"100", "8"} else "-0.01"),
     }
-    assert calls == []
+    assert calls == ["enter", "idempotency", "rollback"]
     assert observer.records == [
+        (
+            TransactionProcessingOperation.IDEMPOTENCY,
+            TransactionProcessingOutcome.SUCCEEDED,
+        ),
         (
             TransactionProcessingOperation.TRANSACTION,
             TransactionProcessingOutcome.REJECTED,
-        )
+        ),
     ]
 
 
