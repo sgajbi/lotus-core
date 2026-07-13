@@ -575,6 +575,42 @@ async def test_use_case_rejects_non_positive_settlement_before_financial_work(
 
 
 @pytest.mark.asyncio
+async def test_use_case_rejects_mismatched_interest_net_before_financial_work() -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(calls=calls)
+    command = replace(
+        _command(),
+        transaction=replace(
+            _transaction(),
+            transaction_type="INTEREST",
+            gross_transaction_amount=Decimal("10"),
+            withholding_tax_amount=Decimal("2"),
+            net_interest_amount=Decimal("100"),
+            interest_direction="INCOME",
+            trade_fee=Decimal("50"),
+        ),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await ProcessTransactionUseCase(
+            lambda: unit_of_work,
+            observer=_RecordingObserver(),
+        ).execute(command)
+
+    assert raised.value.reason_code == "INTEREST_015_NET_RECONCILIATION_MISMATCH"
+    assert raised.value.detail == {
+        "portfolio_id": "PB-001",
+        "transaction_id": "TX-001",
+        "transaction_type": "INTEREST",
+        "field": "net_interest_amount",
+        "available_proceeds": "8",
+        "fee_amount": "50",
+        "net_settlement_amount": "-42",
+    }
+    assert calls == ["enter", "idempotency", "rollback"]
+
+
+@pytest.mark.asyncio
 async def test_repair_intent_claims_payload_specific_correction_identity() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(

@@ -12,6 +12,7 @@ from portfolio_common.domain.transaction_control_codes import (
 from ..booked import BookedTransaction
 from ..settlement import (
     CashEntryMode,
+    SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
     calculate_interest_settlement_economics,
     calculate_settlement_cash_movement,
@@ -204,6 +205,7 @@ def _validate_interest_amounts(
                 message="other_interest_deductions_amount must be >= 0.",
             )
         )
+
     if transaction.net_interest_amount is None:
         return
     settlement_economics = calculate_interest_settlement_economics(transaction)
@@ -301,9 +303,16 @@ def _validate_income_settlement(
     try:
         calculate_settlement_cash_movement(transaction)
     except SettlementCashValidationError as exc:
+        reason_code: IncomeValidationReasonCode = policy.non_positive_net_settlement_code
+        if exc.reason_code is (
+            SettlementCashRejectionReasonCode.INTEREST_NET_RECONCILIATION_MISMATCH
+        ):
+            reason_code = InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
+            if any(issue.code is reason_code for issue in issues):
+                return
         issues.append(
             TransactionValidationIssue(
-                code=policy.non_positive_net_settlement_code,
+                code=reason_code,
                 field=exc.field,
                 message=exc.message,
             )

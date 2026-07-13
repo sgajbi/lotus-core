@@ -120,8 +120,29 @@ def _calculate_interest_movement(
     fee: Decimal,
 ) -> SettlementCashMovement:
     economics = calculate_interest_settlement_economics(transaction)
-    settlement_amount = economics.settlement_cash_amount
     direction = normalize_transaction_control_code(transaction.interest_direction or "INCOME")
+    if (
+        transaction.net_interest_amount is not None
+        and transaction.net_interest_amount != economics.expected_net_interest_amount
+    ):
+        expected_settlement_amount = (
+            economics.expected_net_interest_amount + fee
+            if direction == "EXPENSE"
+            else economics.expected_net_interest_amount - fee
+        )
+        raise SettlementCashValidationError(
+            reason_code=(SettlementCashRejectionReasonCode.INTEREST_NET_RECONCILIATION_MISMATCH),
+            field="net_interest_amount",
+            message=(
+                "net_interest_amount must equal gross_transaction_amount - "
+                "withholding_tax_amount - other_interest_deductions_amount "
+                "before transaction fees."
+            ),
+            available_proceeds=economics.expected_net_interest_amount,
+            fee_amount=fee,
+            net_settlement_amount=expected_settlement_amount,
+        )
+    settlement_amount = economics.settlement_cash_amount
     if settlement_amount <= 0:
         raise SettlementCashValidationError(
             reason_code=(SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT),

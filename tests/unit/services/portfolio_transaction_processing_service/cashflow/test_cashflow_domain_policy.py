@@ -250,6 +250,25 @@ def test_historical_rebuild_preserves_pre_policy_cashflow_economics(
     assert cashflow.amount == expected_amount
 
 
+def test_historical_rebuild_preserves_mismatched_explicit_interest_net() -> None:
+    transaction = _booked_transaction(
+        transaction_type="INTEREST",
+        gross_transaction_amount=Decimal("10"),
+        withholding_tax_amount=Decimal("2"),
+        net_interest_amount=Decimal("100"),
+        interest_direction="INCOME",
+        trade_fee=Decimal("50"),
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.INCOME),
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+
+    assert cashflow.amount == Decimal("50")
+
+
 @pytest.mark.parametrize(
     ("transaction_type", "classification", "changes"),
     [
