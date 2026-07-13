@@ -33,6 +33,12 @@ from .corporate_action_cash_economics import (
     CorporateActionCashEconomicsError,
     calculate_corporate_action_cash_economics,
 )
+from .corporate_action_reconciliation import (
+    DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
+    CorporateActionBasisReconciliation,
+    missing_corporate_action_dependencies,
+    reconcile_corporate_action_basis,
+)
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
 from .models.effective_fx_rate import EffectiveFxRate
@@ -63,6 +69,7 @@ __all__ = [
     "CASH_OUTFLOW_TRANSACTION_TYPES",
     "CorporateActionCashEconomics",
     "CorporateActionCashEconomicsError",
+    "CorporateActionBasisReconciliation",
     "CostBasisCalculator",
     "COST_BASIS_STATE_VERSION",
     "CostBasisProcessingCheckpoint",
@@ -72,6 +79,7 @@ __all__ = [
     "CostLot",
     "CostTransactionParser",
     "CostTransactionSorter",
+    "DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE",
     "EffectiveFxRate",
     "FIFOBasisStrategy",
     "Fees",
@@ -81,5 +89,7 @@ __all__ = [
     "TransactionOrderKey",
     "TransactionType",
     "calculate_corporate_action_cash_economics",
+    "missing_corporate_action_dependencies",
+    "reconcile_corporate_action_basis",
     "transaction_order_key",
 ]
