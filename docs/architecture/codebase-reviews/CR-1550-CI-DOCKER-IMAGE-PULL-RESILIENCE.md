@@ -38,8 +38,14 @@ runner-level immutable cache.
 
 ## Validation
 
-- `tests/unit/test_support/test_docker_stack.py`: `25 passed`.
+- Exact-main run `29219252434` isolated the regression to the Docker smoke image pull; every other
+  executed main-releasability job passed.
+- `tests/unit/test_support/test_docker_stack.py`: `37 passed`.
+- Operations contract: `227 passed`.
+- Strict MyPy for the shared Docker stack helper: passed with no issues.
 - Scoped Ruff lint and format: passed.
+- Wiki validation, front-door synchronization, architecture documentation catalog, RFC ledger,
+  supported-features, and incident-playbook guards: passed.
 - Same-pattern direct Docker-pull scan: only the governed helper and its tests remain.
 
 ## Durable Guidance Decision
