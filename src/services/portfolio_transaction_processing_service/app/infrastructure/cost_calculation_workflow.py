@@ -14,13 +14,13 @@ from portfolio_common.config import (
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.domain.decimal_amount import decimal_or_none
+from portfolio_common.domain.transaction.fee_components import resolve_transaction_trade_fee
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.monitoring import (
     BUY_LIFECYCLE_STAGE_TOTAL,
     SELL_LIFECYCLE_STAGE_TOTAL,
 )
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
 from ..application import (
