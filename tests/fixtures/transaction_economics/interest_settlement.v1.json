@@ -1,0 +1,118 @@
+{
+  "pack_id": "interest-settlement",
+  "pack_version": "1.0.0",
+  "methodology_policy": {
+    "id": "interest-settlement-economics",
+    "version": "1.0.0"
+  },
+  "rounding": {
+    "mode": "none",
+    "scale": null
+  },
+  "vectors": [
+    {
+      "vector_id": "interest-income-derived-net-with-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "direction": "INCOME",
+        "gross_interest_amount": "120",
+        "withholding_tax_amount": "10",
+        "other_interest_deductions_amount": "3",
+        "transaction_fee_amount": "2",
+        "net_interest_amount": null
+      },
+      "ordered_lifecycle_steps": [
+        "validate",
+        "derive_pre_fee_net_interest",
+        "apply_transaction_fee",
+        "apply_cash_direction"
+      ],
+      "expected": {
+        "net_interest_amount": "107",
+        "settlement_cash_amount": "105",
+        "signed_cashflow_amount": "105",
+        "quantity_delta": "0"
+      },
+      "tolerance": "0",
+      "rationale": "Income receipt deducts withholding, other deductions, and the separately reported fee exactly once."
+    },
+    {
+      "vector_id": "interest-income-explicit-net-with-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "direction": "INCOME",
+        "gross_interest_amount": "120",
+        "withholding_tax_amount": "10",
+        "other_interest_deductions_amount": "3",
+        "transaction_fee_amount": "2",
+        "net_interest_amount": "107"
+      },
+      "ordered_lifecycle_steps": [
+        "validate",
+        "reconcile_pre_fee_net_interest",
+        "apply_transaction_fee",
+        "apply_cash_direction"
+      ],
+      "expected": {
+        "net_interest_amount": "107",
+        "settlement_cash_amount": "105",
+        "signed_cashflow_amount": "105",
+        "quantity_delta": "0"
+      },
+      "tolerance": "0",
+      "rationale": "A conforming explicit pre-fee net amount must not bypass the separately reported fee."
+    },
+    {
+      "vector_id": "interest-expense-derived-net-with-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "direction": "EXPENSE",
+        "gross_interest_amount": "120",
+        "withholding_tax_amount": "10",
+        "other_interest_deductions_amount": "3",
+        "transaction_fee_amount": "2",
+        "net_interest_amount": null
+      },
+      "ordered_lifecycle_steps": [
+        "validate",
+        "derive_pre_fee_net_interest",
+        "apply_transaction_fee",
+        "apply_cash_direction"
+      ],
+      "expected": {
+        "net_interest_amount": "107",
+        "settlement_cash_amount": "109",
+        "signed_cashflow_amount": "-109",
+        "quantity_delta": "0"
+      },
+      "tolerance": "0",
+      "rationale": "An expense fee increases the payment magnitude and the cash ledger records the result as an outflow."
+    },
+    {
+      "vector_id": "interest-expense-explicit-net-with-fee",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "direction": "EXPENSE",
+        "gross_interest_amount": "120",
+        "withholding_tax_amount": "10",
+        "other_interest_deductions_amount": "3",
+        "transaction_fee_amount": "2",
+        "net_interest_amount": "107"
+      },
+      "ordered_lifecycle_steps": [
+        "validate",
+        "reconcile_pre_fee_net_interest",
+        "apply_transaction_fee",
+        "apply_cash_direction"
+      ],
+      "expected": {
+        "net_interest_amount": "107",
+        "settlement_cash_amount": "109",
+        "signed_cashflow_amount": "-109",
+        "quantity_delta": "0"
+      },
+      "tolerance": "0",
+      "rationale": "Explicit and derived pre-fee net inputs must produce the same expense payment."
+    }
+  ]
+}
