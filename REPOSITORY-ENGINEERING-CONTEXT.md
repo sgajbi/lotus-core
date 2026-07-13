@@ -2059,14 +2059,20 @@ Most relevant current governance:
      caller-owned units of work. Any change requires concurrent committed backdated-trigger proof,
      exact current-epoch quantities/cost, one-winner epoch evidence, zero active-runtime replay
      fan-out, bounded recalculation work-volume metrics, and migration/index validation.
-146. Position reduction is owned by `portfolio_transaction_processing_service/app/domain`, while
-     position recalculation coordination and SQL persistence are owned by that service's
-     `app/infrastructure`. Do not recreate `src/services/calculators/position_calculator`, copy it
-     into the target image, or place framework, session, repository, or telemetry concerns in the
-     reducer. Retire a legacy module only after production import inventory, installed-package
-     proof, focused domain and integration tests, downstream contract review, and a machine guard
-     that prevents the old path from returning. Apply this ownership-migration pattern to cost and
-     cashflow incrementally; do not move files merely to make the tree look layered.
+146. Position balance and deterministic history policy are owned by
+     `portfolio_transaction_processing_service/app/domain/position`; caller-transaction
+     orchestration is owned by `app/application/position_history.py`; contracts are owned by
+     `app/ports/position_history.py`; SQLAlchemy, state-store, metric, and structured-log adapters
+     are owned by `app/infrastructure`. The production unit of work must pass `BookedTransaction`
+     directly to `PositionHistoryProcessor`; do not restore the
+     `BookedTransaction -> TransactionEvent -> BookedTransaction` round trip or perform a second
+     position-state read for epoch fencing. The former infrastructure workflow and repository are
+     test-only compatibility code until their remaining PostgreSQL atomicity/concurrency coverage
+     is migrated. Do not recreate `src/services/calculators/position_calculator`, copy it into the
+     target image, or place framework, session, repository, metric, or logging concerns in domain
+     or application code. Retire compatibility modules only after production import inventory,
+     focused domain/integration proof, downstream contract review, and a machine guard prevents
+     the old path from returning.
 147. After cost, cashflow, and position target ownership and production evidence are complete,
      review the runtime boundaries among timeseries generation, valuation orchestration, pipeline
      orchestration, portfolio aggregation, and position valuation. Decide `keep`, `merge as

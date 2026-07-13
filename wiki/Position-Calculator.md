@@ -49,9 +49,17 @@ registers cost-stage pipeline readiness for every rebuilt current-epoch transact
 matching cashflow completion signals. Legacy cost publication remains limited to the incoming
 transaction so compatibility consumers cannot double-apply the rebuilt suffix. Compatibility events
 remain for downstream stage orchestration while registry/Kubernetes cutover and remaining legacy
-package removal are completed. The pure reducer now lives in the target domain package;
-recalculation coordination and SQL persistence live in target infrastructure. The retired
-`position_calculator` source package is absent from the target image.
+package removal are completed. The pure reducer and deterministic history builder live in
+`app/domain/position`; the `PositionHistoryProcessor` application use case coordinates current and
+backdated materialization through explicit ports; SQLAlchemy, state-store, and observability
+adapters remain in infrastructure. The production unit of work passes immutable booked
+transactions directly to this use case, avoiding the former event DTO round trip and duplicate
+epoch-state read. The retired `position_calculator` source package is absent from the target image.
+
+The former `position_calculation_workflow.py` and `position_repository.py` modules are no longer
+production-composed. They remain temporarily as test-only compatibility code while their remaining
+PostgreSQL concurrency/atomicity cases move to the canonical position package; issue `#719` tracks
+deletion and an absence guard.
 
 ## Recalculation concurrency
 
