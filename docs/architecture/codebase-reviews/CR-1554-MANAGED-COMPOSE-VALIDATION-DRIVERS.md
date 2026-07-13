@@ -69,6 +69,10 @@ default-project log command.
 - The live run captured a `2,216,235` byte log naming project
   `lotus-integration-failure-recovery-gate-5a6b519c` and the exact Compose file before teardown,
   then left zero project containers.
+- A second live run proved additive polling evidence end to end: `9` polls produced six satisfied
+  field records with explicit `equals`, `at_least`, or `at_most` targets and source UTC
+  `last_changed_at` timestamps. Recovery completed in `8.139s`, diagnostics were `2,228,544` bytes,
+  and teardown again left zero project containers.
 - App certification requires no separate lifecycle migration: it invokes the managed Docker-smoke
   driver, and its PR job already uploads `output/task-runs/diagnostics/*.log`. Adding a second owner
   would duplicate startup and make diagnostic identity ambiguous.
@@ -89,5 +93,4 @@ methodology do not change because their contracts are untouched.
 ## Remaining Work
 
 Issue #730 remains open for scenario shards, change-impact selection, exact-SHA selective dispatch,
-app-certification diagnostic completeness, field-level polling evidence, and timing/queue/flake/
-rerun trend reporting.
+terminal/DLQ fail-fast polling, and timing/queue/flake/rerun trend reporting.

@@ -103,6 +103,10 @@ Failure recovery uses the `integration` runtime profile. Its migration-runner po
 interruption-service lookup, database/Kafka/HTTP endpoints, and diagnostic artifact must remain
 bound to that runtime's exact project. `--skip-compose` preserves an explicitly named external
 project and `--keep-stack-up` is the only supported local post-run inspection path.
+Recovery reports expose each transaction, cost, cashflow, position, claim, and consumer-lag
+predicate with actual value, target, comparison, satisfaction, and source UTC last-change time.
+Retain these fields when extending recovery conditions so timeout evidence identifies what stopped
+changing rather than returning only a generic timeout.
 
 ## Merge and Hygiene Rules
 1. Merge only when required checks are green.
