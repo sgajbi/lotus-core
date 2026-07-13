@@ -191,6 +191,21 @@ def test_local_main_parity_uses_clean_dependency_health_lane() -> None:
     assert "ci" not in target_dependencies["ci-main"]
 
 
+def test_lint_scans_the_complete_repository_python_scope() -> None:
+    makefile_lines = Path("Makefile").read_text(encoding="utf-8").splitlines()
+    target_dependencies = {
+        target: dependencies.split()
+        for line in makefile_lines
+        if ":" in line and not line.startswith(("\t", "#", "."))
+        for target, dependencies in (line.split(":", maxsplit=1),)
+    }
+    makefile_text = "\n".join(makefile_lines)
+
+    assert target_dependencies["lint"] == ["quality-ruff-gate", "quality-ruff-format-gate"]
+    assert "quality-ruff-gate:\n\tpython -m ruff check . --statistics" in makefile_text
+    assert "quality-ruff-format-gate:\n\tpython -m ruff format --check ." in makefile_text
+
+
 def test_workflows_opt_into_node24_action_runtime() -> None:
     missing_opt_in = [
         str(workflow_path)
