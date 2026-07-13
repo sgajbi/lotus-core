@@ -22,18 +22,25 @@ This makes the module a governed semantic transformation stage, not a simple amo
 
 ## Runtime role
 
+Canonical amount, sign, timing, level, transfer, income, fee, and corporate-action semantics live
+in the framework-neutral
+`portfolio_transaction_processing_service.app.domain.cashflow.calculation` policy. It consumes an
+immutable `BookedTransaction` and returns an immutable `CalculatedCashflow`.
+
 The active workflow is implemented by
-`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow` and its
-cashflow calculation/repository adapters. The retired standalone calculator consumer is not part of
-the source tree or runtime.
+`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow`. Event DTO
+mapping, rule loading, metrics, logging, SQLAlchemy row construction, persistence, and outbox
+publication remain infrastructure concerns. The retired standalone calculator consumer is not part
+of the source tree or runtime.
 
 For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture
 2. resolves the effective processing transaction type
 3. loads the governed cashflow rule for that transaction type
-4. calculates the normalized amount, timing, and flow classification
-5. persists the resulting cashflow row and stages the completion event
+4. calculates an immutable normalized domain cashflow
+5. maps that result to the existing cashflow row at the repository boundary
+6. persists the row and stages the completion event
 
 Every transaction emitted by the cost stage traverses this workflow. For `AUTO_GENERATE` booking,
 that includes both the product transaction and its generated settlement cash leg. Both rows retain
