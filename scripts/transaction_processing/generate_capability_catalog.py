@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = Path("contracts/transaction-processing/transaction-capability-catalog.v1.json")

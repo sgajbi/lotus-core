@@ -1,7 +1,7 @@
 {
   "schema_version": "lotus-core-transaction-capability-catalog.v1",
   "repository": "lotus-core",
-  "source_registry": "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py",
+  "source_registry": "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py",
   "guard_command": "make transaction-capability-catalog-guard",
   "generator_command": "python scripts/transaction_processing/generate_capability_catalog.py",
   "documentation_surfaces": [
@@ -754,7 +754,7 @@
       "transaction_types": [],
       "support_status": "target_not_implemented",
       "evidence_refs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+        "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
       ],
       "limitations": [
         "Generic cash and dividend transactions must not be presented as a commitment-based private-market lifecycle."

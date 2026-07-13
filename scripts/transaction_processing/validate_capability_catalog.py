@@ -7,11 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CATALOG_PATH = Path("contracts/transaction-processing/transaction-capability-catalog.v1.json")
-REGISTRY_PATH = Path("src/libs/portfolio-common/portfolio_common/transaction_type_registry.py")
+REGISTRY_PATH = Path(
+    "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py"
+)
 EXPECTED_SCHEMA_VERSION = "lotus-core-transaction-capability-catalog.v1"
 GUARD_COMMAND = "make transaction-capability-catalog-guard"
 GENERATOR_COMMAND = "python scripts/transaction_processing/generate_capability_catalog.py"
