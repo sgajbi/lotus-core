@@ -4,26 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable
+from typing import Callable, cast
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
 from ..booked import BookedTransaction
 from .cash_entry import CashEntryMode, resolve_cash_entry_mode
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-
-AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES = frozenset(
-    code
-    for code, definition in TRANSACTION_TYPE_REGISTRY.items()
-    if definition.production_booking_allowed
-    and definition.lifecycle_family in {"trade", "income"}
-    and definition.cash_effect in {"inflow", "outflow"}
-    and definition.settlement_behavior == "requires_cash_leg"
-)
 
 CashLegEconomicsResolver = Callable[
     [BookedTransaction, Decimal],
@@ -51,7 +41,7 @@ def should_generate_settlement_cash_leg(transaction: BookedTransaction) -> bool:
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
     return (
         mode is CashEntryMode.AUTO_GENERATE
-        and transaction_type in AUTO_GENERATE_ELIGIBLE_TRANSACTION_TYPES
+        and transaction_type in GENERATED_CASH_LEG_TRANSACTION_TYPES
         and bool((transaction.settlement_cash_account_id or "").strip())
     )
 
@@ -127,22 +117,13 @@ def _resolve_cash_leg_economics(
 ) -> tuple[Decimal, str, str]:
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
     fee = transaction.trade_fee or Decimal(0)
-    resolver = _cash_leg_economics_resolvers().get(transaction_type)
+    resolver = _CASH_LEG_ECONOMICS_RESOLVERS.get(transaction_type)
     if resolver is None:
         raise GeneratedCashLegError(
             "transaction_type",
             f"{transaction.transaction_type} is not eligible for auto-generated cash leg.",
         )
     return resolver(transaction, fee)
-
-
-def _cash_leg_economics_resolvers() -> dict[str, CashLegEconomicsResolver]:
-    return {
-        "BUY": _resolve_buy_cash_leg,
-        "SELL": _resolve_sell_cash_leg,
-        "DIVIDEND": _resolve_dividend_cash_leg,
-        "INTEREST": _resolve_interest_cash_leg,
-    }
 
 
 def _resolve_buy_cash_leg(
@@ -181,11 +162,11 @@ def _resolve_net_interest_amount(
     fee: Decimal,
 ) -> Decimal:
     if transaction.net_interest_amount is not None:
-        return transaction.net_interest_amount
+        return cast(Decimal, transaction.net_interest_amount)
     deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
         transaction.other_interest_deductions_amount or Decimal(0)
     )
-    return transaction.gross_transaction_amount - deductions - fee
+    return cast(Decimal, transaction.gross_transaction_amount - deductions - fee)
 
 
 def _resolve_interest_movement_direction(transaction: BookedTransaction) -> str:
@@ -206,3 +187,13 @@ def _resolve_generated_linkage(
         f"LTG-{transaction_type}-{transaction.portfolio_id}-{transaction.transaction_id}"
     )
     return economic_event_id, linked_group_id
+
+
+_CASH_LEG_ECONOMICS_RESOLVERS: dict[str, CashLegEconomicsResolver] = {
+    "BUY": _resolve_buy_cash_leg,
+    "SELL": _resolve_sell_cash_leg,
+    "DIVIDEND": _resolve_dividend_cash_leg,
+    "INTEREST": _resolve_interest_cash_leg,
+}
+
+GENERATED_CASH_LEG_TRANSACTION_TYPES = frozenset(_CASH_LEG_ECONOMICS_RESOLVERS)
