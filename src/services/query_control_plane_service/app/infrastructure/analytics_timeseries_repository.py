@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
 from portfolio_common.currency_codes import normalize_currency_code
@@ -24,7 +24,13 @@ from portfolio_common.identifiers import normalize_lookup_identifier as normaliz
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.analytics import PortfolioAnalyticsSource
+from ..domain.analytics import (
+    AnalyticsCashflowEvidence,
+    AnalyticsFxRateObservation,
+    PortfolioAnalyticsSource,
+    PositionValuationObservation,
+    PriorPositionValuation,
+)
 
 
 def currency_code_sql_expr(currency_code_column: Any):
@@ -38,6 +44,60 @@ DIMENSION_FILTER_COLUMNS = {
     "sector": "sector",
     "country": "country",
 }
+
+
+def _position_valuation_observation(row: Any) -> PositionValuationObservation:
+    return PositionValuationObservation(
+        security_id=cast(str, row.security_id),
+        valuation_date=cast(date, row.valuation_date),
+        bod_market_value=cast(Decimal, row.bod_market_value),
+        eod_market_value=cast(Decimal, row.eod_market_value),
+        bod_cashflow_position=cast(Decimal, row.bod_cashflow_position),
+        eod_cashflow_position=cast(Decimal, row.eod_cashflow_position),
+        bod_cashflow_portfolio=cast(Decimal, row.bod_cashflow_portfolio),
+        eod_cashflow_portfolio=cast(Decimal, row.eod_cashflow_portfolio),
+        fees=cast(Decimal, row.fees),
+        quantity=cast(Decimal, row.quantity),
+        epoch=cast(int, row.epoch),
+        position_currency=cast(str, row.position_currency),
+        asset_class=cast(str | None, row.asset_class),
+        sector=cast(str | None, getattr(row, "sector", None)),
+        country=cast(str | None, getattr(row, "country", None)),
+    )
+
+
+def _prior_position_valuation(row: Any) -> PriorPositionValuation:
+    return PriorPositionValuation(
+        security_id=cast(str, row.security_id),
+        valuation_date=cast(date, row.valuation_date),
+        eod_market_value=cast(Decimal, row.eod_market_value),
+        epoch=cast(int, row.epoch),
+    )
+
+
+def _analytics_cashflow_evidence(row: Any) -> AnalyticsCashflowEvidence:
+    return AnalyticsCashflowEvidence(
+        transaction_id=cast(str, row.transaction_id),
+        security_id=cast(str | None, getattr(row, "security_id", None)),
+        valuation_date=cast(date, row.valuation_date),
+        amount=cast(Decimal, row.amount),
+        currency=cast(str, row.currency),
+        classification=cast(str, row.classification),
+        timing=cast(str, row.timing),
+        is_position_flow=cast(bool, row.is_position_flow),
+        is_portfolio_flow=cast(bool, row.is_portfolio_flow),
+        epoch=cast(int, row.epoch),
+    )
+
+
+def _analytics_fx_rate_observation(row: Any) -> AnalyticsFxRateObservation | None:
+    rate = decimal_or_none(row.rate)
+    if rate is None:
+        return None
+    return AnalyticsFxRateObservation(
+        rate_date=cast(date, row.rate_date),
+        rate=rate,
+    )
 
 
 def _position_page_cursor_filter(ranked, cursor_date: date | None, cursor_security_id: str | None):
@@ -207,14 +267,14 @@ class AnalyticsTimeseriesRepository:
             PortfolioTimeseries.portfolio_id == portfolio_id
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return cast(date | None, result.scalar_one_or_none())
 
     async def get_latest_position_timeseries_date(self, portfolio_id: str) -> date | None:
         stmt = select(func.max(PositionTimeseries.date)).where(
             PositionTimeseries.portfolio_id == portfolio_id
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return cast(date | None, result.scalar_one_or_none())
 
     async def list_business_dates(
         self,
@@ -247,7 +307,7 @@ class AnalyticsTimeseriesRepository:
         position_ids: list[str],
         dimension_filters: dict[str, set[str]],
         snapshot_epoch: int | None = None,
-    ) -> list[Any]:
+    ) -> list[PositionValuationObservation]:
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             PositionTimeseries.date >= start_date,
@@ -317,7 +377,7 @@ class AnalyticsTimeseriesRepository:
             page_size + 1
         )
         result = await self.db.execute(stmt)
-        return result.all()
+        return [_position_valuation_observation(row) for row in result.all()]
 
     async def list_position_timeseries_rows_unpaged(
         self,
@@ -326,7 +386,7 @@ class AnalyticsTimeseriesRepository:
         start_date: date,
         end_date: date,
         snapshot_epoch: int | None = None,
-    ) -> list[Any]:
+    ) -> list[PositionValuationObservation]:
         predicates = [
             PositionTimeseries.portfolio_id == portfolio_id,
             PositionTimeseries.date >= start_date,
@@ -381,7 +441,7 @@ class AnalyticsTimeseriesRepository:
             .order_by(ranked.c.valuation_date.asc(), ranked.c.security_id.asc())
         )
         result = await self.db.execute(stmt)
-        return result.all()
+        return [_position_valuation_observation(row) for row in result.all()]
 
     async def list_position_observation_dates(
         self,
@@ -441,7 +501,7 @@ class AnalyticsTimeseriesRepository:
         before_date: date,
         security_ids: list[str],
         snapshot_epoch: int | None = None,
-    ) -> list[Any]:
+    ) -> list[PriorPositionValuation]:
         normalized_security_ids = self._normalized_security_ids(security_ids)
         if not normalized_security_ids:
             return []
@@ -485,7 +545,7 @@ class AnalyticsTimeseriesRepository:
 
         stmt = select(ranked).where(ranked.c.rn == 1).order_by(ranked.c.security_id.asc())
         result = await self.db.execute(stmt)
-        return result.all()
+        return [_prior_position_valuation(row) for row in result.all()]
 
     @staticmethod
     def _latest_current_position_history_quantity():
@@ -510,7 +570,7 @@ class AnalyticsTimeseriesRepository:
         security_ids: list[str],
         valuation_dates: list[date],
         snapshot_epoch: int | None = None,
-    ) -> list[Any]:
+    ) -> list[AnalyticsCashflowEvidence]:
         normalized_security_ids = self._normalized_security_ids(security_ids)
         if not normalized_security_ids or not valuation_dates:
             return []
@@ -526,7 +586,7 @@ class AnalyticsTimeseriesRepository:
 
         stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=True)
         result = await self.db.execute(stmt)
-        return result.all()
+        return [_analytics_cashflow_evidence(row) for row in result.all()]
 
     async def list_portfolio_cashflow_rows(
         self,
@@ -534,7 +594,7 @@ class AnalyticsTimeseriesRepository:
         portfolio_id: str,
         valuation_dates: list[date],
         snapshot_epoch: int | None = None,
-    ) -> list[Any]:
+    ) -> list[AnalyticsCashflowEvidence]:
         if not valuation_dates:
             return []
 
@@ -548,7 +608,7 @@ class AnalyticsTimeseriesRepository:
 
         stmt = self._latest_cashflow_rows_stmt(predicates=predicates, include_security_id=False)
         result = await self.db.execute(stmt)
-        return result.all()
+        return [_analytics_cashflow_evidence(row) for row in result.all()]
 
     async def get_position_snapshot_epoch(
         self,
@@ -610,10 +670,9 @@ class AnalyticsTimeseriesRepository:
             .order_by(FxRate.rate_date.asc())
         )
         result = await self.db.execute(stmt)
-        rows = result.all()
         rates: dict[date, Decimal] = {}
-        for row in rows:
-            rate = decimal_or_none(row.rate)
-            if rate is not None:
-                rates[row.rate_date] = rate
+        for row in result.all():
+            observation = _analytics_fx_rate_observation(row)
+            if observation is not None:
+                rates[observation.rate_date] = observation.rate
         return rates
