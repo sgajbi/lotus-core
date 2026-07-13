@@ -179,6 +179,8 @@ The following invariants are mandatory for every valid `INTEREST`.
 * `net_interest_local >= 0`
 * `net_interest_base >= 0`
 * `net_interest = gross_interest - withholding_tax - other_interest_deductions`
+* `net_interest` excludes separately reported transaction fees
+* income settlement cash subtracts transaction fees; expense settlement cash adds them
 * realized capital P&L local = `0`
 * realized FX P&L local = `0`
 * realized total P&L local = `0`
@@ -411,8 +413,8 @@ Each field must have one of the following mutability classifications:
 | `gross_interest_base`             | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Base-currency equivalent of gross interest   | `125.00` |
 | `other_interest_deductions_local` | `Decimal` |      Yes | UPSTREAM / DERIVED | DERIVED_ONCE | Other deductions reducing cash settlement    | `0.00`   |
 | `other_interest_deductions_base`  | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Base-currency equivalent of other deductions | `0.00`   |
-| `net_interest_local`              | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Net interest cash settled                    | `125.00` |
-| `net_interest_base`               | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Base-currency equivalent of net interest     | `125.00` |
+| `net_interest_local`              | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Interest after tax/deductions, before transaction fees | `125.00` |
+| `net_interest_base`               | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Base-currency equivalent of pre-fee net interest | `125.00` |
 | `settlement_cash_amount_local`    | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Cash movement amount in local currency       | `125.00` |
 | `settlement_cash_amount_base`     | `Decimal` |      Yes | DERIVED            | DERIVED_ONCE | Cash movement amount in base currency        | `125.00` |
 
@@ -459,8 +461,8 @@ Each field must have one of the following mutability classifications:
 | ------------------------------- | --------- | -------: | ------- | ------------ | -------------------------------------------------- | -------- |
 | `ordinary_interest_local`       | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Ordinary interest income or expense before tax     | `125.00` |
 | `ordinary_interest_base`        | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Base-currency equivalent of ordinary interest      | `125.00` |
-| `net_interest_recognized_local` | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Net recognized amount after withholding/deductions | `125.00` |
-| `net_interest_recognized_base`  | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Base-currency equivalent of net recognized amount  | `125.00` |
+| `net_interest_recognized_local` | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Recognized amount after withholding/deductions and before transaction fees | `125.00` |
+| `net_interest_recognized_base`  | `Decimal` |      Yes | DERIVED | DERIVED_ONCE | Base-currency equivalent of pre-fee net recognized amount | `125.00` |
 
 #### 6.5.12 RealizedPnlDetails
 
@@ -620,6 +622,7 @@ The engine must support calculation from the following normalized inputs:
 * rate-based interest amount where present
 * withholding tax amount or rate
 * other interest deductions
+* separately reported transaction fees
 * interest currency
 * settlement currency where relevant
 * portfolio base currency
@@ -636,6 +639,8 @@ The engine must derive, at minimum:
 * `withholding_tax_base`
 * `other_interest_deductions_local`
 * `other_interest_deductions_base`
+* `transaction_fee_local`
+* `transaction_fee_base`
 * `ordinary_interest_local`
 * `ordinary_interest_base`
 * `net_interest_local`
@@ -652,10 +657,12 @@ The engine must calculate in this exact order:
 2. determine `withholding_tax_local`
 3. determine `other_interest_deductions_local`
 4. determine ordinary interest amount
-5. determine `net_interest_local`
-6. convert required values into base currency
-7. emit explicit zero realized P&L fields
-8. determine linked cash behavior
+5. determine pre-fee `net_interest_local`
+6. determine the separately reported transaction fee
+7. determine direction-aware settlement cash
+8. convert required values into base currency
+9. emit explicit zero realized P&L fields
+10. determine linked cash behavior
 
 ### 8.4 Gross interest calculation
 
@@ -677,17 +684,23 @@ By default:
 
 `net_interest_local = gross_interest_local - withholding_tax_local - other_interest_deductions_local`
 
+`net_interest_local` is an interest-income or interest-expense measure before transaction fees.
+An explicitly supplied value must reconcile to the same identity. A transaction fee remains a
+separate economic component and must not be embedded in `net_interest_local`.
+
 ### 8.7 Settlement cash calculation
 
-For `interest_direction = INCOME` by default:
+For `interest_direction = INCOME`:
 
-`settlement_cash_amount_local = net_interest_local`
+`settlement_cash_amount_local = net_interest_local - transaction_fee_local`
 
-For `interest_direction = EXPENSE` by default:
+For `interest_direction = EXPENSE`:
 
-`settlement_cash_amount_local = net_interest_local`
+`settlement_cash_amount_local = net_interest_local + transaction_fee_local`
 
-with cashflow sign and classification determining the outflow effect.
+The amount is a positive magnitude; cashflow sign and classification determine the inflow or
+outflow effect. Equivalent explicit and derived net-interest inputs must produce identical
+settlement cash.
 
 ### 8.8 Base-currency conversion
 
@@ -768,14 +781,15 @@ The engine must support:
 
 * gross interest amount
 * tax deductions
+* separately reported transaction fees
 * net settlement cash amount
 
 ### 10.4 Settlement cash rule
 
 By default:
 
-* for income: `settlement_cash_amount_local = net_interest_local`
-* for expense: `settlement_cash_amount_local = net_interest_local`
+* for income: `settlement_cash_amount_local = net_interest_local - transaction_fee_local`
+* for expense: `settlement_cash_amount_local = net_interest_local + transaction_fee_local`
 
 with direction represented by classification and sign conventions in the cash ledger.
 

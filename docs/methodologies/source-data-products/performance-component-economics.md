@@ -52,7 +52,7 @@ The contract source-authors these component families when evidence exists:
 | --- | --- |
 | `cashflow` | linked latest-epoch `cashflows.amount`, `currency`, canonical uppercase `classification`, canonical uppercase `timing`, flow-scope flags |
 | `fee` | explicit per-currency `transaction_costs.amount` rows as `trade_fee_components`, falling back to `transactions.trade_fee` and `transactions.trade_currency` |
-| `income` | `transactions.net_interest_amount` |
+| `income` | `transactions.net_interest_amount` after withholding/other deductions and before separately reported transaction fees |
 | `tax` | `transactions.withholding_tax_amount`, `other_interest_deductions_amount` |
 | `realized_capital_pnl` | `transactions.realized_capital_pnl_local/base` plus `realized_pnl_local_currency` |
 | `realized_fx_pnl` | `transactions.realized_fx_pnl_local/base` plus `realized_pnl_local_currency` |
@@ -64,6 +64,11 @@ Rows also expose `allocated_cost_basis_local` and `allocated_cost_basis_base` as
 audit evidence for non-security consideration. These fields explain realized P&L but are not
 reported as a separate additive component family, because allocated basis is an input to the P&L
 equation rather than a gain, loss, fee, tax, income, or cashflow amount.
+
+For INTEREST rows, `net_interest_amount` and fee evidence are intentionally separate components.
+Consumers must not infer that `net_interest_amount` is final settlement cash: income settlement
+subtracts the separately reported fee, while expense settlement adds it. The linked latest-epoch
+cashflow remains the source-owned settled amount.
 
 `transaction_costs` component identity is normalized as `(transaction_id, lower(trim(fee_type)),
 upper(trim(currency)))`. The database enforces one row per normalized component. The response

@@ -28,6 +28,7 @@ Delivered:
 | Direction semantics (income vs expense baseline) | COVERED | `src/services/portfolio_transaction_processing_service/app/domain/transaction/booked.py`, `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`, `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py` |
 | Dual cash-entry mode (AUTO_GENERATE vs UPSTREAM_PROVIDED) | COVERED | `src/services/portfolio_transaction_processing_service/app/domain/transaction/settlement/cash_entry.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py` |
 | Withholding/net reconciliation primitives | COVERED | `src/services/portfolio_transaction_processing_service/app/domain/transaction/booked.py`, `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py` |
+| Pre-fee net-interest and direction-aware settlement cash | COVERED | `src/services/portfolio_transaction_processing_service/app/domain/transaction/settlement/interest.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/test_interest_settlement_economics.py`, `tests/integration/services/portfolio_transaction_processing_service/test_int_combined_interest_processing.py` |
 | Query/audit visibility via existing surfaces | COVERED | `query_service/app/dtos/transaction_dto.py`, `tests/integration/services/query_service/test_transactions_router.py`, `tests/unit/services/query_service/services/test_transaction_service.py` |
 | DB propagation for INTEREST semantic fields | COVERED | `database_models.py`, `alembic/versions/d6e7f8a9b0c1_*.py`, persistence repository tests |
 | Dedicated regression gate | COVERED | `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml` |
@@ -36,6 +37,7 @@ Delivered:
 
 - `python -m pytest -q tests/unit/transaction_specs/test_interest_slice0_characterization.py`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
+- `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/transaction/test_interest_settlement_economics.py`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py -k "interest or dividend"`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py -k "interest_metadata_defaults"`
@@ -44,6 +46,7 @@ Delivered:
 - `python -m pytest -q tests/unit/services/ingestion_service/test_transaction_model.py`
 - `python -m pytest -q tests/unit/services/query_service/services/test_transaction_service.py`
 - `python -m pytest -q tests/integration/services/query_service/test_transactions_router.py`
+- `python -m pytest -q tests/integration/services/portfolio_transaction_processing_service/test_int_combined_interest_processing.py`
 - `python scripts/quality/test_manifest.py --suite transaction-interest-contract --quiet`
 - `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 - `python -m ruff check ... --ignore E501` on changed INTEREST slice files
