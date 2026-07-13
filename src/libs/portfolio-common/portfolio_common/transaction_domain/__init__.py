@@ -1,20 +1,4 @@
-"""Cross-cutting corporate-action and FX transaction compatibility contracts."""
-
-from .ca_bundle_a_reason_codes import CaBundleAValidationReasonCode
-from .ca_bundle_a_reconciliation import (
-    DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
-    CaBundleAReconciliationResult,
-    evaluate_ca_bundle_a_reconciliation,
-    find_missing_ca_bundle_a_dependencies,
-)
-from .ca_bundle_a_validation import (
-    CA_BUNDLE_A_TRANSACTION_TYPES,
-    CaBundleAValidationError,
-    CaBundleAValidationIssue,
-    assert_ca_bundle_a_transaction_valid,
-    is_ca_bundle_a_transaction_type,
-    validate_ca_bundle_a_transaction,
-)
+"""Expose cross-capability FX and effective-processing compatibility contracts."""
 from .effective_processing_type import (
     FX_COMPONENT_PROCESSING_TYPES,
     NON_CASHFLOW_PROCESSING_TYPES,
@@ -51,17 +35,6 @@ from .fx_reason_codes import FxValidationReasonCode
 from .fx_validation import FxValidationError, FxValidationIssue, validate_fx_transaction
 
 __all__ = [
-    "CA_BUNDLE_A_TRANSACTION_TYPES",
-    "DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE",
-    "CaBundleAReconciliationResult",
-    "evaluate_ca_bundle_a_reconciliation",
-    "find_missing_ca_bundle_a_dependencies",
-    "CaBundleAValidationError",
-    "CaBundleAValidationIssue",
-    "CaBundleAValidationReasonCode",
-    "is_ca_bundle_a_transaction_type",
-    "validate_ca_bundle_a_transaction",
-    "assert_ca_bundle_a_transaction_valid",
     "FX_COMPONENT_PROCESSING_TYPES",
     "NON_CASHFLOW_PROCESSING_TYPES",
     "requires_cashflow_processing",

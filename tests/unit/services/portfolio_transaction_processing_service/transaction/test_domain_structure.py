@@ -47,6 +47,14 @@ RETIRED_SHARED_ORDINARY_TRANSACTION_MODULES = tuple(
         "sell_validation.py",
     )
 )
+RETIRED_SHARED_CORPORATE_ACTION_MODULES = tuple(
+    SHARED_TRANSACTION_DOMAIN_ROOT / module_name
+    for module_name in (
+        "ca_bundle_a_reason_codes.py",
+        "ca_bundle_a_reconciliation.py",
+        "ca_bundle_a_validation.py",
+    )
+)
 
 
 def test_transaction_domain_modules_have_responsibility_docstrings() -> None:
@@ -67,5 +75,13 @@ def test_shared_ordinary_transaction_modules_are_retired() -> None:
     assert [
         path.relative_to(REPO_ROOT).as_posix()
         for path in RETIRED_SHARED_ORDINARY_TRANSACTION_MODULES
+        if path.exists()
+    ] == []
+
+
+def test_shared_corporate_action_modules_are_retired() -> None:
+    assert [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in RETIRED_SHARED_CORPORATE_ACTION_MODULES
         if path.exists()
     ] == []
