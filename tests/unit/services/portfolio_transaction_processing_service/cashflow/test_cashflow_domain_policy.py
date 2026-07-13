@@ -1,5 +1,6 @@
 """Characterize framework-neutral transaction cashflow economics."""
 
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -7,6 +8,7 @@ import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowCalculationContext,
     CashflowCalculationType,
     CashflowClassification,
     CashflowRule,
@@ -204,6 +206,48 @@ def test_cashflow_rejects_non_positive_income_like_settlement(
         calculate_transaction_cashflow(transaction, _rule(classification))
 
     assert raised.value.reason_code is reason_code
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification", "changes", "expected_amount"),
+    [
+        ("SELL", CashflowClassification.INVESTMENT_INFLOW, {}, Decimal("0.01")),
+        ("DIVIDEND", CashflowClassification.INCOME, {}, Decimal("0.01")),
+        (
+            "INTEREST",
+            CashflowClassification.INCOME,
+            {
+                "gross_transaction_amount": Decimal("10"),
+                "withholding_tax_amount": Decimal("2"),
+                "interest_direction": "INCOME",
+            },
+            Decimal("1"),
+        ),
+    ],
+)
+def test_historical_rebuild_preserves_pre_policy_cashflow_economics(
+    transaction_type: str,
+    classification: CashflowClassification,
+    changes: dict[str, object],
+    expected_amount: Decimal,
+) -> None:
+    transaction_values: dict[str, object] = {
+        "transaction_type": transaction_type,
+        "gross_transaction_amount": Decimal("100"),
+        "trade_fee": Decimal("100.01"),
+    }
+    transaction_values.update(changes)
+    transaction = _booked_transaction(**transaction_values)
+    if transaction_type == "INTEREST":
+        transaction = replace(transaction, trade_fee=Decimal("9"))
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(classification),
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
+    )
+
+    assert cashflow.amount == expected_amount
 
 
 @pytest.mark.parametrize(

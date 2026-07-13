@@ -28,7 +28,7 @@ from portfolio_common.transaction_domain import (
 )
 
 from ..domain import BookedTransaction
-from ..domain.cashflow import StoredCashflow
+from ..domain.cashflow import CashflowCalculationContext, StoredCashflow
 from ..domain.transaction import (
     assert_cash_entry_mode_supported,
     is_upstream_provided_cash_entry_mode,
@@ -260,11 +260,13 @@ async def _stage_cashflow_calculation(
     rule: CachedCashflowRule,
     correlation_id: str,
     repair_existing: bool,
+    calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> int:
     cashflow_to_save = calculate_observed_transaction_cashflow(
         booked_transaction,
         rule,
         epoch=event.epoch,
+        calculation_context=calculation_context,
     )
     saved = (
         await cashflow_repo.replace_cashflow(cashflow_to_save)
@@ -439,6 +441,9 @@ class CashflowCalculationWorkflow:
         topic: str,
         repair_existing: bool = False,
         booked_transaction: BookedTransaction | None = None,
+        calculation_context: CashflowCalculationContext = (
+            CashflowCalculationContext.CURRENT_BOOKING
+        ),
     ) -> CashflowStageResult:
         """Stage cashflow work inside the caller-owned transaction."""
         fence_outcome = await self._fence_or_semantic_duplicate_outcome(
@@ -461,6 +466,7 @@ class CashflowCalculationWorkflow:
             correlation_id=correlation_id,
             repair_existing=repair_existing,
             booked_transaction=booked_transaction,
+            calculation_context=calculation_context,
         )
 
     async def _fence_or_semantic_duplicate_outcome(
@@ -501,6 +507,9 @@ class CashflowCalculationWorkflow:
         correlation_id: str,
         repair_existing: bool = False,
         booked_transaction: BookedTransaction | None = None,
+        calculation_context: CashflowCalculationContext = (
+            CashflowCalculationContext.CURRENT_BOOKING
+        ),
     ) -> CashflowStageResult:
         booked_transaction = booked_transaction or to_booked_transaction(event)
         event_transaction_type = _validated_cashflow_transaction_type(event, booked_transaction)
@@ -517,6 +526,7 @@ class CashflowCalculationWorkflow:
             rule,
             correlation_id,
             repair_existing,
+            calculation_context,
         )
         return CashflowStageResult(
             outcome=CashflowProcessingOutcome.PROCESSED,

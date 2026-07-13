@@ -7,6 +7,7 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from ..domain import BookedTransaction
+from ..domain.cashflow import CashflowCalculationContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,9 @@ class CashflowProcessingPort(Protocol):
         correlation_id: str | None,
         traceparent: str | None,
         repair_existing: bool = False,
+        calculation_context: CashflowCalculationContext = (
+            CashflowCalculationContext.CURRENT_BOOKING
+        ),
     ) -> CashflowProcessingResult: ...
 
 

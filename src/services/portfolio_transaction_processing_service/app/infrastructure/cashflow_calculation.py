@@ -19,6 +19,7 @@ from ..domain.cashflow import (
 )
 from ..domain.cashflow import (
     CalculatedCashflow,
+    CashflowCalculationContext,
     CashflowRule,
     calculate_transaction_cashflow,
 )
@@ -58,9 +59,17 @@ def calculate_booked_transaction_cashflow(
     rule: CashflowRuleView,
     *,
     epoch: int | None = 0,
+    calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> Cashflow:
     """Calculate one domain cashflow and adapt it to the existing SQLAlchemy model."""
-    return _to_cashflow_row(calculate_observed_transaction_cashflow(transaction, rule, epoch=epoch))
+    return _to_cashflow_row(
+        calculate_observed_transaction_cashflow(
+            transaction,
+            rule,
+            epoch=epoch,
+            calculation_context=calculation_context,
+        )
+    )
 
 
 def calculate_observed_transaction_cashflow(
@@ -68,12 +77,14 @@ def calculate_observed_transaction_cashflow(
     rule: CashflowRuleView,
     *,
     epoch: int | None = 0,
+    calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> CalculatedCashflow:
     """Calculate a domain cashflow and emit infrastructure observability."""
     calculated = calculate_transaction_cashflow(
         transaction,
         _to_domain_rule(rule),
         epoch=epoch,
+        calculation_context=calculation_context,
     )
     CASHFLOWS_CREATED_TOTAL.labels(
         classification=calculated.classification,

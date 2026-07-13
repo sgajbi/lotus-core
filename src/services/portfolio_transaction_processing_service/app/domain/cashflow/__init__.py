@@ -8,10 +8,16 @@ from .calculation import (
     calculate_transaction_cashflow,
 )
 from .stored_cashflow import StoredCashflow
-from .types import CashflowCalculationType, CashflowClassification, CashflowTiming
+from .types import (
+    CashflowCalculationContext,
+    CashflowCalculationType,
+    CashflowClassification,
+    CashflowTiming,
+)
 
 __all__ = [
     "CalculatedCashflow",
+    "CashflowCalculationContext",
     "CashflowCalculationType",
     "CashflowClassification",
     "CashflowRule",
