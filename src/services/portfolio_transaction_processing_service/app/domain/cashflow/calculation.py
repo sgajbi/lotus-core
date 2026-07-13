@@ -56,8 +56,7 @@ def _transfer_transaction_types_for_position_effect(position_effect: str) -> fro
 
 
 TRANSFER_INFLOW_TRANSACTION_TYPES = (
-    _transfer_transaction_types_for_position_effect("increase")
-    | _TRANSFER_INFLOW_CASH_EFFECT_TYPES
+    _transfer_transaction_types_for_position_effect("increase") | _TRANSFER_INFLOW_CASH_EFFECT_TYPES
 )
 TRANSFER_OUTFLOW_TRANSACTION_TYPES = _transfer_transaction_types_for_position_effect("decrease")
 
@@ -150,9 +149,7 @@ def _resolve_cashflow_date(
 ) -> date:
     if transaction.synthetic_flow_effective_date is not None:
         return transaction.synthetic_flow_effective_date
-    if transaction_type in (
-        _SETTLEMENT_DATED_TRANSACTION_TYPES | _PAYMENT_DATED_TRANSACTION_TYPES
-    ):
+    if transaction_type in (_SETTLEMENT_DATED_TRANSACTION_TYPES | _PAYMENT_DATED_TRANSACTION_TYPES):
         return _settlement_date_or_transaction_date(transaction)
     if _normalize_classification(rule.classification) in {"FX_BUY", "FX_SELL"}:
         return _settlement_date_or_transaction_date(transaction)
