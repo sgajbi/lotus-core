@@ -1,4 +1,5 @@
 """Expose cross-capability FX and effective-processing compatibility contracts."""
+
 from .effective_processing_type import (
     FX_COMPONENT_PROCESSING_TYPES,
     NON_CASHFLOW_PROCESSING_TYPES,
