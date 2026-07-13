@@ -23,7 +23,7 @@ tests, contracts, generated evidence, RFC/docs truth, and validation on the corr
 
 | Audience | Start here | Why |
 | --- | --- | --- |
-| Business, sales, and demo teams | [Supported Features](Supported-Features), [Overview](Overview), [Integrations](Integrations) | Understand what can be claimed today and which claims belong to downstream apps. |
+| Business, sales, and demo teams | [Supported Features](Supported-Features), [Transaction and Product Lifecycles](Transaction-and-Product-Lifecycle-Capabilities), [Overview](Overview), [Integrations](Integrations) | Understand what can be claimed today and which claims belong to downstream apps. |
 | Operators and support teams | [Operations Runbook](Operations-Runbook), [Support and Lineage](Support-and-Lineage), [Troubleshooting](Troubleshooting) | Diagnose freshness, replay, readiness, reconciliation, and runtime issues. |
 | Engineers | [Getting Started](Getting-Started), [Development Workflow](Development-Workflow), [Validation and CI](Validation-and-CI) | Install, run targeted checks, and understand the delivery lanes. |
 | API and contract reviewers | [API Surface](API-Surface), [Query Control Plane](Query-Control-Plane), [RFC Index](RFC-Index) | Review route families, source-data products, and governance boundaries. |
@@ -33,6 +33,7 @@ tests, contracts, generated evidence, RFC/docs truth, and validation on the corr
 - [Architecture](Architecture)
 - [System Data Flow](System-Data-Flow)
 - [Supported Features](Supported-Features)
+- [Transaction and Product Lifecycles](Transaction-and-Product-Lifecycle-Capabilities)
 - [API Surface](API-Surface)
 - [Mesh Data Products](Mesh-Data-Products)
 - [Integrations](Integrations)

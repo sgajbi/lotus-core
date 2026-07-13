@@ -2333,6 +2333,24 @@ Most relevant current governance:
      current DIVIDEND available-proceeds input remains booked gross amount pending net-dividend,
      withholding, and return-of-capital work under #448; FX fee currency and two-leg ownership
      remain separate under #754.
+175. Corporate-action Bundle A validation and basis reconciliation are owned by
+     `portfolio_transaction_processing_service.app.domain.transaction.corporate_action` and
+     `.domain.cost_basis.corporate_action_reconciliation` over immutable `BookedTransaction`.
+     Deterministic run/finding assembly belongs in the application evidence builder; repositories,
+     metrics, and logs remain infrastructure concerns. Do not restore the retired
+     `portfolio_common.ca_bundle_a_validation`, `ca_bundle_a_reconciliation`, or reason-code facades.
+     This is design modularity inside the unified transaction-processing deployable, not a new
+     runtime service. Issues #450, #480, and #481 retain partial-allocation, parent-event graph, and
+     lot-lineage closure.
+176. Transaction and product lifecycle publication is governed by
+     `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
+     `python scripts/generators/generate_transaction_capability_catalog.py`, and blocked by
+     `make transaction-capability-catalog-guard`. Every canonical transaction code must appear once
+     with registry-exact lifecycle, economic-role, support, and production-booking posture. Limited,
+     default-strategy, migration-only, and target-not-implemented codes require issue ownership.
+     Generic `BUY`, `SELL`, `INTEREST`, or `DIVIDEND` support must never be presented as complete
+     product-specific maturity, exercise, barrier, payoff, commitment, return-of-capital, or
+     correction lifecycle support.
 
 ## Context Maintenance Rule
 

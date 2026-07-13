@@ -11,6 +11,7 @@
 
 - [System Data Flow](System-Data-Flow)
 - [Supported Features](Supported-Features)
+- [Transaction and Product Lifecycles](Transaction-and-Product-Lifecycle-Capabilities)
 - [API Surface](API-Surface)
 - [Query Control Plane](Query-Control-Plane)
 - [Mesh Data Products](Mesh-Data-Products)

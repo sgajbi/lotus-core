@@ -22,6 +22,11 @@ Canonical supported-feature truth is maintained in
 make supported-features-guard
 ```
 
+Detailed transaction, corporate-action, and product-lifecycle posture is published in
+[Transaction And Product Lifecycle Capabilities](./transaction-and-product-lifecycle-capabilities.md),
+backed by `contracts/transaction-processing/transaction-capability-catalog.v1.json` and
+`make transaction-capability-catalog-guard`.
+
 The guard checks that this document and `wiki/Supported-Features.md` carry the manifest-backed
 capability names, status values, evidence links, fail-closed limitations, and downstream ownership
 caveats.

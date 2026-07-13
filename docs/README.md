@@ -18,6 +18,7 @@ matches its purpose; do not add uncategorized documents beside this index.
 8. [Standards](./standards/) - machine-readable and narrative engineering contracts.
 9. [Testing](./testing/testing-strategy.md) - test strategy and validation guidance.
 10. [Transaction Specifications](./rfc-transaction-specs/) - governed transaction behavior.
+11. [Transaction And Product Lifecycle Capabilities](./features/transaction-and-product-lifecycle-capabilities.md) - implementation-backed transaction, corporate-action, and PB product lifecycle support.
 
 Individual codebase-review evidence records live under
 [architecture/codebase-reviews](./architecture/codebase-reviews/README.md). Their current status

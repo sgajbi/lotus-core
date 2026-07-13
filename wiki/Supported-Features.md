@@ -3,6 +3,8 @@
 This page summarizes the current implementation-backed `lotus-core` feature set for business,
 operations, sales, client-demo, and engineering audiences.
 
+## Evidence And Scope
+
 Use this as a current-state map, not a target-state roadmap. A capability is listed here only when
 the repository has implementation evidence in code, contracts, tests, RFCs, or repo-local wiki
 source. Broader ecosystem claims still belong in `lotus-platform` or in the consuming application
@@ -13,6 +15,11 @@ Canonical capability evidence is maintained in
 `make supported-features-guard`. That manifest maps each claim to owner, status, modules, routes,
 source-data products, tests, validation evidence, limitations, safe demo claims, prohibited claims,
 and downstream ownership caveats.
+
+For transaction types, corporate actions, and product lifecycle detail, use
+[Transaction and Product Lifecycles](Transaction-and-Product-Lifecycle-Capabilities). Its canonical
+source is `contracts/transaction-processing/transaction-capability-catalog.v1.json`, guarded by
+`make transaction-capability-catalog-guard`.
 
 ## Executive Summary
 
