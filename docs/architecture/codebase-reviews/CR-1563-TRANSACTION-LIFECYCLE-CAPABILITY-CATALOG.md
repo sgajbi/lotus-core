@@ -47,4 +47,5 @@ behavior changed. The slice makes existing support and limitation truth discover
 ## Follow-Up
 
 Issues #448, #450, #477-#481, #719, #754, #758, and #759 remain visible limitations. The cost-domain
-duplicate transaction enum is a same-pattern cleanup candidate for the next #719 commit.
+duplicate transaction enum and repeated query position-effect selectors were removed under
+CR-1564.

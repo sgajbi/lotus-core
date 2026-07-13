@@ -2358,6 +2358,12 @@ Most relevant current governance:
      ownership buckets. Transaction-processing capability generation and validation live under
      `scripts/transaction_processing/`. Keep implementation filenames action-oriented and avoid
      repeating the full parent-domain name in every file.
+178. `portfolio_common.transaction_type_registry` is the sole transaction-code vocabulary owner.
+     Do not add service-local transaction enums or repeat generic registry projections. Strategy
+     maps may bind canonical string codes to owned behavior; reusable classification selectors
+     belong beside the registry. Local sets are acceptable only for explicit domain policy such as
+     ordering, same-instrument quantity treatment, generated-leg behavior, or basis transfer, and
+     must have registry-conformance tests plus a documented reason they are not generic metadata.
 
 ## Context Maintenance Rule
 
