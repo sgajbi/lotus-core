@@ -135,7 +135,7 @@ Executed suites include:
 
 ## 8. Evidence
 
-- `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/transaction_type.py`
+- `src/libs/portfolio-common/portfolio_common/transaction_type_registry.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`

@@ -1,5 +1,8 @@
 # CR-989: CA Bundle A Reconciliation Helper Boundary
 
+> Historical evidence note: CR-1565 moved reconciliation ownership and related tests into the
+> transaction-processing domain. Commands below record the original review environment.
+
 Date: 2026-06-05
 
 ## Scope

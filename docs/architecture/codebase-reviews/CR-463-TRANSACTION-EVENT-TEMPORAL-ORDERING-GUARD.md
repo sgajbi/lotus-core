@@ -1,5 +1,9 @@
 # CR-463: Transaction Event Temporal Ordering Guard
 
+> Historical evidence note: event timestamp normalization remains active. CR-1565 removed the
+> unused event-level ordering helper after proving it had no runtime callers; cost and position
+> replay ordering now live in the transaction-processing domain.
+
 Date: 2026-05-28
 
 ## Scope

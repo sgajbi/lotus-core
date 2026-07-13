@@ -26,8 +26,8 @@ with focus on deterministic ordering and replay safety prerequisites for reversa
 
 - Deterministic dependency-rank extension for rights lifecycle legs.
 - Ordering alignment between:
-  - `portfolio_common.events.transaction_event_ordering_key`
-  - financial engine sorter dependency rank
+  - position-history replay ordering
+  - cost-basis transaction ordering
 - Regression tests validating lifecycle order stability.
 
 ### 2.2 Out of scope
@@ -48,35 +48,36 @@ with focus on deterministic ordering and replay safety prerequisites for reversa
 ### 3.2 Replay determinism
 
 - Equal-date/equal-time event processing remains deterministic by standardized ordering keys.
-- Same dependency model is enforced in both replay ordering and engine sort logic.
+- The same service-owned dependency model is enforced in position replay and cost-basis ordering.
 
 ## 4. Architecture and Component Changes
 
-### 4.1 Ordering library update
+### 4.1 Ordering domain policy
 
-- Extended CA dependency ranking in:
-  - `portfolio_common/ca_bundle_a_ordering.py`
+- Corporate-action classification and ordering are owned in:
+  - `portfolio_transaction_processing_service/app/domain/transaction/corporate_action/`
 
 ### 4.2 Engine sorter alignment
 
-- Mirrored dependency ranking in:
-  - `cost_calculator_service/app/cost_engine/processing/sorter.py`
+- Cost and position ordering consume the owner policy from:
+  - `app/domain/cost_basis/calculation/transaction_ordering.py`
+  - `app/domain/position/history.py`
 
 ### 4.3 Regression
 
 - Added tests for rights lifecycle deterministic ordering in:
-  - events ordering tests
-  - sorter tests
+  - corporate-action ordering tests
+  - cost sorter and position-history tests
 
 ## 5. Implementation Slices
 
 ### Slice D0 - Dependency Model Extension
 
-- Rights lifecycle rank definitions added to shared ordering logic.
+- Rights lifecycle rank definitions added to the transaction-processing domain policy.
 
 ### Slice D1 - Cross-Component Consistency
 
-- Sorter ranking updated to match shared ordering model exactly.
+- Cost and position replay ordering consume the same owned policy.
 
 ### Slice D2 - Determinism Proof
 
@@ -85,8 +86,9 @@ with focus on deterministic ordering and replay safety prerequisites for reversa
 ## 6. Validation and Test Matrix
 
 - Deterministic ordering tests:
-  - rights lifecycle ordering in `transaction_event_ordering_key`
-  - rights lifecycle ordering in `TransactionSorter`
+  - rights lifecycle ordering in `corporate_action_dependency_rank`
+  - rights lifecycle ordering in `CostTransactionSorter`
+  - linked-leg ordering in position history
 - Non-regression:
   - existing Bundle A ordering tests remain green.
 
@@ -105,9 +107,11 @@ Executed suites include:
 
 ## 8. Evidence
 
-- `src/libs/portfolio-common/portfolio_common/ca_bundle_a_ordering.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/ordering.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/classification.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/transaction_ordering.py`
-- `tests/unit/libs/portfolio-common/test_events.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/position/history.py`
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_ordering.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cost/test_sorter.py`
 
 ## 9. Current Status
@@ -123,21 +127,22 @@ Executed suites include:
 ## 11. Observability and Operational Diagnostics
 
 - Deterministic ordering can be verified from:
-  - replay sequence artifacts (`transaction_event_ordering_key`)
+  - position-history replay records and ordering tests
   - sorted transaction processing order in engine logs and test traces
-- The ordering model remains centralized for easier diagnostics and future extension.
+- The ordering model remains centralized in the transaction-processing domain for diagnostics and
+  future extension.
 
 ## 12. Rollout and Rollback
 
 ### 12.1 Rollout
 
-1. Deploy shared ordering library and sorter updates together.
+1. Deploy the unified transaction-processing image containing ordering policy and consumers.
 2. Validate with rights lifecycle ordering regression tests.
 3. Confirm no ordering regressions for Bundle A baseline scenarios.
 
 ### 12.2 Rollback
 
-- Revert sorter/ordering updates atomically to previous release.
+- Revert the transaction-processing ordering slice atomically to the previous release.
 - Re-run replay determinism verification on rollback target before production promotion.
 
 ## 13. Risks and Mitigations

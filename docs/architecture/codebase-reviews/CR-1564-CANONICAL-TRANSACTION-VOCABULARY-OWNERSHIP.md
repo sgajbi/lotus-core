@@ -43,6 +43,8 @@ diagnostic instead of being misclassified as unknown inside cost calculation.
 
 ## Remaining Policy Tables
 
-Cost ordering and position-reducer sets remain local only where they encode domain ordering,
-same-instrument, transfer-basis, or generated-leg policy beyond registry classification. Each must
-remain registry-conformant and should be centralized only after behavior-equivalence proof.
+Corporate-action linked-leg ordering is now centralized in its transaction-domain owner after
+usage proof allowed the dead shared event-ordering helper to be removed. Other cost and position
+sets remain local only where they encode same-instrument, transfer-basis, generated-leg, or reducer
+policy beyond registry classification. Each must remain registry-conformant and should be
+centralized only after behavior-equivalence proof.
