@@ -6,23 +6,23 @@ Slice 4 completes INTEREST cash-entry mode behavior parity with DIVIDEND and int
 
 ## Delivered Artifacts
 
-- `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
   - UPSTREAM_PROVIDED cash-entry bypass now supports both `DIVIDEND` and `INTEREST`
   - deterministic linkage enforcement for `external_cash_transaction_id`
-- `src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
   - INTEREST direction-aware sign handling (`INCOME` inflow, `EXPENSE` outflow)
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_models.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/booked.py`
   - canonical fields: `withholding_tax_amount`, `other_interest_deductions_amount`, `net_interest_amount`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_reason_codes.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/reason_codes.py`
   - reconciliation and withholding reason codes (`INTEREST_013`..`INTEREST_015`)
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_validation.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
   - non-negative withholding/deduction checks
   - net-interest reconciliation identity checks
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
   - INTEREST UPSTREAM_PROVIDED mode skip + error-path tests
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
   - INTEREST income/expense sign tests
-- `tests/unit/libs/portfolio_common/test_interest_validation.py`
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
   - withholding and net-reconciliation tests
 
 ## Cash-Entry Mode Behavior

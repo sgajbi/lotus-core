@@ -43,13 +43,13 @@ Implemented:
 
 Evidence:
 - `alembic/versions/1a7b8c9d0e2f_feat_add_cashflow_rules_table.py`
-- `src/services/calculators/cashflow_calculator_service/app/repositories/cashflow_rules_repository.py`
-- `src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py`
-- `src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_rules_repository.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
 - `src/libs/portfolio-common/portfolio_common/monitoring.py`
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/repositories/test_cashflow_rules_repository.py`
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
-- `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -80,11 +80,11 @@ No blocking implementation gap remains for RFC-022 scope.
 ## Test and Validation Evidence
 
 1. Repository query behavior tests:
-   - `tests/unit/services/calculators/cashflow_calculator_service/unit/repositories/test_cashflow_rules_repository.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py`
 2. Consumer cache/rule usage tests:
-   - `tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
 3. Metric emission tests:
-   - `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 
 ## Original Acceptance Criteria Alignment
 

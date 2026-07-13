@@ -6,19 +6,19 @@ Slice 3 hardens INTEREST calculation behavior in the cost engine and introduces 
 
 ## Delivered Artifacts
 
-- `src/services/calculators/cost_calculator_service/app/cost_engine/processing/cost_calculator.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py`
   - new `InterestStrategy` with explicit INTEREST invariants
   - explicit zero realized P&L semantics for INTEREST
   - baseline direction validation (`INCOME` or `EXPENSE`)
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_models.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/booked.py`
   - `interest_direction` field added to canonical model
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_reason_codes.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/reason_codes.py`
   - `INTEREST_012_INVALID_INTEREST_DIRECTION`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_validation.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
   - direction validation rule
-- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`
   - INTEREST invariant and direction tests
-- `tests/unit/libs/portfolio_common/test_interest_validation.py`
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
   - canonical direction validation tests
 - `tests/unit/transaction_specs/test_interest_slice0_characterization.py`
   - updated to explicit zero realized P&L semantics

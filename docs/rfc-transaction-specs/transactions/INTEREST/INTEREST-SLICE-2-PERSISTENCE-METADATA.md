@@ -6,28 +6,28 @@ Slice 2 establishes deterministic metadata enrichment for INTEREST and verifies 
 
 ## Delivered Artifacts
 
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_linkage.py`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/__init__.py` (exports)
-- `src/services/calculators/cost_calculator_service/app/consumer.py` (INTEREST enrichment integration)
-- `tests/unit/libs/portfolio_common/test_interest_linkage.py`
-- `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py` (INTEREST metadata propagation test)
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/booking_metadata.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/__init__.py` (exports)
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py` (INTEREST enrichment integration)
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py` (INTEREST metadata propagation test)
 - `tests/integration/services/persistence_service/repositories/test_repositories.py` (INTEREST metadata UPSERT persistence test)
 
 ## Behavior
 
-`enrich_interest_transaction_metadata` now enforces deterministic defaults for INTEREST:
+`enrich_booking_metadata` now enforces deterministic defaults for INTEREST:
 
 - `economic_event_id` default: `EVT-INTEREST-{portfolio_id}-{transaction_id}`
 - `linked_transaction_group_id` default: `LTG-INTEREST-{portfolio_id}-{transaction_id}`
 - `calculation_policy_id` default: `INTEREST_DEFAULT_POLICY`
 - `calculation_policy_version` default: `1.0.0`
-- `cash_entry_mode` normalization via shared utility (`AUTO_GENERATE` default)
+- `cash_entry_mode` normalization via the service-owned settlement policy (`AUTO_GENERATE` default)
 
 Upstream-provided values are preserved unchanged.
 
 ## Persistence and Propagation Evidence
 
-- Cost calculator consumer enriches INTEREST before engine processing and outbox emission.
+- The unified cost workflow enriches INTEREST before engine processing and outbox emission.
 - Unit test verifies enriched metadata is present in the persisted/updated transaction object and outbound payload.
 - Integration repository test verifies INTEREST linkage/policy/source/cash-entry metadata persists and updates correctly on UPSERT.
 

@@ -38,9 +38,9 @@ Current `lotus-core` already has strong FX-rate infrastructure for valuation and
 8. Extend query/observability surfaces and test gates so FX can be operated and audited to the same standard as other canonical transaction families.
 
 ## Current Implementation Reality (Baseline)
-1. `TransactionType` in `src/services/calculators/cost_calculator_service/app/cost_engine/domain/enums/transaction_type.py` does not include `FX_SPOT`, `FX_FORWARD`, `FX_SWAP`, or the FX component transaction types defined by `RFC-FX-01`.
+1. `TransactionType` in `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/transaction_type.py` does not include `FX_SPOT`, `FX_FORWARD`, `FX_SWAP`, or the FX component transaction types defined by `RFC-FX-01`.
 2. The cost engine has canonical BUY/SELL/DIVIDEND/INTEREST/portfolio-flow routing, but no FX-specific strategy, no FX contract handling, and no realized-FX-P&L-specific transaction path.
-3. The existing dual-leg accounting helpers under `portfolio_common.transaction_domain.adjustment_cash_leg` explicitly serve `DIVIDEND` and `INTEREST` via `ADJUSTMENT`; that model is not correct for FX because both settlement legs remain FX-classified cash components.
+3. The existing dual-leg accounting helpers under `portfolio_transaction_processing_service.app.domain.transaction.settlement.generated_cash_leg` explicitly serve `DIVIDEND` and `INTEREST` via `ADJUSTMENT`; that model is not correct for FX because both settlement legs remain FX-classified cash components.
 4. Position and cashflow calculators have no canonical notion of `FX_CONTRACT` instruments, `FX_CONTRACT_OPEN`/`FX_CONTRACT_CLOSE`, or near/far swap leg grouping.
 5. Ingestion and query DTOs currently expose rich adjustment/dividend/interest metadata, but no FX-specific contract identifiers, cash-leg roles, quote conventions, swap grouping ids, or realized FX policy metadata.
 6. `lotus-core` already supports FX rate ingestion, FX query, and cross-currency conversion for valuation/timeseries/reporting. That infrastructure is reusable, but it is not transaction-domain FX processing.
@@ -67,10 +67,10 @@ Current `lotus-core` already has strong FX-rate infrastructure for valuation and
 | 0 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_fx_slice0_characterization.py` |
 | 1 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/libs/portfolio_common/test_fx_validation.py`, `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
 | 2 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-2-PERSISTENCE-LINKAGE.md`, `tests/unit/libs/portfolio_common/test_fx_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` (code added; local runtime blocked without Docker), `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
-| 3 | Completed | `alembic/versions/ad34ef56a789_feat_add_fx_cash_settlement_rules.py`, `tests/unit/services/calculators/cashflow_calculator_service/unit/core/test_cashflow_logic.py`, `tests/integration/services/calculators/cashflow_calculator_service/test_cashflow_rule_contract.py` |
-| 4 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-4-CONTRACT-LIFECYCLE.md`, `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`, `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`, `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`, `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py` |
+| 3 | Completed | `alembic/versions/ad34ef56a789_feat_add_fx_cash_settlement_rules.py`, `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`, `tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py` |
+| 4 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-4-CONTRACT-LIFECYCLE.md`, `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`, `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py` |
 | 5 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-5-SWAP-GROUPING.md`, `tests/unit/libs/portfolio_common/test_fx_linkage.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
-| 6 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`, `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
+| 6 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
 | 7 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-7-QUERY-OBSERVABILITY.md`, `tests/unit/services/query_service/repositories/test_transaction_repository.py`, `tests/unit/services/query_service/services/test_transaction_service.py`, `scripts/quality/openapi_quality_gate.py` |
 | 8 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md`, `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml`, `tests/e2e/test_fx_lifecycle.py`, live Docker-backed validation (`transaction-fx-contract`: 195 passed; `test_fx_lifecycle.py`: 3 passed) |
 
@@ -286,7 +286,7 @@ Targeted regression evidence added during implementation:
 2. `tests/unit/libs/portfolio_common/test_fx_validation.py`
 3. `tests/unit/libs/portfolio_common/test_fx_linkage.py`
 4. `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`
-5. `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
+5. `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
 6. `tests/integration/services/calculators/position_calculator/test_int_position_calc_repo.py`
 
 ## Closure Status

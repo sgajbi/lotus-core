@@ -13,11 +13,11 @@ No runtime processing behavior is changed in this slice.
 
 ## Delivered Artifacts
 
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_models.py`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_reason_codes.py`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/interest_validation.py`
-- `src/libs/portfolio-common/portfolio_common/transaction_domain/__init__.py` (exports)
-- `tests/unit/libs/portfolio_common/test_interest_validation.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/booked.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/reason_codes.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/transaction/__init__.py` (exports)
+- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
 
 ## Reason Code Taxonomy
 

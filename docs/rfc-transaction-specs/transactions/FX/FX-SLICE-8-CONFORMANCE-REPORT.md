@@ -49,7 +49,7 @@ How this slice aligns:
 
 ## Validation Evidence for Slice 8
 Completed local gates:
-1. `python -m pytest tests/unit/services/persistence_service/consumers/test_persistence_instrument_consumer.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py -q`
+1. `python -m pytest tests/unit/services/persistence_service/consumers/test_persistence_instrument_consumer.py tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py -q`
  - Result: `18 passed`
 2. `python -m pytest tests/e2e/test_fx_lifecycle.py::test_fx_lifecycle_cash_positions_reflect_settlement_pairs -q -x`
  - Result: `1 passed`
@@ -59,7 +59,7 @@ Completed local gates:
  - Result: `6 passed`
 5. `python scripts/quality/test_manifest.py --suite transaction-fx-contract --quiet`
  - Result: `195 passed`
-6. `python -m ruff check src/services/persistence_service/app/consumers/base_consumer.py src/services/calculators/cashflow_calculator_service/app/core/cashflow_logic.py src/services/calculators/cashflow_calculator_service/app/consumers/transaction_consumer.py tests/unit/services/persistence_service/consumers/test_persistence_instrument_consumer.py tests/unit/services/calculators/cashflow_calculator_service/unit/consumers/test_cashflow_transaction_consumer.py tests/integration/services/persistence_service/repositories/test_repositories.py`
+6. `python -m ruff check src/services/persistence_service/app/consumers/base_consumer.py src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py tests/unit/services/persistence_service/consumers/test_persistence_instrument_consumer.py tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py tests/integration/services/persistence_service/repositories/test_repositories.py`
  - Result: passed
 
 Root-cause fixes validated by the live Docker run:

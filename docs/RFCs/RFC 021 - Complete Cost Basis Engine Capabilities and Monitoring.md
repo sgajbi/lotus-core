@@ -41,12 +41,12 @@ Evidence:
 - `alembic/versions/3a9c7b2d1e0f_feat_add_cost_basis_method_to_portfolios.py`
 - `src/libs/portfolio-common/portfolio_common/database_models.py`
 - `src/libs/portfolio-common/portfolio_common/events.py`
-- `src/services/calculators/cost_calculator_service/app/consumer.py`
-- `src/services/calculators/cost_calculator_service/app/cost_engine/src/logic/cost_basis_strategies.py`
-- `src/services/calculators/cost_calculator_service/app/monitoring.py`
-- `src/services/calculators/cost_calculator_service/app/transaction_processor.py`
-- `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
-- `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`
+- `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_metrics.py`
+- `src/services/portfolio_transaction_processing_service/app/application/cost_basis_timeline.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_basis_strategies.py`
+- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
 - `tests/integration/services/persistence_service/repositories/test_repositories.py`
 - `tests/e2e/test_avco_workflow.py`
 - `docs/features/cost_calculator/01_Feature_Cost_Calculator_Overview.md`
@@ -89,9 +89,9 @@ No material implementation gap remains for RFC 021 core intent.
 ## Test and Validation Evidence
 
 1. Engine AVCO correctness tests (including dual currency):
-   - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_basis_strategies.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_basis_strategies.py`
 2. Consumer strategy-selection tests:
-   - `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
 3. Persistence/model integration for `cost_basis_method`:
    - `tests/integration/services/persistence_service/repositories/test_repositories.py`
 4. End-to-end AVCO pipeline proof:
