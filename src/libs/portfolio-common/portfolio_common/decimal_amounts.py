@@ -1,30 +1,5 @@
-from __future__ import annotations
+"""Transitional decimal imports during shared domain package migration."""
 
-from decimal import Decimal, InvalidOperation
+from .domain.decimal_amount import ZERO, decimal_or_none, decimal_or_zero, required_decimal
 
-ZERO = Decimal("0")
-
-
-def decimal_or_none(value: object) -> Decimal | None:
-    if value is None:
-        return None
-    if isinstance(value, Decimal):
-        return value
-    normalized = str(value).strip()
-    if not normalized:
-        return None
-    try:
-        return Decimal(normalized)
-    except (InvalidOperation, ValueError):
-        return None
-
-
-def decimal_or_zero(value: object) -> Decimal:
-    return decimal_or_none(value) or ZERO
-
-
-def required_decimal(value: object, *, field_name: str) -> Decimal:
-    resolved_value = decimal_or_none(value)
-    if resolved_value is None:
-        raise ValueError(f"{field_name} is required")
-    return resolved_value
+__all__ = ["ZERO", "decimal_or_none", "decimal_or_zero", "required_decimal"]
