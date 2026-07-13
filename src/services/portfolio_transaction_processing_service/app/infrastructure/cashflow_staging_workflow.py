@@ -22,15 +22,17 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from portfolio_common.transaction_domain import (
     assert_ca_bundle_a_transaction_valid,
-    assert_portfolio_flow_cash_entry_mode_allowed,
     is_ca_bundle_a_transaction_type,
-    normalize_cash_entry_mode,
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
 )
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import StoredCashflow
+from ..domain.transaction import (
+    assert_cash_entry_mode_supported,
+    is_upstream_provided_cash_entry_mode,
+)
 from .cashflow_calculation import calculate_observed_transaction_cashflow
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_rules_repository import (
@@ -172,19 +174,18 @@ def _validated_cashflow_transaction_type(event: TransactionEvent) -> str:
     event_transaction_type = resolve_effective_processing_transaction_type(event)
     if is_ca_bundle_a_transaction_type(event_transaction_type):
         assert_ca_bundle_a_transaction_valid(event)
-    assert_portfolio_flow_cash_entry_mode_allowed(event)
+    assert_cash_entry_mode_supported(to_booked_transaction(event))
     _assert_linked_cash_leg_contract(event)
     return str(event_transaction_type)
 
 
 def _assert_linked_cash_leg_contract(event: TransactionEvent) -> None:
-    normalized_mode = (
-        normalize_cash_entry_mode(event.cash_entry_mode)
-        if event.cash_entry_mode is not None
-        else None
-    )
     has_linked_cash_leg = bool((event.external_cash_transaction_id or "").strip())
-    if normalized_mode == "UPSTREAM_PROVIDED" and not has_linked_cash_leg:
+    if (
+        event.cash_entry_mode is not None
+        and is_upstream_provided_cash_entry_mode(event.cash_entry_mode)
+        and not has_linked_cash_leg
+    ):
         raise LinkedCashLegError(
             "UPSTREAM_PROVIDED product leg requires external_cash_transaction_id."
         )
