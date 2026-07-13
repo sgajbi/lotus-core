@@ -14,7 +14,9 @@ points; Python module paths are implementation details governed with the reposit
    release-manifest automation. `prebuild_ci_images.py` owns reusable local builds and timing
    evidence; `runtime_image_set.py` owns portable bundle creation, integrity manifests, load, and
    exact-source verification.
-6. `validation/` - application certification and environment-backed validation.
+6. `transaction_processing/` - deterministic transaction capability catalog generation and
+   validation owned by the unified transaction-processing domain.
+7. `validation/` - application certification and environment-backed validation.
 
 ## Naming Contract
 

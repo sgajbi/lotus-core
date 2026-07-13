@@ -31,20 +31,22 @@ def test_domain_layer_guard_rejects_framework_and_repository_imports(tmp_path: P
     ]
 
 
-def test_domain_layer_guard_keeps_transaction_domain_pydantic_allowlist_explicit(
+def test_domain_layer_guard_keeps_fx_model_pydantic_allowlist_explicit(
     tmp_path: Path,
 ) -> None:
     _write(
-        tmp_path / "src/libs/portfolio-common/portfolio_common/transaction_domain/fx_models.py",
+        tmp_path
+        / "src/services/portfolio_transaction_processing_service"
+        / "app/domain/transaction/fx/models.py",
         "from pydantic import BaseModel\n",
     )
     _write(
-        tmp_path / "src/libs/portfolio-common/portfolio_common/transaction_domain/new_models.py",
+        tmp_path / "src/services/example_service/app/domain/new_models.py",
         "from pydantic import BaseModel\n",
     )
 
     findings = find_domain_import_findings(tmp_path)
 
     assert [finding.path for finding in findings] == [
-        "src/libs/portfolio-common/portfolio_common/transaction_domain/new_models.py"
+        "src/services/example_service/app/domain/new_models.py"
     ]

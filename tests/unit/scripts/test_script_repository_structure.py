@@ -10,6 +10,7 @@ SCRIPT_AREAS = {
     "operations",
     "quality",
     "release",
+    "transaction_processing",
     "validation",
 }
 RFC_TRACKING_SCRIPT_NAMES = {
