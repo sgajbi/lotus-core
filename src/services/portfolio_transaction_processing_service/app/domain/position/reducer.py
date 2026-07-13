@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Callable
 
 from ..transaction.booked import BookedTransaction
+from ..transaction.processing_type import resolve_effective_processing_transaction_type
 
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
@@ -52,12 +53,6 @@ SAME_INSTRUMENT_CORPORATE_ACTION_TYPES = {
     "STOCK_DIVIDEND",
 }
 SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES = {"REVERSE_SPLIT", "CONSOLIDATION"}
-FX_COMPONENT_PROCESSING_TYPES = {
-    "FX_CONTRACT_OPEN",
-    "FX_CONTRACT_CLOSE",
-    "FX_CASH_SETTLEMENT_BUY",
-    "FX_CASH_SETTLEMENT_SELL",
-}
 _POSITION_START_DATE = date(1970, 1, 1)
 
 
@@ -111,7 +106,7 @@ def calculate_next_position_state(
     current_state: PositionBalanceState,
     transaction: BookedTransaction,
 ) -> PositionBalanceState:
-    txn_type = _resolve_effective_processing_transaction_type(transaction)
+    txn_type = resolve_effective_processing_transaction_type(transaction)
     handler = _position_update_handler(txn_type)
     next_state = (
         handler(current_state, transaction, txn_type) if handler is not None else current_state
@@ -121,13 +116,6 @@ def calculate_next_position_state(
 
 def normalize_position_code(value: str | None) -> str:
     return str(value or "").strip().upper()
-
-
-def _resolve_effective_processing_transaction_type(transaction: BookedTransaction) -> str:
-    component_type = normalize_position_code(transaction.component_type)
-    if component_type in FX_COMPONENT_PROCESSING_TYPES:
-        return component_type
-    return normalize_position_code(transaction.transaction_type)
 
 
 def cash_position_deltas(
