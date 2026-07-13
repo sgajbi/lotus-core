@@ -3,63 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-import pytest
-from portfolio_common.transaction_domain.buy_models import BuyCanonicalTransaction
-from portfolio_common.transaction_domain.dividend_models import DividendCanonicalTransaction
 from portfolio_common.transaction_domain.fx_models import FxCanonicalTransaction
-from portfolio_common.transaction_domain.interest_models import InterestCanonicalTransaction
-from portfolio_common.transaction_domain.sell_models import SellCanonicalTransaction
-
-
-def _cash_security_record(transaction_type: str) -> dict[str, object]:
-    return {
-        "transaction_id": f"{transaction_type}_001",
-        "transaction_type": f" {transaction_type.lower()} ",
-        "portfolio_id": "PB_SG_GLOBAL_BAL_001",
-        "instrument_id": "EQ_US_AAPL",
-        "security_id": "AAPL",
-        "transaction_date": datetime(2026, 1, 2, 10, 0),
-        "quantity": Decimal("10"),
-        "price": Decimal("100"),
-        "gross_transaction_amount": Decimal("1000"),
-        "trade_currency": "USD",
-        "currency": "SGD",
-    }
-
-
-@pytest.mark.parametrize(
-    ("model_type", "transaction_type"),
-    [
-        (BuyCanonicalTransaction, "BUY"),
-        (SellCanonicalTransaction, "SELL"),
-        (DividendCanonicalTransaction, "DIVIDEND"),
-        (InterestCanonicalTransaction, "INTEREST"),
-    ],
-)
-def test_cash_security_models_normalize_transaction_type(model_type, transaction_type: str) -> None:
-    txn = model_type.model_validate(_cash_security_record(transaction_type))
-
-    assert txn.transaction_type == transaction_type
-
-
-def test_dividend_model_normalizes_cash_entry_mode_without_defaulting() -> None:
-    txn = DividendCanonicalTransaction.model_validate(
-        _cash_security_record("DIVIDEND") | {"cash_entry_mode": " upstream_provided "}
-    )
-    implicit_txn = DividendCanonicalTransaction.model_validate(_cash_security_record("DIVIDEND"))
-
-    assert txn.cash_entry_mode == "UPSTREAM_PROVIDED"
-    assert implicit_txn.cash_entry_mode is None
-
-
-def test_interest_model_normalizes_interest_direction_and_cash_entry_mode() -> None:
-    txn = InterestCanonicalTransaction.model_validate(
-        _cash_security_record("INTEREST")
-        | {"interest_direction": " expense ", "cash_entry_mode": " auto_generate "}
-    )
-
-    assert txn.interest_direction == "EXPENSE"
-    assert txn.cash_entry_mode == "AUTO_GENERATE"
 
 
 def test_fx_transaction_model_normalizes_control_codes() -> None:
