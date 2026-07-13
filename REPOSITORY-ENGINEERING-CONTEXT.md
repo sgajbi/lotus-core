@@ -1719,6 +1719,15 @@ Most relevant current governance:
      position, idempotency, and compatibility outbox effects. Every transaction emitted by the cost
      stage, including an `AUTO_GENERATE` settlement cash leg, must traverse both cashflow and
      position before the single commit; aggregate result counts must include every emitted leg.
+     Ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation reason codes, cash-entry
+     policy, generated settlement-leg economics, and upstream pairing belong under
+     `app/domain/transaction`. These policies consume immutable `BookedTransaction`; infrastructure
+     maps existing `TransactionEvent` envelopes at the boundary and must preserve all governed
+     envelope fields. `portfolio_common.transaction_domain` retains only cross-cutting corporate
+     action, FX, and effective-processing compatibility contracts. Do not restore ordinary
+     Pydantic canonical models, per-type linkage/validation modules, cash-entry helpers, or
+     settlement-pairing facades under the shared library. The transaction-domain structure guard
+     makes that retirement executable.
 128. Cost-basis strategies must reconcile aggregate holdings with source-level lot evidence. FIFO
      returns actual remaining source-lot quantity and cost. AVCO returns deterministic pro-rata
      source quantity and local/base cost whose sums exactly equal pooled holdings after every

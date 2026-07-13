@@ -31,6 +31,7 @@
 - [Event Replay Service](Event-Replay-Service)
 - [Persistence Service](Persistence-Service)
 - [Outbox Events](Outbox-Events)
+- [Transaction Processing](Transaction-Processing)
 - [Cost Processing](Cost-Calculator)
 - [Cashflow Calculator](Cashflow-Calculator)
 - [Financial Reconciliation](Financial-Reconciliation)

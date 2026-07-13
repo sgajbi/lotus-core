@@ -33,6 +33,10 @@ mapping, rule loading, metrics, logging, SQLAlchemy row construction, persistenc
 publication remain infrastructure concerns. The retired standalone calculator consumer is not part
 of the source tree or runtime.
 
+Cash-entry mode validation, generated settlement-leg economics, and upstream product/cash pairing
+are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event
+DTOs remain at the infrastructure boundary and are not domain inputs.
+
 For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture

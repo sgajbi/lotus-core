@@ -287,7 +287,7 @@ Targeted regression evidence added during implementation:
 3. `tests/unit/libs/portfolio_common/test_fx_linkage.py`
 4. `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`
 5. `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
-6. `tests/integration/services/calculators/position_calculator/test_int_position_calc_repo.py`
+6. `tests/integration/services/portfolio_transaction_processing_service/test_int_position_history_repository.py`
 
 ## Closure Status
 1. RFC-082 scope is implemented and locally validated against unit, unit-db, integration, E2E, ops-contract, and dedicated FX contract suites.
