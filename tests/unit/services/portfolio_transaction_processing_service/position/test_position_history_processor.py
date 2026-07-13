@@ -16,7 +16,6 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     PositionRecalculationState,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
-    PositionEpochFence,
     PositionHistoryObserver,
     PositionHistoryRepository,
     PositionRecalculationReason,
@@ -68,15 +67,12 @@ def _state(
 def _ports() -> tuple[
     AsyncMock,
     AsyncMock,
-    AsyncMock,
     Mock,
     PositionHistoryProcessor,
 ]:
     repository = AsyncMock(spec=PositionHistoryRepository)
     state_store = AsyncMock(spec=PositionRecalculationStateStore)
-    epoch_fence = AsyncMock(spec=PositionEpochFence)
     observer = Mock(spec=PositionHistoryObserver)
-    epoch_fence.is_current.return_value = True
     state_store.get_or_create.return_value = _state()
     state_store.rearm_generation.return_value = True
     repository.latest_history_date.return_value = None
@@ -88,29 +84,31 @@ def _ports() -> tuple[
     processor = PositionHistoryProcessor(
         repository=repository,
         state_store=state_store,
-        epoch_fence=epoch_fence,
         observer=observer,
     )
-    return repository, state_store, epoch_fence, observer, processor
+    return repository, state_store, observer, processor
 
 
 @pytest.mark.asyncio
-async def test_processor_discards_stale_epoch_before_loading_position_state() -> None:
-    repository, state_store, epoch_fence, observer, processor = _ports()
-    epoch_fence.is_current.return_value = False
+async def test_processor_discards_stale_epoch_from_single_loaded_position_state() -> None:
+    repository, state_store, observer, processor = _ports()
+    transaction = _transaction(epoch=2)
 
-    result = await processor.process(_transaction(epoch=2))
+    result = await processor.process(transaction)
 
     assert result.position_record_count == 0
     assert result.rebuilt_transactions == ()
-    state_store.get_or_create.assert_not_awaited()
+    state_store.get_or_create.assert_awaited_once_with(portfolio_id="PB-001", security_id="SEC-001")
     repository.latest_history_date.assert_not_awaited()
-    assert observer.mock_calls == []
+    observer.stale_epoch_discarded.assert_called_once_with(
+        transaction=transaction,
+        current_epoch=3,
+    )
 
 
 @pytest.mark.asyncio
 async def test_processor_materializes_current_history_and_rearms_downstream_generation() -> None:
-    repository, state_store, _, observer, processor = _ports()
+    repository, state_store, observer, processor = _ports()
     transaction = _transaction()
     repository.list_transactions_from.return_value = (transaction,)
 
@@ -151,7 +149,7 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
 
 @pytest.mark.asyncio
 async def test_processor_does_not_rearm_generation_when_no_history_is_materialized() -> None:
-    repository, state_store, _, observer, processor = _ports()
+    repository, state_store, observer, processor = _ports()
 
     result = await processor.process(_transaction())
 
@@ -164,7 +162,7 @@ async def test_processor_does_not_rearm_generation_when_no_history_is_materializ
 
 @pytest.mark.asyncio
 async def test_processor_coalesces_materialized_backdated_transaction() -> None:
-    repository, state_store, _, observer, processor = _ports()
+    repository, state_store, observer, processor = _ports()
     transaction = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
     repository.latest_history_date.return_value = date(2026, 4, 19)
@@ -188,7 +186,7 @@ async def test_processor_coalesces_materialized_backdated_transaction() -> None:
 
 @pytest.mark.asyncio
 async def test_processor_rebuilds_backdated_history_in_advanced_epoch() -> None:
-    repository, state_store, _, observer, processor = _ports()
+    repository, state_store, observer, processor = _ports()
     incoming = _transaction("TX-BACKDATED", transaction_date=date(2026, 4, 10))
     later = _transaction("TX-LATER", transaction_date=date(2026, 4, 12))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
@@ -241,7 +239,7 @@ async def test_processor_rebuilds_backdated_history_in_advanced_epoch() -> None:
 
 @pytest.mark.asyncio
 async def test_processor_coalesces_backdated_rebuild_when_epoch_compare_and_set_loses() -> None:
-    repository, state_store, _, observer, processor = _ports()
+    repository, state_store, observer, processor = _ports()
     transaction = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
     repository.latest_history_date.return_value = date(2026, 4, 19)
@@ -260,7 +258,7 @@ async def test_processor_coalesces_backdated_rebuild_when_epoch_compare_and_set_
 
 @pytest.mark.asyncio
 async def test_processor_correction_rebuild_bypasses_materialized_coalescing() -> None:
-    repository, state_store, _, _, processor = _ports()
+    repository, state_store, _, processor = _ports()
     incoming = _transaction(transaction_date=date(2026, 4, 10))
     state_store.get_or_create.return_value = _state(watermark_date=date(2026, 4, 20))
     repository.latest_history_date.return_value = date(2026, 4, 19)

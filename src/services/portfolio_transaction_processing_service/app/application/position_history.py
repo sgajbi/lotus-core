@@ -13,7 +13,6 @@ from ..domain.position_history import (
 )
 from ..domain.position_reducer import plan_backdated_recalculation
 from ..ports.position_history import (
-    PositionEpochFence,
     PositionHistoryObserver,
     PositionHistoryRepository,
     PositionRecalculationReason,
@@ -38,12 +37,10 @@ class PositionHistoryProcessor:
         *,
         repository: PositionHistoryRepository,
         state_store: PositionRecalculationStateStore,
-        epoch_fence: PositionEpochFence,
         observer: PositionHistoryObserver,
     ) -> None:
         self._repository = repository
         self._state_store = state_store
-        self._epoch_fence = epoch_fence
         self._observer = observer
 
     async def process(
@@ -53,13 +50,17 @@ class PositionHistoryProcessor:
         rebuild_existing: bool = False,
     ) -> PositionHistoryProcessingResult:
         """Apply current history or atomically rebuild a backdated position stream."""
-        if not await self._epoch_fence.is_current(transaction):
-            return PositionHistoryProcessingResult()
-
         current_state = await self._state_store.get_or_create(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,
         )
+        message_epoch = transaction.epoch if transaction.epoch is not None else current_state.epoch
+        if message_epoch < current_state.epoch:
+            self._observer.stale_epoch_discarded(
+                transaction=transaction,
+                current_epoch=current_state.epoch,
+            )
+            return PositionHistoryProcessingResult()
         latest_history_date = await self._repository.latest_history_date(
             portfolio_id=transaction.portfolio_id,
             security_id=transaction.security_id,

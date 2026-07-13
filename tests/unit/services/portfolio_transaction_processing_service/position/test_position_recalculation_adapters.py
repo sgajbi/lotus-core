@@ -1,38 +1,15 @@
-"""Test position recalculation state and epoch-fence adapters."""
+"""Test the SQLAlchemy position recalculation state adapter."""
 
-from datetime import date, datetime, timezone
-from decimal import Decimal
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing import EpochFencer
 
-from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_epoch_fence_adapter import (  # noqa: E501
-    PositionEpochFenceAdapter,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_recalculation_state_store import (  # noqa: E501
     SqlAlchemyPositionRecalculationStateStore,
 )
-
-
-def _transaction(*, epoch: int | None = 3) -> BookedTransaction:
-    return BookedTransaction(
-        transaction_id="TX-001",
-        portfolio_id="PB-001",
-        instrument_id="SEC-001",
-        security_id="SEC-001",
-        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
-        transaction_type="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("10"),
-        gross_transaction_amount=Decimal("100"),
-        trade_currency="SGD",
-        currency="SGD",
-        epoch=epoch,
-    )
 
 
 @pytest.mark.asyncio
@@ -96,20 +73,3 @@ async def test_state_store_rearms_generation_without_committing() -> None:
         new_watermark_date=date(2026, 4, 9),
         touch_if_already_lagging=True,
     )
-
-
-@pytest.mark.asyncio
-async def test_epoch_fence_adapter_uses_minimal_domain_envelope() -> None:
-    fencer = AsyncMock(spec=EpochFencer)
-    fencer.check.return_value = True
-    adapter = PositionEpochFenceAdapter(fencer)
-    transaction = _transaction(epoch=3)
-
-    assert await adapter.is_current(transaction) is True
-
-    envelope = fencer.check.await_args.args[0]
-    assert envelope.portfolio_id == "PB-001"
-    assert envelope.security_id == "SEC-001"
-    assert envelope.epoch == 3
-    assert envelope.topic is None
-    assert not hasattr(envelope, "transaction_type")
