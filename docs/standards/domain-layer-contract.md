@@ -62,5 +62,5 @@ Current pure-domain examples include:
 4. cost-basis transaction, fee, and calculation-error domain models;
 5. shared currency, money, FX-rate, quantity, and unit-price values in
    `portfolio_common.domain.financial.amounts`;
-6. shared positive FX-rate, positive market-price, and valuation-unit-price policies in
-   `portfolio_common.domain.market_data`.
+6. shared positive FX-rate, positive market-price, valuation-unit-price, and timeseries market-data
+   record policies in `portfolio_common.domain.market_data`.

@@ -7,7 +7,9 @@ infrastructure.
 
 1. Name ports by the capability required by the use case, not by the current implementation.
 2. Put service-local ports in `src/services/<service>/app/ports/`.
-3. Put reusable cross-service ports in the narrowest shared library that owns the contract.
+3. Put reusable cross-service ports under the narrowest shared bounded context that has multiple
+   demonstrated application consumers. Keep a single-consumer port in its owning service even when
+   its domain records or infrastructure adapter are shared.
 4. Keep concrete repositories, Kafka producers, helper functions, and runtime providers behind
    adapters or provider modules.
 5. Use fake ports in unit tests for application orchestration and failure behavior.
@@ -24,6 +26,11 @@ The current representative families are:
 2. event publisher ports,
 3. repository reader/writer ports,
 4. clock, monotonic timer, and ID provider ports.
+
+Shared domain records do not make a port shared automatically. For example, generation and
+aggregation reuse timeseries market-data records and a SQL reader, while
+`portfolio_aggregation_service.app.ports.timeseries_market_data` remains service-local because only
+portfolio aggregation depends on that application capability.
 
 Existing runtime-provider ports that predate the `app/ports` convention may remain in dedicated
 provider modules while they are cataloged as `clock-id-provider` capabilities. New repository,

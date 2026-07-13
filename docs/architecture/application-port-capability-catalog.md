@@ -17,9 +17,10 @@ Service-local application ports live under:
 src/services/<service>/app/ports/
 ```
 
-Shared cross-service ports live in the smallest shared library that owns the reusable contract, such
-as `src/libs/portfolio-common/portfolio_common/event_publisher.py` or
-`src/libs/portfolio-common/portfolio_common/runtime_providers.py`.
+Shared cross-service ports live in the smallest shared bounded context with multiple demonstrated
+application consumers, such as `src/libs/portfolio-common/portfolio_common/event_publisher.py` or
+`src/libs/portfolio-common/portfolio_common/runtime_providers.py`. Reused domain records or adapters
+do not by themselves justify a shared port.
 
 Existing clock/ID provider ports that predate this convention may remain in dedicated provider
 modules while cataloged as transitional `clock-id-provider` capabilities.
@@ -32,6 +33,7 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 | `ingestion.replay-audit-store` | audit/idempotency store | `ingestion_service/app/ports/ingestion_workflow_stores.py` | `IngestionJobService`; SQLAlchemy adapter in `ingestion_service/app/infrastructure/workflow_stores.py` |
 | `events.event-publisher` | event publisher | `portfolio_common/event_publisher.py` | ingestion publish workflow, valuation job publisher, aggregation job publisher |
 | `aggregation.scheduler-runtime-ports` | scheduler runtime | `portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py` | `AggregationScheduler`; SQLAlchemy, Prometheus, and system-clock adapters in `portfolio_aggregation_service/app/infrastructure/aggregation_scheduler_adapters.py` |
+| `aggregation.timeseries-market-data-reader` | repository reader | `portfolio_aggregation_service/app/ports/timeseries_market_data.py` | `PortfolioTimeseriesLogic`; SQLAlchemy adapter in `portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py` |
 | `qcp.portfolio-tax-lot-reader` | repository reader | `query_control_plane_service/app/ports/dpm_source_readiness.py` | `PortfolioTaxLotWindow:v1` resolver; SQLAlchemy adapter in `query_control_plane_service/app/infrastructure/dpm_portfolio_state_sources.py` |
 | `query.unit-of-work` | unit of work | `query_service/app/ports/unit_of_work.py` | `SimulationService`; SQLAlchemy adapter in `query_service/app/infrastructure/unit_of_work.py` |
 | `reconciliation.repository-port` | repository reader/writer | `financial_reconciliation_service/app/ports/reconciliation_repository_ports.py` | `ReconciliationService` |

@@ -2405,6 +2405,14 @@ Most relevant current governance:
      Product-specific quote conventions and valuation methodology require an explicit governed
      domain decision; the current legacy bond quote heuristic remains tracked under #451 and must
      not be generalized during structural moves.
+183. Timeseries instrument/FX records shared by generation and aggregation belong under
+     `portfolio_common.domain.market_data.timeseries`. The SQL reader remains shared infrastructure
+     because both service-owned repositories reuse it. `TimeseriesMarketDataPort` belongs under
+     `portfolio_aggregation_service.app.ports.timeseries_market_data` because portfolio aggregation
+     is its only application consumer; shared records or adapters do not justify a shared port.
+     Keep generation and aggregation persistence service-owned, and keep #714 open until measured
+     daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence decides runtime
+     topology.
 
 ## Context Maintenance Rule
 
