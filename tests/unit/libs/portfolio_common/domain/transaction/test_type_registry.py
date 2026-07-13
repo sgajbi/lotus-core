@@ -1,7 +1,9 @@
+"""Verify the canonical transaction type vocabulary and local rule alignment."""
+
 from pathlib import Path
 
 import pytest
-from portfolio_common.transaction_type_registry import (
+from portfolio_common.domain.transaction.type_registry import (
     INCOME_RECOGNITION_TRANSACTION_TYPES,
     MIGRATION_ONLY,
     TARGET_NOT_IMPLEMENTED,
@@ -51,8 +53,16 @@ from src.services.query_service.app.services.position_flow_effects import (
 )
 
 
+def _repository_root() -> Path:
+    return next(
+        parent
+        for parent in Path(__file__).resolve().parents
+        if (parent / "pyproject.toml").is_file()
+    )
+
+
 def test_cost_domain_does_not_define_second_transaction_type_vocabulary() -> None:
-    repository_root = Path(__file__).resolve().parents[4]
+    repository_root = _repository_root()
     duplicate_vocabulary = (
         repository_root
         / "src/services/portfolio_transaction_processing_service/app/domain/cost_basis"
