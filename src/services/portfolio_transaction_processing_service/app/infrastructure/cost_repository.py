@@ -50,7 +50,7 @@ from ..ports import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
 )
-from .legacy_transaction_event_mapper import to_booked_transaction
+from .booked_transaction_event_mapper import to_booked_transaction
 
 logger = logging.getLogger(__name__)
 

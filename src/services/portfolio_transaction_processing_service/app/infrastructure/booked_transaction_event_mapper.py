@@ -1,3 +1,5 @@
+"""Map between governed transaction events and booked transaction domain values."""
+
 from __future__ import annotations
 
 from dataclasses import fields
@@ -11,7 +13,9 @@ _DOMAIN_FIELD_SET = frozenset(_DOMAIN_FIELD_NAMES)
 _TUPLE_FIELDS = frozenset({"linked_component_ids", "dependency_reference_ids"})
 
 
-class LegacyTransactionEventMappingError(RuntimeError):
+class BookedTransactionEventMappingError(RuntimeError):
+    """Raised when the event contract and booked transaction model diverge."""
+
     pass
 
 
@@ -46,7 +50,7 @@ def with_booked_transaction_fields(
     return TransactionEvent.model_validate(payload)
 
 
-def validate_legacy_transaction_event_mapping_contract(
+def validate_booked_transaction_event_mapping_contract(
     external_field_names: set[str] | None = None,
 ) -> None:
     external_fields = (
@@ -56,11 +60,11 @@ def validate_legacy_transaction_event_mapping_contract(
     missing_domain_fields = sorted(business_fields - _DOMAIN_FIELD_SET)
     extra_domain_fields = sorted(_DOMAIN_FIELD_SET - business_fields)
     if missing_domain_fields or extra_domain_fields:
-        raise LegacyTransactionEventMappingError(
+        raise BookedTransactionEventMappingError(
             "Transaction event/domain field drift: "
             f"missing_domain_fields={missing_domain_fields}, "
             f"extra_domain_fields={extra_domain_fields}"
         )
 
 
-validate_legacy_transaction_event_mapping_contract()
+validate_booked_transaction_event_mapping_contract()

@@ -28,7 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.legacy_transaction_event_mapper import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
     to_booked_transaction,
 )
 
