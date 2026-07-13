@@ -28,6 +28,14 @@ def test_to_decimal_rejects_blank_value() -> None:
         to_decimal(" ")
 
 
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_to_decimal_rejects_non_finite_values(value: str) -> None:
+    with pytest.raises(ValueError, match="Invalid numeric value"):
+        to_decimal(Decimal(value))
+    with pytest.raises(ValueError, match="Invalid numeric value"):
+        to_decimal(value)
+
+
 def test_to_decimal_handles_none_and_decimal_passthrough() -> None:
     assert to_decimal(None) == Decimal("0")
     original = Decimal("1.23")
@@ -67,8 +75,9 @@ def test_intermediate_precision_preserved_before_final_quantize() -> None:
     assert quantize_performance(value) == Decimal("0.123457")
 
 
-def test_decimal_scale_handles_non_integer_exponent() -> None:
-    assert _decimal_scale(Decimal("NaN")) == 0
+def test_decimal_scale_rejects_non_finite_values() -> None:
+    with pytest.raises(ValueError, match="Cannot determine scale"):
+        _decimal_scale(Decimal("NaN"))
 
 
 def test_rounding_golden_vectors() -> None:

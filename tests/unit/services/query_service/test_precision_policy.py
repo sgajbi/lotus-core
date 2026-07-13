@@ -4,6 +4,7 @@ import pytest
 
 from src.services.query_service.app.precision_policy import (
     ROUNDING_POLICY_VERSION,
+    _decimal_scale,
     normalize_input,
     quantize_fx_rate,
     quantize_money,
@@ -24,6 +25,19 @@ def test_to_decimal_rejects_invalid_value() -> None:
 def test_to_decimal_rejects_blank_value() -> None:
     with pytest.raises(ValueError):
         to_decimal(" ")
+
+
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity"])
+def test_to_decimal_rejects_non_finite_values(value: str) -> None:
+    with pytest.raises(ValueError, match="Invalid numeric value"):
+        to_decimal(Decimal(value))
+    with pytest.raises(ValueError, match="Invalid numeric value"):
+        to_decimal(value)
+
+
+def test_decimal_scale_rejects_non_finite_values() -> None:
+    with pytest.raises(ValueError, match="Cannot determine scale"):
+        _decimal_scale(Decimal("NaN"))
 
 
 def test_money_quantization_half_even() -> None:
