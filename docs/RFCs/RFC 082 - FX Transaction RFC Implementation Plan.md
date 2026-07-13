@@ -70,12 +70,12 @@ transaction capability catalog for current evidence.
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_fx_slice0_characterization.py` |
-| 1 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/libs/portfolio_common/test_fx_validation.py`, `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
-| 2 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-2-PERSISTENCE-LINKAGE.md`, `tests/unit/libs/portfolio_common/test_fx_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` (code added; local runtime blocked without Docker), `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
+| 1 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py`, `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
+| 2 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-2-PERSISTENCE-LINKAGE.md`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_linkage.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` (code added; local runtime blocked without Docker), `alembic/versions/ac23de45f678_feat_add_fx_transaction_metadata_fields.py` |
 | 3 | Completed | `alembic/versions/ad34ef56a789_feat_add_fx_cash_settlement_rules.py`, `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`, `tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py` |
-| 4 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-4-CONTRACT-LIFECYCLE.md`, `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`, `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py` |
-| 5 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-5-SWAP-GROUPING.md`, `tests/unit/libs/portfolio_common/test_fx_linkage.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
-| 6 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `tests/unit/libs/portfolio_common/test_fx_validation.py` |
+| 4 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-4-CONTRACT-LIFECYCLE.md`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_contract_instrument.py`, `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py` |
+| 5 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-5-SWAP-GROUPING.md`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_linkage.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py` |
+| 6 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-6-PNL-SEMANTICS.md`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`, `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py` |
 | 7 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-7-QUERY-OBSERVABILITY.md`, `tests/unit/services/query_service/repositories/test_transaction_repository.py`, `tests/unit/services/query_service/services/test_transaction_service.py`, `scripts/quality/openapi_quality_gate.py` |
 | 8 | Completed | `docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md`, `scripts/quality/test_manifest.py`, `Makefile`, `.github/workflows/ci.yml`, `tests/e2e/test_fx_lifecycle.py`, live Docker-backed validation (`transaction-fx-contract`: 195 passed; `test_fx_lifecycle.py`: 3 passed) |
 
@@ -91,9 +91,9 @@ Exit Criteria:
 
 ### Slice 1 - Canonical FX Validation, Vocabulary, and Reason Codes
 Deliverables:
-1. `portfolio_common.transaction_domain.fx_models`
-2. `portfolio_common.transaction_domain.fx_reason_codes`
-3. `portfolio_common.transaction_domain.fx_validation`
+1. `portfolio_transaction_processing_service.app.domain.transaction.fx.models`
+2. `portfolio_transaction_processing_service.app.domain.transaction.fx.reason_codes`
+3. `portfolio_transaction_processing_service.app.domain.transaction.fx.validation`
 4. Canonical fields for:
  - business transaction type (`FX_SPOT`, `FX_FORWARD`, `FX_SWAP`)
  - `component_type`
@@ -288,9 +288,9 @@ Local validation completed on the implemented branch:
 
 Targeted regression evidence added during implementation:
 1. `tests/e2e/test_fx_lifecycle.py`
-2. `tests/unit/libs/portfolio_common/test_fx_validation.py`
-3. `tests/unit/libs/portfolio_common/test_fx_linkage.py`
-4. `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`
+2. `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py`
+3. `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_linkage.py`
+4. `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_contract_instrument.py`
 5. `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
 6. `tests/integration/services/portfolio_transaction_processing_service/test_int_position_history_repository.py`
 
