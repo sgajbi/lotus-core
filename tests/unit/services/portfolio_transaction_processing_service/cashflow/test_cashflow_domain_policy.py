@@ -13,6 +13,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
     CashflowTiming,
     calculate_transaction_cashflow,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SettlementCashRejectionReasonCode,
+    SettlementCashValidationError,
+)
 
 
 def _booked_transaction(**changes: object) -> BookedTransaction:
@@ -107,6 +111,98 @@ def test_interest_income_cashflow_is_invariant_to_explicit_net_interest(
     )
 
     assert cashflow.amount == Decimal("105")
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification", "fee", "expected_amount"),
+    [
+        ("SELL", CashflowClassification.INVESTMENT_INFLOW, "99", "1"),
+        ("DIVIDEND", CashflowClassification.INCOME, "99", "1"),
+        ("INTEREST", CashflowClassification.INCOME, "7", "1"),
+    ],
+)
+def test_income_like_cashflow_preserves_positive_net_settlement(
+    transaction_type: str,
+    classification: CashflowClassification,
+    fee: str,
+    expected_amount: str,
+) -> None:
+    transaction = _booked_transaction(
+        transaction_type=transaction_type,
+        gross_transaction_amount=(
+            Decimal("100") if transaction_type != "INTEREST" else Decimal("10")
+        ),
+        trade_fee=Decimal(fee),
+        withholding_tax_amount=(Decimal("2") if transaction_type == "INTEREST" else None),
+        interest_direction=("INCOME" if transaction_type == "INTEREST" else None),
+    )
+
+    cashflow = calculate_transaction_cashflow(transaction, _rule(classification))
+
+    assert cashflow.amount == Decimal(expected_amount)
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification", "fee", "reason_code"),
+    [
+        (
+            "SELL",
+            CashflowClassification.INVESTMENT_INFLOW,
+            "100",
+            SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+        (
+            "SELL",
+            CashflowClassification.INVESTMENT_INFLOW,
+            "100.01",
+            SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+        (
+            "DIVIDEND",
+            CashflowClassification.INCOME,
+            "100",
+            SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+        (
+            "DIVIDEND",
+            CashflowClassification.INCOME,
+            "100.01",
+            SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+        (
+            "INTEREST",
+            CashflowClassification.INCOME,
+            "8",
+            SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+        (
+            "INTEREST",
+            CashflowClassification.INCOME,
+            "8.01",
+            SettlementCashRejectionReasonCode.INTEREST_NON_POSITIVE_NET_SETTLEMENT,
+        ),
+    ],
+)
+def test_cashflow_rejects_non_positive_income_like_settlement(
+    transaction_type: str,
+    classification: CashflowClassification,
+    fee: str,
+    reason_code: SettlementCashRejectionReasonCode,
+) -> None:
+    transaction = _booked_transaction(
+        transaction_type=transaction_type,
+        gross_transaction_amount=(
+            Decimal("100") if transaction_type != "INTEREST" else Decimal("10")
+        ),
+        trade_fee=Decimal(fee),
+        withholding_tax_amount=(Decimal("2") if transaction_type == "INTEREST" else None),
+        interest_direction=("INCOME" if transaction_type == "INTEREST" else None),
+    )
+
+    with pytest.raises(SettlementCashValidationError) as raised:
+        calculate_transaction_cashflow(transaction, _rule(classification))
+
+    assert raised.value.reason_code is reason_code
 
 
 def test_synthetic_position_transfer_uses_source_owned_market_value() -> None:
