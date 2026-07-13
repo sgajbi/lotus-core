@@ -2336,8 +2336,10 @@ Most relevant current governance:
 175. Corporate-action Bundle A validation and basis reconciliation are owned by
      `portfolio_transaction_processing_service.app.domain.transaction.corporate_action` and
      `.domain.cost_basis.corporate_action_reconciliation` over immutable `BookedTransaction`.
-     Deterministic run/finding assembly belongs in the application evidence builder; repositories,
-     metrics, and logs remain infrastructure concerns. Do not restore the retired
+     Deterministic run/finding assembly and per-batch group coordination belong in the application
+     coordinator behind typed repository and observer ports. ORM mapping and evidence persistence
+     belong in the SQLAlchemy repository adapter; metrics and logs belong in the observer adapter
+     and run only after persistence succeeds. Do not restore the retired
      `portfolio_common.ca_bundle_a_validation`, `ca_bundle_a_reconciliation`, or reason-code facades.
      This is design modularity inside the unified transaction-processing deployable, not a new
      runtime service. Issues #450, #480, and #481 retain partial-allocation, parent-event graph, and
