@@ -33,9 +33,11 @@ must be preserved.
 
 Most validation functions remain contract-conformance evidence. The one active settlement boundary
 is non-positive proceeds after resolved fees for SELL, DIVIDEND, and INTEREST income. The application
-rejects that condition before opening the financial unit of work; other strict-metadata validators
-remain conformance-only until an intentional behavior decision, compatibility review, tests, and
-contract documentation activate them.
+classifies physical and semantic idempotency inside the combined unit of work first, then rejects a
+newly claimed or repair delivery before cost, position, cashflow, or commit. Harmless historical
+duplicates remain acknowledgements. Other strict-metadata validators remain conformance-only until
+an intentional behavior decision, compatibility review, tests, and contract documentation activate
+them.
 
 ## Ordinary Settlement Cash
 
