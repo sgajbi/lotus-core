@@ -235,7 +235,7 @@ supported-features-guard:
 	python scripts/quality/supported_features_guard.py
 
 transaction-capability-catalog-guard:
-	python scripts/quality/transaction_capability_catalog_guard.py
+	python scripts/transaction_processing/validate_capability_catalog.py
 
 incident-playbook-guard:
 	python scripts/quality/incident_playbook_guard.py

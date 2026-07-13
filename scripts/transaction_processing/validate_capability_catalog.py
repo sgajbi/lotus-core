@@ -14,6 +14,7 @@ CATALOG_PATH = Path("contracts/transaction-processing/transaction-capability-cat
 REGISTRY_PATH = Path("src/libs/portfolio-common/portfolio_common/transaction_type_registry.py")
 EXPECTED_SCHEMA_VERSION = "lotus-core-transaction-capability-catalog.v1"
 GUARD_COMMAND = "make transaction-capability-catalog-guard"
+GENERATOR_COMMAND = "python scripts/transaction_processing/generate_capability_catalog.py"
 ISSUE_REQUIRED_TRANSACTION_STATUSES = {
     "default_strategy",
     "limited",
@@ -243,6 +244,10 @@ def find_transaction_capability_findings(
     if payload.get("guard_command") != GUARD_COMMAND:
         findings.append(
             TransactionCapabilityFinding(CATALOG_PATH.as_posix(), "guard_command mismatch")
+        )
+    if payload.get("generator_command") != GENERATOR_COMMAND:
+        findings.append(
+            TransactionCapabilityFinding(CATALOG_PATH.as_posix(), "generator_command mismatch")
         )
     _validate_transaction_types(
         findings=findings,

@@ -2346,13 +2346,18 @@ Most relevant current governance:
      lot-lineage closure.
 176. Transaction and product lifecycle publication is governed by
      `contracts/transaction-processing/transaction-capability-catalog.v1.json`, refreshed with
-     `python scripts/generators/generate_transaction_capability_catalog.py`, and blocked by
+     `python scripts/transaction_processing/generate_capability_catalog.py`, and blocked by
      `make transaction-capability-catalog-guard`. Every canonical transaction code must appear once
      with registry-exact lifecycle, economic-role, support, and production-booking posture. Limited,
      default-strategy, migration-only, and target-not-implemented codes require issue ownership.
      Generic `BUY`, `SELL`, `INTEREST`, or `DIVIDEND` support must never be presented as complete
      product-specific maturity, exercise, barrier, payoff, commitment, return-of-capital, or
      correction lifecycle support.
+177. Domain-specific automation belongs under a domain-owned `scripts/<domain>/` package, mirrored
+     under `tests/unit/scripts/<domain>/`; generic `quality/` and `generators/` directories are not
+     ownership buckets. Transaction-processing capability generation and validation live under
+     `scripts/transaction_processing/`. Keep implementation filenames action-oriented and avoid
+     repeating the full parent-domain name in every file.
 
 ## Context Maintenance Rule
 

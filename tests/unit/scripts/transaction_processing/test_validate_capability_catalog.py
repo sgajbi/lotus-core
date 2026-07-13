@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.quality import transaction_capability_catalog_guard as guard
+from scripts.transaction_processing import validate_capability_catalog as guard
 
 
 def _registry() -> dict[str, SimpleNamespace]:
@@ -30,6 +30,7 @@ def _catalog() -> dict[str, object]:
         "repository": "lotus-core",
         "source_registry": guard.REGISTRY_PATH.as_posix(),
         "guard_command": "make transaction-capability-catalog-guard",
+        "generator_command": guard.GENERATOR_COMMAND,
         "documentation_surfaces": [
             "docs/features/transaction-and-product-lifecycle-capabilities.md",
             "wiki/Transaction-and-Product-Lifecycle-Capabilities.md",
@@ -152,3 +153,13 @@ def test_catalog_guard_rejects_missing_documentation_anchor(tmp_path: Path) -> N
     findings = guard.find_transaction_capability_findings(root, registry=_registry())
 
     assert any("missing catalog reference" in finding.detail for finding in findings)
+
+
+def test_catalog_guard_rejects_stale_generator_command(tmp_path: Path) -> None:
+    payload = _catalog()
+    payload["generator_command"] = "python scripts/generators/legacy_catalog.py"
+    root = _write_repo(tmp_path, payload)
+
+    findings = guard.find_transaction_capability_findings(root, registry=_registry())
+
+    assert any("generator_command mismatch" in finding.detail for finding in findings)
