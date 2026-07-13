@@ -35,7 +35,7 @@ def test_domain_layer_guard_keeps_transaction_domain_pydantic_allowlist_explicit
     tmp_path: Path,
 ) -> None:
     _write(
-        tmp_path / "src/libs/portfolio-common/portfolio_common/transaction_domain/buy_models.py",
+        tmp_path / "src/libs/portfolio-common/portfolio_common/transaction_domain/fx_models.py",
         "from pydantic import BaseModel\n",
     )
     _write(
