@@ -3,7 +3,7 @@
 import hashlib
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal
 from time import monotonic
@@ -45,6 +45,12 @@ from ..domain.cost_basis import (
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from ..domain.transaction import BookedTransaction
+from ..ports import (
+    CorporateActionReconciliationEvidence,
+    CorporateActionReconciliationKey,
+)
+from .legacy_transaction_event_mapper import to_booked_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -854,6 +860,26 @@ class CostCalculatorRepository:
         )
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def load_group(
+        self, key: CorporateActionReconciliationKey
+    ) -> tuple[BookedTransaction, ...]:
+        """Load a linked corporate-action group as immutable domain transactions."""
+
+        rows = await self.get_bundle_a_group_transactions(
+            portfolio_id=key.portfolio_id,
+            linked_transaction_group_id=key.linked_transaction_group_id,
+            parent_event_reference=key.parent_event_reference,
+        )
+        return tuple(to_booked_transaction(TransactionEvent.model_validate(row)) for row in rows)
+
+    async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
+        """Map typed reconciliation evidence to the existing persistence contract."""
+
+        await self.record_bundle_a_reconciliation_evidence(
+            run=asdict(evidence.run),
+            findings=[asdict(finding) for finding in evidence.findings],
+        )
 
     async def record_bundle_a_reconciliation_evidence(
         self,
