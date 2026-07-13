@@ -47,6 +47,11 @@ The legacy cost calculator source root, standalone consumer, mixed processor, an
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
 processing paths and tests use the combined application use case, target modules, and ports.
 
+Ordinary transaction booking metadata and settlement-leg policy are owned by
+`app/domain/transaction`, operate on immutable `BookedTransaction`, and are mapped back onto the
+existing governed event envelope only in infrastructure. The shared transaction package no longer
+contains duplicate BUY, SELL, DIVIDEND, or INTEREST canonical models or policy facades.
+
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness

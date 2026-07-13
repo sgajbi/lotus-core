@@ -78,6 +78,9 @@ Control execution and reconciliation run contracts.
 - one `portfolio_transaction_processing_service` deployable with target-owned position, cashflow,
   and cost modules behind one atomic use case and database unit of work; legacy calculator source
   roots and standalone consumers are retired
+- one framework-neutral ordinary transaction domain for BUY, SELL, DIVIDEND, and INTEREST booking
+  metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing;
+  delivery and infrastructure map governed event DTOs at the boundary
 - one authoritative `transactions.cost.processed` completion input to pipeline readiness; the
   retained `cashflows.calculated` compatibility fact is not a second prerequisite
 - independently scalable position valuation worker

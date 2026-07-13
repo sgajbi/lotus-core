@@ -118,7 +118,7 @@ Rules:
 | `event_replay_service` | `src/services/event_replay_service` | Replay/remediation commands, ingestion operations queries, consumer DLQ replay, replay audit, ops control | Source write ingestion, generic query read plane, calculator writes |
 | `financial_reconciliation_service` | `src/services/financial_reconciliation_service` | Reconciliation run orchestration, finding policy, control execution APIs, finding persistence | Calculator mutation, portfolio/position source ownership, report composition |
 | `persistence_service` | `src/services/persistence_service` | Raw domain event decoding, canonical persistence writes, idempotency, completion publication | API read shaping, analytics inputs, downstream contract composition |
-| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, or collapsed domain policies |
+| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules. Its framework-neutral transaction domain owns ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing. | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, framework DTOs inside domain policy, or collapsed financial policies |
 | `valuation_orchestrator_service` | `src/services/valuation_orchestrator_service` | Valuation job scheduling, reprocessing state, dispatch readiness | Valuation compute mutation, read-plane response shaping |
 | `position_valuation_calculator` | `src/services/calculators/position_valuation_calculator` | Valuation job consumption, valuation snapshot mutation, active valuation handoff; concrete session/repository/idempotency/outbox construction is isolated in `app/infrastructure` | Job scheduling ownership, benchmark/performance calculations; processor application move before persistence/metrics/unit-of-work ports exist |
 | `timeseries_generator_service` | `src/services/timeseries_generator_service` | Position-timeseries generation, aggregation job staging | Portfolio aggregation policy, operational API responses |
@@ -150,6 +150,11 @@ before full production cutover is claimed.
 source and test ownership is under `portfolio_transaction_processing_service`; do not recreate
 standalone calculator packages, consumers, images, or transaction boundaries.
 
+The shared `portfolio_common.transaction_domain` package no longer owns ordinary BUY, SELL,
+DIVIDEND, or INTEREST models and policy facades. It retains only independently evidenced corporate
+action, FX, and effective-processing compatibility contracts. New ordinary transaction behavior
+belongs in the service-owned framework-neutral transaction domain.
+
 ## Database Ownership
 
 | Data family | Owning runtime or boundary | Read surfaces | Notes |
@@ -157,9 +162,9 @@ standalone calculator packages, consumers, images, or transaction boundaries.
 | portfolio/account/instrument/reference master | `persistence_service` and source-ingestion paths | `query_service`, `query_control_plane_service` | Core source truth. Downstream services consume contracts, not private tables. |
 | transaction ledger and business dates | `persistence_service` | `query_service`, analytics-input products | Transaction date vocabulary follows RFC-0083 temporal semantics. |
 | ingestion jobs, failures, replay audit, consumer DLQ | `ingestion_service`, `event_replay_service` | `event_replay_service`, support APIs | Operator evidence, not public business data. |
-| cost and lot state | target cost module in `portfolio_transaction_processing_service` | `query_service`, source-data products where declared | Atomic transaction mutation with query-service read publication. |
-| cashflows and cashflow rules | target cashflow module in `portfolio_transaction_processing_service` | `query_service` | Do not use for financial-planning advice. |
-| position history and snapshots | target position module in `portfolio_transaction_processing_service`, plus `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
+| cost and lot state | cost-basis domain and infrastructure adapters in `portfolio_transaction_processing_service` | `query_service`, source-data products where declared | Atomic transaction mutation with query-service read publication. |
+| cashflows and cashflow rules | cashflow domain and infrastructure adapters in `portfolio_transaction_processing_service` | `query_service` | Do not use for financial-planning advice. |
+| position history and snapshots | position domain and infrastructure adapters in `portfolio_transaction_processing_service`, plus `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
 | valuation jobs and reprocessing state | `valuation_orchestrator_service` | support APIs, worker consumers | Job orchestration state, not business output. |
 | position timeseries and portfolio timeseries | `timeseries_generator_service`, `portfolio_aggregation_service` | `query_service`, analytics inputs | Published with source-data product metadata where supported. |
 | reconciliation runs/findings and control stages | `financial_reconciliation_service`, `pipeline_orchestrator_service` | support and reconciliation APIs | Controls decide supportability/publishability posture. |
