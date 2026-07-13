@@ -12,6 +12,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from ..application.position_history import PositionHistoryProcessor
 from ..ports import (
     CashflowProcessingPort,
     CostProcessingPort,
@@ -28,8 +29,12 @@ from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_processing_adapter import CostProcessingCompatibilityAdapter, CostStagingWorkflow
 from .cost_repository import CostCalculatorRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
-from .position_processing_adapter import PositionProcessingCompatibilityAdapter
-from .position_repository import PositionRepository
+from .position_processing_adapter import PositionHistoryProcessingAdapter
+from .prometheus_position_history_observer import PROMETHEUS_POSITION_HISTORY_OBSERVER
+from .sqlalchemy_position_history_repository import SqlAlchemyPositionHistoryRepository
+from .sqlalchemy_position_recalculation_state_store import (
+    SqlAlchemyPositionRecalculationStateStore,
+)
 from .transaction_stage_repository import SqlAlchemyTransactionStageRepository
 
 TRANSACTION_PROCESSING_SERVICE_NAME = "portfolio-transaction-processing"
@@ -149,10 +154,13 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             idempotency_repository=idempotency_repository,
             outbox_repository=outbox_repository,
         )
-        self._position = PositionProcessingCompatibilityAdapter(
-            db_session=session,
-            repository=PositionRepository(session),
-            position_state_repository=PositionStateRepository(session),
+        position_state_repository = PositionStateRepository(session)
+        self._position = PositionHistoryProcessingAdapter(
+            processor=PositionHistoryProcessor(
+                repository=SqlAlchemyPositionHistoryRepository(session),
+                state_store=SqlAlchemyPositionRecalculationStateStore(position_state_repository),
+                observer=PROMETHEUS_POSITION_HISTORY_OBSERVER,
+            ),
         )
         self._pipeline = PipelineStageProcessingAdapter(
             SqlAlchemyTransactionStageRepository(session),
