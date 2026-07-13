@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 
-Status: Fixed locally; PR proof pending
+Status: Merged and PR-validated
 
 ## Objective
 
@@ -55,6 +55,10 @@ contract. The former workflow and repository are retired and guarded against rei
 - 81 focused position application/domain/adapter tests and the full architecture guard passed after
   legacy deletion.
 - Focused Ruff check/format and `git diff --check` passed for each implementation commit.
+- PR #747 passed the complete Feature Lane, PR Merge Gate, transaction-contract, combined-coverage,
+  Docker image, smoke, end-to-end, latency, performance-load, and quality-baseline checks.
+- The 28-commit non-squash history was merged to `main` at
+  `035c4a9222af4769659f81c6314f71b7f28eb77b`; post-merge wiki source/publication parity passed.
 
 ## Governance Decisions
 
@@ -69,4 +73,4 @@ contract. The former workflow and repository are retired and guarded against rei
 
 Issue #719 remains open for cost-runtime ownership, simulation/replay hardening, end-to-end
 performance evidence, and broader legacy calculator retirement. The position history application
-boundary and its former workflow/repository retirement are complete locally.
+boundary and its former workflow/repository retirement are merged through PR #747.
