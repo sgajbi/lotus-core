@@ -28,13 +28,12 @@ DISALLOWED_IMPORT_PARTS = {
     "settings",
 }
 
-DOMAIN_GLOBS = (
-    "src/services/**/domain/**/*.py",
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/**/*.py",
-)
+DOMAIN_GLOBS = ("src/services/**/domain/**/*.py",)
 
 TRANSITIONAL_ALLOWLIST = {
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/fx_models.py": {"pydantic"},
+    "src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/models.py": {
+        "pydantic"
+    },
 }
 
 
