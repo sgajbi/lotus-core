@@ -537,6 +537,24 @@ def production_transaction_types_for_lifecycle_families(
     )
 
 
+def production_transaction_types_for_position_effects(
+    *position_effects: str,
+) -> frozenset[str]:
+    """Return production-bookable transaction codes with the requested position effects."""
+
+    normalized_effects = frozenset(
+        str(position_effect or "").strip().lower()
+        for position_effect in position_effects
+        if str(position_effect or "").strip()
+    )
+    return frozenset(
+        code
+        for code, definition in TRANSACTION_TYPE_REGISTRY.items()
+        if definition.production_booking_allowed
+        and definition.position_effect in normalized_effects
+    )
+
+
 def require_registered_transaction_type(code: str) -> TransactionTypeDefinition:
     normalized = str(code or "").strip().upper()
     definition = TRANSACTION_TYPE_REGISTRY.get(normalized)
