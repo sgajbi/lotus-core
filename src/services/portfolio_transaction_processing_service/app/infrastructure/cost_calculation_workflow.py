@@ -33,11 +33,7 @@ from portfolio_common.transaction_domain import (
     build_auto_generated_adjustment_cash_leg,
     build_fx_contract_instrument_event,
     build_fx_processed_event,
-    enrich_buy_transaction_metadata,
-    enrich_dividend_transaction_metadata,
     enrich_fx_transaction_metadata,
-    enrich_interest_transaction_metadata,
-    enrich_sell_transaction_metadata,
     evaluate_ca_bundle_a_reconciliation,
     find_missing_ca_bundle_a_dependencies,
     is_ca_bundle_a_transaction_type,
@@ -62,11 +58,13 @@ from ..domain.cost_basis import (
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from ..domain.transaction import enrich_booking_metadata
 from ..ports import (
     CostBasisCalculationObserver,
 )
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
+from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
@@ -372,11 +370,16 @@ class CostCalculationWorkflow:
         portfolio: Any,
     ) -> tuple[TransactionEvent, str, CostBasisMethod]:
         cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
-        event = enrich_buy_transaction_metadata(event)
-        event = enrich_sell_transaction_metadata(event, cost_basis_method=cost_basis_method)
+        booked_transaction = enrich_booking_metadata(
+            to_booked_transaction(event),
+            cost_basis_method=cost_basis_method,
+        )
+        event = to_transaction_event(
+            booked_transaction,
+            correlation_id=event.correlation_id,
+            traceparent=event.traceparent,
+        )
         event = enrich_fx_transaction_metadata(event)
-        event = enrich_dividend_transaction_metadata(event)
-        event = enrich_interest_transaction_metadata(event)
         if is_ca_bundle_a_transaction_type(event.transaction_type):
             assert_ca_bundle_a_transaction_valid(event)
         return event, _normalize_event_code(event.transaction_type), cost_basis_method
