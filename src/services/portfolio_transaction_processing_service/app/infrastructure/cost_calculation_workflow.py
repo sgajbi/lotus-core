@@ -2,11 +2,10 @@
 
 import logging
 from bisect import bisect_right
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from types import SimpleNamespace
 from typing import Any, List, cast
 
 from portfolio_common.config import (
@@ -19,7 +18,6 @@ from portfolio_common.events import InstrumentEvent, TransactionEvent, event_bus
 from portfolio_common.monitoring import (
     BUY_LIFECYCLE_STAGE_TOTAL,
     SELL_LIFECYCLE_STAGE_TOTAL,
-    observe_financial_reconciliation_run,
 )
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
@@ -32,20 +30,16 @@ from portfolio_common.transaction_fee_components import resolve_transaction_trad
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
 
 from ..application import (
-    CORPORATE_ACTION_RECONCILIATION_TYPE,
+    CorporateActionReconciliationCoordinator,
     CostBasisTimelineProcessor,
-    build_corporate_action_reconciliation_evidence,
     build_cost_basis_timeline_processor,
 )
 from ..domain.cost_basis import (
-    DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
     OpenLotState,
-    missing_corporate_action_dependencies,
-    reconcile_corporate_action_basis,
     transaction_order_key,
 )
 from ..domain.cost_basis import (
@@ -64,6 +58,7 @@ from ..domain.transaction.corporate_action import (
     is_bundle_a_corporate_action,
 )
 from ..ports import (
+    CorporateActionReconciliationObserver,
     CostBasisCalculationObserver,
 )
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
@@ -206,10 +201,19 @@ class CostCalculationWorkflow:
     """
 
     _cost_basis_observer: CostBasisCalculationObserver | None = None
+    _corporate_action_reconciliation_observer: CorporateActionReconciliationObserver | None = None
 
     def configure_cost_basis_observer(self, observer: CostBasisCalculationObserver) -> None:
         """Attach infrastructure observability without changing legacy delivery construction."""
         self._cost_basis_observer = observer
+
+    def configure_corporate_action_reconciliation_observer(
+        self,
+        observer: CorporateActionReconciliationObserver,
+    ) -> None:
+        """Attach corporate-action support telemetry at the infrastructure boundary."""
+
+        self._corporate_action_reconciliation_observer = observer
 
     def _get_cost_basis_timeline_processor(
         self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
@@ -1012,7 +1016,10 @@ class CostCalculationWorkflow:
         correlation_id: str,
     ) -> list[TransactionEvent]:
         emitted_events: list[TransactionEvent] = []
-        reconciled_bundle_groups: set[tuple[str, str]] = set()
+        corporate_action_reconciliation = CorporateActionReconciliationCoordinator(
+            repo,
+            observer=self._corporate_action_reconciliation_observer,
+        )
         for processed_event in events_to_publish:
             await self._validate_upstream_cash_leg(processed_event=processed_event, repo=repo)
             booked_transaction = to_booked_transaction(processed_event)
@@ -1036,10 +1043,8 @@ class CostCalculationWorkflow:
             if generated_cash_leg is not None:
                 emitted_events.append(generated_cash_leg)
 
-            await self._record_bundle_a_reconciliation_diagnostics(
-                processed_event=processed_event,
-                repo=repo,
-                reconciled_bundle_groups=reconciled_bundle_groups,
+            await corporate_action_reconciliation.reconcile(
+                to_booked_transaction(processed_event),
                 correlation_id=correlation_id,
             )
         return emitted_events
@@ -1097,177 +1102,6 @@ class CostCalculationWorkflow:
                 f"{processed_event.portfolio_id}."
             )
         return TransactionEvent.model_validate(cash_leg_db)
-
-    async def _record_bundle_a_reconciliation_diagnostics(
-        self,
-        *,
-        processed_event: TransactionEvent,
-        repo: CostCalculatorRepository,
-        reconciled_bundle_groups: set[tuple[str, str]],
-        correlation_id: str | None,
-    ) -> None:
-        group_key = self._bundle_a_reconciliation_key(processed_event)
-        if group_key is None:
-            return
-        if group_key in reconciled_bundle_groups:
-            return
-
-        linked_group, parent_ref = group_key
-        group_events = await self._load_bundle_a_group_events(
-            processed_event=processed_event,
-            repo=repo,
-            linked_group=linked_group,
-            parent_ref=parent_ref,
-        )
-        reconciliation = reconcile_corporate_action_basis(
-            (to_booked_transaction(event) for event in group_events),
-            basis_tolerance=DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
-        )
-        missing_dependencies = self._bundle_a_missing_dependencies(
-            processed_event=processed_event,
-            group_events=group_events,
-        )
-        self._log_bundle_a_reconciliation(
-            processed_event=processed_event,
-            linked_group=linked_group,
-            parent_ref=parent_ref,
-            reconciliation=reconciliation,
-            missing_dependencies=missing_dependencies,
-        )
-        evidence = build_corporate_action_reconciliation_evidence(
-            processed_transaction=to_booked_transaction(processed_event),
-            linked_transaction_group_id=linked_group,
-            parent_event_reference=parent_ref,
-            reconciliation=reconciliation,
-            missing_dependency_reference_ids=missing_dependencies,
-            correlation_id=correlation_id,
-            completed_at=datetime.now().astimezone(),
-        )
-        run = asdict(evidence.run)
-        findings = [asdict(finding) for finding in evidence.findings]
-        await repo.record_bundle_a_reconciliation_evidence(run=run, findings=findings)
-        self._observe_bundle_a_reconciliation(findings)
-        reconciled_bundle_groups.add(group_key)
-
-    @staticmethod
-    def _bundle_a_reconciliation_key(processed_event: TransactionEvent) -> tuple[str, str] | None:
-        if not is_bundle_a_corporate_action(processed_event.transaction_type):
-            return None
-        return CostCalculationWorkflow._complete_bundle_a_reconciliation_key(
-            linked_group=(processed_event.linked_transaction_group_id or "").strip(),
-            parent_ref=(processed_event.parent_event_reference or "").strip(),
-        )
-
-    @staticmethod
-    def _complete_bundle_a_reconciliation_key(
-        *,
-        linked_group: str,
-        parent_ref: str,
-    ) -> tuple[str, str] | None:
-        if linked_group and parent_ref:
-            return linked_group, parent_ref
-        return None
-
-    @staticmethod
-    async def _load_bundle_a_group_events(
-        *,
-        processed_event: TransactionEvent,
-        repo: CostCalculatorRepository,
-        linked_group: str,
-        parent_ref: str,
-    ) -> list[TransactionEvent]:
-        group_txns = await repo.get_bundle_a_group_transactions(
-            portfolio_id=processed_event.portfolio_id,
-            linked_transaction_group_id=linked_group,
-            parent_event_reference=parent_ref,
-        )
-        return [TransactionEvent.model_validate(transaction) for transaction in group_txns]
-
-    @staticmethod
-    def _bundle_a_missing_dependencies(
-        *,
-        processed_event: TransactionEvent,
-        group_events: list[TransactionEvent],
-    ) -> list[str]:
-        available_ids = {event.transaction_id for event in group_events}
-        return list(
-            missing_corporate_action_dependencies(
-                to_booked_transaction(processed_event),
-                available_ids,
-            )
-        )
-
-    @staticmethod
-    def _observe_bundle_a_reconciliation(findings: list[dict[str, object]]) -> None:
-        observe_financial_reconciliation_run(
-            CORPORATE_ACTION_RECONCILIATION_TYPE,
-            "COMPLETED",
-            0.0,
-            [SimpleNamespace(severity=finding["severity"]) for finding in findings],
-        )
-
-    @staticmethod
-    def _log_bundle_a_reconciliation(
-        *,
-        processed_event: TransactionEvent,
-        linked_group: str,
-        parent_ref: str,
-        reconciliation: Any,
-        missing_dependencies: list[str],
-    ) -> None:
-        logger.info(
-            "bundle_a_reconciliation_state",
-            extra={
-                "portfolio_id": processed_event.portfolio_id,
-                "transaction_id": processed_event.transaction_id,
-                "linked_transaction_group_id": linked_group,
-                "parent_event_reference": parent_ref,
-                "reconciliation_status": reconciliation.status,
-                "source_leg_count": reconciliation.source_leg_count,
-                "target_leg_count": reconciliation.target_leg_count,
-                "cash_consideration_count": reconciliation.cash_consideration_count,
-                "source_basis_out_local": str(reconciliation.source_basis_out_local),
-                "target_basis_in_local": str(reconciliation.target_basis_in_local),
-                "cash_basis_local": str(reconciliation.cash_basis_local),
-                "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-                "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
-                "basis_tolerance": str(reconciliation.basis_tolerance),
-                "missing_dependency_reference_ids": missing_dependencies,
-            },
-        )
-        if reconciliation.status == "basis_mismatch":
-            logger.warning(
-                "bundle_a_basis_mismatch_detected",
-                extra={
-                    "portfolio_id": processed_event.portfolio_id,
-                    "linked_transaction_group_id": linked_group,
-                    "parent_event_reference": parent_ref,
-                    "net_basis_delta_local": str(reconciliation.net_basis_delta_local),
-                    "basis_tolerance": str(reconciliation.basis_tolerance),
-                },
-            )
-        if reconciliation.status == "insufficient_cash_basis":
-            logger.warning(
-                "bundle_a_cash_basis_evidence_missing",
-                extra={
-                    "portfolio_id": processed_event.portfolio_id,
-                    "linked_transaction_group_id": linked_group,
-                    "parent_event_reference": parent_ref,
-                    "cash_consideration_count": reconciliation.cash_consideration_count,
-                    "missing_cash_basis_count": reconciliation.missing_cash_basis_count,
-                },
-            )
-        if missing_dependencies:
-            logger.warning(
-                "bundle_a_dependency_gap_detected",
-                extra={
-                    "portfolio_id": processed_event.portfolio_id,
-                    "transaction_id": processed_event.transaction_id,
-                    "linked_transaction_group_id": linked_group,
-                    "parent_event_reference": parent_ref,
-                    "missing_dependency_reference_ids": missing_dependencies,
-                },
-            )
 
     async def _publish_transaction_events(
         self,

@@ -36,6 +36,8 @@ async def test_cost_workflow_does_not_depend_on_retired_delivery_subclass() -> N
     workflow_source = inspect.getsource(CostCalculationWorkflow)
 
     assert "CostCalculatorConsumer" not in workflow_source
+    assert "record_bundle_a_reconciliation_evidence" not in workflow_source
+    assert "FinancialReconciliationRun" not in workflow_source
 
 
 class _StringCountedAmount:
@@ -819,12 +821,31 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
     )
 
 
-async def test_bundle_a_reconciliation_key_skips_non_bundle_a_events(
+async def test_emitted_corporate_action_group_uses_application_reconciliation_boundary(
     cost_calculation_workflow: CostCalculationWorkflow,
-    mock_buy_kafka_message: MagicMock,
 ):
-    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
-    event.linked_transaction_group_id = "LTG-NON-CA"
-    event.parent_event_reference = "PARENT-NON-CA"
+    source = _bundle_a_transaction_event(
+        transaction_id="CA-OUT-01",
+        transaction_type="DEMERGER_OUT",
+        net_cost_local="-100",
+    )
+    target = _bundle_a_transaction_event(
+        transaction_id="CA-IN-01",
+        transaction_type="DEMERGER_IN",
+        net_cost_local="100",
+    )
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.load_group.return_value = ()
+    observer = MagicMock()
+    cost_calculation_workflow.configure_corporate_action_reconciliation_observer(observer)
 
-    assert cost_calculation_workflow._bundle_a_reconciliation_key(event) is None
+    emitted = await cost_calculation_workflow._build_emitted_transaction_events(
+        events_to_publish=[source, target],
+        repo=repo,
+        correlation_id="corr-ca-01",
+    )
+
+    assert emitted == [source, target]
+    repo.load_group.assert_awaited_once()
+    repo.save_evidence.assert_awaited_once()
+    observer.observe.assert_called_once()
