@@ -75,4 +75,23 @@ This runbook summarizes the ingestion operations controls expected for productio
 - `GET /ingestion/audit/replays`
 - `GET /ingestion/audit/replays/{replay_id}`
 
-These endpoints are designed so operations teams can triage and recover ingestion without direct DB access.
+These endpoints are designed so operations teams can triage and recover ingestion without direct
+DB access.
+
+## Asynchronous transaction rejection diagnostics
+
+An HTTP acceptance response from a publish-backed transaction ingestion route confirms durable
+ingestion-job acceptance; it does not certify downstream cost, cashflow, or position processing.
+Terminal transaction-processing rejections are published to the consumer DLQ and exposed through
+the operations APIs above.
+
+When a domain/application error declares a bounded reason code, the DLQ message and persisted
+consumer-DLQ record preserve that code in `error_reason_code`. Fee-dominated settlement uses:
+
+- `SELL_010_NON_POSITIVE_NET_SETTLEMENT`
+- `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT`
+- `INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`
+
+These are non-retryable booking-economics failures. Correct the source fee/proceeds evidence before
+replay. Do not repeatedly replay the unchanged event, infer success from the original ingestion
+HTTP response, or inspect raw database rows when source-safe DLQ API evidence is available.

@@ -65,6 +65,10 @@ fee. Invalid zero or negative proceeds are rejected before writes with
 amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
 Do not repair or reconcile such a case by applying `abs()` to the amount.
 
+For DIVIDEND, this boundary currently uses booked gross amount as available proceeds. Complete
+withholding-tax, net-dividend, and return-of-capital settlement decomposition remains open under
+Core issue #448; this page does not claim that broader methodology is implemented.
+
 For an eligible booked transaction, the module:
 
 1. validates replay and idempotency posture

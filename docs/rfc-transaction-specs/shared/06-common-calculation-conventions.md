@@ -56,3 +56,8 @@ SELL, DIVIDEND, and INTEREST income settlement must remain strictly positive bef
 is applied. A zero or negative result is a hard rejection; absolute-value normalization must not
 turn it into an apparent inflow. Generated cash legs and persisted product cashflows must consume
 the same signed settlement result.
+
+The current ordinary DIVIDEND runtime treats booked `gross_transaction_amount` as available
+proceeds for this fee boundary. It does not claim that gross amount is the canonical final net
+dividend after withholding tax or return-of-capital decomposition; that separate migration remains
+tracked by GitHub issue #448.

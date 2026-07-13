@@ -1,7 +1,7 @@
 # CR-1561: Fee-Dominated Settlement Policy
 
 Date: 2026-07-14
-Issues: #752, contributes to #719 and #731
+Issues: #752, contributes to #719 and #731; follow-ups #448 and #754
 Status: Locally validated; full PR proof pending
 
 ## Objective
@@ -38,8 +38,8 @@ negative proceeds are non-retryable hard rejections with stable family codes.
 - Routed generated settlement legs and cashflow materialization through the signed policy result.
 - Rejected invalid ordinary settlement before opening the combined transaction-processing unit of
   work; direct adapter paths preserve the same application rejection.
-- Preserved bounded reason codes through terminal consumer handling without leaking exception or
-  payload detail.
+- Preserved bounded reason codes through terminal consumer handling without leaking raw payloads,
+  credentials, or infrastructure detail.
 - Added independent Decimal golden vectors plus pure domain, validator, adapter, consumer,
   persistence, replay, rollback, idempotency-recovery, and generated-leg reconciliation tests.
 - Kept the regression in the governed SELL, DIVIDEND, INTEREST, and complete transaction-processing
@@ -56,13 +56,18 @@ shape changed.
 ## Same-Pattern Audit
 
 - BUY and FEE use additive outflow fees and do not subtract fees from proceeds.
-- FX uses independently positive buy/sell cash legs plus explicit leg roles.
+- FX has two currencies and no governed fee-currency/leg ownership; #754 owns that decision. This
+  slice preserves existing zero-fee FX behavior without claiming the same policy applies.
 - ADJUSTMENT uses positive magnitude plus explicit movement direction; its normalization is a
   representation rule, not repair of invalid net proceeds.
 - Corporate-action cash already rejects fee above gross; its explicit zero boundary remains a
   separate family policy.
 
 No behavior was broadened for those families in this slice.
+
+The current DIVIDEND path uses booked gross amount as available proceeds, while the canonical RFC
+requires net-dividend settlement after withholding and other deductions. #448 owns that existing
+methodology/runtime gap; this slice preserves valid-input behavior and does not claim its closure.
 
 ## Validation
 
@@ -77,7 +82,8 @@ No behavior was broadened for those families in this slice.
 
 ## Documentation Decision
 
-Transaction RFCs, repository context, and the existing transaction/cashflow wiki pages change
-because calculation and runtime rejection truth changed. README, OpenAPI, API inventory, database
-catalog, migrations, image metadata, runtime topology, central platform context, AGENTS guidance,
-and platform skills do not change because their owned contracts and reusable workflow did not.
+Transaction RFCs, ingestion API diagnostics, repository context, and the existing
+transaction/cashflow wiki pages change because calculation, runtime rejection, and support truth
+changed. README, OpenAPI schema, API inventory, database catalog, migrations, image metadata,
+runtime topology, central platform context, AGENTS guidance, and platform skills do not change
+because their owned contracts and reusable workflow did not.
