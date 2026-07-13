@@ -22,12 +22,15 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
+    calculate_next_position_state,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
     CostCalculationWorkflow,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
-    PositionCalculationWorkflow,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.legacy_transaction_event_mapper import (  # noqa: E501
+    to_booked_transaction,
 )
 from src.services.query_service.app.dtos.transaction_dto import TransactionRecord
 
@@ -127,7 +130,7 @@ def test_interest_position_calculation_preserves_quantity_and_cost_basis() -> No
         currency="USD",
     )
 
-    next_state = PositionCalculationWorkflow.calculate_next_position(state, event)
+    next_state = calculate_next_position_state(state, to_booked_transaction(event))
     assert next_state.quantity == Decimal("10")
     assert next_state.cost_basis == Decimal("1000")
     assert next_state.cost_basis_local == Decimal("1000")

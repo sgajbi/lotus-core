@@ -13,11 +13,14 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
+    calculate_next_position_state,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
-    PositionCalculationWorkflow,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.legacy_transaction_event_mapper import (  # noqa: E501
+    to_booked_transaction,
 )
 
 
@@ -81,7 +84,7 @@ def test_position_bundle_semantics(
         net_cost_local=net_cost,
     )
 
-    next_state = PositionCalculationWorkflow.calculate_next_position(initial_state, txn)
+    next_state = calculate_next_position_state(initial_state, to_booked_transaction(txn))
 
     assert next_state.quantity == expected_qty
     assert next_state.cost_basis == expected_cost
