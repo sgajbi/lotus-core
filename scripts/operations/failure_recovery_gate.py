@@ -116,6 +116,7 @@ class RecoveryPollingEvidence:
     poll_count: int
     last_observed_at: str
     fields: tuple[RecoveryFieldEvidence, ...]
+    terminal_reason: str | None
 
 
 def _utc_now() -> datetime:
@@ -182,6 +183,7 @@ def _evaluate_recovery_result(
     max_recovery_seconds: int,
     counts: TransactionProcessingCounts,
     dlq_events_added_during_recovery: int,
+    recovery_terminal_reason: str | None = None,
 ) -> tuple[RecoveryMode, list[str]]:
     failed_checks: list[str] = []
     if consumer_lag_growth < records_submitted:
@@ -229,6 +231,8 @@ def _evaluate_recovery_result(
         failed_checks.append(
             f"failure recovery added {dlq_events_added_during_recovery} DLQ events"
         )
+    if recovery_terminal_reason:
+        failed_checks.append(f"recovery polling stopped early: {recovery_terminal_reason}")
     if failed_checks:
         return RecoveryMode.FAILED_RECOVERY, failed_checks
     return RecoveryMode.FULLY_DRAINED, failed_checks
@@ -365,6 +369,7 @@ def _wait_for_full_recovery(
     transaction_id_prefix: str,
     expected_records: int,
     timeout_seconds: int,
+    terminal_condition: Callable[[], str | None] | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleeper: Callable[[float], None] = time.sleep,
     utc_now: Callable[[], datetime] = _utc_now,
@@ -427,11 +432,26 @@ def _wait_for_full_recovery(
             )
             for field, expected, comparison in field_targets
         )
+        terminal_reason = next(
+            (
+                f"{field.field} exceeded exact target: "
+                f"actual={field.actual} expected={field.expected}"
+                for field in fields
+                if field.comparison == RecoveryComparison.EQUALS.value
+                and field.actual > field.expected
+            ),
+            None,
+        )
+        if terminal_reason is None and terminal_condition is not None:
+            terminal_reason = terminal_condition()
         evidence = RecoveryPollingEvidence(
             poll_count=poll_count,
             last_observed_at=observed_at,
             fields=fields,
+            terminal_reason=terminal_reason,
         )
+        if terminal_reason is not None:
+            return None, counts, consumer_lag, evidence
         if all(field.satisfied for field in fields):
             return round(clock() - started, 3), counts, consumer_lag, evidence
         if clock() >= deadline:
@@ -482,6 +502,7 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
         f"| processing_claim_count | {result.processing_claim_count} |",
         f"| dlq_events_added_during_recovery | {result.dlq_events_added_during_recovery} |",
         f"| recovery_poll_count | {result.recovery_polling.poll_count} |",
+        f"| recovery_terminal_reason | {result.recovery_polling.terminal_reason or ''} |",
     ]
     lines.extend(
         [
@@ -652,6 +673,7 @@ def main() -> int:
             event_replay_base_url=event_replay_base_url,
             ops_token=args.ops_token,
         )
+        baseline_dlq = int(baseline_health.get("dlq_events_in_window", 0))
         baseline_consumer_lag = _consumer_lag(
             store=offset_store,
             consumer_group=args.consumer_group,
@@ -716,6 +738,16 @@ def main() -> int:
             )
         actual_interruption_seconds = round(time.time() - interruption_started, 3)
 
+        def dlq_terminal_condition() -> str | None:
+            health = _get_health_snapshot(
+                event_replay_base_url=event_replay_base_url,
+                ops_token=args.ops_token,
+            )
+            current_dlq = int(health.get("dlq_events_in_window", 0))
+            if current_dlq <= baseline_dlq:
+                return None
+            return f"DLQ events increased: baseline={baseline_dlq} current={current_dlq}"
+
         recovery_seconds, counts, lag_after_recovery, recovery_polling = _wait_for_full_recovery(
             store=offset_store,
             engine=engine,
@@ -726,12 +758,12 @@ def main() -> int:
             transaction_id_prefix=transaction_id_prefix,
             expected_records=records_submitted,
             timeout_seconds=args.recovery_timeout_seconds,
+            terminal_condition=dlq_terminal_condition,
         )
         recovery_health = _get_health_snapshot(
             event_replay_base_url=event_replay_base_url,
             ops_token=args.ops_token,
         )
-        baseline_dlq = int(baseline_health.get("dlq_events_in_window", 0))
         recovery_dlq = int(recovery_health.get("dlq_events_in_window", 0))
         dlq_events_added = max(recovery_dlq - baseline_dlq, 0)
         replay_consumer_lag_after_recovery = _consumer_lag(
@@ -751,6 +783,7 @@ def main() -> int:
             max_recovery_seconds=args.max_recovery_seconds,
             counts=counts,
             dlq_events_added_during_recovery=dlq_events_added,
+            recovery_terminal_reason=recovery_polling.terminal_reason,
         )
 
         ended_at = datetime.now(UTC)
