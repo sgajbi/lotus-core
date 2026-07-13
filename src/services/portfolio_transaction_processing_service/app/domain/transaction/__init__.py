@@ -1,6 +1,18 @@
 """Canonical booked transactions and deterministic transaction identity."""
 
 from .booked import BookedTransaction
+from .booking_metadata import (
+    BUY_DEFAULT_POLICY_ID,
+    BUY_DEFAULT_POLICY_VERSION,
+    DIVIDEND_DEFAULT_POLICY_ID,
+    DIVIDEND_DEFAULT_POLICY_VERSION,
+    INTEREST_DEFAULT_POLICY_ID,
+    INTEREST_DEFAULT_POLICY_VERSION,
+    SELL_AVCO_POLICY_ID,
+    SELL_DEFAULT_POLICY_VERSION,
+    SELL_FIFO_POLICY_ID,
+    enrich_booking_metadata,
+)
 from .semantic_identity import (
     TRANSACTION_CORRECTION_IDENTITY_VERSION,
     TRANSACTION_SEMANTIC_IDENTITY_VERSION,
@@ -26,9 +38,18 @@ from .settlement import (
 
 __all__ = [
     "ADJUSTMENT_TRANSACTION_TYPE",
+    "BUY_DEFAULT_POLICY_ID",
+    "BUY_DEFAULT_POLICY_VERSION",
     "BookedTransaction",
     "CashEntryMode",
+    "DIVIDEND_DEFAULT_POLICY_ID",
+    "DIVIDEND_DEFAULT_POLICY_VERSION",
     "GeneratedCashLegError",
+    "INTEREST_DEFAULT_POLICY_ID",
+    "INTEREST_DEFAULT_POLICY_VERSION",
+    "SELL_AVCO_POLICY_ID",
+    "SELL_DEFAULT_POLICY_VERSION",
+    "SELL_FIFO_POLICY_ID",
     "TRANSACTION_CORRECTION_IDENTITY_VERSION",
     "TRANSACTION_SEMANTIC_IDENTITY_VERSION",
     "TransactionSemanticIdentity",
@@ -37,6 +58,7 @@ __all__ = [
     "assert_cash_entry_mode_supported",
     "assert_upstream_cash_leg_pairing",
     "build_generated_settlement_cash_leg",
+    "enrich_booking_metadata",
     "build_transaction_correction_identity",
     "build_transaction_semantic_identity",
     "is_portfolio_level_cash_flow",
