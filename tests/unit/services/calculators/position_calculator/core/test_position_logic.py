@@ -1,7 +1,6 @@
 # tests/unit/services/calculators/position_calculator/core/test_position_logic.py
 from datetime import date, datetime
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +9,7 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 from portfolio_common.position_state_repository import PositionStateRepository
 
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState as PositionStateDTO,
 )
@@ -25,16 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.po
 )
 
 # The module-level pytestmark is removed to apply the asyncio mark selectively.
-
-
-class _StringCountedAmount:
-    def __init__(self, value: str) -> None:
-        self.value = value
-        self.string_call_count = 0
-
-    def __str__(self) -> str:
-        self.string_call_count += 1
-        return self.value
 
 
 @pytest.fixture
@@ -951,15 +941,21 @@ def test_cash_portfolio_flows_fall_back_to_quantity_when_gross_amount_is_zero(
     assert next_state.cost_basis_local == expected_cost
 
 
-def test_cash_position_deltas_normalize_booked_costs_once() -> None:
-    net_cost = _StringCountedAmount("30")
-    net_cost_local = _StringCountedAmount("30")
-    transaction = SimpleNamespace(
-        gross_transaction_amount="0",
-        quantity="25",
-        net_cost=net_cost,
-        net_cost_local=net_cost_local,
-        movement_direction=None,
+def test_cash_position_deltas_use_canonical_booked_amounts() -> None:
+    transaction = BookedTransaction(
+        transaction_id="DEPOSIT_BOOKED_AMOUNTS_01",
+        portfolio_id="P1",
+        instrument_id="CASH-USD",
+        security_id="CASH-USD",
+        transaction_date=datetime(2026, 4, 10),
+        transaction_type="DEPOSIT",
+        quantity=Decimal("25"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        currency="USD",
+        net_cost=Decimal("30"),
+        net_cost_local=Decimal("30"),
     )
 
     quantity_delta, cost_basis_delta, cost_basis_local_delta = cash_position_deltas(
@@ -969,8 +965,6 @@ def test_cash_position_deltas_normalize_booked_costs_once() -> None:
     assert quantity_delta == Decimal("25")
     assert cost_basis_delta == Decimal("30")
     assert cost_basis_local_delta == Decimal("30")
-    assert net_cost.string_call_count == 1
-    assert net_cost_local.string_call_count == 1
 
 
 def test_foreign_currency_cash_flow_uses_booked_base_and_local_costs() -> None:
