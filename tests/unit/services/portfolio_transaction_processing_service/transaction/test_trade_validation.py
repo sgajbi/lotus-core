@@ -91,7 +91,12 @@ def test_trade_validation_reports_every_reason_code(
             BuyValidationReasonCode.INVALID_DATE_ORDER
             if transaction_type == "BUY"
             else SellValidationReasonCode.INVALID_DATE_ORDER
-        )
+        ),
+        *(
+            {SellValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT}
+            if transaction_type == "SELL"
+            else set()
+        ),
     }
 
 
@@ -113,3 +118,15 @@ def test_trade_validation_rejects_trade_after_settlement(
     )
 
     assert reason_code in {issue.code for issue in validator(transaction)}
+
+
+@pytest.mark.parametrize("fee", [Decimal("1000"), Decimal("1000.01")])
+def test_sell_validation_rejects_non_positive_net_settlement(fee: Decimal) -> None:
+    issues = validate_sell_transaction(replace(_trade("SELL"), trade_fee=fee))
+
+    settlement_issue = next(
+        issue
+        for issue in issues
+        if issue.code is SellValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT
+    )
+    assert settlement_issue.field == "trade_fee"

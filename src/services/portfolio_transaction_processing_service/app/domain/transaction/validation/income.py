@@ -12,7 +12,9 @@ from portfolio_common.domain.transaction_control_codes import (
 from ..booked import BookedTransaction
 from ..settlement import (
     CashEntryMode,
+    SettlementCashValidationError,
     calculate_interest_settlement_economics,
+    calculate_settlement_cash_movement,
     is_upstream_provided_cash_entry_mode,
     resolve_cash_entry_mode,
 )
@@ -39,6 +41,7 @@ class IncomeValidationPolicy:
     missing_policy_code: IncomeValidationReasonCode
     missing_external_cash_link_code: IncomeValidationReasonCode
     missing_settlement_cash_account_code: IncomeValidationReasonCode
+    non_positive_net_settlement_code: IncomeValidationReasonCode
 
 
 def validate_dividend_transaction(
@@ -56,6 +59,7 @@ def validate_dividend_transaction(
         strict_metadata=strict_metadata,
     )
     _validate_income_cash_entry(issues, transaction, _DIVIDEND_VALIDATION_POLICY)
+    _validate_income_settlement(issues, transaction, _DIVIDEND_VALIDATION_POLICY)
     return issues
 
 
@@ -76,6 +80,7 @@ def validate_interest_transaction(
         strict_metadata=strict_metadata,
     )
     _validate_income_cash_entry(issues, transaction, _INTEREST_VALIDATION_POLICY)
+    _validate_income_settlement(issues, transaction, _INTEREST_VALIDATION_POLICY)
     return issues
 
 
@@ -286,6 +291,25 @@ def _validate_income_cash_entry(
         )
 
 
+def _validate_income_settlement(
+    issues: list[TransactionValidationIssue],
+    transaction: BookedTransaction,
+    policy: IncomeValidationPolicy,
+) -> None:
+    if normalize_transaction_control_code(transaction.transaction_type) != policy.transaction_type:
+        return
+    try:
+        calculate_settlement_cash_movement(transaction)
+    except SettlementCashValidationError as exc:
+        issues.append(
+            TransactionValidationIssue(
+                code=policy.non_positive_net_settlement_code,
+                field=exc.field,
+                message=exc.message,
+            )
+        )
+
+
 _DIVIDEND_VALIDATION_POLICY = IncomeValidationPolicy(
     transaction_type="DIVIDEND",
     invalid_type_code=DividendValidationReasonCode.INVALID_TRANSACTION_TYPE,
@@ -302,6 +326,7 @@ _DIVIDEND_VALIDATION_POLICY = IncomeValidationPolicy(
     missing_settlement_cash_account_code=(
         DividendValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
     ),
+    non_positive_net_settlement_code=(DividendValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT),
 )
 
 _INTEREST_VALIDATION_POLICY = IncomeValidationPolicy(
@@ -320,4 +345,5 @@ _INTEREST_VALIDATION_POLICY = IncomeValidationPolicy(
     missing_settlement_cash_account_code=(
         InterestValidationReasonCode.MISSING_SETTLEMENT_CASH_ACCOUNT
     ),
+    non_positive_net_settlement_code=(InterestValidationReasonCode.NON_POSITIVE_NET_SETTLEMENT),
 )
