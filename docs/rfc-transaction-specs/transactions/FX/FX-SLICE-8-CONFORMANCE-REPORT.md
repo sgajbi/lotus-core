@@ -21,7 +21,7 @@ Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's sta
 ## Requirement-to-Evidence Closure
 | RFC-FX-01 Area | Evidence |
 | --- | --- |
-| Canonical FX business types | `src/libs/portfolio-common/portfolio_common/transaction_type_registry.py`; `tests/unit/transaction_specs/test_fx_slice0_characterization.py` |
+| Canonical FX business types | `src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py`; `tests/unit/transaction_specs/test_fx_slice0_characterization.py` |
 | Canonical validation and reason codes | `src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/models.py`; `src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/validation.py`; `src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/reason_codes.py`; `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py` |
 | Deterministic linkage and enrichment | `src/services/portfolio_transaction_processing_service/app/domain/transaction/fx/linkage.py`; `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_linkage.py` |
 | Cash settlement semantics | `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`; `tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py`; `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py` |

@@ -437,7 +437,7 @@ Current repository posture:
     tests, app-local compose mounts, and installed wheel/container runtime. `make architecture-guard`
     enforces this to prevent CI-only Docker readiness failures caused by packaging path drift.
 43. Canonical transaction-type classification now starts in
-    `portfolio_common.transaction_type_registry`. New or changed transaction types in cost,
+    `portfolio_common.domain.transaction.type_registry`. New or changed transaction types in cost,
     cashflow, position, query, validation, or RFC target work must be classified there first.
     `OTHER` is migration-only and not production-booking allowed. Redemption and
     conversion/exercise target types are known but not implemented until dedicated runtime slices
@@ -2369,7 +2369,7 @@ Most relevant current governance:
      ownership buckets. Transaction-processing capability generation and validation live under
      `scripts/transaction_processing/`. Keep implementation filenames action-oriented and avoid
      repeating the full parent-domain name in every file.
-178. `portfolio_common.transaction_type_registry` is the sole transaction-code vocabulary owner.
+178. `portfolio_common.domain.transaction.type_registry` is the sole transaction-code vocabulary owner.
      Do not add service-local transaction enums or repeat generic registry projections. Strategy
      maps may bind canonical string codes to owned behavior; reusable classification selectors
      belong beside the registry. Local sets are acceptable only for explicit domain policy such as
@@ -2390,6 +2390,14 @@ Most relevant current governance:
      service-owned FX policy through a shared compatibility facade. FX canonical values are
      immutable and framework-independent; do not reintroduce Pydantic, event-envelope, ORM, or
      transport models into the domain package.
+181. Framework-independent transaction vocabulary and policies shared by multiple Core boundaries
+     belong under `portfolio_common.domain.transaction`, with tests mirroring that package path.
+     Do not add new transaction modules to the `portfolio_common` root. Migration re-exports must
+     be bounded to one active sequence, explicitly named transitional, and deleted with retired-path
+     guards once consumers move. Keep calculation policy owned by one service, such as cost basis,
+     position, cashflow, settlement, FX P&L, or corporate-action reconciliation, in that service's
+     domain package; shared placement requires demonstrated cross-boundary ownership rather than
+     convenience.
 
 ## Context Maintenance Rule
 
