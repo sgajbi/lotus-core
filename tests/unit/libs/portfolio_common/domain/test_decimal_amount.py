@@ -1,7 +1,13 @@
+"""Verify shared decimal amount conversion semantics."""
+
 from decimal import Decimal
 
 import pytest
-from portfolio_common.decimal_amounts import decimal_or_none, decimal_or_zero, required_decimal
+from portfolio_common.domain.decimal_amount import (
+    decimal_or_none,
+    decimal_or_zero,
+    required_decimal,
+)
 
 
 class _StringCountedAmount:
