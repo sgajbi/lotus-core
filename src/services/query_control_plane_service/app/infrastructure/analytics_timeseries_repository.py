@@ -7,7 +7,6 @@ from decimal import Decimal
 from typing import Any, cast
 
 from portfolio_common.config import DEFAULT_BUSINESS_CALENDAR_CODE
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     BusinessDate,
     Cashflow,
@@ -20,6 +19,7 @@ from portfolio_common.database_models import (
     PositionTimeseries,
 )
 from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
