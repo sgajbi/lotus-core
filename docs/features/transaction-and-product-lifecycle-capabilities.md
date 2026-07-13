@@ -112,7 +112,7 @@ remain unimplemented product lifecycles.
 When transaction registry truth changes:
 
 1. update implementation and focused tests,
-2. run `python scripts/generators/generate_transaction_capability_catalog.py`,
+2. run `python scripts/transaction_processing/generate_capability_catalog.py`,
 3. update product-lifecycle rows and gap issue ownership,
 4. update this page and `wiki/Transaction-and-Product-Lifecycle-Capabilities.md`,
 5. run `make transaction-capability-catalog-guard`,
