@@ -111,8 +111,8 @@ Representative topology from the current codebase:
  - consume orchestration events and publish completion facts
 
 Authoritative sources for the current topology:
- - [tools/kafka_setup.py](C:\Users\Sandeep\projects\lotus-core\tools\kafka_setup.py)
- - [config.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\config.py)
+ - `tools/kafka_setup.py`
+ - `src/libs/portfolio-common/portfolio_common/config.py`
  - service `consumer_manager.py` files under `src/services/**`
 
 ## 7. Current Topic Inventory and Observed Problems
