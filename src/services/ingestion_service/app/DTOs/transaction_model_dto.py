@@ -4,13 +4,13 @@ from decimal import Decimal
 from typing import Annotated, Optional, cast
 
 from portfolio_common.domain.currency import normalize_optional_currency_code
+from portfolio_common.domain.transaction.fee_components import (
+    TRANSACTION_FEE_COMPONENT_FIELDS,
+    resolve_transaction_trade_fee,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
-)
-from portfolio_common.transaction_fee_components import (
-    TRANSACTION_FEE_COMPONENT_FIELDS,
-    resolve_transaction_trade_fee,
 )
 from pydantic import BaseModel, Field, field_validator, model_validator
 
