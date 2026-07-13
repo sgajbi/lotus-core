@@ -16,6 +16,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowCalculationContext,
+)
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,
     CostProcessingResult,
@@ -130,9 +133,11 @@ class _Cashflow:
     def __init__(self, calls: list[str], *, error: Exception | None = None) -> None:
         self.calls = calls
         self.error = error
+        self.calculation_contexts: list[CashflowCalculationContext | None] = []
 
-    async def process(self, transaction: BookedTransaction, **_kwargs) -> CashflowProcessingResult:
+    async def process(self, transaction: BookedTransaction, **kwargs) -> CashflowProcessingResult:
         self.calls.append(f"cashflow:{transaction.transaction_id}:{transaction.epoch or 0}")
+        self.calculation_contexts.append(kwargs.get("calculation_context"))
         if self.error is not None:
             raise self.error
         return CashflowProcessingResult(cashflow_record_count=1)
@@ -326,6 +331,10 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
     assert result.processed_transaction_ids == ("TX-BACKDATED",)
     assert result.cashflow_record_count == 2
     assert result.position_record_count == 1
+    assert unit_of_work.cashflow.calculation_contexts == [
+        CashflowCalculationContext.HISTORICAL_REBUILD,
+        CashflowCalculationContext.HISTORICAL_REBUILD,
+    ]
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from ..domain import (
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
+from ..domain.cashflow import CashflowCalculationContext
 from ..domain.transaction import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashValidationError,
@@ -202,6 +203,14 @@ class ProcessTransactionUseCase:
                         traceparent=metadata.traceparent,
                     )
             cashflow_results = []
+            rebuilt_cashflow_keys = {
+                (
+                    rebuilt_transaction.portfolio_id,
+                    rebuilt_transaction.transaction_id,
+                    rebuilt_transaction.epoch or 0,
+                )
+                for rebuilt_transaction in rebuilt_transactions
+            }
             for cashflow_transaction in _cashflow_stage_transactions(
                 cost_result.processed_transactions,
                 position_results,
@@ -215,6 +224,16 @@ class ProcessTransactionUseCase:
                             traceparent=metadata.traceparent,
                             repair_existing=(
                                 metadata.processing_intent is TransactionProcessingIntent.REPAIR
+                            ),
+                            calculation_context=(
+                                CashflowCalculationContext.HISTORICAL_REBUILD
+                                if (
+                                    cashflow_transaction.portfolio_id,
+                                    cashflow_transaction.transaction_id,
+                                    cashflow_transaction.epoch or 0,
+                                )
+                                in rebuilt_cashflow_keys
+                                else CashflowCalculationContext.CURRENT_BOOKING
                             ),
                         )
                     )

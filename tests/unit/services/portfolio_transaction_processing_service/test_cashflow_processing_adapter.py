@@ -14,6 +14,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingRejected,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CashflowCalculationContext,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
@@ -72,6 +75,7 @@ async def test_cashflow_adapter_preserves_source_event_and_returns_record_count(
         event_id="transactions.persisted-0-42",
         correlation_id="corr-001",
         traceparent="trace-001",
+        calculation_context=CashflowCalculationContext.HISTORICAL_REBUILD,
     )
 
     assert result.cashflow_record_count == 1
@@ -80,6 +84,7 @@ async def test_cashflow_adapter_preserves_source_event_and_returns_record_count(
     assert stage_call["event"].correlation_id == "corr-001"
     assert stage_call["event"].traceparent == "trace-001"
     assert stage_call["booked_transaction"] is transaction
+    assert stage_call["calculation_context"] is CashflowCalculationContext.HISTORICAL_REBUILD
 
 
 @pytest.mark.asyncio

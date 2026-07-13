@@ -14,6 +14,7 @@ from ..application import (
     build_settlement_cash_rejection,
 )
 from ..domain import BookedTransaction
+from ..domain.cashflow import CashflowCalculationContext
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import CashflowProcessingResult
 from .cashflow_repository import SqlAlchemyCashflowRepository
@@ -40,6 +41,9 @@ class CashflowStagingWorkflow(Protocol):
         topic: str,
         repair_existing: bool = False,
         booked_transaction: BookedTransaction | None = None,
+        calculation_context: CashflowCalculationContext = (
+            CashflowCalculationContext.CURRENT_BOOKING
+        ),
     ) -> CashflowStageResult: ...
 
 
@@ -71,6 +75,9 @@ class CashflowProcessingCompatibilityAdapter:
         correlation_id: str | None,
         traceparent: str | None,
         repair_existing: bool = False,
+        calculation_context: CashflowCalculationContext = (
+            CashflowCalculationContext.CURRENT_BOOKING
+        ),
     ) -> CashflowProcessingResult:
         try:
             stage_result = await self._workflow.stage_valid_event(
@@ -88,6 +95,7 @@ class CashflowProcessingCompatibilityAdapter:
                 topic=self._source_topic,
                 repair_existing=repair_existing,
                 booked_transaction=transaction,
+                calculation_context=calculation_context,
             )
         except NoCashflowRuleError as exc:
             raise TransactionProcessingError(

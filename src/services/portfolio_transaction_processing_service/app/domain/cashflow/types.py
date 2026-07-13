@@ -18,6 +18,13 @@ class CashflowCalculationType(str, Enum):
     MVT = "MVT"  # Market Value Transaction
 
 
+class CashflowCalculationContext(str, Enum):
+    """Identify whether cashflow economics are current input or historical restatement."""
+
+    CURRENT_BOOKING = "CURRENT_BOOKING"
+    HISTORICAL_REBUILD = "HISTORICAL_REBUILD"
+
+
 class CashflowClassification(str, Enum):
     """Standardized classification of the cashflow's purpose."""
 

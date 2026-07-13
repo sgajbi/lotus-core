@@ -15,9 +15,14 @@ from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 from ..transaction.booked import BookedTransaction
 from ..transaction.settlement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    calculate_interest_settlement_economics,
     calculate_settlement_cash_movement,
 )
-from .types import CashflowCalculationType, CashflowClassification
+from .types import (
+    CashflowCalculationContext,
+    CashflowCalculationType,
+    CashflowClassification,
+)
 
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})
 _TRANSFER_INFLOW_CASH_EFFECT_TYPES = frozenset({"RIGHTS_REFUND"})
@@ -113,10 +118,16 @@ def calculate_transaction_cashflow(
     rule: CashflowRule,
     *,
     epoch: int | None = 0,
+    calculation_context: CashflowCalculationContext = (CashflowCalculationContext.CURRENT_BOOKING),
 ) -> CalculatedCashflow:
     """Apply the governed cashflow rule to one framework-neutral booked transaction."""
     transaction_type = _normalize_code(transaction.transaction_type)
-    economics = _resolve_cashflow_economics(transaction, rule, transaction_type)
+    economics = _resolve_cashflow_economics(
+        transaction,
+        rule,
+        transaction_type,
+        calculation_context,
+    )
     level = _resolve_cashflow_level(transaction, rule)
     return CalculatedCashflow(
         transaction_id=transaction.transaction_id,
@@ -188,11 +199,16 @@ def _resolve_cashflow_economics(
     transaction: BookedTransaction,
     rule: CashflowRule,
     transaction_type: str,
+    calculation_context: CashflowCalculationContext,
 ) -> _CashflowEconomics:
     if transaction.has_synthetic_flow:
         return _synthetic_transfer_economics(transaction, rule)
     if transaction_type in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
-        amount = calculate_settlement_cash_movement(transaction).signed_amount
+        amount = (
+            _historical_rebuild_cashflow_amount(transaction, rule, transaction_type)
+            if calculation_context is CashflowCalculationContext.HISTORICAL_REBUILD
+            else calculate_settlement_cash_movement(transaction).signed_amount
+        )
     else:
         amount = _signed_cashflow_amount(
             transaction,
@@ -204,6 +220,26 @@ def _resolve_cashflow_economics(
         amount=amount,
         currency=transaction.currency,
         calculation_type=CashflowCalculationType.NET.value,
+    )
+
+
+def _historical_rebuild_cashflow_amount(
+    transaction: BookedTransaction,
+    rule: CashflowRule,
+    transaction_type: str,
+) -> Decimal:
+    """Reproduce pre-policy signing for already accepted history during restatement."""
+    if transaction_type == "INTEREST":
+        amount: Decimal = calculate_interest_settlement_economics(
+            transaction
+        ).settlement_cash_amount
+        direction = _normalize_code(transaction.interest_direction, default="INCOME")
+        return -abs(amount) if direction == "EXPENSE" else abs(amount)
+    return _signed_cashflow_amount(
+        transaction,
+        rule,
+        transaction_type,
+        _base_cashflow_amount(transaction, transaction_type),
     )
 
 
