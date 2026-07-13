@@ -102,14 +102,15 @@ class PositionRecalculationStateStore(Protocol):
     ) -> bool: ...
 
 
-class PositionEpochFence(Protocol):
-    """Reject stale position commands before materialization begins."""
-
-    async def is_current(self, transaction: BookedTransaction) -> bool: ...
-
-
 class PositionHistoryObserver(Protocol):
     """Observe position recalculation without coupling application policy to telemetry."""
+
+    def stale_epoch_discarded(
+        self,
+        *,
+        transaction: BookedTransaction,
+        current_epoch: int,
+    ) -> None: ...
 
     def backdated_recalculation_detected(
         self,

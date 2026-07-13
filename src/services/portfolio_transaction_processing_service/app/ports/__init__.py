@@ -6,7 +6,6 @@ from .cost_basis_observability import (
     CostBasisCalculationObserver,
 )
 from .position_history import (
-    PositionEpochFence,
     PositionHistoryObserver,
     PositionHistoryRepository,
     PositionRecalculationReason,
@@ -44,7 +43,6 @@ __all__ = [
     "CostProcessingPort",
     "CostProcessingResult",
     "PipelineStageProcessingPort",
-    "PositionEpochFence",
     "PositionHistoryObserver",
     "PositionHistoryRepository",
     "PositionProcessingPort",
