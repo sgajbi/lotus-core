@@ -8,8 +8,9 @@ from typing import Any, Protocol
 from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
-from ..application import TransactionProcessingError
+from ..application import TransactionProcessingError, build_settlement_cash_rejection
 from ..domain import BookedTransaction
+from ..domain.transaction import SettlementCashValidationError
 from ..ports import CostProcessingResult
 from .cost_calculation_workflow import (
     FxRateNotFoundError,
@@ -170,6 +171,8 @@ class CostProcessingCompatibilityAdapter:
                 event=event,
                 correlation_id=correlation_id or "",
             )
+        except SettlementCashValidationError as exc:
+            raise build_settlement_cash_rejection(transaction, exc) from exc
         except (
             FxRateNotFoundError,
             InstrumentReferenceUnavailableError,

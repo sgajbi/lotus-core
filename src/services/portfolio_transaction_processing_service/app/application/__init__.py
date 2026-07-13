@@ -26,6 +26,7 @@ from .replay_booked_transaction import (
     ReplayBookedTransactionUseCase,
 )
 from .results import ProcessTransactionResult, TransactionProcessingStatus
+from .settlement_cash_rejection import build_settlement_cash_rejection
 
 __all__ = [
     "BookedTransactionReplayDependencyUnavailable",
@@ -46,6 +47,7 @@ __all__ = [
     "TransactionProcessingIntent",
     "CostBasisTimelineProcessor",
     "build_cost_basis_timeline_processor",
+    "build_settlement_cash_rejection",
     "TransactionProcessingError",
     "TransactionProcessingRejected",
     "TransactionProcessingStatus",
