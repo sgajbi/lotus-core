@@ -32,12 +32,12 @@ from portfolio_common.transaction_domain import (
 from ..domain import BookedTransaction
 from ..domain.cashflow import StoredCashflow
 from .cashflow_calculation import calculate_booked_transaction_cashflow
-from .legacy_transaction_event_mapper import to_booked_transaction
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_rules_repository import (
     CashflowRuleSetVersion,
     SqlAlchemyCashflowRulesRepository,
 )
+from .legacy_transaction_event_mapper import to_booked_transaction
 
 logger = logging.getLogger(__name__)
 
