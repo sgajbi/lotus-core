@@ -1,8 +1,10 @@
+"""Verify shared financial amount value-object behavior."""
+
 from datetime import date
 from decimal import Decimal
 
 import pytest
-from portfolio_common.domain_value_objects import (
+from portfolio_common.domain.financial.amounts import (
     CurrencyCode,
     FxRate,
     MoneyAmount,
