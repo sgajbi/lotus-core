@@ -91,7 +91,8 @@
         "docs/architecture/codebase-reviews/CR-1514-COST-STAGING-INFRASTRUCTURE-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1523-CASHFLOW-TARGET-OWNERSHIP.md",
         "docs/architecture/codebase-reviews/CR-1524-COST-RUNTIME-SOURCE-OWNERSHIP.md",
-        "docs/architecture/codebase-reviews/CR-1525-CALCULATOR-SOURCE-ROOT-RETIREMENT.md"
+        "docs/architecture/codebase-reviews/CR-1525-CALCULATOR-SOURCE-ROOT-RETIREMENT.md",
+        "docs/architecture/codebase-reviews/CR-1558-POSITION-HISTORY-APPLICATION-BOUNDARY.md"
       ],
       "noRuntimeSplitRationale": "App-local Compose and Compose-backed CI use one target deployable and one atomic financial unit of work. Cost, cashflow, and position remain in-process modules because they share transaction ordering, scale, trust, and commit boundaries; valuation remains separate. Position, cashflow, and cost source and test ownership is target-owned, all three legacy calculator roots are retired, and the installed image has no legacy calculator source closure. Registry/Kubernetes rollout and canonical runtime validation remain governed follow-up work."
     }

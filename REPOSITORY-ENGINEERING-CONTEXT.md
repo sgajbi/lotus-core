@@ -1223,12 +1223,10 @@ Most relevant current governance:
     corporate-action quantity policy, FX contract/cash settlement behavior, flat-position cost
     zeroing, and deterministic backdated replay planning without SQLAlchemy, repositories, outbox,
     metrics, `EpochFencer`, persistence models, Pydantic DTOs, or correlation context.
-    `PositionCalculationWorkflow` remains infrastructure coordination because it performs epoch
-    fencing, repository reads/writes, position-history persistence, metric emission, deterministic
-    rebuild ordering, and persistence-model adaptation. `make architecture-guard`
-    runs `scripts/quality/position_reducer_boundary_guard.py` so reducer transaction-type sets, cash delta
-    helpers, buy/sell/transfer/corporate-action state helpers, and backdated replay decision
-    helpers do not drift into `position_calculation_workflow.py`.
+    `PositionHistoryProcessor` owns framework-neutral coordination through ports. SQLAlchemy
+    mapping, state access, persistence, metrics, and structured logs remain infrastructure adapters.
+    `make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py` so domain
+    policy stays pure and the retired infrastructure workflow/repository cannot return.
 80. Protected business logic modules must stay directly testable without FastAPI, real databases,
     Kafka, Redis, cloud SDKs, or downstream clients. The repo-local standard lives at
     `docs/standards/testability-architecture-standard.md`, and the machine-readable contract lives
@@ -2067,12 +2065,11 @@ Most relevant current governance:
      directly to `PositionHistoryProcessor`; do not restore the
      `BookedTransaction -> TransactionEvent -> BookedTransaction` round trip or perform a second
      position-state read for epoch fencing. The former infrastructure workflow and repository are
-     test-only compatibility code until their remaining PostgreSQL atomicity/concurrency coverage
-     is migrated. Do not recreate `src/services/calculators/position_calculator`, copy it into the
+     retired; canonical PostgreSQL tests exercise the application and adapter boundaries directly.
+     Do not recreate `src/services/calculators/position_calculator`, copy it into the
      target image, or place framework, session, repository, metric, or logging concerns in domain
-     or application code. Retire compatibility modules only after production import inventory,
-     focused domain/integration proof, downstream contract review, and a machine guard prevents
-     the old path from returning.
+     or application code. Any replacement must preserve the production import inventory, focused
+     domain/integration proof, downstream contract review, and the machine absence guard.
 147. After cost, cashflow, and position target ownership and production evidence are complete,
      review the runtime boundaries among timeseries generation, valuation orchestration, pipeline
      orchestration, portfolio aggregation, and position valuation. Decide `keep`, `merge as

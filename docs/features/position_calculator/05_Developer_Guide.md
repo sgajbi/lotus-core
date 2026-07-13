@@ -1,54 +1,71 @@
-# Developer's Guide: Position Calculator
+# Developer Guide: Position History Processing
 
-This guide provides developers with instructions for understanding and extending the `position_calculator_service`.
+Position history is an in-process capability of `portfolio_transaction_processing_service`. It
+materializes the auditable quantity and cost-basis state for each portfolio/security transaction
+stream. There is no standalone position-calculator runtime or source package.
 
-## 1. Architecture Overview
+## Architecture
 
-The `position_calculator_service` is a stateful consumer that builds an auditable trail of position history. Its architecture is straightforward:
+The dependency flow is:
 
-* **`TransactionEventConsumer`:** The Kafka consumer that subscribes to `transactions.cost.processed` events. It is the main entry point and orchestrates the calls to the logic layer. It also contains the logic to check for stale epochs (epoch fencing).
-* **`PositionLogic`:** A class that contains the core business logic for calculating the next position state based on an incoming transaction. It also houses the critical logic for detecting back-dated events and triggering the reprocessing flow.
-* **`PositionRepository`:** Encapsulates all database queries for fetching historical data and saving new `position_history` records.
+```text
+Kafka delivery mapper
+  -> ProcessTransactionUseCase
+  -> PositionHistoryProcessingPort
+  -> PositionHistoryProcessor
+  -> position domain policies
+  -> PositionHistoryRepository / PositionRecalculationStateStore / PositionHistoryObserver
+  -> SQLAlchemy and Prometheus infrastructure adapters
+```
 
-The primary design principle is that for any given transaction, the service recalculates the position history from that point forward, ensuring the timeline is always consistent.
+Capability ownership is explicit:
 
-## 2. Adding Logic for a New Transaction Type
+- `app/domain/position/` owns immutable position state, history construction, transaction effects,
+  and deterministic backdated-recalculation decisions.
+- `app/domain/transaction/` owns the framework-neutral booked transaction and semantic identity.
+- `app/application/position_history.py` coordinates current and backdated materialization through
+  ports while preserving the caller-owned transaction.
+- `app/ports/position_history.py` defines persistence, recalculation-state, and observation
+  contracts.
+- `app/infrastructure/sqlalchemy_position_history_repository.py` and
+  `sqlalchemy_position_recalculation_state_store.py` map domain records to durable state.
+- `app/infrastructure/prometheus_position_history_observer.py` owns metrics and support logs.
 
-If a new transaction type is introduced that needs to affect a position's quantity or cost basis, the logic must be added to the `calculate_next_position` method.
+Domain and application code must not import Kafka/Pydantic event DTOs, SQLAlchemy models or
+sessions, concrete repositories, metrics, or logging. Service-owned behavior must not be added to
+`portfolio_common`; move it into the capability package once production-consumer inventory proves
+there is only one owner.
 
-1.  **Locate the Method:** Open the core logic file.
-    * **File:** `src/services/calculators/position_calculator/app/core/position_logic.py`
+## Extending Position Semantics
 
-2.  **Add a New Condition:** Add an `elif` block to the `calculate_next_position` method to handle the new `transaction_type`. Modify the `quantity`, `cost_basis`, and `cost_basis_local` variables as required.
+When a governed transaction type changes position quantity or basis:
 
-    ```python
-    # In calculate_next_position method:
+1. Define or update its transaction vocabulary and validation in the owning transaction-domain
+   family.
+2. Add the deterministic state transition to `app/domain/position/reducer.py` using domain
+   language and immutable inputs/outputs.
+3. Add direct domain tests under
+   `tests/unit/services/portfolio_transaction_processing_service/position/` for current,
+   backdated, transfer, corporate-action, cash-position, FX, zero-balance, and invalid cases that
+   apply.
+4. Add processor or PostgreSQL proof when the change affects replay windows, epoch fencing,
+   locking, rollback, persistence mapping, or downstream rebuild inputs.
+5. Update the transaction specification, supported-feature evidence, and operator documentation
+   when behavior or supportability truth changes.
 
-    elif txn_type == "STOCK_SPLIT":
-        # Example: a 2-for-1 stock split
-        # Quantity doubles, cost basis remains the same.
-        quantity *= 2
-        # No change to cost_basis or cost_basis_local
-    ```
+Do not add transaction-type conditionals to delivery, repositories, or telemetry adapters. Do not
+restore `position_calculation_workflow.py`, `position_repository.py`, or a standalone calculator
+consumer.
 
-3.  **Add a Unit Test:** To ensure your new logic is correct, add a new test case to the logic test suite. This is a critical step.
-    * **File:** `tests/unit/services/calculators/position_calculator/core/test_position_logic.py`
+## Validation
 
-    ```python
-    def test_calculate_next_position_for_stock_split():
-        initial_state = PositionStateDTO(quantity=Decimal("100"), cost_basis=Decimal("10000"))
-        split_event = TransactionEvent(
-            # ... populate with relevant data for a split ...
-            transaction_type="STOCK_SPLIT",
-            # ... other fields
-        )
-        new_state = PositionCalculator.calculate_next_position(initial_state, split_event)
-        assert new_state.quantity == Decimal("200")
-        assert new_state.cost_basis == Decimal("10000")
-    ```
+Run the focused proofs from the repository root:
 
-## 3. Testing
+```powershell
+python -m pytest tests/unit/services/portfolio_transaction_processing_service/position -q
+python -m pytest tests/integration/services/portfolio_transaction_processing_service/test_int_position_history_repository.py tests/integration/services/portfolio_transaction_processing_service/test_int_position_reprocessing_atomicity.py tests/integration/services/portfolio_transaction_processing_service/test_int_position_recalculation_concurrency.py -q
+make architecture-guard
+```
 
-To run the unit tests specifically for the position logic, use the following command from the project root:
-```bash
-pytest tests/unit/services/calculators/position_calculator/core/test_position_logic.py
+Use the repository-native feature and PR gates before delivery. The focused tests supplement those
+gates; they do not replace them.

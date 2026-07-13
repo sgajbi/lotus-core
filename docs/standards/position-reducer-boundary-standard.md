@@ -54,7 +54,9 @@ Backdated replay planning must be deterministic from:
 
 `make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py`.
 The guard also rejects flat `domain/position_reducer.py` and `domain/position_history.py` modules;
-position domain policy belongs under the cohesive `domain/position/` package.
+position domain policy belongs under the cohesive `domain/position/` package. It requires the
+application processor and its repository, state-store, and observer ports, and rejects framework,
+persistence, event DTO, concrete adapter, telemetry, and logging dependencies from that module.
 
 ## Compatibility
 
@@ -62,4 +64,4 @@ This is an in-process modularity rule. The production unit of work now calls
 `PositionHistoryProcessor` with `BookedTransaction` directly. Public APIs, event contracts,
 database schema, caller-owned commit/rollback behavior, epoch semantics, deterministic history
 ordering, and downstream cashflow rebuild inputs are unchanged. The former workflow and repository
-remain only for PostgreSQL integration-test migration and are not production-composed.
+are retired; the boundary guard rejects either legacy module if it returns.
