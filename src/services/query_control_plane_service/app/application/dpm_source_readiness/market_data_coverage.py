@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 
 from ...contracts.market_data_coverage import (
     MarketDataCoverageRequest,
