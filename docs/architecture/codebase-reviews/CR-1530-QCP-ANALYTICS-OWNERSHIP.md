@@ -1,8 +1,8 @@
 # CR-1530: Query-Control-Plane Analytics Ownership
 
 Date: 2026-07-12
-Issues: #715
-Status: Reconciled candidate; complete QCP image closure remains open
+Issues: #715, #717
+Status: Reconciled; analytics type boundary closed by CR-1555, complete QCP image closure remains open
 
 ## Objective
 
@@ -48,14 +48,14 @@ job state until the operations/support ownership family moves.
 - Built and installed the QCP wheel; analytics contract/application/infrastructure imports passed,
   and the installed `app` package contained zero Query Service files.
 
-## Remaining Hardening
+## Type-Boundary Closure
 
-Strict MyPy over the complete moved analytics helper family reports 97 existing dynamic row-shape
-findings. The ownership move removes ORM returns for portfolio/export records, but position,
-cashflow, FX, page, and export-result helpers still accept attribute-shaped `object` values. A next
-slice must introduce immutable adapter records and typed helper inputs rather than `Any` casts or
-suppression. This gap does not alter runtime behavior but prevents claiming ideal application-layer
-type closure.
+CR-1555 replaces the remaining dynamic position, prior-EOD, cashflow, FX, page, and export helper
+shapes with immutable adapter records or focused protocols. The governed strict MyPy command now
+reports zero findings, and the complete analytics boundary is part of configured `make typecheck`
+scope. SQLAlchemy projection rows remain confined to infrastructure mappers.
+
+## Remaining Hardening
 
 QCP `app.main` still depends on Query Service for Core snapshot/integration, operations/support,
 and advisory compatibility. #715 remains open until those families move and the Compose source
@@ -64,4 +64,5 @@ mount is removed with clean-image startup/API proof.
 ## Documentation Decision
 
 Updated repository context, current RFC/backlog/schema/incident references, QCP wiki source, and the
-review ledger. No consumer migration note is required because the public API contract is unchanged.
+review ledger. CR-1555 updates the typed-boundary and CI-enforcement truth. No consumer migration
+note is required because the public API contract is unchanged.

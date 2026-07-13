@@ -2185,8 +2185,11 @@ Most relevant current governance:
      export-store, and unit-of-work contracts under `app/ports/analytics.py`, and SQLAlchemy
      adapters under `app/infrastructure`. Do not restore Query Service analytics contracts,
      workflow, repositories, or export settings; Query Service operations may read export-job
-     support state only until the operations family moves. The moved helpers still require typed
-     immutable position/cashflow/page records before analytics type closure can be claimed.
+     support state only until the operations family moves. Position valuation, prior-EOD,
+     cashflow, FX, portfolio, and export persistence results must be mapped to immutable records
+     inside infrastructure adapters before crossing ports. The complete analytics boundary is
+     enforced by configured `make typecheck`; do not reintroduce attribute-shaped `object` rows,
+     broad `Any` port returns, or application dependencies on SQLAlchemy result shapes.
 162. `ClientRestrictionProfile:v1` is the first reference integration source product owned end to
      end by `query_control_plane_service`: public DTOs under `app/contracts`, selection and
      supportability policy under `app/application`, immutable mandate/restriction records under
