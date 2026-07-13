@@ -8,6 +8,18 @@ The cashflow module materializes canonical cashflow records inside the combined
 It converts transaction semantics into normalized inflow and outflow state that downstream
 timeseries, reconciliation, and supportability surfaces can rely on.
 
+Current scope is cashflow materialization inside the combined transaction worker. This page does
+not assign ownership of valuation, performance, risk, advice, or downstream liquidity decisions.
+
+## Reader Map
+
+| Need | Start with |
+| --- | --- |
+| Understand calculation ownership | Runtime role |
+| Diagnose a missing or reversed flow | Operational hints |
+| Verify durable outputs and events | Data it owns |
+| Check transaction-family semantics | Runtime role and boundary rules |
+
 ## What it handles
 
 The current app-local/CI runtime centers on:
@@ -43,6 +55,15 @@ cashflow sign. Explicit and derived pre-fee net amounts are therefore source-sha
 supporting a discrepancy, compare gross interest, withholding tax, other deductions, resolved fee
 components, direction, and the linked cashflow amount; do not infer final settlement cash from
 `net_interest_amount` alone.
+
+The same settlement boundary governs ordinary BUY, SELL, and DIVIDEND cash. Component fee fields
+override aggregate `trade_fee` when present. BUY and INTEREST expense remain outflows including the
+resolved fee; SELL, DIVIDEND, and INTEREST income must retain strictly positive proceeds after the
+fee. Invalid zero or negative proceeds are rejected before writes with
+`SELL_010_NON_POSITIVE_NET_SETTLEMENT`, `DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT`, or
+`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT`. Support diagnostics retain transaction, portfolio,
+amount, and stable reason-code evidence without exposing raw payloads or infrastructure details.
+Do not repair or reconcile such a case by applying `abs()` to the amount.
 
 For an eligible booked transaction, the module:
 

@@ -2311,6 +2311,17 @@ Most relevant current governance:
      equivalent explicit and derived net-interest inputs remain invariant. Preserve the stable
      `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code and keep the independent Decimal golden
      vectors in the governed INTEREST contract when extending this methodology.
+174. Canonical ordinary signed settlement cash lives in
+     `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_movement`.
+     Resolve component fees before aggregate `trade_fee`; BUY and INTEREST expense include the fee
+     in an outflow, while SELL, DIVIDEND, and INTEREST income subtract it from available proceeds.
+     The three inflow families must remain strictly positive before direction is applied. Reject a
+     zero or negative result before opening the combined financial unit of work with the stable
+     family reason code, preserve it as a bounded non-retryable application rejection, and never
+     use absolute-value normalization to manufacture an inflow. Generated cash legs, product
+     cashflows, validators, adapters, and independent Decimal golden vectors must consume or prove
+     this one policy. BUY, FEE, FX, ADJUSTMENT, and corporate-action cash retain their documented
+     family-specific representations; do not broaden this rule without a separate domain decision.
 
 ## Context Maintenance Rule
 
