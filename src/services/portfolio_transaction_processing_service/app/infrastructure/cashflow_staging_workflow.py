@@ -29,8 +29,10 @@ from portfolio_common.transaction_domain import (
     resolve_effective_processing_transaction_type,
 )
 
+from ..domain import BookedTransaction
 from ..domain.cashflow import StoredCashflow
-from .cashflow_calculation import CashflowCalculator
+from .cashflow_calculation import calculate_booked_transaction_cashflow
+from .legacy_transaction_event_mapper import to_booked_transaction
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_rules_repository import (
     CashflowRuleSetVersion,
@@ -250,11 +252,16 @@ async def _stage_cashflow_calculation(
     cashflow_repo: SqlAlchemyCashflowRepository,
     outbox_repo: OutboxRepository,
     event: TransactionEvent,
+    booked_transaction: BookedTransaction,
     rule: CachedCashflowRule,
     correlation_id: str,
     repair_existing: bool,
 ) -> int:
-    cashflow_to_save = CashflowCalculator.calculate(event, rule, epoch=event.epoch)
+    cashflow_to_save = calculate_booked_transaction_cashflow(
+        booked_transaction,
+        rule,
+        epoch=event.epoch,
+    )
     saved = (
         await cashflow_repo.replace_cashflow(cashflow_to_save)
         if repair_existing
@@ -427,6 +434,7 @@ class CashflowCalculationWorkflow:
         correlation_id: str,
         topic: str,
         repair_existing: bool = False,
+        booked_transaction: BookedTransaction | None = None,
     ) -> CashflowStageResult:
         """Stage cashflow work inside the caller-owned transaction."""
         fence_outcome = await self._fence_or_semantic_duplicate_outcome(
@@ -448,6 +456,7 @@ class CashflowCalculationWorkflow:
             event=event,
             correlation_id=correlation_id,
             repair_existing=repair_existing,
+            booked_transaction=booked_transaction,
         )
 
     async def _fence_or_semantic_duplicate_outcome(
@@ -487,6 +496,7 @@ class CashflowCalculationWorkflow:
         event: TransactionEvent,
         correlation_id: str,
         repair_existing: bool = False,
+        booked_transaction: BookedTransaction | None = None,
     ) -> CashflowStageResult:
         event_transaction_type = _validated_cashflow_transaction_type(event)
         if _is_non_cashflow_lifecycle_event(event, event_transaction_type):
@@ -498,6 +508,7 @@ class CashflowCalculationWorkflow:
             cashflow_repo,
             outbox_repo,
             event,
+            booked_transaction or to_booked_transaction(event),
             rule,
             correlation_id,
             repair_existing,
