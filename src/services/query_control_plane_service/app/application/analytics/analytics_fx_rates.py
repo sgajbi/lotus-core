@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Protocol
 
 from portfolio_common.currency_codes import normalize_currency_code
 
@@ -12,8 +13,21 @@ class AnalyticsFxRateError(RuntimeError):
     pass
 
 
+class AnalyticsFxRateReader(Protocol):
+    """Read normalized effective-dated FX rates for analytics conversion."""
+
+    async def get_fx_rates_map(
+        self,
+        *,
+        from_currency: str,
+        to_currency: str,
+        start_date: date,
+        end_date: date,
+    ) -> dict[date, Decimal]: ...
+
+
 async def get_portfolio_to_reporting_rates(
-    repo: object,
+    repo: AnalyticsFxRateReader,
     *,
     portfolio_currency: str,
     reporting_currency: str,
@@ -33,7 +47,7 @@ async def get_portfolio_to_reporting_rates(
 
 
 async def get_position_to_portfolio_rate_maps(
-    repo: object,
+    repo: AnalyticsFxRateReader,
     *,
     position_currencies: set[str],
     portfolio_currency: str,
