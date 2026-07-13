@@ -26,14 +26,12 @@ from portfolio_common.monitoring import (
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
     DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
-    assert_ca_bundle_a_transaction_valid,
     assert_fx_processed_event_valid,
     build_fx_contract_instrument_event,
     build_fx_processed_event,
     enrich_fx_transaction_metadata,
     evaluate_ca_bundle_a_reconciliation,
     find_missing_ca_bundle_a_dependencies,
-    is_ca_bundle_a_transaction_type,
 )
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
@@ -60,6 +58,10 @@ from ..domain.transaction import (
     enrich_booking_metadata,
     is_upstream_provided_cash_entry_mode,
     should_generate_settlement_cash_leg,
+)
+from ..domain.transaction.corporate_action import (
+    assert_bundle_a_corporate_action_valid,
+    is_bundle_a_corporate_action,
 )
 from ..ports import (
     CostBasisCalculationObserver,
@@ -382,8 +384,8 @@ class CostCalculationWorkflow:
         )
         event = with_booked_transaction_fields(event, booked_transaction)
         event = enrich_fx_transaction_metadata(event)
-        if is_ca_bundle_a_transaction_type(event.transaction_type):
-            assert_ca_bundle_a_transaction_valid(event)
+        if is_bundle_a_corporate_action(event.transaction_type):
+            assert_bundle_a_corporate_action_valid(booked_transaction)
         return event, _normalize_event_code(event.transaction_type), cost_basis_method
 
     async def _build_events_to_publish(
@@ -1153,7 +1155,7 @@ class CostCalculationWorkflow:
 
     @staticmethod
     def _bundle_a_reconciliation_key(processed_event: TransactionEvent) -> tuple[str, str] | None:
-        if not is_ca_bundle_a_transaction_type(processed_event.transaction_type):
+        if not is_bundle_a_corporate_action(processed_event.transaction_type):
             return None
         return CostCalculationWorkflow._complete_bundle_a_reconciliation_key(
             linked_group=(processed_event.linked_transaction_group_id or "").strip(),

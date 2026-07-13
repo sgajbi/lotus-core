@@ -21,8 +21,6 @@ from portfolio_common.monitoring import observe_cashflow_rule_cache_event
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
 from portfolio_common.transaction_domain import (
-    assert_ca_bundle_a_transaction_valid,
-    is_ca_bundle_a_transaction_type,
     requires_cashflow_processing,
     resolve_effective_processing_transaction_type,
 )
@@ -32,6 +30,10 @@ from ..domain.cashflow import CashflowCalculationContext, StoredCashflow
 from ..domain.transaction import (
     assert_cash_entry_mode_supported,
     is_upstream_provided_cash_entry_mode,
+)
+from ..domain.transaction.corporate_action import (
+    assert_bundle_a_corporate_action_valid,
+    is_bundle_a_corporate_action,
 )
 from .cashflow_calculation import calculate_observed_transaction_cashflow
 from .cashflow_repository import SqlAlchemyCashflowRepository
@@ -175,8 +177,8 @@ def _validated_cashflow_transaction_type(
     booked_transaction: BookedTransaction,
 ) -> str:
     event_transaction_type = resolve_effective_processing_transaction_type(event)
-    if is_ca_bundle_a_transaction_type(event_transaction_type):
-        assert_ca_bundle_a_transaction_valid(event)
+    if is_bundle_a_corporate_action(event_transaction_type):
+        assert_bundle_a_corporate_action_valid(booked_transaction)
     assert_cash_entry_mode_supported(booked_transaction)
     _assert_linked_cash_leg_contract(booked_transaction)
     return str(event_transaction_type)
