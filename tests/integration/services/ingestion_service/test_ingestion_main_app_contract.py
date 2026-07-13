@@ -896,8 +896,9 @@ async def test_openapi_describes_transaction_dual_leg_and_income_fields(async_te
         "Semantic direction for INTEREST transactions. Supported values are INCOME and EXPENSE."
     )
     assert properties["net_interest_amount"]["description"] == (
-        "Net interest amount supplied upstream for reconciliation against "
-        "gross and deduction fields."
+        "Interest amount after withholding tax and other interest deductions, "
+        "but before separately reported transaction fees; when supplied upstream, "
+        "it is reconciled against the gross and deduction fields."
     )
 
 
