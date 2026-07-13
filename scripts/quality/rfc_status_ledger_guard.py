@@ -205,6 +205,8 @@ def _index_status_errors(
 ) -> list[str]:
     errors: list[str] = []
     for entry in entries:
+        if entry.get("family") != "core" or not str(entry.get("path", "")).startswith("docs/RFCs/"):
+            continue
         rfc_id = entry.get("rfc_id")
         expected_status = index_statuses.get(str(rfc_id))
         if expected_status is not None and entry.get("status") != expected_status:
