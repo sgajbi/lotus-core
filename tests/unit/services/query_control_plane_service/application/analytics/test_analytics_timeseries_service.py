@@ -34,6 +34,10 @@ from src.services.query_control_plane_service.app.contracts.analytics_inputs imp
     PortfolioAnalyticsTimeseriesRequest,
     PositionAnalyticsTimeseriesRequest,
 )
+from src.services.query_control_plane_service.app.domain.analytics import (
+    AnalyticsCashflowEvidence,
+    PositionValuationObservation,
+)
 from src.services.query_control_plane_service.app.infrastructure.analytics_export_repository import (  # noqa: E501
     AnalyticsExportRepository,
 )
@@ -83,6 +87,70 @@ def _canonical_portfolio() -> SimpleNamespace:
     )
 
 
+def _position_observation(
+    *,
+    security_id: str = "SEC_USD",
+    valuation_date: date = date(2025, 1, 1),
+    bod_market_value: Decimal = Decimal("100"),
+    eod_market_value: Decimal = Decimal("110"),
+    bod_cashflow_position: Decimal = Decimal("0"),
+    eod_cashflow_position: Decimal = Decimal("0"),
+    bod_cashflow_portfolio: Decimal = Decimal("0"),
+    eod_cashflow_portfolio: Decimal = Decimal("0"),
+    fees: Decimal = Decimal("0"),
+    quantity: Decimal = Decimal("1"),
+    epoch: int = 0,
+    position_currency: str = "USD",
+    asset_class: str | None = "Equity",
+    sector: str | None = None,
+    country: str | None = None,
+) -> PositionValuationObservation:
+    return PositionValuationObservation(
+        security_id=security_id,
+        valuation_date=valuation_date,
+        bod_market_value=bod_market_value,
+        eod_market_value=eod_market_value,
+        bod_cashflow_position=bod_cashflow_position,
+        eod_cashflow_position=eod_cashflow_position,
+        bod_cashflow_portfolio=bod_cashflow_portfolio,
+        eod_cashflow_portfolio=eod_cashflow_portfolio,
+        fees=fees,
+        quantity=quantity,
+        epoch=epoch,
+        position_currency=position_currency,
+        asset_class=asset_class,
+        sector=sector,
+        country=country,
+    )
+
+
+def _cashflow_evidence(
+    *,
+    transaction_id: str = "TXN_1",
+    security_id: str | None = "SEC_USD",
+    valuation_date: date = date(2025, 1, 1),
+    amount: Decimal = Decimal("5"),
+    currency: str = "USD",
+    classification: str = "CASHFLOW_IN",
+    timing: str = "BOD",
+    is_position_flow: bool = True,
+    is_portfolio_flow: bool = True,
+    epoch: int = 0,
+) -> AnalyticsCashflowEvidence:
+    return AnalyticsCashflowEvidence(
+        transaction_id=transaction_id,
+        security_id=security_id,
+        valuation_date=valuation_date,
+        amount=amount,
+        currency=currency,
+        classification=classification,
+        timing=timing,
+        is_position_flow=is_position_flow,
+        is_portfolio_flow=is_portfolio_flow,
+        epoch=epoch,
+    )
+
+
 def _install_canonical_portfolio_timeseries_repo(service: AnalyticsTimeseriesService) -> None:
     service.repo = SimpleNamespace(
         get_portfolio=AsyncMock(return_value=_canonical_portfolio()),
@@ -94,13 +162,11 @@ def _install_canonical_portfolio_timeseries_repo(service: AnalyticsTimeseriesSer
         list_position_observation_dates=AsyncMock(return_value=[date(2026, 7, 3)]),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
-                SimpleNamespace(
+                _position_observation(
                     security_id="SEC_SG_BOND_001",
                     valuation_date=date(2026, 7, 3),
                     bod_market_value=Decimal("1000"),
                     eod_market_value=Decimal("1005"),
-                    bod_cashflow_position=Decimal("0"),
-                    epoch=0,
                     position_currency="SGD",
                     asset_class="Fixed Income",
                 )
@@ -594,15 +660,14 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
         ),
         list_position_timeseries_rows_unpaged=AsyncMock(
             return_value=[
-                SimpleNamespace(
+                _position_observation(
                     security_id="SEC_USD",
                     valuation_date=date(2025, 1, 1),
                     bod_market_value=Decimal("100"),
                     eod_market_value=Decimal("110"),
-                    epoch=0,
                     position_currency="USD",
                 ),
-                SimpleNamespace(
+                _position_observation(
                     security_id="SEC_EUR",
                     valuation_date=date(2025, 1, 1),
                     bod_market_value=Decimal("50"),
@@ -610,29 +675,17 @@ async def test_portfolio_rows_aggregate_position_rows_with_fx_and_page_token() -
                     epoch=1,
                     position_currency="EUR",
                 ),
-                SimpleNamespace(
+                _position_observation(
                     security_id="SEC_USD",
                     valuation_date=date(2025, 1, 2),
                     bod_market_value=Decimal("110"),
                     eod_market_value=Decimal("120"),
-                    epoch=0,
                     position_currency="USD",
                 ),
             ]
         ),
         list_latest_position_timeseries_before=AsyncMock(return_value=[]),
-        list_portfolio_cashflow_rows=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    valuation_date=date(2025, 1, 1),
-                    amount=Decimal("5"),
-                    classification="CASHFLOW_IN",
-                    timing="BOD",
-                    is_position_flow=True,
-                    is_portfolio_flow=True,
-                )
-            ]
-        ),
+        list_portfolio_cashflow_rows=AsyncMock(return_value=[_cashflow_evidence(security_id=None)]),
         list_position_cashflow_rows=AsyncMock(return_value=[]),
         get_fx_rates_map=AsyncMock(side_effect=get_fx_rates_map),
     )
