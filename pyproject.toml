@@ -56,6 +56,8 @@ pythonpath = [
 ]
 addopts = "--strict-markers --import-mode=importlib"
 minversion = "6.0"
+asyncio_default_fixture_loop_scope = "function"
+asyncio_default_test_loop_scope = "module"
 markers = [
     "asyncio: mark a test as being an asyncio test",
     "dependency: mark test dependency ordering/grouping",
@@ -77,7 +79,6 @@ markers = [
 ]
 filterwarnings = [
     "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",
-    "ignore:The configuration option \"asyncio_default_fixture_loop_scope\" is unset.:pytest.PytestDeprecationWarning"
 ]
 
 [tool.ruff]
