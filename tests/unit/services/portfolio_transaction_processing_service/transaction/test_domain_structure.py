@@ -19,6 +19,34 @@ LEGACY_TRANSACTION_DOMAIN_MODULES = (
     TRANSACTION_DOMAIN_ROOT.parent / "booked_transaction.py",
     TRANSACTION_DOMAIN_ROOT.parent / "transaction_semantic_identity.py",
 )
+SHARED_TRANSACTION_DOMAIN_ROOT = (
+    REPO_ROOT / "src" / "libs" / "portfolio-common" / "portfolio_common" / "transaction_domain"
+)
+RETIRED_SHARED_ORDINARY_TRANSACTION_MODULES = tuple(
+    SHARED_TRANSACTION_DOMAIN_ROOT / module_name
+    for module_name in (
+        "adjustment_cash_leg.py",
+        "buy_linkage.py",
+        "buy_models.py",
+        "buy_reason_codes.py",
+        "buy_validation.py",
+        "cash_entry_mode.py",
+        "dividend_linkage.py",
+        "dividend_models.py",
+        "dividend_reason_codes.py",
+        "dividend_validation.py",
+        "dual_leg_pairing.py",
+        "interest_linkage.py",
+        "interest_models.py",
+        "interest_reason_codes.py",
+        "interest_validation.py",
+        "portfolio_flow_guardrails.py",
+        "sell_linkage.py",
+        "sell_models.py",
+        "sell_reason_codes.py",
+        "sell_validation.py",
+    )
+)
 
 
 def test_transaction_domain_modules_have_responsibility_docstrings() -> None:
@@ -33,3 +61,11 @@ def test_transaction_domain_modules_have_responsibility_docstrings() -> None:
 
 def test_flat_transaction_domain_modules_are_retired() -> None:
     assert [path for path in LEGACY_TRANSACTION_DOMAIN_MODULES if path.exists()] == []
+
+
+def test_shared_ordinary_transaction_modules_are_retired() -> None:
+    assert [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in RETIRED_SHARED_ORDINARY_TRANSACTION_MODULES
+        if path.exists()
+    ] == []

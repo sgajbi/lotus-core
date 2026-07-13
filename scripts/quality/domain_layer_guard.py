@@ -34,15 +34,7 @@ DOMAIN_GLOBS = (
 )
 
 TRANSITIONAL_ALLOWLIST = {
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/buy_models.py": {"pydantic"},
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/dividend_models.py": {
-        "pydantic"
-    },
     "src/libs/portfolio-common/portfolio_common/transaction_domain/fx_models.py": {"pydantic"},
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/interest_models.py": {
-        "pydantic"
-    },
-    "src/libs/portfolio-common/portfolio_common/transaction_domain/sell_models.py": {"pydantic"},
 }
 
 
