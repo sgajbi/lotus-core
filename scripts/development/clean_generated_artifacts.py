@@ -150,11 +150,11 @@ def _remove_directory_with_retry(
             sleeper(retry_seconds)
 
 
-def _directory_removal_path(target: Path) -> Path:
+def _directory_removal_path(target: Path, *, platform_name: str = os.name) -> Path:
     """Return an extended-length Windows path for deeply nested artifacts."""
 
     resolved = target.resolve(strict=False)
-    if os.name != "nt" or str(resolved).startswith("\\\\?\\"):
+    if platform_name != "nt" or str(resolved).startswith("\\\\?\\"):
         return resolved
     return Path(f"\\\\?\\{resolved}")
 
