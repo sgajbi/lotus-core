@@ -40,7 +40,10 @@ When `net_interest_amount` is provided, validator enforces:
 
 `net_interest_amount = gross_transaction_amount - withholding_tax_amount - other_interest_deductions_amount`
 
-All deduction components are constrained to non-negative values.
+`net_interest_amount` is therefore before separately reported transaction fees. Settlement cash
+applies the resolved fee exactly once: income subtracts the fee and expense adds the fee. Explicit
+and derived net-interest source shapes must produce the same settlement amount. All deduction and
+fee components are constrained to non-negative values.
 
 ## Shared-Doc Conformance Note (Slice 4)
 
