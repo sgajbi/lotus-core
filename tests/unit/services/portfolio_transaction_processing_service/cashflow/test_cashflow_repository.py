@@ -112,9 +112,9 @@ async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> No
         epoch=4,
     )
 
-    saved = await cashflow_repository.SqlAlchemyCashflowRepository(
-        db_session
-    ).create_cashflow(calculated)
+    saved = await cashflow_repository.SqlAlchemyCashflowRepository(db_session).create_cashflow(
+        calculated
+    )
 
     mapped_row = db_session.add.call_args.args[0]
     assert isinstance(mapped_row, Cashflow)
@@ -122,3 +122,44 @@ async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> No
     assert mapped_row.economic_event_id == "EVENT-001"
     assert mapped_row.linked_transaction_group_id == "GROUP-001"
     assert saved.cashflow_id == 18
+
+
+async def test_create_cashflow_persists_domain_result_successfully() -> None:
+    db_session = AsyncMock()
+    db_session.add = MagicMock()
+    nested_tx = AsyncMock()
+    nested_tx.__aenter__.return_value = None
+    nested_tx.__aexit__.return_value = None
+    db_session.begin_nested = MagicMock(return_value=nested_tx)
+
+    async def assign_database_identity() -> None:
+        db_session.add.call_args.args[0].id = 19
+
+    db_session.flush.side_effect = assign_database_identity
+    calculated = CalculatedCashflow(
+        transaction_id="TXN-DOMAIN-002",
+        portfolio_id="PORT-001",
+        security_id="SEC-001",
+        cashflow_date=date(2026, 4, 13),
+        amount=Decimal("995"),
+        currency="USD",
+        classification="INVESTMENT_INFLOW",
+        timing="EOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        economic_event_id=None,
+        linked_transaction_group_id=None,
+        epoch=5,
+    )
+
+    saved = await cashflow_repository.SqlAlchemyCashflowRepository(db_session).create_cashflow(
+        calculated
+    )
+
+    persisted_row = db_session.add.call_args.args[0]
+    assert isinstance(persisted_row, Cashflow)
+    assert persisted_row.transaction_id == "TXN-DOMAIN-002"
+    assert saved.cashflow_id == 19
+    assert saved.amount == Decimal("995")
+    db_session.refresh.assert_awaited_once_with(persisted_row)

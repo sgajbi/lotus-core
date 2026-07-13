@@ -12,7 +12,10 @@ from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.portfolio_transaction_processing_service.app.domain.cashflow import StoredCashflow
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CalculatedCashflow,
+    StoredCashflow,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculationWorkflow,
     CashflowRuleSetVersion,
@@ -163,3 +166,73 @@ async def test_completion_event_preserves_corporate_action_lineage() -> None:
     assert event.linked_transaction_group_id == "GROUP-001"
     assert event.parent_event_reference == "PARENT-001"
     assert event.linked_cash_transaction_id == "CASH-001"
+
+
+async def test_stage_cashflow_calculation_persists_domain_result_and_publishes_event() -> None:
+    source = TransactionEvent(
+        transaction_id="TX-STAGE-001",
+        portfolio_id="PB-001",
+        instrument_id="INST-001",
+        security_id="SEC-001",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
+        settlement_date=datetime(2026, 4, 12, tzinfo=timezone.utc),
+        transaction_type="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("25"),
+        gross_transaction_amount=Decimal("250"),
+        trade_fee=Decimal("2"),
+        trade_currency="SGD",
+        currency="SGD",
+        economic_event_id="EVENT-001",
+        linked_transaction_group_id="GROUP-001",
+        epoch=3,
+    )
+    stored = StoredCashflow(
+        cashflow_id=92,
+        transaction_id=source.transaction_id,
+        portfolio_id=source.portfolio_id,
+        security_id=source.security_id,
+        cashflow_date=date(2026, 4, 12),
+        amount=Decimal("-252"),
+        currency="SGD",
+        classification="INVESTMENT_OUTFLOW",
+        timing="BOD",
+        calculation_type="NET",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        economic_event_id="EVENT-001",
+        linked_transaction_group_id="GROUP-001",
+        epoch=3,
+    )
+    repository = AsyncMock()
+    repository.create_cashflow.return_value = stored
+    outbox_repository = AsyncMock()
+    rule = workflow_module.CachedCashflowRule(
+        classification="INVESTMENT_OUTFLOW",
+        timing="BOD",
+        is_position_flow=True,
+        is_portfolio_flow=False,
+        rule_set_version="rules-v1",
+        rule_set_effective_at_utc=None,
+    )
+
+    record_count = await workflow_module._stage_cashflow_calculation(
+        repository,
+        outbox_repository,
+        source,
+        workflow_module.to_booked_transaction(source),
+        rule,
+        "corr-001",
+        False,
+    )
+
+    calculated = repository.create_cashflow.await_args.args[0]
+    assert isinstance(calculated, CalculatedCashflow)
+    assert calculated.amount == Decimal("-252")
+    assert calculated.cashflow_date == date(2026, 4, 12)
+    assert calculated.epoch == 3
+    outbox_call = outbox_repository.create_outbox_event.await_args.kwargs
+    assert outbox_call["topic"] == "cashflows.calculated"
+    assert outbox_call["payload"]["cashflow_id"] == 92
+    assert outbox_call["correlation_id"] == "corr-001"
+    assert record_count == 1
