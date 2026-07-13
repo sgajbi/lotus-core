@@ -53,7 +53,7 @@ from .cost_repository import (
     cost_basis_processing_lock_key,
 )
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
-from .position_processing_adapter import PositionProcessingCompatibilityAdapter
+from .position_processing_adapter import PositionHistoryProcessingAdapter
 from .prometheus_cost_basis_observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PrometheusCostBasisCalculationObserver,
@@ -95,7 +95,7 @@ __all__ = [
     "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",
     "OpenLotCheckpointRecord",
-    "PositionProcessingCompatibilityAdapter",
+    "PositionHistoryProcessingAdapter",
     "PipelineStageProcessingAdapter",
     "PortfolioNotFoundError",
     "LinkedCashLegError",
