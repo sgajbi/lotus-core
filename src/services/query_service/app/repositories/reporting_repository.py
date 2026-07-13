@@ -18,10 +18,11 @@ from portfolio_common.database_models import (
     PositionState,
     Transaction,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .currency_codes import currency_code_sql_expr, normalize_currency_code
+from .currency_query_expressions import currency_code_sql_expr
 from .date_filters import start_of_next_day
 from .identifier_normalization import normalize_security_id
 
