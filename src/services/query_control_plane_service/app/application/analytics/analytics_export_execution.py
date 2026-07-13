@@ -6,7 +6,9 @@ from collections.abc import Awaitable, Callable
 
 from ...contracts.analytics_inputs import (
     PortfolioAnalyticsTimeseriesRequest,
+    PortfolioAnalyticsTimeseriesResponse,
     PositionAnalyticsTimeseriesRequest,
+    PositionAnalyticsTimeseriesResponse,
 )
 
 PORTFOLIO_EXPORT_PAGE_SIZE = 2000
@@ -17,7 +19,7 @@ async def collect_portfolio_timeseries_for_export(
     *,
     portfolio_id: str,
     request: PortfolioAnalyticsTimeseriesRequest,
-    get_portfolio_timeseries: Callable[..., Awaitable[object]],
+    get_portfolio_timeseries: Callable[..., Awaitable[PortfolioAnalyticsTimeseriesResponse]],
 ) -> tuple[list[dict[str, object]], int]:
     rows: list[dict[str, object]] = []
     page_depth = 0
@@ -43,7 +45,7 @@ async def collect_position_timeseries_for_export(
     *,
     portfolio_id: str,
     request: PositionAnalyticsTimeseriesRequest,
-    get_position_timeseries: Callable[..., Awaitable[object]],
+    get_position_timeseries: Callable[..., Awaitable[PositionAnalyticsTimeseriesResponse]],
 ) -> tuple[list[dict[str, object]], int]:
     rows: list[dict[str, object]] = []
     page_depth = 0
