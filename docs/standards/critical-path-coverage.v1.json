@@ -33,7 +33,7 @@
       "title": "Transaction lifecycle and transaction type handling",
       "risk": "Incorrect lifecycle or transaction-type behavior can corrupt booking state, replay behavior, and downstream analytics inputs.",
       "source_globs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_domain/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/**/*.py",
         "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py",
         "src/services/ingestion_service/app/domain/**/*.py",
         "src/services/ingestion_service/app/services/ingestion_job_lifecycle*.py",
@@ -57,7 +57,8 @@
       ],
       "required_test_globs": [
         "tests/unit/transaction_specs/test_*_slice0_characterization.py",
-        "tests/unit/libs/portfolio_common/test_*_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_*_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py",
         "tests/unit/services/ingestion_service/domain/test_ingestion_job_lifecycle_policy.py",
         "tests/integration/services/ingestion_service/test_ingestion_routers.py"
       ]
@@ -144,7 +145,8 @@
       "title": "Corporate-action handling",
       "risk": "Corporate-action handling needs explicit domain tests because it changes quantity, cash, and cost state through non-trade events.",
       "source_globs": [
-        "src/libs/portfolio-common/portfolio_common/transaction_domain/ca_*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/*.py",
+        "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/corporate_action_reconciliation.py",
         "src/services/portfolio_transaction_processing_service/app/domain/position/**/*.py",
         "src/services/portfolio_transaction_processing_service/app/application/position_history.py"
       ],
@@ -160,6 +162,8 @@
         "transaction-fx-contract"
       ],
       "required_test_globs": [
+        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py",
         "tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py",
         "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_domain.py",
