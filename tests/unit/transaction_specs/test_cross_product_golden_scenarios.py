@@ -6,11 +6,11 @@ from decimal import Decimal
 from pathlib import Path
 
 from portfolio_common.database_models import CashflowRule
-from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_type_registry import (
+from portfolio_common.domain.transaction.type_registry import (
     TARGET_NOT_IMPLEMENTED,
     get_transaction_type_definition,
 )
+from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,

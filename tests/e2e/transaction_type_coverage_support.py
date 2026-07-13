@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.transaction_type_registry import (
+from portfolio_common.domain.transaction.type_registry import (
     PRODUCTION_BOOKING_TRANSACTION_TYPES,
     TRANSACTION_TYPE_REGISTRY,
 )

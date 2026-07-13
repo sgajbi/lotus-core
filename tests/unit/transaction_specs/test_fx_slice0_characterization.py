@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.transaction_type_registry import is_registered_transaction_type
+from portfolio_common.domain.transaction.type_registry import is_registered_transaction_type
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
