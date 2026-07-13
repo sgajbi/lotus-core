@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from portfolio_common.currency_codes import normalize_currency_code
@@ -39,6 +39,12 @@ from ...contracts.analytics_inputs import (
     PositionAnalyticsTimeseriesResponse,
     PositionTimeseriesRow,
     QualityDiagnostics,
+)
+from ...domain.analytics import (
+    AnalyticsCashflowEvidence,
+    AnalyticsExportJobRecord,
+    PositionValuationObservation,
+    PriorPositionValuation,
 )
 from ...ports.analytics import AnalyticsExportStore, AnalyticsTimeseriesReader, AnalyticsUnitOfWork
 from .analytics_cash_flows import (
@@ -138,7 +144,7 @@ ANALYTICS_EXPORT_CANCELLATION_MESSAGE = (
 
 
 def _analytics_source_runtime_metadata(**kwargs: Any) -> dict[str, object]:
-    metadata = source_data_product_runtime_metadata(**kwargs)
+    metadata: dict[str, object] = source_data_product_runtime_metadata(**kwargs)
     if "lineage" in metadata:
         raise AnalyticsInputError(
             "UNSUPPORTED_CONFIGURATION",
@@ -171,7 +177,7 @@ class AnalyticsRuntimePolicy:
 
 @dataclass(frozen=True)
 class _PortfolioObservationSupportInputs:
-    position_rows: list[object]
+    position_rows: list[PositionValuationObservation]
     portfolio_cashflows_by_date: dict[date, list[CashFlowObservation]]
     position_cashflows_by_key: dict[tuple[str, date], list[CashFlowObservation]]
     position_to_portfolio_rates: dict[str, dict[date, Decimal]]
@@ -200,26 +206,33 @@ class AnalyticsTimeseriesService:
         self._analytics_export_stale_timeout_minutes = policy.export_stale_timeout_minutes
         self._analytics_export_execution_timeout_seconds = policy.export_execution_timeout_seconds
 
-    def _request_fingerprint(self, payload: dict) -> str:
-        return request_fingerprint(payload)
+    def _request_fingerprint(self, payload: dict[str, object]) -> str:
+        fingerprint: str = request_fingerprint(payload)
+        return fingerprint
 
-    def _encode_page_token(self, payload: dict) -> str:
-        return encode_analytics_page_token(
-            payload=payload,
-            secret=self._page_token_secret,
-            active_kid=self._page_token_key_id,
-            previous_secrets=self._page_token_previous_keys,
-            ttl_seconds=self._page_token_ttl_seconds,
-        )
-
-    def _decode_page_token(self, token: str | None) -> dict:
-        try:
-            return decode_analytics_page_token(
-                token=token,
+    def _encode_page_token(self, payload: dict[str, object]) -> str:
+        return cast(
+            str,
+            encode_analytics_page_token(
+                payload=payload,
                 secret=self._page_token_secret,
                 active_kid=self._page_token_key_id,
                 previous_secrets=self._page_token_previous_keys,
                 ttl_seconds=self._page_token_ttl_seconds,
+            ),
+        )
+
+    def _decode_page_token(self, token: str | None) -> dict[str, object]:
+        try:
+            return cast(
+                dict[str, object],
+                decode_analytics_page_token(
+                    token=token,
+                    secret=self._page_token_secret,
+                    active_kid=self._page_token_key_id,
+                    previous_secrets=self._page_token_previous_keys,
+                    ttl_seconds=self._page_token_ttl_seconds,
+                ),
             )
         except AnalyticsPageTokenSignatureError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
@@ -252,12 +265,15 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[date, Decimal]:
-        return await get_portfolio_to_reporting_rates(
-            self.repo,
-            portfolio_currency=portfolio_currency,
-            reporting_currency=reporting_currency,
-            start_date=start_date,
-            end_date=end_date,
+        return cast(
+            dict[date, Decimal],
+            await get_portfolio_to_reporting_rates(
+                self.repo,
+                portfolio_currency=portfolio_currency,
+                reporting_currency=reporting_currency,
+                start_date=start_date,
+                end_date=end_date,
+            ),
         )
 
     async def _get_position_to_portfolio_rate_maps(
@@ -268,21 +284,24 @@ class AnalyticsTimeseriesService:
         start_date: date,
         end_date: date,
     ) -> dict[str, dict[date, Decimal]]:
-        return await get_position_to_portfolio_rate_maps(
-            self.repo,
-            position_currencies=position_currencies,
-            portfolio_currency=portfolio_currency,
-            start_date=start_date,
-            end_date=end_date,
+        return cast(
+            dict[str, dict[date, Decimal]],
+            await get_position_to_portfolio_rate_maps(
+                self.repo,
+                position_currencies=position_currencies,
+                portfolio_currency=portfolio_currency,
+                start_date=start_date,
+                end_date=end_date,
+            ),
         )
 
     @staticmethod
     def _quality_status_from_epoch(epoch: int) -> str:
-        return quality_status_from_epoch(epoch)
+        return cast(str, quality_status_from_epoch(epoch))
 
     @staticmethod
     def _build_cash_flow_observation(
-        row: object,
+        row: AnalyticsCashflowEvidence,
         *,
         amount: Decimal,
     ) -> CashFlowObservation:
@@ -290,45 +309,54 @@ class AnalyticsTimeseriesService:
 
     def _portfolio_cash_flows_for_dates(
         self,
-        cashflow_rows: list[object],
+        cashflow_rows: list[AnalyticsCashflowEvidence],
         *,
         reporting_currency: str,
         portfolio_currency: str,
         fx_rates: dict[date, Decimal],
     ) -> dict[date, list[CashFlowObservation]]:
         try:
-            return portfolio_cash_flows_for_dates(
-                cashflow_rows,
-                reporting_currency=reporting_currency,
-                portfolio_currency=portfolio_currency,
-                fx_rates=fx_rates,
+            return cast(
+                dict[date, list[CashFlowObservation]],
+                portfolio_cash_flows_for_dates(
+                    cashflow_rows,
+                    reporting_currency=reporting_currency,
+                    portfolio_currency=portfolio_currency,
+                    fx_rates=fx_rates,
+                ),
             )
         except AnalyticsCashFlowError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
 
     def _position_cash_flows_for_keys(
         self,
-        cashflow_rows: list[object],
+        cashflow_rows: list[AnalyticsCashflowEvidence],
     ) -> dict[tuple[str, date], list[CashFlowObservation]]:
-        return position_cash_flows_for_keys(cashflow_rows)
+        return cast(
+            dict[tuple[str, date], list[CashFlowObservation]],
+            position_cash_flows_for_keys(cashflow_rows),
+        )
 
     @staticmethod
     def _has_external_flow(cash_flows: list[CashFlowObservation]) -> bool:
-        return has_external_flow(cash_flows)
+        return cast(bool, has_external_flow(cash_flows))
 
     @staticmethod
     def _effective_beginning_market_value(
-        row: object,
+        row: PositionValuationObservation,
         *,
         previous_eod_market_value: Decimal | None,
         cash_flows: list[CashFlowObservation],
         has_portfolio_external_flow: bool,
     ) -> Decimal:
-        return effective_beginning_market_value(
-            row,
-            previous_eod_market_value=previous_eod_market_value,
-            cash_flows=cash_flows,
-            has_portfolio_external_flow=has_portfolio_external_flow,
+        return cast(
+            Decimal,
+            effective_beginning_market_value(
+                row,
+                previous_eod_market_value=previous_eod_market_value,
+                cash_flows=cash_flows,
+                has_portfolio_external_flow=has_portfolio_external_flow,
+            ),
         )
 
     async def _portfolio_observation_rows(
@@ -461,7 +489,9 @@ class AnalyticsTimeseriesService:
         )
 
     @staticmethod
-    def _portfolio_position_currencies(position_rows: list[object]) -> set[str]:
+    def _portfolio_position_currencies(
+        position_rows: list[PositionValuationObservation],
+    ) -> set[str]:
         return {
             str(row.position_currency)
             for row in position_rows
@@ -469,7 +499,9 @@ class AnalyticsTimeseriesService:
         }
 
     @staticmethod
-    def _portfolio_position_security_ids(position_rows: list[object]) -> list[str]:
+    def _portfolio_position_security_ids(
+        position_rows: list[PositionValuationObservation],
+    ) -> list[str]:
         return sorted(
             {
                 security_id
@@ -479,7 +511,9 @@ class AnalyticsTimeseriesService:
         )
 
     @staticmethod
-    def _previous_eod_by_security(previous_rows: list[object]) -> dict[str, Decimal]:
+    def _previous_eod_by_security(
+        previous_rows: list[PriorPositionValuation],
+    ) -> dict[str, Decimal]:
         return {
             normalize_security_id(row.security_id): decimal_or_zero(row.eod_market_value)
             for row in previous_rows
@@ -517,15 +551,18 @@ class AnalyticsTimeseriesService:
     def _portfolio_row_buckets(
         *,
         page_dates: list[date],
-        position_rows: list[object],
-    ) -> dict[date, list[object]]:
-        return portfolio_row_buckets(page_dates=page_dates, position_rows=position_rows)
+        position_rows: list[PositionValuationObservation],
+    ) -> dict[date, list[PositionValuationObservation]]:
+        return cast(
+            dict[date, list[PositionValuationObservation]],
+            portfolio_row_buckets(page_dates=page_dates, position_rows=position_rows),
+        )
 
     def _portfolio_observation_for_date(
         self,
         *,
         valuation_date: date,
-        rows: list[object],
+        rows: list[PositionValuationObservation],
         support_inputs: _PortfolioObservationSupportInputs,
         previous_eod_by_security: dict[str, Decimal],
         portfolio_currency: str,
@@ -591,11 +628,14 @@ class AnalyticsTimeseriesService:
         portfolio_to_reporting_rates: dict[date, Decimal],
     ) -> Decimal:
         try:
-            return portfolio_to_reporting_observation_rate(
-                valuation_date=valuation_date,
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                portfolio_to_reporting_rates=portfolio_to_reporting_rates,
+            return cast(
+                Decimal,
+                portfolio_to_reporting_observation_rate(
+                    valuation_date=valuation_date,
+                    portfolio_currency=portfolio_currency,
+                    reporting_currency=reporting_currency,
+                    portfolio_to_reporting_rates=portfolio_to_reporting_rates,
+                ),
             )
         except AnalyticsPortfolioPageError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
@@ -603,17 +643,20 @@ class AnalyticsTimeseriesService:
     @staticmethod
     def _position_to_portfolio_observation_rate(
         *,
-        row: object,
+        row: PositionValuationObservation,
         valuation_date: date,
         portfolio_currency: str,
         position_to_portfolio_rates: dict[str, dict[date, Decimal]],
     ) -> Decimal:
         try:
-            return position_to_portfolio_observation_rate(
-                row=row,
-                valuation_date=valuation_date,
-                portfolio_currency=portfolio_currency,
-                position_to_portfolio_rates=position_to_portfolio_rates,
+            return cast(
+                Decimal,
+                position_to_portfolio_observation_rate(
+                    row=row,
+                    valuation_date=valuation_date,
+                    portfolio_currency=portfolio_currency,
+                    position_to_portfolio_rates=position_to_portfolio_rates,
+                ),
             )
         except AnalyticsPortfolioPageError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
@@ -625,11 +668,14 @@ class AnalyticsTimeseriesService:
         snapshot_epoch: int,
         request_scope_fingerprint: str,
     ) -> str | None:
-        return portfolio_observation_next_page_token(
-            page_scope=page_scope,
-            snapshot_epoch=snapshot_epoch,
-            request_scope_fingerprint=request_scope_fingerprint,
-            encode_page_token=self._encode_page_token,
+        return cast(
+            str | None,
+            portfolio_observation_next_page_token(
+                page_scope=page_scope,
+                snapshot_epoch=snapshot_epoch,
+                request_scope_fingerprint=request_scope_fingerprint,
+                encode_page_token=self._encode_page_token,
+            ),
         )
 
     async def get_portfolio_timeseries(
@@ -746,11 +792,14 @@ class AnalyticsTimeseriesService:
         resolved_window: AnalyticsWindow,
         reporting_currency: str,
     ) -> str:
-        return portfolio_timeseries_scope_fingerprint(
-            portfolio_id=portfolio_id,
-            request=request,
-            resolved_window=resolved_window,
-            reporting_currency=reporting_currency,
+        return cast(
+            str,
+            portfolio_timeseries_scope_fingerprint(
+                portfolio_id=portfolio_id,
+                request=request,
+                resolved_window=resolved_window,
+                reporting_currency=reporting_currency,
+            ),
         )
 
     def _portfolio_timeseries_cursor_date(
@@ -760,10 +809,13 @@ class AnalyticsTimeseriesService:
         request_scope_fingerprint: str,
     ) -> date | None:
         try:
-            return portfolio_timeseries_cursor_date(
-                page_token=page_token,
-                request_scope_fingerprint=request_scope_fingerprint,
-                decode_page_token=self._decode_page_token,
+            return cast(
+                date | None,
+                portfolio_timeseries_cursor_date(
+                    page_token=page_token,
+                    request_scope_fingerprint=request_scope_fingerprint,
+                    decode_page_token=self._decode_page_token,
+                ),
             )
         except AnalyticsPaginationError as exc:
             raise AnalyticsInputError("INVALID_REQUEST", str(exc)) from exc
@@ -914,11 +966,14 @@ class AnalyticsTimeseriesService:
         resolved_window: AnalyticsWindow,
         reporting_currency: str,
     ) -> str:
-        return position_timeseries_scope_fingerprint(
-            portfolio_id=portfolio_id,
-            request=request,
-            resolved_window=resolved_window,
-            reporting_currency=reporting_currency,
+        return cast(
+            str,
+            position_timeseries_scope_fingerprint(
+                portfolio_id=portfolio_id,
+                request=request,
+                resolved_window=resolved_window,
+                reporting_currency=reporting_currency,
+            ),
         )
 
     def _position_timeseries_cursor(
@@ -940,7 +995,7 @@ class AnalyticsTimeseriesService:
     def _position_dimension_filters(
         request: PositionAnalyticsTimeseriesRequest,
     ) -> dict[str, set[str]]:
-        return position_dimension_filters(request)
+        return cast(dict[str, set[str]], position_dimension_filters(request))
 
     async def _position_snapshot_epoch(
         self,
@@ -952,30 +1007,36 @@ class AnalyticsTimeseriesService:
         cursor: PositionTimeseriesCursor,
     ) -> int:
         if cursor.snapshot_epoch is not None:
-            return cursor.snapshot_epoch
-        return await self.repo.get_position_snapshot_epoch(
-            portfolio_id=portfolio_id,
-            start_date=resolved_window.start_date,
-            end_date=resolved_window.end_date,
-            security_ids=request.filters.security_ids,
-            position_ids=request.filters.position_ids,
-            dimension_filters=dimension_filters,
+            return cast(int, cursor.snapshot_epoch)
+        return cast(
+            int,
+            await self.repo.get_position_snapshot_epoch(
+                portfolio_id=portfolio_id,
+                start_date=resolved_window.start_date,
+                end_date=resolved_window.end_date,
+                security_ids=request.filters.security_ids,
+                position_ids=request.filters.position_ids,
+                dimension_filters=dimension_filters,
+            ),
         )
 
     def _position_timeseries_next_page_token(
         self,
         *,
         has_more: bool,
-        rows_page: list[object],
+        rows_page: list[PositionValuationObservation],
         snapshot_epoch: int,
         request_scope_fingerprint: str,
     ) -> str | None:
-        return position_timeseries_next_page_token(
-            has_more=has_more,
-            rows_page=rows_page,
-            snapshot_epoch=snapshot_epoch,
-            request_scope_fingerprint=request_scope_fingerprint,
-            encode_page_token=self._encode_page_token,
+        return cast(
+            str | None,
+            position_timeseries_next_page_token(
+                has_more=has_more,
+                rows_page=rows_page,
+                snapshot_epoch=snapshot_epoch,
+                request_scope_fingerprint=request_scope_fingerprint,
+                encode_page_token=self._encode_page_token,
+            ),
         )
 
     @staticmethod
@@ -995,7 +1056,7 @@ class AnalyticsTimeseriesService:
         self,
         *,
         portfolio_id: str,
-        rows_page: list[object],
+        rows_page: list[PositionValuationObservation],
         portfolio_currency: str,
         reporting_currency: str,
         include_cash_flows: bool,
@@ -1058,7 +1119,7 @@ class AnalyticsTimeseriesService:
     @staticmethod
     def _position_page_scope(
         *,
-        rows_page: list[object],
+        rows_page: list[PositionValuationObservation],
         fallback_start_date: date,
     ) -> PositionPageScope:
         return position_page_scope(
@@ -1069,12 +1130,15 @@ class AnalyticsTimeseriesService:
     @staticmethod
     def _previous_position_eod_by_security(
         *,
-        previous_rows: list[object],
+        previous_rows: list[PriorPositionValuation],
         first_page_date: date,
     ) -> dict[str, Decimal]:
-        return previous_position_eod_by_security(
-            previous_rows=previous_rows,
-            first_page_date=first_page_date,
+        return cast(
+            dict[str, Decimal],
+            previous_position_eod_by_security(
+                previous_rows=previous_rows,
+                first_page_date=first_page_date,
+            ),
         )
 
     async def _position_page_cash_flows_by_key(
@@ -1100,7 +1164,7 @@ class AnalyticsTimeseriesService:
         self,
         *,
         portfolio_id: str,
-        rows_page: list[object],
+        rows_page: list[PositionValuationObservation],
         portfolio_currency: str,
         reporting_currency: str,
         dimensions: list[str],
@@ -1129,11 +1193,14 @@ class AnalyticsTimeseriesService:
         position_to_portfolio_rates: dict[str, dict[date, Decimal]],
     ) -> Decimal:
         try:
-            return position_to_portfolio_rate(
-                position_currency=position_currency,
-                portfolio_currency=portfolio_currency,
-                valuation_date=valuation_date,
-                position_to_portfolio_rates=position_to_portfolio_rates,
+            return cast(
+                Decimal,
+                position_to_portfolio_rate(
+                    position_currency=position_currency,
+                    portfolio_currency=portfolio_currency,
+                    valuation_date=valuation_date,
+                    position_to_portfolio_rates=position_to_portfolio_rates,
+                ),
             )
         except AnalyticsFxRateError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
@@ -1147,11 +1214,14 @@ class AnalyticsTimeseriesService:
         fx_rates: dict[date, Decimal],
     ) -> Decimal:
         try:
-            return portfolio_to_reporting_rate(
-                portfolio_currency=portfolio_currency,
-                reporting_currency=reporting_currency,
-                valuation_date=valuation_date,
-                fx_rates=fx_rates,
+            return cast(
+                Decimal,
+                portfolio_to_reporting_rate(
+                    portfolio_currency=portfolio_currency,
+                    reporting_currency=reporting_currency,
+                    valuation_date=valuation_date,
+                    fx_rates=fx_rates,
+                ),
             )
         except AnalyticsFxRateError as exc:
             raise AnalyticsInputError("INSUFFICIENT_DATA", str(exc)) from exc
@@ -1219,22 +1289,25 @@ class AnalyticsTimeseriesService:
             latest_position_date=latest_position_date,
             observed_dates=observed_dates,
         )
-        return bounded_latest_performance_date(
-            portfolio_candidate=latest_portfolio_horizon_candidate(
-                latest_portfolio_date=latest_portfolio_date,
-                observed_dates=observed_dates,
+        return cast(
+            date | None,
+            bounded_latest_performance_date(
+                portfolio_candidate=latest_portfolio_horizon_candidate(
+                    latest_portfolio_date=latest_portfolio_date,
+                    observed_dates=observed_dates,
+                ),
+                latest_position_date=latest_position_date,
+                as_of_date=as_of_date,
             ),
-            latest_position_date=latest_position_date,
-            as_of_date=as_of_date,
         )
 
     async def _reserve_export_job(
         self,
         *,
         request: AnalyticsExportCreateRequest,
-        request_payload: dict,
+        request_payload: dict[str, object],
         request_fingerprint: str,
-    ) -> tuple[object, bool]:
+    ) -> tuple[AnalyticsExportJobRecord, bool]:
         async with self._unit_of_work.transaction():
             existing = await self.export_repo.get_latest_by_fingerprint(
                 request_fingerprint=request_fingerprint,
@@ -1265,7 +1338,7 @@ class AnalyticsTimeseriesService:
             )
             return row, False
 
-    async def _mark_export_job_running(self, job_id: str) -> object:
+    async def _mark_export_job_running(self, job_id: str) -> AnalyticsExportJobRecord:
         async with self._unit_of_work.transaction():
             row = await self.export_repo.get_job(job_id)
             if row is None:
@@ -1276,9 +1349,9 @@ class AnalyticsTimeseriesService:
         self,
         job_id: str,
         *,
-        result_payload: dict,
+        result_payload: dict[str, object],
         result_row_count: int,
-    ) -> object:
+    ) -> AnalyticsExportJobRecord:
         async with self._unit_of_work.transaction():
             row = await self.export_repo.get_job(job_id)
             if row is None:
@@ -1289,7 +1362,9 @@ class AnalyticsTimeseriesService:
                 result_row_count=result_row_count,
             )
 
-    async def _mark_export_job_failed(self, job_id: str, *, error_message: str) -> object:
+    async def _mark_export_job_failed(
+        self, job_id: str, *, error_message: str
+    ) -> AnalyticsExportJobRecord:
         async with self._unit_of_work.transaction():
             row = await self.export_repo.get_job(job_id)
             if row is None:
@@ -1381,7 +1456,7 @@ class AnalyticsTimeseriesService:
         job_id: str,
         request: AnalyticsExportCreateRequest,
         request_fingerprint: str,
-    ) -> object:
+    ) -> AnalyticsExportJobRecord:
         data_rows, page_depth = await self._collect_export_dataset(request)
         return await self._complete_export_job_with_result(
             job_id=job_id,
@@ -1422,7 +1497,7 @@ class AnalyticsTimeseriesService:
         request_fingerprint: str,
         data_rows: list[dict[str, object]],
         page_depth: int,
-    ) -> object:
+    ) -> AnalyticsExportJobRecord:
         result_payload = analytics_export_result_payload(
             job_id=job_id,
             dataset_type=request.dataset_type,
@@ -1465,24 +1540,33 @@ class AnalyticsTimeseriesService:
         if row is None:
             raise AnalyticsInputError("RESOURCE_NOT_FOUND", "Export job not found.")
         try:
-            return analytics_export_ndjson_result_response(row, compression=compression)
+            return cast(
+                tuple[bytes, str, str],
+                analytics_export_ndjson_result_response(row, compression=compression),
+            )
         except AnalyticsExportResultError as exc:
             raise AnalyticsInputError(exc.code, str(exc)) from exc
 
     async def _collect_portfolio_timeseries_for_export(
         self, *, portfolio_id: str, request: PortfolioAnalyticsTimeseriesRequest
     ) -> tuple[list[dict[str, object]], int]:
-        return await collect_portfolio_timeseries_for_export(
-            portfolio_id=portfolio_id,
-            request=request,
-            get_portfolio_timeseries=self.get_portfolio_timeseries,
+        return cast(
+            tuple[list[dict[str, object]], int],
+            await collect_portfolio_timeseries_for_export(
+                portfolio_id=portfolio_id,
+                request=request,
+                get_portfolio_timeseries=self.get_portfolio_timeseries,
+            ),
         )
 
     async def _collect_position_timeseries_for_export(
         self, *, portfolio_id: str, request: PositionAnalyticsTimeseriesRequest
     ) -> tuple[list[dict[str, object]], int]:
-        return await collect_position_timeseries_for_export(
-            portfolio_id=portfolio_id,
-            request=request,
-            get_position_timeseries=self.get_position_timeseries,
+        return cast(
+            tuple[list[dict[str, object]], int],
+            await collect_position_timeseries_for_export(
+                portfolio_id=portfolio_id,
+                request=request,
+                get_position_timeseries=self.get_position_timeseries,
+            ),
         )

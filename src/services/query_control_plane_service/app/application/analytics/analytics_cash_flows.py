@@ -105,7 +105,7 @@ def effective_beginning_market_value(
 ) -> Decimal:
     stored_beginning: Decimal = decimal_or_zero(row.bod_market_value)
     ending: Decimal = decimal_or_zero(row.eod_market_value)
-    bod_position_flow: Decimal = decimal_or_zero(row.bod_cashflow_position)
+    bod_position_flow: Decimal = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
 
     if has_prior_eod_continuity(
         previous_eod_market_value=previous_eod_market_value,
@@ -144,7 +144,7 @@ def effective_beginning_market_value(
 
 
 def is_cash_book_position(row: PositionValuationObservation) -> bool:
-    asset_class = str(row.asset_class or "").strip().casefold()
+    asset_class = str(getattr(row, "asset_class", None) or "").strip().casefold()
     security_id = row.security_id.strip().upper()
     return asset_class == "cash" or security_id.startswith("CASH_")
 
