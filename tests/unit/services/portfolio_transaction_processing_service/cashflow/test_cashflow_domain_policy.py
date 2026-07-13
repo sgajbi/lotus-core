@@ -16,6 +16,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
+    build_generated_settlement_cash_leg,
 )
 
 
@@ -203,6 +204,57 @@ def test_cashflow_rejects_non_positive_income_like_settlement(
         calculate_transaction_cashflow(transaction, _rule(classification))
 
     assert raised.value.reason_code is reason_code
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "classification", "changes"),
+    [
+        ("SELL", CashflowClassification.INVESTMENT_INFLOW, {}),
+        (
+            "DIVIDEND",
+            CashflowClassification.INCOME,
+            {"quantity": Decimal(0), "price": Decimal(0)},
+        ),
+        (
+            "INTEREST",
+            CashflowClassification.INCOME,
+            {
+                "quantity": Decimal(0),
+                "price": Decimal(0),
+                "net_interest_amount": Decimal("100"),
+                "interest_direction": "INCOME",
+            },
+        ),
+    ],
+)
+def test_product_and_generated_leg_cashflows_share_settlement_economics(
+    transaction_type: str,
+    classification: CashflowClassification,
+    changes: dict[str, object],
+) -> None:
+    product_transaction = _booked_transaction(
+        transaction_type=transaction_type,
+        gross_transaction_amount=Decimal("100"),
+        trade_fee=Decimal("2"),
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-001",
+        settlement_cash_instrument_id="CASH-USD",
+        **changes,
+    )
+    settlement_transaction = build_generated_settlement_cash_leg(product_transaction)
+
+    product_cashflow = calculate_transaction_cashflow(
+        product_transaction,
+        _rule(classification),
+    )
+    settlement_cashflow = calculate_transaction_cashflow(
+        settlement_transaction,
+        _rule(CashflowClassification.TRANSFER),
+    )
+
+    assert product_cashflow.amount == Decimal("98")
+    assert settlement_cashflow.amount == product_cashflow.amount
+    assert settlement_transaction.movement_direction == "INFLOW"
 
 
 def test_synthetic_position_transfer_uses_source_owned_market_value() -> None:
