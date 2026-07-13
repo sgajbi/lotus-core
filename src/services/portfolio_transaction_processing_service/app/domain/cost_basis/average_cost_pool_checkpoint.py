@@ -7,7 +7,7 @@ from decimal import Decimal
 from types import MappingProxyType
 from typing import Mapping
 
-from portfolio_common.cost_basis import CostBasisMethod
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 
 from .calculation.lot_state import OpenLotState
 from .models.cost_basis_transaction import CostBasisTransaction

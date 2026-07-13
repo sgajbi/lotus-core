@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Callable
 
-from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )

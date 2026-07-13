@@ -5,9 +5,9 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 from .currency_codes import normalize_currency_code, normalize_optional_currency_code
 from .decimal_amounts import decimal_or_none
+from .domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 from .domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,

@@ -6,7 +6,7 @@ import logging
 from types import TracebackType
 from typing import Any
 
-from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 
 from ..domain.cost_basis import (
     AverageCostBasisStrategy,

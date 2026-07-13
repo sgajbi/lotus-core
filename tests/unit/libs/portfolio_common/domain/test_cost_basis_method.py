@@ -1,5 +1,5 @@
 import pytest
-from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 
 
 @pytest.mark.parametrize(

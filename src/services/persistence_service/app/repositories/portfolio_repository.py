@@ -1,8 +1,8 @@
 # services/persistence_service/app/repositories/portfolio_repository.py
 import logging
 
-from portfolio_common.cost_basis import normalize_cost_basis_method
 from portfolio_common.database_models import Portfolio as DBPortfolio
+from portfolio_common.domain.cost_basis_method import normalize_cost_basis_method
 from portfolio_common.events import PortfolioEvent
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
