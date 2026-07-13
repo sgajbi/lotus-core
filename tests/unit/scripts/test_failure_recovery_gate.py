@@ -345,6 +345,7 @@ def test_recovery_polling_reports_unsatisfied_fields_at_timeout(
     mismatches = {field.field: field for field in evidence.fields if not field.satisfied}
     assert recovery_seconds is None
     assert evidence.poll_count == 1
+    assert evidence.terminal_reason is None
     assert set(mismatches) == {
         "transaction_count",
         "cost_count",
@@ -357,6 +358,75 @@ def test_recovery_polling_reports_unsatisfied_fields_at_timeout(
     assert mismatches["transaction_count"].expected == 2
     assert mismatches["consumer_lag"].actual == 3
     assert mismatches["consumer_lag"].expected == 0
+
+
+def test_recovery_polling_stops_on_terminal_exact_count_overshoot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate.transaction_processing_counts",
+        lambda **_kwargs: TransactionProcessingCounts(3, 0, 0, 0, 0),
+    )
+    store = SimpleNamespace(
+        snapshot=lambda **_kwargs: SimpleNamespace(
+            partitions=(SimpleNamespace(high_watermark=1, committed_offset=0),)
+        )
+    )
+
+    recovery_seconds, _, _, evidence = _wait_for_full_recovery(
+        store=store,
+        engine=object(),
+        consumer_group="portfolio_transaction_processing_group",
+        transaction_topic="transactions.persisted.v1",
+        baseline_lag=0,
+        portfolio_id="PORTFOLIO_001",
+        transaction_id_prefix="TX_TEST",
+        expected_records=2,
+        timeout_seconds=30,
+        clock=lambda: 0.0,
+        sleeper=lambda _seconds: pytest.fail("terminal state must not sleep"),
+        utc_now=lambda: datetime(2026, 7, 13, tzinfo=UTC),
+    )
+
+    assert recovery_seconds is None
+    assert evidence.poll_count == 1
+    assert evidence.terminal_reason == (
+        "transaction_count exceeded exact target: actual=3 expected=2"
+    )
+
+
+def test_recovery_polling_stops_on_dlq_terminal_condition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate.transaction_processing_counts",
+        lambda **_kwargs: TransactionProcessingCounts(1, 0, 0, 0, 0),
+    )
+    store = SimpleNamespace(
+        snapshot=lambda **_kwargs: SimpleNamespace(
+            partitions=(SimpleNamespace(high_watermark=1, committed_offset=0),)
+        )
+    )
+
+    recovery_seconds, _, _, evidence = _wait_for_full_recovery(
+        store=store,
+        engine=object(),
+        consumer_group="portfolio_transaction_processing_group",
+        transaction_topic="transactions.persisted.v1",
+        baseline_lag=0,
+        portfolio_id="PORTFOLIO_001",
+        transaction_id_prefix="TX_TEST",
+        expected_records=2,
+        timeout_seconds=30,
+        terminal_condition=lambda: "DLQ events increased: baseline=0 current=1",
+        clock=lambda: 0.0,
+        sleeper=lambda _seconds: pytest.fail("DLQ terminal state must not sleep"),
+        utc_now=lambda: datetime(2026, 7, 13, tzinfo=UTC),
+    )
+
+    assert recovery_seconds is None
+    assert evidence.poll_count == 1
+    assert evidence.terminal_reason == "DLQ events increased: baseline=0 current=1"
 
 
 def test_evaluate_recovery_result_requires_exact_domain_and_lag_recovery() -> None:
