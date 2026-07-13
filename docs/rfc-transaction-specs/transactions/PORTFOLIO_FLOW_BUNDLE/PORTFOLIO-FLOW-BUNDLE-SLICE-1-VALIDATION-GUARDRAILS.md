@@ -21,9 +21,9 @@ Primary rule:
  - `PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES`
  - `is_portfolio_level_cash_flow(...)`
  - `assert_cash_entry_mode_supported(...)`
-2. Exported guardrail APIs through `portfolio_common.transaction_domain.__init__`.
-3. Enforced guardrail in cost calculator consumer before emission/linkage handling.
-4. Enforced guardrail in cashflow calculator consumer before mode-specific processing.
+2. Exported guardrail APIs through the service-owned transaction domain.
+3. Enforced the guardrail in the unified cost-processing stage before emission and linkage.
+4. Enforced the guardrail in the unified cashflow-processing stage before mode-specific handling.
 5. Added unit tests:
  - transaction-domain guardrail tests
  - cashflow consumer reject-path test for `FEE + AUTO_GENERATE`

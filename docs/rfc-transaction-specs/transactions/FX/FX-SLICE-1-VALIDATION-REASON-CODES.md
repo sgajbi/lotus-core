@@ -9,9 +9,9 @@ This slice establishes the canonical FX contract for validation, metadata carria
  - `FX_FORWARD`
  - `FX_SWAP`
 2. Added canonical transaction-domain modules:
- - `portfolio_common.transaction_domain.fx_models`
- - `portfolio_common.transaction_domain.fx_reason_codes`
- - `portfolio_common.transaction_domain.fx_validation`
+ - `portfolio_transaction_processing_service.app.domain.transaction.fx.models`
+ - `portfolio_transaction_processing_service.app.domain.transaction.fx.reason_codes`
+ - `portfolio_transaction_processing_service.app.domain.transaction.fx.validation`
 3. Added canonical metadata carriage through:
  - ingestion transaction DTO
  - transaction event model
@@ -71,6 +71,6 @@ This slice establishes the canonical FX contract for validation, metadata carria
 5. downstream query views dedicated to FX lifecycle interpretation
 
 ## Exit Evidence
-1. `tests/unit/libs/portfolio_common/test_fx_validation.py`
+1. `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py`
 2. `tests/unit/transaction_specs/test_fx_slice0_characterization.py`
 3. Alembic migration for FX transaction metadata fields
