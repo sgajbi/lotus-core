@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 Issues: #752, contributes to #719 and #731; follow-ups #448 and #754
-Status: Locally validated; full PR proof pending
+Status: Locally validated; PR proof pending
 
 ## Objective
 
@@ -78,7 +78,13 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
 - Three PostgreSQL corrected-redelivery cases passed in 83.18 seconds.
 - Three PostgreSQL positive generated-settlement reconciliation cases passed in 86.19 seconds.
 - Focused Ruff, RFC status ledger, and diff checks passed.
-- Full repository and PR gates remain pending.
+- Governed SELL, DIVIDEND, and INTEREST contracts passed 152, 303, and 330 cases.
+- The complete PostgreSQL transaction-processing contract passed 70 cases in 296.59 seconds.
+- `make ci-local` passed 4,408 zero-warning unit tests, 10 unit-DB tests, and 136
+  integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
+- Configured MyPy, architecture, application error taxonomy, security-control coverage, event,
+  image-provenance, OpenAPI, API-vocabulary, documentation, wiki, Ruff, and diff gates passed.
+- PR checks and exact-main proof remain pending.
 
 ## Documentation Decision
 
