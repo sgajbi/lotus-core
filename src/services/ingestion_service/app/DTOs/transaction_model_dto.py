@@ -260,8 +260,9 @@ class Transaction(BaseModel):
         default=None,
         json_schema_extra={"example": "108.20"},
         description=(
-            "Net interest amount supplied upstream for reconciliation against "
-            "gross and deduction fields."
+            "Interest amount after withholding tax and other interest deductions, "
+            "but before separately reported transaction fees; when supplied upstream, "
+            "it is reconciled against the gross and deduction fields."
         ),
     )
     component_type: Optional[str] = Field(

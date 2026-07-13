@@ -194,7 +194,10 @@ class TransactionRecord(BaseModel):
     )
     net_interest_amount: Optional[Decimal] = Field(
         None,
-        description="Net-interest amount when provided for reconciliation.",
+        description=(
+            "Interest amount after withholding tax and other interest deductions, "
+            "but before separately reported transaction fees."
+        ),
         examples=[108.2],
     )
     gross_transaction_amount_reporting_currency: Optional[Decimal] = Field(

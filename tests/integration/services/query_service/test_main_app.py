@@ -205,6 +205,20 @@ async def test_openapi_describes_transaction_date_as_event_timestamp(async_test_
     assert "booking" not in sell_disposal_description.lower()
 
 
+async def test_openapi_describes_net_interest_as_pre_fee(async_test_client):
+    response = await async_test_client.get("/openapi.json")
+    assert response.status_code == 200
+
+    net_interest = response.json()["components"]["schemas"]["TransactionRecord"]["properties"][
+        "net_interest_amount"
+    ]
+
+    assert net_interest["description"] == (
+        "Interest amount after withholding tax and other interest deductions, "
+        "but before separately reported transaction fees."
+    )
+
+
 async def test_openapi_excludes_control_plane_analytics_input_contracts(async_test_client):
     response = await async_test_client.get("/openapi.json")
     assert response.status_code == 200
