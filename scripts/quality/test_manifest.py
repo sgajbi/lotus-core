@@ -84,6 +84,7 @@ SUITES: dict[str, list[str]] = {
     "transaction-interest-contract": [
         "tests/unit/transaction_specs/test_interest_slice0_characterization.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_interest_settlement_economics.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_generated_cash_leg.py",
@@ -97,6 +98,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/services/query_service/services/test_transaction_service.py",
         "tests/integration/services/query_service/test_transactions_router.py",
         "tests/integration/services/persistence_service/repositories/test_repositories.py",
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_interest_processing.py",
     ],
     "transaction-fx-contract": [
         "tests/unit/transaction_specs/test_fx_slice0_characterization.py",
