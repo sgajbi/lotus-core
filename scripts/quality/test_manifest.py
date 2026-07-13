@@ -84,6 +84,7 @@ SUITES: dict[str, list[str]] = {
     "transaction-interest-contract": [
         "tests/unit/docs/test_interest_settlement_methodology.py",
         "tests/unit/transaction_specs/test_interest_slice0_characterization.py",
+        "tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_interest_settlement_economics.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
