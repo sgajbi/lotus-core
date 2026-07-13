@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from scripts.operations.failure_recovery_gate import (
     _resolve_interruption_container,
     _resolve_runtime_connections,
     _set_container_pause,
+    _wait_for_full_recovery,
 )
 from scripts.operations.transaction_processing_load_support import TransactionProcessingCounts
 
@@ -243,6 +245,118 @@ def test_consumer_lag_treats_uncommitted_partition_as_offset_zero() -> None:
     )
 
     assert lag == 15
+
+
+def test_recovery_polling_reports_field_comparison_and_last_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    counts = iter(
+        (
+            TransactionProcessingCounts(2, 0, 0, 0, 0),
+            TransactionProcessingCounts(2, 2, 2, 2, 2),
+        )
+    )
+    lags = iter((2, 0))
+    elapsed = 0.0
+    observed_at = datetime(2026, 7, 13, tzinfo=UTC)
+
+    def clock() -> float:
+        return elapsed
+
+    def sleeper(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+
+    def utc_now() -> datetime:
+        return observed_at + timedelta(seconds=elapsed)
+
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate.transaction_processing_counts",
+        lambda **_kwargs: next(counts),
+    )
+    store = SimpleNamespace(
+        snapshot=lambda **_kwargs: SimpleNamespace(
+            partitions=(
+                SimpleNamespace(
+                    high_watermark=next(lags),
+                    committed_offset=0,
+                ),
+            )
+        )
+    )
+
+    recovery_seconds, final_counts, final_lag, evidence = _wait_for_full_recovery(
+        store=store,
+        engine=object(),
+        consumer_group="portfolio_transaction_processing_group",
+        transaction_topic="transactions.persisted.v1",
+        baseline_lag=0,
+        portfolio_id="PORTFOLIO_001",
+        transaction_id_prefix="TX_TEST",
+        expected_records=2,
+        timeout_seconds=5,
+        clock=clock,
+        sleeper=sleeper,
+        utc_now=utc_now,
+    )
+
+    fields = {field.field: field for field in evidence.fields}
+    assert recovery_seconds == 1.0
+    assert final_counts == TransactionProcessingCounts(2, 2, 2, 2, 2)
+    assert final_lag == 0
+    assert evidence.poll_count == 2
+    assert evidence.last_observed_at == "2026-07-13T00:00:01+00:00"
+    assert fields["transaction_count"].comparison == "equals"
+    assert fields["transaction_count"].satisfied is True
+    assert fields["transaction_count"].last_changed_at == "2026-07-13T00:00:00+00:00"
+    assert fields["cost_count"].last_changed_at == "2026-07-13T00:00:01+00:00"
+    assert fields["processing_claim_count"].comparison == "at_least"
+    assert fields["consumer_lag"].comparison == "at_most"
+    assert all(field.satisfied for field in fields.values())
+
+
+def test_recovery_polling_reports_unsatisfied_fields_at_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.operations.failure_recovery_gate.transaction_processing_counts",
+        lambda **_kwargs: TransactionProcessingCounts(1, 0, 0, 0, 0),
+    )
+    store = SimpleNamespace(
+        snapshot=lambda **_kwargs: SimpleNamespace(
+            partitions=(SimpleNamespace(high_watermark=3, committed_offset=0),)
+        )
+    )
+
+    recovery_seconds, _, _, evidence = _wait_for_full_recovery(
+        store=store,
+        engine=object(),
+        consumer_group="portfolio_transaction_processing_group",
+        transaction_topic="transactions.persisted.v1",
+        baseline_lag=0,
+        portfolio_id="PORTFOLIO_001",
+        transaction_id_prefix="TX_TEST",
+        expected_records=2,
+        timeout_seconds=0,
+        clock=lambda: 0.0,
+        utc_now=lambda: datetime(2026, 7, 13, tzinfo=UTC),
+    )
+
+    mismatches = {field.field: field for field in evidence.fields if not field.satisfied}
+    assert recovery_seconds is None
+    assert evidence.poll_count == 1
+    assert set(mismatches) == {
+        "transaction_count",
+        "cost_count",
+        "cashflow_count",
+        "position_count",
+        "processing_claim_count",
+        "consumer_lag",
+    }
+    assert mismatches["transaction_count"].actual == 1
+    assert mismatches["transaction_count"].expected == 2
+    assert mismatches["consumer_lag"].actual == 3
+    assert mismatches["consumer_lag"].expected == 0
 
 
 def test_evaluate_recovery_result_requires_exact_domain_and_lag_recovery() -> None:

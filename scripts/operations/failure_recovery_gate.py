@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Callable, Protocol, cast
 
 import requests  # type: ignore[import-untyped]
 from portfolio_common.config import (
@@ -89,6 +89,55 @@ class RecoveryMode(StrEnum):
     FAILED_RECOVERY = "FAILED_RECOVERY"
 
 
+class RecoveryComparison(StrEnum):
+    """Comparison applied to one observed recovery field."""
+
+    EQUALS = "equals"
+    AT_LEAST = "at_least"
+    AT_MOST = "at_most"
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryFieldEvidence:
+    """Final value, target, and change time for one recovery predicate."""
+
+    field: str
+    actual: int
+    expected: int
+    comparison: str
+    satisfied: bool
+    last_changed_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryPollingEvidence:
+    """Field-level state accumulated by bounded recovery polling."""
+
+    poll_count: int
+    last_observed_at: str
+    fields: tuple[RecoveryFieldEvidence, ...]
+
+
+def _utc_now() -> datetime:
+    """Return the current timezone-aware UTC timestamp."""
+
+    return datetime.now(UTC)
+
+
+def _recovery_comparison_satisfied(
+    *, actual: int, expected: int, comparison: RecoveryComparison
+) -> bool:
+    """Evaluate one field against its explicit recovery target."""
+
+    match comparison:
+        case RecoveryComparison.EQUALS:
+            return actual == expected
+        case RecoveryComparison.AT_LEAST:
+            return actual >= expected
+        case RecoveryComparison.AT_MOST:
+            return actual <= expected
+
+
 @dataclass(slots=True)
 class RecoveryResult:
     run_id: str
@@ -115,6 +164,7 @@ class RecoveryResult:
     position_count: int
     processing_claim_count: int
     dlq_events_added_during_recovery: int
+    recovery_polling: RecoveryPollingEvidence
     recovery_mode: str
     checks_passed: bool
     failed_checks: list[str]
@@ -315,20 +365,21 @@ def _wait_for_full_recovery(
     transaction_id_prefix: str,
     expected_records: int,
     timeout_seconds: int,
-) -> tuple[float | None, TransactionProcessingCounts, int]:
-    started = time.time()
+    clock: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], None] = time.sleep,
+    utc_now: Callable[[], datetime] = _utc_now,
+) -> tuple[
+    float | None,
+    TransactionProcessingCounts,
+    int,
+    RecoveryPollingEvidence,
+]:
+    started = clock()
     deadline = started + timeout_seconds
-    counts = transaction_processing_counts(
-        engine=engine,
-        portfolio_id=portfolio_id,
-        transaction_id_prefix=transaction_id_prefix,
-    )
-    consumer_lag = _consumer_lag(
-        store=store,
-        consumer_group=consumer_group,
-        transaction_topic=transaction_topic,
-    )
-    while time.time() < deadline:
+    last_values: dict[str, int] = {}
+    last_changed_at: dict[str, str] = {}
+    poll_count = 0
+    while True:
         counts = transaction_processing_counts(
             engine=engine,
             portfolio_id=portfolio_id,
@@ -339,23 +390,53 @@ def _wait_for_full_recovery(
             consumer_group=consumer_group,
             transaction_topic=transaction_topic,
         )
-        domain_complete = all(
-            count == expected_records
-            for count in (
-                counts.transaction_count,
-                counts.cost_count,
-                counts.cashflow_count,
-                counts.position_count,
-            )
+        observed_at = utc_now().isoformat()
+        poll_count += 1
+        values = {
+            "transaction_count": counts.transaction_count,
+            "cost_count": counts.cost_count,
+            "cashflow_count": counts.cashflow_count,
+            "position_count": counts.position_count,
+            "processing_claim_count": counts.processing_claim_count,
+            "consumer_lag": consumer_lag,
+        }
+        for field, value in values.items():
+            if field not in last_values or last_values[field] != value:
+                last_changed_at[field] = observed_at
+        last_values = values
+        field_targets = (
+            ("transaction_count", expected_records, RecoveryComparison.EQUALS),
+            ("cost_count", expected_records, RecoveryComparison.EQUALS),
+            ("cashflow_count", expected_records, RecoveryComparison.EQUALS),
+            ("position_count", expected_records, RecoveryComparison.EQUALS),
+            ("processing_claim_count", expected_records, RecoveryComparison.AT_LEAST),
+            ("consumer_lag", baseline_lag, RecoveryComparison.AT_MOST),
         )
-        if (
-            domain_complete
-            and counts.processing_claim_count >= expected_records
-            and consumer_lag <= baseline_lag
-        ):
-            return round(time.time() - started, 3), counts, consumer_lag
-        time.sleep(1)
-    return None, counts, consumer_lag
+        fields = tuple(
+            RecoveryFieldEvidence(
+                field=field,
+                actual=values[field],
+                expected=expected,
+                comparison=comparison.value,
+                satisfied=_recovery_comparison_satisfied(
+                    actual=values[field],
+                    expected=expected,
+                    comparison=comparison,
+                ),
+                last_changed_at=last_changed_at[field],
+            )
+            for field, expected, comparison in field_targets
+        )
+        evidence = RecoveryPollingEvidence(
+            poll_count=poll_count,
+            last_observed_at=observed_at,
+            fields=fields,
+        )
+        if all(field.satisfied for field in fields):
+            return round(clock() - started, 3), counts, consumer_lag, evidence
+        if clock() >= deadline:
+            return None, counts, consumer_lag, evidence
+        sleeper(1)
 
 
 def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Path]:
@@ -400,7 +481,23 @@ def _write_report(*, output_dir: Path, result: RecoveryResult) -> tuple[Path, Pa
         f"| position_count | {result.position_count} |",
         f"| processing_claim_count | {result.processing_claim_count} |",
         f"| dlq_events_added_during_recovery | {result.dlq_events_added_during_recovery} |",
+        f"| recovery_poll_count | {result.recovery_polling.poll_count} |",
     ]
+    lines.extend(
+        [
+            "",
+            "## Recovery field evidence",
+            "",
+            "| Field | Actual | Comparison | Expected | Satisfied | Last changed at |",
+            "|---|---:|---|---:|---|---|",
+        ]
+    )
+    lines.extend(
+        "| "
+        f"{field.field} | {field.actual} | {field.comparison} | {field.expected} | "
+        f"{field.satisfied} | {field.last_changed_at} |"
+        for field in result.recovery_polling.fields
+    )
     if result.failed_checks:
         lines.extend(["", "## Failed checks"])
         lines.extend(f"- {check}" for check in result.failed_checks)
@@ -619,7 +716,7 @@ def main() -> int:
             )
         actual_interruption_seconds = round(time.time() - interruption_started, 3)
 
-        recovery_seconds, counts, lag_after_recovery = _wait_for_full_recovery(
+        recovery_seconds, counts, lag_after_recovery, recovery_polling = _wait_for_full_recovery(
             store=offset_store,
             engine=engine,
             consumer_group=args.consumer_group,
@@ -654,6 +751,7 @@ def main() -> int:
             max_recovery_seconds=args.max_recovery_seconds,
             counts=counts,
             dlq_events_added_during_recovery=dlq_events_added,
+            recovery_polling=recovery_polling,
         )
 
         ended_at = datetime.now(UTC)
