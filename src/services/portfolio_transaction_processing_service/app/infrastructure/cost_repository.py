@@ -852,9 +852,7 @@ class CostCalculatorRepository:
         stmt = (
             select(DBTransaction)
             .where(DBTransaction.portfolio_id == key.portfolio_id)
-            .where(
-                DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id
-            )
+            .where(DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id)
             .where(DBTransaction.parent_event_reference == key.parent_event_reference)
             .where(
                 DBTransaction.transaction_type.in_(
