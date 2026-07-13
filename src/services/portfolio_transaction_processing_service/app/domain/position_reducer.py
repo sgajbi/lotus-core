@@ -5,12 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Callable, cast
+from typing import Callable
 
-from portfolio_common.decimal_amounts import required_decimal
-from portfolio_common.domain.transaction_control_codes import (
-    normalize_transaction_control_code,
-)
+from .booked_transaction import BookedTransaction
 
 CASH_POSITION_INFLOW_TRANSACTION_TYPES = {"DEPOSIT"}
 CASH_POSITION_OUTFLOW_TRANSACTION_TYPES = {"WITHDRAWAL", "FEE", "TAX"}
@@ -79,7 +76,9 @@ class BackdatedRecalculationDecision:
     reason: str
 
 
-_PositionUpdateHandler = Callable[[PositionBalanceState, Any, str], PositionBalanceState]
+_PositionUpdateHandler = Callable[
+    [PositionBalanceState, BookedTransaction, str], PositionBalanceState
+]
 
 
 def plan_backdated_recalculation(
@@ -110,7 +109,7 @@ def plan_backdated_recalculation(
 
 def calculate_next_position_state(
     current_state: PositionBalanceState,
-    transaction: Any,
+    transaction: BookedTransaction,
 ) -> PositionBalanceState:
     txn_type = _resolve_effective_processing_transaction_type(transaction)
     handler = _position_update_handler(txn_type)
@@ -120,35 +119,26 @@ def calculate_next_position_state(
     return _zeroed_cost_basis_when_flat(next_state)
 
 
-def normalize_position_code(value: object) -> str:
+def normalize_position_code(value: str | None) -> str:
     return str(value or "").strip().upper()
 
 
-def _resolve_effective_processing_transaction_type(transaction: Any) -> str:
-    component_type = normalize_transaction_control_code(
-        getattr(transaction, "component_type", None)
-    )
+def _resolve_effective_processing_transaction_type(transaction: BookedTransaction) -> str:
+    component_type = normalize_position_code(transaction.component_type)
     if component_type in FX_COMPONENT_PROCESSING_TYPES:
-        return cast(str, component_type)
-    return cast(
-        str,
-        normalize_transaction_control_code(getattr(transaction, "transaction_type", None)),
-    )
+        return component_type
+    return normalize_position_code(transaction.transaction_type)
 
 
-def cash_position_deltas(transaction: Any, txn_type: str) -> tuple[Decimal, Decimal, Decimal]:
+def cash_position_deltas(
+    transaction: BookedTransaction, txn_type: str
+) -> tuple[Decimal, Decimal, Decimal]:
     quantity_delta = _cash_position_amount_delta(transaction, txn_type)
     use_quantity_fallback = txn_type == "ADJUSTMENT" or txn_type in (
         CASH_POSITION_INFLOW_TRANSACTION_TYPES | CASH_POSITION_OUTFLOW_TRANSACTION_TYPES
     )
-    net_cost = _optional_decimal(
-        transaction.net_cost,
-        field_name="net_cost",
-    )
-    net_cost_local = _optional_decimal(
-        transaction.net_cost_local,
-        field_name="net_cost_local",
-    )
+    net_cost = transaction.net_cost
+    net_cost_local = transaction.net_cost_local
     cost_basis_delta = (
         net_cost
         if net_cost is not None and not (use_quantity_fallback and net_cost == Decimal(0))
@@ -202,7 +192,7 @@ def _position_state(
 
 
 def _buy_position_state(
-    current_state: PositionBalanceState, transaction: Any, _txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, _txn_type: str
 ) -> PositionBalanceState:
     return _position_state(
         quantity=current_state.quantity + transaction.quantity,
@@ -216,7 +206,7 @@ def _buy_position_state(
 
 
 def _sell_position_state(
-    current_state: PositionBalanceState, transaction: Any, _txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, _txn_type: str
 ) -> PositionBalanceState:
     return _position_state(
         quantity=current_state.quantity - transaction.quantity,
@@ -236,7 +226,7 @@ def _cost_basis_with_optional_net_cost(
 
 
 def _cash_delta_position_state(
-    current_state: PositionBalanceState, transaction: Any, txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, txn_type: str
 ) -> PositionBalanceState:
     quantity_delta, cost_basis_delta, cost_basis_local_delta = cash_position_deltas(
         transaction, txn_type
@@ -249,7 +239,7 @@ def _cash_delta_position_state(
 
 
 def _transfer_position_state(
-    current_state: PositionBalanceState, transaction: Any, txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, txn_type: str
 ) -> PositionBalanceState:
     transfer_quantity = transaction.quantity
     if transfer_quantity <= Decimal(0):
@@ -288,7 +278,7 @@ def _transfer_cost_basis(
 
 
 def _same_instrument_action_state(
-    current_state: PositionBalanceState, transaction: Any, txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, txn_type: str
 ) -> PositionBalanceState:
     quantity_delta_sign = (
         Decimal(-1) if txn_type in SAME_INSTRUMENT_QUANTITY_DECREASE_TYPES else Decimal(1)
@@ -297,7 +287,7 @@ def _same_instrument_action_state(
 
 
 def _spin_off_position_state(
-    current_state: PositionBalanceState, transaction: Any, _txn_type: str
+    current_state: PositionBalanceState, transaction: BookedTransaction, _txn_type: str
 ) -> PositionBalanceState:
     quantity_delta = -transaction.quantity if transaction.quantity > Decimal(0) else Decimal(0)
     return _position_state(
@@ -336,13 +326,13 @@ def _quantity_delta_position_state(
 
 
 def _fx_contract_open_position_state(
-    current_state: PositionBalanceState, _transaction: Any, _txn_type: str
+    current_state: PositionBalanceState, _transaction: BookedTransaction, _txn_type: str
 ) -> PositionBalanceState:
     return _quantity_delta_position_state(current_state, Decimal(1))
 
 
 def _fx_contract_close_position_state(
-    current_state: PositionBalanceState, _transaction: Any, _txn_type: str
+    current_state: PositionBalanceState, _transaction: BookedTransaction, _txn_type: str
 ) -> PositionBalanceState:
     return _quantity_delta_position_state(current_state, Decimal(-1))
 
@@ -357,21 +347,12 @@ def _zeroed_cost_basis_when_flat(current_state: PositionBalanceState) -> Positio
     )
 
 
-def _cash_position_amount_delta(transaction: Any, txn_type: str) -> Decimal:
-    gross_amount = _decimal_or_zero(
-        transaction.gross_transaction_amount,
-        field_name="gross_transaction_amount",
-    )
-    quantity_amount = _decimal_or_zero(
-        transaction.quantity,
-        field_name="quantity",
-    )
-    magnitude = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
+def _cash_position_amount_delta(transaction: BookedTransaction, txn_type: str) -> Decimal:
+    gross_amount = transaction.gross_transaction_amount
+    quantity_amount = transaction.quantity
+    magnitude: Decimal = abs(gross_amount if not gross_amount.is_zero() else quantity_amount)
     if txn_type == "FEE":
-        net_cost_local = _optional_decimal(
-            transaction.net_cost_local,
-            field_name="net_cost_local",
-        )
+        net_cost_local = transaction.net_cost_local
         if net_cost_local is not None and not net_cost_local.is_zero():
             magnitude = abs(net_cost_local)
     if txn_type in CASH_POSITION_INFLOW_TRANSACTION_TYPES | {
@@ -383,15 +364,3 @@ def _cash_position_amount_delta(transaction: Any, txn_type: str) -> Decimal:
             return -magnitude if movement_direction == "OUTFLOW" else magnitude
         return magnitude
     return -magnitude
-
-
-def _decimal_or_zero(value: object, *, field_name: str) -> Decimal:
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return Decimal(0)
-    return Decimal(required_decimal(value, field_name=field_name))
-
-
-def _optional_decimal(value: object, *, field_name: str) -> Decimal | None:
-    if value is None:
-        return None
-    return Decimal(required_decimal(value, field_name=field_name))

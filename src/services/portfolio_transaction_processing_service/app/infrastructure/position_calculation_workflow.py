@@ -22,6 +22,7 @@ from ..domain.position_reducer import (
     calculate_next_position_state,
     plan_backdated_recalculation,
 )
+from .legacy_transaction_event_mapper import to_booked_transaction
 from .position_repository import PositionRepository
 
 logger = logging.getLogger(__name__)
@@ -422,4 +423,4 @@ class PositionCalculationWorkflow:
     def calculate_next_position(
         current_state: PositionBalanceState, transaction: TransactionEvent
     ) -> PositionBalanceState:
-        return calculate_next_position_state(current_state, transaction)
+        return calculate_next_position_state(current_state, to_booked_transaction(transaction))

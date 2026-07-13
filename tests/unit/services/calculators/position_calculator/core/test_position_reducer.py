@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from types import SimpleNamespace
 
 import pytest
 
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
     PositionBalanceState,
     calculate_next_position_state,
@@ -21,15 +21,23 @@ def _txn(
     net_cost_local: Decimal | None = None,
     movement_direction: str | None = None,
     component_type: str | None = None,
-) -> SimpleNamespace:
-    return SimpleNamespace(
+) -> BookedTransaction:
+    return BookedTransaction(
+        transaction_id=f"TX-{transaction_type}",
+        portfolio_id="PB-001",
+        instrument_id="SEC-001",
+        security_id="SEC-001",
+        transaction_date=datetime(2026, 4, 10, tzinfo=timezone.utc),
         transaction_type=transaction_type,
-        component_type=component_type,
         quantity=quantity,
+        price=Decimal("1"),
         gross_transaction_amount=gross_transaction_amount,
+        trade_currency="SGD",
+        currency="SGD",
         net_cost=net_cost,
         net_cost_local=net_cost_local,
         movement_direction=movement_direction,
+        component_type=component_type,
     )
 
 
@@ -220,24 +228,13 @@ def test_flat_position_zeroes_residual_cost_basis() -> None:
     assert next_state == PositionBalanceState()
 
 
-def test_cash_position_deltas_normalize_booked_costs_once() -> None:
-    class CountedAmount:
-        def __init__(self, value: str) -> None:
-            self.value = value
-            self.string_call_count = 0
-
-        def __str__(self) -> str:
-            self.string_call_count += 1
-            return self.value
-
-    net_cost = CountedAmount("30")
-    net_cost_local = CountedAmount("30")
+def test_cash_position_deltas_use_canonical_booked_decimal_amounts() -> None:
     transaction = _txn(
         "DEPOSIT",
         quantity=Decimal("25"),
         gross_transaction_amount=Decimal("0"),
-        net_cost=net_cost,
-        net_cost_local=net_cost_local,
+        net_cost=Decimal("30"),
+        net_cost_local=Decimal("30"),
     )
 
     quantity_delta, cost_basis_delta, cost_basis_local_delta = cash_position_deltas(
@@ -247,8 +244,6 @@ def test_cash_position_deltas_normalize_booked_costs_once() -> None:
     assert quantity_delta == Decimal("25")
     assert cost_basis_delta == Decimal("30")
     assert cost_basis_local_delta == Decimal("30")
-    assert net_cost.string_call_count == 1
-    assert net_cost_local.string_call_count == 1
 
 
 def test_plan_backdated_recalculation_rebuilds_original_event_before_effective_completion() -> None:
