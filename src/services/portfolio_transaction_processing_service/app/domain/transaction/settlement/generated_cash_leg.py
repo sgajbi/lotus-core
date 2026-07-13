@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable, cast
+from typing import Callable
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
@@ -12,6 +12,7 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..booked import BookedTransaction
 from .cash_entry import CashEntryMode, resolve_cash_entry_mode
+from .interest import calculate_interest_settlement_economics
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
 
@@ -149,24 +150,12 @@ def _resolve_dividend_cash_leg(
 
 def _resolve_interest_cash_leg(
     transaction: BookedTransaction,
-    fee: Decimal,
+    _fee: Decimal,
 ) -> tuple[Decimal, str, str]:
-    amount = _resolve_net_interest_amount(transaction, fee)
+    amount = calculate_interest_settlement_economics(transaction).settlement_cash_amount
     direction = _resolve_interest_movement_direction(transaction)
     reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
     return amount, direction, reason
-
-
-def _resolve_net_interest_amount(
-    transaction: BookedTransaction,
-    fee: Decimal,
-) -> Decimal:
-    if transaction.net_interest_amount is not None:
-        return cast(Decimal, transaction.net_interest_amount)
-    deductions = (transaction.withholding_tax_amount or Decimal(0)) + (
-        transaction.other_interest_deductions_amount or Decimal(0)
-    )
-    return cast(Decimal, transaction.gross_transaction_amount - deductions - fee)
 
 
 def _resolve_interest_movement_direction(transaction: BookedTransaction) -> str:

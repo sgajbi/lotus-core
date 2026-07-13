@@ -79,7 +79,10 @@ def test_generated_cash_leg_preserves_trade_and_income_economics(
     assert cash_leg.instrument_id == "CASH-USD"
 
 
-def test_generated_interest_cash_leg_uses_net_amount_and_expense_direction() -> None:
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("20.00")])
+def test_generated_interest_cash_leg_is_invariant_to_explicit_net_interest(
+    net_interest_amount: Decimal | None,
+) -> None:
     transaction = replace(
         _dividend_transaction(),
         transaction_type=" interest ",
@@ -88,6 +91,7 @@ def test_generated_interest_cash_leg_uses_net_amount_and_expense_direction() -> 
         interest_direction=" expense ",
         withholding_tax_amount=Decimal("3.00"),
         other_interest_deductions_amount=Decimal("2.00"),
+        net_interest_amount=net_interest_amount,
     )
 
     cash_leg = build_generated_settlement_cash_leg(transaction)
@@ -95,14 +99,18 @@ def test_generated_interest_cash_leg_uses_net_amount_and_expense_direction() -> 
     assert cash_leg.originating_transaction_type == "INTEREST"
     assert cash_leg.movement_direction == "OUTFLOW"
     assert cash_leg.adjustment_reason == "INTEREST_CHARGE_SETTLEMENT"
-    assert cash_leg.gross_transaction_amount == Decimal("19.00")
+    assert cash_leg.gross_transaction_amount == Decimal("21.00")
 
 
-def test_generated_interest_cash_leg_prefers_reconciled_upstream_net_amount() -> None:
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("20.50")])
+def test_generated_interest_income_cash_leg_is_invariant_to_explicit_net_interest(
+    net_interest_amount: Decimal | None,
+) -> None:
     transaction = replace(
         _dividend_transaction(),
         transaction_type="INTEREST",
-        net_interest_amount=Decimal("18.50"),
+        gross_transaction_amount=Decimal("20.50"),
+        net_interest_amount=net_interest_amount,
     )
 
     assert build_generated_settlement_cash_leg(transaction).gross_transaction_amount == Decimal(
