@@ -160,6 +160,21 @@ async def test_consumer_propagates_terminal_application_error_for_dlq_mapping() 
     assert exc_info.value is terminal_error
 
 
+async def test_consumer_propagates_settlement_rejection_for_dlq_mapping() -> None:
+    use_case = AsyncMock()
+    settlement_rejection = TransactionProcessingRejected(
+        reason_code="SELL_010_NON_POSITIVE_NET_SETTLEMENT",
+        detail={"transaction_id": "TX-001", "net_settlement_amount": "-1"},
+        retryable=False,
+    )
+    use_case.execute.side_effect = settlement_rejection
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await _consumer(use_case).process_message(_message())
+
+    assert raised.value is settlement_rejection
+
+
 async def test_consumer_rejects_malformed_payload_before_use_case() -> None:
     use_case = AsyncMock()
     message = _message()
