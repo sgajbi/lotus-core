@@ -25,13 +25,10 @@ from portfolio_common.monitoring import (
 )
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.transaction_domain import (
-    DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
     assert_fx_processed_event_valid,
     build_fx_contract_instrument_event,
     build_fx_processed_event,
     enrich_fx_transaction_metadata,
-    evaluate_ca_bundle_a_reconciliation,
-    find_missing_ca_bundle_a_dependencies,
 )
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
@@ -41,11 +38,14 @@ from ..application import (
     build_cost_basis_timeline_processor,
 )
 from ..domain.cost_basis import (
+    DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
     OpenLotState,
+    missing_corporate_action_dependencies,
+    reconcile_corporate_action_basis,
     transaction_order_key,
 )
 from ..domain.cost_basis import (
@@ -1126,9 +1126,9 @@ class CostCalculationWorkflow:
             linked_group=linked_group,
             parent_ref=parent_ref,
         )
-        reconciliation = evaluate_ca_bundle_a_reconciliation(
-            group_events,
-            basis_tolerance=DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
+        reconciliation = reconcile_corporate_action_basis(
+            (to_booked_transaction(event) for event in group_events),
+            basis_tolerance=DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE,
         )
         missing_dependencies = self._bundle_a_missing_dependencies(
             processed_event=processed_event,
@@ -1194,9 +1194,11 @@ class CostCalculationWorkflow:
         group_events: list[TransactionEvent],
     ) -> list[str]:
         available_ids = {event.transaction_id for event in group_events}
-        return cast(
-            list[str],
-            find_missing_ca_bundle_a_dependencies(processed_event, available_ids),
+        return list(
+            missing_corporate_action_dependencies(
+                to_booked_transaction(processed_event),
+                available_ids,
+            )
         )
 
     @staticmethod
