@@ -1963,8 +1963,9 @@ Most relevant current governance:
      `--skip-compose` only for an already-running target and keep-stack flags only for explicit local
      diagnosis. Failure recovery must pass its prepared runtime to migration polling and capture
      `output/task-runs/diagnostics/failure-recovery-gate-compose.log` before teardown.
-     App-certification diagnostic completeness remains governed by #730 and must be closed with
-     project-owned artifacts rather than implicit-project shell steps.
+     Its JSON and Markdown reports must retain field-level actual/target/comparison/satisfaction
+     evidence plus source UTC last-change timestamps. App certification delegates runtime ownership
+     to the managed Docker-smoke driver; do not add a second lifecycle owner around it.
 140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
      reconciliation, and workflow metrics belong to
      `portfolio_transaction_processing_service.app.infrastructure` and its target domain and

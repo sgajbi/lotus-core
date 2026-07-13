@@ -61,6 +61,10 @@ from `output/task-runs/diagnostics/`; a post-run default-project log command is 
 External targets remain available through `--skip-compose`, and keeping a stack requires an
 explicit local diagnosis flag.
 
+Failure-recovery JSON and Markdown evidence records each transaction, cost, cashflow, position,
+claim, and lag predicate with actual/expected values, comparison, satisfaction, and source UTC
+last-change time. A timeout must therefore identify the fields that remained unsatisfied.
+
 | Evidence | Location | Failure Meaning |
 |---|---|---|
 | Build timing | `output/runtime-image-set/build-metrics.json` | Compare unique builds, reused tags, and total producer time. |
