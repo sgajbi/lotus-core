@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import cast
 
 from portfolio_common.reconciliation_quality import (
     COMPLETE,
@@ -25,18 +26,21 @@ def timeseries_data_quality_status(
     stale_count: int,
     warning_issue_count: int = 0,
 ) -> str:
-    return classify_data_quality_coverage(
-        DataQualityCoverageSignal(
-            required_count=required_count,
-            observed_count=observed_count,
-            stale_count=stale_count,
-            warning_issue_count=warning_issue_count,
-        )
+    return cast(
+        str,
+        classify_data_quality_coverage(
+            DataQualityCoverageSignal(
+                required_count=required_count,
+                observed_count=observed_count,
+                stale_count=stale_count,
+                warning_issue_count=warning_issue_count,
+            )
+        ),
     )
 
 
 def portfolio_reference_data_quality_status(*, performance_end_date: date | None) -> str:
-    return COMPLETE if performance_end_date is not None else PARTIAL
+    return cast(str, COMPLETE if performance_end_date is not None else PARTIAL)
 
 
 def portfolio_reference_evidence_timestamp(portfolio: object) -> datetime | None:
