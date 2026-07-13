@@ -79,6 +79,28 @@ def test_calculate_next_position_state_applies_buy_and_sell_net_costs() -> None:
     )
 
 
+def test_calculate_next_position_state_normalizes_transaction_type() -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("10"),
+            cost_basis=Decimal("100"),
+            cost_basis_local=Decimal("100"),
+        ),
+        _txn(
+            " buy ",
+            quantity=Decimal("5"),
+            net_cost=Decimal("55"),
+            net_cost_local=Decimal("55"),
+        ),
+    )
+
+    assert next_state == PositionBalanceState(
+        quantity=Decimal("15"),
+        cost_basis=Decimal("155"),
+        cost_basis_local=Decimal("155"),
+    )
+
+
 def test_cash_reducer_uses_movement_direction_and_booked_costs() -> None:
     initial_state = PositionBalanceState(
         quantity=Decimal("1000"),
@@ -110,8 +132,18 @@ def test_cash_reducer_uses_movement_direction_and_booked_costs() -> None:
     [
         ("TRANSFER_IN", Decimal("5"), Decimal("105")),
         ("TRANSFER_OUT", Decimal("5"), Decimal("95")),
+        ("MERGER_IN", Decimal("5"), Decimal("105")),
+        ("MERGER_OUT", Decimal("5"), Decimal("95")),
+        ("EXCHANGE_IN", Decimal("5"), Decimal("105")),
+        ("EXCHANGE_OUT", Decimal("5"), Decimal("95")),
+        ("REPLACEMENT_IN", Decimal("5"), Decimal("105")),
+        ("REPLACEMENT_OUT", Decimal("5"), Decimal("95")),
+        ("SPIN_IN", Decimal("5"), Decimal("105")),
+        ("DEMERGER_IN", Decimal("5"), Decimal("105")),
         ("RIGHTS_ALLOCATE", Decimal("2"), Decimal("102")),
+        ("RIGHTS_SHARE_DELIVERY", Decimal("2"), Decimal("102")),
         ("RIGHTS_SUBSCRIBE", Decimal("2"), Decimal("98")),
+        ("RIGHTS_SELL", Decimal("2"), Decimal("98")),
     ],
 )
 def test_transfer_reducer_applies_inflow_and_outflow_direction(
@@ -142,6 +174,7 @@ def test_transfer_reducer_applies_inflow_and_outflow_direction(
     [
         ("SPLIT", Decimal("10"), Decimal("110")),
         ("BONUS_ISSUE", Decimal("8"), Decimal("108")),
+        ("STOCK_DIVIDEND", Decimal("5"), Decimal("105")),
         ("REVERSE_SPLIT", Decimal("15"), Decimal("85")),
         ("CONSOLIDATION", Decimal("12"), Decimal("88")),
     ],
@@ -208,6 +241,148 @@ def test_fx_reducer_tracks_contract_open_close_from_component_type() -> None:
 
     assert open_state.quantity == Decimal("1")
     assert close_state == PositionBalanceState()
+
+
+def test_fx_cash_settlement_buy_updates_cash_position() -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("1000"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("1000"),
+        ),
+        _txn(
+            "FX_FORWARD",
+            gross_transaction_amount=Decimal("1095"),
+            component_type="FX_CASH_SETTLEMENT_BUY",
+        ),
+    )
+
+    assert next_state == PositionBalanceState(
+        quantity=Decimal("2095"),
+        cost_basis=Decimal("2095"),
+        cost_basis_local=Decimal("2095"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "gross_amount", "expected_balance"),
+    [
+        ("DEPOSIT", Decimal("25"), Decimal("125")),
+        ("WITHDRAWAL", Decimal("30"), Decimal("70")),
+        ("FEE", Decimal("5"), Decimal("95")),
+        ("TAX", Decimal("7"), Decimal("93")),
+    ],
+)
+def test_cash_portfolio_flows_use_gross_amount_when_booked_cost_is_absent(
+    transaction_type: str,
+    gross_amount: Decimal,
+    expected_balance: Decimal,
+) -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("100"),
+            cost_basis=Decimal("100"),
+            cost_basis_local=Decimal("100"),
+        ),
+        _txn(transaction_type, gross_transaction_amount=gross_amount),
+    )
+
+    assert next_state == PositionBalanceState(
+        quantity=expected_balance,
+        cost_basis=expected_balance,
+        cost_basis_local=expected_balance,
+    )
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "quantity", "expected_balance"),
+    [
+        ("DEPOSIT", Decimal("25"), Decimal("125")),
+        ("WITHDRAWAL", Decimal("30"), Decimal("70")),
+        ("FEE", Decimal("5"), Decimal("95")),
+        ("TAX", Decimal("7"), Decimal("93")),
+    ],
+)
+def test_cash_portfolio_flows_use_quantity_when_gross_and_booked_cost_are_zero(
+    transaction_type: str,
+    quantity: Decimal,
+    expected_balance: Decimal,
+) -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("100"),
+            cost_basis=Decimal("100"),
+            cost_basis_local=Decimal("100"),
+        ),
+        _txn(
+            transaction_type,
+            quantity=quantity,
+            net_cost=Decimal("0"),
+            net_cost_local=Decimal("0"),
+        ),
+    )
+
+    assert next_state == PositionBalanceState(
+        quantity=expected_balance,
+        cost_basis=expected_balance,
+        cost_basis_local=expected_balance,
+    )
+
+
+def test_cash_fee_uses_fee_inclusive_booked_cost() -> None:
+    next_state = calculate_next_position_state(
+        PositionBalanceState(
+            quantity=Decimal("100"),
+            cost_basis=Decimal("100"),
+            cost_basis_local=Decimal("100"),
+        ),
+        _txn(
+            "FEE",
+            gross_transaction_amount=Decimal("25"),
+            net_cost=Decimal("-26.75"),
+            net_cost_local=Decimal("-26.75"),
+        ),
+    )
+
+    assert next_state == PositionBalanceState(
+        quantity=Decimal("73.25"),
+        cost_basis=Decimal("73.25"),
+        cost_basis_local=Decimal("73.25"),
+    )
+
+
+def test_foreign_currency_cash_flow_preserves_base_and_local_booked_costs() -> None:
+    deposited_state = calculate_next_position_state(
+        PositionBalanceState(),
+        _txn(
+            "DEPOSIT",
+            quantity=Decimal("335000"),
+            gross_transaction_amount=Decimal("335000"),
+            net_cost=Decimal("359349.475"),
+            net_cost_local=Decimal("335000"),
+        ),
+    )
+    sold_state = calculate_next_position_state(
+        deposited_state,
+        _txn(
+            "SELL",
+            quantity=Decimal("82552"),
+            gross_transaction_amount=Decimal("82552"),
+            net_cost=Decimal("-88689.906304"),
+            net_cost_local=Decimal("-82552"),
+        ),
+    )
+
+    assert deposited_state == PositionBalanceState(
+        quantity=Decimal("335000"),
+        cost_basis=Decimal("359349.475"),
+        cost_basis_local=Decimal("335000"),
+    )
+    assert sold_state == PositionBalanceState(
+        quantity=Decimal("252448"),
+        cost_basis=Decimal("270659.568696"),
+        cost_basis_local=Decimal("252448"),
+    )
 
 
 def test_flat_position_zeroes_residual_cost_basis() -> None:
