@@ -13,7 +13,7 @@ def _write(path: Path, text: str) -> None:
 def _write_required_boundary(root: Path) -> None:
     _write(
         root
-        / "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+        / "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py",
         "class PositionBalanceState: pass\n"
         "class BackdatedRecalculationDecision: pass\n"
         "def calculate_next_position_state(): pass\n"
@@ -43,7 +43,7 @@ def test_position_reducer_boundary_guard_rejects_runtime_coupling_in_reducer(
     _write_required_boundary(tmp_path)
     _write(
         tmp_path
-        / "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+        / "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py",
         "class PositionBalanceState: pass\n"
         "class BackdatedRecalculationDecision: pass\n"
         "def calculate_next_position_state(): pass\n"
@@ -76,6 +76,26 @@ def test_position_reducer_boundary_guard_rejects_runtime_coupling_in_reducer(
         "TransactionEvent",
         "BaseModel",
         "sqlalchemy",
+    ]
+
+
+def test_position_reducer_boundary_guard_rejects_flat_legacy_domain_module(
+    tmp_path: Path,
+) -> None:
+    _write_required_boundary(tmp_path)
+    _write(
+        tmp_path
+        / "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+        "legacy reducer\n",
+    )
+
+    findings = find_position_reducer_boundary_findings(tmp_path)
+
+    assert [(finding.path, finding.snippet) for finding in findings] == [
+        (
+            "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py",
+            "<legacy-position-domain-module>",
+        )
     ]
 
 

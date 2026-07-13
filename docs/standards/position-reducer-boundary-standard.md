@@ -5,7 +5,7 @@ decision planning pure, typed, and independently testable.
 
 ## Responsibilities
 
-`portfolio_transaction_processing_service.app.domain.position_reducer` owns:
+`portfolio_transaction_processing_service.app.domain.position.reducer` owns:
 
 1. position balance state transitions for buy and sell events,
 2. cash movement amount and booked-cost deltas,
@@ -48,6 +48,8 @@ Backdated replay planning must be deterministic from:
 ## Enforcement
 
 `make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py`.
+The guard also rejects flat `domain/position_reducer.py` and `domain/position_history.py` modules;
+position domain policy belongs under the cohesive `domain/position/` package.
 
 ## Compatibility
 

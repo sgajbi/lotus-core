@@ -1217,7 +1217,7 @@ Most relevant current governance:
 79. Position calculation rules are split from database sessions, concrete repositories, outbox
     staging, metrics, epoch fencing, and position-history persistence orchestration. The repo-local
     standard lives at `docs/standards/position-reducer-boundary-standard.md`.
-    `portfolio_transaction_processing_service.app.domain.position_reducer` owns
+    `portfolio_transaction_processing_service.app.domain.position.reducer` owns
     `PositionBalanceState`, `BackdatedRecalculationDecision`, buy/sell transitions, cash movement
     deltas, transfer and
     corporate-action quantity policy, FX contract/cash settlement behavior, flat-position cost
