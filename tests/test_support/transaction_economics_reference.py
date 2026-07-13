@@ -16,6 +16,22 @@ class InterestSettlementReferenceResult:
     signed_cashflow_amount: Decimal
 
 
+@dataclass(frozen=True, slots=True)
+class OrdinarySettlementCashReferenceResult:
+    """Expected ordinary settlement outcome calculated without production dependencies."""
+
+    available_proceeds_amount: Decimal
+    fee_amount: Decimal
+    signed_cash_amount: Decimal | None
+    rejection_reason_code: str | None
+
+    @property
+    def accepted(self) -> bool:
+        """Return whether the reference policy produced a ledger movement."""
+
+        return self.rejection_reason_code is None
+
+
 def evaluate_interest_settlement(
     inputs: Mapping[str, object],
 ) -> InterestSettlementReferenceResult:
@@ -49,4 +65,43 @@ def evaluate_interest_settlement(
         net_interest_amount=net_interest,
         settlement_cash_amount=settlement_cash,
         signed_cashflow_amount=signed_cashflow,
+    )
+
+
+def evaluate_ordinary_settlement_cash(
+    inputs: Mapping[str, object],
+) -> OrdinarySettlementCashReferenceResult:
+    """Evaluate reviewed SELL, DIVIDEND, and INTEREST settlement boundaries."""
+
+    transaction_type = str(inputs["transaction_type"]).strip().upper()
+    fee = Decimal(str(inputs["transaction_fee_amount"]))
+    if transaction_type in {"SELL", "DIVIDEND"}:
+        available_proceeds = Decimal(str(inputs["gross_transaction_amount"]))
+        settlement_amount = available_proceeds - fee
+        signed_cash = settlement_amount
+        reason_code = {
+            "SELL": "SELL_010_NON_POSITIVE_NET_SETTLEMENT",
+            "DIVIDEND": "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT",
+        }[transaction_type]
+    elif transaction_type == "INTEREST":
+        interest = evaluate_interest_settlement(inputs)
+        available_proceeds = interest.net_interest_amount
+        settlement_amount = interest.settlement_cash_amount
+        signed_cash = interest.signed_cashflow_amount
+        reason_code = "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"
+    else:
+        raise ValueError(f"Unsupported ordinary settlement type: {transaction_type}")
+
+    if settlement_amount <= 0:
+        return OrdinarySettlementCashReferenceResult(
+            available_proceeds_amount=available_proceeds,
+            fee_amount=fee,
+            signed_cash_amount=None,
+            rejection_reason_code=reason_code,
+        )
+    return OrdinarySettlementCashReferenceResult(
+        available_proceeds_amount=available_proceeds,
+        fee_amount=fee,
+        signed_cash_amount=signed_cash,
+        rejection_reason_code=None,
     )
