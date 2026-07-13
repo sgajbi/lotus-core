@@ -5,6 +5,14 @@ from .cost_basis_observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
 )
+from .position_history import (
+    PositionEpochFence,
+    PositionHistoryObserver,
+    PositionHistoryRepository,
+    PositionRecalculationReason,
+    PositionRecalculationStateStore,
+    PositionReplayMode,
+)
 from .processing_observability import (
     TransactionProcessingObservation,
     TransactionProcessingObserver,
@@ -36,8 +44,14 @@ __all__ = [
     "CostProcessingPort",
     "CostProcessingResult",
     "PipelineStageProcessingPort",
+    "PositionEpochFence",
+    "PositionHistoryObserver",
+    "PositionHistoryRepository",
     "PositionProcessingPort",
     "PositionProcessingResult",
+    "PositionRecalculationReason",
+    "PositionRecalculationStateStore",
+    "PositionReplayMode",
     "TransactionIdempotencyOutcome",
     "TransactionIdempotencyPort",
     "TransactionProcessingObservation",
