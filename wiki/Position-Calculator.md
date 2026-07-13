@@ -56,10 +56,10 @@ adapters remain in infrastructure. The production unit of work passes immutable 
 transactions directly to this use case, avoiding the former event DTO round trip and duplicate
 epoch-state read. The retired `position_calculator` source package is absent from the target image.
 
-The former `position_calculation_workflow.py` and `position_repository.py` modules are no longer
-production-composed. They remain temporarily as test-only compatibility code while their remaining
-PostgreSQL concurrency/atomicity cases move to the canonical position package; issue `#719` tracks
-deletion and an absence guard.
+The former `position_calculation_workflow.py` and `position_repository.py` modules are retired.
+Canonical PostgreSQL tests now prove rollback atomicity, replay deduplication, same-key
+serialization, and different-key/epoch parallelism through the application and adapter boundaries;
+the architecture guard rejects either legacy module if it returns.
 
 ## Recalculation concurrency
 

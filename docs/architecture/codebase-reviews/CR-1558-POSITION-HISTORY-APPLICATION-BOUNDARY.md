@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 
-Status: Locally validated; PostgreSQL compatibility-test migration pending under #719
+Status: Fixed locally; PR proof pending
 
 ## Objective
 
@@ -34,14 +34,15 @@ packages.
    cohesive packages, with structure tests preventing flat-module return.
 7. Migrated active repository coverage and proved three unused legacy reads are absent from the new
    adapter.
+8. Migrated PostgreSQL repository, rollback, replay, and concurrency tests to the application and
+   adapter boundaries; deleted the legacy workflow/repository and added an absence guard.
 
 ## Compatibility
 
 No HTTP/OpenAPI, Kafka event, database schema, transaction ordering, public DTO, or deployment
 topology changed. Deterministic corporate-action ordering is now used consistently for current and
 backdated history. This is an intentional correctness strengthening within the existing ordering
-contract. The former workflow and repository are no longer production-composed but remain as
-test-only compatibility code until their remaining PostgreSQL tests are migrated.
+contract. The former workflow and repository are retired and guarded against reintroduction.
 
 ## Validation
 
@@ -50,6 +51,9 @@ test-only compatibility code until their remaining PostgreSQL tests are migrated
 - 31 adapter, unit-of-work, and position tests passed for production cutover.
 - 24 processor/observability tests passed, including one-state-load stale fencing.
 - 10 active SQLAlchemy position-history repository tests passed.
+- 6 live PostgreSQL repository, rollback, replay, and concurrency tests passed in 89.81 seconds.
+- 81 focused position application/domain/adapter tests and the full architecture guard passed after
+  legacy deletion.
 - Focused Ruff check/format and `git diff --check` passed for each implementation commit.
 
 ## Governance Decisions
@@ -63,7 +67,6 @@ test-only compatibility code until their remaining PostgreSQL tests are migrated
 
 ## Remaining Work
 
-Issue #719 retains migration of PostgreSQL atomicity/concurrency tests, deletion of
-`position_calculation_workflow.py` and
-`position_repository.py`, manifest/coverage path cleanup, and a machine absence guard. Cost runtime,
-simulation/replay, and performance evidence remain separate #719 slices.
+Issue #719 remains open for cost-runtime ownership, simulation/replay hardening, end-to-end
+performance evidence, and broader legacy calculator retirement. The position history application
+boundary and its former workflow/repository retirement are complete locally.

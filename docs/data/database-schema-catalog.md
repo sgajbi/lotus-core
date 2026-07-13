@@ -94,7 +94,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Event-driven ledger of position state over time.
 - **Description**: Per-transaction derived position state (quantity/cost) by date and epoch.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `transaction_id` -> `transactions.transaction_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/query_service/app/services/position_service.py`, `src/services/calculators/position_calculator/app/repositories/position_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/services/query_service/app/routers/positions.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/query_service/app/services/position_service.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_history_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/services/query_service/app/routers/positions.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -114,7 +114,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Valuation snapshot store by day.
 - **Description**: End-of-day (or latest available) valued/unvalued position records.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/calculators/position_calculator/app/repositories/position_repository.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/persistence_service/app/repositories/market_price_repository.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_history_repository.py`, `src/services/timeseries_generator_service/app/repositories/timeseries_repository.py`, `src/services/persistence_service/app/repositories/market_price_repository.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -1259,7 +1259,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Current processing state per portfolio-security key.
 - **Description**: Watermark/epoch/status pointer that orchestrates reprocessing and backlog advancement.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/libs/portfolio-common/portfolio_common/position_state_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/calculators/position_calculator/app/core/position_logic.py`, `src/services/query_service/app/services/operations_service.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/position_repository.py`, `src/services/query_service/app/repositories/operations_repository.py`, `src/libs/portfolio-common/portfolio_common/position_state_repository.py`, `src/services/calculators/position_valuation_calculator/app/repositories/valuation_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_recalculation_state_store.py`, `src/services/query_service/app/services/operations_service.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String): Canonical portfolio identifier.
