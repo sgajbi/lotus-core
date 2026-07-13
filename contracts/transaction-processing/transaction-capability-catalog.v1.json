@@ -1,0 +1,806 @@
+{
+  "schema_version": "lotus-core-transaction-capability-catalog.v1",
+  "repository": "lotus-core",
+  "source_registry": "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py",
+  "guard_command": "make transaction-capability-catalog-guard",
+  "generator_command": "python scripts/generators/generate_transaction_capability_catalog.py",
+  "documentation_surfaces": [
+    "docs/features/transaction-and-product-lifecycle-capabilities.md",
+    "wiki/Transaction-and-Product-Lifecycle-Capabilities.md"
+  ],
+  "transaction_types": [
+    {
+      "code": "ACCRETION",
+      "lifecycle_family": "redemption",
+      "economic_role": "discount_accretion",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 478
+    },
+    {
+      "code": "ADJUSTMENT",
+      "lifecycle_family": "adjustment",
+      "economic_role": "cash_or_position_adjustment",
+      "support_status": "default_strategy",
+      "production_booking_allowed": true,
+      "gap_issue": 719
+    },
+    {
+      "code": "AMORTIZATION",
+      "lifecycle_family": "redemption",
+      "economic_role": "principal_amortization",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 478
+    },
+    {
+      "code": "BONUS_ISSUE",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "quantity_restatement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "BUY",
+      "lifecycle_family": "trade",
+      "economic_role": "security_buy",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "CALL_REDEMPTION",
+      "lifecycle_family": "redemption",
+      "economic_role": "call_redemption",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 477
+    },
+    {
+      "code": "CASH_CONSIDERATION",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "cash_consideration",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "CASH_IN_LIEU",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "fractional_cash_settlement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "CONSOLIDATION",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "quantity_restatement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "CONVERSION_EVENT",
+      "lifecycle_family": "conversion",
+      "economic_role": "parent_conversion_event",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "CONVERSION_IN",
+      "lifecycle_family": "conversion",
+      "economic_role": "target_security_leg",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "CONVERSION_OUT",
+      "lifecycle_family": "conversion",
+      "economic_role": "source_security_leg",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "DEMERGER_IN",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "target_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "DEMERGER_OUT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "source_security_reduction",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "DEPOSIT",
+      "lifecycle_family": "cash_movement",
+      "economic_role": "cash_deposit",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "DIVIDEND",
+      "lifecycle_family": "income",
+      "economic_role": "income_receipt",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "EXCHANGE_IN",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "target_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "EXCHANGE_OUT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "source_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "EXERCISE_IN",
+      "lifecycle_family": "conversion",
+      "economic_role": "target_security_leg",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "EXERCISE_OUT",
+      "lifecycle_family": "conversion",
+      "economic_role": "source_contract_leg",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "FEE",
+      "lifecycle_family": "expense",
+      "economic_role": "fee",
+      "support_status": "limited",
+      "production_booking_allowed": true,
+      "gap_issue": 719
+    },
+    {
+      "code": "FX_CASH_SETTLEMENT_BUY",
+      "lifecycle_family": "fx",
+      "economic_role": "generated_fx_cash_leg",
+      "support_status": "internal_generated",
+      "production_booking_allowed": false,
+      "gap_issue": null
+    },
+    {
+      "code": "FX_CASH_SETTLEMENT_SELL",
+      "lifecycle_family": "fx",
+      "economic_role": "generated_fx_cash_leg",
+      "support_status": "internal_generated",
+      "production_booking_allowed": false,
+      "gap_issue": null
+    },
+    {
+      "code": "FX_FORWARD",
+      "lifecycle_family": "fx",
+      "economic_role": "fx_forward",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "FX_SPOT",
+      "lifecycle_family": "fx",
+      "economic_role": "fx_trade",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "FX_SWAP",
+      "lifecycle_family": "fx",
+      "economic_role": "fx_swap",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "INTEREST",
+      "lifecycle_family": "income",
+      "economic_role": "income_receipt",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "MATURITY_REDEMPTION",
+      "lifecycle_family": "redemption",
+      "economic_role": "maturity_redemption",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 477
+    },
+    {
+      "code": "MERGER_IN",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "target_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "MERGER_OUT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "source_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "OTHER",
+      "lifecycle_family": "migration",
+      "economic_role": "unknown_legacy_type",
+      "support_status": "migration_only",
+      "production_booking_allowed": false,
+      "gap_issue": 718
+    },
+    {
+      "code": "PARTIAL_REDEMPTION",
+      "lifecycle_family": "redemption",
+      "economic_role": "partial_redemption",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 477
+    },
+    {
+      "code": "REPLACEMENT_IN",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "target_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "REPLACEMENT_OUT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "source_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "REVERSE_SPLIT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "quantity_restatement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_ADJUSTMENT",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_adjustment",
+      "support_status": "default_strategy",
+      "production_booking_allowed": true,
+      "gap_issue": 719
+    },
+    {
+      "code": "RIGHTS_ALLOCATE",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_allocation",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_ANNOUNCE",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_notification",
+      "support_status": "default_strategy",
+      "production_booking_allowed": true,
+      "gap_issue": 719
+    },
+    {
+      "code": "RIGHTS_EXPIRE",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_expiry",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_OVERSUBSCRIBE",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_oversubscription",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_REFUND",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_refund",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_SELL",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_sale",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_SHARE_DELIVERY",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_share_delivery",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "RIGHTS_SUBSCRIBE",
+      "lifecycle_family": "rights",
+      "economic_role": "rights_subscription",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "SELL",
+      "lifecycle_family": "trade",
+      "economic_role": "security_sell",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "SPIN_IN",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "target_security_leg",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "SPIN_OFF",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "source_security_reduction",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "SPLIT",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "quantity_restatement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "STOCK_DIVIDEND",
+      "lifecycle_family": "corporate_action",
+      "economic_role": "quantity_restatement",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "STRIKE_PAYMENT",
+      "lifecycle_family": "conversion",
+      "economic_role": "strike_cash_payment",
+      "support_status": "target_not_implemented",
+      "production_booking_allowed": false,
+      "gap_issue": 479
+    },
+    {
+      "code": "TAX",
+      "lifecycle_family": "expense",
+      "economic_role": "tax",
+      "support_status": "limited",
+      "production_booking_allowed": true,
+      "gap_issue": 719
+    },
+    {
+      "code": "TRANSFER_IN",
+      "lifecycle_family": "transfer",
+      "economic_role": "security_transfer_in",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "TRANSFER_OUT",
+      "lifecycle_family": "transfer",
+      "economic_role": "security_transfer_out",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    },
+    {
+      "code": "WITHDRAWAL",
+      "lifecycle_family": "cash_movement",
+      "economic_role": "cash_withdrawal",
+      "support_status": "supported",
+      "production_booking_allowed": true,
+      "gap_issue": null
+    }
+  ],
+  "product_lifecycles": [
+    {
+      "product_family": "listed_instruments",
+      "lifecycle_event": "purchase_and_sale",
+      "transaction_types": [
+        "BUY",
+        "SELL"
+      ],
+      "support_status": "supported_via_generic_transaction_semantics",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/BUY/BUY-SLICE-6-CONFORMANCE-REPORT.md",
+        "docs/rfc-transaction-specs/transactions/SELL/SELL-SLICE-6-CONFORMANCE-REPORT.md"
+      ],
+      "limitations": [
+        "Trade support applies to canonical acquisition and disposal economics; it does not certify every product-specific lifecycle event."
+      ],
+      "gap_issues": []
+    },
+    {
+      "product_family": "cash_and_deposits",
+      "lifecycle_event": "funding_withdrawal_and_interest",
+      "transaction_types": [
+        "DEPOSIT",
+        "WITHDRAWAL",
+        "INTEREST"
+      ],
+      "support_status": "supported_via_generic_transaction_semantics",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/CASH MOVEMENT/RFC-CASH-MOVEMENT-01.md",
+        "docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md"
+      ],
+      "limitations": [
+        "Term-deposit maturity can be represented by principal cash movement plus interest, but there is no separately certified term-deposit maturity event."
+      ],
+      "gap_issues": []
+    },
+    {
+      "product_family": "foreign_exchange",
+      "lifecycle_event": "spot_forward_and_swap",
+      "transaction_types": [
+        "FX_SPOT",
+        "FX_FORWARD",
+        "FX_SWAP"
+      ],
+      "support_status": "supported",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/FX/FX-SLICE-8-CONFORMANCE-REPORT.md"
+      ],
+      "limitations": [
+        "Support is bounded by the documented fee-currency and realized-FX-PnL policies; #754 owns the remaining fee-currency decision."
+      ],
+      "gap_issues": []
+    },
+    {
+      "product_family": "listed_funds",
+      "lifecycle_event": "subscription_redemption_distribution_and_reinvestment",
+      "transaction_types": [
+        "BUY",
+        "SELL",
+        "DIVIDEND"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+      ],
+      "limitations": [
+        "Generic listed-fund legs are executable, but mixed income and return-of-capital distributions remain limited."
+      ],
+      "gap_issues": [
+        448
+      ]
+    },
+    {
+      "product_family": "fixed_income",
+      "lifecycle_event": "purchase_sale_coupon_and_accrued_interest",
+      "transaction_types": [
+        "BUY",
+        "SELL",
+        "INTEREST"
+      ],
+      "support_status": "supported_via_generic_transaction_semantics",
+      "evidence_refs": [
+        "tests/fixtures/cross-product-transaction-golden-scenarios.v1.json",
+        "docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-6-CONFORMANCE-REPORT.md"
+      ],
+      "limitations": [
+        "Trade and coupon semantics do not include amortized-cost evolution or redemption lifecycle support."
+      ],
+      "gap_issues": []
+    },
+    {
+      "product_family": "fixed_income",
+      "lifecycle_event": "maturity_call_and_partial_redemption",
+      "transaction_types": [
+        "MATURITY_REDEMPTION",
+        "CALL_REDEMPTION",
+        "PARTIAL_REDEMPTION"
+      ],
+      "support_status": "target_not_implemented",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/misc/RFC-REDEMPTION-01 Canonical Fixed Income Redemption Family Specification.md"
+      ],
+      "limitations": [
+        "Production booking is disabled until quantity, lot, principal cash, and realized-PnL behavior is implemented."
+      ],
+      "gap_issues": [
+        477,
+        481
+      ]
+    },
+    {
+      "product_family": "fixed_income",
+      "lifecycle_event": "premium_amortization_and_discount_accretion",
+      "transaction_types": [
+        "AMORTIZATION",
+        "ACCRETION"
+      ],
+      "support_status": "target_not_implemented",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/misc/RFC-AMORTIZATION-01 Canonical Fixed Income Amortization & Accretion Specification.md"
+      ],
+      "limitations": [
+        "No production amortized-cost schedule or transaction posting is certified."
+      ],
+      "gap_issues": [
+        478
+      ]
+    },
+    {
+      "product_family": "equity",
+      "lifecycle_event": "ordinary_dividend_withholding_and_return_of_capital",
+      "transaction_types": [
+        "DIVIDEND"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/DIVIDEND/DIVIDEND-SLICE-6-CONFORMANCE-REPORT.md"
+      ],
+      "limitations": [
+        "Ordinary income is supported; complete withholding decomposition, return-of-capital separation, and basis reduction are not certified."
+      ],
+      "gap_issues": [
+        448
+      ]
+    },
+    {
+      "product_family": "equity",
+      "lifecycle_event": "split_consolidation_bonus_and_stock_dividend",
+      "transaction_types": [
+        "SPLIT",
+        "REVERSE_SPLIT",
+        "CONSOLIDATION",
+        "BONUS_ISSUE",
+        "STOCK_DIVIDEND"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/CA/RFC-CA-SPLIT-FAMILY-01.md",
+        "docs/rfc-transaction-specs/transactions/CA/RFC-CA-BONUS-STOCK-DIVIDEND-01.md"
+      ],
+      "limitations": [
+        "Transaction semantics exist, while first-class parent-event persistence and complete lot lineage remain open."
+      ],
+      "gap_issues": [
+        480,
+        481
+      ]
+    },
+    {
+      "product_family": "corporate_actions",
+      "lifecycle_event": "merger_exchange_and_replacement",
+      "transaction_types": [
+        "MERGER_OUT",
+        "MERGER_IN",
+        "EXCHANGE_OUT",
+        "EXCHANGE_IN",
+        "REPLACEMENT_OUT",
+        "REPLACEMENT_IN"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/CA/RFC-CA-FULL-REPLACEMENT-01.md"
+      ],
+      "limitations": [
+        "Source and target transaction semantics exist, while persisted parent/dependency graphs and lot-lineage records remain open."
+      ],
+      "gap_issues": [
+        480,
+        481
+      ]
+    },
+    {
+      "product_family": "corporate_actions",
+      "lifecycle_event": "spin_off_demerger_mixed_consideration_and_fractional_cash",
+      "transaction_types": [
+        "SPIN_OFF",
+        "SPIN_IN",
+        "DEMERGER_OUT",
+        "DEMERGER_IN",
+        "CASH_CONSIDERATION",
+        "CASH_IN_LIEU"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_corporate_action_processing.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/test_corporate_action_reconciliation_evidence.py"
+      ],
+      "limitations": [
+        "Bundle validation and reconciliation exist; full partial-transfer, multi-target, fractional, synthetic-flow, and lot-lineage closure remains open."
+      ],
+      "gap_issues": [
+        450,
+        480,
+        481,
+        719
+      ]
+    },
+    {
+      "product_family": "rights",
+      "lifecycle_event": "announcement_allocation_sale_subscription_expiry_refund_and_delivery",
+      "transaction_types": [
+        "RIGHTS_ANNOUNCE",
+        "RIGHTS_ALLOCATE",
+        "RIGHTS_SELL",
+        "RIGHTS_SUBSCRIBE",
+        "RIGHTS_OVERSUBSCRIBE",
+        "RIGHTS_REFUND",
+        "RIGHTS_EXPIRE",
+        "RIGHTS_ADJUSTMENT",
+        "RIGHTS_SHARE_DELIVERY"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/CA/RFC-CA-RIGHTS-ISSUE-FAMILY-01.md"
+      ],
+      "limitations": [
+        "Core has rights transaction vocabulary and selected strategies; complete parent-event, dependency, lot-lineage, and executable lifecycle proof remains open."
+      ],
+      "gap_issues": [
+        480,
+        481,
+        719
+      ]
+    },
+    {
+      "product_family": "securities_transfer",
+      "lifecycle_event": "transfer_in_and_out",
+      "transaction_types": [
+        "TRANSFER_IN",
+        "TRANSFER_OUT"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/TRANSFER_IN_OUT/RFC-TRANSFER-01.md"
+      ],
+      "limitations": [
+        "Position and basis semantics exist, while durable source-to-target lot lineage and all partial transfer scenarios remain open."
+      ],
+      "gap_issues": [
+        481,
+        719
+      ]
+    },
+    {
+      "product_family": "convertibles_warrants_and_options",
+      "lifecycle_event": "conversion_exercise_and_strike_payment",
+      "transaction_types": [
+        "CONVERSION_EVENT",
+        "CONVERSION_OUT",
+        "CONVERSION_IN",
+        "EXERCISE_OUT",
+        "EXERCISE_IN",
+        "STRIKE_PAYMENT"
+      ],
+      "support_status": "target_not_implemented",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/misc/RFC-CONVERSION-01 Canonical Conversion Family Specification.md"
+      ],
+      "limitations": [
+        "The vocabulary is reserved but production booking and calculation are disabled."
+      ],
+      "gap_issues": [
+        479
+      ]
+    },
+    {
+      "product_family": "structured_products",
+      "lifecycle_event": "trade_coupon_observation_barrier_autocall_and_payoff",
+      "transaction_types": [
+        "BUY",
+        "SELL",
+        "INTEREST"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "tests/unit/transaction_specs/test_cross_product_golden_scenarios.py"
+      ],
+      "limitations": [
+        "Trade and generic coupon legs are executable; observation, barrier, autocall, maturity payoff, and physical settlement are not modeled."
+      ],
+      "gap_issues": [
+        477,
+        479,
+        758
+      ]
+    },
+    {
+      "product_family": "private_markets",
+      "lifecycle_event": "commitment_capital_call_distribution_return_of_capital_and_recallable_capital",
+      "transaction_types": [],
+      "support_status": "target_not_implemented",
+      "evidence_refs": [
+        "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
+      ],
+      "limitations": [
+        "Generic cash and dividend transactions must not be presented as a commitment-based private-market lifecycle."
+      ],
+      "gap_issues": [
+        448,
+        515,
+        759
+      ]
+    },
+    {
+      "product_family": "charges_and_tax",
+      "lifecycle_event": "fee_and_tax_cash_posting",
+      "transaction_types": [
+        "FEE",
+        "TAX"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "docs/rfc-transaction-specs/transactions/CHARGE/RFC-CHARGE-01.md"
+      ],
+      "limitations": [
+        "Cash posting is available, while broader component allocation, product attribution, and jurisdictional tax treatment remain policy-bounded."
+      ],
+      "gap_issues": [
+        448,
+        719
+      ]
+    },
+    {
+      "product_family": "transaction_correction",
+      "lifecycle_event": "economic_reversal_rebook_and_restatement",
+      "transaction_types": [
+        "ADJUSTMENT"
+      ],
+      "support_status": "limited",
+      "evidence_refs": [
+        "tests/fixtures/cross-product-transaction-golden-scenarios.v1.json"
+      ],
+      "limitations": [
+        "Economic reversal and rebook are testable; first-class cancellation and corporate-action correction state remains open."
+      ],
+      "gap_issues": [
+        480,
+        719
+      ]
+    }
+  ]
+}

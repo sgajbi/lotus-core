@@ -140,6 +140,8 @@ Current repo truth:
     managed runs do not inherit another test process's project or host ports.
 
 For a business-friendly feature map, use [wiki/Supported-Features.md](wiki/Supported-Features.md).
+For exact transaction, corporate-action, and private-banking product lifecycle posture, use
+[wiki/Transaction-and-Product-Lifecycle-Capabilities.md](wiki/Transaction-and-Product-Lifecycle-Capabilities.md).
 For detailed source-data products and boundary caveats, use
 [wiki/Mesh-Data-Products.md](wiki/Mesh-Data-Products.md) and the methodology docs under
 [docs/methodologies/source-data-products/](docs/methodologies/source-data-products).
