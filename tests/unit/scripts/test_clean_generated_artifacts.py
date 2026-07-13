@@ -124,10 +124,18 @@ def test_directory_cleanup_retries_transient_removal_race(tmp_path: Path) -> Non
 def test_directory_cleanup_uses_extended_length_path_on_windows(tmp_path: Path) -> None:
     target = tmp_path / "nested" / "artifact-cache"
 
-    removal_path = clean._directory_removal_path(target)
+    removal_path = clean._directory_removal_path(target, platform_name="nt")
 
     assert str(removal_path).startswith("\\\\?\\")
     assert str(removal_path).endswith(str(target.resolve()))
+
+
+def test_directory_cleanup_uses_resolved_native_path_off_windows(tmp_path: Path) -> None:
+    target = tmp_path / "nested" / "artifact-cache"
+
+    removal_path = clean._directory_removal_path(target, platform_name="posix")
+
+    assert removal_path == target.resolve()
 
 
 def test_directory_cleanup_accepts_concurrent_completion(tmp_path: Path) -> None:
