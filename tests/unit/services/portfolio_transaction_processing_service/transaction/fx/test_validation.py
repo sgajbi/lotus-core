@@ -64,7 +64,7 @@ def test_validate_fx_transaction_normalizes_control_codes() -> None:
             "fx_rate_quote_convention": " quote_per_base ",
             "spot_exposure_model": " none ",
             "fx_realized_pnl_mode": " upstream_provided ",
-        }
+        },
     )
 
     issues = validate_fx_transaction(txn, strict_metadata=True)
@@ -79,7 +79,7 @@ def test_validate_fx_transaction_normalizes_cash_leg_role() -> None:
             "component_type": " fx_cash_settlement_buy ",
             "fx_cash_leg_role": " buy ",
             "linked_fx_cash_leg_id": "FX-CASH-SELL-001",
-        }
+        },
     )
 
     issues = validate_fx_transaction(txn)
@@ -119,7 +119,7 @@ def test_validate_fx_transaction_requires_positive_amounts_and_rate() -> None:
             "buy_amount": Decimal("0"),
             "sell_amount": Decimal("-1"),
             "contract_rate": Decimal("0"),
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.NON_POSITIVE_BUY_AMOUNT for i in issues)
@@ -134,7 +134,7 @@ def test_validate_fx_transaction_requires_cash_leg_linkage_for_settlement_compon
             "component_type": "FX_CASH_SETTLEMENT_BUY",
             "fx_cash_leg_role": None,
             "linked_fx_cash_leg_id": None,
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.INVALID_FX_CASH_ROLE for i in issues)
@@ -157,7 +157,7 @@ def test_validate_fx_transaction_requires_swap_group_identifiers() -> None:
             "swap_event_id": None,
             "near_leg_group_id": None,
             "far_leg_group_id": None,
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.MISSING_SWAP_GROUP_IDENTIFIER for i in issues)
@@ -171,7 +171,7 @@ def test_validate_fx_transaction_rejects_non_distinct_swap_groups() -> None:
             "swap_event_id": "FXSWAP-001",
             "near_leg_group_id": "FXSWAP-001-LEG",
             "far_leg_group_id": "FXSWAP-001-LEG",
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.INVALID_SWAP_GROUP_STRUCTURE for i in issues)
@@ -183,7 +183,7 @@ def test_validate_fx_transaction_rejects_invalid_policy_modes() -> None:
         **{
             "spot_exposure_model": "BAD",
             "fx_realized_pnl_mode": "BAD",
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.INVALID_SPOT_EXPOSURE_MODEL for i in issues)
@@ -196,7 +196,7 @@ def test_validate_fx_transaction_rejects_non_zero_capital_pnl_and_total_mismatch
         **{
             "realized_capital_pnl_local": Decimal("1"),
             "realized_total_pnl_base": Decimal("999"),
-        }
+        },
     )
     issues = validate_fx_transaction(txn)
     assert any(i.code == FxValidationReasonCode.NON_ZERO_REALIZED_CAPITAL_PNL for i in issues)
@@ -211,7 +211,7 @@ def test_validate_fx_transaction_strict_metadata() -> None:
             "linked_transaction_group_id": None,
             "calculation_policy_id": None,
             "calculation_policy_version": None,
-        }
+        },
     )
     issues = validate_fx_transaction(txn, strict_metadata=True)
     assert any(i.code == FxValidationReasonCode.MISSING_LINKAGE_IDENTIFIER for i in issues)
