@@ -30,6 +30,7 @@ DOMAIN_FORBIDDEN_DEPENDENCIES = {
     "starlette",
 }
 RETIRED_MODULES = {
+    "portfolio_common.cost_basis",
     "portfolio_common.control_code_normalization",
     "portfolio_common.models",
     "portfolio_common.infrastructure.persistence.timeseries_repository",
@@ -44,6 +45,7 @@ RETIRED_MODULES = {
     "src.services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
 }
 RETIRED_PATHS = {
+    PACKAGE_ROOT / "cost_basis.py",
     PACKAGE_ROOT / "control_code_normalization.py",
     PACKAGE_ROOT / "models.py",
     PACKAGE_ROOT / "timeseries_repository_base.py",

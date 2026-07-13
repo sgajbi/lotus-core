@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.cost_basis import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 
 from .calculation.transaction_ordering import TransactionOrderKey, transaction_order_key
 from .models.cost_basis_transaction import CostBasisTransaction

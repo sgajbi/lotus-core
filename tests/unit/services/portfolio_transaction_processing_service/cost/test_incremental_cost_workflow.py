@@ -3,8 +3,8 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (

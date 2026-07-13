@@ -1,3 +1,5 @@
+"""Define the owner-neutral cost-basis method vocabulary."""
+
 from __future__ import annotations
 
 from enum import Enum
@@ -8,7 +10,7 @@ class CostBasisMethod(str, Enum):
     AVCO = "AVCO"
 
 
-def normalize_cost_basis_method(value: str | CostBasisMethod | None) -> CostBasisMethod:
+def normalize_cost_basis_method(value: object | None) -> CostBasisMethod:
     if isinstance(value, CostBasisMethod):
         return value
     if value is None:

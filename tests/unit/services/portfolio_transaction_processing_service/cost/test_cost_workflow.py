@@ -7,8 +7,8 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
-from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Portfolio
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
