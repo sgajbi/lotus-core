@@ -11,9 +11,6 @@ from portfolio_common.cost_basis import CostBasisMethod
 from portfolio_common.database_models import Portfolio
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
-from portfolio_common.transaction_domain import (
-    evaluate_ca_bundle_a_reconciliation,
-)
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     AverageCostPoolCheckpoint,
@@ -21,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostCalculationError,
     EffectiveFxRate,
     OpenLotState,
+    reconcile_corporate_action_basis,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
@@ -29,8 +27,16 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     FxRateNotFoundError,
     OpenLotStateUpdateScope,
     PortfolioNotFoundError,
+    legacy_transaction_event_mapper,
     normalize_cost_fee_amount,
 )
+
+
+def _reconcile_bundle_a_events(events: list[TransactionEvent]):
+    return reconcile_corporate_action_basis(
+        legacy_transaction_event_mapper.to_booked_transaction(event) for event in events
+    )
+
 
 pytestmark = pytest.mark.asyncio
 
@@ -843,7 +849,7 @@ async def test_bundle_a_basis_mismatch_creates_reconciliation_finding(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
-        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        reconciliation=_reconcile_bundle_a_events(group_events),
         missing_dependencies=[],
         correlation_id="corr-basis",
     )
@@ -870,7 +876,7 @@ async def test_bundle_a_insufficient_legs_creates_reconciliation_finding(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
-        reconciliation=evaluate_ca_bundle_a_reconciliation([processed_event]),
+        reconciliation=_reconcile_bundle_a_events([processed_event]),
         missing_dependencies=[],
         correlation_id="corr-insufficient",
     )
@@ -908,7 +914,7 @@ async def test_bundle_a_missing_cash_basis_creates_reconciliation_finding(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
-        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        reconciliation=_reconcile_bundle_a_events(group_events),
         missing_dependencies=[],
         correlation_id="corr-cash-basis",
     )
@@ -948,7 +954,7 @@ async def test_bundle_a_dependency_gap_creates_reconciliation_finding(
         processed_event=processed_event,
         linked_group="LTG-CA-DEM-01",
         parent_ref="CA-PARENT-DEM-01",
-        reconciliation=evaluate_ca_bundle_a_reconciliation(group_events),
+        reconciliation=_reconcile_bundle_a_events(group_events),
         missing_dependencies=missing_dependencies,
         correlation_id="corr-dependency",
     )

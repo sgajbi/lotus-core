@@ -101,6 +101,30 @@ def test_corporate_action_basis_reconciliation_distinguishes_incomplete_evidence
     assert result.missing_cash_basis_count == 1
 
 
+def test_corporate_action_basis_reconciliation_reports_basis_mismatch() -> None:
+    source = replace(
+        _booked_transaction(
+            transaction_id="SRC_01",
+            transaction_type="DEMERGER_OUT",
+            gross_amount="100",
+        ),
+        net_cost_local=Decimal("-100"),
+    )
+    target = replace(
+        _booked_transaction(
+            transaction_id="TGT_01",
+            transaction_type="DEMERGER_IN",
+            gross_amount="60",
+        ),
+        net_cost_local=Decimal("60"),
+    )
+
+    result = reconcile_corporate_action_basis((source, target))
+
+    assert result.status == "basis_mismatch"
+    assert result.net_basis_delta_local == Decimal("-40")
+
+
 def test_corporate_action_dependency_references_preserve_order() -> None:
     from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
         missing_corporate_action_dependencies,

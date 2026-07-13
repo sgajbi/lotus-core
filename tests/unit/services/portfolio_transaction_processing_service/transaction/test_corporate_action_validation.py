@@ -56,6 +56,42 @@ def test_bundle_a_validation_reports_required_linkage_and_instrument_fields() ->
     }
 
 
+def test_bundle_a_validation_requires_target_instrument_for_target_leg() -> None:
+    transaction = replace(
+        _booked_transaction("SPIN_IN"),
+        target_instrument_id=None,
+    )
+
+    assert [
+        finding.code for finding in corporate_action.validate_bundle_a_corporate_action(transaction)
+    ] == [corporate_action.CorporateActionValidationReasonCode.MISSING_TARGET_INSTRUMENT_ID]
+
+
+def test_bundle_a_validation_rejects_non_bundle_transaction_type() -> None:
+    findings = corporate_action.validate_bundle_a_corporate_action(_booked_transaction("BUY"))
+
+    assert [finding.code for finding in findings] == [
+        corporate_action.CorporateActionValidationReasonCode.INVALID_TRANSACTION_TYPE
+    ]
+
+
+def test_bundle_a_validation_error_preserves_all_findings() -> None:
+    transaction = replace(
+        _booked_transaction("DEMERGER_OUT"),
+        parent_event_reference=None,
+        economic_event_id=None,
+        source_instrument_id=None,
+    )
+
+    try:
+        corporate_action.assert_bundle_a_corporate_action_valid(transaction)
+    except corporate_action.CorporateActionValidationError as error:
+        assert len(error.findings) == 3
+        assert "MISSING_PARENT_EVENT_REFERENCE" in str(error)
+    else:
+        raise AssertionError("invalid corporate action was accepted")
+
+
 def test_cash_consideration_requires_one_consistent_cash_leg_reference() -> None:
     missing = replace(
         _booked_transaction("CASH_CONSIDERATION"),
