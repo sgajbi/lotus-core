@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Optional, cast
 
-from portfolio_common.currency_codes import normalize_optional_currency_code
+from portfolio_common.domain.currency import normalize_optional_currency_code
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,

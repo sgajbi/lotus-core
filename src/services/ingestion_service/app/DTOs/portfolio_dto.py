@@ -1,8 +1,8 @@
 from datetime import date
 from typing import List, Optional
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.currency import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 

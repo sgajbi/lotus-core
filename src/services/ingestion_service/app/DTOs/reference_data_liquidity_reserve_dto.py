@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, cast
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 

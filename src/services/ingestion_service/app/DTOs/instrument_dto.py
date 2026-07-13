@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
-from portfolio_common.currency_codes import normalize_optional_currency_code
+from portfolio_common.domain.currency import normalize_optional_currency_code
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
