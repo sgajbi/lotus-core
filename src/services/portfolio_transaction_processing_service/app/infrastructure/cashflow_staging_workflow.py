@@ -31,7 +31,7 @@ from portfolio_common.transaction_domain import (
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import StoredCashflow
-from .cashflow_calculation import calculate_booked_transaction_cashflow
+from .cashflow_calculation import calculate_observed_transaction_cashflow
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_rules_repository import (
     CashflowRuleSetVersion,
@@ -257,7 +257,7 @@ async def _stage_cashflow_calculation(
     correlation_id: str,
     repair_existing: bool,
 ) -> int:
-    cashflow_to_save = calculate_booked_transaction_cashflow(
+    cashflow_to_save = calculate_observed_transaction_cashflow(
         booked_transaction,
         rule,
         epoch=event.epoch,
