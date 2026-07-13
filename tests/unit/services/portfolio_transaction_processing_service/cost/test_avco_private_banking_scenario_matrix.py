@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
+from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_REGISTRY
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     build_cost_basis_timeline_processor,

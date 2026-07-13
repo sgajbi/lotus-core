@@ -8,12 +8,12 @@ from decimal import Decimal
 from typing import Any, Protocol
 
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_lifecycle_families,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
-)
-from portfolio_common.transaction_type_registry import (
-    production_transaction_types_for_lifecycle_families,
 )
 
 FX_BUSINESS_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("fx")

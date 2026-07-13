@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
-from portfolio_common.transaction_type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
+from portfolio_common.domain.transaction.type_registry import PRODUCTION_BOOKING_TRANSACTION_TYPES
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,

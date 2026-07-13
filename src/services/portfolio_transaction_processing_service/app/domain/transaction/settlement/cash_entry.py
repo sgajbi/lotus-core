@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from portfolio_common.domain.transaction.type_registry import (
+    production_transaction_types_for_lifecycle_families,
+)
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
-)
-from portfolio_common.transaction_type_registry import (
-    production_transaction_types_for_lifecycle_families,
 )
 
 from ..booked import BookedTransaction
