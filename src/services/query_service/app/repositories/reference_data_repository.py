@@ -6,11 +6,12 @@ from datetime import date
 from decimal import Decimal
 
 from portfolio_common.database_models import FxRate
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..services.decimal_amounts import decimal_or_none
-from .currency_codes import currency_code_sql_expr, normalize_currency_code
+from .currency_query_expressions import currency_code_sql_expr
 
 
 class ReferenceDataRepository:

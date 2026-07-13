@@ -4,10 +4,11 @@ from datetime import date
 from typing import List, Optional
 
 from portfolio_common.database_models import FxRate
+from portfolio_common.domain.currency import normalize_currency_code
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .currency_codes import currency_code_sql_expr, normalize_currency_code
+from .currency_query_expressions import currency_code_sql_expr
 
 logger = logging.getLogger(__name__)
 
