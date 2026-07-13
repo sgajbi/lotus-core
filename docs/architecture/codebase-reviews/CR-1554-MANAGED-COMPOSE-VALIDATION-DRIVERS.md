@@ -69,6 +69,9 @@ default-project log command.
 - The live run captured a `2,216,235` byte log naming project
   `lotus-integration-failure-recovery-gate-5a6b519c` and the exact Compose file before teardown,
   then left zero project containers.
+- App certification requires no separate lifecycle migration: it invokes the managed Docker-smoke
+  driver, and its PR job already uploads `output/task-runs/diagnostics/*.log`. Adding a second owner
+  would duplicate startup and make diagnostic identity ambiguous.
 
 ## Compatibility
 
