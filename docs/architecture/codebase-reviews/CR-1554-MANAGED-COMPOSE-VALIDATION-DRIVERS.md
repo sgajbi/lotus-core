@@ -73,6 +73,10 @@ default-project log command.
   field records with explicit `equals`, `at_least`, or `at_most` targets and source UTC
   `last_changed_at` timestamps. Recovery completed in `8.139s`, diagnostics were `2,228,544` bytes,
   and teardown again left zero project containers.
+- Polling now stops without another sleep when any exact-count field exceeds its target or when
+  source-owned error-budget evidence reports DLQ growth. Unit tests prove both one-poll terminal
+  paths. A third live run remained non-terminal with `9` polls, `0` added DLQ events, `8.271s`
+  recovery, `2,224,379` bytes of diagnostics, and zero residual containers.
 - App certification requires no separate lifecycle migration: it invokes the managed Docker-smoke
   driver, and its PR job already uploads `output/task-runs/diagnostics/*.log`. Adding a second owner
   would duplicate startup and make diagnostic identity ambiguous.
@@ -93,4 +97,4 @@ methodology do not change because their contracts are untouched.
 ## Remaining Work
 
 Issue #730 remains open for scenario shards, change-impact selection, exact-SHA selective dispatch,
-terminal/DLQ fail-fast polling, and timing/queue/flake/rerun trend reporting.
+and timing/queue/flake/rerun trend reporting.

@@ -64,6 +64,8 @@ explicit local diagnosis flag.
 Failure-recovery JSON and Markdown evidence records each transaction, cost, cashflow, position,
 claim, and lag predicate with actual/expected values, comparison, satisfaction, and source UTC
 last-change time. A timeout must therefore identify the fields that remained unsatisfied.
+An exact-count overshoot or DLQ increase from the pre-interruption baseline is terminal evidence;
+polling records the reason and stops without another wait cycle.
 
 | Evidence | Location | Failure Meaning |
 |---|---|---|
