@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from decimal import Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,61 @@ class PortfolioAnalyticsSource:
 
 
 @dataclass(frozen=True, slots=True)
+class PositionValuationObservation:
+    """One effective position valuation selected for an analytics observation date."""
+
+    security_id: str
+    valuation_date: date
+    bod_market_value: Decimal
+    eod_market_value: Decimal
+    bod_cashflow_position: Decimal
+    eod_cashflow_position: Decimal
+    bod_cashflow_portfolio: Decimal
+    eod_cashflow_portfolio: Decimal
+    fees: Decimal
+    quantity: Decimal
+    epoch: int
+    position_currency: str
+    asset_class: str | None
+    sector: str | None
+    country: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PriorPositionValuation:
+    """Latest position EOD value preceding an analytics page window."""
+
+    security_id: str
+    valuation_date: date
+    eod_market_value: Decimal
+    epoch: int
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyticsCashflowEvidence:
+    """Latest source-authored cashflow selected for analytics treatment."""
+
+    transaction_id: str
+    security_id: str | None
+    valuation_date: date
+    amount: Decimal
+    currency: str
+    classification: str
+    timing: str
+    is_position_flow: bool
+    is_portfolio_flow: bool
+    epoch: int
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyticsFxRateObservation:
+    """One valid source FX rate selected by the analytics adapter."""
+
+    rate_date: date
+    rate: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class AnalyticsExportJobRecord:
     """Durable analytics export lifecycle state without ORM identity."""
 
@@ -32,8 +87,8 @@ class AnalyticsExportJobRecord:
     portfolio_id: str
     status: str
     request_fingerprint: str
-    request_payload: dict[str, Any]
-    result_payload: dict[str, Any] | None
+    request_payload: dict[str, object]
+    result_payload: dict[str, object] | None
     result_row_count: int | None
     result_format: str
     compression: str
