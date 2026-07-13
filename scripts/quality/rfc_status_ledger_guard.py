@@ -10,6 +10,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEDGER_PATH = REPO_ROOT / "docs" / "standards" / "rfc-status-ledger.v1.json"
+RFC_INDEX_PATH = REPO_ROOT / "docs" / "RFCs" / "RFC-INDEX.md"
 
 SCHEMA_VERSION = "lotus-core.rfc-status-ledger.v1"
 REPOSITORY = "lotus-core"
@@ -70,6 +71,15 @@ PATH_LIST_FIELDS = {
     "canonical_registry_refs",
 }
 IMPLEMENTED_STATUSES = {"active_current_state", "implemented", "partially_implemented"}
+INDEX_STATUS_TO_LEDGER_STATUS = {
+    "Implemented": "implemented",
+    "Partially Implemented": "partially_implemented",
+    "In Progress": "partially_implemented",
+    "Approved": "target_state",
+    "Draft": "target_state",
+    "Deprecated": "deprecated",
+    "Archived": "archived",
+}
 TRANSACTION_REGISTRY = "src/libs/portfolio-common/portfolio_common/transaction_type_registry.py"
 SUPPORTED_FEATURES_DOC = "docs/features/supported-features.md"
 
@@ -109,6 +119,20 @@ def discover_rfc_documents(repo_root: Path = REPO_ROOT) -> list[RfcDocument]:
 
 def load_ledger(path: Path = LEDGER_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_rfc_index_statuses(path: Path = RFC_INDEX_PATH) -> dict[str, str]:
+    statuses: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("| RFC-"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) < 6:
+            continue
+        expected_status = INDEX_STATUS_TO_LEDGER_STATUS.get(cells[4])
+        if expected_status is not None:
+            statuses[cells[1]] = expected_status
+    return statuses
 
 
 def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> list[str]:
@@ -151,6 +175,27 @@ def evaluate_ledger(payload: dict[str, Any], *, repo_root: Path = REPO_ROOT) -> 
         errors.append("RFC ledger is missing metadata for: " + ", ".join(missing))
     if stale:
         errors.append("RFC ledger contains stale metadata for: " + ", ".join(stale))
+    errors.extend(
+        _index_status_errors(
+            entries,
+            index_statuses=load_rfc_index_statuses(repo_root / "docs" / "RFCs" / "RFC-INDEX.md"),
+        )
+    )
+    return errors
+
+
+def _index_status_errors(
+    entries: list[dict[str, Any]], *, index_statuses: dict[str, str]
+) -> list[str]:
+    errors: list[str] = []
+    for entry in entries:
+        rfc_id = entry.get("rfc_id")
+        expected_status = index_statuses.get(str(rfc_id))
+        if expected_status is not None and entry.get("status") != expected_status:
+            errors.append(
+                f"{entry.get('path')}: status must be {expected_status!r} "
+                f"to match the RFC index current status for {rfc_id}"
+            )
     return errors
 
 
