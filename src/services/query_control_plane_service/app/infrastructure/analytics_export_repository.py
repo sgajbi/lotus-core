@@ -22,7 +22,7 @@ class AnalyticsExportRepository:
         dataset_type: str,
         portfolio_id: str,
         request_fingerprint: str,
-        request_payload: dict,
+        request_payload: dict[str, object],
         result_format: str,
         compression: str,
     ) -> AnalyticsExportJobRecord:
@@ -67,7 +67,11 @@ class AnalyticsExportRepository:
         return _export_job_record(model)
 
     async def mark_completed(
-        self, row: AnalyticsExportJobRecord, *, result_payload: dict, result_row_count: int
+        self,
+        row: AnalyticsExportJobRecord,
+        *,
+        result_payload: dict[str, object],
+        result_row_count: int,
     ) -> AnalyticsExportJobRecord:
         model = await self._require_model(row.job_id)
         model.status = "completed"

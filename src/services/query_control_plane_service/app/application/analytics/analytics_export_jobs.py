@@ -12,6 +12,7 @@ from portfolio_common.monitoring import (
 )
 
 from ...contracts.analytics_inputs import AnalyticsExportJobResponse
+from ...domain.analytics import AnalyticsExportJobRecord
 
 
 def analytics_export_result_endpoint(job_id: str) -> str:
@@ -26,7 +27,7 @@ def normalize_analytics_export_job_status(status: str | None) -> str | None:
 
 
 def analytics_export_job_response(
-    row: object,
+    row: AnalyticsExportJobRecord,
     *,
     lifecycle_mode: str,
     disposition: str = "status_lookup",
@@ -53,7 +54,7 @@ def analytics_export_job_response(
 
 
 def reused_analytics_export_job_response(
-    row: object, *, lifecycle_mode: str
+    row: AnalyticsExportJobRecord, *, lifecycle_mode: str
 ) -> AnalyticsExportJobResponse:
     disposition = (
         "reused_completed"

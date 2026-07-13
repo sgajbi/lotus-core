@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from ...domain.analytics import AnalyticsExportJobRecord
 from .analytics_export_jobs import normalize_analytics_export_job_status
 
 
-def export_job_is_completed(row: object) -> bool:
+def export_job_is_completed(row: AnalyticsExportJobRecord) -> bool:
     return normalize_analytics_export_job_status(row.status) == "completed"
 
 
-def export_job_is_inflight(row: object) -> bool:
+def export_job_is_inflight(row: AnalyticsExportJobRecord) -> bool:
     return normalize_analytics_export_job_status(row.status) in {"accepted", "running"}
 
 
@@ -25,7 +26,7 @@ def export_job_stale_threshold(
 
 
 def export_job_is_fresh(
-    row: object,
+    row: AnalyticsExportJobRecord,
     *,
     timeout_minutes: int,
     reference_now: datetime | None = None,

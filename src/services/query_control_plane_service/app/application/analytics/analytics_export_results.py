@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ...contracts.analytics_inputs import AnalyticsExportJsonResultResponse
+from ...domain.analytics import AnalyticsExportJobRecord
 from .analytics_export_jobs import normalize_analytics_export_job_status
 from .analytics_export_ndjson import (
     AnalyticsExportNdjsonError,
@@ -16,7 +17,9 @@ class AnalyticsExportResultError(ValueError):
         super().__init__(message)
 
 
-def completed_analytics_export_result_payload(row: object) -> dict[str, object]:
+def completed_analytics_export_result_payload(
+    row: AnalyticsExportJobRecord,
+) -> dict[str, object]:
     if normalize_analytics_export_job_status(row.status) != "completed":
         raise AnalyticsExportResultError(
             "UNSUPPORTED_CONFIGURATION",
@@ -31,13 +34,13 @@ def completed_analytics_export_result_payload(row: object) -> dict[str, object]:
 
 
 def analytics_export_json_result_response(
-    row: object,
+    row: AnalyticsExportJobRecord,
 ) -> AnalyticsExportJsonResultResponse:
     return AnalyticsExportJsonResultResponse(**completed_analytics_export_result_payload(row))
 
 
 def analytics_export_ndjson_result_response(
-    row: object, *, compression: str
+    row: AnalyticsExportJobRecord, *, compression: str
 ) -> tuple[bytes, str, str]:
     result_payload = completed_analytics_export_result_payload(row)
     try:
