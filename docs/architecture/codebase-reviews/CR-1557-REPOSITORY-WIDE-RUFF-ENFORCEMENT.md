@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issue: #745
-Status: Locally validated; PR proof pending
+Status: Fixed locally; PR proof pending
 
 ## Objective
 
@@ -53,6 +53,8 @@ and wiki validation guidance changed because local command truth changed.
 - `make lint`: passed the complete Ruff and governed contract-guard chain.
 - `make quality-wiki-docs-gate`: passed all wiki, front-door, architecture catalog, RFC status,
   supported-feature, and incident-playbook checks.
+- `make ci-local`: passed 4,343 unit, 10 database, and 135 integration-lite tests with zero
+  warnings, 97.79% aggregate coverage, and 91.24% branch coverage.
 - `git diff --check`: passed.
 
 PR CI and post-merge exact-main proof remain required before issue closure.
