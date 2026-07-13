@@ -109,8 +109,10 @@
       "risk": "Untested position or cash state transitions can create incorrect holdings, cash balances, and replay decisions.",
       "source_globs": [
         "src/services/portfolio_transaction_processing_service/app/domain/position/**/*.py",
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_calculation_workflow.py",
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_repository.py",
+        "src/services/portfolio_transaction_processing_service/app/application/position_history.py",
+        "src/services/portfolio_transaction_processing_service/app/ports/position_history.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_history_repository.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_recalculation_state_store.py",
         "src/services/query_service/app/services/position*.py",
         "src/services/query_service/app/services/cash*.py",
         "src/services/query_service/app/repositories/position_repository.py",
@@ -131,7 +133,7 @@
         "integration-lite"
       ],
       "required_test_globs": [
-        "tests/unit/services/calculators/position_calculator/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/position/**/*.py",
         "tests/unit/services/query_service/services/test_position*.py",
         "tests/unit/services/query_service/routers/test_cash_movements_router.py",
         "tests/integration/services/query_service/test_*cash*.py"
@@ -144,7 +146,7 @@
       "source_globs": [
         "src/libs/portfolio-common/portfolio_common/transaction_domain/ca_*.py",
         "src/services/portfolio_transaction_processing_service/app/domain/position/**/*.py",
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/position_calculation_workflow.py"
+        "src/services/portfolio_transaction_processing_service/app/application/position_history.py"
       ],
       "minimum_measured_line_coverage_percent": 90.0,
       "minimum_measured_branch_coverage_percent": 82.0,
@@ -159,8 +161,9 @@
       ],
       "required_test_globs": [
         "tests/unit/libs/portfolio_common/test_portfolio_flow_guardrails.py",
-        "tests/unit/services/calculators/position_calculator/core/test_position_reducer.py",
-        "tests/unit/services/calculators/position_calculator/core/test_position_logic.py"
+        "tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py",
+        "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_domain.py",
+        "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_processor.py"
       ]
     },
     {
