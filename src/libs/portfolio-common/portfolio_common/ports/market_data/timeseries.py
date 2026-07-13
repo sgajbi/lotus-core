@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Protocol
 
-from portfolio_common.domain.timeseries_market_data import (
+from portfolio_common.domain.market_data.timeseries import (
     TimeseriesFxRate,
     TimeseriesInstrument,
 )

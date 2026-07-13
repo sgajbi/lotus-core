@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from portfolio_common.database_models import FxRate, Instrument
 from portfolio_common.domain.currency import normalize_currency_code
-from portfolio_common.domain.timeseries_market_data import (
+from portfolio_common.domain.market_data.timeseries import (
     TimeseriesFxRate,
     TimeseriesInstrument,
 )
