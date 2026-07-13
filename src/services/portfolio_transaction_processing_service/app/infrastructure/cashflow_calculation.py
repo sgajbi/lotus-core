@@ -60,9 +60,7 @@ def calculate_booked_transaction_cashflow(
     epoch: int | None = 0,
 ) -> Cashflow:
     """Calculate one domain cashflow and adapt it to the existing SQLAlchemy model."""
-    return _to_cashflow_row(
-        calculate_observed_transaction_cashflow(transaction, rule, epoch=epoch)
-    )
+    return _to_cashflow_row(calculate_observed_transaction_cashflow(transaction, rule, epoch=epoch))
 
 
 def calculate_observed_transaction_cashflow(
