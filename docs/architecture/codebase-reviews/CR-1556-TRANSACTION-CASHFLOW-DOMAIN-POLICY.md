@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issue: #719
-Status: Implemented locally; aggregate and PR proof pending
+Status: Locally validated; PR proof pending
 
 ## Objective
 
@@ -50,13 +50,18 @@ did not change because the public surface and platform-wide operating contract a
 - Interest, dividend, cross-product, and portfolio-flow transaction specifications: 34 cases
   passed.
 - Cashflow adapter, staging, calculation, and repository cohorts passed 67 and 65 cases across the
-  command and persistence-boundary slices.
+  command and persistence-boundary slices; the final focused cross-module cohort passed 112 cases.
 - Concrete PostgreSQL combined BUY/SELL lifecycle: 2 cases passed.
-- Ruff, MyPy, domain-layer, in-process boundary, architecture, and diff checks passed for completed
-  commits.
+- Complete PostgreSQL transaction-processing contract: 52 cases passed.
+- `make ci-local` passed dependency integrity, Ruff, zero-warning, MyPy, architecture, OpenAPI,
+  API-vocabulary, unit DB, integration-lite, and coverage gates: 4,336 unit, 10 DB, and 135
+  integration-lite cases passed; aggregate measured coverage was 97.79% with 91.24% branch
+  coverage.
+- Domain-layer, in-process boundary, documentation, wiki-source, and diff checks passed.
 
-Aggregate repository-native gates, PR CI, exact-branch validation, and post-merge exact-main proof
-remain required before closure.
+PR CI, exact-branch validation, and post-merge exact-main proof remain required before this bounded
+slice is complete. Issue #719 remains open for the broader cost/position workflow, port, replay,
+simulation, performance, and legacy-retirement program.
 
 ## Same-Pattern Decision
 
