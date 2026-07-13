@@ -2,7 +2,7 @@
 
 Date: 2026-07-13
 Issue: #719
-Status: Locally validated; PR proof pending
+Status: Merged; exact-main proof running
 
 ## Objective
 
@@ -61,9 +61,10 @@ did not change because the public surface and platform-wide operating contract a
   check reported only `Cashflow-Calculator.md`, the expected authored source change that must not
   be published before merge.
 
-PR CI, exact-branch validation, and post-merge exact-main proof remain required before this bounded
-slice is complete. Issue #719 remains open for the broader cost/position workflow, port, replay,
-simulation, performance, and legacy-retirement program.
+PR #744 merged to `main` at `f03a5b34` after Feature Lane, PR Merge Gate, Quality Baseline,
+exact-source Docker build, SBOM/provenance, smoke, load, latency, and application validation passed.
+Post-merge exact-main proof is running. Issue #719 remains open for the broader cost/position
+workflow, port, replay, simulation, performance, and legacy-retirement program.
 
 ## Same-Pattern Decision
 
