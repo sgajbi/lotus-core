@@ -5,7 +5,6 @@ from .average_cost_pool_reconciliation import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from .booked_transaction import BookedTransaction
 from .position import (
     PositionHistoryInvariantError,
     PositionHistoryRecord,
@@ -14,9 +13,10 @@ from .position import (
     order_position_transactions,
     position_transaction_ordering_key,
 )
-from .transaction_semantic_identity import (
+from .transaction import (
     TRANSACTION_CORRECTION_IDENTITY_VERSION,
     TRANSACTION_SEMANTIC_IDENTITY_VERSION,
+    BookedTransaction,
     TransactionSemanticIdentity,
     build_transaction_correction_identity,
     build_transaction_semantic_identity,

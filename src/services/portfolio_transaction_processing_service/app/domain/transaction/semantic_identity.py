@@ -1,3 +1,5 @@
+"""Build deterministic semantic identities for booked transactions and corrections."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +9,7 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Any
 
-from .booked_transaction import BookedTransaction
+from .booked import BookedTransaction
 
 TRANSACTION_SEMANTIC_IDENTITY_VERSION = "v1"
 TRANSACTION_CORRECTION_IDENTITY_VERSION = "v1"

@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
-from ..domain.booked_transaction import BookedTransaction
 from ..domain.position.history import (
     PositionHistoryRecord,
     PositionRecalculationState,
     build_position_history,
 )
 from ..domain.position.reducer import plan_backdated_recalculation
+from ..domain.transaction.booked import BookedTransaction
 from ..ports.position_history import (
     PositionHistoryObserver,
     PositionHistoryRepository,
