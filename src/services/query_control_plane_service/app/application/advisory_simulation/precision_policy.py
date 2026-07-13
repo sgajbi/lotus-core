@@ -25,14 +25,15 @@ INPUT_MAX_SCALE = {
 
 def to_decimal(value: Any) -> Decimal:
     if isinstance(value, Decimal):
-        return value
-    if value is None:
-        return Decimal("0")
-    try:
-        decimal_value = decimal_or_none(value)
-    except (InvalidOperation, ValueError, TypeError) as exc:
-        raise ValueError(f"Invalid numeric value: {value!r}") from exc
-    if decimal_value is None:
+        decimal_value = value
+    elif value is None:
+        decimal_value = Decimal("0")
+    else:
+        try:
+            decimal_value = decimal_or_none(value)
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid numeric value: {value!r}") from exc
+    if decimal_value is None or not decimal_value.is_finite():
         raise ValueError(f"Invalid numeric value: {value!r}")
     return decimal_value
 
@@ -40,7 +41,7 @@ def to_decimal(value: Any) -> Decimal:
 def _decimal_scale(value: Decimal) -> int:
     exponent = value.as_tuple().exponent
     if not isinstance(exponent, int):
-        return 0
+        raise ValueError(f"Cannot determine scale for non-finite value: {value!r}")
     return -exponent if exponent < 0 else 0
 
 
