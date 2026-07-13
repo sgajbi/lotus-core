@@ -3,15 +3,14 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from portfolio_common.ca_bundle_a_constants import (
-    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
-    CA_BUNDLE_A_SOURCE_OUT_TYPES,
-    CA_BUNDLE_A_TARGET_IN_TYPES,
-    CA_BUNDLE_A_TRANSACTION_TYPES,
-    normalize_ca_bundle_a_transaction_type,
-)
-
 from ..booked import BookedTransaction
+from .classification import (
+    BASIS_TRANSFER_CORPORATE_ACTION_TYPES,
+    CASH_CONSIDERATION_TRANSACTION_TYPE,
+    SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES,
+    TARGET_BASIS_TRANSFER_TRANSACTION_TYPES,
+    normalize_corporate_action_transaction_type,
+)
 from .reason_codes import CorporateActionValidationReasonCode
 
 
@@ -36,7 +35,10 @@ class CorporateActionValidationError(ValueError):
 def is_bundle_a_corporate_action(transaction_type: str | None) -> bool:
     """Return whether a source control code belongs to Corporate Action Bundle A."""
 
-    return normalize_ca_bundle_a_transaction_type(transaction_type) in CA_BUNDLE_A_TRANSACTION_TYPES
+    return (
+        normalize_corporate_action_transaction_type(transaction_type)
+        in BASIS_TRANSFER_CORPORATE_ACTION_TYPES
+    )
 
 
 def validate_bundle_a_corporate_action(
@@ -45,8 +47,8 @@ def validate_bundle_a_corporate_action(
     """Return every validation finding in stable field-policy order."""
 
     findings: list[CorporateActionValidationFinding] = []
-    transaction_type = normalize_ca_bundle_a_transaction_type(transaction.transaction_type)
-    if transaction_type not in CA_BUNDLE_A_TRANSACTION_TYPES:
+    transaction_type = normalize_corporate_action_transaction_type(transaction.transaction_type)
+    if transaction_type not in BASIS_TRANSFER_CORPORATE_ACTION_TYPES:
         findings.append(
             _finding(
                 CorporateActionValidationReasonCode.INVALID_TRANSACTION_TYPE,
@@ -76,7 +78,7 @@ def validate_bundle_a_corporate_action(
                 "Bundle A CA transaction types.",
             )
         )
-    if transaction_type in CA_BUNDLE_A_SOURCE_OUT_TYPES and not _present(
+    if transaction_type in SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES and not _present(
         transaction.source_instrument_id
     ):
         findings.append(
@@ -86,7 +88,7 @@ def validate_bundle_a_corporate_action(
                 "source_instrument_id is required for Bundle A source-out transaction types.",
             )
         )
-    if transaction_type in CA_BUNDLE_A_TARGET_IN_TYPES and not _present(
+    if transaction_type in TARGET_BASIS_TRANSFER_TRANSACTION_TYPES and not _present(
         transaction.target_instrument_id
     ):
         findings.append(
@@ -96,7 +98,7 @@ def validate_bundle_a_corporate_action(
                 "target_instrument_id is required for Bundle A target-in transaction types.",
             )
         )
-    if transaction_type == CA_BUNDLE_A_CASH_CONSIDERATION_TYPE:
+    if transaction_type == CASH_CONSIDERATION_TRANSACTION_TYPE:
         _validate_cash_leg_references(findings, transaction)
     return tuple(findings)
 

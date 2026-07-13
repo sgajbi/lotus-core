@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction,
 )
@@ -59,6 +61,22 @@ def test_transaction_settlement_date_can_remain_none() -> None:
     transaction = _transaction(settlement_date=None)
 
     assert transaction.settlement_date is None
+
+
+def test_transaction_declares_corporate_action_ordering_fields() -> None:
+    ordinary = _transaction()
+    target_leg = _transaction(child_sequence_hint="2", target_instrument_id="TARGET-SECURITY")
+
+    assert ordinary.child_sequence_hint is None
+    assert ordinary.target_instrument_id is None
+    assert target_leg.child_sequence_hint == 2
+    assert target_leg.target_instrument_id == "TARGET-SECURITY"
+    assert target_leg.model_dump()["child_sequence_hint"] == 2
+
+
+def test_transaction_rejects_invalid_corporate_action_sequence() -> None:
+    with pytest.raises(ValueError, match="child_sequence_hint must be a valid integer"):
+        _transaction(child_sequence_hint="second")
 
 
 def test_transaction_dump_serializes_current_calculated_extra_field_value() -> None:

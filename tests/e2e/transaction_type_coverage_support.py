@@ -2,14 +2,13 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
-from portfolio_common.ca_bundle_a_constants import (
-    CA_BUNDLE_A_CASH_CONSIDERATION_TYPE,
-    CA_BUNDLE_A_SOURCE_OUT_TYPES,
-    CA_BUNDLE_A_TARGET_IN_TYPES,
-)
 from portfolio_common.transaction_type_registry import (
     PRODUCTION_BOOKING_TRANSACTION_TYPES,
     TRANSACTION_TYPE_REGISTRY,
+)
+
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    corporate_action,
 )
 
 from .api_client import E2EApiClient
@@ -53,8 +52,8 @@ TRANSACTION_TYPES_WITHOUT_CASHFLOW_RULE = {
         or TRANSACTION_TYPE_REGISTRY[code].cash_effect == "linked_cash_legs"
     )
 }
-BUNDLE_A_OUT_TYPES = set(CA_BUNDLE_A_SOURCE_OUT_TYPES)
-BUNDLE_A_IN_TYPES = set(CA_BUNDLE_A_TARGET_IN_TYPES)
+BUNDLE_A_OUT_TYPES = set(corporate_action.SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES)
+BUNDLE_A_IN_TYPES = set(corporate_action.TARGET_BASIS_TRANSFER_TRANSACTION_TYPES)
 MIN_E2E_CASHFLOW_DISTINCT_TYPES = 5
 
 
@@ -155,7 +154,7 @@ def build_transaction_payloads(
             event["source_instrument_id"] = resolved_security_id
         if tx_type in BUNDLE_A_IN_TYPES:
             event["target_instrument_id"] = resolved_security_id
-        if tx_type == CA_BUNDLE_A_CASH_CONSIDERATION_TYPE:
+        if tx_type == corporate_action.CASH_CONSIDERATION_TRANSACTION_TYPE:
             link_ref = f"{portfolio_id}_ADJ_LINK_00"
             event["linked_cash_transaction_id"] = link_ref
             event["external_cash_transaction_id"] = link_ref

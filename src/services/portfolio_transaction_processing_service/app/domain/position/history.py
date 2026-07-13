@@ -7,12 +7,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from portfolio_common.ca_bundle_a_ordering import (
-    ca_bundle_a_dependency_rank,
-    ca_bundle_a_target_order_key,
-)
-
 from ..transaction.booked import BookedTransaction
+from ..transaction.corporate_action.ordering import (
+    corporate_action_dependency_rank,
+    corporate_action_target_order_key,
+)
 from .reducer import PositionBalanceState, calculate_next_position_state
 
 PositionTransactionOrderKey = tuple[date, datetime, int, int, str, datetime, str]
@@ -66,11 +65,11 @@ def position_transaction_ordering_key(
         if transaction.created_at is not None
         else datetime.fromtimestamp(0, tz=timezone.utc)
     )
-    target_sequence, target_instrument_id = ca_bundle_a_target_order_key(transaction)
+    target_sequence, target_instrument_id = corporate_action_target_order_key(transaction)
     return (
         transaction_timestamp.date(),
         transaction_timestamp,
-        ca_bundle_a_dependency_rank(transaction),
+        corporate_action_dependency_rank(transaction),
         target_sequence,
         target_instrument_id,
         ingestion_timestamp,

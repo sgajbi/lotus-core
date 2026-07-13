@@ -81,6 +81,15 @@ def _optional_positive(value: object, *, field_name: str) -> Decimal | None:
     return amount
 
 
+def _optional_integer(value: object, *, field_name: str) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(str(value))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid integer") from exc
+
+
 def _model_dump(
     instance: object, *, exclude_none: bool, exclude: set[str] | None
 ) -> dict[str, Any]:
@@ -159,6 +168,8 @@ class CostBasisTransaction:
     transaction_type: str
     transaction_date: datetime
     settlement_date: datetime | None
+    child_sequence_hint: int | None
+    target_instrument_id: str | None
     quantity: Decimal
     gross_transaction_amount: Decimal
     net_transaction_amount: Decimal | None
@@ -190,6 +201,8 @@ class CostBasisTransaction:
         trade_currency: object,
         portfolio_base_currency: object,
         settlement_date: object = None,
+        child_sequence_hint: object = None,
+        target_instrument_id: object = None,
         net_transaction_amount: object = None,
         fees: Fees | dict[str, object] | None = None,
         accrued_interest: object = Decimal(0),
@@ -214,6 +227,13 @@ class CostBasisTransaction:
         self.settlement_date = standardize_datetime_value(settlement_date)
         if self.settlement_date is not None and not isinstance(self.settlement_date, datetime):
             raise ValueError("settlement_date must be a datetime")
+        self.child_sequence_hint = _optional_integer(
+            child_sequence_hint,
+            field_name="child_sequence_hint",
+        )
+        self.target_instrument_id = (
+            str(target_instrument_id) if target_instrument_id is not None else None
+        )
         self.quantity = _non_negative(quantity, field_name="quantity")
         self.gross_transaction_amount = _non_negative(
             gross_transaction_amount,

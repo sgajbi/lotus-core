@@ -5,10 +5,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .ca_bundle_a_ordering import (
-    ca_bundle_a_dependency_rank,
-    ca_bundle_a_target_order_key,
-)
 from .cost_basis import CostBasisMethod, normalize_cost_basis_method
 from .currency_codes import normalize_currency_code, normalize_optional_currency_code
 from .decimal_amounts import decimal_or_none
@@ -30,13 +26,6 @@ def _standardize_event_datetime_value(value: object) -> object:
     if isinstance(value, datetime) and value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
-
-
-def _aware_event_datetime(value: datetime) -> datetime:
-    normalized = _standardize_event_datetime_value(value)
-    if not isinstance(normalized, datetime):
-        raise TypeError("Expected datetime value.")
-    return normalized
 
 
 def _event_decimal_amount(value: object) -> Decimal:
@@ -405,38 +394,6 @@ class TransactionEvent(CoreEventModel):
             {field: getattr(self, field) for field in TRANSACTION_FEE_COMPONENT_FIELDS},
         )
         return self
-
-
-def transaction_event_ordering_key(
-    event: "TransactionEvent",
-) -> tuple[date, datetime, int, int, str, datetime, str]:
-    """
-    Deterministic intra-partition ordering for transaction processing.
-    Priority:
-    1) effective business date (derived from transaction_date)
-    2) transaction timestamp
-    3) Bundle A dependency rank (source-out, target-in, cash-consideration, other)
-    4) Bundle A target leg sequence (child_sequence_hint fallback)
-    5) Bundle A target instrument fallback
-    6) ingestion timestamp (created_at when present)
-    7) stable event identity (transaction_id)
-    """
-    transaction_ts = _aware_event_datetime(event.transaction_date)
-    ingestion_ts = (
-        _aware_event_datetime(event.created_at)
-        if event.created_at is not None
-        else datetime.fromtimestamp(0, tz=timezone.utc)
-    )
-    target_sequence, target_instrument = ca_bundle_a_target_order_key(event)
-    return (
-        transaction_ts.date(),
-        transaction_ts,
-        ca_bundle_a_dependency_rank(event),
-        target_sequence,
-        target_instrument,
-        ingestion_ts,
-        event.transaction_id,
-    )
 
 
 class DailyPositionSnapshotPersistedEvent(CoreEventModel):
