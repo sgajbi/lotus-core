@@ -8,6 +8,13 @@ from .cash_entry import (
     is_upstream_provided_cash_entry_mode,
     resolve_cash_entry_mode,
 )
+from .cash_movement import (
+    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    SettlementCashMovement,
+    SettlementCashRejectionReasonCode,
+    SettlementCashValidationError,
+    calculate_settlement_cash_movement,
+)
 from .generated_cash_leg import (
     ADJUSTMENT_TRANSACTION_TYPE,
     GENERATED_CASH_LEG_TRANSACTION_TYPES,
@@ -32,13 +39,18 @@ __all__ = [
     "GeneratedCashLegError",
     "GENERATED_CASH_LEG_TRANSACTION_TYPES",
     "InterestSettlementEconomics",
+    "ORDINARY_SETTLEMENT_TRANSACTION_TYPES",
     "PORTFOLIO_LEVEL_CASH_FLOW_TRANSACTION_TYPES",
+    "SettlementCashMovement",
+    "SettlementCashRejectionReasonCode",
+    "SettlementCashValidationError",
     "UpstreamCashLegPairingError",
     "UpstreamCashLegPairingIssue",
     "assert_cash_entry_mode_supported",
     "assert_upstream_cash_leg_pairing",
     "build_generated_settlement_cash_leg",
     "calculate_interest_settlement_economics",
+    "calculate_settlement_cash_movement",
     "is_portfolio_level_cash_flow",
     "is_upstream_provided_cash_entry_mode",
     "resolve_cash_entry_mode",
