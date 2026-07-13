@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.decimal_amounts import decimal_or_none, decimal_or_zero
+from portfolio_common.domain.decimal_amount import decimal_or_none, decimal_or_zero
 
 from ...contracts.core_snapshot import CoreSnapshotDeltaRecord, CoreSnapshotPositionRecord
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from portfolio_common.decimal_amounts import decimal_or_none, decimal_or_zero
+from portfolio_common.domain.decimal_amount import decimal_or_none, decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier
 
 from ...domain.core_snapshot import CoreSnapshotInstrument, CoreSnapshotPositionSource
