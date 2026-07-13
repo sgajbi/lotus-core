@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 
 def coerce_positive_fx_rate_or_none(rate: object) -> Decimal | None:

@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 from decimal import Decimal
 from typing import Protocol
 
-from portfolio_common.decimal_amounts import required_decimal
+from portfolio_common.domain.decimal_amount import required_decimal
 
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .average_cost_source_allocation import (

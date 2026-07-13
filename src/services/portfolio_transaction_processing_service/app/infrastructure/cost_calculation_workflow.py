@@ -12,8 +12,8 @@ from portfolio_common.config import (
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
-from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
+from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.monitoring import (
     BUY_LIFECYCLE_STAGE_TOTAL,
