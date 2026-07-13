@@ -29,6 +29,10 @@ from .composition import (
     build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
 )
+from .corporate_action_reconciliation_observability import (
+    PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
+    PrometheusCorporateActionReconciliationObserver,
+)
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -86,6 +90,8 @@ __all__ = [
     "CashflowRuleSetVersion",
     "CashflowStageResult",
     "CostProcessingCompatibilityAdapter",
+    "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
+    "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
     "CostCalculatorRepository",
     "CostStagingResult",
