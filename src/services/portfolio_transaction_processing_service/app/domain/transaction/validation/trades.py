@@ -3,25 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
 )
 
 from ..booked import BookedTransaction
+from .issues import TransactionValidationIssue
 from .reason_codes import BuyValidationReasonCode, SellValidationReasonCode
 
 TradeValidationReasonCode = BuyValidationReasonCode | SellValidationReasonCode
-
-
-@dataclass(frozen=True, slots=True)
-class TransactionValidationIssue:
-    """Describe one deterministic transaction validation finding."""
-
-    code: StrEnum
-    field: str
-    message: str
 
 
 @dataclass(frozen=True, slots=True)
