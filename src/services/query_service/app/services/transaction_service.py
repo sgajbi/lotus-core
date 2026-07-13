@@ -4,11 +4,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional, cast
 
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.logging_utils import operation_log_extra
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..dtos.transaction_dto import PaginatedTransactionResponse, PortfolioRealizedTaxSummaryResponse
-from ..repositories.currency_codes import normalize_currency_code
 from ..repositories.transaction_repository import TransactionRepository
 from .fx_conversion import CachedFxRateConverter
 from .portfolio_validation import ensure_portfolio_exists
