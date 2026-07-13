@@ -43,6 +43,8 @@ from .validation import (
     TransactionValidationIssue,
     TransactionValidationReasonCode,
     validate_buy_transaction,
+    validate_dividend_transaction,
+    validate_interest_transaction,
     validate_sell_transaction,
 )
 
@@ -83,5 +85,7 @@ __all__ = [
     "should_generate_settlement_cash_leg",
     "validate_upstream_cash_leg_pairing",
     "validate_buy_transaction",
+    "validate_dividend_transaction",
+    "validate_interest_transaction",
     "validate_sell_transaction",
 ]
