@@ -49,6 +49,8 @@ They are archival proof, not current implementation guidance.
 - package ownership and retired-path guard: `5 passed`;
 - focused Ruff lint and format: passed;
 - focused strict MyPy over shared Decimal and market-data policy: passed;
+- critical-path coverage contract migrated to all three canonical policy paths and their mirrored
+  tests: passed;
 - retired-import scan and `git diff --check`: passed.
 
 ## Documentation Decision
