@@ -590,6 +590,47 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
     repo.get_transaction_by_id.assert_not_awaited()
 
 
+async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contract(
+    cost_calculation_workflow: CostCalculationWorkflow,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    product_leg = TransactionEvent(
+        transaction_id="DIV-GENERATED-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="FUND-001",
+        security_id="SEC-FUND-001",
+        transaction_date=datetime(2025, 1, 20),
+        settlement_date=datetime(2025, 1, 22),
+        transaction_type="DIVIDEND",
+        quantity=Decimal(0),
+        price=Decimal(0),
+        gross_transaction_amount=Decimal("25.00"),
+        trade_currency="USD",
+        currency="USD",
+        cash_entry_mode="AUTO_GENERATE",
+        settlement_cash_account_id="CASH-USD-001",
+        settlement_cash_instrument_id="CASH-USD",
+    )
+
+    emitted = await cost_calculation_workflow._build_emitted_transaction_events(
+        events_to_publish=[product_leg],
+        repo=repo,
+        correlation_id="corr-generated-01",
+    )
+
+    assert [event.transaction_id for event in emitted] == [
+        "DIV-GENERATED-01",
+        "DIV-GENERATED-01-CASHLEG",
+    ]
+    generated_cash_leg = emitted[1]
+    assert generated_cash_leg.transaction_type == "ADJUSTMENT"
+    assert generated_cash_leg.gross_transaction_amount == Decimal("25.00")
+    assert generated_cash_leg.movement_direction == "INFLOW"
+    assert generated_cash_leg.originating_transaction_id == "DIV-GENERATED-01"
+    assert product_leg.external_cash_transaction_id == "DIV-GENERATED-01-CASHLEG"
+    assert repo.create_or_update_transaction_event.await_count == 2
+
+
 async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     cost_calculation_workflow: CostCalculationWorkflow,
 ):
