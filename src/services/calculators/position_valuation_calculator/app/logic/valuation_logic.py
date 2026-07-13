@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, Tuple
 
-from portfolio_common.decimal_amounts import required_decimal
+from portfolio_common.domain.decimal_amount import required_decimal
 from portfolio_common.fx_rates import coerce_positive_fx_rate_or_none
 from portfolio_common.market_prices import coerce_positive_market_price_or_none
 from portfolio_common.valuation_prices import resolve_valuation_unit_price
