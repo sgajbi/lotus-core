@@ -1,3 +1,5 @@
+"""Assess and report deterministic average-cost-pool reconciliation outcomes."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -7,7 +7,7 @@ from src.services.portfolio_transaction_processing_service.app.application.recon
     ReconcileAverageCostPoolsCommand,
     ReconcileAverageCostPoolsUseCase,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.average_cost_pool_reconciliation import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.reconciliation import (  # noqa: E501
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,

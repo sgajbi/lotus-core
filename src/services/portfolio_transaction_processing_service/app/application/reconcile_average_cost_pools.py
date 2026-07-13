@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain.average_cost_pool_reconciliation import (
+from ..domain.cost_basis.reconciliation import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
