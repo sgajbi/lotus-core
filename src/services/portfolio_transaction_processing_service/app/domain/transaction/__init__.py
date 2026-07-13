@@ -41,6 +41,7 @@ from .validation import (
     InterestValidationReasonCode,
     SellValidationReasonCode,
     TransactionValidationIssue,
+    TransactionValidationReasonCode,
     validate_buy_transaction,
     validate_sell_transaction,
 )
@@ -66,6 +67,7 @@ __all__ = [
     "TRANSACTION_CORRECTION_IDENTITY_VERSION",
     "TRANSACTION_SEMANTIC_IDENTITY_VERSION",
     "TransactionSemanticIdentity",
+    "TransactionValidationReasonCode",
     "TransactionValidationIssue",
     "UpstreamCashLegPairingError",
     "UpstreamCashLegPairingIssue",

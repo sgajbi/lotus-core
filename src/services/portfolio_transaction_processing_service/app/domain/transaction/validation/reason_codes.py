@@ -1,10 +1,10 @@
-"""Define stable reason-code vocabularies for transaction validation findings."""
+"""Define stable reason codes for ordinary transaction booking validation."""
 
 from enum import StrEnum
 
 
 class BuyValidationReasonCode(StrEnum):
-    """Identify a deterministic BUY validation finding."""
+    """Identify canonical BUY validation failures."""
 
     INVALID_TRANSACTION_TYPE = "BUY_001_INVALID_TRANSACTION_TYPE"
     MISSING_SETTLEMENT_DATE = "BUY_002_MISSING_SETTLEMENT_DATE"
@@ -18,7 +18,7 @@ class BuyValidationReasonCode(StrEnum):
 
 
 class SellValidationReasonCode(StrEnum):
-    """Identify a deterministic SELL validation finding."""
+    """Identify canonical SELL validation failures."""
 
     INVALID_TRANSACTION_TYPE = "SELL_001_INVALID_TRANSACTION_TYPE"
     MISSING_SETTLEMENT_DATE = "SELL_002_MISSING_SETTLEMENT_DATE"
@@ -32,7 +32,7 @@ class SellValidationReasonCode(StrEnum):
 
 
 class DividendValidationReasonCode(StrEnum):
-    """Identify a deterministic DIVIDEND validation finding."""
+    """Identify canonical DIVIDEND validation failures."""
 
     INVALID_TRANSACTION_TYPE = "DIVIDEND_001_INVALID_TRANSACTION_TYPE"
     MISSING_SETTLEMENT_DATE = "DIVIDEND_002_MISSING_SETTLEMENT_DATE"
@@ -49,7 +49,7 @@ class DividendValidationReasonCode(StrEnum):
 
 
 class InterestValidationReasonCode(StrEnum):
-    """Identify a deterministic INTEREST validation finding."""
+    """Identify canonical INTEREST validation failures."""
 
     INVALID_TRANSACTION_TYPE = "INTEREST_001_INVALID_TRANSACTION_TYPE"
     MISSING_SETTLEMENT_DATE = "INTEREST_002_MISSING_SETTLEMENT_DATE"
@@ -67,3 +67,11 @@ class InterestValidationReasonCode(StrEnum):
     NEGATIVE_OTHER_DEDUCTIONS = "INTEREST_014_NEGATIVE_OTHER_DEDUCTIONS"
     NET_INTEREST_RECONCILIATION_MISMATCH = "INTEREST_015_NET_RECONCILIATION_MISMATCH"
     MISSING_SETTLEMENT_CASH_ACCOUNT = "INTEREST_016_MISSING_SETTLEMENT_CASH_ACCOUNT"
+
+
+TransactionValidationReasonCode = (
+    BuyValidationReasonCode
+    | SellValidationReasonCode
+    | DividendValidationReasonCode
+    | InterestValidationReasonCode
+)
