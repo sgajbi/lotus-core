@@ -78,6 +78,12 @@ fee-bearing source-shape difference; it did not rename fields, reason codes, eve
 columns. Downstream consumers needing settled cash should use the linked cashflow amount rather than
 treating `net_interest_amount` as fee-inclusive cash.
 
+For a current booking, an explicit pre-fee net that does not reconcile to gross interest less
+withholding and other deductions is rejected with
+`INTEREST_015_NET_RECONCILIATION_MISMATCH` after idempotency classification and before financial
+writes. Historical rows already accepted before this active boundary retain their pre-policy
+economics only when Core supplies them through the explicit position-history rebuild context.
+
 ## Shared-Library Boundary
 
 `portfolio_common.transaction_domain` does not own ordinary BUY, SELL, DIVIDEND, or INTEREST models

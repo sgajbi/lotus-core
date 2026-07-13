@@ -45,6 +45,9 @@ negative proceeds are non-retryable hard rejections with stable family codes.
   pre-policy economics so a valid backdated correction cannot roll back or dead-letter solely
   because previously accepted history predates this policy. The application derives this context
   only from rebuilt transaction identities; repair intent is not used as a policy bypass.
+- Activated `INTEREST_015_NET_RECONCILIATION_MISMATCH` in the same current-booking boundary. A
+  supplied pre-fee net must reconcile to gross less withholding and other deductions before it can
+  influence fee-dominated settlement; historical rebuild remains the only compatibility context.
 - Preserved bounded reason codes through terminal consumer handling without leaking raw payloads,
   credentials, or infrastructure detail.
 - Added independent Decimal golden vectors plus pure domain, validator, adapter, consumer,
@@ -90,6 +93,10 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
   complete 72-case PostgreSQL transaction-processing contract in 253.72 seconds. Domain vectors
   prove pre-policy SELL, DIVIDEND, and INTEREST economics only under historical rebuild context;
   application and adapter tests prove explicit context routing through every layer.
+- The net-interest review fix-forward passed 234 focused domain/application cases, the 330-case
+  INTEREST contract, the 72-case PostgreSQL processing contract, and four concrete PostgreSQL
+  rejection/replay/corrected-delivery scenarios. Two rejected mismatch deliveries wrote no state;
+  the corrected delivery processed once and then returned duplicate.
 - Documentation review fix-forward aligned the shared transaction RFC, repository engineering
   context, and transaction-processing wiki with the implemented idempotency-first,
   pre-financial-work rejection boundary. The final exact-phrase audit across repository context,

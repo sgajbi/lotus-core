@@ -95,3 +95,7 @@ consumer-DLQ record preserve that code in `error_reason_code`. Fee-dominated set
 These are non-retryable booking-economics failures. Correct the source fee/proceeds evidence before
 replay. Do not repeatedly replay the unchanged event, infer success from the original ingestion
 HTTP response, or inspect raw database rows when source-safe DLQ API evidence is available.
+
+An explicit INTEREST pre-fee net that does not reconcile to gross interest less withholding and
+other deductions uses `INTEREST_015_NET_RECONCILIATION_MISMATCH`. Correct the source net-interest
+evidence before replay; do not treat a large supplied net as authority over the reconciled amount.

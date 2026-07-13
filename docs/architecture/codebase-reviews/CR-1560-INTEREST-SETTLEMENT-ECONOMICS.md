@@ -44,7 +44,10 @@ inflow or outflow sign from `interest_direction`.
   domain.
 - Routed INTEREST reconciliation, generated cash-leg construction, and cashflow materialization
   through the policy and removed their duplicate formulas.
-- Preserved the exact `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code and field mapping.
+- Preserved the exact `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code and field mapping. PR
+  review later activated it in the current-booking settlement boundary so a mismatched supplied net
+  cannot bypass fee-dominated rejection; explicit historical rebuild context preserves accepted
+  pre-policy rows.
 - Clarified ingestion and query OpenAPI descriptions without changing field shape.
 - Added independent versioned JSON vectors and a Decimal-only reference evaluator with no
   production imports.
@@ -71,7 +74,9 @@ topology, reason code, or downstream response shape changes. Consumers that trea
 - PostgreSQL combined processing proof passed for explicit and derived source shapes.
 - Independent golden vectors cover income and expense explicit/derived fee-bearing cases; focused
   policy and validation tests cover invalid direction and reconciliation rejection.
-- The governed INTEREST contract passed 314 cases.
+- The governed INTEREST contract passed 330 cases after active mismatch rejection was added.
+- Four PostgreSQL rejection/replay/corrected-delivery scenarios passed, including zero-state
+  rollback and one idempotent corrected INTEREST mismatch delivery.
 - Repository-native local CI passed 4,355 unit tests with zero warnings, 10 unit-DB tests, and 136
   integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
 - Configured MyPy, architecture, domain-layer, in-process boundary, image provenance, OpenAPI,
