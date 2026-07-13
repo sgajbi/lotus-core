@@ -1,14 +1,5 @@
-def normalize_currency_code(currency_code: object) -> str:
-    if not isinstance(currency_code, str):
-        raise ValueError("Currency code must be a string.")
+"""Transitional imports for currency normalization during domain package migration."""
 
-    normalized = currency_code.strip().upper()
-    if len(normalized) != 3 or not normalized.isalpha():
-        raise ValueError("Currency code must be a three-letter ISO 4217 code.")
-    return normalized
+from .domain.currency import normalize_currency_code, normalize_optional_currency_code
 
-
-def normalize_optional_currency_code(currency_code: object) -> str | None:
-    if currency_code is None:
-        return None
-    return normalize_currency_code(currency_code)
+__all__ = ["normalize_currency_code", "normalize_optional_currency_code"]
