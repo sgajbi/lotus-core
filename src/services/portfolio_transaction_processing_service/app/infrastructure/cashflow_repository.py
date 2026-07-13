@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.cashflow import StoredCashflow
+from ..domain.cashflow import CalculatedCashflow, StoredCashflow
 
 logger = logging.getLogger(__name__)
 
@@ -38,32 +38,36 @@ class SqlAlchemyCashflowRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none() is not None
 
-    async def create_cashflow(self, cashflow: Cashflow) -> StoredCashflow:
+    async def create_cashflow(
+        self,
+        cashflow: CalculatedCashflow | Cashflow,
+    ) -> StoredCashflow:
         """
         Saves a new Cashflow record to the database within a managed transaction.
         """
+        cashflow_row = _to_cashflow_row(cashflow)
         try:
             async with self.db.begin_nested():
-                self.db.add(cashflow)
+                self.db.add(cashflow_row)
                 await self.db.flush()
-            await self.db.refresh(cashflow)
+            await self.db.refresh(cashflow_row)
             logger.info(
                 "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
-                cashflow.transaction_id,
-                cashflow.epoch,
+                cashflow_row.transaction_id,
+                cashflow_row.epoch,
             )
-            return _to_stored_cashflow(cashflow)
+            return _to_stored_cashflow(cashflow_row)
         except IntegrityError:
             logger.info(
                 "Cashflow for transaction_id '%s' in epoch %s already exists. "
                 "Reusing persisted row.",
-                cashflow.transaction_id,
-                cashflow.epoch,
+                cashflow_row.transaction_id,
+                cashflow_row.epoch,
             )
             result = await self.db.execute(
                 select(Cashflow).where(
-                    Cashflow.transaction_id == cashflow.transaction_id,
-                    Cashflow.epoch == cashflow.epoch,
+                    Cashflow.transaction_id == cashflow_row.transaction_id,
+                    Cashflow.epoch == cashflow_row.epoch,
                 )
             )
             existing_cashflow = result.scalars().first()
@@ -73,12 +77,15 @@ class SqlAlchemyCashflowRepository:
         except Exception as e:
             logger.error(
                 "An unexpected error occurred while staging cashflow for txn "
-                f"{cashflow.transaction_id}: {e}",
+                f"{cashflow_row.transaction_id}: {e}",
                 exc_info=True,
             )
             raise
 
-    async def replace_cashflow(self, cashflow: Cashflow) -> StoredCashflow:
+    async def replace_cashflow(
+        self,
+        cashflow: CalculatedCashflow | Cashflow,
+    ) -> StoredCashflow:
         """Atomically restore the canonical transaction/epoch cashflow."""
         values = _cashflow_values(cashflow)
         insert_statement = pg_insert(Cashflow).values(**values)
@@ -102,7 +109,9 @@ class SqlAlchemyCashflowRepository:
         return _to_stored_cashflow(stored)
 
 
-def _cashflow_values(cashflow: Cashflow) -> dict[str, object]:
+def _cashflow_values(
+    cashflow: CalculatedCashflow | Cashflow,
+) -> dict[str, object]:
     return {
         "transaction_id": cashflow.transaction_id,
         "portfolio_id": cashflow.portfolio_id,
@@ -119,6 +128,27 @@ def _cashflow_values(cashflow: Cashflow) -> dict[str, object]:
         "economic_event_id": cashflow.economic_event_id,
         "linked_transaction_group_id": cashflow.linked_transaction_group_id,
     }
+
+
+def _to_cashflow_row(cashflow: CalculatedCashflow | Cashflow) -> Cashflow:
+    if isinstance(cashflow, Cashflow):
+        return cashflow
+    return Cashflow(
+        transaction_id=cashflow.transaction_id,
+        portfolio_id=cashflow.portfolio_id,
+        security_id=cashflow.security_id,
+        cashflow_date=cashflow.cashflow_date,
+        epoch=cashflow.epoch,
+        amount=cashflow.amount,
+        currency=cashflow.currency,
+        classification=cashflow.classification,
+        timing=cashflow.timing,
+        calculation_type=cashflow.calculation_type,
+        is_position_flow=cashflow.is_position_flow,
+        is_portfolio_flow=cashflow.is_portfolio_flow,
+        economic_event_id=cashflow.economic_event_id,
+        linked_transaction_group_id=cashflow.linked_transaction_group_id,
+    )
 
 
 def _to_stored_cashflow(cashflow: Cashflow) -> StoredCashflow:
