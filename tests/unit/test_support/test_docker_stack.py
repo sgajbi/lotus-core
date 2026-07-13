@@ -372,6 +372,40 @@ def test_ensure_required_images_available_recovers_from_transient_timeout(
     assert sleep_delays == [2.5]
 
 
+def test_ensure_required_images_available_classifies_stdout_pull_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["prom/prometheus:v2.47.2"],
+    )
+    pull_attempts = 0
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        nonlocal pull_attempts
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        if args[0:2] == ["docker", "pull"]:
+            pull_attempts += 1
+            if pull_attempts == 1:
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=args,
+                    output=b"status code: 503",
+                    stderr=b"",
+                )
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise AssertionError(f"unexpected call: {args}")
+
+    ensure_required_images_available(
+        "docker-compose.yml",
+        runner,
+        sleeper=lambda _: None,
+    )
+
+    assert pull_attempts == 2
+
+
 def test_ensure_required_images_available_bounds_timeout_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -402,6 +436,74 @@ def test_ensure_required_images_available_bounds_timeout_retries(
                 timeout_seconds=5,
                 initial_backoff_seconds=0,
             ),
+            sleeper=lambda _: None,
+        )
+
+    assert pull_attempts == 3
+
+
+def test_ensure_required_images_available_recovers_from_unknown_pull_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["grafana/grafana:10.1.5"],
+    )
+    pull_attempts = 0
+    sleep_delays: list[float] = []
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        nonlocal pull_attempts
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        if args[0:2] == ["docker", "pull"]:
+            pull_attempts += 1
+            if pull_attempts == 1:
+                raise subprocess.CalledProcessError(
+                    returncode=1,
+                    cmd=args,
+                    stderr=b"",
+                )
+            return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+        raise AssertionError(f"unexpected call: {args}")
+
+    ensure_required_images_available(
+        "docker-compose.yml",
+        runner,
+        sleeper=sleep_delays.append,
+        jitter=lambda start, end: start,
+    )
+
+    assert pull_attempts == 2
+    assert sleep_delays == [2.0]
+
+
+def test_ensure_required_images_available_bounds_unknown_failure_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tests.test_support.docker_stack._load_compose_pull_images",
+        lambda _: ["grafana/grafana:10.1.5"],
+    )
+    pull_attempts = 0
+
+    def runner(args, **kwargs):  # noqa: ANN001
+        nonlocal pull_attempts
+        if args[0:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(returncode=1, stdout=b"", stderr=b"")
+        if args[0:2] == ["docker", "pull"]:
+            pull_attempts += 1
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=args,
+                stderr=b"unexpected daemon failure",
+            )
+        raise AssertionError(f"unexpected call: {args}")
+
+    with pytest.raises(DockerStackError, match="failure_class=unknown, attempts=3"):
+        ensure_required_images_available(
+            "docker-compose.yml",
+            runner,
             sleeper=lambda _: None,
         )
 
@@ -457,6 +559,10 @@ def test_image_pull_failure_classification_is_bounded_and_source_safe(
             DockerImagePullFailureClass.REGISTRY_UNAVAILABLE,
         ),
         ("manifest unknown", DockerImagePullFailureClass.PERMANENT),
+        ("pull access denied for private/image", DockerImagePullFailureClass.PERMANENT),
+        ("no matching manifest for linux/amd64", DockerImagePullFailureClass.PERMANENT),
+        ("", DockerImagePullFailureClass.UNKNOWN),
+        ("unexpected daemon failure", DockerImagePullFailureClass.UNKNOWN),
     ],
 )
 def test_image_pull_failure_classification(

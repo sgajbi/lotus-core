@@ -31,6 +31,7 @@ class DockerImagePullFailureClass(StrEnum):
     TIMEOUT = "timeout"
     RATE_LIMITED = "rate_limited"
     REGISTRY_UNAVAILABLE = "registry_unavailable"
+    UNKNOWN = "unknown"
     PERMANENT = "permanent"
 
 
@@ -59,9 +60,10 @@ class DockerImagePullPolicy:
         failed_attempt: int,
         jitter: Callable[[float, float], float],
     ) -> float:
+        exponential_multiplier = 2.0 ** max(0, failed_attempt - 1)
         base_delay = min(
             self.max_backoff_seconds,
-            self.initial_backoff_seconds * (2 ** max(0, failed_attempt - 1)),
+            self.initial_backoff_seconds * exponential_multiplier,
         )
         jitter_ceiling = base_delay * self.jitter_ratio
         return min(
@@ -76,7 +78,7 @@ class DockerImagePullPolicy:
             min(
                 self.max_backoff_seconds,
                 self.initial_backoff_seconds
-                * (2 ** max(0, failed_attempt - 1))
+                * (2.0 ** max(0, failed_attempt - 1))
                 * (1 + self.jitter_ratio),
             )
             for failed_attempt in range(1, self.max_attempts)
@@ -101,6 +103,15 @@ _RETRYABLE_PULL_MARKERS = (
     "status code: 502",
     "status code: 503",
     "status code: 504",
+)
+_PERMANENT_PULL_MARKERS = (
+    "manifest unknown",
+    "manifest not found",
+    "no matching manifest",
+    "pull access denied",
+    "requested access to the resource is denied",
+    "authentication required",
+    "unauthorized",
 )
 
 
@@ -244,10 +255,11 @@ def _pull_required_image(
 
 
 def _process_error_text(error: subprocess.CalledProcessError) -> str:
-    stderr = error.stderr or b""
-    if isinstance(stderr, bytes):
-        return stderr.decode("utf-8", errors="ignore").lower()
-    return str(stderr).lower()
+    captured_streams = (error.stderr or b"", error.stdout or b"")
+    return " ".join(
+        stream.decode("utf-8", errors="ignore") if isinstance(stream, bytes) else str(stream)
+        for stream in captured_streams
+    ).lower()
 
 
 def _classify_image_pull_failure(details: str) -> DockerImagePullFailureClass:
@@ -256,7 +268,9 @@ def _classify_image_pull_failure(details: str) -> DockerImagePullFailureClass:
         return DockerImagePullFailureClass.RATE_LIMITED
     if any(marker in normalized_details for marker in _RETRYABLE_PULL_MARKERS):
         return DockerImagePullFailureClass.REGISTRY_UNAVAILABLE
-    return DockerImagePullFailureClass.PERMANENT
+    if any(marker in normalized_details for marker in _PERMANENT_PULL_MARKERS):
+        return DockerImagePullFailureClass.PERMANENT
+    return DockerImagePullFailureClass.UNKNOWN
 
 
 def _is_retryable_compose_up_error(stderr: str) -> bool:
