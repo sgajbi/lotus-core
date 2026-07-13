@@ -1,8 +1,11 @@
+"""Verify position-history replay locking and exact materialization."""
+
 from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from unittest.mock import Mock
 
 import pytest
 from portfolio_common.database_models import PositionHistory, PositionState
@@ -10,12 +13,21 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501
-    PositionCalculationResult,
-    PositionCalculationWorkflow,
+from src.services.portfolio_transaction_processing_service.app.application.position_history import (
+    PositionHistoryProcessingResult,
+    PositionHistoryProcessor,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.position_repository import (  # noqa: E501
-    PositionRepository,
+from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
+    map_transaction_event,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_history_repository import (  # noqa: E501
+    SqlAlchemyPositionHistoryRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_recalculation_state_store import (  # noqa: E501
+    SqlAlchemyPositionRecalculationStateStore,
+)
+from src.services.portfolio_transaction_processing_service.app.ports.position_history import (
+    PositionHistoryObserver,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -33,7 +45,9 @@ pytestmark = [
 ]
 
 
-class _HeldLockPositionRepository(PositionRepository):
+class _HeldLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository):
+    """Hold a replay lock so the concurrent caller's blocking is observable."""
+
     def __init__(
         self,
         db: AsyncSession,
@@ -45,18 +59,25 @@ class _HeldLockPositionRepository(PositionRepository):
         self._lock_acquired = lock_acquired
         self._release_lock = release_lock
 
-    async def acquire_position_history_replay_lock(
+    async def acquire_replay_lock(
         self,
+        *,
         portfolio_id: str,
         security_id: str,
         epoch: int,
     ) -> None:
-        await super().acquire_position_history_replay_lock(portfolio_id, security_id, epoch)
+        await super().acquire_replay_lock(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            epoch=epoch,
+        )
         self._lock_acquired.set()
         await self._release_lock.wait()
 
 
-class _ObservedLockPositionRepository(PositionRepository):
+class _ObservedLockPositionHistoryRepository(SqlAlchemyPositionHistoryRepository):
+    """Signal when a concurrent replay starts waiting for the same position key."""
+
     def __init__(
         self,
         db: AsyncSession,
@@ -66,14 +87,19 @@ class _ObservedLockPositionRepository(PositionRepository):
         super().__init__(db)
         self._lock_attempted = lock_attempted
 
-    async def acquire_position_history_replay_lock(
+    async def acquire_replay_lock(
         self,
+        *,
         portfolio_id: str,
         security_id: str,
         epoch: int,
     ) -> None:
         self._lock_attempted.set()
-        await super().acquire_position_history_replay_lock(portfolio_id, security_id, epoch)
+        await super().acquire_replay_lock(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            epoch=epoch,
+        )
 
 
 async def _calculate_position(
@@ -81,14 +107,16 @@ async def _calculate_position(
     session_factory: async_sessionmaker[AsyncSession],
     event,
     repository_factory,
-) -> PositionCalculationResult:
+) -> PositionHistoryProcessingResult:
+    """Run one position command in an isolated caller-owned transaction."""
     async with session_factory() as session, session.begin():
-        return await PositionCalculationWorkflow.calculate(
-            event,
-            session,
-            repository_factory(session),
-            PositionStateRepository(session),
+        processor = PositionHistoryProcessor(
+            repository=repository_factory(session),
+            state_store=SqlAlchemyPositionRecalculationStateStore(PositionStateRepository(session)),
+            observer=Mock(spec=PositionHistoryObserver),
         )
+        transaction = map_transaction_event(event, event_id=event.transaction_id).transaction
+        return await processor.process(transaction)
 
 
 async def test_same_key_recalculations_serialize_and_leave_exact_position_history(
@@ -154,7 +182,7 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
         _calculate_position(
             session_factory=session_factory,
             event=first_event,
-            repository_factory=lambda session: _HeldLockPositionRepository(
+            repository_factory=lambda session: _HeldLockPositionHistoryRepository(
                 session,
                 lock_acquired=first_lock_acquired,
                 release_lock=release_first_lock,
@@ -166,7 +194,7 @@ async def test_same_key_recalculations_serialize_and_leave_exact_position_histor
         _calculate_position(
             session_factory=session_factory,
             event=second_event,
-            repository_factory=lambda session: _ObservedLockPositionRepository(
+            repository_factory=lambda session: _ObservedLockPositionHistoryRepository(
                 session,
                 lock_attempted=second_lock_attempted,
             ),
@@ -224,26 +252,26 @@ async def test_position_recalculation_lock_does_not_serialize_other_keys_or_epoc
         session_factory() as other_security_session,
         session_factory() as other_epoch_session,
     ):
-        await PositionRepository(owning_session).acquire_position_history_replay_lock(
-            "PORT-POSITION-LOCK-02",
-            "SEC-POSITION-LOCK-01",
-            0,
+        await SqlAlchemyPositionHistoryRepository(owning_session).acquire_replay_lock(
+            portfolio_id="PORT-POSITION-LOCK-02",
+            security_id="SEC-POSITION-LOCK-01",
+            epoch=0,
         )
         async with other_security_session.begin():
             await asyncio.wait_for(
-                PositionRepository(other_security_session).acquire_position_history_replay_lock(
-                    "PORT-POSITION-LOCK-02",
-                    "SEC-POSITION-LOCK-02",
-                    0,
+                SqlAlchemyPositionHistoryRepository(other_security_session).acquire_replay_lock(
+                    portfolio_id="PORT-POSITION-LOCK-02",
+                    security_id="SEC-POSITION-LOCK-02",
+                    epoch=0,
                 ),
                 timeout=1,
             )
         async with other_epoch_session.begin():
             await asyncio.wait_for(
-                PositionRepository(other_epoch_session).acquire_position_history_replay_lock(
-                    "PORT-POSITION-LOCK-02",
-                    "SEC-POSITION-LOCK-01",
-                    1,
+                SqlAlchemyPositionHistoryRepository(other_epoch_session).acquire_replay_lock(
+                    portfolio_id="PORT-POSITION-LOCK-02",
+                    security_id="SEC-POSITION-LOCK-01",
+                    epoch=1,
                 ),
                 timeout=1,
             )
