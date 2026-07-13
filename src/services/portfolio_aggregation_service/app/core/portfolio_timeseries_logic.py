@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.domain.market_data.fx_rate import coerce_positive_fx_rate_or_none
-from portfolio_common.ports.timeseries_market_data import TimeseriesMarketDataPort
+from portfolio_common.ports.market_data.timeseries import TimeseriesMarketDataPort
 
 from ..domain.aggregation_records import (
     PortfolioAggregationScope,
