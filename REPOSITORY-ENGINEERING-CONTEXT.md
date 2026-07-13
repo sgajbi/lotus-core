@@ -2315,13 +2315,16 @@ Most relevant current governance:
      `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_movement`.
      Resolve component fees before aggregate `trade_fee`; BUY and INTEREST expense include the fee
      in an outflow, while SELL, DIVIDEND, and INTEREST income subtract it from available proceeds.
-     The three inflow families must remain strictly positive before direction is applied. Reject a
-     zero or negative result before opening the combined financial unit of work with the stable
-     family reason code, preserve it as a bounded non-retryable application rejection, and never
-     use absolute-value normalization to manufacture an inflow. Generated cash legs, product
-     cashflows, validators, adapters, and independent Decimal golden vectors must consume or prove
-     this one policy. BUY, FEE, FX, ADJUSTMENT, and corporate-action cash retain their documented
-     family-specific representations; do not broaden this rule without a separate domain decision.
+     The three inflow families must remain strictly positive before direction is applied. Open the
+     combined unit of work and classify physical and semantic idempotency first so harmless
+     historical duplicates remain acknowledgements. Reject a newly claimed or repair delivery with
+     a zero or negative result before cost, position, cashflow, or commit, preserve the stable family
+     reason code as a bounded non-retryable application rejection, and roll back the uncommitted
+     claim. Never use absolute-value normalization to manufacture an inflow. Generated cash legs,
+     product cashflows, validators, adapters, and independent Decimal golden vectors must consume or
+     prove this one policy. BUY, FEE, FX, ADJUSTMENT, and corporate-action cash retain their
+     documented family-specific representations; do not broaden this rule without a separate domain
+     decision.
      Preserve bounded application reason codes through Kafka DLQ and operations-API evidence. The
      current DIVIDEND available-proceeds input remains booked gross amount pending net-dividend,
      withholding, and return-of-capital work under #448; FX fee currency and two-leg ownership
