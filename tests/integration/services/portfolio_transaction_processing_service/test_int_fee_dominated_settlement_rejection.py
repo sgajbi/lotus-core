@@ -59,9 +59,7 @@ class _CapturingReplayProducer:
         value: dict[str, Any],
         headers: list[tuple[str, bytes]],
     ) -> None:
-        self.messages.append(
-            {"topic": topic, "key": key, "value": value, "headers": headers}
-        )
+        self.messages.append({"topic": topic, "key": key, "value": value, "headers": headers})
 
     def flush(self) -> int:
         return 0
@@ -210,9 +208,9 @@ async def _derived_state_count(session_factory, transaction_id: str) -> int:
     async with session_factory() as session:
         counts = [
             await session.scalar(
-                select(func.count()).select_from(model).where(
-                    model.transaction_id == transaction_id
-                )
+                select(func.count())
+                .select_from(model)
+                .where(model.transaction_id == transaction_id)
             )
             for model in (Cashflow, PositionHistory, TransactionCost)
         ]
@@ -224,7 +222,5 @@ async def _derived_state_count(session_factory, transaction_id: str) -> int:
                 ProcessedEvent.semantic_key.contains(transaction_id),
             )
         )
-        outbox_count = await session.scalar(
-            select(func.count()).select_from(OutboxEvent)
-        )
+        outbox_count = await session.scalar(select(func.count()).select_from(OutboxEvent))
         return sum(int(count or 0) for count in [*counts, processed_count, outbox_count])

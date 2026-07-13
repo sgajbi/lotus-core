@@ -216,6 +216,62 @@ async def test_semantic_fence_suppresses_republication_and_rejects_changed_paylo
     assert semantic_fence_count == 1
 
 
+@pytest.mark.parametrize(
+    ("transaction_type", "gross_amount", "fee_amount", "withholding_tax", "reason_code"),
+    [
+        ("SELL", "100", "100", None, "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
+        ("DIVIDEND", "100", "100.01", None, "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
+        ("INTEREST", "10", "8", "2", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
+    ],
+)
+async def test_fee_dominated_settlement_replay_leaves_no_state_before_corrected_delivery(
+    clean_db,
+    async_db_session: AsyncSession,
+    transaction_type: str,
+    gross_amount: str,
+    fee_amount: str,
+    withholding_tax: str | None,
+    reason_code: str,
+) -> None:
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+    base_command = _command(f"FEE-DOMINATED-{transaction_type}")
+    rejected_command = replace(
+        base_command,
+        transaction=replace(
+            base_command.transaction,
+            transaction_type=transaction_type,
+            gross_transaction_amount=Decimal(gross_amount),
+            trade_fee=Decimal(fee_amount),
+            withholding_tax_amount=(
+                Decimal(withholding_tax) if withholding_tax is not None else None
+            ),
+            interest_direction=("INCOME" if transaction_type == "INTEREST" else None),
+        ),
+    )
+    use_case = ProcessTransactionUseCase(
+        _unit_of_work_factory(session_factory, fail_at=None),
+        observer=PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    )
+
+    for _delivery in range(2):
+        with pytest.raises(TransactionProcessingRejected) as raised:
+            await use_case.execute(rejected_command)
+        assert raised.value.reason_code == reason_code
+
+    assert await _persisted_counts(session_factory, rejected_command) == (0, 0)
+
+    corrected_command = replace(
+        rejected_command,
+        transaction=replace(rejected_command.transaction, trade_fee=Decimal("1")),
+    )
+    corrected_result = await use_case.execute(corrected_command)
+    duplicate_result = await use_case.execute(corrected_command)
+
+    assert corrected_result.status is TransactionProcessingStatus.PROCESSED
+    assert duplicate_result.status is TransactionProcessingStatus.DUPLICATE
+    assert await _persisted_counts(session_factory, corrected_command) == (3, 1)
+
+
 async def test_explicit_repair_claims_immutable_payload_specific_correction_identity(
     clean_db,
     async_db_session: AsyncSession,
