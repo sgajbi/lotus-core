@@ -28,17 +28,12 @@ from portfolio_common.transaction_domain import (
     DEFAULT_CA_BUNDLE_A_BASIS_TOLERANCE,
     assert_ca_bundle_a_transaction_valid,
     assert_fx_processed_event_valid,
-    assert_portfolio_flow_cash_entry_mode_allowed,
-    assert_upstream_cash_leg_pairing,
-    build_auto_generated_adjustment_cash_leg,
     build_fx_contract_instrument_event,
     build_fx_processed_event,
     enrich_fx_transaction_metadata,
     evaluate_ca_bundle_a_reconciliation,
     find_missing_ca_bundle_a_dependencies,
     is_ca_bundle_a_transaction_type,
-    is_upstream_provided_cash_entry_mode,
-    should_auto_generate_cash_leg,
 )
 from portfolio_common.transaction_fee_components import resolve_transaction_trade_fee
 from portfolio_common.transaction_type_registry import get_transaction_type_definition
@@ -58,7 +53,14 @@ from ..domain.cost_basis import (
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
-from ..domain.transaction import enrich_booking_metadata
+from ..domain.transaction import (
+    assert_cash_entry_mode_supported,
+    assert_upstream_cash_leg_pairing,
+    build_generated_settlement_cash_leg,
+    enrich_booking_metadata,
+    is_upstream_provided_cash_entry_mode,
+    should_generate_settlement_cash_leg,
+)
 from ..ports import (
     CostBasisCalculationObserver,
 )
@@ -66,6 +68,7 @@ from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_
 from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 from .legacy_transaction_event_mapper import (
     to_booked_transaction,
+    to_transaction_event,
     with_booked_transaction_fields,
 )
 
@@ -1018,8 +1021,13 @@ class CostCalculationWorkflow:
         for processed_event in events_to_publish:
             await self._validate_upstream_cash_leg(processed_event=processed_event, repo=repo)
             emitted_events.append(processed_event)
-            if should_auto_generate_cash_leg(processed_event):
-                generated_cash_leg = build_auto_generated_adjustment_cash_leg(processed_event)
+            booked_transaction = to_booked_transaction(processed_event)
+            if should_generate_settlement_cash_leg(booked_transaction):
+                generated_cash_leg = to_transaction_event(
+                    build_generated_settlement_cash_leg(booked_transaction),
+                    correlation_id=None,
+                    traceparent=None,
+                )
                 await repo.create_or_update_transaction_event(generated_cash_leg)
                 processed_event.external_cash_transaction_id = generated_cash_leg.transaction_id
                 await repo.create_or_update_transaction_event(processed_event)
@@ -1039,7 +1047,7 @@ class CostCalculationWorkflow:
         processed_event: TransactionEvent,
         repo: CostCalculatorRepository,
     ) -> None:
-        assert_portfolio_flow_cash_entry_mode_allowed(processed_event)
+        assert_cash_entry_mode_supported(to_booked_transaction(processed_event))
         if not self._requires_upstream_cash_leg_validation(processed_event):
             return
 
@@ -1049,7 +1057,10 @@ class CostCalculationWorkflow:
             processed_event=processed_event,
             repo=repo,
         )
-        assert_upstream_cash_leg_pairing(processed_event, cash_leg)
+        assert_upstream_cash_leg_pairing(
+            to_booked_transaction(processed_event),
+            to_booked_transaction(cash_leg),
+        )
 
     @staticmethod
     def _requires_upstream_cash_leg_validation(processed_event: TransactionEvent) -> bool:
