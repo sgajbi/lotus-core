@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +15,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_INPUT = REPO_ROOT / "requirements" / "shared-runtime.in"
 RUNTIME_LOCK = REPO_ROOT / "requirements" / "shared-runtime.lock.txt"
 PIP_TOOLS_VERSION = "7.5.3"
+_PROJECT_NAME_SEPARATOR = re.compile(r"[-_.]+")
+_DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
@@ -23,16 +27,35 @@ def _normalize_dependency(dep: str) -> str:
     return dep.split(";", 1)[0].strip()
 
 
+def _canonical_project_name(value: str) -> str:
+    return _PROJECT_NAME_SEPARATOR.sub("-", value).lower()
+
+
+def _dependency_project_name(dependency: str) -> str:
+    match = _DEPENDENCY_NAME.match(dependency.strip())
+    if match is None:
+        raise SystemExit(f"Unable to resolve dependency project name: {dependency}")
+    return _canonical_project_name(match.group())
+
+
 def _collect_runtime_dependencies() -> list[str]:
+    projects = [
+        (pyproject, tomllib.loads(pyproject.read_text(encoding="utf-8")))
+        for pyproject in sorted(REPO_ROOT.glob("src/**/pyproject.toml"))
+    ]
+    local_project_names = {
+        _canonical_project_name(str(data["project"]["name"])) for _pyproject, data in projects
+    }
     deps: dict[str, str] = {}
-    for pyproject in sorted(REPO_ROOT.glob("src/**/pyproject.toml")):
-        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    for pyproject, data in projects:
         for dep in data.get("project", {}).get("dependencies", []):
             normalized = _normalize_dependency(dep)
             if "==" not in normalized:
                 raise SystemExit(
                     f"Floating runtime dependency still present in {pyproject}: {normalized}"
                 )
+            if _dependency_project_name(normalized) in local_project_names:
+                continue
             deps[normalized.lower()] = normalized
     return sorted(deps.values(), key=str.lower)
 
@@ -46,35 +69,46 @@ def _write_runtime_input(deps: list[str]) -> None:
     RUNTIME_INPUT.write_text("\n".join(header + deps) + "\n", encoding="utf-8")
 
 
-def _compile_runtime_lock() -> None:
+def _compile_runtime_lock(*, upgrade_packages: tuple[str, ...] = ()) -> None:
     temp_dir = Path(tempfile.mkdtemp(prefix="lotus-runtime-lock-"))
     try:
         venv_dir = temp_dir / "venv"
         _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=temp_dir)
         venv_python = venv_dir / ("Scripts" if sys.platform == "win32" else "bin") / "python"
         _run([str(venv_python), "-m", "pip", "install", f"pip-tools=={PIP_TOOLS_VERSION}"])
-        _run(
-            [
-                str(venv_python),
-                "-m",
-                "piptools",
-                "compile",
-                "--resolver=backtracking",
-                "--strip-extras",
-                "--allow-unsafe",
-                "--output-file",
-                str(RUNTIME_LOCK),
-                str(RUNTIME_INPUT),
-            ]
-        )
+        compile_command = [
+            str(venv_python),
+            "-m",
+            "piptools",
+            "compile",
+            "--resolver=backtracking",
+            "--strip-extras",
+            "--allow-unsafe",
+        ]
+        for package in upgrade_packages:
+            compile_command.extend(("--upgrade-package", package))
+        compile_command.extend(("--output-file", str(RUNTIME_LOCK), str(RUNTIME_INPUT)))
+        _run(compile_command)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--upgrade-package",
+        action="append",
+        default=[],
+        help="Upgrade only the named package while preserving other compiled pins.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
     deps = _collect_runtime_dependencies()
     _write_runtime_input(deps)
-    _compile_runtime_lock()
+    _compile_runtime_lock(upgrade_packages=tuple(args.upgrade_package))
     return 0
 
 
