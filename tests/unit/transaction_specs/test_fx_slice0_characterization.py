@@ -3,12 +3,12 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.transaction_type_registry import is_registered_transaction_type
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
     CostCalculationErrorCollector,
-    TransactionType,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
@@ -89,9 +89,9 @@ def test_fx_query_record_maps_foundation_fields() -> None:
 
 
 def test_fx_transaction_types_are_registered_and_engine_uses_baseline_processing() -> None:
-    assert TransactionType.is_valid("FX_SPOT")
-    assert TransactionType.is_valid("FX_FORWARD")
-    assert TransactionType.is_valid("FX_SWAP")
+    assert is_registered_transaction_type("FX_SPOT")
+    assert is_registered_transaction_type("FX_FORWARD")
+    assert is_registered_transaction_type("FX_SWAP")
 
     error_reporter = CostCalculationErrorCollector()
     calculator = CostBasisCalculator(
@@ -103,7 +103,7 @@ def test_fx_transaction_types_are_registered_and_engine_uses_baseline_processing
         portfolio_id="PORT-FX",
         instrument_id="FXC-EURUSD-001",
         security_id="FXC-EURUSD-001",
-        transaction_type=TransactionType.FX_FORWARD,
+        transaction_type="FX_FORWARD",
         transaction_date=datetime(2026, 4, 1, 9, 0, 0),
         settlement_date=datetime(2026, 7, 1, 9, 0, 0),
         quantity=Decimal("0"),

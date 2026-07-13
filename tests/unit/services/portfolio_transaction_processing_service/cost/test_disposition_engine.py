@@ -8,7 +8,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     CostBasisStrategy,
     CostBasisTransaction,
     LotDispositionEngine,
-    TransactionType,
 )
 
 
@@ -42,7 +41,7 @@ def sample_transaction() -> CostBasisTransaction:
         portfolio_id="P1",
         instrument_id="I1",
         security_id="S1",
-        transaction_type=TransactionType.BUY,
+        transaction_type="BUY",
         transaction_date=datetime(2023, 1, 1),
         quantity=Decimal("10"),
         gross_transaction_amount=Decimal("100"),
@@ -95,7 +94,7 @@ def test_consume_sell_quantity_delegates_to_strategy(
     Tests that consume_sell_quantity correctly calls and returns values from the strategy.
     """
     # Arrange
-    sample_transaction.transaction_type = TransactionType.SELL
+    sample_transaction.transaction_type = "SELL"
     mock_strategy.consume_sell_quantity.return_value = (
         Decimal("105"),
         Decimal("105"),
@@ -121,7 +120,7 @@ def test_consume_sell_quantity_normalizes_quantity_once(
     sample_transaction: CostBasisTransaction,
 ):
     quantity = _StringCountedAmount("10")
-    sample_transaction.transaction_type = TransactionType.SELL
+    sample_transaction.transaction_type = "SELL"
     sample_transaction.quantity = quantity
     mock_strategy.consume_sell_quantity.return_value = (
         Decimal("105"),
@@ -151,7 +150,7 @@ def test_set_initial_lots_delegates_to_strategy(
     """
     # Arrange
     sell_transaction = sample_transaction.model_copy()
-    sell_transaction.transaction_type = TransactionType.SELL
+    sell_transaction.transaction_type = "SELL"
     transactions = [sample_transaction, sell_transaction]
 
     # Act
