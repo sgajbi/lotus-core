@@ -646,17 +646,20 @@ def test_calculate_interest_income_transaction(
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
 )
-def test_calculate_interest_income_uses_net_interest_when_present(
-    mock_metric, base_transaction_event: TransactionEvent
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("1187.00")])
+def test_calculate_interest_income_is_invariant_to_explicit_net_interest(
+    mock_metric,
+    base_transaction_event: TransactionEvent,
+    net_interest_amount: Decimal | None,
 ):
-    """INTEREST should use settled net cash when withholding/deductions are supplied."""
+    """INTEREST should apply the fee once after resolving the pre-fee net amount."""
     event = base_transaction_event.model_copy(
         update={
             "transaction_type": "INTEREST",
             "gross_transaction_amount": Decimal("1280.75"),
             "withholding_tax_amount": Decimal("81.75"),
             "other_interest_deductions_amount": Decimal("12.00"),
-            "net_interest_amount": Decimal("1187.00"),
+            "net_interest_amount": net_interest_amount,
             "interest_direction": "INCOME",
         }
     )
@@ -669,7 +672,7 @@ def test_calculate_interest_income_uses_net_interest_when_present(
 
     cashflow = CashflowCalculator.calculate(event, rule)
 
-    assert cashflow.amount == Decimal("1187.00")
+    assert cashflow.amount == Decimal("1181.50")
     assert cashflow.amount > 0
     mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
     mock_metric.labels.return_value.inc.assert_called_once()
@@ -699,7 +702,7 @@ def test_calculate_interest_expense_transaction(
 
     cashflow = CashflowCalculator.calculate(event, rule)
 
-    assert cashflow.amount == Decimal("-115")
+    assert cashflow.amount == Decimal("-125")
     assert cashflow.amount < 0
     mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
     mock_metric.labels.return_value.inc.assert_called_once()
@@ -728,7 +731,7 @@ def test_calculate_interest_expense_normalizes_direction(
 
     cashflow = CashflowCalculator.calculate(event, rule)
 
-    assert cashflow.amount == Decimal("-115")
+    assert cashflow.amount == Decimal("-125")
     mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
     mock_metric.labels.return_value.inc.assert_called_once()
 

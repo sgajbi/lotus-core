@@ -65,14 +65,17 @@ def test_buy_cashflow_includes_fees_and_uses_settlement_date() -> None:
     assert cashflow.epoch == 7
 
 
-def test_interest_cashflow_uses_net_amount_and_expense_direction() -> None:
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("107")])
+def test_interest_cashflow_is_invariant_to_explicit_net_interest(
+    net_interest_amount: Decimal | None,
+) -> None:
     transaction = _booked_transaction(
         transaction_type="INTEREST",
         gross_transaction_amount=Decimal("120"),
         trade_fee=Decimal("2"),
         withholding_tax_amount=Decimal("10"),
         other_interest_deductions_amount=Decimal("3"),
-        net_interest_amount=Decimal("101"),
+        net_interest_amount=net_interest_amount,
         interest_direction="EXPENSE",
     )
 
@@ -81,7 +84,29 @@ def test_interest_cashflow_uses_net_amount_and_expense_direction() -> None:
         _rule(CashflowClassification.EXPENSE),
     )
 
-    assert cashflow.amount == Decimal("-101")
+    assert cashflow.amount == Decimal("-109")
+
+
+@pytest.mark.parametrize("net_interest_amount", [None, Decimal("107")])
+def test_interest_income_cashflow_is_invariant_to_explicit_net_interest(
+    net_interest_amount: Decimal | None,
+) -> None:
+    transaction = _booked_transaction(
+        transaction_type="INTEREST",
+        gross_transaction_amount=Decimal("120"),
+        trade_fee=Decimal("2"),
+        withholding_tax_amount=Decimal("10"),
+        other_interest_deductions_amount=Decimal("3"),
+        net_interest_amount=net_interest_amount,
+        interest_direction="INCOME",
+    )
+
+    cashflow = calculate_transaction_cashflow(
+        transaction,
+        _rule(CashflowClassification.INCOME),
+    )
+
+    assert cashflow.amount == Decimal("105")
 
 
 def test_synthetic_position_transfer_uses_source_owned_market_value() -> None:
