@@ -32,7 +32,7 @@
     "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
     "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
     "tests/unit/services/calculators/portfolio_flow_bundle/test_portfolio_flow_bundle_slice0_characterization.py",
-    "tests/unit/libs/portfolio_common/test_ca_bundle_a_reconciliation.py"
+    "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py"
   ],
   "lowest_meaningful_lane": "unit",
   "promotion_policy": "Promote only product-critical flows with proven service orchestration risk to E2E; keep calculation and contract golden examples at unit/contract level first.",

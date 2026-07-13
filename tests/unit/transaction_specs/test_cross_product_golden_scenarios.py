@@ -7,7 +7,6 @@ from pathlib import Path
 
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
-from portfolio_common.transaction_domain import evaluate_ca_bundle_a_reconciliation
 from portfolio_common.transaction_type_registry import (
     TARGET_NOT_IMPLEMENTED,
     get_transaction_type_definition,
@@ -16,6 +15,9 @@ from portfolio_common.transaction_type_registry import (
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
     CashflowTiming,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    reconcile_corporate_action_basis,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
@@ -258,11 +260,11 @@ def test_ca_bundle_golden_spin_off_reconciles_basis_transfer() -> None:
     scenario = _scenario("equity_dividend_stock_split_return_of_capital_spin_off_merger_rights")
     source_out, target_in = scenario["input_events"][1:]
 
-    result = evaluate_ca_bundle_a_reconciliation(
-        [
-            _event(source_out),
-            _event(target_in),
-        ]
+    result = reconcile_corporate_action_basis(
+        (
+            to_booked_transaction(_event(source_out)),
+            to_booked_transaction(_event(target_in)),
+        )
     )
 
     assert result.status == "balanced"

@@ -359,8 +359,8 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/libs/portfolio_common/test_ca_bundle_a_validation.py",
-            "tests/unit/libs/portfolio_common/test_ca_bundle_a_reconciliation.py",
+            "tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_validation.py",
+            "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py",
             "tests/unit/libs/portfolio_common/test_ca_bundle_a_ordering.py"
           ]
         },
