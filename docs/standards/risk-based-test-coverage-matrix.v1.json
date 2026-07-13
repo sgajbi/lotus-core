@@ -456,7 +456,7 @@
           "gap_status": "covered",
           "current_coverage": [
             "tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py",
-            "tests/unit/libs/portfolio-common/test_analytics_cashflow_semantics.py"
+            "tests/unit/libs/portfolio_common/domain/analytics/test_cashflow_semantics.py"
           ]
         },
         {
@@ -518,7 +518,7 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/libs/portfolio_common/test_cost_basis.py",
+            "tests/unit/libs/portfolio_common/domain/test_cost_basis_method.py",
             "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py"
           ]
         },

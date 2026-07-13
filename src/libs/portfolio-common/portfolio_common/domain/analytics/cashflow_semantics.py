@@ -1,3 +1,5 @@
+"""Classify normalized cash movements for shared analytics consumers."""
+
 from __future__ import annotations
 
 from decimal import Decimal

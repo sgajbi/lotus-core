@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 import pytest
-from portfolio_common.analytics_cashflow_semantics import (
+from portfolio_common.domain.analytics.cashflow_semantics import (
     classify_analytics_cash_flow,
     normalize_cashflow_timing,
     normalize_position_flow_amount,
