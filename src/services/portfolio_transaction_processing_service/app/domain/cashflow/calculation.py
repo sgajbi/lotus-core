@@ -12,7 +12,7 @@ from portfolio_common.transaction_fee_components import (
 )
 from portfolio_common.transaction_type_registry import TRANSACTION_TYPE_REGISTRY
 
-from ..booked_transaction import BookedTransaction
+from ..transaction.booked import BookedTransaction
 from .types import CashflowCalculationType, CashflowClassification
 
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})

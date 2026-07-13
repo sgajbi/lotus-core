@@ -14,8 +14,8 @@ from portfolio_common.monitoring import (
     REPROCESSING_EPOCH_BUMPED_TOTAL,
 )
 
-from ..domain.booked_transaction import BookedTransaction
 from ..domain.position.history import PositionRecalculationState
+from ..domain.transaction.booked import BookedTransaction
 from ..ports.position_history import PositionRecalculationReason, PositionReplayMode
 
 logger = logging.getLogger(__name__)

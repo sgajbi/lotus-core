@@ -1,3 +1,5 @@
+"""Define the canonical framework-neutral booked transaction command."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
