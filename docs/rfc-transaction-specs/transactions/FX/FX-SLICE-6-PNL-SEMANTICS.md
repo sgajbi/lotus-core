@@ -30,6 +30,6 @@ Validated against:
 2. No MTM/unrealized contract valuation yet.
 
 ## Exit Evidence
-1. `tests/unit/services/calculators/cost_calculator_service/consumer/test_cost_calculator_consumer.py`
+1. `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
 2. `tests/unit/libs/portfolio_common/test_fx_validation.py`
 

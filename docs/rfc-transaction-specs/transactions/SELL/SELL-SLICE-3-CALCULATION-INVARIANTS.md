@@ -20,7 +20,7 @@ This slice tightens SELL calculation semantics in the financial calculator engin
 ## Evidence
 
 - Unit tests:
-  - `tests/unit/services/calculators/cost_calculator_service/engine/test_cost_calculator.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`
     - negative proceeds is rejected with invariant error
     - non-positive consumed quantity is rejected with invariant error
     - existing SELL gain and dual-currency behavior remains covered

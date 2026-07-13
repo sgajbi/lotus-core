@@ -4,15 +4,16 @@
 Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's standard regression surfaces and by recording the final requirement-to-evidence mapping for `FX_SPOT`, `FX_FORWARD`, and `FX_SWAP`.
 
 ## Delivered in Slice 8
-1. Dedicated manifest suite added in [scripts/quality/test_manifest.py](C:\Users\Sandeep\projects\lotus-core\scripts\test_manifest.py):
- - `transaction-fx-contract`
- - alias `transaction-fx-contract`
-2. Dedicated local targets added in [Makefile](C:\Users\Sandeep\projects\lotus-core\Makefile):
- - `test-transaction-fx-contract`
- - `test-transaction-fx-contract`
-3. CI matrix coverage added in [.github/workflows/ci.yml](C:\Users\Sandeep\projects\lotus-core\.github\workflows\ci.yml), including `transaction-fx-contract` and full-E2E execution on `main`.
-4. FX query-router integration coverage extended in [test_transactions_router.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\query_service\test_transactions_router.py) to verify FX filter forwarding.
-5. FX end-to-end lifecycle coverage added in [test_fx_lifecycle.py](C:\Users\Sandeep\projects\lotus-core\tests\e2e\test_fx_lifecycle.py) for:
+1. Dedicated `transaction-fx-contract` manifest suite added in
+   `scripts/quality/test_manifest.py`.
+2. Dedicated `test-transaction-fx-contract` local target added in `Makefile`.
+3. CI matrix coverage added in `.github/workflows/pr-merge-gate.yml` and
+   `.github/workflows/main-releasability.yml`, including `transaction-fx-contract` and full-E2E
+   execution on `main`.
+4. FX query-router integration coverage extended in
+   `tests/integration/services/query_service/test_transactions_router.py` to verify FX filter
+   forwarding.
+5. FX end-to-end lifecycle coverage added in `tests/e2e/test_fx_lifecycle.py` for:
  - `FX_SPOT`
  - `FX_FORWARD`
  - `FX_SWAP`
@@ -20,16 +21,16 @@ Slice 8 closes RFC 082 by wiring canonical FX coverage into the repository's sta
 ## Requirement-to-Evidence Closure
 | RFC-FX-01 Area | Evidence |
 | --- | --- |
-| Canonical FX business types | [transaction_type.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cost_calculator_service\app\cost_engine\domain\enums\transaction_type.py); [test_fx_slice0_characterization.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\transaction_specs\test_fx_slice0_characterization.py) |
-| Canonical validation and reason codes | [fx_models.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_models.py); [fx_validation.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_validation.py); [fx_reason_codes.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_reason_codes.py); [test_fx_validation.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_validation.py) |
-| Deterministic linkage and enrichment | [fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_linkage.py); [test_fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_linkage.py) |
-| Cash settlement semantics | [cashflow_logic.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cashflow_calculator_service\app\core\cashflow_logic.py); [test_cashflow_rule_contract.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\calculators\cashflow_calculator_service\test_cashflow_rule_contract.py); [test_cashflow_logic.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cashflow_calculator_service\unit\core\test_cashflow_logic.py) |
-| FX contract lifecycle | [fx_contract_instrument.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_contract_instrument.py); [consumer.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cost_calculator_service\app\consumer.py); [position_logic.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\position_calculator\app\core\position_logic.py); [test_fx_contract_instrument.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_contract_instrument.py); [test_position_logic.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\position_calculator\core\test_position_logic.py) |
-| Swap grouping | [fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_linkage.py); [fx_validation.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_validation.py); [test_fx_linkage.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_linkage.py) |
-| Realized FX P&L baseline | [fx_baseline_processing.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\transaction_domain\fx_baseline_processing.py); [cost_calculator.py](C:\Users\Sandeep\projects\lotus-core\src\services\calculators\cost_calculator_service\app\cost_engine\processing\cost_calculator.py); [test_fx_baseline_processing.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\libs\portfolio_common\test_fx_baseline_processing.py); [test_cost_calculator.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cost_calculator_service\engine\test_cost_calculator.py); [test_cost_calculator_consumer.py](C:\Users\Sandeep\projects\lotus-core\tests\unit\services\calculators\cost_calculator_service\consumer\test_cost_calculator_consumer.py) |
-| Query and observability | [transactions.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\routers\transactions.py); [transaction_repository.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\repositories\transaction_repository.py); [transaction_service.py](C:\Users\Sandeep\projects\lotus-core\src\services\query_service\app\services\transaction_service.py); [test_transactions_router.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\query_service\test_transactions_router.py) |
-| Persistence round-trip | [database_models.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\database_models.py); [events.py](C:\Users\Sandeep\projects\lotus-core\src\libs\portfolio-common\portfolio_common\events.py); [test_repositories.py](C:\Users\Sandeep\projects\lotus-core\tests\integration\services\persistence_service\repositories\test_repositories.py) |
-| Full-stack lifecycle | [test_fx_lifecycle.py](C:\Users\Sandeep\projects\lotus-core\tests\e2e\test_fx_lifecycle.py) |
+| Canonical FX business types | `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/transaction_type.py`; `tests/unit/transaction_specs/test_fx_slice0_characterization.py` |
+| Canonical validation and reason codes | `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_models.py`; `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_validation.py`; `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_reason_codes.py`; `tests/unit/libs/portfolio_common/test_fx_validation.py` |
+| Deterministic linkage and enrichment | `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py`; `tests/unit/libs/portfolio_common/test_fx_linkage.py` |
+| Cash settlement semantics | `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`; `tests/integration/services/portfolio_transaction_processing_service/test_cashflow_rule_contract.py`; `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py` |
+| FX contract lifecycle | `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_contract_instrument.py`; `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`; `src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py`; `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`; `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py` |
+| Swap grouping | `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_linkage.py`; `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_validation.py`; `tests/unit/libs/portfolio_common/test_fx_linkage.py` |
+| Realized FX P&L baseline | `src/libs/portfolio-common/portfolio_common/transaction_domain/fx_baseline_processing.py`; `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_calculator.py`; `tests/unit/libs/portfolio_common/test_fx_baseline_processing.py`; `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`; `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py` |
+| Query and observability | `src/services/query_service/app/routers/transactions.py`; `src/services/query_service/app/repositories/transaction_repository.py`; `src/services/query_service/app/services/transaction_service.py`; `tests/integration/services/query_service/test_transactions_router.py` |
+| Persistence round-trip | `src/libs/portfolio-common/portfolio_common/database_models.py`; `src/libs/portfolio-common/portfolio_common/events.py`; `tests/integration/services/persistence_service/repositories/test_repositories.py` |
+| Full-stack lifecycle | `tests/e2e/test_fx_lifecycle.py` |
 
 ## Shared-Doc Conformance Note
 Validated explicitly against:
