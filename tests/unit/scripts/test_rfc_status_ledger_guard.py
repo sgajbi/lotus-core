@@ -180,8 +180,25 @@ def test_rfc_status_ledger_maps_accepted_index_status_to_active_current_state(
         encoding="utf-8",
     )
     ledger = _ledger()
+    ledger["entries"][0]["rfc_id"] = "RFC-083"  # type: ignore[index]
+    ledger["entries"][0]["status"] = "active_current_state"  # type: ignore[index]
+
+    assert guard.evaluate_ledger(ledger, repo_root=tmp_path) == []
+
+
+def test_rfc_status_ledger_does_not_apply_core_index_status_to_architecture_family(
+    tmp_path: Path,
+) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        "| RFC ID | Title | Original | Current | Classification | Evidence | Next |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| RFC-083 | Event taxonomy | Implemented | Accepted | Current | evidence | maintain |\n",
+        encoding="utf-8",
+    )
+    ledger = _ledger()
     ledger["entries"][4]["rfc_id"] = "RFC-083"  # type: ignore[index]
-    ledger["entries"][4]["status"] = "active_current_state"  # type: ignore[index]
+    ledger["entries"][4]["status"] = "target_state"  # type: ignore[index]
 
     assert guard.evaluate_ledger(ledger, repo_root=tmp_path) == []
 
