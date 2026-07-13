@@ -9,6 +9,11 @@ import pytest
 from portfolio_common.database_models import Cashflow
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.query_control_plane_service.app.domain.analytics import (
+    AnalyticsCashflowEvidence,
+    PositionValuationObservation,
+    PriorPositionValuation,
+)
 from src.services.query_control_plane_service.app.infrastructure.analytics_timeseries_repository import (  # noqa: E501
     AnalyticsTimeseriesRepository,
 )
@@ -29,6 +34,45 @@ class _FakeExecuteResult:
 
     def scalar_one_or_none(self):
         return self._rows[0] if self._rows else None
+
+
+def _position_row(**overrides: object) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "security_id": "SEC_A",
+        "valuation_date": date(2025, 1, 1),
+        "bod_market_value": Decimal("100"),
+        "eod_market_value": Decimal("110"),
+        "bod_cashflow_position": Decimal("0"),
+        "eod_cashflow_position": Decimal("0"),
+        "bod_cashflow_portfolio": Decimal("0"),
+        "eod_cashflow_portfolio": Decimal("0"),
+        "fees": Decimal("0"),
+        "quantity": Decimal("10"),
+        "epoch": 0,
+        "asset_class": "Equity",
+        "sector": "Technology",
+        "country": "US",
+        "position_currency": "USD",
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _cashflow_row(**overrides: object) -> SimpleNamespace:
+    values: dict[str, object] = {
+        "transaction_id": "TXN1",
+        "security_id": "SEC_A",
+        "valuation_date": date(2025, 1, 1),
+        "amount": Decimal("10"),
+        "currency": "USD",
+        "classification": "BUY",
+        "timing": "BOD",
+        "is_position_flow": True,
+        "is_portfolio_flow": False,
+        "epoch": 0,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
 
 
 @pytest.mark.asyncio
@@ -52,7 +96,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
             ]
         ),
         _FakeExecuteResult([date(2025, 1, 31)]),
-        _FakeExecuteResult([SimpleNamespace(valuation_date=date(2025, 1, 1), security_id="SEC_A")]),
+        _FakeExecuteResult([_position_row()]),
         _FakeExecuteResult(
             [
                 SimpleNamespace(rate_date=date(2025, 1, 1), rate=Decimal("1.1200000000")),
@@ -83,6 +127,7 @@ async def test_analytics_timeseries_repository_methods() -> None:
         dimension_filters={"asset_class": {"Equity"}, "sector": {"Technology"}, "country": {"US"}},
     )
     assert len(position_rows) == 1
+    assert isinstance(position_rows[0], PositionValuationObservation)
     position_stmt = db.execute.await_args_list[2].args[0]
     position_sql = str(position_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "trim(position_timeseries.security_id)" in position_sql
@@ -235,7 +280,7 @@ async def test_timeseries_repository_snapshot_epoch_short_circuits_invalid_posit
 async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow_queries() -> None:
     db = AsyncMock(spec=AsyncSession)
     db.execute.side_effect = [
-        _FakeExecuteResult([SimpleNamespace(valuation_date=date(2025, 1, 1), security_id="SEC_A")]),
+        _FakeExecuteResult([_position_row()]),
         _FakeExecuteResult(
             [
                 SimpleNamespace(
@@ -246,26 +291,9 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
                 )
             ]
         ),
+        _FakeExecuteResult([_cashflow_row()]),
         _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    security_id="SEC_A",
-                    valuation_date=date(2025, 1, 1),
-                    amount=Decimal("10"),
-                    timing="BOD",
-                    transaction_id="TXN1",
-                )
-            ]
-        ),
-        _FakeExecuteResult(
-            [
-                SimpleNamespace(
-                    valuation_date=date(2025, 1, 1),
-                    amount=Decimal("10"),
-                    timing="BOD",
-                    transaction_id="TXN1",
-                )
-            ]
+            [_cashflow_row(security_id=None, is_position_flow=False, is_portfolio_flow=True)]
         ),
     ]
     repo = AnalyticsTimeseriesRepository(db)
@@ -277,6 +305,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=2,
     )
     assert len(unpaged_rows) == 1
+    assert isinstance(unpaged_rows[0], PositionValuationObservation)
     unpaged_stmt = db.execute.await_args_list[0].args[0]
     unpaged_sql = str(unpaged_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.epoch <= 2" in unpaged_sql
@@ -292,6 +321,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=3,
     )
     assert len(prior_rows) == 1
+    assert isinstance(prior_rows[0], PriorPositionValuation)
     prior_stmt = db.execute.await_args_list[1].args[0]
     prior_sql = str(prior_stmt.compile(compile_kwargs={"literal_binds": True}))
     assert "position_timeseries.portfolio_id = 'P1'" in prior_sql
@@ -311,6 +341,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=3,
     )
     assert len(position_cashflow_rows) == 1
+    assert isinstance(position_cashflow_rows[0], AnalyticsCashflowEvidence)
     position_cashflow_stmt = db.execute.await_args_list[2].args[0]
     position_cashflow_sql = str(
         position_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
@@ -326,6 +357,7 @@ async def test_timeseries_repository_supports_unpaged_position_rows_and_cashflow
         snapshot_epoch=4,
     )
     assert len(portfolio_cashflow_rows) == 1
+    assert isinstance(portfolio_cashflow_rows[0], AnalyticsCashflowEvidence)
     portfolio_cashflow_stmt = db.execute.await_args_list[3].args[0]
     portfolio_cashflow_sql = str(
         portfolio_cashflow_stmt.compile(compile_kwargs={"literal_binds": True})
