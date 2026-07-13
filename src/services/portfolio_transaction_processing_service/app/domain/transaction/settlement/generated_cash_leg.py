@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Callable
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
@@ -12,14 +11,12 @@ from portfolio_common.domain.transaction_control_codes import (
 
 from ..booked import BookedTransaction
 from .cash_entry import CashEntryMode, resolve_cash_entry_mode
-from .interest import calculate_interest_settlement_economics
+from .cash_movement import (
+    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    calculate_settlement_cash_movement,
+)
 
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-
-CashLegEconomicsResolver = Callable[
-    [BookedTransaction, Decimal],
-    tuple[Decimal, str, str],
-]
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +51,7 @@ def build_generated_settlement_cash_leg(
 
     _require_generated_cash_leg(transaction)
     cash_instrument_id = _resolve_cash_instrument_id(transaction)
-    amount, movement_direction, adjustment_reason = _resolve_cash_leg_economics(transaction)
+    settlement_cash = calculate_settlement_cash_movement(transaction)
     transaction_type = normalize_transaction_control_code(transaction.transaction_type)
     economic_event_id, linked_group_id = _resolve_generated_linkage(
         transaction,
@@ -71,7 +68,7 @@ def build_generated_settlement_cash_leg(
         transaction_type=ADJUSTMENT_TRANSACTION_TYPE,
         quantity=Decimal(0),
         price=Decimal(0),
-        gross_transaction_amount=abs(amount),
+        gross_transaction_amount=settlement_cash.amount,
         trade_currency=transaction.trade_currency,
         currency=transaction.currency,
         trade_fee=Decimal(0),
@@ -83,10 +80,10 @@ def build_generated_settlement_cash_leg(
         cash_entry_mode=CashEntryMode.AUTO_GENERATE.value,
         settlement_cash_account_id=transaction.settlement_cash_account_id,
         settlement_cash_instrument_id=transaction.settlement_cash_instrument_id,
-        movement_direction=movement_direction,
+        movement_direction=settlement_cash.movement_direction,
         originating_transaction_id=transaction.transaction_id,
         originating_transaction_type=transaction_type,
-        adjustment_reason=adjustment_reason,
+        adjustment_reason=settlement_cash.adjustment_reason,
         link_type=f"{transaction_type}_TO_CASH",
         reconciliation_key=transaction.reconciliation_key,
     )
@@ -113,58 +110,6 @@ def _resolve_cash_instrument_id(transaction: BookedTransaction) -> str:
     )
 
 
-def _resolve_cash_leg_economics(
-    transaction: BookedTransaction,
-) -> tuple[Decimal, str, str]:
-    transaction_type = normalize_transaction_control_code(transaction.transaction_type)
-    fee = transaction.trade_fee or Decimal(0)
-    resolver = _CASH_LEG_ECONOMICS_RESOLVERS.get(transaction_type)
-    if resolver is None:
-        raise GeneratedCashLegError(
-            "transaction_type",
-            f"{transaction.transaction_type} is not eligible for auto-generated cash leg.",
-        )
-    return resolver(transaction, fee)
-
-
-def _resolve_buy_cash_leg(
-    transaction: BookedTransaction,
-    fee: Decimal,
-) -> tuple[Decimal, str, str]:
-    return transaction.gross_transaction_amount + fee, "OUTFLOW", "BUY_SETTLEMENT"
-
-
-def _resolve_sell_cash_leg(
-    transaction: BookedTransaction,
-    fee: Decimal,
-) -> tuple[Decimal, str, str]:
-    return transaction.gross_transaction_amount - fee, "INFLOW", "SELL_SETTLEMENT"
-
-
-def _resolve_dividend_cash_leg(
-    transaction: BookedTransaction,
-    fee: Decimal,
-) -> tuple[Decimal, str, str]:
-    return transaction.gross_transaction_amount - fee, "INFLOW", "DIVIDEND_SETTLEMENT"
-
-
-def _resolve_interest_cash_leg(
-    transaction: BookedTransaction,
-    _fee: Decimal,
-) -> tuple[Decimal, str, str]:
-    amount = calculate_interest_settlement_economics(transaction).settlement_cash_amount
-    direction = _resolve_interest_movement_direction(transaction)
-    reason = "INTEREST_CHARGE_SETTLEMENT" if direction == "OUTFLOW" else "INTEREST_SETTLEMENT"
-    return amount, direction, reason
-
-
-def _resolve_interest_movement_direction(transaction: BookedTransaction) -> str:
-    interest_direction = normalize_transaction_control_code(
-        transaction.interest_direction or "INCOME"
-    )
-    return "OUTFLOW" if interest_direction == "EXPENSE" else "INFLOW"
-
-
 def _resolve_generated_linkage(
     transaction: BookedTransaction,
     transaction_type: str,
@@ -178,11 +123,4 @@ def _resolve_generated_linkage(
     return economic_event_id, linked_group_id
 
 
-_CASH_LEG_ECONOMICS_RESOLVERS: dict[str, CashLegEconomicsResolver] = {
-    "BUY": _resolve_buy_cash_leg,
-    "SELL": _resolve_sell_cash_leg,
-    "DIVIDEND": _resolve_dividend_cash_leg,
-    "INTEREST": _resolve_interest_cash_leg,
-}
-
-GENERATED_CASH_LEG_TRANSACTION_TYPES = frozenset(_CASH_LEG_ECONOMICS_RESOLVERS)
+GENERATED_CASH_LEG_TRANSACTION_TYPES = ORDINARY_SETTLEMENT_TRANSACTION_TYPES
