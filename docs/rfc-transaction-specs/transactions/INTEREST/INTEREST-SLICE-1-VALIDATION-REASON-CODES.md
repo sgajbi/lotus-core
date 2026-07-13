@@ -58,8 +58,11 @@ Implemented reason codes:
 - interest direction, deduction signs, and explicit pre-fee net interest reconcile deterministically
 - income settlement must remain strictly positive after resolved transaction fees
 
-`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT` is a non-retryable runtime rejection performed before
-financial writes. It is not repaired by applying an absolute-value inflow sign.
+`INTEREST_015_NET_RECONCILIATION_MISMATCH` and
+`INTEREST_017_NON_POSITIVE_NET_SETTLEMENT` are non-retryable runtime rejections performed after
+idempotency classification and before financial writes. A mismatched explicit net is not trusted as
+settlement evidence, and non-positive income settlement is not repaired by applying an
+absolute-value inflow sign.
 
 ## Shared-Doc Conformance Note (Slice 1)
 

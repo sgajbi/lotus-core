@@ -2309,8 +2309,12 @@ Most relevant current governance:
      expense settlement adds it; cashflow sign then represents inflow or outflow. Validation,
      generated settlement legs, and cashflow materialization must consume this one policy so
      equivalent explicit and derived net-interest inputs remain invariant. Preserve the stable
-     `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code and keep the independent Decimal golden
-     vectors in the governed INTEREST contract when extending this methodology.
+     `INTEREST_015_NET_RECONCILIATION_MISMATCH` reason code. For current newly claimed or repair
+     deliveries, reject a mismatched explicit net after idempotency classification and before
+     financial work; do not let a supplied net override gross-less-deductions economics. Only the
+     explicit historical-rebuild context may reproduce a previously accepted mismatch. Keep the
+     independent Decimal golden vectors in the governed INTEREST contract when extending this
+     methodology.
 174. Canonical ordinary signed settlement cash lives in
      `portfolio_transaction_processing_service.app.domain.transaction.settlement.cash_movement`.
      Resolve component fees before aggregate `trade_fee`; BUY and INTEREST expense include the fee
