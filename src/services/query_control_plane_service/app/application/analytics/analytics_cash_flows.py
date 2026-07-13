@@ -107,11 +107,10 @@ def effective_beginning_market_value(
     ending: Decimal = decimal_or_zero(row.eod_market_value)
     bod_position_flow: Decimal = decimal_or_zero(getattr(row, "bod_cashflow_position", 0))
 
-    if has_prior_eod_continuity(
+    if previous_eod_market_value is not None and has_prior_eod_continuity(
         previous_eod_market_value=previous_eod_market_value,
         bod_position_flow=bod_position_flow,
     ):
-        assert previous_eod_market_value is not None
         return previous_eod_market_value
 
     has_internal_position_flow = has_only_internal_flows(cash_flows)
@@ -122,14 +121,13 @@ def effective_beginning_market_value(
     ):
         return ending
 
-    if can_repair_beginning_from_previous_eod(
+    if previous_eod_market_value is not None and can_repair_beginning_from_previous_eod(
         previous_eod_market_value=previous_eod_market_value,
         stored_beginning=stored_beginning,
         bod_position_flow=bod_position_flow,
         has_portfolio_external_flow=has_portfolio_external_flow,
         has_internal_position_flow=has_internal_position_flow,
     ):
-        assert previous_eod_market_value is not None
         return previous_eod_market_value + bod_position_flow
 
     if is_new_internally_funded_position(
