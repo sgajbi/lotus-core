@@ -18,8 +18,8 @@ from portfolio_common.database_models import (
     PositionState,
     PositionTimeseries,
 )
-from portfolio_common.decimal_amounts import decimal_or_none
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.decimal_amount import decimal_or_none
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
