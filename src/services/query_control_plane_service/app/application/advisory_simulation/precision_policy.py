@@ -3,7 +3,7 @@
 from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from typing import Any
 
-from portfolio_common.decimal_amounts import decimal_or_none
+from portfolio_common.domain.decimal_amount import decimal_or_none
 
 ROUNDING_POLICY_VERSION = "1.1.0"
 ROUNDING_MODE = ROUND_HALF_EVEN

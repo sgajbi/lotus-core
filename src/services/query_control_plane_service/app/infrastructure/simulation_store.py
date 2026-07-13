@@ -17,7 +17,7 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import (
     SimulationSession as SimulationSessionRow,
 )
-from portfolio_common.decimal_amounts import decimal_or_none, decimal_or_zero
+from portfolio_common.domain.decimal_amount import decimal_or_none, decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
