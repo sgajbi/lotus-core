@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import decimal_or_zero
+from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.analytics_inputs import PositionAnalyticsTimeseriesRequest

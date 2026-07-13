@@ -6,12 +6,12 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from portfolio_common.decimal_amounts import decimal_or_zero
 from portfolio_common.domain.analytics.cashflow_semantics import (
     classify_analytics_cash_flow,
     normalize_position_flow_amount,
 )
 from portfolio_common.domain.currency import normalize_currency_code
+from portfolio_common.domain.decimal_amount import decimal_or_zero
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
 
 from ...contracts.analytics_inputs import CashFlowObservation
