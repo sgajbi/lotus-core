@@ -74,6 +74,8 @@ async def test_cost_workflow_applies_booking_policy_without_losing_event_envelop
         gross_transaction_amount=Decimal("1500"),
         trade_currency="USD",
         currency="USD",
+        event_type="TransactionBooked",
+        schema_version="1.0.0",
         correlation_id="corr-booking-01",
         traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
     )
@@ -93,6 +95,8 @@ async def test_cost_workflow_applies_booking_policy_without_losing_event_envelop
     assert prepared.linked_transaction_group_id == "LTG-BUY-PORT_COST_01-BUY-BOOKING-01"
     assert prepared.calculation_policy_id == "BUY_DEFAULT_POLICY"
     assert prepared.calculation_policy_version == "1.0.0"
+    assert prepared.event_type == event.event_type
+    assert prepared.schema_version == event.schema_version
     assert prepared.correlation_id == event.correlation_id
     assert prepared.traceparent == event.traceparent
 
