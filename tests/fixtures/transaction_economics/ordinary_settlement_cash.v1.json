@@ -1,0 +1,188 @@
+{
+  "pack_id": "ordinary-settlement-cash",
+  "pack_version": "1.0.0",
+  "methodology_policy": {
+    "id": "ordinary-settlement-cash-boundary",
+    "version": "1.0.0"
+  },
+  "rounding": {
+    "mode": "none",
+    "scale": null
+  },
+  "vectors": [
+    {
+      "vector_id": "sell-fee-below-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "SELL",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "2"
+      },
+      "expected": {
+        "accepted": true,
+        "available_proceeds_amount": "100",
+        "fee_amount": "2",
+        "signed_cash_amount": "98",
+        "rejection_reason_code": null
+      },
+      "tolerance": "0",
+      "rationale": "A fee below sale proceeds leaves a positive settlement inflow."
+    },
+    {
+      "vector_id": "sell-fee-equals-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "SELL",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "100"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "100",
+        "fee_amount": "100",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "SELL_010_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "A zero sale settlement is rejected rather than emitted as a directionless cash leg."
+    },
+    {
+      "vector_id": "sell-fee-exceeds-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "SELL",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "100.01"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "100",
+        "fee_amount": "100.01",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "SELL_010_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "Fees cannot silently invert sale proceeds into a cash outflow."
+    },
+    {
+      "vector_id": "dividend-fee-below-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "2"
+      },
+      "expected": {
+        "accepted": true,
+        "available_proceeds_amount": "100",
+        "fee_amount": "2",
+        "signed_cash_amount": "98",
+        "rejection_reason_code": null
+      },
+      "tolerance": "0",
+      "rationale": "A fee below dividend proceeds leaves a positive income settlement."
+    },
+    {
+      "vector_id": "dividend-fee-equals-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "100"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "100",
+        "fee_amount": "100",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "A zero dividend settlement is rejected as unsupported source economics."
+    },
+    {
+      "vector_id": "dividend-fee-exceeds-proceeds",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "DIVIDEND",
+        "gross_transaction_amount": "100",
+        "transaction_fee_amount": "100.01"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "100",
+        "fee_amount": "100.01",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "Fees cannot silently invert dividend income into an expense."
+    },
+    {
+      "vector_id": "interest-income-fee-below-net-interest",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "INTEREST",
+        "direction": "INCOME",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "2",
+        "other_interest_deductions_amount": "0",
+        "net_interest_amount": "8",
+        "transaction_fee_amount": "2"
+      },
+      "expected": {
+        "accepted": true,
+        "available_proceeds_amount": "8",
+        "fee_amount": "2",
+        "signed_cash_amount": "6",
+        "rejection_reason_code": null
+      },
+      "tolerance": "0",
+      "rationale": "An income fee below pre-fee net interest leaves a positive receipt."
+    },
+    {
+      "vector_id": "interest-income-fee-equals-net-interest",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "INTEREST",
+        "direction": "INCOME",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "2",
+        "other_interest_deductions_amount": "0",
+        "net_interest_amount": "8",
+        "transaction_fee_amount": "8"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "8",
+        "fee_amount": "8",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "A zero income settlement is rejected rather than emitted without direction."
+    },
+    {
+      "vector_id": "interest-income-fee-exceeds-net-interest",
+      "vector_version": "1.0.0",
+      "inputs": {
+        "transaction_type": "INTEREST",
+        "direction": "INCOME",
+        "gross_interest_amount": "10",
+        "withholding_tax_amount": "2",
+        "other_interest_deductions_amount": "0",
+        "net_interest_amount": "8",
+        "transaction_fee_amount": "8.01"
+      },
+      "expected": {
+        "accepted": false,
+        "available_proceeds_amount": "8",
+        "fee_amount": "8.01",
+        "signed_cash_amount": null,
+        "rejection_reason_code": "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"
+      },
+      "tolerance": "0",
+      "rationale": "Fees cannot silently invert an interest receipt into an expense."
+    }
+  ]
+}
