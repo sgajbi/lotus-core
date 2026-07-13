@@ -10,6 +10,7 @@ from .cost_basis_timeline import (
     build_cost_basis_timeline_processor,
 )
 from .errors import TransactionProcessingError, TransactionProcessingRejected
+from .position_history import PositionHistoryProcessingResult, PositionHistoryProcessor
 from .process_transaction import ProcessTransactionUseCase
 from .reconcile_average_cost_pools import (
     ReconcileAverageCostPoolsCommand,
@@ -33,6 +34,8 @@ __all__ = [
     "ProcessTransactionCommand",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
+    "PositionHistoryProcessingResult",
+    "PositionHistoryProcessor",
     "ReconcileAverageCostPoolsCommand",
     "ReconcileAverageCostPoolsResult",
     "ReconcileAverageCostPoolsUseCase",
