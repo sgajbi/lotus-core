@@ -12,6 +12,7 @@ from portfolio_common.domain.transaction_control_codes import (
 from ..booked import BookedTransaction
 from ..settlement import (
     CashEntryMode,
+    calculate_interest_settlement_economics,
     is_upstream_provided_cash_entry_mode,
     resolve_cash_entry_mode,
 )
@@ -200,15 +201,16 @@ def _validate_interest_amounts(
         )
     if transaction.net_interest_amount is None:
         return
-    expected_net = transaction.gross_transaction_amount - withholding_tax - other_deductions
-    if transaction.net_interest_amount != expected_net:
+    settlement_economics = calculate_interest_settlement_economics(transaction)
+    if transaction.net_interest_amount != settlement_economics.expected_net_interest_amount:
         issues.append(
             TransactionValidationIssue(
                 code=InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH,
                 field="net_interest_amount",
                 message=(
                     "net_interest_amount must equal gross_transaction_amount - "
-                    "withholding_tax_amount - other_interest_deductions_amount."
+                    "withholding_tax_amount - other_interest_deductions_amount "
+                    "before transaction fees."
                 ),
             )
         )

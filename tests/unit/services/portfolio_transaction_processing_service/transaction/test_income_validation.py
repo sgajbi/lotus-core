@@ -129,6 +129,7 @@ def test_income_validation_requires_settlement_account_for_generated_cash() -> N
 def test_interest_validation_accepts_reconciled_net_interest_amount() -> None:
     transaction = replace(
         _income("INTEREST"),
+        trade_fee=Decimal("2.50"),
         withholding_tax_amount=Decimal("10"),
         other_interest_deductions_amount=Decimal("5"),
         net_interest_amount=Decimal("108.45"),
@@ -137,3 +138,23 @@ def test_interest_validation_accepts_reconciled_net_interest_amount() -> None:
     assert InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH not in {
         issue.code for issue in validate_interest_transaction(transaction)
     }
+
+
+def test_interest_validation_rejects_net_interest_reconciliation_mismatch() -> None:
+    transaction = replace(
+        _income("INTEREST"),
+        trade_fee=Decimal("2.50"),
+        withholding_tax_amount=Decimal("10"),
+        other_interest_deductions_amount=Decimal("5"),
+        net_interest_amount=Decimal("105.95"),
+    )
+
+    mismatch = next(
+        issue
+        for issue in validate_interest_transaction(transaction)
+        if issue.code is InterestValidationReasonCode.NET_INTEREST_RECONCILIATION_MISMATCH
+    )
+
+    assert mismatch.code.value == "INTEREST_015_NET_RECONCILIATION_MISMATCH"
+    assert mismatch.field == "net_interest_amount"
+    assert mismatch.message.endswith("before transaction fees.")
