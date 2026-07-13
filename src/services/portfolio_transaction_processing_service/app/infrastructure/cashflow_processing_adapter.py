@@ -17,6 +17,7 @@ from ..domain import BookedTransaction
 from ..domain.cashflow import CashflowCalculationContext
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import CashflowProcessingResult
+from .booked_transaction_event_mapper import to_transaction_event
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_staging_workflow import (
     CashflowProcessingOutcome,
@@ -24,7 +25,6 @@ from .cashflow_staging_workflow import (
     LinkedCashLegError,
     NoCashflowRuleError,
 )
-from .legacy_transaction_event_mapper import to_transaction_event
 
 
 class CashflowStagingWorkflow(Protocol):

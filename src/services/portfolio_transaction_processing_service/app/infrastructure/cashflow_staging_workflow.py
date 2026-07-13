@@ -35,13 +35,13 @@ from ..domain.transaction.corporate_action import (
     assert_bundle_a_corporate_action_valid,
     is_bundle_a_corporate_action,
 )
+from .booked_transaction_event_mapper import to_booked_transaction
 from .cashflow_calculation import calculate_observed_transaction_cashflow
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_rules_repository import (
     CashflowRuleSetVersion,
     SqlAlchemyCashflowRulesRepository,
 )
-from .legacy_transaction_event_mapper import to_booked_transaction
 
 logger = logging.getLogger(__name__)
 

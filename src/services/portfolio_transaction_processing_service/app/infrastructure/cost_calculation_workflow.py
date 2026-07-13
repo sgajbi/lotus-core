@@ -61,13 +61,13 @@ from ..ports import (
     CorporateActionReconciliationObserver,
     CostBasisCalculationObserver,
 )
-from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
-from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
-from .legacy_transaction_event_mapper import (
+from .booked_transaction_event_mapper import (
     to_booked_transaction,
     to_transaction_event,
     with_booked_transaction_fields,
 )
+from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
+from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 
 logger = logging.getLogger(__name__)
 ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"

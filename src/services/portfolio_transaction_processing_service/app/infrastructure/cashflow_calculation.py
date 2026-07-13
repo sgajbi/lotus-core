@@ -23,7 +23,7 @@ from ..domain.cashflow import (
     CashflowRule,
     calculate_transaction_cashflow,
 )
-from .legacy_transaction_event_mapper import to_booked_transaction
+from .booked_transaction_event_mapper import to_booked_transaction
 
 logger = logging.getLogger(__name__)
 

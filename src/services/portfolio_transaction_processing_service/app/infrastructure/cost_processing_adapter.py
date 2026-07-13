@@ -12,6 +12,7 @@ from ..application import TransactionProcessingError, build_settlement_cash_reje
 from ..domain import BookedTransaction
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import CostProcessingResult
+from .booked_transaction_event_mapper import to_booked_transaction, to_transaction_event
 from .cost_calculation_workflow import (
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
@@ -20,7 +21,6 @@ from .cost_calculation_workflow import (
 from .cost_repository import (
     CostCalculatorRepository,
 )
-from .legacy_transaction_event_mapper import to_booked_transaction, to_transaction_event
 
 
 class PortfolioNotFoundError(Exception):

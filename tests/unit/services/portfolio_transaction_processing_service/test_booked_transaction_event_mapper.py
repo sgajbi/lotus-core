@@ -9,7 +9,7 @@ from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    legacy_transaction_event_mapper as mapper,
+    booked_transaction_event_mapper as mapper,
 )
 
 
@@ -30,7 +30,7 @@ def _transaction() -> BookedTransaction:
     )
 
 
-def test_legacy_mapper_round_trips_every_domain_field() -> None:
+def test_mapper_round_trips_every_domain_field() -> None:
     transaction = _transaction()
 
     event = mapper.to_transaction_event(
@@ -44,7 +44,7 @@ def test_legacy_mapper_round_trips_every_domain_field() -> None:
     assert event.traceparent == "trace-001"
 
 
-def test_legacy_mapper_applies_domain_fields_without_losing_event_envelope() -> None:
+def test_mapper_applies_domain_fields_without_losing_event_envelope() -> None:
     transaction = _transaction()
     event = mapper.to_transaction_event(
         transaction,
@@ -67,11 +67,11 @@ def test_legacy_mapper_applies_domain_fields_without_losing_event_envelope() -> 
     assert mapper.to_booked_transaction(event) == transaction
 
 
-def test_legacy_mapper_rejects_external_field_drift() -> None:
+def test_mapper_rejects_external_field_drift() -> None:
     drifted_fields = set(TransactionEvent.model_fields) | {"unsupported_business_field"}
 
     with pytest.raises(
-        mapper.LegacyTransactionEventMappingError,
+        mapper.BookedTransactionEventMappingError,
         match="unsupported_business_field",
     ):
-        mapper.validate_legacy_transaction_event_mapping_contract(drifted_fields)
+        mapper.validate_booked_transaction_event_mapping_contract(drifted_fields)
