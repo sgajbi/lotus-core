@@ -104,6 +104,16 @@ def test_rfc_status_ledger_reports_stale_metadata(tmp_path: Path) -> None:
     )
 
 
+def test_rfc_status_ledger_reports_non_object_entry_without_crashing(tmp_path: Path) -> None:
+    _write_required_files(tmp_path)
+    ledger = _ledger()
+    ledger["entries"].append("not-an-object")  # type: ignore[union-attr]
+
+    errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
+
+    assert "entry 6 must be an object" in errors
+
+
 def test_rfc_status_ledger_requires_transaction_registry_link(tmp_path: Path) -> None:
     _write_required_files(tmp_path)
     ledger = _ledger()
