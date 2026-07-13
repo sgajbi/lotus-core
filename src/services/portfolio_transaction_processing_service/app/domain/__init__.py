@@ -13,6 +13,7 @@ from .position import (
     order_position_transactions,
     position_transaction_ordering_key,
 )
+from .processing import TransactionStageRecord
 from .transaction import (
     TRANSACTION_CORRECTION_IDENTITY_VERSION,
     TRANSACTION_SEMANTIC_IDENTITY_VERSION,
@@ -21,7 +22,6 @@ from .transaction import (
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
-from .transaction_stage import TransactionStageRecord
 
 __all__ = [
     "AverageCostPoolKey",
