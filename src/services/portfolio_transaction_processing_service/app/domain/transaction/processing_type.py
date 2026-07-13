@@ -13,6 +13,7 @@ class ProcessingTypeSource(Protocol):
     transaction_type: str
     component_type: str | None
 
+
 FX_COMPONENT_PROCESSING_TYPES = {
     "FX_CONTRACT_OPEN",
     "FX_CONTRACT_CLOSE",

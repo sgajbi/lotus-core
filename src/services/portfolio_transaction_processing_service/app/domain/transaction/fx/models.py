@@ -208,9 +208,7 @@ class FxCanonicalTransaction:
                 source, "linked_transaction_group_id"
             ),
             calculation_policy_id=_optional_source_value(source, "calculation_policy_id"),
-            calculation_policy_version=_optional_source_value(
-                source, "calculation_policy_version"
-            ),
+            calculation_policy_version=_optional_source_value(source, "calculation_policy_version"),
             fx_cash_leg_role=_optional_source_value(source, "fx_cash_leg_role"),
             linked_fx_cash_leg_id=_optional_source_value(source, "linked_fx_cash_leg_id"),
             settlement_status=_optional_source_value(source, "settlement_status"),
@@ -229,18 +227,10 @@ class FxCanonicalTransaction:
             far_leg_group_id=_optional_source_value(source, "far_leg_group_id"),
             spot_exposure_model=_optional_source_value(source, "spot_exposure_model"),
             fx_realized_pnl_mode=_optional_source_value(source, "fx_realized_pnl_mode"),
-            realized_capital_pnl_local=_optional_source_value(
-                source, "realized_capital_pnl_local"
-            ),
+            realized_capital_pnl_local=_optional_source_value(source, "realized_capital_pnl_local"),
             realized_fx_pnl_local=_optional_source_value(source, "realized_fx_pnl_local"),
-            realized_total_pnl_local=_optional_source_value(
-                source, "realized_total_pnl_local"
-            ),
-            realized_capital_pnl_base=_optional_source_value(
-                source, "realized_capital_pnl_base"
-            ),
+            realized_total_pnl_local=_optional_source_value(source, "realized_total_pnl_local"),
+            realized_capital_pnl_base=_optional_source_value(source, "realized_capital_pnl_base"),
             realized_fx_pnl_base=_optional_source_value(source, "realized_fx_pnl_base"),
-            realized_total_pnl_base=_optional_source_value(
-                source, "realized_total_pnl_base"
-            ),
+            realized_total_pnl_base=_optional_source_value(source, "realized_total_pnl_base"),
         )
