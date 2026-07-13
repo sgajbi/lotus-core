@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 Issues: #752, contributes to #719 and #731; follow-ups #448 and #754
-Status: Locally validated; PR proof pending
+Status: Review fix-forward locally validated; refreshed PR proof pending
 
 ## Objective
 
@@ -36,8 +36,10 @@ negative proceeds are non-retryable hard rejections with stable family codes.
 
 - Added the service-owned `SettlementCashMovement` policy and stable reason-code vocabulary.
 - Routed generated settlement legs and cashflow materialization through the signed policy result.
-- Rejected invalid ordinary settlement before opening the combined transaction-processing unit of
-  work; direct adapter paths preserve the same application rejection.
+- Classified persisted-event idempotency before validating settlement economics so historical
+  physical and semantic duplicates remain harmless acknowledgements. Newly claimed and repair
+  deliveries are rejected before cost, position, cashflow, or commit; the uncommitted claim rolls
+  back with the unit of work. Direct adapter paths preserve the same application rejection.
 - Preserved bounded reason codes through terminal consumer handling without leaking raw payloads,
   credentials, or infrastructure detail.
 - Added independent Decimal golden vectors plus pure domain, validator, adapter, consumer,
@@ -77,6 +79,8 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
 - Seven PostgreSQL rejection/replay cases passed in 110.10 seconds.
 - Three PostgreSQL corrected-redelivery cases passed in 83.18 seconds.
 - Three PostgreSQL positive generated-settlement reconciliation cases passed in 86.19 seconds.
+- Review fix-forward proof passed 18 application cases plus two PostgreSQL historical physical and
+  semantic duplicate cases; neither duplicate created financial outbox or idempotency state.
 - Focused Ruff, RFC status ledger, and diff checks passed.
 - Governed SELL, DIVIDEND, and INTEREST contracts passed 152, 303, and 330 cases.
 - The complete PostgreSQL transaction-processing contract passed 70 cases in 296.59 seconds.
@@ -84,7 +88,8 @@ methodology/runtime gap; this slice preserves valid-input behavior and does not 
   integration-lite tests at 97.79% aggregate and 91.24% branch coverage.
 - Configured MyPy, architecture, application error taxonomy, security-control coverage, event,
   image-provenance, OpenAPI, API-vocabulary, documentation, wiki, Ruff, and diff gates passed.
-- PR checks and exact-main proof remain pending.
+- The initial PR gate passed all 40 checks. Review fix-forward PR checks and exact-main proof remain
+  pending.
 
 ## Documentation Decision
 
