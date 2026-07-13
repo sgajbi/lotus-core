@@ -24,6 +24,7 @@ RUNTIME_IMPORT_PREFIXES = (
     "botocore",
     "portfolio_common.kafka_utils",
 )
+DOMAIN_RUNTIME_IMPORT_PREFIXES = (*RUNTIME_IMPORT_PREFIXES, "portfolio_common.monitoring")
 APPLICATION_RUNTIME_IMPORT_PREFIXES = (*RUNTIME_IMPORT_PREFIXES, "pydantic")
 PORT_RUNTIME_IMPORT_PREFIXES = APPLICATION_RUNTIME_IMPORT_PREFIXES
 PERSISTENCE_IMPORT_PREFIXES = (
@@ -200,7 +201,7 @@ def _classify_domain_import(
     path: str, line: int, imported_module: str
 ) -> list[InProcessBoundaryFinding]:
     findings: list[InProcessBoundaryFinding] = []
-    if _matches_prefix(imported_module, RUNTIME_IMPORT_PREFIXES):
+    if _matches_prefix(imported_module, DOMAIN_RUNTIME_IMPORT_PREFIXES):
         findings.append(
             _finding(
                 path,

@@ -73,6 +73,18 @@ def test_boundary_guard_rejects_domain_runtime_import(tmp_path: Path) -> None:
     assert any(finding.rule == "domain-forbidden-runtime-import" for finding in findings)
 
 
+def test_boundary_guard_rejects_domain_monitoring_import(tmp_path: Path) -> None:
+    _write_standard(tmp_path)
+    _write(
+        tmp_path / "src/services/example_service/app/domain/policy.py",
+        "from portfolio_common.monitoring import REQUESTS_TOTAL\n",
+    )
+
+    findings = find_in_process_boundary_findings(tmp_path)
+
+    assert any(finding.rule == "domain-forbidden-runtime-import" for finding in findings)
+
+
 def test_boundary_guard_rejects_application_adapter_import(tmp_path: Path) -> None:
     _write_standard(tmp_path)
     _write(
