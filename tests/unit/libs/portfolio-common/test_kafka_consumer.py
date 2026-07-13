@@ -881,6 +881,26 @@ async def test_dlq_payload_is_correct(
     test_consumer._record_consumer_dlq_event.assert_awaited_once()
 
 
+async def test_dlq_payload_preserves_bounded_application_reason_code(
+    test_consumer: ConcreteTestConsumer,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    error = ValueError("settlement cash rejected")
+    error.reason_code = "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"  # type: ignore[attr-defined]
+    mock_msg = create_mock_message("key-domain-rejection", {"data": "value"})
+    test_consumer._record_consumer_dlq_event = AsyncMock()
+
+    result = await test_consumer._send_to_dlq_async(mock_msg, error)
+
+    assert result is True
+    payload = mock_kafka_producer.publish_message.call_args.kwargs["value"]
+    assert payload["error_reason_code"] == "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+    assert (
+        test_consumer._record_consumer_dlq_event.await_args.kwargs["error_reason_code"]
+        == "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+    )
+
+
 async def test_dlq_payload_and_headers_preserve_traceparent(
     test_consumer: ConcreteTestConsumer, mock_kafka_producer: MagicMock
 ):
