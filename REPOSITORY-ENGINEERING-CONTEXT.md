@@ -2270,8 +2270,9 @@ Most relevant current governance:
 171. Required external Docker images for compose-backed tests use
      `DockerImagePullPolicy`: three attempts, explicit 120-second subprocess timeout, exponential
      backoff with bounded jitter, retryable timeout/rate-limit/transient-registry classification,
-     permanent fail-fast behavior, and source-safe diagnostics. Do not expose raw pull stderr,
-     registry tokens, or authentication URLs. GitHub matrix cells have isolated Docker daemons;
+     bounded retry for unknown/empty failures, explicit permanent-marker fail-fast behavior, and
+     source-safe diagnostics. Do not expose raw pull stderr, registry tokens, or authentication
+     URLs. GitHub matrix cells have isolated Docker daemons;
      retain per-cell bounded acquisition unless a governed registry mirror or runner-level
      immutable image cache provides truthful shared evidence.
 

@@ -20,11 +20,13 @@ found no second direct `docker pull`; this helper is the shared acquisition boun
 - Recognized Docker daemon and Go client connection-timeout variants, including
   `connect: connection timed out` and `Client.Timeout exceeded while awaiting headers`, through the
   same bounded retry path.
-- Kept unknown, authentication, authorization, and missing-manifest failures permanent and
-  fail-fast.
+- Kept explicit authentication, authorization, and missing-manifest failures permanent and
+  fail-fast. Exact-main run `29219252434` proved that treating every unrecognized or empty pull
+  failure as permanent could still reject a valid image on its first attempt, so unknown failures
+  now consume the same bounded retry budget and remain fail-closed after exhaustion.
 - Replaced raw stderr output with image, failure class, attempt, outcome, and elapsed diagnostics.
-- Added controlled timeout-then-success, timeout exhaustion, permanent failure, classification,
-  timeout propagation, jitter, and secret non-disclosure tests.
+- Added controlled timeout/unknown-failure recovery, timeout/unknown exhaustion, permanent
+  failure, classification, timeout propagation, jitter, and secret non-disclosure tests.
 
 ## Compatibility And Ownership
 
