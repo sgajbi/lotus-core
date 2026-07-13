@@ -139,3 +139,21 @@ def test_rfc_status_ledger_rejects_implemented_entry_without_test_evidence(
     errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
 
     assert any("implemented entries must define test_evidence" in error for error in errors)
+
+
+def test_rfc_status_ledger_rejects_status_that_conflicts_with_rfc_index(tmp_path: Path) -> None:
+    _write_required_files(tmp_path)
+    (tmp_path / "docs" / "RFCs" / "RFC-INDEX.md").write_text(
+        "| RFC ID | Title | Original | Current | Classification | Evidence | Next |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| RFC-001 | First | Implemented | Implemented | Fully implemented and aligned | "
+        "evidence | maintain |\n",
+        encoding="utf-8",
+    )
+    ledger = _ledger()
+    ledger["entries"][0]["rfc_id"] = "RFC-001"  # type: ignore[index]
+    ledger["entries"][0]["status"] = "partially_implemented"  # type: ignore[index]
+
+    errors = guard.evaluate_ledger(ledger, repo_root=tmp_path)
+
+    assert any("status must be 'implemented' to match the RFC index" in error for error in errors)

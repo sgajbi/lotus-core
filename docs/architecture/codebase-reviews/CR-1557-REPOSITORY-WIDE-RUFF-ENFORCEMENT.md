@@ -27,6 +27,8 @@ as well as incomplete.
   covered by repository-wide check and format behavior on supported platforms.
 - Marked RFC-073's global-gate tightening slice complete and updated README, repository context, and
   wiki source with the canonical command and scope.
+- Aligned the RFC index and machine-readable ledger and extended the ledger guard so indexed RFC
+  status cannot diverge from any ledger entry for the same RFC.
 
 ## Measurable Improvement
 
@@ -50,6 +52,7 @@ and wiki validation guidance changed because local command truth changed.
 - `python -m ruff check . --statistics`: passed.
 - `python -m ruff format --check .`: 1,793 files already formatted.
 - Focused CI-governance and repository-wide path tests: 23 passed.
+- RFC index/ledger alignment guard tests: 7 passed.
 - `make lint`: passed the complete Ruff and governed contract-guard chain.
 - `make quality-wiki-docs-gate`: passed all wiki, front-door, architecture catalog, RFC status,
   supported-feature, and incident-playbook checks.
