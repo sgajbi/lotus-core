@@ -7,8 +7,8 @@ from typing import cast
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import FxRate, Instrument
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.timeseries_market_data import (
     TimeseriesFxRate,
     TimeseriesInstrument,

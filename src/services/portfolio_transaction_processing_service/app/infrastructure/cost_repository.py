@@ -9,7 +9,6 @@ from decimal import Decimal
 from time import monotonic
 from typing import Any, List, Optional, cast
 
-from portfolio_common.currency_codes import normalize_currency_code
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AverageCostPoolState,
@@ -25,6 +24,7 @@ from portfolio_common.database_models import (
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait

@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
-from portfolio_common.currency_codes import normalize_currency_code
+from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
