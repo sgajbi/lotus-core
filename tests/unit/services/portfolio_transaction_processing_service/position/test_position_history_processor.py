@@ -148,6 +148,28 @@ async def test_processor_materializes_current_history_and_rearms_downstream_gene
 
 
 @pytest.mark.asyncio
+async def test_processor_acquires_key_lock_before_deleting_current_history() -> None:
+    repository, _, _, processor = _ports()
+    transaction = _transaction()
+    repository.list_transactions_from.return_value = (transaction,)
+    call_order: list[str] = []
+
+    async def acquire_lock(**_: object) -> None:
+        call_order.append("lock")
+
+    async def delete_records(**_: object) -> int:
+        call_order.append("delete")
+        return 0
+
+    repository.acquire_replay_lock.side_effect = acquire_lock
+    repository.delete_records_from.side_effect = delete_records
+
+    await processor.process(transaction)
+
+    assert call_order[:2] == ["lock", "delete"]
+
+
+@pytest.mark.asyncio
 async def test_processor_does_not_rearm_generation_when_no_history_is_materialized() -> None:
     repository, state_store, observer, processor = _ports()
 
