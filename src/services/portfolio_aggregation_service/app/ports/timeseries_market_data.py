@@ -1,4 +1,4 @@
-"""Port for market-data inputs required by timeseries calculations."""
+"""Market-data read capability required by portfolio timeseries aggregation."""
 
 from datetime import date
 from typing import Protocol
