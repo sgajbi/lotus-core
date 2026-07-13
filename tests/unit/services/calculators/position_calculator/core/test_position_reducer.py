@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState,
     calculate_next_position_state,
     cash_position_deltas,

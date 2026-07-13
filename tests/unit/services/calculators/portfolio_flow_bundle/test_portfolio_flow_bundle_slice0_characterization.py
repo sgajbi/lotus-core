@@ -10,7 +10,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
     CashflowClassification,
     CashflowTiming,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (

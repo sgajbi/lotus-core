@@ -10,10 +10,10 @@ from portfolio_common.events import TransactionEvent
 from portfolio_common.position_state_repository import PositionStateRepository
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.position_reducer import (
+from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     cash_position_deltas,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.position_calculation_workflow import (  # noqa: E501

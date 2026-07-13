@@ -8,7 +8,11 @@ POSITION_LOGIC_MODULE = Path(
     "position_calculation_workflow.py"
 )
 POSITION_REDUCER_MODULE = Path(
-    "src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py"
+    "src/services/portfolio_transaction_processing_service/app/domain/position/reducer.py"
+)
+LEGACY_POSITION_DOMAIN_MODULES = (
+    Path("src/services/portfolio_transaction_processing_service/app/domain/position_history.py"),
+    Path("src/services/portfolio_transaction_processing_service/app/domain/position_reducer.py"),
 )
 
 REQUIRED_REDUCER_SNIPPETS = (
@@ -90,6 +94,15 @@ def find_position_reducer_boundary_findings(
             relative_path=POSITION_REDUCER_MODULE,
             snippets=FORBIDDEN_REDUCER_SNIPPETS,
         )
+    )
+    findings.extend(
+        PositionReducerBoundaryFinding(
+            path=legacy_path.as_posix(),
+            snippet="<legacy-position-domain-module>",
+            reason="position domain code belongs in the domain/position package",
+        )
+        for legacy_path in LEGACY_POSITION_DOMAIN_MODULES
+        if (root / legacy_path).exists()
     )
     findings.extend(
         _required_snippet_findings(

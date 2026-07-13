@@ -19,7 +19,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.booked_transaction import BookedTransaction
-from ..domain.position_history import PositionHistoryRecord
+from ..domain.position.history import PositionHistoryRecord
 
 logger = logging.getLogger(__name__)
 

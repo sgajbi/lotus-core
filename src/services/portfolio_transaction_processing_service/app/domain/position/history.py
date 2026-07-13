@@ -12,8 +12,8 @@ from portfolio_common.ca_bundle_a_ordering import (
     ca_bundle_a_target_order_key,
 )
 
-from .booked_transaction import BookedTransaction
-from .position_reducer import PositionBalanceState, calculate_next_position_state
+from ..booked_transaction import BookedTransaction
+from .reducer import PositionBalanceState, calculate_next_position_state
 
 PositionTransactionOrderKey = tuple[date, datetime, int, int, str, datetime, str]
 
