@@ -4,6 +4,7 @@ import functools
 import inspect
 import json
 import logging
+import re
 import time
 import traceback
 from abc import ABC, abstractmethod
@@ -97,12 +98,16 @@ _DLQ_SENSITIVE_HEADER_TOKENS = (
     "connection_string",
     "credential",
 )
+_APPLICATION_REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,95}$")
 
 
 def classify_dlq_reason_code(error: Exception) -> str:
     """
     Maps terminal consumer exceptions into a deterministic reason-code taxonomy.
     """
+    declared_reason_code = _declared_application_reason_code(error)
+    if declared_reason_code is not None:
+        return declared_reason_code
     combined = _combined_error_text(error)
     if "json" in combined and _contains_any_token(combined, _DLQ_DESERIALIZATION_TOKENS):
         return DLQ_REASON_CODE_DESERIALIZATION
@@ -110,6 +115,16 @@ def classify_dlq_reason_code(error: Exception) -> str:
         if _contains_any_token(combined, tokens):
             return reason_code
     return DLQ_REASON_CODE_UNCLASSIFIED
+
+
+def _declared_application_reason_code(error: Exception) -> str | None:
+    value = getattr(error, "reason_code", None)
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().upper()
+    if not _APPLICATION_REASON_CODE_PATTERN.fullmatch(normalized):
+        return None
+    return normalized
 
 
 def _combined_error_text(error: Exception) -> str:

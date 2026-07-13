@@ -1355,6 +1355,25 @@ async def test_classify_dlq_reason_code_timeout():
 
 
 @pytest.mark.parametrize(
+    ("declared_reason_code", "expected_reason_code"),
+    [
+        ("SELL_010_NON_POSITIVE_NET_SETTLEMENT", "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
+        (" interest_017_non_positive_net_settlement ", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
+        ("transaction-id-123", "VALIDATION_ERROR"),
+        ("A" * 97, "VALIDATION_ERROR"),
+    ],
+)
+async def test_classify_dlq_reason_code_preserves_only_bounded_application_codes(
+    declared_reason_code: str,
+    expected_reason_code: str,
+) -> None:
+    error = ValueError("required settlement cash is invalid")
+    error.reason_code = declared_reason_code  # type: ignore[attr-defined]
+
+    assert classify_dlq_reason_code(error) == expected_reason_code
+
+
+@pytest.mark.parametrize(
     ("error", "expected_reason_code"),
     [
         (ValueError("required portfolio_id is missing"), "VALIDATION_ERROR"),
