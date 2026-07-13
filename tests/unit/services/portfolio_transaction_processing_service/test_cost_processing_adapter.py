@@ -12,8 +12,13 @@ from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
+    TransactionProcessingRejected,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SettlementCashRejectionReasonCode,
+    SettlementCashValidationError,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
@@ -108,3 +113,56 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
 
     assert exc_info.value.reason_code == "cost_dependency_unavailable"
     assert exc_info.value.retryable is True
+
+
+@pytest.mark.asyncio
+async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -> None:
+    transaction = BookedTransaction(
+        transaction_id="SELL-FEE-DOMINATED-001",
+        portfolio_id="PB-001",
+        instrument_id="INST-001",
+        security_id="SEC-001",
+        transaction_date=datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity=Decimal("1"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1"),
+        trade_fee=Decimal("2"),
+        trade_currency="SGD",
+        currency="SGD",
+    )
+    processed_event = TransactionEvent.model_validate(
+        {field.name: getattr(transaction, field.name) for field in fields(transaction)}
+    )
+    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository.get_portfolio.return_value = Portfolio(
+        base_currency="SGD",
+        portfolio_id="PB-001",
+    )
+    repository.get_instrument.return_value = MagicMock()
+    workflow = MagicMock()
+    workflow._prepare_transaction_event = AsyncMock(return_value=(processed_event, "SELL", "FIFO"))
+    workflow._assert_required_instrument_reference_available = MagicMock()
+    workflow._build_events_to_publish = AsyncMock(
+        side_effect=SettlementCashValidationError(
+            reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),
+            field="trade_fee",
+            message="SELL settlement cash must remain greater than zero after transaction fees.",
+            available_proceeds=Decimal("1"),
+            fee_amount=Decimal("2"),
+            net_settlement_amount=Decimal("-1"),
+        )
+    )
+    adapter = CostProcessingCompatibilityAdapter(
+        workflow=workflow,
+        repository=repository,
+        outbox_repository=AsyncMock(spec=OutboxRepository),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await adapter.process(transaction, correlation_id="corr-001", traceparent=None)
+
+    assert raised.value.reason_code == "SELL_010_NON_POSITIVE_NET_SETTLEMENT"
+    assert raised.value.retryable is False
+    assert raised.value.detail["available_proceeds"] == "1"
+    assert raised.value.detail["fee_amount"] == "2"

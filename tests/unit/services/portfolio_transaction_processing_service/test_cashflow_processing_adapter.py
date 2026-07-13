@@ -14,6 +14,10 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingRejected,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    SettlementCashRejectionReasonCode,
+    SettlementCashValidationError,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowProcessingCompatibilityAdapter,
     CashflowProcessingOutcome,
@@ -121,3 +125,28 @@ async def test_cashflow_adapter_maps_terminal_policy_errors(
 
     assert exc_info.value.reason_code == reason_code
     assert exc_info.value.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_cashflow_adapter_maps_settlement_rejection_for_dlq_delivery() -> None:
+    adapter, workflow = _adapter(CashflowStageResult(outcome=CashflowProcessingOutcome.PROCESSED))
+    workflow.stage_valid_event.side_effect = SettlementCashValidationError(
+        reason_code=(SettlementCashRejectionReasonCode.DIVIDEND_NON_POSITIVE_NET_SETTLEMENT),
+        field="trade_fee",
+        message="DIVIDEND settlement cash must remain greater than zero after transaction fees.",
+        available_proceeds=Decimal("10"),
+        fee_amount=Decimal("11"),
+        net_settlement_amount=Decimal("-1"),
+    )
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await adapter.process(
+            _transaction(),
+            event_id="transactions.persisted-0-42",
+            correlation_id="corr-001",
+            traceparent=None,
+        )
+
+    assert raised.value.reason_code == "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"
+    assert raised.value.retryable is False
+    assert raised.value.detail["net_settlement_amount"] == "-1"

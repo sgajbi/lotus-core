@@ -8,8 +8,13 @@ from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..application import TransactionProcessingError, TransactionProcessingRejected
+from ..application import (
+    TransactionProcessingError,
+    TransactionProcessingRejected,
+    build_settlement_cash_rejection,
+)
 from ..domain import BookedTransaction
+from ..domain.transaction import SettlementCashValidationError
 from ..ports import CashflowProcessingResult
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_staging_workflow import (
@@ -103,6 +108,8 @@ class CashflowProcessingCompatibilityAdapter:
                 },
                 retryable=False,
             ) from exc
+        except SettlementCashValidationError as exc:
+            raise build_settlement_cash_rejection(transaction, exc) from exc
         if stage_result.outcome is CashflowProcessingOutcome.EPOCH_REJECTED:
             raise TransactionProcessingRejected(
                 reason_code="cashflow_epoch_rejected",

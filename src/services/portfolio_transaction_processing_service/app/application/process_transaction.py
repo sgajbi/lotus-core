@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from portfolio_common.domain.transaction_control_codes import (
+    normalize_transaction_control_code,
+)
+
 from ..domain import (
     BookedTransaction,
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
+)
+from ..domain.transaction import (
+    ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
+    SettlementCashValidationError,
+    calculate_settlement_cash_movement,
 )
 from ..ports import (
     PositionProcessingResult,
@@ -17,6 +26,7 @@ from ..ports import (
 from .commands import ProcessTransactionCommand, TransactionProcessingIntent
 from .errors import TransactionProcessingRejected
 from .results import ProcessTransactionResult, TransactionProcessingStatus
+from .settlement_cash_rejection import build_settlement_cash_rejection
 
 
 def _cashflow_stage_transactions(
@@ -61,6 +71,16 @@ def _rebuilt_position_transactions(
     )
 
 
+def _validate_ordinary_settlement_cash(transaction: BookedTransaction) -> None:
+    transaction_type = normalize_transaction_control_code(transaction.transaction_type)
+    if transaction_type not in ORDINARY_SETTLEMENT_TRANSACTION_TYPES:
+        return
+    try:
+        calculate_settlement_cash_movement(transaction)
+    except SettlementCashValidationError as exc:
+        raise build_settlement_cash_rejection(transaction, exc) from exc
+
+
 class ProcessTransactionUseCase:
     def __init__(
         self,
@@ -89,6 +109,7 @@ class ProcessTransactionUseCase:
     ) -> ProcessTransactionResult:
         transaction = command.transaction
         metadata = command.metadata
+        _validate_ordinary_settlement_cash(transaction)
         async with self._unit_of_work_factory() as unit_of_work:
             identity = build_transaction_semantic_identity(transaction)
             with self._observer.observe(

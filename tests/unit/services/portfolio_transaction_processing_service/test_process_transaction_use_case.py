@@ -464,6 +464,69 @@ async def test_use_case_rejects_material_semantic_conflict_before_financial_work
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "transaction_type",
+        "gross_amount",
+        "fee_amount",
+        "withholding_tax_amount",
+        "reason_code",
+    ),
+    [
+        ("SELL", "100", "100", None, "SELL_010_NON_POSITIVE_NET_SETTLEMENT"),
+        ("DIVIDEND", "100", "100.01", None, "DIVIDEND_013_NON_POSITIVE_NET_SETTLEMENT"),
+        ("INTEREST", "10", "8", "2", "INTEREST_017_NON_POSITIVE_NET_SETTLEMENT"),
+    ],
+)
+async def test_use_case_rejects_non_positive_settlement_before_opening_unit_of_work(
+    transaction_type: str,
+    gross_amount: str,
+    fee_amount: str,
+    withholding_tax_amount: str | None,
+    reason_code: str,
+) -> None:
+    calls: list[str] = []
+    unit_of_work = _UnitOfWork(calls=calls)
+    transaction = replace(
+        _transaction(),
+        transaction_type=transaction_type,
+        gross_transaction_amount=Decimal(gross_amount),
+        trade_fee=Decimal(fee_amount),
+        withholding_tax_amount=(
+            Decimal(withholding_tax_amount) if withholding_tax_amount is not None else None
+        ),
+        interest_direction=("INCOME" if transaction_type == "INTEREST" else None),
+    )
+    command = replace(_command(), transaction=transaction)
+    observer = _RecordingObserver()
+
+    with pytest.raises(TransactionProcessingRejected) as raised:
+        await ProcessTransactionUseCase(
+            lambda: unit_of_work,
+            observer=observer,
+        ).execute(command)
+
+    assert raised.value.reason_code == reason_code
+    assert raised.value.retryable is False
+    assert raised.value.detail == {
+        "portfolio_id": "PB-001",
+        "transaction_id": "TX-001",
+        "transaction_type": transaction_type,
+        "field": "trade_fee",
+        "available_proceeds": ("8" if transaction_type == "INTEREST" else "100"),
+        "fee_amount": fee_amount,
+        "net_settlement_amount": ("0" if fee_amount in {"100", "8"} else "-0.01"),
+    }
+    assert calls == []
+    assert observer.records == [
+        (
+            TransactionProcessingOperation.TRANSACTION,
+            TransactionProcessingOutcome.REJECTED,
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_repair_intent_claims_payload_specific_correction_identity() -> None:
     calls: list[str] = []
     unit_of_work = _UnitOfWork(
