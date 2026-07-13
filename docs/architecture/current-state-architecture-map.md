@@ -150,10 +150,10 @@ before full production cutover is claimed.
 source and test ownership is under `portfolio_transaction_processing_service`; do not recreate
 standalone calculator packages, consumers, images, or transaction boundaries.
 
-The shared `portfolio_common.transaction_domain` package no longer owns ordinary BUY, SELL,
-DIVIDEND, or INTEREST models and policy facades. It retains only independently evidenced corporate
-action, FX, and effective-processing compatibility contracts. New ordinary transaction behavior
-belongs in the service-owned framework-neutral transaction domain.
+The retired `portfolio_common.transaction_domain` package no longer owns transaction models or
+policy facades. Ordinary settlement, corporate-action, FX, and effective-processing behavior now
+belongs in the service-owned transaction domain. Shared libraries retain only owner-neutral event,
+registry, normalization, and infrastructure contracts.
 
 ## Database Ownership
 

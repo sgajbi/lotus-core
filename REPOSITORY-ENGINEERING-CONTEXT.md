@@ -843,11 +843,12 @@ Most relevant current governance:
     tests while failing in installed service images. Prefer relative imports for same-service code,
     shared libraries for durable cross-service contracts, and explicit migration plans for
     transitional cross-service app imports that are still mounted in compose.
-47. FX contract lifecycle rows use shared transaction-domain cashflow semantics. `FX_CONTRACT_OPEN`
+47. FX contract lifecycle rows use service-owned transaction-domain cashflow semantics. `FX_CONTRACT_OPEN`
     and `FX_CONTRACT_CLOSE` are non-cashflow processing types: they carry position exposure, while
     settlement cash movements are represented by separate FX cash settlement rows. Cashflow
     consumers, pipeline readiness, reconciliation, and future supportability code must use
-    `portfolio_common.transaction_domain.requires_cashflow_processing(...)` instead of duplicating
+    `portfolio_transaction_processing_service.app.domain.transaction.requires_cashflow_processing(...)`
+    instead of duplicating
     local FX lifecycle skip lists.
 48. Runtime CI gates that bring up the compose-backed stack consume one exact-source image set per
     workflow SHA. The existing `Validate Docker Build` job is the sole producer after coverage; it
@@ -983,9 +984,10 @@ Most relevant current governance:
     hand-written production defaults; use the shared profile helper so query service, query control
     plane, and future business/operator HTTP apps remain consistent. This is service-local proof;
     gateway/platform ingress and IAM closure still require higher-lane evidence.
-61. Cost-calculator FX processing uses the shared canonical FX baseline helper. `FX_SPOT`,
+61. Cost-basis FX processing uses the service-owned canonical FX baseline helper. `FX_SPOT`,
     `FX_FORWARD`, and `FX_SWAP` must route through
-    `portfolio_common.transaction_domain.build_fx_baseline_processing_update(...)` after canonical
+    `portfolio_transaction_processing_service.app.domain.transaction.fx.build_fx_baseline_processing_update(...)`
+    after canonical
     FX validation instead of service-local pending strategies or duplicated realized-P&L mode
     branches. Baseline engine and consumer paths support `NONE` and `UPSTREAM_PROVIDED`
     `fx_realized_pnl_mode`; `CASH_LOT_COST_METHOD` remains an explicit future extension that must
@@ -1723,11 +1725,13 @@ Most relevant current governance:
      policy, generated settlement-leg economics, and upstream pairing belong under
      `app/domain/transaction`. These policies consume immutable `BookedTransaction`; infrastructure
      maps existing `TransactionEvent` envelopes at the boundary and must preserve all governed
-     envelope fields. `portfolio_common.transaction_domain` retains only cross-cutting corporate
-     action, FX, and effective-processing compatibility contracts. Do not restore ordinary
-     Pydantic canonical models, per-type linkage/validation modules, cash-entry helpers, or
-     settlement-pairing facades under the shared library. The transaction-domain structure guard
-     makes that retirement executable.
+     envelope fields. The retired `portfolio_common.transaction_domain` package has no remaining
+     owner-neutral runtime contract. Corporate-action, FX, and effective-processing policy now
+     belongs to the service-owned transaction domain. Do not restore Pydantic canonical models,
+     per-type linkage/validation modules, cash-entry helpers, settlement-pairing facades, or
+     calculation policy under the shared library. The transaction-domain structure guard makes
+     that retirement executable. FX economics use immutable dataclass values; event and
+     persistence representations must remain at delivery and infrastructure boundaries.
 128. Cost-basis strategies must reconcile aggregate holdings with source-level lot evidence. FIFO
      returns actual remaining source-lot quantity and cost. AVCO returns deterministic pro-rata
      source quantity and local/base cost whose sums exactly equal pooled holdings after every
@@ -2371,6 +2375,14 @@ Most relevant current governance:
      `portfolio_common.ca_bundle_a_ordering`, or the unused
      `portfolio_common.events.transaction_event_ordering_key`. Shared event models own payload and
      boundary normalization, not calculation replay ordering.
+180. Foreign-exchange validation, linkage, contract-instrument construction, baseline P&L policy,
+     reason codes, and models are owned by
+     `portfolio_transaction_processing_service.app.domain.transaction.fx`. Effective processing
+     type selection is owned by the parent transaction domain and is shared by cost, cashflow, and
+     position policies in-process. Do not restore `portfolio_common.transaction_domain` or import
+     service-owned FX policy through a shared compatibility facade. FX canonical values are
+     immutable and framework-independent; do not reintroduce Pydantic, event-envelope, ORM, or
+     transport models into the domain package.
 
 ## Context Maintenance Rule
 

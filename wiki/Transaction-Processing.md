@@ -86,10 +86,12 @@ economics only when Core supplies them through the explicit position-history reb
 
 ## Shared-Library Boundary
 
-`portfolio_common.transaction_domain` does not own ordinary BUY, SELL, DIVIDEND, or INTEREST models
-or policy facades. It retains corporate-action, FX, and effective-processing compatibility only
-until each responsibility has an independently evidenced target owner. Do not recreate deleted
-ordinary transaction modules in the shared package or retired calculator source roots.
+`portfolio_common.transaction_domain` is retired. Ordinary settlement, corporate-action, FX, and
+effective-processing policies are owned by the unified transaction-processing domain. Shared
+libraries retain only owner-neutral event contracts, controlled vocabularies, normalization, and
+infrastructure support. Do not recreate transaction policy facades in the shared package or the
+retired calculator source roots. FX canonical values are immutable and framework-independent;
+transport events are mapped at delivery and infrastructure boundaries.
 
 ## Extension Rule
 
