@@ -28,6 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolCheckpointRecord,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -35,6 +36,12 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+
+def _fx_rate_port() -> AsyncMock:
+    """Provide an isolated effective-rate dependency for one workflow test."""
+
+    return AsyncMock(spec=CostBasisFxRatePort)
 
 
 def _event(
@@ -164,6 +171,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             portfolio_base_currency="USD",
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
+            fx_rates=_fx_rate_port(),
             cost_basis_method=method,
         )
 
@@ -225,6 +233,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        fx_rates=_fx_rate_port(),
         cost_basis_method=method,
     )
 
@@ -286,6 +295,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        fx_rates=_fx_rate_port(),
         cost_basis_method=method,
     )
 
@@ -332,6 +342,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        fx_rates=_fx_rate_port(),
         cost_basis_method=method,
     )
 
@@ -398,6 +409,7 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
         security_id="S1",
         repo=repo,
         reference_data=reference_data,
+        fx_rates=_fx_rate_port(),
     )
 
     assert [transaction.transaction_id for transaction in plan.source_transactions] == [
@@ -432,6 +444,7 @@ async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> No
             security_id="S1",
             repo=repo,
             reference_data=reference_data,
+            fx_rates=_fx_rate_port(),
         )
 
     repo.get_transaction_history.assert_not_awaited()
@@ -474,6 +487,7 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
             security_id="S1",
             repo=repo,
             reference_data=reference_data,
+            fx_rates=_fx_rate_port(),
         )
 
 
@@ -507,6 +521,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             portfolio_base_currency="USD",
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
+            fx_rates=_fx_rate_port(),
             cost_basis_method=CostBasisMethod.FIFO,
         )
 
@@ -546,6 +561,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        fx_rates=_fx_rate_port(),
         cost_basis_method=cost_basis_method,
     )
     await workflow._update_open_lot_states_if_required(

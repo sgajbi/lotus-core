@@ -18,6 +18,7 @@ from ..domain import BookedTransaction
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import (
     CorporateActionReconciliationRepository,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -54,6 +55,7 @@ class CostEffectsStager(Protocol):
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
@@ -70,12 +72,14 @@ class CostProcessingCompatibilityAdapter:
         workflow: CostEffectsStager,
         repository: CostCalculatorRepository,
         reference_data: CostBasisReferenceDataPort,
+        fx_rates: CostBasisFxRatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         outbox_repository: OutboxRepository,
     ) -> None:
         self._workflow = workflow
         self._repository = repository
         self._reference_data = reference_data
+        self._fx_rates = fx_rates
         self._reconciliation_repository = reconciliation_repository
         self._outbox_repository = outbox_repository
 
@@ -104,6 +108,7 @@ class CostProcessingCompatibilityAdapter:
             portfolio=portfolio,
             instrument=instrument,
             repo=self._repository,
+            fx_rates=self._fx_rates,
             reconciliation_repository=self._reconciliation_repository,
             cost_basis_method=prepared.cost_basis_method,
             outbox_repo=self._outbox_repository,

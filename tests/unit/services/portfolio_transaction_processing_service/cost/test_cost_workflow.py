@@ -33,6 +33,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CorporateActionReconciliationRepository,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -85,6 +86,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         currency="USD",
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     workflow = CostCalculationWorkflow()
     calculation = MagicMock(
         processed=[],
@@ -105,6 +107,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         portfolio=MagicMock(base_currency="USD"),
         instrument=MagicMock(),
         repo=repo,
+        fx_rates=fx_rates,
         cost_basis_method=CostBasisMethod.FIFO,
     )
 
@@ -191,6 +194,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     )
     instrument_event = MagicMock()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
@@ -217,12 +221,23 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         portfolio=portfolio,
         instrument=instrument,
         repo=repo,
+        fx_rates=fx_rates,
         reconciliation_repository=reconciliation_repository,
         cost_basis_method=CostBasisMethod.FIFO,
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
     )
 
+    workflow._build_events_to_publish.assert_awaited_once_with(
+        event=event,
+        event_transaction_type="BUY",
+        route=cost_basis_processing.CostProcessingRoute.COST_BASIS,
+        portfolio=portfolio,
+        instrument=instrument,
+        repo=repo,
+        fx_rates=fx_rates,
+        cost_basis_method=CostBasisMethod.FIFO,
+    )
     workflow._build_emitted_transaction_events.assert_awaited_once_with(
         events_to_publish=[event],
         repo=repo,
@@ -260,6 +275,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
@@ -269,6 +285,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             workflow=MagicMock(),
             repository=repo,
             reference_data=reference_data,
+            fx_rates=fx_rates,
             reconciliation_repository=reconciliation_repository,
             outbox_repository=outbox_repo,
         ).stage_event(
@@ -405,7 +422,7 @@ async def test_fee_amount_normalizer_normalizes_counted_amount_once() -> None:
 async def test_fx_enrichment_normalizes_same_currency_without_lookup(
     cost_calculation_workflow: CostCalculationWorkflow,
 ):
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     transactions = [
         {
             "transaction_id": "BUY_PADDED_CCY_01",
@@ -417,10 +434,10 @@ async def test_fx_enrichment_normalizes_same_currency_without_lookup(
     enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency=" USD ",
-        repo=repo,
+        fx_rates=fx_rates,
     )
 
-    repo.get_fx_rate_window.assert_not_awaited()
+    fx_rates.get_fx_rate_window.assert_not_awaited()
     assert enriched[0]["trade_currency"] == "USD"
     assert enriched[0]["portfolio_base_currency"] == "USD"
     assert "transaction_fx_rate" not in enriched[0]
@@ -429,8 +446,8 @@ async def test_fx_enrichment_normalizes_same_currency_without_lookup(
 async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_fx_rate_window.return_value = [
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = [
         EffectiveFxRate(
             effective_date=date(2026, 4, 1),
             rate=Decimal("1.40"),
@@ -453,10 +470,10 @@ async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
     enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency="SGD",
-        repo=repo,
+        fx_rates=fx_rates,
     )
 
-    repo.get_fx_rate_window.assert_awaited_once_with(
+    fx_rates.get_fx_rate_window.assert_awaited_once_with(
         from_currency="EUR",
         to_currency="SGD",
         start_date=date(2026, 4, 5),
@@ -471,8 +488,8 @@ async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
 async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_pair(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_fx_rate_window.side_effect = [
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.side_effect = [
         [EffectiveFxRate(effective_date=date(2026, 4, 1), rate=Decimal("1.40"))],
         [EffectiveFxRate(effective_date=date(2026, 4, 2), rate=Decimal("1.75"))],
     ]
@@ -497,10 +514,10 @@ async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_p
     enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
         transactions=transactions,
         portfolio_base_currency="SGD",
-        repo=repo,
+        fx_rates=fx_rates,
     )
 
-    assert repo.get_fx_rate_window.await_args_list == [
+    assert fx_rates.get_fx_rate_window.await_args_list == [
         call(
             from_currency="EUR",
             to_currency="SGD",
@@ -524,8 +541,8 @@ async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_p
 async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_rate(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_fx_rate_window.return_value = [
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    fx_rates.get_fx_rate_window.return_value = [
         EffectiveFxRate(effective_date=date(2026, 4, 10), rate=Decimal("1.45"))
     ]
 
@@ -539,7 +556,7 @@ async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_ra
                 }
             ],
             portfolio_base_currency="SGD",
-            repo=repo,
+            fx_rates=fx_rates,
         )
 
 

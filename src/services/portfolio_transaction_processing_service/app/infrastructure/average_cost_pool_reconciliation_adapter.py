@@ -15,8 +15,15 @@ from ..domain import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from ..ports import AverageCostPoolPersistedSummary, CostBasisReferenceDataPort
-from .cost_basis import SqlAlchemyCostBasisReferenceDataRepository
+from ..ports import (
+    AverageCostPoolPersistedSummary,
+    CostBasisFxRatePort,
+    CostBasisReferenceDataPort,
+)
+from .cost_basis import (
+    SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisReferenceDataRepository,
+)
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -46,11 +53,15 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         reference_data_factory: Callable[[AsyncSession], CostBasisReferenceDataPort] = (
             SqlAlchemyCostBasisReferenceDataRepository
         ),
+        fx_rate_factory: Callable[[AsyncSession], CostBasisFxRatePort] = (
+            SqlAlchemyCostBasisFxRateRepository
+        ),
     ) -> None:
         self._session_factory = session_factory
         self._workflow = workflow
         self._repository_factory = repository_factory
         self._reference_data_factory = reference_data_factory
+        self._fx_rate_factory = fx_rate_factory
 
     async def list_candidates(
         self,
@@ -110,6 +121,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                 async with session.begin():
                     repository = self._repository_factory(session)
                     reference_data = self._reference_data_factory(session)
+                    fx_rates = self._fx_rate_factory(session)
                     await repository.acquire_cost_basis_processing_lock(
                         key.portfolio_id,
                         key.security_id,
@@ -119,6 +131,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         security_id=key.security_id,
                         repo=repository,
                         reference_data=reference_data,
+                        fx_rates=fx_rates,
                     )
                     expected_source_count = len(plan.source_transactions)
                     expected_quantity = plan.checkpoint.quantity

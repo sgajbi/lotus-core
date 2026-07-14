@@ -28,6 +28,7 @@ from .cashflow_processing_adapter import (
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_basis import (
     SqlAlchemyCorporateActionReconciliationRepository,
+    SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
 from .cost_processing_adapter import CostEffectsStager, CostProcessingCompatibilityAdapter
@@ -150,6 +151,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             workflow=self._cost_workflow,
             repository=CostCalculatorRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
+            fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
             outbox_repository=outbox_repository,
         )

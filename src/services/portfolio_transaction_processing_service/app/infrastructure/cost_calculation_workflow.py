@@ -58,6 +58,7 @@ from ..ports import (
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
     CostBasisCalculationObserver,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -220,6 +221,7 @@ class CostCalculationWorkflow:
         security_id: str,
         repo: CostCalculatorRepository,
         reference_data: CostBasisReferenceDataPort,
+        fx_rates: CostBasisFxRatePort,
     ) -> AverageCostPoolRebuildPlan:
         portfolio = await reference_data.get_cost_basis_portfolio(portfolio_id)
         if portfolio is None:
@@ -252,7 +254,7 @@ class CostCalculationWorkflow:
         enriched_history = await self._enrich_transactions_with_fx(
             transactions=history_raw,
             portfolio_base_currency=portfolio.base_currency,
-            repo=repo,
+            fx_rates=fx_rates,
         )
         processed, errored, source_states = self._get_cost_basis_timeline_processor(
             CostBasisMethod.AVCO
@@ -318,7 +320,7 @@ class CostCalculationWorkflow:
         self,
         transactions: List[dict[str, Any]],
         portfolio_base_currency: str,
-        repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
     ) -> List[dict[str, Any]]:
         """Attach latest-on-or-before FX rates using one bounded read per currency pair."""
         portfolio_base_currency = _normalize_event_code(portfolio_base_currency)
@@ -348,13 +350,13 @@ class CostCalculationWorkflow:
 
         for (trade_currency, base_currency), pair_transactions in transactions_by_pair.items():
             requested_dates = [transaction_date for _, transaction_date in pair_transactions]
-            fx_rates = await repo.get_fx_rate_window(
+            rate_window = await fx_rates.get_fx_rate_window(
                 from_currency=trade_currency,
                 to_currency=base_currency,
                 start_date=min(requested_dates),
                 end_date=max(requested_dates),
             )
-            rate_dates = [fx_rate.effective_date for fx_rate in fx_rates]
+            rate_dates = [fx_rate.effective_date for fx_rate in rate_window]
             for txn_raw, transaction_date in pair_transactions:
                 effective_rate_index = bisect_right(rate_dates, transaction_date) - 1
                 if effective_rate_index < 0:
@@ -362,7 +364,7 @@ class CostCalculationWorkflow:
                         f"FX rate for {trade_currency}->{base_currency} on "
                         f"{txn_raw['transaction_date']} not found. Retrying..."
                     )
-                txn_raw["transaction_fx_rate"] = fx_rates[effective_rate_index].rate
+                txn_raw["transaction_fx_rate"] = rate_window[effective_rate_index].rate
 
         return transactions
 
@@ -375,6 +377,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         if route is CostProcessingRoute.FOREIGN_EXCHANGE:
@@ -385,6 +388,7 @@ class CostCalculationWorkflow:
             portfolio=portfolio,
             instrument=instrument,
             repo=repo,
+            fx_rates=fx_rates,
             cost_basis_method=cost_basis_method,
         )
 
@@ -397,6 +401,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
@@ -411,6 +416,7 @@ class CostCalculationWorkflow:
             portfolio=portfolio,
             instrument=instrument,
             repo=repo,
+            fx_rates=fx_rates,
             cost_basis_method=cost_basis_method,
         )
         emitted_transactions = await self._build_emitted_transaction_events(
@@ -459,6 +465,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         await repo.acquire_cost_basis_processing_lock(event.portfolio_id, event.security_id)
@@ -468,6 +475,7 @@ class CostCalculationWorkflow:
             portfolio_base_currency=portfolio.base_currency,
             instrument=instrument,
             repo=repo,
+            fx_rates=fx_rates,
             cost_basis_method=cost_basis_method,
         )
 
@@ -504,6 +512,7 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
         checkpoint = await repo.get_cost_basis_processing_checkpoint(
@@ -517,6 +526,7 @@ class CostCalculationWorkflow:
                 portfolio_base_currency=portfolio_base_currency,
                 instrument=instrument,
                 repo=repo,
+                fx_rates=fx_rates,
             )
             incoming_transaction = EngineTransaction(**incoming_raw)
             if checkpoint.permits_append(
@@ -540,6 +550,7 @@ class CostCalculationWorkflow:
                             portfolio_base_currency=portfolio_base_currency,
                             instrument=instrument,
                             repo=repo,
+                            fx_rates=fx_rates,
                             cost_basis_method=cost_basis_method,
                         )
                 initial_open_lots_raw = []
@@ -607,6 +618,7 @@ class CostCalculationWorkflow:
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
             repo=repo,
+            fx_rates=fx_rates,
             cost_basis_method=cost_basis_method,
         )
 
@@ -617,6 +629,7 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
         all_transactions_raw = await self._load_cost_basis_transactions(
@@ -624,6 +637,7 @@ class CostCalculationWorkflow:
             portfolio_base_currency=portfolio_base_currency,
             instrument=instrument,
             repo=repo,
+            fx_rates=fx_rates,
         )
         processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
             cost_basis_method
@@ -651,6 +665,7 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
     ) -> dict[str, Any]:
         event_raw = self._transform_event_for_engine(event)
         if instrument is not None:
@@ -658,7 +673,7 @@ class CostCalculationWorkflow:
         enriched = await self._enrich_transactions_with_fx(
             transactions=[event_raw],
             portfolio_base_currency=portfolio_base_currency,
-            repo=repo,
+            fx_rates=fx_rates,
         )
         return enriched[0]
 
@@ -793,6 +808,7 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        fx_rates: CostBasisFxRatePort,
     ) -> list[dict[str, Any]]:
         history = await repo.get_transaction_history(
             portfolio_id=event.portfolio_id,
@@ -819,7 +835,7 @@ class CostCalculationWorkflow:
         return await self._enrich_transactions_with_fx(
             transactions=all_transactions_raw,
             portfolio_base_currency=portfolio_base_currency,
-            repo=repo,
+            fx_rates=fx_rates,
         )
 
     async def _persist_affected_processed_transactions(
