@@ -20,6 +20,11 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyCorporateActionReconciliationRepository,
+    SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisReferenceDataRepository,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -89,6 +94,9 @@ async def _stage_cost_calculation(
         await CostProcessingCompatibilityAdapter(
             workflow=CostCalculationWorkflow(),
             repository=repository_factory(session),
+            reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
+            fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
+            reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
             outbox_repository=AsyncMock(spec=OutboxRepository),
         ).stage_event(
             event=event,

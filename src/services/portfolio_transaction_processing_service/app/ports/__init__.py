@@ -13,6 +13,7 @@ from .corporate_action_reconciliation import (
 from .cost_basis import (
     AverageCostPoolCheckpointRecord,
     AverageCostPoolPersistedSummary,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -59,6 +60,7 @@ __all__ = [
     "CashflowProcessingResult",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
+    "CostBasisFxRatePort",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
     "CostBasisReferenceDataPort",

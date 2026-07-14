@@ -27,6 +27,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CorporateActionReconciliationRepository,
+    CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -69,6 +70,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         asset_class="EQUITY",
     )
     outbox_repository = AsyncMock(spec=OutboxRepository)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow = MagicMock()
     workflow.stage_prepared_event = AsyncMock(
@@ -81,6 +83,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         workflow=workflow,
         repository=repository,
         reference_data=reference_data,
+        fx_rates=fx_rates,
         reconciliation_repository=reconciliation_repository,
         outbox_repository=outbox_repository,
     )
@@ -102,6 +105,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert build_call["event_transaction_type"] == "BUY"
     assert build_call["cost_basis_method"].value == "FIFO"
     assert build_call["route"] is cost_basis_processing.CostProcessingRoute.COST_BASIS
+    assert build_call["fx_rates"] is fx_rates
 
 
 @pytest.mark.asyncio
@@ -121,12 +125,14 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
     adapter = CostProcessingCompatibilityAdapter(
         workflow=MagicMock(),
         repository=repository,
         reference_data=reference_data,
+        fx_rates=fx_rates,
         reconciliation_repository=reconciliation_repository,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )
@@ -167,6 +173,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         asset_class="EQUITY",
     )
     workflow = MagicMock()
+    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow.stage_prepared_event = AsyncMock(
         side_effect=SettlementCashValidationError(
@@ -182,6 +189,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         workflow=workflow,
         repository=repository,
         reference_data=reference_data,
+        fx_rates=fx_rates,
         reconciliation_repository=reconciliation_repository,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )

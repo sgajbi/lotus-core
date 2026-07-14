@@ -3,7 +3,6 @@
 import hashlib
 import logging
 from collections.abc import Callable
-from datetime import date
 from decimal import Decimal
 from time import monotonic
 from typing import Any
@@ -32,7 +31,6 @@ from ..domain.cost_basis import (
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
-    EffectiveFxRate,
     OpenLotState,
 )
 from ..domain.cost_basis import (
@@ -45,7 +43,6 @@ from ..ports import (
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
-from .cost_basis.fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +238,6 @@ class CostCalculatorRepository:
     def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
         self._clock = clock
-        self._fx_rates = SqlAlchemyCostBasisFxRateRepository(db)
 
     @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
     async def acquire_cost_basis_processing_lock(
@@ -284,23 +280,6 @@ class CostCalculatorRepository:
                 "security_id": normalize_lookup_identifier(security_id),
                 "lock_wait_seconds": wait_seconds,
             },
-        )
-
-    async def get_fx_rate_window(
-        self,
-        from_currency: str,
-        to_currency: str,
-        *,
-        start_date: date,
-        end_date: date,
-    ) -> list[EffectiveFxRate]:
-        """Delegate effective-rate lookup to the dedicated FX adapter."""
-
-        return await self._fx_rates.get_fx_rate_window(
-            from_currency,
-            to_currency,
-            start_date=start_date,
-            end_date=end_date,
         )
 
     async def get_transaction_history(
