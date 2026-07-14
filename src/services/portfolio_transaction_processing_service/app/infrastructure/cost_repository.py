@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal
 from time import monotonic
-from typing import Any, List, Optional, cast
+from typing import Any, cast
 
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
@@ -346,7 +346,7 @@ class CostCalculatorRepository:
         return CostBasisInstrumentReference(
             security_id=cast(str, instrument.security_id),
             product_type=cast(str, instrument.product_type),
-            asset_class=cast(Optional[str], instrument.asset_class),
+            asset_class=cast(str | None, instrument.asset_class),
         )
 
     async def get_fx_rate_window(
@@ -395,8 +395,8 @@ class CostCalculatorRepository:
         ]
 
     async def get_transaction_history(
-        self, portfolio_id: str, security_id: str, exclude_id: Optional[str] = None
-    ) -> List[DBTransaction]:
+        self, portfolio_id: str, security_id: str, exclude_id: str | None = None
+    ) -> list[BookedTransaction]:
         """
         Fetches all transactions for a given security in a portfolio,
         optionally excluding one by its transaction_id.
@@ -418,7 +418,10 @@ class CostCalculatorRepository:
         )
 
         result = await self.db.execute(stmt)
-        return cast(List[DBTransaction], result.scalars().all())
+        return [
+            to_booked_transaction(TransactionEvent.model_validate(row))
+            for row in result.scalars().all()
+        ]
 
     async def get_cost_basis_processing_checkpoint(
         self, *, portfolio_id: str, security_id: str

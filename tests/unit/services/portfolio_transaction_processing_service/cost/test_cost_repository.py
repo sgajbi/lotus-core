@@ -27,6 +27,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BookedTransaction,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,
     cost_basis_processing_lock_key,
@@ -287,22 +290,20 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     repository = CostCalculatorRepository(db_session)
 
     execute_result = MagicMock()
-    expected_transactions = [
-        DBTransaction(
-            transaction_id="BUY01",
-            portfolio_id="PORT_COST_01",
-            instrument_id="SEC01",
-            security_id="SEC01",
-            transaction_type="BUY",
-            transaction_date=datetime(2026, 1, 1, 10, 0, 0),
-            quantity=Decimal("10"),
-            price=Decimal("100"),
-            gross_transaction_amount=Decimal("1000"),
-            trade_currency="USD",
-            currency="USD",
-        )
-    ]
-    execute_result.scalars.return_value.all.return_value = expected_transactions
+    persisted_transaction = DBTransaction(
+        transaction_id="BUY01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="SEC01",
+        security_id="SEC01",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 1, 1, 10, 0, 0),
+        quantity=Decimal("10"),
+        price=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    execute_result.scalars.return_value.all.return_value = [persisted_transaction]
     db_session.execute.return_value = execute_result
 
     transactions = await repository.get_transaction_history(
@@ -311,7 +312,23 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
         exclude_id=" SELL01 ",
     )
 
-    assert transactions == expected_transactions
+    assert transactions == [
+        BookedTransaction(
+            transaction_id="BUY01",
+            portfolio_id="PORT_COST_01",
+            instrument_id="SEC01",
+            security_id="SEC01",
+            transaction_type="BUY",
+            transaction_date=datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC),
+            quantity=Decimal("10"),
+            price=Decimal("100"),
+            gross_transaction_amount=Decimal("1000"),
+            trade_currency="USD",
+            currency="USD",
+            trade_fee=None,
+        )
+    ]
+    assert transactions[0] is not persisted_transaction
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )
