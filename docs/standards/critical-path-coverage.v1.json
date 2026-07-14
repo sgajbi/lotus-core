@@ -193,7 +193,7 @@
         "transaction-fx-contract"
       ],
       "required_test_globs": [
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cost_basis/test_corporate_action_observability.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py",

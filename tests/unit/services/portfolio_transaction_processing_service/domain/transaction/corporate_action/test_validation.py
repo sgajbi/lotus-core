@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +11,16 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     BookedTransaction,
     corporate_action,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[7]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+TARGET_TEST = SERVICE_TEST_ROOT / "domain/transaction/corporate_action/test_validation.py"
+RETIRED_TEST = SERVICE_TEST_ROOT / "transaction/test_corporate_action_validation.py"
+
+
+def test_corporate_action_validation_is_owned_by_domain_family() -> None:
+    assert Path(__file__).resolve() == TARGET_TEST.resolve()
+    assert not RETIRED_TEST.exists()
 
 
 def _booked_transaction(transaction_type: str = "SPIN_OFF") -> BookedTransaction:
