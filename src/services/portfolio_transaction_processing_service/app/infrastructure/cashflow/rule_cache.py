@@ -17,9 +17,9 @@ from portfolio_common.domain.transaction_control_codes import (
 from portfolio_common.monitoring import observe_cashflow_rule_cache_event
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..cashflow_rules_repository import (
+from .rule_repository import (
     CashflowRuleSetVersion,
-    SqlAlchemyCashflowRulesRepository,
+    SqlAlchemyCashflowRuleRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +146,7 @@ class CashflowRuleCache:
         return await self._load(db_session)
 
     async def _load(self, db_session: AsyncSession) -> CashflowRuleCacheState:
-        repository = SqlAlchemyCashflowRulesRepository(db_session)
+        repository = SqlAlchemyCashflowRuleRepository(db_session)
         rules = await repository.get_all_rules()
         rule_set_version = _rule_set_version(rules)
         logger.info("Loaded %s cashflow rules from repository.", len(rules))
@@ -176,7 +176,7 @@ class CashflowRuleCache:
         db_session: AsyncSession,
         state: CashflowRuleCacheState,
     ) -> bool:
-        source_version = await SqlAlchemyCashflowRulesRepository(db_session).get_rule_set_version()
+        source_version = await SqlAlchemyCashflowRuleRepository(db_session).get_rule_set_version()
         return bool(source_version.fingerprint == state.rule_set_version)
 
     def _is_fresh(self, state: CashflowRuleCacheState) -> bool:

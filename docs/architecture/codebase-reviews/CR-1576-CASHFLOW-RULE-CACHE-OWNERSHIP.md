@@ -23,6 +23,9 @@ multiple workflow instances share state implicitly.
 6. Moved cache tests to the mirrored `tests/.../infrastructure/cashflow/` package.
 7. Extended critical-path coverage to the nested source and mirrored test package so organized
    cashflow modules cannot silently fall outside financial-calculation evidence.
+8. Moved SQL rule access and its tests into the same mirrored package as `rule_repository.py` and
+   `test_rule_repository.py`, adopted the singular repository name, and guarded the retired flat
+   path from returning through the ORM-output exception registry.
 
 The infrastructure workflow is now 372 lines instead of 566. This slice separates one cohesive
 runtime responsibility; it does not claim that the transitional workflow is fully decomposed.
@@ -44,6 +47,7 @@ function with process-global state.
    309, 314, and 230 cases respectively.
 4. Strict MyPy passes for the new cache and touched workflow; repository-wide lint, architecture,
    critical-path coverage, documentation/wiki, scoped Ruff/format, and diff checks pass.
+5. Focused rule-cache, rule-repository, and repository-output guard tests pass after package closure.
 
 ## Documentation Decision
 

@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    SqlAlchemyCashflowRulesRepository,
+    SqlAlchemyCashflowRuleRepository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -24,13 +24,13 @@ def mock_db_session() -> AsyncMock:
 
 
 @pytest.fixture
-def repository(mock_db_session: AsyncMock) -> SqlAlchemyCashflowRulesRepository:
+def repository(mock_db_session: AsyncMock) -> SqlAlchemyCashflowRuleRepository:
     """Provides an instance of the repository with a mock session."""
-    return SqlAlchemyCashflowRulesRepository(mock_db_session)
+    return SqlAlchemyCashflowRuleRepository(mock_db_session)
 
 
 async def test_get_all_rules_constructs_correct_query(
-    repository: SqlAlchemyCashflowRulesRepository, mock_db_session: AsyncMock
+    repository: SqlAlchemyCashflowRuleRepository, mock_db_session: AsyncMock
 ):
     """
     GIVEN the repository
@@ -53,7 +53,7 @@ async def test_get_all_rules_constructs_correct_query(
 
 
 async def test_get_rule_set_version_returns_count_and_latest_update(
-    repository: SqlAlchemyCashflowRulesRepository,
+    repository: SqlAlchemyCashflowRuleRepository,
     mock_db_session: AsyncMock,
 ):
     latest_updated_at = datetime(2026, 4, 10, 9, 30, tzinfo=timezone.utc)

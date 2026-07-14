@@ -1,9 +1,10 @@
 """SQLAlchemy access to effective cashflow classification rules."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List
 
 from portfolio_common.database_models import CashflowRule
 from portfolio_common.utils import async_timed
@@ -32,40 +33,33 @@ def _version_timestamp_text(value: datetime | None) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
-class SqlAlchemyCashflowRulesRepository:
-    """
-    Handles read-only database queries for cashflow rule data.
-    """
+class SqlAlchemyCashflowRuleRepository:
+    """Read governed cashflow rule snapshots from SQLAlchemy persistence."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
     @async_timed(repository="CashflowRulesRepository", method="get_all_rules")
-    async def get_all_rules(self) -> List[CashflowRule]:
-        """
-        Retrieves all cashflow rules from the database.
-        """
+    async def get_all_rules(self) -> list[CashflowRule]:
+        """Return all rules in deterministic transaction-type order."""
+
         stmt = select(CashflowRule).order_by(CashflowRule.transaction_type)
-        result = await self.db.execute(stmt)
+        result = await self._session.execute(stmt)
         rules = result.scalars().all()
-        logger.info(f"Loaded {len(rules)} cashflow rules from the database.")
+        logger.info("Loaded %s cashflow rules from the database.", len(rules))
         return list(rules)
 
     @async_timed(repository="CashflowRulesRepository", method="get_rule_set_version")
     async def get_rule_set_version(self) -> CashflowRuleSetVersion:
-        """
-        Retrieves the source-owned version marker for cached cashflow rules.
-        """
+        """Return the source-owned version marker for the current rule set."""
+
         stmt = select(
             func.count(CashflowRule.transaction_type),
             func.max(CashflowRule.updated_at),
         )
-        result = await self.db.execute(stmt)
+        result = await self._session.execute(stmt)
         rule_count, latest_updated_at = result.one()
         return CashflowRuleSetVersion(
             rule_count=int(rule_count or 0),
             latest_updated_at=latest_updated_at,
         )
-
-
-# Temporary source-compatible name for callers moving into the unified service.

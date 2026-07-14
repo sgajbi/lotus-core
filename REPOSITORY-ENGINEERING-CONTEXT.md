@@ -1459,7 +1459,9 @@ Most relevant current governance:
      version/effective metadata, stale-read behavior, invalidation ownership, and cache metrics.
      The active cache is an instance-owned `CashflowRuleCache` under
      `app/infrastructure/cashflow/`; its immutable snapshot and lock belong to the composed runtime.
-     Do not restore module-global cache state or make tests reset private process state.
+     SQL rule access belongs to the adjacent singular `rule_repository.py`, with tests mirrored
+     under `tests/.../infrastructure/cashflow/`. Do not restore module-global cache state, flat
+     cashflow rule repositories, plural compatibility names, or tests that reset private state.
      Every ORM, repository, raw SQL, migration, and migration-downgrade rule mutation must advance
      `cashflow_rules.updated_at` explicitly; ORM `onupdate` does not apply to raw SQL.
 106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now

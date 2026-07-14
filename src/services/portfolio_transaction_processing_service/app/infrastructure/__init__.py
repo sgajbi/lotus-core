@@ -2,6 +2,10 @@
 
 from ..application.settlement_processing import UpstreamCashLegUnavailableError
 from .cashflow.rule_cache import CachedCashflowRule, CashflowRuleCache, CashflowRuleCacheState
+from .cashflow.rule_repository import (
+    CashflowRuleSetVersion,
+    SqlAlchemyCashflowRuleRepository,
+)
 from .cashflow_calculation import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
@@ -9,10 +13,6 @@ from .cashflow_calculation import (
 )
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
 from .cashflow_repository import SqlAlchemyCashflowRepository
-from .cashflow_rules_repository import (
-    CashflowRuleSetVersion,
-    SqlAlchemyCashflowRulesRepository,
-)
 from .cashflow_staging_workflow import (
     CashflowCalculationWorkflow,
     CashflowProcessingOutcome,
@@ -66,7 +66,7 @@ __all__ = [
     "CashflowProcessingCompatibilityAdapter",
     "CashflowProcessingOutcome",
     "SqlAlchemyCashflowRepository",
-    "SqlAlchemyCashflowRulesRepository",
+    "SqlAlchemyCashflowRuleRepository",
     "CashflowRuleSetVersion",
     "CashflowStageResult",
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
