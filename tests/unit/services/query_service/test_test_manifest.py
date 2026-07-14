@@ -87,3 +87,21 @@ def test_manifest_collection_command_uses_suite_definition() -> None:
     assert "--collect-only" in command
     assert "-q" in command
     assert "tests/integration/services/query_service/test_main_app.py" in command
+
+
+def test_manifest_coverage_command_accepts_multiple_source_targets() -> None:
+    command = suite_pytest_command(
+        "integration-lite",
+        with_coverage=True,
+        coverage_sources=(
+            "src.services.query_service.app",
+            "src.services.portfolio_transaction_processing_service.app.domain.cost_basis",
+            "src.services.query_service.app",
+        ),
+    )
+
+    assert command[-3:] == [
+        "--cov=src.services.query_service.app",
+        "--cov=src.services.portfolio_transaction_processing_service.app.domain.cost_basis",
+        "--cov-report=",
+    ]
