@@ -52,6 +52,6 @@ Validated against:
 1. `tests/unit/libs/portfolio_common/test_fx_contract_instrument.py`
 2. `tests/unit/libs/portfolio_common/test_fx_linkage.py`
 3. `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
-4. `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
+4. `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py`
 5. `tests/integration/services/persistence_service/repositories/test_repositories.py`
 6. `alembic/versions/be45fa67b890_feat_add_fx_contract_instrument_fields.py`

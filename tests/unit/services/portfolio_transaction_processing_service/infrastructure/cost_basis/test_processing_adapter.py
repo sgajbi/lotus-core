@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
     TransactionProcessingRejected,
     cost_basis_processing,
+)
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+    PreparedCostProcessingUseCase,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -23,7 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
-    StagedCostEffects,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AccruedIncomeOffsetStatePort,
@@ -37,6 +38,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
     CostProcessingEffectStagingPort,
+    CostProcessingResult,
 )
 
 
@@ -55,14 +57,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         trade_currency="SGD",
         currency="SGD",
     )
-    processed_event = TransactionEvent.model_validate(
-        {
-            **{field.name: getattr(transaction, field.name) for field in fields(transaction)},
-            "transaction_id": "TX-001-COSTED",
-            "correlation_id": "corr-001",
-            "traceparent": "trace-001",
-        }
-    )
+    processed_transaction = replace(transaction, transaction_id="TX-001-COSTED")
     repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
@@ -82,15 +77,13 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
-    workflow = MagicMock()
-    workflow.stage_prepared_event = AsyncMock(
-        return_value=StagedCostEffects(
-            emitted_transactions=(processed_event,),
-            instrument_update_count=1,
-        )
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
+    processor.execute.return_value = CostProcessingResult(
+        processed_transactions=(processed_transaction,),
+        instrument_update_count=1,
     )
     adapter = CostBasisProcessingAdapter(
-        workflow=workflow,
+        processor=processor,
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
@@ -110,15 +103,13 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
 
     assert [item.transaction_id for item in result.processed_transactions] == ["TX-001-COSTED"]
     assert result.instrument_update_count == 1
-    build_call = workflow.stage_prepared_event.await_args.kwargs
-    input_event = build_call["event"]
-    assert input_event.transaction_id == "TX-001"
-    assert input_event.correlation_id == "corr-001"
-    assert input_event.traceparent == "trace-001"
-    assert input_event.economic_event_id == "EVT-BUY-PB-001-TX-001"
-    assert build_call["event_transaction_type"] == "BUY"
-    assert build_call["cost_basis_method"].value == "FIFO"
-    assert build_call["route"] is cost_basis_processing.CostProcessingRoute.COST_BASIS
+    build_call = processor.execute.await_args.kwargs
+    prepared = build_call["prepared"]
+    assert prepared.transaction.transaction_id == "TX-001"
+    assert prepared.transaction.economic_event_id == "EVT-BUY-PB-001-TX-001"
+    assert prepared.transaction_type == "BUY"
+    assert prepared.cost_basis_method.value == "FIFO"
+    assert prepared.route is cost_basis_processing.CostProcessingRoute.COST_BASIS
     assert build_call["fx_rates"] is fx_rates
     assert build_call["average_cost_pools"] is average_cost_pools
     assert build_call["lot_states"] is lot_states
@@ -152,7 +143,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
     adapter = CostBasisProcessingAdapter(
-        workflow=MagicMock(),
+        processor=AsyncMock(spec=PreparedCostProcessingUseCase),
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
@@ -199,25 +190,23 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         product_type="EQUITY",
         asset_class="EQUITY",
     )
-    workflow = MagicMock()
+    processor = AsyncMock(spec=PreparedCostProcessingUseCase)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
-    workflow.stage_prepared_event = AsyncMock(
-        side_effect=SettlementCashValidationError(
-            reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),
-            field="trade_fee",
-            message="SELL settlement cash must remain greater than zero after transaction fees.",
-            available_proceeds=Decimal("1"),
-            fee_amount=Decimal("2"),
-            net_settlement_amount=Decimal("-1"),
-        )
+    processor.execute.side_effect = SettlementCashValidationError(
+        reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),
+        field="trade_fee",
+        message="SELL settlement cash must remain greater than zero after transaction fees.",
+        available_proceeds=Decimal("1"),
+        fee_amount=Decimal("2"),
+        net_settlement_amount=Decimal("-1"),
     )
     adapter = CostBasisProcessingAdapter(
-        workflow=workflow,
+        processor=processor,
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,

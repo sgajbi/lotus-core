@@ -16,7 +16,6 @@ from .observability import (
 )
 from .processing_adapter import (
     CostBasisProcessingAdapter,
-    CostEffectsStager,
     PortfolioNotFoundError,
 )
 from .processing_state_repository import (
@@ -24,7 +23,6 @@ from .processing_state_repository import (
     cost_basis_processing_lock_key,
 )
 from .reference_data_repository import SqlAlchemyCostBasisReferenceDataRepository
-from .staged_effects import StagedCostEffects
 from .transaction_repository import SqlAlchemyCostBasisTransactionRepository
 
 __all__ = [
@@ -37,13 +35,11 @@ __all__ = [
     "SqlAlchemyCostBasisReferenceDataRepository",
     "SqlAlchemyCostBasisTransactionRepository",
     "CostBasisProcessingAdapter",
-    "CostEffectsStager",
     "TransactionalCostProcessingEffectStager",
     "PortfolioNotFoundError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PrometheusCostBasisCalculationObserver",
     "PrometheusCostBasisPersistenceObserver",
-    "StagedCostEffects",
     "cost_basis_processing_lock_key",
 ]

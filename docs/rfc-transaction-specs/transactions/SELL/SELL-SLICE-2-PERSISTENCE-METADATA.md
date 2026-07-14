@@ -18,7 +18,7 @@ This slice hardens SELL metadata persistence preconditions by ensuring determini
 
 - Unit tests:
   - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
-  - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py`
 - Consumer integration assertion verifies SELL metadata is present on persisted transaction update payload.
 
 ## Notes

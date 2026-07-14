@@ -75,10 +75,11 @@ def test_cost_basis_calculation_has_application_owned_paths() -> None:
     assert not (APPLICATION_ROOT / "cost_basis_calculation.py").exists()
     assert not (UNIT_TEST_ROOT / "cost" / "test_incremental_cost_workflow.py").exists()
     assert (APPLICATION_ROOT / "cost_basis_processing" / "calculation.py").is_file()
+    assert (APPLICATION_ROOT / "cost_basis_processing" / "execution.py").is_file()
     assert (application_test_root / "test_calculation.py").is_file()
-    workflow_source = infrastructure_workflow.read_text(encoding="utf-8")
-    assert "_calculate_cost_basis" not in workflow_source
-    assert "transaction_lot_behavior" not in workflow_source
+    assert (application_test_root / "test_execution.py").is_file()
+    assert not infrastructure_workflow.exists()
+    assert not (UNIT_TEST_ROOT / "cost" / "test_cost_workflow.py").exists()
 
 
 def test_cost_processing_effect_staging_has_port_and_infrastructure_paths() -> None:
@@ -88,12 +89,26 @@ def test_cost_processing_effect_staging_has_port_and_infrastructure_paths() -> N
     port_path = app_root / "ports" / "cost_basis" / "effect_staging.py"
     adapter_path = app_root / "infrastructure" / "cost_basis" / "effect_staging.py"
     adapter_test_path = UNIT_TEST_ROOT / "infrastructure" / "cost_basis" / "test_effect_staging.py"
-    workflow_path = app_root / "infrastructure" / "cost_calculation_workflow.py"
+    processing_adapter_path = app_root / "infrastructure" / "cost_basis" / "processing_adapter.py"
+    processing_adapter_test_path = (
+        UNIT_TEST_ROOT / "infrastructure" / "cost_basis" / "test_processing_adapter.py"
+    )
+    execution_path = APPLICATION_ROOT / "cost_basis_processing" / "execution.py"
+    coordination_path = APPLICATION_ROOT / "cost_basis_processing" / "effect_coordination.py"
     assert port_path.is_file()
     assert adapter_path.is_file()
     assert adapter_test_path.is_file()
+    assert processing_adapter_test_path.is_file()
+    assert not (UNIT_TEST_ROOT / "cost" / "infrastructure" / "test_processing_adapter.py").exists()
     assert not (app_root / "ports" / "cost_effect_staging.py").exists()
     assert not (app_root / "infrastructure" / "cost_effect_staging.py").exists()
+    assert not (app_root / "infrastructure" / "cost_calculation_workflow.py").exists()
+    assert not (app_root / "infrastructure" / "cost_basis" / "staged_effects.py").exists()
+    assert execution_path.is_file()
+    assert coordination_path.is_file()
+    assert (
+        UNIT_TEST_ROOT / "application" / "cost_basis_processing" / "test_effect_coordination.py"
+    ).is_file()
 
     port_source = port_path.read_text(encoding="utf-8")
     for forbidden_dependency in (
@@ -105,8 +120,12 @@ def test_cost_processing_effect_staging_has_port_and_infrastructure_paths() -> N
     ):
         assert forbidden_dependency not in port_source
 
-    workflow_source = workflow_path.read_text(encoding="utf-8")
-    for retired_workflow_dependency in (
+    application_source = execution_path.read_text(encoding="utf-8") + coordination_path.read_text(
+        encoding="utf-8"
+    )
+    for forbidden_application_dependency in (
+        "TransactionEvent",
+        "InstrumentEvent",
         "OutboxRepository",
         "event_business_payload",
         "KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC",
@@ -114,4 +133,13 @@ def test_cost_processing_effect_staging_has_port_and_infrastructure_paths() -> N
         "_publish_transaction_events",
         "_publish_instrument_events",
     ):
-        assert retired_workflow_dependency not in workflow_source
+        assert forbidden_application_dependency not in application_source
+
+    processing_adapter_source = processing_adapter_path.read_text(encoding="utf-8")
+    for retired_mapping_dependency in (
+        "TransactionEvent",
+        "to_transaction_event",
+        "to_booked_transaction",
+        "with_booked_transaction_fields",
+    ):
+        assert retired_mapping_dependency not in processing_adapter_source

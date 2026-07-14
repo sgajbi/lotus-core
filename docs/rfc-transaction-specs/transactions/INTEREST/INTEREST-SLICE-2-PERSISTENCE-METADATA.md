@@ -8,9 +8,9 @@ Slice 2 establishes deterministic metadata enrichment for INTEREST and verifies 
 
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/booking_metadata.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/__init__.py` (exports)
-- `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py` (INTEREST enrichment integration)
+- `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py` (INTEREST enrichment integration)
 - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
-- `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py` (INTEREST metadata propagation test)
+- `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py` (INTEREST processing integration test)
 - `tests/integration/services/persistence_service/repositories/test_repositories.py` (INTEREST metadata UPSERT persistence test)
 
 ## Behavior

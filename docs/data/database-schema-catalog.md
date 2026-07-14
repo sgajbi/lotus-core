@@ -823,7 +823,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Canonical transaction ledger.
 - **Description**: Ingested transactions enriched with cost and policy metadata.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; ORM relationship `costs` -> `TransactionCost`; ORM relationship `cashflow` -> `Cashflow`
-- **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/domain/cost_basis`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/transaction_repository.py`, `src/services/query_service/app/repositories/transaction_repository.py`, `src/services/ingestion_service/app/routers/transactions.py`
+- **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/domain/cost_basis`, `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/transaction_repository.py`, `src/services/query_service/app/repositories/transaction_repository.py`, `src/services/ingestion_service/app/routers/transactions.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
@@ -947,7 +947,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
   incompatible, or unsupported events fail over to deterministic full replay.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
 - **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/processing_state_repository.py`,
-  `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`
+  `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py`
 - **Typical access patterns**: Primary-key lookup and atomic upsert inside the combined transaction
   processing unit of work; updated-time scans are operator/supportability only.
 - **Column definitions**:
@@ -974,7 +974,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`;
   `representative_source_transaction_id` -> `transactions.transaction_id`
 - **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/average_cost_pool_repository.py`,
-  `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`
+  `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py`
 - **Typical access patterns**: Composite-primary-key lookup with a table-scoped row lock, atomic
   upsert in the combined transaction-processing unit of work, and support scans by updated key.
 - **Column definitions**:
@@ -995,7 +995,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Accrued-income offset state for fixed income flows.
 - **Description**: Tracks paid accrued interest and remaining offset to avoid double counting income.
 - **Relationships**: `source_transaction_id` -> `transactions.transaction_id`; `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/buy_state_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/income/accrued_income_offset_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/buy_state_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/income/accrued_income_offset_repository.py`, `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/execution.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

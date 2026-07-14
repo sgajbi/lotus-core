@@ -10,12 +10,15 @@ from portfolio_common.database_models import CostBasisProcessingState, PositionL
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+    PreparedCostProcessingUseCase,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BUY_DEFAULT_POLICY_ID,
     BUY_DEFAULT_POLICY_VERSION,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculationWorkflow,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
+    to_booked_transaction,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
@@ -101,7 +104,7 @@ async def _stage_cost_calculation(
 ) -> None:
     async with session_factory() as session, session.begin():
         await CostBasisProcessingAdapter(
-            workflow=CostCalculationWorkflow(),
+            processor=PreparedCostProcessingUseCase(),
             repository=repository_factory(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_states=SqlAlchemyCostBasisLotRepository(session),
@@ -111,9 +114,10 @@ async def _stage_cost_calculation(
             processing_state=processing_state_factory(session),
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
             effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
-        ).stage_event(
-            event=event,
+        ).process(
+            to_booked_transaction(event),
             correlation_id=f"corr-{event.transaction_id}",
+            traceparent=None,
         )
 
 

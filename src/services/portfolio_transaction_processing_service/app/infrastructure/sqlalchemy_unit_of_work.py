@@ -12,6 +12,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from ..application.cost_basis_processing import PreparedCostProcessingUseCase
 from ..application.position_history import PositionHistoryProcessor
 from ..ports import (
     CashflowProcessingPort,
@@ -28,7 +29,6 @@ from .cashflow_processing_adapter import (
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_basis import (
     CostBasisProcessingAdapter,
-    CostEffectsStager,
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
@@ -97,11 +97,11 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self,
         *,
         session_factory: Callable[[], AsyncSession],
-        cost_workflow: CostEffectsStager,
+        cost_processor: PreparedCostProcessingUseCase,
         cashflow_workflow: CashflowStagingWorkflow,
     ) -> None:
         self._session_factory = session_factory
-        self._cost_workflow = cost_workflow
+        self._cost_processor = cost_processor
         self._cashflow_workflow = cashflow_workflow
         self._session: AsyncSession | None = None
         self._transaction: AsyncSessionTransaction | None = None
@@ -154,7 +154,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         idempotency_repository = IdempotencyRepository(session)
         self._idempotency = SqlAlchemyTransactionIdempotencyAdapter(idempotency_repository)
         self._cost = CostBasisProcessingAdapter(
-            workflow=self._cost_workflow,
+            processor=self._cost_processor,
             repository=SqlAlchemyCostBasisTransactionRepository(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_states=SqlAlchemyCostBasisLotRepository(session),
