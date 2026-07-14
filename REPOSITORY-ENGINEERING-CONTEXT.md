@@ -1462,6 +1462,10 @@ Most relevant current governance:
      SQL rule access belongs to the adjacent singular `rule_repository.py`, with tests mirrored
      under `tests/.../infrastructure/cashflow/`. Do not restore module-global cache state, flat
      cashflow rule repositories, plural compatibility names, or tests that reset private state.
+     Durable cashflow writes belong to adjacent `cashflow/persistence.py`; keep its SQLAlchemy
+     session private, map ORM rows to `StoredCashflow` at the adapter boundary, and mirror adapter
+     tests under the same infrastructure package. Do not restore flat cashflow persistence modules
+     or place infrastructure tests beside domain calculation tests.
      Every ORM, repository, raw SQL, migration, and migration-downgrade rule mutation must advance
      `cashflow_rules.updated_at` explicitly; ORM `onupdate` does not apply to raw SQL.
 106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now

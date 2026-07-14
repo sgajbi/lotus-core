@@ -19,8 +19,8 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
+    SqlAlchemyCashflowRepository,
     build_replay_booked_transaction_use_case,
-    cashflow_repository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -375,7 +375,7 @@ async def test_concurrent_missing_cashflow_repairs_converge_on_one_row(
 
     async def repair(amount: Decimal) -> int:
         async with context.session_factory() as session, session.begin():
-            repository = cashflow_repository.SqlAlchemyCashflowRepository(session)
+            repository = SqlAlchemyCashflowRepository(session)
             stored = await repository.replace_cashflow(
                 Cashflow(
                     transaction_id=transaction_id,

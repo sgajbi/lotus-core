@@ -18,7 +18,7 @@ from ..domain.cashflow import CashflowCalculationContext
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import CashflowProcessingResult
 from .booked_transaction_event_mapper import to_transaction_event
-from .cashflow_repository import SqlAlchemyCashflowRepository
+from .cashflow.persistence import SqlAlchemyCashflowRepository
 from .cashflow_staging_workflow import (
     CashflowProcessingOutcome,
     CashflowStageResult,

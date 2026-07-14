@@ -9,8 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CalculatedCashflow,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    cashflow_repository,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
+    SqlAlchemyCashflowRepository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
     execute_result.scalars.return_value.first.return_value = existing_cashflow
     db_session.execute.return_value = execute_result
 
-    repository = cashflow_repository.SqlAlchemyCashflowRepository(db_session)
+    repository = SqlAlchemyCashflowRepository(db_session)
     duplicate_cashflow = Cashflow(
         transaction_id="TXN-001",
         portfolio_id="PORT-001",
@@ -112,9 +112,7 @@ async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> No
         epoch=4,
     )
 
-    saved = await cashflow_repository.SqlAlchemyCashflowRepository(db_session).create_cashflow(
-        calculated
-    )
+    saved = await SqlAlchemyCashflowRepository(db_session).create_cashflow(calculated)
 
     mapped_row = db_session.add.call_args.args[0]
     assert isinstance(mapped_row, Cashflow)
@@ -153,9 +151,7 @@ async def test_create_cashflow_persists_domain_result_successfully() -> None:
         epoch=5,
     )
 
-    saved = await cashflow_repository.SqlAlchemyCashflowRepository(db_session).create_cashflow(
-        calculated
-    )
+    saved = await SqlAlchemyCashflowRepository(db_session).create_cashflow(calculated)
 
     persisted_row = db_session.add.call_args.args[0]
     assert isinstance(persisted_row, Cashflow)
