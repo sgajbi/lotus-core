@@ -55,49 +55,10 @@ class _StringCountedAmount:
 async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None:
     workflow = CostCalculationWorkflow()
 
-    assert callable(workflow._prepare_transaction_event)
     assert callable(workflow._build_events_to_publish)
+    assert not hasattr(workflow, "_prepare_transaction_event")
+    assert not hasattr(workflow, "_assert_required_instrument_reference_available")
     assert not hasattr(workflow, "_consumer_config")
-
-
-async def test_cost_workflow_applies_booking_policy_without_losing_event_envelope() -> None:
-    event = TransactionEvent(
-        transaction_id="BUY-BOOKING-01",
-        portfolio_id="PORT_COST_01",
-        instrument_id="AAPL",
-        security_id="SEC_COST_01",
-        transaction_date=datetime(2025, 1, 15),
-        transaction_type="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("150"),
-        gross_transaction_amount=Decimal("1500"),
-        trade_currency="USD",
-        currency="USD",
-        event_type="TransactionBooked",
-        schema_version="1.0.0",
-        correlation_id="corr-booking-01",
-        traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-    )
-
-    (
-        prepared,
-        transaction_type,
-        cost_basis_method,
-    ) = await CostCalculationWorkflow()._prepare_transaction_event(
-        event,
-        MagicMock(cost_basis_method=CostBasisMethod.FIFO),
-    )
-
-    assert transaction_type == "BUY"
-    assert cost_basis_method is CostBasisMethod.FIFO
-    assert prepared.economic_event_id == "EVT-BUY-PORT_COST_01-BUY-BOOKING-01"
-    assert prepared.linked_transaction_group_id == "LTG-BUY-PORT_COST_01-BUY-BOOKING-01"
-    assert prepared.calculation_policy_id == "BUY_DEFAULT_POLICY"
-    assert prepared.calculation_policy_version == "1.0.0"
-    assert prepared.event_type == event.event_type
-    assert prepared.schema_version == event.schema_version
-    assert prepared.correlation_id == event.correlation_id
-    assert prepared.traceparent == event.traceparent
 
 
 async def test_cost_basis_acquires_key_lock_before_reading_processing_state() -> None:
@@ -226,8 +187,6 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
 
     workflow = MagicMock()
-    workflow._prepare_transaction_event = AsyncMock(return_value=(event, "BUY", "FIFO"))
-    workflow._assert_required_instrument_reference_available = MagicMock()
     workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
     workflow._build_emitted_transaction_events = AsyncMock(return_value=[event])
     workflow._publish_transaction_events = AsyncMock()
@@ -247,8 +206,9 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         repo=repo,
         correlation_id="cost-corr-id",
     )
+    prepared_event = workflow._build_events_to_publish.await_args.kwargs["event"]
     workflow._publish_transaction_events.assert_awaited_once_with(
-        original_event=event,
+        original_event=prepared_event,
         emitted_events=[event],
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",

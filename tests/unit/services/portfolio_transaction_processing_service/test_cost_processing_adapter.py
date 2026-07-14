@@ -57,8 +57,6 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     repository.get_instrument.return_value = MagicMock()
     outbox_repository = AsyncMock(spec=OutboxRepository)
     workflow = MagicMock()
-    workflow._prepare_transaction_event = AsyncMock(return_value=(processed_event, "BUY", "FIFO"))
-    workflow._assert_required_instrument_reference_available = MagicMock()
     workflow._build_events_to_publish = AsyncMock(
         return_value=([processed_event], [instrument_event])
     )
@@ -79,10 +77,14 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
 
     assert [item.transaction_id for item in result.processed_transactions] == ["TX-001-COSTED"]
     assert result.instrument_update_count == 1
-    input_event = workflow._prepare_transaction_event.await_args.args[0]
+    build_call = workflow._build_events_to_publish.await_args.kwargs
+    input_event = build_call["event"]
     assert input_event.transaction_id == "TX-001"
     assert input_event.correlation_id == "corr-001"
     assert input_event.traceparent == "trace-001"
+    assert input_event.economic_event_id == "EVT-BUY-PB-001-TX-001"
+    assert build_call["event_transaction_type"] == "BUY"
+    assert build_call["cost_basis_method"].value == "FIFO"
 
 
 @pytest.mark.asyncio
@@ -131,9 +133,6 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         trade_currency="SGD",
         currency="SGD",
     )
-    processed_event = TransactionEvent.model_validate(
-        {field.name: getattr(transaction, field.name) for field in fields(transaction)}
-    )
     repository = AsyncMock(spec=CostCalculatorRepository)
     repository.get_portfolio.return_value = Portfolio(
         base_currency="SGD",
@@ -141,8 +140,6 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     )
     repository.get_instrument.return_value = MagicMock()
     workflow = MagicMock()
-    workflow._prepare_transaction_event = AsyncMock(return_value=(processed_event, "SELL", "FIFO"))
-    workflow._assert_required_instrument_reference_available = MagicMock()
     workflow._build_events_to_publish = AsyncMock(
         side_effect=SettlementCashValidationError(
             reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),

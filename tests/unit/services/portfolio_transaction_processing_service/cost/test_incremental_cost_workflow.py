@@ -7,6 +7,9 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    cost_basis_processing,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPoolCheckpoint,
     CostBasisProcessingCheckpoint,
@@ -20,6 +23,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CostCalculatorRepository,
     OpenLotCheckpointRecord,
     OpenLotStateUpdateScope,
+    booked_transaction_event_mapper,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -64,6 +68,22 @@ def _processed_buy(transaction_id: str, transaction_date: datetime) -> EngineTra
     return EngineTransaction(**payload)
 
 
+def _prepare_event(
+    event: TransactionEvent,
+    cost_basis_method: CostBasisMethod,
+) -> tuple[TransactionEvent, str, CostBasisMethod]:
+    prepared = cost_basis_processing.prepare_cost_transaction(
+        booked_transaction_event_mapper.to_booked_transaction(event),
+        cost_basis_method=cost_basis_method,
+        instrument_reference_available=True,
+    )
+    return (
+        booked_transaction_event_mapper.with_booked_transaction_fields(event, prepared.transaction),
+        prepared.transaction_type,
+        prepared.cost_basis_method,
+    )
+
+
 def _persisted_buy(transaction_id: str, transaction_date: datetime) -> DBTransaction:
     return DBTransaction(
         transaction_id=transaction_id,
@@ -102,14 +122,14 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             cost_base=Decimal("100"),
         )
     ]
-    sell_event, sell_type, method = await workflow._prepare_transaction_event(
+    sell_event, sell_type, method = _prepare_event(
         _event(
             transaction_id="SELL-1",
             transaction_date=sell_date,
             transaction_type="SELL",
             quantity="4",
         ),
-        MagicMock(cost_basis_method="FIFO"),
+        CostBasisMethod.FIFO,
     )
 
     with (
@@ -173,14 +193,14 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         ),
         representative_transaction=_persisted_buy("BUY-AVCO-1", buy_date),
     )
-    sell_event, sell_type, method = await workflow._prepare_transaction_event(
+    sell_event, sell_type, method = _prepare_event(
         _event(
             transaction_id="SELL-AVCO-1",
             transaction_date=sell_date,
             transaction_type="SELL",
             quantity="4",
         ),
-        MagicMock(cost_basis_method="AVCO"),
+        CostBasisMethod.AVCO,
     )
 
     calculation = await workflow._calculate_cost_basis(
@@ -232,14 +252,14 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         ),
         representative_transaction=_persisted_buy("BUY-AVCO-1", first_buy_date),
     )
-    buy_event, buy_type, method = await workflow._prepare_transaction_event(
+    buy_event, buy_type, method = _prepare_event(
         _event(
             transaction_id="BUY-AVCO-2",
             transaction_date=second_buy_date,
             transaction_type="BUY",
             quantity="5",
         ),
-        MagicMock(cost_basis_method="AVCO"),
+        CostBasisMethod.AVCO,
     )
 
     calculation = await workflow._calculate_cost_basis(
@@ -276,14 +296,14 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     )
     repo.get_average_cost_pool_checkpoint_record.return_value = None
     repo.get_transaction_history.return_value = [_persisted_buy("BUY-AVCO-1", buy_date)]
-    sell_event, sell_type, method = await workflow._prepare_transaction_event(
+    sell_event, sell_type, method = _prepare_event(
         _event(
             transaction_id="SELL-AVCO-1",
             transaction_date=sell_date,
             transaction_type="SELL",
             quantity="4",
         ),
-        MagicMock(cost_basis_method="AVCO"),
+        CostBasisMethod.AVCO,
     )
 
     calculation = await workflow._calculate_cost_basis(
