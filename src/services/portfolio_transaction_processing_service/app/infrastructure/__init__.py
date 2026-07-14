@@ -1,5 +1,6 @@
 """Concrete transaction processing infrastructure adapters."""
 
+from ..application.cost_basis_processing import UpstreamCashLegUnavailableError
 from .cashflow_calculation import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
@@ -38,7 +39,6 @@ from .cost_basis import (
 from .cost_calculation_workflow import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
-    UpstreamCashLegUnavailableError,
 )
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
