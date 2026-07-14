@@ -52,3 +52,14 @@ def test_cost_basis_observability_has_layer_owned_paths() -> None:
     assert (infrastructure_root / "cost_basis" / "observability.py").is_file()
     assert (infrastructure_root / "cost_basis" / "metrics.py").is_file()
     assert (UNIT_TEST_ROOT / "infrastructure" / "cost_basis" / "test_observability.py").is_file()
+
+
+def test_transaction_persistence_has_application_owned_paths() -> None:
+    """Keep cost-basis persistence orchestration and its tests out of flat packages."""
+
+    application_test_root = UNIT_TEST_ROOT / "application" / "cost_basis_processing"
+    assert not (APPLICATION_ROOT / "transaction_persistence.py").exists()
+    assert not (UNIT_TEST_ROOT / "test_transaction_persistence.py").exists()
+    assert not (UNIT_TEST_ROOT / "cost" / "test_transaction_persistence.py").exists()
+    assert (APPLICATION_ROOT / "cost_basis_processing" / "transaction_persistence.py").is_file()
+    assert (application_test_root / "test_transaction_persistence.py").is_file()

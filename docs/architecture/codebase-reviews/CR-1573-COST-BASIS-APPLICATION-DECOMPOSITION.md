@@ -4,7 +4,8 @@
 
 Reduce the design-time complexity of the unified transaction processor by moving cost-basis policy,
 deterministic rebuild planning, upstream cash-leg validation, and SQL reconciliation into their
-correct layers and cohesive domain-owned packages.
+correct layers and cohesive domain-owned packages. The follow-up slice also moves calculated
+transaction persistence behind application ports without changing the deployed runtime boundary.
 
 ## Finding
 
@@ -49,6 +50,15 @@ obscured ownership and encouraged further dumping into broad folders.
     infrastructure modules, replacing the flat application/port roots and vague domain filename.
 11. Grouped the cost-basis observation protocol under `ports.cost_basis`, and the Prometheus adapter
     and instruments under `infrastructure.cost_basis`, with a mirrored infrastructure test.
+12. Added `application.cost_basis_processing.persist_cost_basis_transactions` to own affected-suffix
+    transaction, fee-breakdown, opening-lot, and accrued-income-offset writes through typed ports;
+    it returns immutable `BookedTransaction` values for infrastructure event mapping.
+13. Added typed persistence observations and a failure-contained Prometheus/log adapter, preserving
+    BUY/SELL lifecycle labels and support event names without importing telemetry into application
+    code.
+14. Removed the persistence private methods and duplicate tests from the broad infrastructure
+    workflow/test roots, and changed the rollback integration test to inject failure at the concrete
+    repository adapter instead of a retired workflow implementation detail.
 
 ## Measurable Improvement
 
@@ -61,7 +71,10 @@ obscured ownership and encouraged further dumping into broad folders.
 - replaced six flat, vague, or mismatched production/test paths with layer-mirrored cost-basis
   package paths and retirement guards; and
 - retained one combined transaction-processing runtime and application use case without adding a
-  deployable service boundary.
+  deployable service boundary;
+- reduced `CostCalculationWorkflow` from 869 to 742 lines in the persistence follow-up while placing
+  its 146-line application function and 256-line behavioral suite in mirrored owner packages; and
+- removed every repository reference to the retired private persistence helpers.
 
 ## Compatibility
 
@@ -73,7 +86,7 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite: `754 passed`;
+- complete transaction-processing unit suite after persistence extraction: `780 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
 - focused domain, application, and infrastructure tests: passed;
@@ -83,6 +96,8 @@ the broader calculator-runtime retirement tracked by #719.
 - application-layer, dependency-inversion, domain-layer, and infrastructure-adapter guards:
   passed;
 - focused strict MyPy, Ruff lint/format, import scans, and `git diff --check`: passed.
+- backdated suffix partial-write rollback on PostgreSQL after repository-level failure injection:
+  `1 passed`.
 
 ## Documentation Decision
 
@@ -94,7 +109,7 @@ governed layered-architecture rule are unchanged.
 
 ## Remaining Work
 
-Keep #719 open. Further slices must extract persistence and settlement/generated-leg coordination
-only when each resulting application service has a narrow port contract and focused domain tests.
+Keep #719 open. Further slices must extract settlement/generated-leg coordination only when each
+resulting application service has a narrow port contract and focused domain tests.
 Do not restore extracted behavior to `CostCalculationWorkflow`, create flat compatibility modules,
 or split the runtime without workload, failure-isolation, scaling, security, or ownership evidence.

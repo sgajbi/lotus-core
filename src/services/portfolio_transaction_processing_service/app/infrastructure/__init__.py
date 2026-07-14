@@ -33,6 +33,7 @@ from .corporate_action_reconciliation_observability import (
 )
 from .cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     PrometheusCostBasisCalculationObserver,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     StagedCostEffects,
@@ -74,6 +75,7 @@ __all__ = [
     "LinkedCashLegError",
     "NoCashflowRuleError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
+    "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",
     "PrometheusTransactionProcessingObserver",
     "PrometheusCostBasisCalculationObserver",

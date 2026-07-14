@@ -2441,6 +2441,14 @@ Most relevant current governance:
      Prometheus instruments and their adapter belong under `app/infrastructure/cost_basis` as
      `metrics.py` and `observability.py`. Preserve the existing metric contracts while keeping
      framework dependencies outside domain and application code.
+     Calculated transaction-cost persistence belongs in
+     `app/application/cost_basis_processing/transaction_persistence.py`: it accepts domain
+     transactions and persistence ports, writes only the affected deterministic suffix, and returns
+     immutable `BookedTransaction` values. Event DTO mapping and outbox publication remain
+     infrastructure concerns. Persistence lifecycle observations use typed stage/status records;
+     the Prometheus/log adapter must contain telemetry failures so support tooling cannot roll back
+     financial writes. Mirror persistence tests under the application package and do not test this
+     behavior through private workflow methods.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,

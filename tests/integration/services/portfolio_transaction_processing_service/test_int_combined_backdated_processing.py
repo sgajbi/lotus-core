@@ -22,6 +22,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingIntent,
     TransactionProcessingStatus,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyCostBasisTransactionRepository,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     instrument_record,
@@ -585,24 +588,16 @@ async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(
             correlation_id="corr-combined-backdated-rollback-01",
         )
 
-    workflow = context.use_case._unit_of_work_factory.cost_workflow
-    persist_processed_transaction = workflow._persist_processed_transaction
+    apply_transaction_costs = SqlAlchemyCostBasisTransactionRepository.apply_transaction_costs
 
-    async def fail_later_suffix_persistence(
-        *, processed_transaction, repo, lot_states, income_offsets
-    ):
-        if processed_transaction.transaction_id == later_sell.transaction_id:
+    async def fail_later_suffix_persistence(self, transaction):
+        if transaction.transaction_id == later_sell.transaction_id:
             raise RuntimeError("later suffix persistence failed")
-        return await persist_processed_transaction(
-            processed_transaction=processed_transaction,
-            repo=repo,
-            lot_states=lot_states,
-            income_offsets=income_offsets,
-        )
+        return await apply_transaction_costs(self, transaction)
 
     monkeypatch.setattr(
-        workflow,
-        "_persist_processed_transaction",
+        SqlAlchemyCostBasisTransactionRepository,
+        "apply_transaction_costs",
         fail_later_suffix_persistence,
     )
 

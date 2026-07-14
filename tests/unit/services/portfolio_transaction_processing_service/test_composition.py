@@ -11,6 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
     CashflowCalculationWorkflow,
@@ -76,6 +77,10 @@ def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
     assert isinstance(unit_of_work, SqlAlchemyTransactionProcessingUnitOfWork)
     assert unit_of_work._session_factory is session_factory
     assert use_case._observer is PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
+    assert (
+        use_case._unit_of_work_factory.cost_workflow._cost_basis_persistence_observer
+        is PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER
+    )
 
 
 def test_replay_use_case_builder_composes_canonical_repository_dependencies() -> None:

@@ -47,7 +47,10 @@ Deterministic AVCO rebuild planning and upstream-provided cash-leg validation ar
 services under `app/application/cost_basis_processing`. They operate on canonical booked
 transactions through transaction-state, reference-data, and FX ports. The same application package
 owns the persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO
-transitions. SQLAlchemy-based AVCO reconciliation remains an infrastructure adapter under
+transitions. The same package owns calculated transaction persistence: it writes the affected
+timeline suffix through transaction, lot-state, and accrued-income-offset ports and returns
+immutable booked transactions. Infrastructure maps those values to event DTOs and outbox payloads.
+SQLAlchemy-based AVCO reconciliation remains an infrastructure adapter under
 `app/infrastructure/cost_basis`; it invokes the application planner and owns only persistence
 coordination. Lot-opening, consumption, preservation, and basis-transfer behavior remains pure
 policy under `app/domain/cost_basis`.
@@ -59,7 +62,9 @@ are not extension points.
 
 Cost-basis calculation observation remains framework-neutral at the port boundary. Prometheus
 instruments and adapters are grouped under `app/infrastructure/cost_basis`; metric names, labels,
-and buckets remain stable operational contracts.
+and buckets remain stable operational contracts. Transaction-persistence stages use the same typed
+observation boundary, and the infrastructure adapter contains metric or logging failures so
+telemetry cannot abort financial writes.
 
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
@@ -80,8 +85,8 @@ For an eligible persisted transaction event, the service:
    a backdated, same-order, unsupported, missing-checkpoint, or incompatible event
 6. enriches the applicable rows with portfolio policy and FX context where required
 7. calculates the ordered append or deterministic affected history under the active cost-basis method
-8. persists the incoming row and any recalculated later suffix, plus lot, checkpoint, and support state, in one
-   transaction
+8. persists the incoming row and any recalculated later suffix, plus lot, checkpoint, and support
+   state, in one transaction through the cost-basis application persistence boundary
 9. publishes only the incoming enriched event so downstream position handling is not duplicated
 
 The same key lock protects FIFO, AVCO, backdated rebuild, replay, first-write, and historical AVCO

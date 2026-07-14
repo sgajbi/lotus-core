@@ -23,6 +23,7 @@ from .corporate_action_reconciliation_observability import (
 )
 from .cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     CostEffectsStager,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
@@ -71,6 +72,9 @@ def build_process_transaction_use_case(
     resolved_session_factory = session_factory or get_async_session_factory()
     cost_workflow = CostCalculationWorkflow()
     cost_workflow.configure_cost_basis_observer(PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER)
+    cost_workflow.configure_cost_basis_persistence_observer(
+        PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER
+    )
     cost_workflow.configure_corporate_action_reconciliation_observer(
         PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER
     )

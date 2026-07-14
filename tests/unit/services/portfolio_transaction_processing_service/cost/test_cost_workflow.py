@@ -15,12 +15,13 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
-    CostBasisTransaction,
     CostCalculationError,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    booked_transaction_event_mapper,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    cost_calculation_workflow as cost_calculation_workflow_module,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
@@ -71,7 +72,9 @@ async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None
     assert not hasattr(workflow, "_consumer_config")
 
 
-async def test_cost_basis_acquires_key_lock_before_reading_processing_state() -> None:
+async def test_cost_basis_acquires_key_lock_before_reading_processing_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     event = TransactionEvent(
         transaction_id="BUY-LOCK-01",
         portfolio_id="PORT_COST_01",
@@ -101,7 +104,12 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         average_cost_pool_transition=None,
     )
     workflow._calculate_cost_basis = AsyncMock(return_value=calculation)
-    workflow._persist_affected_processed_transactions = AsyncMock(return_value=[])
+    persist_transactions = AsyncMock(return_value=())
+    monkeypatch.setattr(
+        cost_calculation_workflow_module,
+        "persist_cost_basis_transactions",
+        persist_transactions,
+    )
     workflow._persist_cost_basis_processing_checkpoint = AsyncMock()
 
     await workflow._build_cost_basis_events_to_publish(
@@ -296,36 +304,6 @@ async def test_cost_basis_stage_reports_missing_portfolio_dependency():
     reference_data.get_cost_basis_instrument.assert_not_awaited()
 
 
-async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_incoming(
-    cost_calculation_workflow: CostCalculationWorkflow,
-) -> None:
-    prior = MagicMock(transaction_id="BUY-PRIOR")
-    incoming = MagicMock(transaction_id="BUY-BACKDATED")
-    later = MagicMock(transaction_id="SELL-LATER")
-    incoming_event = MagicMock(spec=TransactionEvent)
-    later_event = MagicMock(spec=TransactionEvent)
-    repository = MagicMock()
-    lot_states = _lot_state_port()
-    income_offsets = _income_offset_port()
-    cost_calculation_workflow._persist_processed_transaction = AsyncMock(
-        side_effect=(incoming_event, later_event)
-    )
-
-    events = await cost_calculation_workflow._persist_affected_processed_transactions(
-        processed=[prior, incoming, later],
-        new_transaction_ids={incoming.transaction_id},
-        repo=repository,
-        lot_states=lot_states,
-        income_offsets=income_offsets,
-    )
-
-    assert events == [incoming_event]
-    assert [
-        call.kwargs["processed_transaction"].transaction_id
-        for call in cost_calculation_workflow._persist_processed_transaction.await_args_list
-    ] == ["BUY-BACKDATED", "SELL-LATER"]
-
-
 async def test_recalculation_rejects_historical_engine_error_before_suffix_write() -> None:
     with pytest.raises(
         ValueError,
@@ -339,34 +317,6 @@ async def test_recalculation_rejects_historical_engine_error_before_suffix_write
                 )
             ]
         )
-
-
-async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_missing(
-    cost_calculation_workflow: CostCalculationWorkflow,
-) -> None:
-    processed_transaction = MagicMock(
-        transaction_id="BUY-MISSING-CANONICAL",
-        transaction_type="BUY",
-    )
-    repository = AsyncMock(spec=CostBasisTransactionStatePort)
-    lot_states = _lot_state_port()
-    income_offsets = _income_offset_port()
-    repository.apply_transaction_costs.return_value = None
-
-    with pytest.raises(
-        ValueError,
-        match="Canonical transaction row was not found during cost persistence",
-    ):
-        await cost_calculation_workflow._persist_processed_transaction(
-            processed_transaction=processed_transaction,
-            repo=repository,
-            lot_states=lot_states,
-            income_offsets=income_offsets,
-        )
-
-    repository.replace_transaction_cost_breakdown.assert_not_awaited()
-    lot_states.upsert_buy_lot_state.assert_not_awaited()
-    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
 
 
 async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contract(
@@ -497,73 +447,6 @@ async def test_cost_workflow_routes_foreign_exchange_and_cost_basis_independentl
         event=event, repo=dependencies["repo"]
     )
     workflow._build_cost_basis_events_to_publish.assert_awaited_once()
-
-
-@pytest.mark.parametrize(
-    ("transaction_type", "fee", "persists_open_lot", "persists_accrued_income"),
-    [
-        ("BUY", Decimal("4.50"), True, True),
-        ("SELL", Decimal(0), False, False),
-        ("TRANSFER_IN", Decimal("1.25"), True, False),
-    ],
-)
-async def test_cost_persistence_applies_domain_specific_child_state(
-    transaction_type: str,
-    fee: Decimal,
-    persists_open_lot: bool,
-    persists_accrued_income: bool,
-) -> None:
-    event = TransactionEvent(
-        transaction_id=f"{transaction_type}-PERSIST-01",
-        portfolio_id="PORT_COST_01",
-        instrument_id="AAPL",
-        security_id="SEC_COST_01",
-        transaction_date=datetime(2025, 1, 15),
-        transaction_type=transaction_type,
-        quantity=Decimal("10"),
-        price=Decimal("150"),
-        gross_transaction_amount=Decimal("1500"),
-        trade_currency="USD",
-        currency="USD",
-    )
-    processed = CostBasisTransaction(
-        transaction_id=event.transaction_id,
-        portfolio_id=event.portfolio_id,
-        instrument_id=event.instrument_id,
-        security_id=event.security_id,
-        transaction_type=transaction_type,
-        transaction_date=event.transaction_date,
-        quantity=event.quantity,
-        gross_transaction_amount=event.gross_transaction_amount,
-        trade_currency="USD",
-        portfolio_base_currency="USD",
-        fees={"brokerage": fee},
-    )
-    repository = AsyncMock(spec=CostBasisTransactionStatePort)
-    repository.apply_transaction_costs.return_value = (
-        booked_transaction_event_mapper.to_booked_transaction(event)
-    )
-    lot_states = _lot_state_port()
-    income_offsets = _income_offset_port()
-
-    persisted = await CostCalculationWorkflow()._persist_processed_transaction(
-        processed_transaction=processed,
-        repo=repository,
-        lot_states=lot_states,
-        income_offsets=income_offsets,
-    )
-
-    assert persisted.trade_fee == fee
-    repository.apply_transaction_costs.assert_awaited_once_with(processed)
-    repository.replace_transaction_cost_breakdown.assert_awaited_once_with(processed)
-    if persists_open_lot:
-        lot_states.upsert_buy_lot_state.assert_awaited_once_with(processed)
-    else:
-        lot_states.upsert_buy_lot_state.assert_not_awaited()
-    if persists_accrued_income:
-        income_offsets.upsert_accrued_income_offset.assert_awaited_once_with(processed)
-    else:
-        income_offsets.upsert_accrued_income_offset.assert_not_awaited()
 
 
 @pytest.mark.parametrize("epoch", [None, 7])

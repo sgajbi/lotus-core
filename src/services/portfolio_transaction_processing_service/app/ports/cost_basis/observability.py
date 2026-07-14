@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
+from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
+
+from ...domain.cost_basis import CostBasisTransaction
 
 
 class CostBasisCalculationObservation(Protocol):
@@ -28,3 +32,33 @@ class CostBasisCalculationObserver(Protocol):
     def observe_recalculation(
         self,
     ) -> AbstractContextManager[CostBasisCalculationObservation]: ...
+
+
+class CostBasisPersistenceStage(StrEnum):
+    """Name one durable state transition in calculated transaction persistence."""
+
+    TRANSACTION_COSTS = "persist_transaction_costs"
+    OPEN_LOT = "persist_lot_state"
+    ACCRUED_INCOME_OFFSET = "persist_accrued_offset_state"
+
+
+class CostBasisPersistenceStatus(StrEnum):
+    """Describe whether one persistence stage started or completed."""
+
+    ATTEMPT = "attempt"
+    SUCCESS = "success"
+
+
+@dataclass(frozen=True, slots=True)
+class CostBasisPersistenceObservation:
+    """Describe one cost-basis persistence lifecycle transition."""
+
+    transaction: CostBasisTransaction
+    stage: CostBasisPersistenceStage
+    status: CostBasisPersistenceStatus
+
+
+class CostBasisPersistenceObserver(Protocol):
+    """Observe persistence without coupling application policy to telemetry."""
+
+    def observe(self, observation: CostBasisPersistenceObservation) -> None: ...
