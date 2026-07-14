@@ -170,9 +170,9 @@ async def _stage_cashflow_calculation(
         calculation_context=calculation_context,
     )
     saved = (
-        await cashflow_repo.replace_cashflow(cashflow_to_save)
+        await cashflow_repo.replace(cashflow_to_save)
         if repair_existing
-        else await cashflow_repo.create_cashflow(cashflow_to_save)
+        else await cashflow_repo.create(cashflow_to_save)
     )
     completion_evt = cashflow_calculated_event_from_stored_cashflow(saved, event)
     await outbox_repo.create_outbox_event(

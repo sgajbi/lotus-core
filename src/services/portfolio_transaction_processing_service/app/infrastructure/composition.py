@@ -19,8 +19,7 @@ from ..application.cost_basis_processing import (
     PreparedCostProcessingUseCase,
 )
 from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
-from .cashflow_processing_adapter import CashflowStagingWorkflow
-from .cashflow_staging_workflow import CashflowCalculationWorkflow
+from .cashflow import CashflowRuleCache
 from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
 )
@@ -41,13 +40,13 @@ from .transaction_replay_adapter import (
 class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
     session_factory: Callable[[], AsyncSession]
     cost_processor: PreparedCostProcessingUseCase
-    cashflow_workflow: CashflowStagingWorkflow
+    cashflow_rule_cache: CashflowRuleCache
 
     def __call__(self) -> TransactionProcessingUnitOfWork:
         return SqlAlchemyTransactionProcessingUnitOfWork(
             session_factory=self.session_factory,
             cost_processor=self.cost_processor,
-            cashflow_workflow=self.cashflow_workflow,
+            cashflow_rule_cache=self.cashflow_rule_cache,
         )
 
 
@@ -79,7 +78,7 @@ def build_process_transaction_use_case(
     unit_of_work_factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=resolved_session_factory,
         cost_processor=cost_processor,
-        cashflow_workflow=CashflowCalculationWorkflow(),
+        cashflow_rule_cache=CashflowRuleCache(),
     )
     return ProcessTransactionUseCase(
         unit_of_work_factory,

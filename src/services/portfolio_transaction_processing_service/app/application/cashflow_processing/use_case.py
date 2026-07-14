@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from ...domain import BookedTransaction
 from ...domain.cashflow import CashflowCalculationContext, calculate_transaction_cashflow
 from ...domain.transaction import (
@@ -18,6 +20,7 @@ from ...domain.transaction.processing_type import (
     resolve_effective_processing_transaction_type,
 )
 from ...ports.cashflow import (
+    CashflowCalculationObserver,
     CashflowEventStagingPort,
     CashflowPersistencePort,
     CashflowProcessingStatePort,
@@ -26,6 +29,8 @@ from ...ports.cashflow import (
 from ...ports.transaction_processing import CashflowProcessingResult
 from ..errors import TransactionProcessingError, TransactionProcessingRejected
 from ..settlement_cash_rejection import build_settlement_cash_rejection
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessTransactionCashflowUseCase:
@@ -38,13 +43,15 @@ class ProcessTransactionCashflowUseCase:
         state: CashflowProcessingStatePort,
         persistence: CashflowPersistencePort,
         events: CashflowEventStagingPort,
+        observer: CashflowCalculationObserver,
     ) -> None:
         self._rules = rules
         self._state = state
         self._persistence = persistence
         self._events = events
+        self._observer = observer
 
-    async def execute(
+    async def process(
         self,
         transaction: BookedTransaction,
         *,
@@ -83,6 +90,16 @@ class ProcessTransactionCashflowUseCase:
 
         transaction_type = _validated_cashflow_transaction_type(transaction)
         if not requires_cashflow_processing(transaction):
+            logger.info(
+                "Skipping cashflow creation for non-cash FX contract lifecycle event.",
+                extra={
+                    "transaction_id": transaction.transaction_id,
+                    "transaction_type": transaction.transaction_type,
+                    "effective_processing_type": transaction_type,
+                    "component_type": transaction.component_type,
+                    "fx_contract_id": transaction.fx_contract_id,
+                },
+            )
             return CashflowProcessingResult()
 
         rule = await self._rules.resolve(transaction_type)
@@ -106,6 +123,8 @@ class ProcessTransactionCashflowUseCase:
             )
         except SettlementCashValidationError as exc:
             raise build_settlement_cash_rejection(transaction, exc) from exc
+
+        self._observer.calculated(calculated)
 
         stored = (
             await self._persistence.replace(calculated)

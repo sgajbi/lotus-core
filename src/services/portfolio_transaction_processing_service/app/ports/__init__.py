@@ -1,6 +1,7 @@
 """Framework-neutral transaction processing capability ports."""
 
 from .cashflow import (
+    CashflowCalculationObserver,
     CashflowEventStagingPort,
     CashflowPersistencePort,
     CashflowProcessingStatePort,
@@ -74,6 +75,7 @@ __all__ = [
     "AverageCostPoolPersistedSummary",
     "AverageCostPoolReconciliationPort",
     "CashflowEventStagingPort",
+    "CashflowCalculationObserver",
     "CashflowPersistencePort",
     "CashflowProcessingPort",
     "BookedTransactionReplayPort",

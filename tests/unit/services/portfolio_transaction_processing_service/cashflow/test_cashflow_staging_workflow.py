@@ -134,7 +134,7 @@ async def test_stage_cashflow_calculation_persists_domain_result_and_publishes_e
         epoch=3,
     )
     repository = AsyncMock()
-    repository.create_cashflow.return_value = stored
+    repository.create.return_value = stored
     outbox_repository = AsyncMock()
     rule = CachedCashflowRule(
         classification="INVESTMENT_OUTFLOW",
@@ -155,7 +155,7 @@ async def test_stage_cashflow_calculation_persists_domain_result_and_publishes_e
         False,
     )
 
-    calculated = repository.create_cashflow.await_args.args[0]
+    calculated = repository.create.await_args.args[0]
     assert isinstance(calculated, CalculatedCashflow)
     assert calculated.amount == Decimal("-252")
     assert calculated.cashflow_date == date(2026, 4, 12)

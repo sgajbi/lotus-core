@@ -274,6 +274,140 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "transaction-processing.cashflow-rule-resolution",
+      "capability_family": "reference-data-reader",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/cashflow/rule_resolution.py",
+      "port_symbols": [
+        "CashflowRuleResolutionPort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_resolver.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "transaction-processing.cashflow-processing-state",
+      "capability_family": "epoch-idempotency-store",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/cashflow/processing_state.py",
+      "port_symbols": [
+        "CashflowProcessingStatePort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/processing_state.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "transaction-processing.cashflow-persistence",
+      "capability_family": "financial-ledger-writer",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/cashflow/persistence.py",
+      "port_symbols": [
+        "CashflowPersistencePort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/persistence.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "transaction-processing.cashflow-event-staging",
+      "capability_family": "transactional-event-writer",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/cashflow/event_staging.py",
+      "port_symbols": [
+        "CashflowEventStagingPort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/event_staging.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
+      "capability_id": "transaction-processing.cashflow-observability",
+      "capability_family": "financial-calculation-observer",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/cashflow/observability.py",
+      "port_symbols": [
+        "CashflowCalculationObserver"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/observability.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/metric_vocabulary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "runtime.provider-ports",
       "capability_family": "clock-id-provider",
       "owner_service": "portfolio_common",

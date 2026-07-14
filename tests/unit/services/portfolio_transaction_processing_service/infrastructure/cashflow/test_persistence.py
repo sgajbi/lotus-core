@@ -16,7 +16,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.ca
 pytestmark = pytest.mark.asyncio
 
 
-async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
+async def test_create_reuses_existing_row_on_duplicate() -> None:
     db_session = AsyncMock()
     db_session.add = MagicMock()
     nested_tx = AsyncMock()
@@ -60,7 +60,7 @@ async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
         epoch=3,
     )
 
-    saved_cashflow = await repository.create_cashflow(duplicate_cashflow)
+    saved_cashflow = await repository.create(duplicate_cashflow)
 
     assert saved_cashflow.cashflow_id == 17
     assert saved_cashflow.transaction_id == "TXN-001"
@@ -69,7 +69,7 @@ async def test_create_cashflow_reuses_existing_row_on_duplicate() -> None:
     db_session.execute.assert_awaited_once()
 
 
-async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> None:
+async def test_create_maps_domain_result_at_repository_boundary() -> None:
     db_session = AsyncMock()
     db_session.add = MagicMock()
     nested_tx = AsyncMock()
@@ -112,7 +112,7 @@ async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> No
         epoch=4,
     )
 
-    saved = await SqlAlchemyCashflowRepository(db_session).create_cashflow(calculated)
+    saved = await SqlAlchemyCashflowRepository(db_session).create(calculated)
 
     mapped_row = db_session.add.call_args.args[0]
     assert isinstance(mapped_row, Cashflow)
@@ -122,7 +122,7 @@ async def test_create_cashflow_maps_domain_result_at_repository_boundary() -> No
     assert saved.cashflow_id == 18
 
 
-async def test_create_cashflow_persists_domain_result_successfully() -> None:
+async def test_create_persists_domain_result_successfully() -> None:
     db_session = AsyncMock()
     db_session.add = MagicMock()
     nested_tx = AsyncMock()
@@ -151,7 +151,7 @@ async def test_create_cashflow_persists_domain_result_successfully() -> None:
         epoch=5,
     )
 
-    saved = await SqlAlchemyCashflowRepository(db_session).create_cashflow(calculated)
+    saved = await SqlAlchemyCashflowRepository(db_session).create(calculated)
 
     persisted_row = db_session.add.call_args.args[0]
     assert isinstance(persisted_row, Cashflow)

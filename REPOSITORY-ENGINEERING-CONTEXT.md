@@ -1469,9 +1469,11 @@ Most relevant current governance:
      Cashflow orchestration belongs in `application/cashflow_processing/` and may depend only on
      `BookedTransaction`, cashflow domain values, application errors/results, and protocols under
      `ports/cashflow/`. Keep SQLAlchemy sessions, ORM rows, Kafka/Pydantic events, outbox helpers,
-     cache implementations, and transport mappers in infrastructure. The #719 runtime migration is
-     incomplete until composition uses this application boundary and deletes the compatibility
-     workflow; do not add new behavior to that workflow while the replacement is in progress.
+     cache implementations, and transport mappers in infrastructure. Combined unit-of-work
+     composition constructs `ProcessTransactionCashflowUseCase` with session-scoped adapters and a
+     runtime-owned `CashflowRuleCache`; preserve one transaction for cashflow persistence and outbox
+     staging. The #719 migration remains incomplete only until the unused compatibility workflow
+     and adapter are deleted; do not add behavior to those retired-path candidates.
      Every ORM, repository, raw SQL, migration, and migration-downgrade rule mutation must advance
      `cashflow_rules.updated_at` explicitly; ORM `onupdate` does not apply to raw SQL.
 106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now
