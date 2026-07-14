@@ -17,7 +17,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingIntent,
     TransactionProcessingStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
     SqlAlchemyCashflowRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (

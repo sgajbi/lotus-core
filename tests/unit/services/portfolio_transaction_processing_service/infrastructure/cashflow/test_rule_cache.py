@@ -10,7 +10,7 @@ import pytest
 from portfolio_common.database_models import CashflowRule
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
     CashflowRuleCache,
     CashflowRuleSetVersion,
     SqlAlchemyCashflowRuleRepository,
