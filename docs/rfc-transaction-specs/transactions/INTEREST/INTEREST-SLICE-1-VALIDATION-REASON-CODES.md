@@ -17,7 +17,7 @@ No runtime processing behavior is changed in this slice.
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/reason_codes.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/__init__.py` (exports)
-- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py`
 
 ## Reason Code Taxonomy
 
