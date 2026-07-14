@@ -1,3 +1,5 @@
+"""Test FX contract lifecycle instrument semantics."""
+
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal

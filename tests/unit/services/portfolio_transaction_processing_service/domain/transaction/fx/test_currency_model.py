@@ -1,3 +1,5 @@
+"""Test canonical FX currency-pair modeling."""
+
 from __future__ import annotations
 
 from datetime import datetime

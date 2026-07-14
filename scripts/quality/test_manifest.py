@@ -111,9 +111,9 @@ SUITES: dict[str, list[str]] = {
     ],
     "transaction-fx-contract": [
         "tests/unit/transaction_specs/test_fx_slice0_characterization.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_linkage.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_contract_instrument.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_linkage.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_contract_instrument.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/test_processing_type.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py",
