@@ -1,3 +1,5 @@
+"""Verify SQLAlchemy AVCO reconciliation adapter behavior and transaction ownership."""
+
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -12,7 +14,7 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.average_cost_pool_reconciliation_adapter import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.average_cost_pool_reconciliation import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (

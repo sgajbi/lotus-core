@@ -1,8 +1,5 @@
 """Concrete transaction processing infrastructure adapters."""
 
-from .average_cost_pool_reconciliation_adapter import (
-    SqlAlchemyAverageCostPoolReconciliationAdapter,
-)
 from .cashflow_calculation import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
@@ -33,7 +30,11 @@ from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PrometheusCorporateActionReconciliationObserver,
 )
-from .cost_basis import StagedCostEffects, cost_basis_processing_lock_key
+from .cost_basis import (
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
+    StagedCostEffects,
+    cost_basis_processing_lock_key,
+)
 from .cost_calculation_workflow import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
