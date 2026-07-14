@@ -9,7 +9,9 @@ from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 from .observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     PrometheusCostBasisCalculationObserver,
+    PrometheusCostBasisPersistenceObserver,
 )
 from .processing_adapter import (
     CostBasisProcessingAdapter,
@@ -37,7 +39,9 @@ __all__ = [
     "CostEffectsStager",
     "PortfolioNotFoundError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
+    "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PrometheusCostBasisCalculationObserver",
+    "PrometheusCostBasisPersistenceObserver",
     "StagedCostEffects",
     "cost_basis_processing_lock_key",
 ]

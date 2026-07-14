@@ -663,25 +663,3 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
             checkpoint=malformed_checkpoint,
             open_lot_states={},
         )
-
-
-async def test_recalculated_suffix_requires_the_incoming_transaction_before_writes() -> None:
-    repository = AsyncMock(spec=CostBasisTransactionStatePort)
-    lot_states = _lot_state_port()
-    income_offsets = AsyncMock()
-
-    with pytest.raises(ValueError, match="omitted the incoming transaction"):
-        await CostCalculationWorkflow()._persist_affected_processed_transactions(
-            processed=[
-                _processed_buy(
-                    "BUY-EXISTING",
-                    datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
-                )
-            ],
-            new_transaction_ids={"BUY-MISSING"},
-            repo=repository,
-            lot_states=lot_states,
-            income_offsets=income_offsets,
-        )
-
-    repository.apply_transaction_costs.assert_not_awaited()

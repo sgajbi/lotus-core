@@ -4,7 +4,14 @@ from .average_cost_pool import CostBasisAverageCostPoolPort
 from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
 from .fx_rates import CostBasisFxRatePort
 from .lot_state import CostBasisLotStatePort
-from .observability import CostBasisCalculationObservation, CostBasisCalculationObserver
+from .observability import (
+    CostBasisCalculationObservation,
+    CostBasisCalculationObserver,
+    CostBasisPersistenceObservation,
+    CostBasisPersistenceObserver,
+    CostBasisPersistenceStage,
+    CostBasisPersistenceStatus,
+)
 from .processing_state import CostBasisProcessingStatePort
 from .reference_data import (
     CostBasisInstrumentReference,
@@ -27,6 +34,10 @@ __all__ = [
     "CostBasisLotStatePort",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
+    "CostBasisPersistenceObservation",
+    "CostBasisPersistenceObserver",
+    "CostBasisPersistenceStage",
+    "CostBasisPersistenceStatus",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
     "CostBasisProcessingStatePort",

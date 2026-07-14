@@ -1,6 +1,5 @@
 """Stage cost-basis effects inside the unified transaction-processing boundary."""
 
-import logging
 from dataclasses import replace
 from decimal import Decimal
 from typing import Any
@@ -11,10 +10,7 @@ from portfolio_common.config import (
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
-from portfolio_common.monitoring import (
-    BUY_LIFECYCLE_STAGE_TOTAL,
-    SELL_LIFECYCLE_STAGE_TOTAL,
-)
+from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 
 from ..application import (
@@ -27,13 +23,13 @@ from ..application.cost_basis_processing import (
     CostProcessingRoute,
     OpenLotPersistenceScope,
     enrich_cost_basis_transactions_with_fx,
+    persist_cost_basis_transactions,
     persist_open_lot_state,
     validate_upstream_cash_leg,
 )
 from ..domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
     INCREMENTAL_SAFE_LOT_BEHAVIORS,
-    LOT_OPENING_BEHAVIORS,
     STATE_DEPENDENT_LOT_BEHAVIORS,
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
@@ -65,6 +61,7 @@ from ..ports import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisLotStatePort,
+    CostBasisPersistenceObserver,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisTransactionStatePort,
@@ -78,11 +75,20 @@ from .cost_basis.metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING
 from .cost_basis.staged_effects import StagedCostEffects
 from .fx_event_mapper import to_fx_contract_instrument_event
 
-logger = logging.getLogger(__name__)
-
 
 def _normalize_event_code(value: object) -> str:
     return str(value or "").strip().upper()
+
+
+def _record_outbox_lifecycle(transaction_type: object) -> None:
+    """Preserve BUY/SELL outbox lifecycle metrics at the infrastructure boundary."""
+
+    counter = {
+        "BUY": BUY_LIFECYCLE_STAGE_TOTAL,
+        "SELL": SELL_LIFECYCLE_STAGE_TOTAL,
+    }.get(_normalize_event_code(transaction_type))
+    if counter is not None:
+        counter.labels("emit_outbox", "success").inc()
 
 
 class CostCalculationWorkflow:
@@ -94,11 +100,20 @@ class CostCalculationWorkflow:
     """
 
     _cost_basis_observer: CostBasisCalculationObserver | None = None
+    _cost_basis_persistence_observer: CostBasisPersistenceObserver | None = None
     _corporate_action_reconciliation_observer: CorporateActionReconciliationObserver | None = None
 
     def configure_cost_basis_observer(self, observer: CostBasisCalculationObserver) -> None:
         """Attach infrastructure observability without changing legacy delivery construction."""
         self._cost_basis_observer = observer
+
+    def configure_cost_basis_persistence_observer(
+        self,
+        observer: CostBasisPersistenceObserver,
+    ) -> None:
+        """Attach infrastructure persistence telemetry to the application use case."""
+
+        self._cost_basis_persistence_observer = observer
 
     def configure_corporate_action_reconciliation_observer(
         self,
@@ -115,14 +130,6 @@ class CostCalculationWorkflow:
             cost_basis_method,
             observer=self._cost_basis_observer,
         )
-
-    @staticmethod
-    def _record_lifecycle_stage(transaction_type: str, stage: str, status: str) -> None:
-        normalized_type = _normalize_event_code(transaction_type)
-        if normalized_type == "BUY":
-            BUY_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
-        if normalized_type == "SELL":
-            SELL_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
 
     async def _build_events_to_publish(
         self,
@@ -263,13 +270,22 @@ class CostCalculationWorkflow:
 
         new_transaction_ids = {event.transaction_id}
         self._raise_for_transaction_engine_errors(errored=calculation.errored)
-        events_to_publish = await self._persist_affected_processed_transactions(
+        persisted_transactions = await persist_cost_basis_transactions(
             processed=calculation.processed,
-            new_transaction_ids=new_transaction_ids,
-            repo=repo,
+            incoming_transaction_ids=new_transaction_ids,
+            transactions=repo,
             lot_states=lot_states,
             income_offsets=income_offsets,
+            observer=self._cost_basis_persistence_observer,
         )
+        events_to_publish = [
+            to_transaction_event(
+                transaction,
+                correlation_id=None,
+                traceparent=None,
+            )
+            for transaction in persisted_transactions
+        ]
         await persist_open_lot_state(
             transaction=to_booked_transaction(event),
             effective_transaction_type=event_transaction_type,
@@ -606,38 +622,6 @@ class CostCalculationWorkflow:
         )
         return enriched_transactions
 
-    async def _persist_affected_processed_transactions(
-        self,
-        *,
-        processed: list[Any],
-        new_transaction_ids: set[str],
-        repo: CostBasisTransactionStatePort,
-        lot_states: CostBasisLotStatePort,
-        income_offsets: AccruedIncomeOffsetStatePort,
-    ) -> list[TransactionEvent]:
-        first_affected_index = next(
-            (
-                index
-                for index, transaction in enumerate(processed)
-                if transaction.transaction_id in new_transaction_ids
-            ),
-            None,
-        )
-        if first_affected_index is None:
-            raise ValueError("Processed transaction timeline omitted the incoming transaction")
-
-        events_to_publish: list[TransactionEvent] = []
-        for processed_transaction in processed[first_affected_index:]:
-            persisted_event = await self._persist_processed_transaction(
-                processed_transaction=processed_transaction,
-                repo=repo,
-                lot_states=lot_states,
-                income_offsets=income_offsets,
-            )
-            if processed_transaction.transaction_id in new_transaction_ids:
-                events_to_publish.append(persisted_event)
-        return events_to_publish
-
     @staticmethod
     async def _persist_cost_basis_processing_checkpoint(
         *,
@@ -673,117 +657,6 @@ class CostCalculationWorkflow:
                 f"Cost-basis calculation failed for {errored[0].transaction_id}: "
                 f"{errored[0].error_reason}"
             )
-
-    async def _persist_processed_transaction(
-        self,
-        *,
-        processed_transaction: Any,
-        repo: CostBasisTransactionStatePort,
-        lot_states: CostBasisLotStatePort,
-        income_offsets: AccruedIncomeOffsetStatePort,
-    ) -> TransactionEvent:
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type, "persist_transaction_costs", "attempt"
-        )
-        updated_transaction = await repo.apply_transaction_costs(processed_transaction)
-        if updated_transaction is None:
-            raise ValueError(
-                "Canonical transaction row was not found during cost persistence: "
-                f"{processed_transaction.transaction_id}"
-            )
-        await repo.replace_transaction_cost_breakdown(processed_transaction)
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type, "persist_transaction_costs", "success"
-        )
-
-        if (
-            transaction_lot_behavior(processed_transaction.transaction_type)
-            in LOT_OPENING_BEHAVIORS
-        ):
-            await self._persist_open_lot_state(
-                processed_transaction=processed_transaction,
-                lot_states=lot_states,
-            )
-        if processed_transaction.transaction_type == "BUY":
-            await self._persist_accrued_income_offset(
-                processed_transaction=processed_transaction,
-                income_offsets=income_offsets,
-            )
-        if processed_transaction.transaction_type == "SELL":
-            self._log_processed_transaction_state(
-                log_event="sell_state_persisted",
-                processed_transaction=processed_transaction,
-            )
-
-        trade_fee = (
-            processed_transaction.fees.total_fees
-            if processed_transaction.fees and processed_transaction.fees.total_fees > 0
-            else Decimal(0)
-        )
-        return to_transaction_event(
-            replace(updated_transaction, trade_fee=trade_fee),
-            correlation_id=None,
-            traceparent=None,
-        )
-
-    async def _persist_open_lot_state(
-        self,
-        *,
-        processed_transaction: Any,
-        lot_states: CostBasisLotStatePort,
-    ) -> None:
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type, "persist_lot_state", "attempt"
-        )
-        await lot_states.upsert_buy_lot_state(processed_transaction)
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type, "persist_lot_state", "success"
-        )
-        self._log_processed_transaction_state(
-            log_event="open_lot_state_persisted",
-            processed_transaction=processed_transaction,
-        )
-
-    async def _persist_accrued_income_offset(
-        self,
-        *,
-        processed_transaction: Any,
-        income_offsets: AccruedIncomeOffsetStatePort,
-    ) -> None:
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type,
-            "persist_accrued_offset_state",
-            "attempt",
-        )
-        await income_offsets.upsert_accrued_income_offset(processed_transaction)
-        self._record_lifecycle_stage(
-            processed_transaction.transaction_type,
-            "persist_accrued_offset_state",
-            "success",
-        )
-
-    @staticmethod
-    def _log_processed_transaction_state(
-        *,
-        log_event: str,
-        processed_transaction: Any,
-    ) -> None:
-        logger.info(
-            log_event,
-            extra={
-                "transaction_id": processed_transaction.transaction_id,
-                "economic_event_id": getattr(processed_transaction, "economic_event_id", None),
-                "linked_transaction_group_id": getattr(
-                    processed_transaction, "linked_transaction_group_id", None
-                ),
-                "calculation_policy_id": getattr(
-                    processed_transaction, "calculation_policy_id", None
-                ),
-                "calculation_policy_version": getattr(
-                    processed_transaction, "calculation_policy_version", None
-                ),
-            },
-        )
 
     async def _build_emitted_transaction_events(
         self,
@@ -849,7 +722,7 @@ class CostCalculationWorkflow:
                 payload=event_business_payload(publish_event, mode="json"),
                 correlation_id=correlation_id,
             )
-            self._record_lifecycle_stage(publish_event.transaction_type, "emit_outbox", "success")
+            _record_outbox_lifecycle(publish_event.transaction_type)
 
     async def _publish_instrument_events(
         self,
