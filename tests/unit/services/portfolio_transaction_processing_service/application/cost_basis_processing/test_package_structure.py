@@ -22,3 +22,18 @@ def test_cost_basis_timeline_has_domain_owned_application_path() -> None:
     assert not (APPLICATION_ROOT / "cost_basis_timeline.py").exists()
     assert not (UNIT_TEST_ROOT / "test_cost_basis_timeline.py").exists()
     assert (APPLICATION_ROOT / "cost_basis_processing" / "timeline.py").is_file()
+
+
+def test_average_cost_pool_reconciliation_has_layer_owned_paths() -> None:
+    """Reject restoration of vague or flat reconciliation modules."""
+
+    app_root = APPLICATION_ROOT.parent
+    assert not (APPLICATION_ROOT / "reconcile_average_cost_pools.py").exists()
+    assert not (app_root / "ports" / "average_cost_pool_reconciliation.py").exists()
+    assert not (app_root / "domain" / "cost_basis" / "reconciliation.py").exists()
+    assert not (UNIT_TEST_ROOT / "test_reconcile_average_cost_pools.py").exists()
+    assert (
+        APPLICATION_ROOT / "cost_basis_processing" / "average_cost_pool_reconciliation.py"
+    ).is_file()
+    assert (app_root / "ports" / "cost_basis" / "average_cost_pool_reconciliation.py").is_file()
+    assert (app_root / "domain" / "cost_basis" / "average_cost_pool_reconciliation.py").is_file()

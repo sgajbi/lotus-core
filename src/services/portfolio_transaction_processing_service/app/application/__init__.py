@@ -15,6 +15,11 @@ from .corporate_action_reconciliation import (
     CorporateActionReconciliationRunEvidence,
     build_corporate_action_reconciliation_evidence,
 )
+from .cost_basis_processing.average_cost_pool_reconciliation import (
+    ReconcileAverageCostPoolsCommand,
+    ReconcileAverageCostPoolsResult,
+    ReconcileAverageCostPoolsUseCase,
+)
 from .cost_basis_processing.timeline import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
@@ -22,11 +27,6 @@ from .cost_basis_processing.timeline import (
 from .errors import TransactionProcessingError, TransactionProcessingRejected
 from .position_history import PositionHistoryProcessingResult, PositionHistoryProcessor
 from .process_transaction import ProcessTransactionUseCase
-from .reconcile_average_cost_pools import (
-    ReconcileAverageCostPoolsCommand,
-    ReconcileAverageCostPoolsResult,
-    ReconcileAverageCostPoolsUseCase,
-)
 from .replay_booked_transaction import (
     BookedTransactionReplayDependencyUnavailable,
     BookedTransactionReplayInvariantViolation,
