@@ -86,7 +86,8 @@ Current repository posture:
    reporting, latency, Docker, and operational gates. Critical-path coverage governance lives in
    `docs/standards/critical-path-coverage.v1.json`, is checked by
    `make critical-path-coverage-guard`, and is reported by `make coverage-gate` under
-   `output/coverage/critical-path-coverage-report.json`. Git name-status evidence preserves
+   `output/coverage/critical-path-coverage-report.json`; contract-only validation writes the
+   separate `critical-path-coverage-contract-report.json` artifact. Git name-status evidence preserves
    rename/copy/delete lineage, coverage evaluates only post-change files, and current changed
    critical modules fail closed when absent from the measured-source artifact or when Git cannot
    establish comparison evidence. Measured changed critical modules enforce both line and branch

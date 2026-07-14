@@ -61,11 +61,21 @@ def test_documentation_evidence_pack_records_required_metadata(tmp_path: Path, m
         "front_door_sync_check",
         "api_catalog_generation",
         "api_route_catalog_check",
+        "critical_path_coverage_contract_check",
         "rfc_ledger_check",
         "rfc_status_ledger_check",
         "supported_features_manifest",
         "runbook_validation",
     } <= check_names
+    contract_check = next(
+        check
+        for check in evidence["checks"]
+        if check["name"] == "critical_path_coverage_contract_check"
+    )
+    assert any(
+        path.endswith("critical-path-coverage-contract-report.json")
+        for path in contract_check["details"]["artifact_paths"]
+    )
 
 
 def test_documentation_evidence_pack_fails_when_command_fails(tmp_path: Path, monkeypatch) -> None:

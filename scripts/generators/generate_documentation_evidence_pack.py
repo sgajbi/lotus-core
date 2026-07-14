@@ -220,7 +220,7 @@ def run_documentation_evidence(args: argparse.Namespace) -> dict[str, Any]:
             ],
             artifact_paths=(
                 REPO_ROOT / "docs" / "standards" / "critical-path-coverage.v1.json",
-                REPO_ROOT / "output" / "coverage" / "critical-path-coverage-report.json",
+                REPO_ROOT / "output" / "coverage" / "critical-path-coverage-contract-report.json",
             ),
         ),
         _run_command(

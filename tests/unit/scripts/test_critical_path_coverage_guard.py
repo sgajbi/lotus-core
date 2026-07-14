@@ -18,6 +18,9 @@ def _minimal_contract() -> dict[str, object]:
     return {
         "schema_version": "critical-path-coverage.v1",
         "owning_repository": "lotus-core",
+        "contract_validation_report_path": (
+            "output/coverage/critical-path-coverage-contract-report.json"
+        ),
         "aggregate_gate": {
             "command": "make coverage-gate",
             "minimum_line_coverage_percent": 98.0,
@@ -102,6 +105,16 @@ def test_current_critical_path_coverage_contract_is_valid() -> None:
     assert contract["changed_code_gate"]["minimum_measured_branch_coverage_percent"] == 85.0
     assert contract["changed_code_gate"]["deleted_paths_are_audit_only"] is True
     assert contract["changed_code_gate"]["rename_lineage_required"] is True
+
+
+def test_contract_only_report_does_not_replace_measured_coverage_report() -> None:
+    assert guard.resolve_report_path(output=None, contract_only=False) == guard.DEFAULT_REPORT_PATH
+    assert (
+        guard.resolve_report_path(output=None, contract_only=True)
+        == guard.DEFAULT_CONTRACT_REPORT_PATH
+    )
+    explicit = Path("output/custom-report.json")
+    assert guard.resolve_report_path(output=explicit, contract_only=True) == explicit
 
 
 def test_guard_direct_script_entrypoint_resolves_coverage_evidence_package() -> None:

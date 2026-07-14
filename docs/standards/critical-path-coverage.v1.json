@@ -3,6 +3,7 @@
   "owning_repository": "lotus-core",
   "issue": "sgajbi/lotus-core#612",
   "current_hardening_issue": "sgajbi/lotus-core#766",
+  "contract_validation_report_path": "output/coverage/critical-path-coverage-contract-report.json",
   "aggregate_gate": {
     "command": "make coverage-gate",
     "minimum_line_coverage_percent": 98.0,

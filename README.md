@@ -355,6 +355,8 @@ Coverage posture:
 - It writes `output/coverage/query-service-coverage.json` for the aggregate scope,
   `output/coverage/coverage.json` for Query Service plus exact changed-critical modules, and
   `output/coverage/critical-path-coverage-report.json` for changed-file lineage and thresholds.
+  Contract-only checks write `output/coverage/critical-path-coverage-contract-report.json` so they
+  cannot overwrite measured evidence.
   Rename/copy records preserve previous and current paths, deleted paths are audit-only, and an
   existing changed critical module absent from coverage fails with
   `CHANGED_CRITICAL_SOURCE_UNMEASURED`. Measured changed critical modules must satisfy both the

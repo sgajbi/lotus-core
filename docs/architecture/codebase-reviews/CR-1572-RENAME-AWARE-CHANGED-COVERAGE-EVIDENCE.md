@@ -32,6 +32,8 @@ closed when a current critical module is absent from governed coverage data.
 - Promoted the contract's unmeasured critical-file policy from report-only to fail-closed.
 - Made repository-path normalization preserve leading-dot directories and reject absolute or
   parent-traversing paths.
+- Separated contract-only output from measured coverage output so documentation validation cannot
+  overwrite release evidence with empty totals.
 
 ## Tests Added
 
@@ -42,6 +44,8 @@ closed when a current critical module is absent from governed coverage data.
   distinct aggregate/measured totals, and multi-target manifest/warning forwarding.
 - Real subprocess coverage evidence proving a renamed replacement module contributes to both line
   and branch thresholds.
+- Contract-only report selection preserves the measured report while honoring explicit output
+  overrides.
 
 ## Downstream Compatibility
 
@@ -65,7 +69,8 @@ calculation, metric, Docker runtime, deployment topology, or downstream response
   path/Git and branch-threshold hardening.
 - Strict MyPy passed for all five affected quality modules.
 - Scoped Ruff and `git diff --check` passed for each implementation slice.
-- Full `make coverage-gate` emitted separate aggregate, measured-source, and critical-path report
-  artifacts; a direct guard rerun accepted that evidence.
+- Full `make coverage-gate` passed with 4,509 unit tests, 10 deselected tests, 136 integration-lite
+  tests, zero unit warnings, the branch-aware 98% Query Service aggregate display, and separate
+  aggregate, measured-source, and passing critical-path report artifacts.
 - `make docs-evidence-pack`, `make quality-wiki-docs-gate`, and
   `make architecture-docs-catalog-guard` passed.
