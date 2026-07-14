@@ -1,6 +1,7 @@
 """Concrete transaction processing infrastructure adapters."""
 
 from ..application.settlement_processing import UpstreamCashLegUnavailableError
+from .cashflow.rule_cache import CachedCashflowRule, CashflowRuleCache, CashflowRuleCacheState
 from .cashflow_calculation import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
@@ -58,6 +59,9 @@ __all__ = [
     "CanonicalBookedTransactionReplayerFactory",
     "CanonicalTransactionReplayer",
     "CashflowCalculationWorkflow",
+    "CachedCashflowRule",
+    "CashflowRuleCache",
+    "CashflowRuleCacheState",
     "CashflowCalculator",
     "CashflowProcessingCompatibilityAdapter",
     "CashflowProcessingOutcome",

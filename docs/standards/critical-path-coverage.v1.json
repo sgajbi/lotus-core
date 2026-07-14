@@ -90,6 +90,7 @@
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/processing_adapter.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_basis/effect_staging.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow*.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/**/*.py",
         "src/services/calculators/position_valuation_calculator/app/**/*.py",
         "src/services/query_control_plane_service/app/application/advisory_simulation/valuation.py",
         "src/services/query_service/app/services/fx*.py",
@@ -118,6 +119,7 @@
         "tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cost_basis/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cashflow/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/**/*.py",
         "tests/unit/services/calculators/position_valuation_calculator/**/*.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_*.py"
       ]

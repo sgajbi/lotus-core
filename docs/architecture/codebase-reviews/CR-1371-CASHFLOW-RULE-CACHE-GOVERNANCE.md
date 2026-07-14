@@ -1,5 +1,10 @@
 # CR-1371 Cashflow Rule Cache Governance
 
+Current implementation ownership was refined by
+[CR-1576](./CR-1576-CASHFLOW-RULE-CACHE-OWNERSHIP.md): the same governed behavior now lives in an
+instance-owned `infrastructure/cashflow/rule_cache.py` adapter rather than mutable workflow-module
+state.
+
 ## Objective
 
 Fix GitHub issue #576 by governing the cashflow rule cache with source version metadata,
@@ -12,7 +17,7 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
   each `CachedCashflowRule`.
 - Changed fresh cache reads to verify the source rule-set version before serving a cached rule.
 - Kept TTL expiry and missing-rule reload behavior.
-- Kept explicit process-local invalidation through `invalidate_cashflow_rule_cache()`.
+- Kept explicit process-local invalidation through `CashflowRuleCache.invalidate()`.
 - Added `cashflow_rule_cache_events_total` for hit, miss, reload, stale, invalidation, and
   missing-rule cache events.
 
@@ -47,7 +52,7 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 ## Validation Evidence
 
 ```powershell
-python -m pytest tests\unit\services\calculators\cashflow_calculator_service\unit\consumers\test_cashflow_transaction_consumer.py tests\unit\services\calculators\cashflow_calculator_service\unit\repositories\test_cashflow_rules_repository.py -q
+python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py
 ```
 
 Final lint, docs, architecture, and diff checks are recorded in the issue comment before commit.

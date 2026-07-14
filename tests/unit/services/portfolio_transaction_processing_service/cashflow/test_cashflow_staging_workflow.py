@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import date, datetime, timezone
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,10 +15,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
     StoredCashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    CachedCashflowRule,
     CashflowCalculationWorkflow,
-    CashflowRuleSetVersion,
     LinkedCashLegError,
-    SqlAlchemyCashflowRulesRepository,
     cashflow_calculated_event_from_stored_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
@@ -28,74 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-def reset_rule_cache() -> None:
-    """Keep process-level cashflow rule cache state isolated between tests."""
-    workflow_module._cashflow_rule_cache_state = None
-    workflow_module._cashflow_rule_cache_lock = None
-
-
-def _rule(*, timing: str = "BOD", updated_at: datetime | None = None) -> CashflowRule:
-    return CashflowRule(
-        transaction_type="BUY",
-        classification="INVESTMENT_OUTFLOW",
-        timing=timing,
-        is_position_flow=True,
-        is_portfolio_flow=False,
-        updated_at=updated_at,
-    )
-
-
-async def test_concurrent_rule_requests_load_one_cache_snapshot() -> None:
-    session = AsyncMock(spec=AsyncSession)
-    repository = AsyncMock(spec=SqlAlchemyCashflowRulesRepository)
-    repository.get_all_rules.return_value = [_rule()]
-    repository.get_rule_set_version.return_value = CashflowRuleSetVersion(
-        rule_count=1,
-        latest_updated_at=None,
-    )
-
-    with (
-        patch.object(workflow_module, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
-        patch.object(workflow_module, "SqlAlchemyCashflowRulesRepository", return_value=repository),
-    ):
-        first, second = await asyncio.gather(
-            CashflowCalculationWorkflow()._get_rule_for_transaction(session, "BUY"),
-            CashflowCalculationWorkflow()._get_rule_for_transaction(session, " buy "),
-        )
-
-    assert first == second
-    assert first is not None
-    assert repository.get_all_rules.await_count == 1
-
-
-async def test_rule_cache_reloads_when_source_version_changes() -> None:
-    first_version = datetime(2026, 4, 10, 8, tzinfo=timezone.utc)
-    second_version = datetime(2026, 4, 10, 9, tzinfo=timezone.utc)
-    repository = AsyncMock(spec=SqlAlchemyCashflowRulesRepository)
-    repository.get_all_rules.side_effect = [
-        [_rule(timing="BOD", updated_at=first_version)],
-        [_rule(timing="EOD", updated_at=second_version)],
-    ]
-    repository.get_rule_set_version.side_effect = [
-        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_version),
-        CashflowRuleSetVersion(rule_count=1, latest_updated_at=second_version),
-    ]
-
-    with (
-        patch.object(workflow_module, "CASHFLOW_RULE_CACHE_TTL_SECONDS", 3600),
-        patch.object(workflow_module, "SqlAlchemyCashflowRulesRepository", return_value=repository),
-    ):
-        workflow = CashflowCalculationWorkflow()
-        first = await workflow._get_rule_for_transaction(AsyncMock(spec=AsyncSession), "BUY")
-        second = await workflow._get_rule_for_transaction(AsyncMock(spec=AsyncSession), "BUY")
-
-    assert first is not None and first.timing == "BOD"
-    assert second is not None and second.timing == "EOD"
-    assert first.rule_set_version != second.rule_set_version
-    assert second.rule_set_effective_at_utc == second_version
 
 
 async def test_linked_cash_leg_contract_rejects_missing_upstream_reference() -> None:
@@ -207,7 +136,7 @@ async def test_stage_cashflow_calculation_persists_domain_result_and_publishes_e
     repository = AsyncMock()
     repository.create_cashflow.return_value = stored
     outbox_repository = AsyncMock()
-    rule = workflow_module.CachedCashflowRule(
+    rule = CachedCashflowRule(
         classification="INVESTMENT_OUTFLOW",
         timing="BOD",
         is_position_flow=True,

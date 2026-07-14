@@ -93,6 +93,26 @@ def test_financial_calculation_contract_tracks_layer_owned_cost_processing() -> 
     )
 
 
+def test_financial_calculation_contract_tracks_cashflow_infrastructure_package() -> None:
+    contract = json.loads(
+        Path("docs/standards/critical-path-coverage.v1.json").read_text(encoding="utf-8")
+    )
+    financial_calculations = next(
+        group
+        for group in contract["critical_path_groups"]
+        if group["id"] == "financial_calculations"
+    )
+
+    assert (
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "cashflow/**/*.py" in financial_calculations["source_globs"]
+    )
+    assert (
+        "tests/unit/services/portfolio_transaction_processing_service/infrastructure/"
+        "cashflow/**/*.py" in financial_calculations["required_test_globs"]
+    )
+
+
 def _coverage_payload(
     *,
     covered_lines: int,

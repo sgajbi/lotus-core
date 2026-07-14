@@ -1,0 +1,1 @@
+"""Cashflow infrastructure adapter tests."""
