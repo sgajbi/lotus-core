@@ -14,6 +14,7 @@ class SourceChangeType(StrEnum):
     ADDED = "added"
     COPIED = "copied"
     DELETED = "deleted"
+    EXPLICIT = "explicit"
     MODIFIED = "modified"
     RENAMED = "renamed"
     TYPE_CHANGED = "type_changed"
@@ -147,3 +148,26 @@ def read_git_changed_sources(*, repo_root: Path, base_ref: str | None) -> list[C
         if completed.returncode == 0:
             return parse_git_name_status(completed.stdout)
     return []
+
+
+def explicit_changed_sources(paths: list[str], *, repo_root: Path) -> list[ChangedSourceFile]:
+    """Represent caller-supplied paths while excluding files absent from the current tree."""
+
+    changes: list[ChangedSourceFile] = []
+    for path in paths:
+        normalized = normalize_repo_path(path)
+        if (repo_root / normalized).is_file():
+            current_path = normalized
+            previous_path = None
+        else:
+            current_path = None
+            previous_path = normalized
+        changes.append(
+            ChangedSourceFile(
+                git_status="EXPLICIT",
+                change_type=SourceChangeType.EXPLICIT,
+                current_path=current_path,
+                previous_path=previous_path,
+            )
+        )
+    return changes

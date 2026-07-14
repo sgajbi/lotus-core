@@ -3,9 +3,12 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 from scripts.quality import critical_path_coverage_guard as guard
+from scripts.quality.coverage_evidence.changed_source_evidence import (
+    ChangedSourceFile,
+    SourceChangeType,
+)
 
 
 def _minimal_contract() -> dict[str, object]:
@@ -102,7 +105,11 @@ def test_changed_code_report_classifies_measured_and_unmeasured_critical_files()
     report = guard.build_coverage_report(
         contract=_minimal_contract(),
         coverage_json=_coverage_payload(covered_lines=9, statements=10),
-        changed_files=["src/app/use_case.py", "src/app/not_measured.py", "docs/readme.md"],
+        changed_files=[
+            ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/app/use_case.py"),
+            ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/not_measured.py"),
+            ChangedSourceFile("M", SourceChangeType.MODIFIED, "docs/readme.md"),
+        ],
     )
 
     changed = report["changed_code_coverage"]
@@ -121,7 +128,7 @@ def test_threshold_evaluation_rejects_low_measured_critical_group_coverage() -> 
     report = guard.build_coverage_report(
         contract=_minimal_contract(),
         coverage_json=_coverage_payload(covered_lines=8, statements=10),
-        changed_files=["src/app/use_case.py"],
+        changed_files=[ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/app/use_case.py")],
     )
 
     findings = guard.evaluate_coverage_thresholds(report)
@@ -163,16 +170,47 @@ def test_run_guard_writes_report_with_explicit_changed_files(tmp_path: Path) -> 
     assert (tmp_path / "output/coverage/report.json").exists()
 
 
-def test_changed_files_from_git_uses_merge_base_diff_first(monkeypatch) -> None:
-    calls: list[list[str]] = []
+def test_changed_code_report_retains_rename_and_delete_lineage() -> None:
+    report = guard.build_coverage_report(
+        contract=_minimal_contract(),
+        coverage_json=_coverage_payload(covered_lines=9, statements=10),
+        changed_files=[
+            ChangedSourceFile(
+                "R090",
+                SourceChangeType.RENAMED,
+                "src/app/use_case.py",
+                previous_path="src/app/old_use_case.py",
+                similarity_percent=90,
+            ),
+            ChangedSourceFile(
+                "D",
+                SourceChangeType.DELETED,
+                None,
+                previous_path="src/app/deleted.py",
+            ),
+        ],
+    )
 
-    def _fake_run(args, **_kwargs):
-        calls.append(list(args))
-        return SimpleNamespace(returncode=0, stdout="src/app/use_case.py\n", stderr="")
+    changed = report["changed_code_coverage"]
 
-    monkeypatch.setattr(guard.subprocess, "run", _fake_run)
-
-    changed = guard._changed_files_from_git(repo_root=Path("."), base_ref="origin/main")
-
-    assert changed == ["src/app/use_case.py"]
-    assert calls[0] == ["git", "diff", "--name-only", "origin/main...HEAD"]
+    assert changed["changed_python_source_files"] == ["src/app/use_case.py"]
+    assert changed["measured_critical_changed_file_count"] == 1
+    assert changed["unmeasured_critical_changed_files"] == []
+    assert changed["changed_file_lineage"] == [
+        {
+            "change_type": "renamed",
+            "current_path": "src/app/use_case.py",
+            "exists_at_head": True,
+            "git_status": "R090",
+            "previous_path": "src/app/old_use_case.py",
+            "similarity_percent": 90,
+        },
+        {
+            "change_type": "deleted",
+            "current_path": None,
+            "exists_at_head": False,
+            "git_status": "D",
+            "previous_path": "src/app/deleted.py",
+            "similarity_percent": None,
+        },
+    ]
