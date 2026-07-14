@@ -15,6 +15,8 @@ from ..domain import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
+from ..ports import CostBasisReferenceDataPort
+from .cost_basis import SqlAlchemyCostBasisReferenceDataRepository
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -44,10 +46,14 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         repository_factory: Callable[[AsyncSession], CostCalculatorRepository] = (
             CostCalculatorRepository
         ),
+        reference_data_factory: Callable[[AsyncSession], CostBasisReferenceDataPort] = (
+            SqlAlchemyCostBasisReferenceDataRepository
+        ),
     ) -> None:
         self._session_factory = session_factory
         self._workflow = workflow
         self._repository_factory = repository_factory
+        self._reference_data_factory = reference_data_factory
 
     async def list_candidates(
         self,
@@ -106,6 +112,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
             async with self._session_factory() as session:
                 async with session.begin():
                     repository = self._repository_factory(session)
+                    reference_data = self._reference_data_factory(session)
                     await repository.acquire_cost_basis_processing_lock(
                         key.portfolio_id,
                         key.security_id,
@@ -114,6 +121,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         portfolio_id=key.portfolio_id,
                         security_id=key.security_id,
                         repo=repository,
+                        reference_data=reference_data,
                     )
                     expected_source_count = len(plan.source_transactions)
                     expected_quantity = plan.checkpoint.quantity

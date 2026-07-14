@@ -34,6 +34,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -190,12 +191,12 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     instrument_event = MagicMock()
     repo = AsyncMock(spec=CostCalculatorRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
-    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    portfolio = CostBasisPortfolioReference(
         portfolio_id="PORT_COST_01",
         base_currency="USD",
         cost_basis_method=CostBasisMethod.FIFO,
     )
-    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+    instrument = CostBasisInstrumentReference(
         security_id="SEC_COST_01",
         product_type="EQUITY",
         asset_class="EQUITY",
@@ -211,8 +212,8 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         event=event,
         event_transaction_type="BUY",
         route=cost_basis_processing.CostProcessingRoute.COST_BASIS,
-        portfolio=repo.get_cost_basis_portfolio.return_value,
-        instrument=repo.get_cost_basis_instrument.return_value,
+        portfolio=portfolio,
+        instrument=instrument,
         repo=repo,
         cost_basis_method=CostBasisMethod.FIFO,
         outbox_repo=outbox_repo,
@@ -254,20 +255,22 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
         currency="USD",
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     outbox_repo = AsyncMock(spec=OutboxRepository)
-    repo.get_cost_basis_portfolio.return_value = None
+    reference_data.get_cost_basis_portfolio.return_value = None
 
     with pytest.raises(PortfolioNotFoundError):
         await CostProcessingCompatibilityAdapter(
             workflow=MagicMock(),
             repository=repo,
+            reference_data=reference_data,
             outbox_repository=outbox_repo,
         ).stage_event(
             event=event,
             correlation_id="cost-corr-id",
         )
 
-    repo.get_cost_basis_instrument.assert_not_awaited()
+    reference_data.get_cost_basis_instrument.assert_not_awaited()
 
 
 async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_incoming(
@@ -605,9 +608,7 @@ async def test_load_upstream_cash_leg_maps_domain_transaction_to_event(
 
     assert cash_leg.transaction_id == "CASH-UP-01"
     assert cash_leg.transaction_type == "CASH_INFLOW"
-    repo.get_booked_transaction.assert_awaited_once_with(
-        "CASH-UP-01", portfolio_id="PORT_COST_01"
-    )
+    repo.get_booked_transaction.assert_awaited_once_with("CASH-UP-01", portfolio_id="PORT_COST_01")
 
 
 async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contract(

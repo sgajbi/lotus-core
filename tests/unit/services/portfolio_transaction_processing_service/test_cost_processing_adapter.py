@@ -28,6 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
 )
 
 
@@ -55,12 +56,13 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         }
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",
         portfolio_id="PB-001",
         cost_basis_method=CostBasisMethod.FIFO,
     )
-    repository.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
         security_id="SEC-001",
         product_type="EQUITY",
         asset_class="EQUITY",
@@ -76,6 +78,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     adapter = CostProcessingCompatibilityAdapter(
         workflow=workflow,
         repository=repository,
+        reference_data=reference_data,
         outbox_repository=outbox_repository,
     )
 
@@ -114,10 +117,12 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         currency="SGD",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_cost_basis_portfolio.return_value = None
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_portfolio.return_value = None
     adapter = CostProcessingCompatibilityAdapter(
         workflow=MagicMock(),
         repository=repository,
+        reference_data=reference_data,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )
 
@@ -145,12 +150,13 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         currency="SGD",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",
         portfolio_id="PB-001",
         cost_basis_method=CostBasisMethod.FIFO,
     )
-    repository.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
         security_id="SEC-001",
         product_type="EQUITY",
         asset_class="EQUITY",
@@ -169,6 +175,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     adapter = CostProcessingCompatibilityAdapter(
         workflow=workflow,
         repository=repository,
+        reference_data=reference_data,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )
 

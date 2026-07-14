@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from decimal import Decimal
 from time import monotonic
-from typing import Any, cast
+from typing import Any
 
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
@@ -16,15 +16,12 @@ from portfolio_common.database_models import (
     FinancialReconciliationFinding,
     FinancialReconciliationRun,
     FxRate,
-    Instrument,
-    Portfolio,
     PositionLotState,
     TransactionCost,
 )
 from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
-from portfolio_common.domain.cost_basis_method import normalize_cost_basis_method
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -50,8 +47,6 @@ from ..domain.transaction import BookedTransaction
 from ..ports import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
-    CostBasisInstrumentReference,
-    CostBasisPortfolioReference,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
 
@@ -316,37 +311,6 @@ class CostCalculatorRepository:
                 "security_id": normalize_lookup_identifier(security_id),
                 "lock_wait_seconds": wait_seconds,
             },
-        )
-
-    async def get_cost_basis_portfolio(
-        self, portfolio_id: str
-    ) -> CostBasisPortfolioReference | None:
-        """Load the minimal portfolio policy required for cost-basis processing."""
-        stmt = select(Portfolio).where(Portfolio.portfolio_id == portfolio_id)
-        result = await self.db.execute(stmt)
-        portfolio = result.scalars().first()
-        if portfolio is None:
-            return None
-        return CostBasisPortfolioReference(
-            portfolio_id=cast(str, portfolio.portfolio_id),
-            base_currency=cast(str, portfolio.base_currency),
-            cost_basis_method=normalize_cost_basis_method(portfolio.cost_basis_method),
-        )
-
-    async def get_cost_basis_instrument(
-        self, security_id: str
-    ) -> CostBasisInstrumentReference | None:
-        """Load the minimal instrument classification required for cost processing."""
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        stmt = select(Instrument).where(func.trim(Instrument.security_id) == normalized_security_id)
-        result = await self.db.execute(stmt)
-        instrument = result.scalars().first()
-        if instrument is None:
-            return None
-        return CostBasisInstrumentReference(
-            security_id=cast(str, instrument.security_id),
-            product_type=cast(str, instrument.product_type),
-            asset_class=cast(str | None, instrument.asset_class),
         )
 
     async def get_fx_rate_window(
