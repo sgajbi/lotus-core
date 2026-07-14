@@ -30,6 +30,13 @@ governed instrument event. Domain and application modules remain independent of 
 models, and new transaction event translations belong in this package rather than flat
 infrastructure files.
 
+Booked-transaction replay remains a separate application use case because operator replay has
+different backlog, recovery, and delivery controls. Its infrastructure adapter lives under
+`app/infrastructure/transaction_replay`, opens a short-lived SQLAlchemy session, delegates to the
+canonical publisher, maps dependency failures, and enforces that one transaction ID publishes zero
+or one record. Delivery code owns retry and DLQ handling; replay infrastructure is not exported from
+the broad infrastructure package root.
+
 ## Ordinary Transaction Domain
 
 The service-owned `app/domain/transaction` package owns ordinary BUY, SELL, DIVIDEND, and INTEREST:

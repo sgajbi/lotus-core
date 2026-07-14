@@ -30,7 +30,7 @@ from .cost_basis import (
 )
 from .prometheus_observability import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
-from .transaction_replay_adapter import (
+from .transaction_replay import (
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,
 )
