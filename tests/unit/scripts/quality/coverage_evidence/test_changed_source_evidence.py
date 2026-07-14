@@ -8,6 +8,7 @@ import pytest
 from scripts.quality.coverage_evidence.changed_source_evidence import (
     ChangedSourceFile,
     SourceChangeType,
+    explicit_changed_sources,
     parse_git_name_status,
     read_git_changed_sources,
 )
@@ -108,3 +109,24 @@ def test_read_git_changed_sources_falls_back_when_merge_base_is_missing(monkeypa
 
     assert changes[0].change_type is SourceChangeType.ADDED
     assert calls[1][-2:] == ["origin/main", "HEAD"]
+
+
+def test_explicit_changed_sources_distinguishes_current_and_absent_paths(tmp_path: Path) -> None:
+    current = tmp_path / "src/app/current.py"
+    current.parent.mkdir(parents=True)
+    current.write_text("", encoding="utf-8")
+
+    changes = explicit_changed_sources(
+        ["src\\app\\current.py", "src/app/deleted.py"],
+        repo_root=tmp_path,
+    )
+
+    assert changes == [
+        ChangedSourceFile("EXPLICIT", SourceChangeType.EXPLICIT, "src/app/current.py"),
+        ChangedSourceFile(
+            "EXPLICIT",
+            SourceChangeType.EXPLICIT,
+            None,
+            previous_path="src/app/deleted.py",
+        ),
+    ]

@@ -13,6 +13,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+from scripts.quality.coverage_evidence.changed_source_evidence import (
+    ChangedSourceFile,
+    explicit_changed_sources,
+    read_git_changed_sources,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -289,25 +295,6 @@ def _coverage_files(coverage_json: dict[str, Any] | None) -> dict[str, dict[str,
     }
 
 
-def _changed_files_from_git(*, repo_root: Path, base_ref: str | None) -> list[str]:
-    if not base_ref:
-        return []
-    candidates = ([f"{base_ref}...HEAD"], [base_ref, "HEAD"])
-    for args in candidates:
-        completed = subprocess.run(
-            ["git", "diff", "--name-only", *args],
-            cwd=repo_root,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if completed.returncode == 0:
-            return [_normalize_path(line) for line in completed.stdout.splitlines() if line.strip()]
-    return []
-
-
 def _group_report(
     group: dict[str, Any],
     *,
@@ -336,16 +323,20 @@ def _group_report(
 
 def _changed_report(
     *,
-    changed_files: list[str],
+    changed_files: list[ChangedSourceFile],
     contract: dict[str, Any],
     coverage_files: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     critical_changed: list[dict[str, Any]] = []
     unmeasured: list[dict[str, str]] = []
     measured_summaries: list[CoverageSummary] = []
-    changed_python_source = [
-        path for path in changed_files if path.endswith(".py") and path.startswith("src/")
-    ]
+    changed_python_source = sorted(
+        path
+        for change in changed_files
+        if (path := change.current_path) is not None
+        and path.endswith(".py")
+        and path.startswith("src/")
+    )
 
     for path in changed_python_source:
         matched_groups = [
@@ -368,6 +359,7 @@ def _changed_report(
 
     combined = _combine_summaries(measured_summaries)
     return {
+        "changed_file_lineage": [change.as_evidence() for change in changed_files],
         "changed_python_source_files": changed_python_source,
         "critical_changed_files": critical_changed,
         "measured_critical_changed_file_count": len(measured_summaries),
@@ -387,7 +379,7 @@ def build_coverage_report(
     *,
     contract: dict[str, Any],
     coverage_json: dict[str, Any] | None,
-    changed_files: list[str],
+    changed_files: list[ChangedSourceFile],
 ) -> dict[str, Any]:
     coverage_files = _coverage_files(coverage_json)
     group_reports = [
@@ -464,9 +456,11 @@ def run_guard(
     if coverage_json_path is not None and (repo_root / coverage_json_path).exists():
         coverage_json = _load_json(repo_root / coverage_json_path)
 
-    resolved_changed_files = changed_files
-    if resolved_changed_files is None:
-        resolved_changed_files = _changed_files_from_git(repo_root=repo_root, base_ref=changed_base)
+    resolved_changed_files = (
+        explicit_changed_sources(changed_files, repo_root=repo_root)
+        if changed_files is not None
+        else read_git_changed_sources(repo_root=repo_root, base_ref=changed_base)
+    )
 
     report = build_coverage_report(
         contract=contract,
