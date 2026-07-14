@@ -15,7 +15,7 @@ from .corporate_action_reconciliation import (
     CorporateActionReconciliationRunEvidence,
     build_corporate_action_reconciliation_evidence,
 )
-from .cost_basis_timeline import (
+from .cost_basis_processing.timeline import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
 )

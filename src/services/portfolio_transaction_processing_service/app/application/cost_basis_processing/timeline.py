@@ -8,7 +8,7 @@ from typing import Any
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
 
-from ..domain.cost_basis import (
+from ...domain.cost_basis import (
     AverageCostBasisStrategy,
     CostBasisCalculator,
     CostBasisStrategy,
@@ -21,7 +21,10 @@ from ..domain.cost_basis import (
     LotDispositionEngine,
     OpenLotState,
 )
-from ..ports import CostBasisCalculationObservation, CostBasisCalculationObserver
+from ...ports.cost_basis_observability import (
+    CostBasisCalculationObservation,
+    CostBasisCalculationObserver,
+)
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.services.portfolio_transaction_processing_service.app.application import (
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.timeline import (  # noqa: E501
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
 )
