@@ -348,7 +348,10 @@ Important lane mapping:
 
 Coverage posture:
 
-- `make coverage-gate` still enforces the combined branch-aware 98% aggregate threshold.
+- `make coverage-gate` enforces the zero-warning unit budget and combined branch-aware 98%
+  aggregate threshold from the same unit execution. `make ci-local` therefore runs the complete
+  unit and integration-lite suites once, while hosted CI can still run the standalone
+  `make warning-gate` for earlier failure isolation.
 - It now also writes `output/coverage/coverage.json` and
   `output/coverage/critical-path-coverage-report.json`, separating aggregate coverage,
   measured changed-code coverage, and measured critical-path coverage for transaction lifecycle,
