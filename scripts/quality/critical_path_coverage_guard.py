@@ -20,6 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.quality.coverage_evidence.changed_source_evidence import (  # noqa: E402
     ChangedSourceFile,
     explicit_changed_sources,
+    normalize_repo_path,
     read_git_changed_sources,
 )
 
@@ -58,7 +59,7 @@ def _relative(path: Path, *, repo_root: Path) -> str:
 
 
 def _normalize_path(path: str) -> str:
-    return path.replace("\\", "/").lstrip("./")
+    return normalize_repo_path(path)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -247,6 +248,10 @@ def validate_contract(
         findings.append(
             {"changed_code_gate": "minimum_measured_line_coverage_percent must be non-negative"}
         )
+    if float(changed.get("minimum_measured_branch_coverage_percent", -1)) < 0:
+        findings.append(
+            {"changed_code_gate": ("minimum_measured_branch_coverage_percent must be non-negative")}
+        )
     if changed.get("unmeasured_critical_file_policy") not in UNMEASURED_CRITICAL_FILE_POLICIES:
         findings.append(
             {
@@ -402,6 +407,9 @@ def _changed_report(
         "minimum_measured_line_coverage_percent": contract["changed_code_gate"][
             "minimum_measured_line_coverage_percent"
         ],
+        "minimum_measured_branch_coverage_percent": contract["changed_code_gate"][
+            "minimum_measured_branch_coverage_percent"
+        ],
         "unmeasured_critical_file_policy": contract["changed_code_gate"][
             "unmeasured_critical_file_policy"
         ],
@@ -469,6 +477,17 @@ def evaluate_coverage_thresholds(report: dict[str, Any]) -> list[dict[str, objec
                 "changed_code": "measured critical changed-code coverage below minimum",
                 "line_coverage_percent": changed["measured_line_coverage_percent"],
                 "minimum": changed["minimum_measured_line_coverage_percent"],
+            }
+        )
+    if changed["measured_branch_coverage_percent"] is not None and (
+        changed["measured_branch_coverage_percent"]
+        < changed["minimum_measured_branch_coverage_percent"]
+    ):
+        findings.append(
+            {
+                "changed_code": "measured critical changed-code branch coverage below minimum",
+                "branch_coverage_percent": changed["measured_branch_coverage_percent"],
+                "minimum": changed["minimum_measured_branch_coverage_percent"],
             }
         )
     if changed["unmeasured_critical_file_policy"] == "fail_closed":

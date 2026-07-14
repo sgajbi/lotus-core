@@ -4,6 +4,7 @@ import copy
 import json
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 from scripts.quality import critical_path_coverage_guard as guard
@@ -27,6 +28,7 @@ def _minimal_contract() -> dict[str, object]:
             "base_ref_environment_variable": "LOTUS_COVERAGE_CHANGED_BASE",
             "default_base_ref": "origin/main",
             "minimum_measured_line_coverage_percent": 90.0,
+            "minimum_measured_branch_coverage_percent": 85.0,
             "unmeasured_critical_file_policy": "reported_requires_follow_up",
             "report_path": "output/coverage/critical-path-coverage-report.json",
         },
@@ -59,15 +61,21 @@ def _minimal_contract() -> dict[str, object]:
     }
 
 
-def _coverage_payload(*, covered_lines: int, statements: int) -> dict[str, object]:
+def _coverage_payload(
+    *,
+    covered_lines: int,
+    statements: int,
+    covered_branches: int = 4,
+    branches: int = 4,
+) -> dict[str, object]:
     return {
         "files": {
             "src/app/use_case.py": {
                 "summary": {
                     "covered_lines": covered_lines,
                     "num_statements": statements,
-                    "covered_branches": 4,
-                    "num_branches": 4,
+                    "covered_branches": covered_branches,
+                    "num_branches": branches,
                 }
             }
         },
@@ -91,6 +99,7 @@ def test_current_critical_path_coverage_contract_is_valid() -> None:
     assert contract["aggregate_gate"]["coverage_json"].endswith("query-service-coverage.json")
     assert contract["changed_code_gate"]["coverage_json"].endswith("coverage.json")
     assert contract["changed_code_gate"]["unmeasured_critical_file_policy"] == "fail_closed"
+    assert contract["changed_code_gate"]["minimum_measured_branch_coverage_percent"] == 85.0
     assert contract["changed_code_gate"]["deleted_paths_are_audit_only"] is True
     assert contract["changed_code_gate"]["rename_lineage_required"] is True
 
@@ -187,6 +196,91 @@ def test_threshold_evaluation_rejects_low_measured_critical_group_coverage() -> 
         "line_coverage_percent": 80.0,
         "minimum": 90.0,
     } in findings
+
+
+def test_threshold_evaluation_rejects_low_changed_critical_branch_coverage() -> None:
+    report = guard.build_coverage_report(
+        contract=_minimal_contract(),
+        coverage_json=_coverage_payload(
+            covered_lines=10,
+            statements=10,
+            covered_branches=3,
+            branches=4,
+        ),
+        changed_files=[ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/app/use_case.py")],
+    )
+
+    findings = guard.evaluate_coverage_thresholds(report)
+
+    assert {
+        "changed_code": "measured critical changed-code branch coverage below minimum",
+        "branch_coverage_percent": 75.0,
+        "minimum": 85.0,
+    } in findings
+
+
+def test_changed_module_target_produces_real_line_and_branch_evidence(tmp_path: Path) -> None:
+    module_path = tmp_path / "src" / "issue766_demo" / "replacement.py"
+    _write(
+        module_path,
+        "def classify(value: int) -> str:\n"
+        "    if value > 0:\n"
+        "        return 'positive'\n"
+        "    return 'non_positive'\n",
+    )
+    coverage_path = tmp_path / "coverage.json"
+    script = textwrap.dedent(
+        f"""
+        import importlib
+        from coverage import Coverage
+
+        measured = Coverage(
+            branch=True,
+            config_file=False,
+            source=["src.issue766_demo.replacement"],
+        )
+        measured.start()
+        module = importlib.import_module("src.issue766_demo.replacement")
+        assert module.classify(1) == "positive"
+        assert module.classify(0) == "non_positive"
+        measured.stop()
+        measured.json_report(outfile={str(coverage_path)!r})
+        """
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    coverage_json = json.loads(coverage_path.read_text(encoding="utf-8"))
+    contract = _minimal_contract()
+    contract["critical_path_groups"][0]["source_globs"] = ["src/issue766_demo/**/*.py"]
+    contract["changed_code_gate"]["minimum_measured_line_coverage_percent"] = 100.0
+    contract["changed_code_gate"]["minimum_measured_branch_coverage_percent"] = 100.0
+    report = guard.build_coverage_report(
+        contract=contract,
+        coverage_json=coverage_json,
+        changed_files=[
+            ChangedSourceFile(
+                "R100",
+                SourceChangeType.RENAMED,
+                "src/issue766_demo/replacement.py",
+                previous_path="src/issue766_demo/legacy.py",
+                similarity_percent=100,
+            )
+        ],
+    )
+
+    changed = report["changed_code_coverage"]
+    assert changed["measured_critical_changed_file_count"] == 1
+    assert changed["measured_line_coverage_percent"] == 100.0
+    assert changed["measured_branch_coverage_percent"] == 100.0
+    assert guard.evaluate_coverage_thresholds(report) == []
 
 
 def test_threshold_evaluation_fails_closed_for_unmeasured_changed_critical_source() -> None:

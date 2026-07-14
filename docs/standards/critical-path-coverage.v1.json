@@ -18,6 +18,7 @@
     "deleted_paths_are_audit_only": true,
     "rename_lineage_required": true,
     "minimum_measured_line_coverage_percent": 90.0,
+    "minimum_measured_branch_coverage_percent": 85.0,
     "unmeasured_critical_file_policy": "fail_closed",
     "report_path": "output/coverage/critical-path-coverage-report.json"
   },
