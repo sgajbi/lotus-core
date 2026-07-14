@@ -237,7 +237,7 @@ def _has_non_zero_realized_pnl(transaction: CostBasisTransaction) -> bool:
 def _normalized_price_or_error(
     transaction: CostBasisTransaction,
     error_reporter: CostCalculationErrorCollector,
-    add_invariant_error,
+    add_invariant_error: InvariantErrorAdder,
 ) -> Decimal | None:
     try:
         return _normalize_decimal_field(getattr(transaction, "price", Decimal(0)), "price")
@@ -251,7 +251,7 @@ def _validate_zero_quantity_and_price(
     error_reporter: CostCalculationErrorCollector,
     *,
     transaction_label: str,
-    add_invariant_error,
+    add_invariant_error: InvariantErrorAdder,
 ) -> bool:
     if transaction.quantity != Decimal(0):
         add_invariant_error(
@@ -276,7 +276,7 @@ def _validate_zero_cost_and_realized_pnl(
     error_reporter: CostCalculationErrorCollector,
     *,
     realized_label: str,
-    add_invariant_error,
+    add_invariant_error: InvariantErrorAdder,
 ) -> bool:
     if _has_non_zero_cost_fields(transaction):
         add_invariant_error(error_reporter, transaction, "net_cost and net_cost_local must be 0.")
@@ -360,9 +360,7 @@ def _record_buy_lot(
 
 
 def _net_sell_proceeds_local(transaction: CostBasisTransaction) -> Decimal:
-    return cast(Decimal, transaction.gross_transaction_amount) - _transaction_total_fees(
-        transaction
-    )
+    return transaction.gross_transaction_amount - _transaction_total_fees(transaction)
 
 
 def _validate_sell_quantity_and_proceeds(
@@ -1090,7 +1088,7 @@ class CostBasisCalculator:
     def _validate_fx(self, t: CostBasisTransaction) -> bool:
         return _validate_transaction_currency_context(t, self._error_reporter)
 
-    def calculate_transaction_costs(self, transaction: CostBasisTransaction):
+    def calculate_transaction_costs(self, transaction: CostBasisTransaction) -> None:
         if not self._validate_fx(transaction):
             return
         try:
