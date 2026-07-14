@@ -11,6 +11,7 @@ from portfolio_common.domain.transaction.type_registry import (
 
 from ...transaction.fx import (
     FxCanonicalTransaction,
+    FxTransactionSource,
     UnsupportedFxRealizedPnlModeError,
     build_fx_baseline_processing_update,
     validate_fx_transaction,
@@ -1012,6 +1013,12 @@ def _validate_canonical_fx_transaction(
     transaction: CostBasisTransaction,
     error_reporter: CostCalculationErrorCollector,
 ) -> bool:
+    if not isinstance(transaction, FxTransactionSource):
+        error_reporter.add_error(
+            transaction.transaction_id,
+            "FX validation failed: required canonical FX fields are incomplete.",
+        )
+        return False
     try:
         canonical = FxCanonicalTransaction.from_transaction(transaction)
     except ValueError as exc:

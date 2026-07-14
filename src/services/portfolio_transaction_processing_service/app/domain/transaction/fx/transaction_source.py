@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class FxTransactionSource(Protocol):
-    """Expose persisted FX component fields without requiring mutable records."""
+    """Expose the required inputs for canonical FX transaction economics."""
 
     @property
     def transaction_id(self) -> str: ...
@@ -78,69 +79,3 @@ class FxTransactionSource(Protocol):
 
     @property
     def contract_rate(self) -> Decimal | None: ...
-
-    @property
-    def economic_event_id(self) -> str | None: ...
-
-    @property
-    def linked_transaction_group_id(self) -> str | None: ...
-
-    @property
-    def calculation_policy_id(self) -> str | None: ...
-
-    @property
-    def calculation_policy_version(self) -> str | None: ...
-
-    @property
-    def fx_cash_leg_role(self) -> str | None: ...
-
-    @property
-    def linked_fx_cash_leg_id(self) -> str | None: ...
-
-    @property
-    def settlement_status(self) -> str | None: ...
-
-    @property
-    def fx_contract_id(self) -> str | None: ...
-
-    @property
-    def fx_contract_open_transaction_id(self) -> str | None: ...
-
-    @property
-    def fx_contract_close_transaction_id(self) -> str | None: ...
-
-    @property
-    def settlement_of_fx_contract_id(self) -> str | None: ...
-
-    @property
-    def swap_event_id(self) -> str | None: ...
-
-    @property
-    def near_leg_group_id(self) -> str | None: ...
-
-    @property
-    def far_leg_group_id(self) -> str | None: ...
-
-    @property
-    def spot_exposure_model(self) -> str | None: ...
-
-    @property
-    def fx_realized_pnl_mode(self) -> str | None: ...
-
-    @property
-    def realized_capital_pnl_local(self) -> Decimal | None: ...
-
-    @property
-    def realized_fx_pnl_local(self) -> Decimal | None: ...
-
-    @property
-    def realized_total_pnl_local(self) -> Decimal | None: ...
-
-    @property
-    def realized_capital_pnl_base(self) -> Decimal | None: ...
-
-    @property
-    def realized_fx_pnl_base(self) -> Decimal | None: ...
-
-    @property
-    def realized_total_pnl_base(self) -> Decimal | None: ...
