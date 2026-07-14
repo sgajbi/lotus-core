@@ -84,6 +84,9 @@ obscured ownership and encouraged further dumping into broad folders.
     application boundaries, reduced `CostBasisProcessingAdapter` to reference/error mapping, deleted
     the remaining 320-line `CostCalculationWorkflow` and transport-valued `StagedCostEffects`, and
     moved the mixed legacy workflow tests into mirrored application and infrastructure packages.
+22. Repointed the financial-calculation critical-path coverage contract from the deleted flat
+    infrastructure glob to the application-owned cost-basis package and concrete adapter/stager,
+    added mirrored test globs, and guarded the retired ownership path.
 
 ## Measurable Improvement
 
