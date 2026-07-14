@@ -7,6 +7,7 @@ from .lot_state import CostBasisLotStatePort
 from .observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
+    CostBasisExecutionMode,
     CostBasisPersistenceObservation,
     CostBasisPersistenceObserver,
     CostBasisPersistenceStage,
@@ -34,6 +35,7 @@ __all__ = [
     "CostBasisLotStatePort",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
+    "CostBasisExecutionMode",
     "CostBasisPersistenceObservation",
     "CostBasisPersistenceObserver",
     "CostBasisPersistenceStage",

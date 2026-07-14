@@ -13,11 +13,14 @@ from prometheus_client import Counter, Histogram
 from ...ports.cost_basis.observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
+    CostBasisExecutionMode,
     CostBasisPersistenceObservation,
     CostBasisPersistenceStage,
     CostBasisPersistenceStatus,
 )
 from .metrics import (
+    COST_PROCESSING_EXECUTION_TOTAL,
+    COST_PROCESSING_OPEN_LOTS_RESTORED,
     RECALCULATION_DEPTH,
     RECALCULATION_DURATION_SECONDS,
 )
@@ -33,11 +36,43 @@ class PrometheusCostBasisCalculationObserver(CostBasisCalculationObserver):
         *,
         depth: Histogram = RECALCULATION_DEPTH,
         duration: Histogram = RECALCULATION_DURATION_SECONDS,
+        execution: Counter = COST_PROCESSING_EXECUTION_TOTAL,
+        restored_open_lots: Histogram = COST_PROCESSING_OPEN_LOTS_RESTORED,
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self._depth = depth
         self._duration = duration
+        self._execution = execution
+        self._restored_open_lots = restored_open_lots
         self._clock = clock
+
+    def record_execution(
+        self,
+        mode: CostBasisExecutionMode,
+        cost_basis_method: str,
+    ) -> None:
+        """Record the selected bounded execution path."""
+
+        try:
+            self._execution.labels(
+                mode=mode.value,
+                cost_basis_method=cost_basis_method,
+            ).inc()
+        except Exception:
+            logger.exception("Cost-basis execution metric recording failed.")
+
+    def record_restored_open_lots(
+        self,
+        *,
+        cost_basis_method: str,
+        lot_count: int,
+    ) -> None:
+        """Record the source-lot state restored for incremental processing."""
+
+        try:
+            self._restored_open_lots.labels(cost_basis_method=cost_basis_method).observe(lot_count)
+        except Exception:
+            logger.exception("Cost-basis restored-lot metric recording failed.")
 
     def observe_recalculation(self) -> CostBasisCalculationObservation:
         return _PrometheusCostBasisCalculationObservation(

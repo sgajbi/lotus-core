@@ -24,6 +24,7 @@ from ...domain.cost_basis import (
 from ...ports.cost_basis.observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
+    CostBasisExecutionMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -195,5 +196,16 @@ class _NullCostBasisCalculationObservation(CostBasisCalculationObservation):
 
 
 class _NullCostBasisCalculationObserver(CostBasisCalculationObserver):
+    def record_execution(self, mode: CostBasisExecutionMode, cost_basis_method: str) -> None:
+        del mode, cost_basis_method
+
+    def record_restored_open_lots(
+        self,
+        *,
+        cost_basis_method: str,
+        lot_count: int,
+    ) -> None:
+        del cost_basis_method, lot_count
+
     def observe_recalculation(self) -> CostBasisCalculationObservation:
         return _NullCostBasisCalculationObservation()

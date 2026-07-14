@@ -69,6 +69,9 @@ obscured ownership and encouraged further dumping into broad folders.
 17. Added `application.foreign_exchange_processing.book_foreign_exchange_transaction` over a
     one-method persistence port; it returns the validated domain transaction and optional synthetic
     contract instrument while infrastructure retains governed event mapping.
+18. Extended the typed cost-basis calculation observer with bounded execution mode and restored-lot
+    observations, moved the existing Prometheus counter/histogram calls behind the failure-contained
+    adapter, and replaced workflow-global metric patching with port-level assertions.
 
 ## Measurable Improvement
 
@@ -103,7 +106,7 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite after FX booking extraction: `789 passed`;
+- complete transaction-processing unit suite after execution-observer extraction: `791 passed`;
 - settlement application, cost workflow, processing adapter, and composition tests: `27 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
@@ -114,6 +117,7 @@ the broader calculator-runtime retirement tracked by #719.
 - cost-basis observability, composition, timeline, and incremental-workflow tests: `23 passed`;
 - application-layer, dependency-inversion, domain-layer, and infrastructure-adapter guards:
   passed;
+- direct workflow references to cost execution/restored-lot Prometheus instruments: absent;
 - focused strict MyPy, Ruff lint/format, import scans, and `git diff --check`: passed.
 - backdated suffix partial-write rollback on PostgreSQL after repository-level failure injection:
   `1 passed`.

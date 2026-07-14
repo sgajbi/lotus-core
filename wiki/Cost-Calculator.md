@@ -68,7 +68,8 @@ Cost-basis calculation observation remains framework-neutral at the port boundar
 instruments and adapters are grouped under `app/infrastructure/cost_basis`; metric names, labels,
 and buckets remain stable operational contracts. Transaction-persistence stages use the same typed
 observation boundary, and the infrastructure adapter contains metric or logging failures so
-telemetry cannot abort financial writes.
+telemetry cannot abort financial writes. Ordered-append/full-rebuild execution mode and restored-lot
+counts also cross this typed boundary; calculation coordination does not import Prometheus objects.
 
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New

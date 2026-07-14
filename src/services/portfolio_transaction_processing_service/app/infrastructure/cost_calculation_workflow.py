@@ -49,6 +49,7 @@ from ..ports import (
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisCalculationObserver,
+    CostBasisExecutionMode,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisLotStatePort,
@@ -62,7 +63,6 @@ from .booked_transaction_event_mapper import (
     to_transaction_event,
     with_booked_transaction_fields,
 )
-from .cost_basis.metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_basis.staged_effects import StagedCostEffects
 from .fx_event_mapper import to_fx_contract_instrument_event
 
@@ -377,10 +377,11 @@ class CostCalculationWorkflow:
                 if (
                     average_cost_pool_record is not None
                     or lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS
-                ):
-                    COST_PROCESSING_OPEN_LOTS_RESTORED.labels(
-                        cost_basis_method=cost_basis_method.value
-                    ).observe(len(initial_open_lots_raw))
+                ) and self._cost_basis_observer is not None:
+                    self._cost_basis_observer.record_restored_open_lots(
+                        cost_basis_method=cost_basis_method.value,
+                        lot_count=len(initial_open_lots_raw),
+                    )
                 processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
                     cost_basis_method
                 ).process_increment(
@@ -395,10 +396,11 @@ class CostCalculationWorkflow:
                     if average_cost_pool_record is not None and not errored
                     else None
                 )
-                COST_PROCESSING_EXECUTION_TOTAL.labels(
-                    mode="ordered_append",
-                    cost_basis_method=cost_basis_method.value,
-                ).inc()
+                if self._cost_basis_observer is not None:
+                    self._cost_basis_observer.record_execution(
+                        CostBasisExecutionMode.ORDERED_APPEND,
+                        cost_basis_method.value,
+                    )
                 return CostBasisCalculationResult(
                     processed=processed,
                     errored=errored,
@@ -440,10 +442,11 @@ class CostCalculationWorkflow:
             existing_transactions_raw=[],
             new_transactions_raw=all_transactions_raw,
         )
-        COST_PROCESSING_EXECUTION_TOTAL.labels(
-            mode="full_rebuild",
-            cost_basis_method=cost_basis_method.value,
-        ).inc()
+        if self._cost_basis_observer is not None:
+            self._cost_basis_observer.record_execution(
+                CostBasisExecutionMode.FULL_REBUILD,
+                cost_basis_method.value,
+            )
         return CostBasisCalculationResult(
             processed=processed,
             errored=errored,
