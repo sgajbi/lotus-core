@@ -86,8 +86,12 @@ Current repository posture:
    reporting, latency, Docker, and operational gates. Critical-path coverage governance lives in
    `docs/standards/critical-path-coverage.v1.json`, is checked by
    `make critical-path-coverage-guard`, and is reported by `make coverage-gate` under
-   `output/coverage/critical-path-coverage-report.json` so aggregate, changed-code, and
-   critical-path coverage cannot be conflated. Risk-based test-family coverage governance lives in
+   `output/coverage/critical-path-coverage-report.json`. Git name-status evidence preserves
+   rename/copy/delete lineage, coverage evaluates only post-change files, and current changed
+   critical modules fail closed when absent from the measured-source artifact. Query Service
+   aggregate evidence remains separate at `output/coverage/query-service-coverage.json`, so
+   aggregate, changed-code, and critical-path coverage cannot be conflated. Risk-based test-family
+   coverage governance lives in
    `docs/standards/risk-based-test-coverage-matrix.v1.json`, is checked by
    `make risk-based-test-coverage-matrix-guard`, and maps instruments, accounts, positions, cash,
    transactions, corporate actions, valuation, cashflow, cost, reconciliation, ingestion, replay,

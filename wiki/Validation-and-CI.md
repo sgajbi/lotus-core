@@ -152,8 +152,11 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
 - `make critical-path-coverage-guard`
   protects the critical-path coverage contract for transaction lifecycle, calculations,
   position/cash state, corporate actions, auth/audit/security, ingestion/replay/outbox,
-  repository/database hot paths, and API/error mapping. `make coverage-gate` also writes separate
-  aggregate, changed-code, and critical-path coverage reports under `output/coverage/`.
+  repository/database hot paths, and API/error mapping. `make coverage-gate` writes a scoped Query
+  Service aggregate artifact, broader measured-source evidence, and a changed/critical-path report
+  under `output/coverage/`. The report retains rename/copy/delete lineage, excludes deleted paths
+  from current-file counts, and fails with `CHANGED_CRITICAL_SOURCE_UNMEASURED` when a current
+  changed critical module is absent from the governed coverage execution.
 - `make generated-artifact-tracking-guard`
   fails if disposable build, cache, package, coverage, or generated `output/` artifacts become
   tracked repository source truth. Local ignored generated artifacts remain removable through
@@ -230,7 +233,8 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
 - critical-path coverage failure:
   update `docs/standards/critical-path-coverage.v1.json`, the affected tests, and the relevant
   Makefile suite together. Do not add an exception without owner, reason, follow-up issue, and
-  expiry.
+  expiry. Inspect `changed_file_lineage` before treating an old path as current: deletes are
+  audit-only and renames are evaluated through their post-change path.
 
 ## Related references
 

@@ -348,18 +348,19 @@ Important lane mapping:
 
 Coverage posture:
 
-- `make coverage-gate` enforces the zero-warning unit budget and combined branch-aware 98%
+- `make coverage-gate` enforces the zero-warning unit budget and branch-aware 98% Query Service
   aggregate threshold from the same unit execution. `make ci-local` therefore runs the complete
   unit and integration-lite suites once, while hosted CI can still run the standalone
   `make warning-gate` for earlier failure isolation.
-- It now also writes `output/coverage/coverage.json` and
-  `output/coverage/critical-path-coverage-report.json`, separating aggregate coverage,
-  measured changed-code coverage, and measured critical-path coverage for transaction lifecycle,
-  calculations, position/cash state, corporate actions, auth/audit/security, ingestion/replay/
-  outbox, repository/database hot paths, and API/error-mapping paths.
+- It writes `output/coverage/query-service-coverage.json` for the aggregate scope,
+  `output/coverage/coverage.json` for Query Service plus exact changed-critical modules, and
+  `output/coverage/critical-path-coverage-report.json` for changed-file lineage and thresholds.
+  Rename/copy records preserve previous and current paths, deleted paths are audit-only, and an
+  existing changed critical module absent from coverage fails with
+  `CHANGED_CRITICAL_SOURCE_UNMEASURED`.
 - `docs/standards/critical-path-coverage.v1.json` is the governed contract for critical-path
-  module groups, minimum measured coverage expectations, test-family expectations, and exception
-  policy.
+  module groups, source scopes, minimum measured coverage expectations, test-family expectations,
+  fail-closed changed-source evidence, and exception policy.
 
 Because this repo has a heavy validation contract, targeted local proof plus GitHub-backed heavy
 execution is often the right workflow.
