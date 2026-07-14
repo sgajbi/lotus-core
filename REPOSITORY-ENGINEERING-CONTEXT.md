@@ -2157,6 +2157,13 @@ Most relevant current governance:
      stable event, identity, monetary, runtime-port, and supportability contracts when multiple
      deployables legitimately share them. Do not restore generic `portfolio_common.models`, root
      transaction control-code helpers, or duplicate compatibility facades.
+     Shared cost-basis vocabulary, analytics cashflow semantics, currency normalization, and
+     decimal amount policy live at `portfolio_common.domain.cost_basis_method`,
+     `portfolio_common.domain.analytics.cashflow_semantics`, `portfolio_common.domain.currency`,
+     and `portfolio_common.domain.decimal_amount`. Import those canonical owners directly; do not
+     restore their deleted root modules. Query Service strict decimal acceptance remains
+     service-owned under `query_service.app.domain.strict_decimal`, while SQL currency expressions
+     remain repository infrastructure rather than domain policy.
 156. Shared SQLAlchemy adapters belong under `portfolio_common.infrastructure.persistence` only
      while multiple deployables genuinely use the same behavior. Do not name concrete repositories
      `Base` or place them at the shared package root. Timeseries persistence is now service-owned;
