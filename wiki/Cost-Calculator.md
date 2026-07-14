@@ -64,6 +64,13 @@ capability in every layer. Their domain assessment, application use case, port, 
 tests use matching `cost_basis` or `cost_basis_processing` package paths; flat compatibility roots
 are not extension points.
 
+`CostBasisCalculationCoordinator` owns the incremental-versus-full-rebuild decision after the
+infrastructure workflow acquires the portfolio-security lock. It accepts an immutable booked
+transaction, restores compatible FIFO lots or an AVCO pool through narrow ports, enriches the
+calculation timeline with effective FX evidence, and invokes the governed timeline processor.
+Framework event DTO mapping, SQL transaction ownership, and outbox publication stay outside that
+application boundary.
+
 Cost-basis calculation observation remains framework-neutral at the port boundary. Prometheus
 instruments and adapters are grouped under `app/infrastructure/cost_basis`; metric names, labels,
 and buckets remain stable operational contracts. Transaction-persistence stages use the same typed

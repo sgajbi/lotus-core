@@ -6,6 +6,7 @@ from .average_cost_pool_reconciliation import (
     ReconcileAverageCostPoolsResult,
     ReconcileAverageCostPoolsUseCase,
 )
+from .calculation import CostBasisCalculationCoordinator
 from .calculation_result import CostBasisCalculationResult
 from .fx_enrichment import FxRateNotFoundError, enrich_cost_basis_transactions_with_fx
 from .lot_state_persistence import OpenLotPersistenceScope, persist_open_lot_state
@@ -20,6 +21,7 @@ from .transaction_persistence import persist_cost_basis_transactions
 
 __all__ = [
     "AverageCostPoolRebuildPlanner",
+    "CostBasisCalculationCoordinator",
     "CostBasisCalculationResult",
     "CostBasisTimelineProcessor",
     "CostProcessingRoute",

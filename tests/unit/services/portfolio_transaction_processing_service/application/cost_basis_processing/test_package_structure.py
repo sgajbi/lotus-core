@@ -63,3 +63,19 @@ def test_transaction_persistence_has_application_owned_paths() -> None:
     assert not (UNIT_TEST_ROOT / "cost" / "test_transaction_persistence.py").exists()
     assert (APPLICATION_ROOT / "cost_basis_processing" / "transaction_persistence.py").is_file()
     assert (application_test_root / "test_transaction_persistence.py").is_file()
+
+
+def test_cost_basis_calculation_has_application_owned_paths() -> None:
+    """Keep calculation policy and its tests out of infrastructure and legacy cost folders."""
+
+    application_test_root = UNIT_TEST_ROOT / "application" / "cost_basis_processing"
+    infrastructure_workflow = (
+        APPLICATION_ROOT.parent / "infrastructure" / "cost_calculation_workflow.py"
+    )
+    assert not (APPLICATION_ROOT / "cost_basis_calculation.py").exists()
+    assert not (UNIT_TEST_ROOT / "cost" / "test_incremental_cost_workflow.py").exists()
+    assert (APPLICATION_ROOT / "cost_basis_processing" / "calculation.py").is_file()
+    assert (application_test_root / "test_calculation.py").is_file()
+    workflow_source = infrastructure_workflow.read_text(encoding="utf-8")
+    assert "_calculate_cost_basis" not in workflow_source
+    assert "transaction_lot_behavior" not in workflow_source

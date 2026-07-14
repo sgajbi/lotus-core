@@ -1,3 +1,5 @@
+"""Verify deterministic cost-basis calculation coordination through application ports."""
+
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
@@ -23,7 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     BookedTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculationWorkflow,
     booked_transaction_event_mapper,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
@@ -32,6 +33,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisCalculationObserver,
     CostBasisExecutionMode,
     CostBasisFxRatePort,
+    CostBasisInstrumentReference,
     CostBasisLotStatePort,
     CostBasisProcessingStatePort,
     CostBasisTransactionStatePort,
@@ -41,6 +43,8 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 pytestmark = pytest.mark.asyncio
 
 OpenLotPersistenceScope = cost_basis_processing.OpenLotPersistenceScope
+CostBasisCalculationCoordinator = cost_basis_processing.CostBasisCalculationCoordinator
+CostBasisCalculationResult = cost_basis_processing.CostBasisCalculationResult
 persist_open_lot_state = cost_basis_processing.persist_open_lot_state
 
 
@@ -66,6 +70,59 @@ def _lot_state_port() -> AsyncMock:
     """Provide an isolated open-lot persistence dependency for one workflow test."""
 
     return AsyncMock(spec=CostBasisLotStatePort)
+
+
+def _calculation_coordinator(
+    *,
+    transactions: CostBasisTransactionStatePort,
+    average_cost_pools: CostBasisAverageCostPoolPort,
+    lot_states: CostBasisLotStatePort,
+    fx_rates: CostBasisFxRatePort,
+    processing_state: CostBasisProcessingStatePort,
+    observer: CostBasisCalculationObserver | None = None,
+) -> CostBasisCalculationCoordinator:
+    """Build the application coordinator with isolated state ports."""
+
+    return CostBasisCalculationCoordinator(
+        transactions=transactions,
+        average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
+        fx_rates=fx_rates,
+        processing_state=processing_state,
+        observer=observer,
+    )
+
+
+async def _calculate_cost_basis(
+    *,
+    event: TransactionEvent,
+    event_transaction_type: str,
+    portfolio_base_currency: str,
+    instrument: CostBasisInstrumentReference | None,
+    repo: CostBasisTransactionStatePort,
+    average_cost_pools: CostBasisAverageCostPoolPort,
+    lot_states: CostBasisLotStatePort,
+    fx_rates: CostBasisFxRatePort,
+    processing_state: CostBasisProcessingStatePort,
+    cost_basis_method: CostBasisMethod,
+    observer: CostBasisCalculationObserver | None = None,
+) -> CostBasisCalculationResult:
+    """Calculate through the framework-neutral application boundary used in production."""
+
+    return await _calculation_coordinator(
+        transactions=repo,
+        average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
+        fx_rates=fx_rates,
+        processing_state=processing_state,
+        observer=observer,
+    ).calculate(
+        transaction=booked_transaction_event_mapper.to_booked_transaction(event),
+        transaction_type=event_transaction_type,
+        portfolio_base_currency=portfolio_base_currency,
+        instrument=instrument,
+        cost_basis_method=cost_basis_method,
+    )
 
 
 def _event(
@@ -153,9 +210,7 @@ def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
 
 
 async def test_later_sell_restores_open_lots_without_loading_full_history() -> None:
-    workflow = CostCalculationWorkflow()
     observer = MagicMock(spec=CostBasisCalculationObserver)
-    workflow.configure_cost_basis_observer(observer)
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -186,7 +241,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         CostBasisMethod.FIFO,
     )
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
@@ -197,6 +252,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
+        observer=observer,
     )
 
     assert calculation.incremental is True
@@ -220,7 +276,6 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
 
 
 async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
-    workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -257,7 +312,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         CostBasisMethod.AVCO,
     )
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
@@ -288,7 +343,6 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
 
 
 async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source() -> None:
-    workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -327,7 +381,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         CostBasisMethod.AVCO,
     )
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=buy_event,
         event_transaction_type=buy_type,
         portfolio_base_currency="USD",
@@ -353,7 +407,6 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
 
 
 async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() -> None:
-    workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -380,7 +433,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         CostBasisMethod.AVCO,
     )
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=sell_event,
         event_transaction_type=sell_type,
         portfolio_base_currency="USD",
@@ -401,9 +454,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
 
 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
-    workflow = CostCalculationWorkflow()
     observer = MagicMock(spec=CostBasisCalculationObserver)
-    workflow.configure_cost_basis_observer(observer)
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -420,7 +471,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         _history_transaction(_persisted_buy("BUY-LATER", later_date))
     ]
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=_event(
             transaction_id="BUY-EARLIER",
             transaction_date=earlier_date,
@@ -436,6 +487,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
+        observer=observer,
     )
 
     assert calculation.incremental is False
@@ -453,7 +505,6 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
 async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     cost_basis_method: CostBasisMethod,
 ) -> None:
-    workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
@@ -471,7 +522,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         quantity="0",
     )
 
-    calculation = await workflow._calculate_cost_basis(
+    calculation = await _calculate_cost_basis(
         event=dividend,
         event_transaction_type="DIVIDEND",
         portfolio_base_currency="USD",
@@ -540,9 +591,15 @@ async def test_positive_average_cost_pool_without_representative_row_is_not_rest
         )
     )
 
-    checkpoint = await CostCalculationWorkflow._get_compatible_average_cost_pool_checkpoint(
-        event=event,
+    coordinator = _calculation_coordinator(
+        transactions=AsyncMock(spec=CostBasisTransactionStatePort),
         average_cost_pools=average_cost_pools,
+        lot_states=_lot_state_port(),
+        fx_rates=_fx_rate_port(),
+        processing_state=_processing_state_port(),
+    )
+    checkpoint = await coordinator._get_compatible_average_cost_pool_checkpoint(
+        booked_transaction_event_mapper.to_booked_transaction(event)
     )
 
     assert checkpoint is None
@@ -551,7 +608,6 @@ async def test_positive_average_cost_pool_without_representative_row_is_not_rest
 async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_open_sources() -> (
     None
 ):
-    workflow = CostCalculationWorkflow()
     closed_record = AverageCostPoolCheckpointRecord(
         checkpoint=AverageCostPoolCheckpoint(
             portfolio_id="P1",
@@ -575,7 +631,7 @@ async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_o
     )
 
     assert (
-        workflow._load_average_cost_pool_checkpoint_transaction(
+        CostBasisCalculationCoordinator._load_average_cost_pool_checkpoint_transaction(
             record=closed_record,
             portfolio_base_currency="USD",
             instrument=None,
@@ -583,7 +639,7 @@ async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_o
         == []
     )
     with pytest.raises(ValueError, match="no representative transaction"):
-        workflow._load_average_cost_pool_checkpoint_transaction(
+        CostBasisCalculationCoordinator._load_average_cost_pool_checkpoint_transaction(
             record=AverageCostPoolCheckpointRecord(
                 checkpoint=open_checkpoint,
                 representative_transaction=None,
@@ -592,7 +648,7 @@ async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_o
             instrument=None,
         )
 
-    restored = workflow._load_average_cost_pool_checkpoint_transaction(
+    restored = CostBasisCalculationCoordinator._load_average_cost_pool_checkpoint_transaction(
         record=AverageCostPoolCheckpointRecord(
             checkpoint=open_checkpoint,
             representative_transaction=_history_transaction(
@@ -612,7 +668,6 @@ async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_o
 
 
 async def test_average_cost_pool_transition_rejects_missing_representative_state() -> None:
-    workflow = CostCalculationWorkflow()
     closed_checkpoint = AverageCostPoolCheckpoint(
         portfolio_id="P1",
         instrument_id="I1",
@@ -622,7 +677,7 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
         cost_local=Decimal(0),
         cost_base=Decimal(0),
     )
-    closed_transition = workflow._build_average_cost_pool_transition(
+    closed_transition = CostBasisCalculationCoordinator._build_average_cost_pool_transition(
         checkpoint=closed_checkpoint,
         open_lot_states={},
     )
@@ -642,7 +697,7 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
         cost_base=Decimal("100"),
     )
     with pytest.raises(ValueError, match="omitted the aggregate representative source"):
-        workflow._build_average_cost_pool_transition(
+        CostBasisCalculationCoordinator._build_average_cost_pool_transition(
             checkpoint=open_checkpoint,
             open_lot_states={},
         )
@@ -652,7 +707,7 @@ async def test_average_cost_pool_transition_rejects_missing_representative_state
         representative_source_transaction_id=None,
     )
     with pytest.raises(ValueError, match="no representative source"):
-        workflow._build_average_cost_pool_transition(
+        CostBasisCalculationCoordinator._build_average_cost_pool_transition(
             checkpoint=malformed_checkpoint,
             open_lot_states={},
         )
