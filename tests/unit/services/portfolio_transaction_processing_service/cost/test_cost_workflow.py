@@ -36,6 +36,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
 )
 
@@ -87,6 +88,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     workflow = CostCalculationWorkflow()
     calculation = MagicMock(
         processed=[],
@@ -108,11 +110,11 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         instrument=MagicMock(),
         repo=repo,
         fx_rates=fx_rates,
+        processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
     )
 
-    repo.acquire_cost_basis_processing_lock.assert_awaited_once_with("PORT_COST_01", "SEC_COST_01")
-    assert repo.method_calls[0] == call.acquire_cost_basis_processing_lock(
+    processing_state.acquire_cost_basis_processing_lock.assert_awaited_once_with(
         "PORT_COST_01", "SEC_COST_01"
     )
 
@@ -195,6 +197,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     instrument_event = MagicMock()
     repo = AsyncMock(spec=CostCalculatorRepository)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
@@ -222,6 +225,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         instrument=instrument,
         repo=repo,
         fx_rates=fx_rates,
+        processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
         cost_basis_method=CostBasisMethod.FIFO,
         outbox_repo=outbox_repo,
@@ -236,6 +240,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         instrument=instrument,
         repo=repo,
         fx_rates=fx_rates,
+        processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
     )
     workflow._build_emitted_transaction_events.assert_awaited_once_with(
@@ -276,6 +281,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     repo = AsyncMock(spec=CostCalculatorRepository)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
+    processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
@@ -286,6 +292,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             repository=repo,
             reference_data=reference_data,
             fx_rates=fx_rates,
+            processing_state=processing_state,
             reconciliation_repository=reconciliation_repository,
             outbox_repository=outbox_repo,
         ).stage_event(

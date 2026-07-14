@@ -1,6 +1,7 @@
 """Framework-neutral ports for cost-basis processing dependencies."""
 
 from .fx_rates import CostBasisFxRatePort
+from .processing_state import CostBasisProcessingStatePort
 from .reference_data import (
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
@@ -18,6 +19,7 @@ __all__ = [
     "CostBasisFxRatePort",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
+    "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
     "OpenLotCheckpointRecord",
 ]

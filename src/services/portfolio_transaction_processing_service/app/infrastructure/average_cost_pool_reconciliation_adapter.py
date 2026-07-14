@@ -18,10 +18,12 @@ from ..domain import (
 from ..ports import (
     AverageCostPoolPersistedSummary,
     CostBasisFxRatePort,
+    CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
 )
 from .cost_basis import (
     SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
 from .cost_calculation_workflow import (
@@ -56,12 +58,16 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         fx_rate_factory: Callable[[AsyncSession], CostBasisFxRatePort] = (
             SqlAlchemyCostBasisFxRateRepository
         ),
+        processing_state_factory: Callable[[AsyncSession], CostBasisProcessingStatePort] = (
+            SqlAlchemyCostBasisProcessingStateRepository
+        ),
     ) -> None:
         self._session_factory = session_factory
         self._workflow = workflow
         self._repository_factory = repository_factory
         self._reference_data_factory = reference_data_factory
         self._fx_rate_factory = fx_rate_factory
+        self._processing_state_factory = processing_state_factory
 
     async def list_candidates(
         self,
@@ -122,7 +128,8 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                     repository = self._repository_factory(session)
                     reference_data = self._reference_data_factory(session)
                     fx_rates = self._fx_rate_factory(session)
-                    await repository.acquire_cost_basis_processing_lock(
+                    processing_state = self._processing_state_factory(session)
+                    await processing_state.acquire_cost_basis_processing_lock(
                         key.portfolio_id,
                         key.security_id,
                     )
@@ -173,6 +180,9 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         )
 
                     await repository.apply_average_cost_pool_rebuild(plan)
+                    await processing_state.upsert_cost_basis_processing_checkpoint(
+                        plan.processing_checkpoint
+                    )
                     persisted_after = await repository.get_average_cost_pool_persisted_summary(
                         portfolio_id=key.portfolio_id,
                         security_id=key.security_id,

@@ -23,6 +23,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
 from tests.test_support.transaction_processing import (
@@ -65,7 +66,7 @@ class _HeldHistoryCostRepository(CostCalculatorRepository):
         return history
 
 
-class _ObservedLockCostRepository(CostCalculatorRepository):
+class _ObservedProcessingStateRepository(SqlAlchemyCostBasisProcessingStateRepository):
     def __init__(
         self,
         db: AsyncSession,
@@ -89,6 +90,7 @@ async def _stage_cost_calculation(
     session_factory: async_sessionmaker[AsyncSession],
     event,
     repository_factory,
+    processing_state_factory=SqlAlchemyCostBasisProcessingStateRepository,
 ) -> None:
     async with session_factory() as session, session.begin():
         await CostProcessingCompatibilityAdapter(
@@ -96,6 +98,7 @@ async def _stage_cost_calculation(
             repository=repository_factory(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
+            processing_state=processing_state_factory(session),
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
             outbox_repository=AsyncMock(spec=OutboxRepository),
         ).stage_event(
@@ -170,7 +173,8 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         _stage_cost_calculation(
             session_factory=session_factory,
             event=sell,
-            repository_factory=lambda session: _ObservedLockCostRepository(
+            repository_factory=CostCalculatorRepository,
+            processing_state_factory=lambda session: _ObservedProcessingStateRepository(
                 session,
                 lock_attempted=sell_lock_attempted,
             ),
@@ -180,7 +184,8 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         _stage_cost_calculation(
             session_factory=session_factory,
             event=sell,
-            repository_factory=lambda session: _ObservedLockCostRepository(
+            repository_factory=CostCalculatorRepository,
+            processing_state_factory=lambda session: _ObservedProcessingStateRepository(
                 session,
                 lock_attempted=replay_lock_attempted,
             ),
@@ -245,12 +250,16 @@ async def test_cost_basis_processing_lock_does_not_serialize_other_security_keys
         session_factory() as other_security_session,
         other_security_session.begin(),
     ):
-        await CostCalculatorRepository(owning_session).acquire_cost_basis_processing_lock(
+        await SqlAlchemyCostBasisProcessingStateRepository(
+            owning_session
+        ).acquire_cost_basis_processing_lock(
             "PORT-COST-LOCK-02",
             "SEC-COST-LOCK-01",
         )
         await asyncio.wait_for(
-            CostCalculatorRepository(other_security_session).acquire_cost_basis_processing_lock(
+            SqlAlchemyCostBasisProcessingStateRepository(
+                other_security_session
+            ).acquire_cost_basis_processing_lock(
                 "PORT-COST-LOCK-02",
                 "SEC-COST-LOCK-02",
             ),

@@ -1,8 +1,6 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
-from collections.abc import Callable
 from decimal import Decimal
-from time import monotonic
 from typing import Any
 
 from portfolio_common.database_models import (
@@ -25,7 +23,6 @@ from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
-    CostBasisProcessingCheckpoint,
     OpenLotState,
 )
 from ..domain.cost_basis import (
@@ -38,7 +35,6 @@ from ..ports import (
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
-from .cost_basis.processing_state_repository import SqlAlchemyCostBasisProcessingStateRepository
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -220,21 +216,8 @@ def _scaled_persisted_value(
 class CostCalculatorRepository:
     AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 500
 
-    def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
+    def __init__(self, db: AsyncSession):
         self.db = db
-        self._processing_state = SqlAlchemyCostBasisProcessingStateRepository(db, clock=clock)
-
-    async def acquire_cost_basis_processing_lock(
-        self,
-        portfolio_id: str,
-        security_id: str,
-    ) -> None:
-        """Delegate stream serialization to the processing-state adapter."""
-
-        await self._processing_state.acquire_cost_basis_processing_lock(
-            portfolio_id,
-            security_id,
-        )
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
@@ -264,19 +247,6 @@ class CostCalculatorRepository:
             to_booked_transaction(TransactionEvent.model_validate(row))
             for row in result.scalars().all()
         ]
-
-    async def get_cost_basis_processing_checkpoint(
-        self, *, portfolio_id: str, security_id: str
-    ) -> CostBasisProcessingCheckpoint | None:
-        return await self._processing_state.get_cost_basis_processing_checkpoint(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-        )
-
-    async def upsert_cost_basis_processing_checkpoint(
-        self, checkpoint: CostBasisProcessingCheckpoint
-    ) -> None:
-        await self._processing_state.upsert_cost_basis_processing_checkpoint(checkpoint)
 
     async def get_average_cost_pool_checkpoint_record(
         self,
@@ -409,7 +379,6 @@ class CostCalculatorRepository:
             )
 
         await self.upsert_average_cost_pool_checkpoint(checkpoint)
-        await self.upsert_cost_basis_processing_checkpoint(plan.processing_checkpoint)
 
     async def get_average_cost_pool_persisted_summary(
         self,

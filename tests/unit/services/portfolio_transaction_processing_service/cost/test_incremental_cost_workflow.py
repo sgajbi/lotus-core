@@ -31,6 +31,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     OpenLotCheckpointRecord,
 )
@@ -42,6 +43,12 @@ def _fx_rate_port() -> AsyncMock:
     """Provide an isolated effective-rate dependency for one workflow test."""
 
     return AsyncMock(spec=CostBasisFxRatePort)
+
+
+def _processing_state_port() -> AsyncMock:
+    """Provide an isolated replay-frontier dependency for one workflow test."""
+
+    return AsyncMock(spec=CostBasisProcessingStatePort)
 
 
 def _event(
@@ -129,10 +136,11 @@ def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
 async def test_later_sell_restores_open_lots_without_loading_full_history() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-1", buy_date)
-    repo.get_cost_basis_processing_checkpoint.return_value = (
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
         CostBasisProcessingCheckpoint.from_transaction(
             prior_buy, cost_basis_method=CostBasisMethod.FIFO
         )
@@ -172,6 +180,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
             fx_rates=_fx_rate_port(),
+            processing_state=processing_state,
             cost_basis_method=method,
         )
 
@@ -197,10 +206,11 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
 async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
-    repo.get_cost_basis_processing_checkpoint.return_value = (
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
         CostBasisProcessingCheckpoint.from_transaction(
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
@@ -234,6 +244,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
         cost_basis_method=method,
     )
 
@@ -257,10 +268,11 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
 async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", first_buy_date)
-    repo.get_cost_basis_processing_checkpoint.return_value = (
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
         CostBasisProcessingCheckpoint.from_transaction(
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
@@ -296,6 +308,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
         cost_basis_method=method,
     )
 
@@ -314,10 +327,11 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
 async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
-    repo.get_cost_basis_processing_checkpoint.return_value = (
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
         CostBasisProcessingCheckpoint.from_transaction(
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
@@ -343,6 +357,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
         cost_basis_method=method,
     )
 
@@ -494,10 +509,11 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     later_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     earlier_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     later_buy = _processed_buy("BUY-LATER", later_date)
-    repo.get_cost_basis_processing_checkpoint.return_value = (
+    processing_state.get_cost_basis_processing_checkpoint.return_value = (
         CostBasisProcessingCheckpoint.from_transaction(
             later_buy, cost_basis_method=CostBasisMethod.FIFO
         )
@@ -522,6 +538,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
             fx_rates=_fx_rate_port(),
+            processing_state=processing_state,
             cost_basis_method=CostBasisMethod.FIFO,
         )
 
@@ -542,9 +559,10 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
 ) -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    processing_state = _processing_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     dividend_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
-    repo.get_cost_basis_processing_checkpoint.return_value = None
+    processing_state.get_cost_basis_processing_checkpoint.return_value = None
     repo.get_transaction_history.return_value = [
         _history_transaction(_persisted_buy("BUY-1", buy_date))
     ]
@@ -562,6 +580,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         fx_rates=_fx_rate_port(),
+        processing_state=processing_state,
         cost_basis_method=cost_basis_method,
     )
     await workflow._update_open_lot_states_if_required(

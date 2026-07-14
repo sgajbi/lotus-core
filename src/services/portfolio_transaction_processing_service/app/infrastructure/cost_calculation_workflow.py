@@ -61,6 +61,7 @@ from ..ports import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
 )
 from .booked_transaction_event_mapper import (
@@ -378,6 +379,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         fx_rates: CostBasisFxRatePort,
+        processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         if route is CostProcessingRoute.FOREIGN_EXCHANGE:
@@ -389,6 +391,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             fx_rates=fx_rates,
+            processing_state=processing_state,
             cost_basis_method=cost_basis_method,
         )
 
@@ -402,6 +405,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         fx_rates: CostBasisFxRatePort,
+        processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
@@ -417,6 +421,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             fx_rates=fx_rates,
+            processing_state=processing_state,
             cost_basis_method=cost_basis_method,
         )
         emitted_transactions = await self._build_emitted_transaction_events(
@@ -466,9 +471,13 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         fx_rates: CostBasisFxRatePort,
+        processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
-        await repo.acquire_cost_basis_processing_lock(event.portfolio_id, event.security_id)
+        await processing_state.acquire_cost_basis_processing_lock(
+            event.portfolio_id,
+            event.security_id,
+        )
         calculation = await self._calculate_cost_basis(
             event=event,
             event_transaction_type=event_transaction_type,
@@ -476,6 +485,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             fx_rates=fx_rates,
+            processing_state=processing_state,
             cost_basis_method=cost_basis_method,
         )
 
@@ -499,7 +509,7 @@ class CostCalculationWorkflow:
         await self._persist_cost_basis_processing_checkpoint(
             processed=calculation.processed,
             cost_basis_method=cost_basis_method,
-            repo=repo,
+            processing_state=processing_state,
         )
 
         return events_to_publish, []
@@ -513,9 +523,10 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         fx_rates: CostBasisFxRatePort,
+        processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
-        checkpoint = await repo.get_cost_basis_processing_checkpoint(
+        checkpoint = await processing_state.get_cost_basis_processing_checkpoint(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
         )
@@ -918,10 +929,10 @@ class CostCalculationWorkflow:
         *,
         processed: list[EngineTransaction],
         cost_basis_method: CostBasisMethod,
-        repo: CostCalculatorRepository,
+        processing_state: CostBasisProcessingStatePort,
     ) -> None:
         latest_transaction = max(processed, key=transaction_order_key)
-        await repo.upsert_cost_basis_processing_checkpoint(
+        await processing_state.upsert_cost_basis_processing_checkpoint(
             CostBasisProcessingCheckpoint.from_transaction(
                 latest_transaction,
                 cost_basis_method=cost_basis_method,

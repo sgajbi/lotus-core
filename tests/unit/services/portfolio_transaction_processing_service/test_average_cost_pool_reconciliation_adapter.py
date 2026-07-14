@@ -18,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.av
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolPersistedSummary,
+    CostBasisProcessingStatePort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -57,6 +58,7 @@ def _summary(
 def _plan() -> SimpleNamespace:
     return SimpleNamespace(
         source_transactions=(SimpleNamespace(), SimpleNamespace()),
+        processing_checkpoint=SimpleNamespace(latest_transaction_id="SELL-AVCO-1"),
         checkpoint=SimpleNamespace(
             quantity=Decimal("15"),
             cost_local=Decimal("180"),
@@ -70,17 +72,20 @@ def _adapter(
     session: MagicMock,
     workflow: AsyncMock | None = None,
     repository: AsyncMock | None = None,
-) -> tuple[SqlAlchemyAverageCostPoolReconciliationAdapter, AsyncMock, AsyncMock]:
+) -> tuple[SqlAlchemyAverageCostPoolReconciliationAdapter, AsyncMock, AsyncMock, AsyncMock]:
     resolved_workflow = workflow or AsyncMock(spec=CostCalculationWorkflow)
     resolved_repository = repository or AsyncMock(spec=CostCalculatorRepository)
+    processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     return (
         SqlAlchemyAverageCostPoolReconciliationAdapter(
             session_factory=MagicMock(return_value=session),
             workflow=resolved_workflow,
             repository_factory=MagicMock(return_value=resolved_repository),
+            processing_state_factory=MagicMock(return_value=processing_state),
         ),
         resolved_workflow,
         resolved_repository,
+        processing_state,
     )
 
 
@@ -92,7 +97,7 @@ async def test_candidate_listing_uses_ordered_bounded_avco_lot_source_keys() -> 
         SimpleNamespace(portfolio_id="P2", security_id="S1"),
     ]
     session.execute.return_value = result
-    adapter, _, _ = _adapter(session=session)
+    adapter, _, _, _ = _adapter(session=session)
 
     keys = await adapter.list_candidates(
         portfolio_id="P1",
@@ -117,7 +122,7 @@ async def test_candidate_listing_uses_ordered_bounded_avco_lot_source_keys() -> 
 
 async def test_dry_run_reports_replay_proven_drift_without_writes() -> None:
     session = _session()
-    adapter, workflow, repository = _adapter(session=session)
+    adapter, workflow, repository, processing_state = _adapter(session=session)
     workflow.build_average_cost_pool_rebuild_plan.return_value = _plan()
     repository.get_average_cost_pool_persisted_summary.return_value = _summary(pool_present=False)
 
@@ -126,13 +131,13 @@ async def test_dry_run_reports_replay_proven_drift_without_writes() -> None:
     assert assessment.status is AverageCostPoolReconciliationStatus.DRIFTED
     assert assessment.reason_code == "pool_state_missing"
     assert assessment.expected_quantity == Decimal("15")
-    repository.acquire_cost_basis_processing_lock.assert_awaited_once_with("P1", "S1")
+    processing_state.acquire_cost_basis_processing_lock.assert_awaited_once_with("P1", "S1")
     repository.apply_average_cost_pool_rebuild.assert_not_awaited()
 
 
 async def test_apply_commits_only_after_post_write_exact_reconciliation() -> None:
     session = _session()
-    adapter, workflow, repository = _adapter(session=session)
+    adapter, workflow, repository, processing_state = _adapter(session=session)
     plan = _plan()
     workflow.build_average_cost_pool_rebuild_plan.return_value = plan
     repository.get_average_cost_pool_persisted_summary.side_effect = [
@@ -144,6 +149,9 @@ async def test_apply_commits_only_after_post_write_exact_reconciliation() -> Non
 
     assert assessment.status is AverageCostPoolReconciliationStatus.RECONCILED
     repository.apply_average_cost_pool_rebuild.assert_awaited_once_with(plan)
+    processing_state.upsert_cost_basis_processing_checkpoint.assert_awaited_once_with(
+        plan.processing_checkpoint
+    )
     assert repository.get_average_cost_pool_persisted_summary.await_count == 2
     session.begin.return_value.__aexit__.assert_awaited_once_with(None, None, None)
 
@@ -152,7 +160,7 @@ async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_n
     None
 ):
     session = _session()
-    adapter, workflow, repository = _adapter(session=session)
+    adapter, workflow, repository, _ = _adapter(session=session)
     workflow.build_average_cost_pool_rebuild_plan.return_value = _plan()
     repository.get_average_cost_pool_persisted_summary.side_effect = [
         _summary(quantity="14", cost_local="168", cost_base="182"),
@@ -170,7 +178,7 @@ async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_n
 
 async def test_replay_failure_is_isolated_as_bounded_key_failure() -> None:
     session = _session()
-    adapter, workflow, repository = _adapter(session=session)
+    adapter, workflow, repository, _ = _adapter(session=session)
     workflow.build_average_cost_pool_rebuild_plan.side_effect = ValueError("invalid history")
 
     assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
