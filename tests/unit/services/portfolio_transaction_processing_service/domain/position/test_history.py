@@ -3,6 +3,7 @@
 from dataclasses import FrozenInstanceError
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -14,6 +15,17 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.h
     build_position_history,
     order_position_transactions,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+TARGET_TEST = SERVICE_TEST_ROOT / "domain/position/test_history.py"
+RETIRED_TEST = SERVICE_TEST_ROOT / "position/test_position_history_domain.py"
+
+
+def test_position_history_tests_are_owned_by_domain_boundary() -> None:
+    assert Path(__file__).resolve() == TARGET_TEST.resolve()
+    assert not RETIRED_TEST.exists()
+    assert list((SERVICE_TEST_ROOT / "position").glob("*.py")) == []
 
 
 def _transaction(

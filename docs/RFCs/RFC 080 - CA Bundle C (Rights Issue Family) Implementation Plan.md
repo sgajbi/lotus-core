@@ -156,7 +156,7 @@ Executed suites include:
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/ordering.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/transaction_ordering.py`
 - `alembic/versions/d8e9f0a1b2c3_feat_add_ca_expansion_cashflow_rules.py`
-- `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py`
 - `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
 - `tests/unit/services/query_service/services/test_position_flow_effects.py`
 - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_ordering.py`

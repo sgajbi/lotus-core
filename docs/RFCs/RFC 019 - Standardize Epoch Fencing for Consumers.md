@@ -41,7 +41,7 @@ Evidence:
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/processing_state.py`
 - `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`
 - `tests/unit/libs/portfolio-common/test_reprocessing.py`
-- `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py`
 - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_processing_state.py`
 - `tests/unit/services/timeseries_generator_service/timeseries-generator-service/consumers/test_position_timeseries_consumer.py`
 - `docs/features/reprocessing_engine/05_Developer_Guide.md`

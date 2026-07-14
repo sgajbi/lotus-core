@@ -45,7 +45,7 @@ When a governed transaction type changes position quantity or basis:
 2. Add the deterministic state transition to `app/domain/position/reducer.py` using domain
    language and immutable inputs/outputs.
 3. Add direct domain tests under
-   `tests/unit/services/portfolio_transaction_processing_service/position/` for current,
+   `tests/unit/services/portfolio_transaction_processing_service/domain/position/` for current,
    backdated, transfer, corporate-action, cash-position, FX, zero-balance, and invalid cases that
    apply.
 4. Add processor or PostgreSQL proof when the change affects replay windows, epoch fencing,
@@ -62,7 +62,7 @@ consumer.
 Run the focused proofs from the repository root:
 
 ```powershell
-python -m pytest tests/unit/services/portfolio_transaction_processing_service/position -q
+python -m pytest tests/unit/services/portfolio_transaction_processing_service/domain/position tests/unit/services/portfolio_transaction_processing_service/application/test_position_history.py -q
 python -m pytest tests/integration/services/portfolio_transaction_processing_service/test_int_position_history_repository.py tests/integration/services/portfolio_transaction_processing_service/test_int_position_reprocessing_atomicity.py tests/integration/services/portfolio_transaction_processing_service/test_int_position_recalculation_concurrency.py -q
 make architecture-guard
 ```
