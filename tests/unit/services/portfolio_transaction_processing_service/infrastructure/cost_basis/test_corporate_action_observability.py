@@ -5,7 +5,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     PrometheusCorporateActionReconciliationObserver,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
@@ -62,12 +62,12 @@ def test_observer_preserves_metric_and_balanced_state_log_contract() -> None:
     with (
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability."
+            "cost_basis.corporate_action_observability."
             "observe_financial_reconciliation_run"
         ) as observe_run,
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability.logger"
+            "cost_basis.corporate_action_observability.logger"
         ) as logger,
     ):
         PrometheusCorporateActionReconciliationObserver().observe(observation)
@@ -111,12 +111,12 @@ def test_observer_emits_each_actionable_support_warning() -> None:
     with (
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability."
+            "cost_basis.corporate_action_observability."
             "observe_financial_reconciliation_run"
         ) as observe_run,
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability.logger"
+            "cost_basis.corporate_action_observability.logger"
         ) as logger,
     ):
         PrometheusCorporateActionReconciliationObserver().observe(observation)
@@ -139,15 +139,44 @@ def test_observer_reports_missing_cash_basis() -> None:
     with (
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability."
+            "cost_basis.corporate_action_observability."
             "observe_financial_reconciliation_run"
         ),
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "corporate_action_reconciliation_observability.logger"
+            "cost_basis.corporate_action_observability.logger"
         ) as logger,
     ):
         PrometheusCorporateActionReconciliationObserver().observe(observation)
 
     logger.warning.assert_called_once()
     assert logger.warning.call_args.args[0] == "bundle_a_cash_basis_evidence_missing"
+
+
+def test_observer_contains_telemetry_failure_after_financial_persistence() -> None:
+    """Telemetry must not roll back already-computed reconciliation evidence."""
+
+    observation = _observation()
+
+    with (
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure."
+            "cost_basis.corporate_action_observability."
+            "observe_financial_reconciliation_run",
+            side_effect=RuntimeError("metrics unavailable"),
+        ),
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure."
+            "cost_basis.corporate_action_observability.logger"
+        ) as logger,
+    ):
+        PrometheusCorporateActionReconciliationObserver().observe(observation)
+
+    logger.exception.assert_called_once_with(
+        "Corporate-action reconciliation observation failed.",
+        extra={
+            "portfolio_id": "PORT_CA_01",
+            "transaction_id": "CA-IN-01",
+            "reconciliation_status": "balanced",
+        },
+    )

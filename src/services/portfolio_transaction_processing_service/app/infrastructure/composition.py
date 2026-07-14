@@ -20,16 +20,14 @@ from ..application.cost_basis_processing import (
 )
 from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
 from .cashflow import CashflowRuleCache
-from .corporate_action_reconciliation_observability import (
-    PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
-)
 from .cost_basis import (
+    PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
-from .prometheus_observability import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
+from .transaction_processing import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .transaction_replay import (
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,

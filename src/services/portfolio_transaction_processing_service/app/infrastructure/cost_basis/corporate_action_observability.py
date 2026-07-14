@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from portfolio_common.monitoring import observe_financial_reconciliation_run
 
-from ..application import CORPORATE_ACTION_RECONCILIATION_TYPE
-from ..ports import CorporateActionReconciliationObservation
+from ...application import CORPORATE_ACTION_RECONCILIATION_TYPE
+from ...ports import CorporateActionReconciliationObservation
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,19 @@ class PrometheusCorporateActionReconciliationObserver:
     def observe(self, observation: CorporateActionReconciliationObservation) -> None:
         """Record one successfully persisted reconciliation outcome."""
 
+        try:
+            self._record(observation)
+        except Exception:
+            logger.exception(
+                "Corporate-action reconciliation observation failed.",
+                extra={
+                    "portfolio_id": observation.processed_transaction.portfolio_id,
+                    "transaction_id": observation.processed_transaction.transaction_id,
+                    "reconciliation_status": observation.reconciliation_status,
+                },
+            )
+
+    def _record(self, observation: CorporateActionReconciliationObservation) -> None:
         findings = tuple(
             _FindingSeverity(severity=severity) for severity in observation.finding_severities
         )

@@ -1,3 +1,5 @@
+"""Adapt aggregate transaction-processing observations to Prometheus metrics."""
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +9,7 @@ from types import TracebackType
 
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
 
-from ..ports import (
+from ...ports.processing_observability import (
     TransactionProcessingObservation,
     TransactionProcessingObserver,
     TransactionProcessingOperation,

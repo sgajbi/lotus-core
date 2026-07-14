@@ -13,7 +13,6 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
-    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
     CashflowRuleCache,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
@@ -22,6 +21,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     build_process_transaction_use_case,
     build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
+    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
     SqlAlchemyBookedTransactionReplayAdapter,

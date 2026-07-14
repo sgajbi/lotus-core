@@ -82,6 +82,9 @@ and buckets remain stable operational contracts. Transaction-persistence stages 
 observation boundary, and the infrastructure adapter contains metric or logging failures so
 telemetry cannot abort financial writes. Ordered-append/full-rebuild execution mode and restored-lot
 counts also cross this typed boundary; calculation coordination does not import Prometheus objects.
+Corporate-action basis-reconciliation metrics and support logs are separately named in
+`app/infrastructure/cost_basis/corporate_action_observability.py` so this financial evidence remains
+discoverable without returning a flat service-level telemetry module.
 
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New

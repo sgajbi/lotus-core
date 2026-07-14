@@ -2004,6 +2004,12 @@ Most relevant current governance:
      use that anti-corruption boundary; do not restore flat `booked_transaction_event_mapper.py` or
      `fx_event_mapper.py` infrastructure roots or place Pydantic event mapping in domain/application
      modules.
+     Aggregate live/replay stage telemetry belongs under
+     `app/infrastructure/transaction_processing/observability.py` behind the application observer
+     port. Corporate-action basis-reconciliation telemetry belongs with its financial capability at
+     `app/infrastructure/cost_basis/corporate_action_observability.py`. Keep both adapters out of the
+     broad infrastructure package root, mirror their tests under the owned packages, and do not
+     restore flat generic or corporate-action observability modules.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary
@@ -2504,6 +2510,9 @@ Most relevant current governance:
      framework dependencies outside domain and application code. Ordered-append/full-rebuild mode
      and restored-open-lot counts must cross the typed calculation observer; application or workflow
      code must not import Prometheus counters or histograms directly.
+     Corporate-action basis-reconciliation metrics and support logs use the same cost-basis
+     infrastructure ownership through `corporate_action_observability.py`; keep its observer port in
+     application-facing contracts and contain telemetry failures outside domain policy.
      Calculated transaction-cost persistence belongs in
      `app/application/cost_basis_processing/transaction_persistence.py`: it accepts domain
      transactions and persistence ports, writes only the affected deterministic suffix, and returns

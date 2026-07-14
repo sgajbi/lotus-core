@@ -5,7 +5,7 @@ from collections.abc import Iterator
 import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
     PrometheusTransactionProcessingObserver,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
