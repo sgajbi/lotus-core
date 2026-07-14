@@ -28,7 +28,17 @@ class ComposeFaultRecoveryBoundary:
     def __enter__(self) -> ComposeFaultRecoveryBoundary:
         """Inject the configured service outage."""
 
-        self._run("stop", self.faulted_service)
+        try:
+            self._run("stop", self.faulted_service)
+        except BaseException as stop_error:
+            try:
+                self.restore()
+            except BaseException as recovery_error:
+                stop_error.add_note(
+                    "Docker Compose recovery also failed: "
+                    f"{type(recovery_error).__name__}: {recovery_error}"
+                )
+            raise
         return self
 
     def restore(self) -> None:
