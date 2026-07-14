@@ -93,7 +93,7 @@ def test_financial_calculation_contract_tracks_layer_owned_cost_processing() -> 
     )
 
 
-def test_financial_calculation_contract_tracks_cashflow_infrastructure_package() -> None:
+def test_financial_calculation_contract_tracks_cashflow_layer_packages() -> None:
     contract = json.loads(
         Path("docs/standards/critical-path-coverage.v1.json").read_text(encoding="utf-8")
     )
@@ -104,8 +104,16 @@ def test_financial_calculation_contract_tracks_cashflow_infrastructure_package()
     )
 
     assert (
+        "src/services/portfolio_transaction_processing_service/app/application/"
+        "cashflow_processing/*.py" in financial_calculations["source_globs"]
+    )
+    assert (
         "src/services/portfolio_transaction_processing_service/app/infrastructure/"
         "cashflow/**/*.py" in financial_calculations["source_globs"]
+    )
+    assert (
+        "tests/unit/services/portfolio_transaction_processing_service/application/"
+        "cashflow_processing/*.py" in financial_calculations["required_test_globs"]
     )
     assert (
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/"

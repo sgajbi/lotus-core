@@ -1,5 +1,6 @@
 """Transaction processing application use cases and contracts."""
 
+from .cashflow_processing import ProcessTransactionCashflowUseCase
 from .commands import (
     ProcessTransactionCommand,
     TransactionEventMetadata,
@@ -50,6 +51,7 @@ __all__ = [
     "CorporateActionReconciliationReasonCode",
     "CorporateActionReconciliationRunEvidence",
     "ProcessTransactionCommand",
+    "ProcessTransactionCashflowUseCase",
     "ProcessTransactionResult",
     "ProcessTransactionUseCase",
     "PositionHistoryProcessingResult",
