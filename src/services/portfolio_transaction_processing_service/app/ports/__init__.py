@@ -43,7 +43,7 @@ from .processing_observability import (
     TransactionProcessingOperation,
     TransactionProcessingOutcome,
 )
-from .settlement import SettlementTransactionLookupPort
+from .settlement import SettlementTransactionLookupPort, SettlementTransactionPersistencePort
 from .transaction_processing import (
     CashflowProcessingPort,
     CashflowProcessingResult,
@@ -100,6 +100,7 @@ __all__ = [
     "PositionRecalculationStateStore",
     "PositionReplayMode",
     "SettlementTransactionLookupPort",
+    "SettlementTransactionPersistencePort",
     "TransactionIdempotencyOutcome",
     "TransactionIdempotencyPort",
     "TransactionProcessingObservation",
