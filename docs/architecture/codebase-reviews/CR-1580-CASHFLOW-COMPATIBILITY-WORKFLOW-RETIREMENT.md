@@ -55,8 +55,8 @@ No OpenAPI update is required because no HTTP contract changed.
    transaction boundary, critical-path coverage, metric vocabulary, supported-feature,
    documentation/wiki, scoped Ruff/format, no-return reference, and diff checks pass.
 
-## Remaining Work
+## Closure
 
-Keep #719 open. Evaluate and retire the separate event-to-ORM `CashflowCalculator` compatibility
-surface in its own caller-migration slice; do not combine that behavior-bearing migration with this
-dead-workflow deletion.
+CR-1581 migrated the remaining test callers to explicit mapper/domain boundaries and deleted the
+event-to-ORM `CashflowCalculator` compatibility surface. Issue #719 remains open for broader
+transaction-processor consolidation and runtime cutover evidence.

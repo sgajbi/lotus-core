@@ -1,14 +1,15 @@
 from datetime import datetime
 from decimal import Decimal
-from unittest.mock import patch
 
 import pytest
-from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    CalculatedCashflow,
     CashflowClassification,
+    CashflowRule,
     CashflowTiming,
+    calculate_transaction_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
@@ -16,12 +17,13 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     calculate_next_position_state,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CashflowCalculator,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
     to_booked_transaction,
 )
+
+
+def _calculate(event: TransactionEvent, rule: CashflowRule) -> CalculatedCashflow:
+    return calculate_transaction_cashflow(to_booked_transaction(event), rule)
 
 
 def _event(
@@ -114,11 +116,7 @@ def test_position_bundle_semantics(
         ),
     ],
 )
-@patch(
-    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
-)
 def test_slice0_cashflow_characterization_locks_current_bundle_behavior(
-    mock_metric,
     transaction_type: str,
     classification: str,
     timing: str,
@@ -133,9 +131,8 @@ def test_slice0_cashflow_characterization_locks_current_bundle_behavior(
         is_portfolio_flow=is_portfolio_flow,
     )
 
-    cashflow = CashflowCalculator.calculate(txn, rule)
+    cashflow = _calculate(txn, rule)
 
     assert cashflow.amount == expected_amount
     assert cashflow.is_position_flow is True
     assert cashflow.is_portfolio_flow is is_portfolio_flow
-    mock_metric.labels.return_value.inc.assert_called_once()

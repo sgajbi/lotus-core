@@ -42,7 +42,7 @@ Delivered:
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py -k "interest or dividend"`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py`
 - `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
-- `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py -k "interest"`
+- `python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py -k "interest"`
 - `python -m pytest -q tests/unit/services/ingestion_service/test_transaction_model.py`
 - `python -m pytest -q tests/unit/services/query_service/services/test_transaction_service.py`
 - `python -m pytest -q tests/integration/services/query_service/test_transactions_router.py`

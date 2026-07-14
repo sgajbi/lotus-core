@@ -1,15 +1,16 @@
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from portfolio_common.database_models import CashflowRule
 from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
+    CashflowRule,
     CashflowTiming,
+    calculate_transaction_cashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
@@ -24,9 +25,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     calculate_next_position_state,
-)
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CashflowCalculator,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
     to_booked_transaction,
@@ -134,10 +132,7 @@ def test_dividend_position_calculation_preserves_quantity_and_cost_basis() -> No
     assert next_state.cost_basis_local == Decimal("1000")
 
 
-@patch(
-    "src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow_calculation.CASHFLOWS_CREATED_TOTAL"
-)
-def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) -> None:
+def test_dividend_cashflow_current_behavior_positive_income_inflow() -> None:
     event = TransactionEvent(
         transaction_id="DIV_SLICE0_005",
         portfolio_id="PORT_SLICE0",
@@ -160,14 +155,12 @@ def test_dividend_cashflow_current_behavior_positive_income_inflow(mock_metric) 
         is_portfolio_flow=False,
     )
 
-    cashflow = CashflowCalculator.calculate(event, rule)
+    cashflow = calculate_transaction_cashflow(to_booked_transaction(event), rule)
 
     assert cashflow.amount == Decimal("600.0")
     assert cashflow.amount > 0
     assert cashflow.cashflow_date == date(2026, 1, 25)
     assert cashflow.classification == "INCOME"
-    mock_metric.labels.assert_called_once_with(classification="INCOME", timing="EOD")
-    mock_metric.labels.return_value.inc.assert_called_once()
 
 
 def test_dividend_query_record_mapping_preserves_current_fields() -> None:

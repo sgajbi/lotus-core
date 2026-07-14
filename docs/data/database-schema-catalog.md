@@ -886,7 +886,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Derived cashflow ledger from transaction rules.
 - **Description**: Position/portfolio cash impacts by date, type, and epoch.
 - **Relationships**: `transaction_id` -> `transactions.transaction_id`; `portfolio_id` -> `portfolios.portfolio_id`; ORM relationship `transaction` -> `Transaction`
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/cashflow_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_calculation.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/persistence.py`, `src/services/query_service/app/routers/cashflow_projection.py`, `src/services/query_service/app/services/cashflow_projection_service.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/cashflow_repository.py`, `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/persistence.py`, `src/services/query_service/app/routers/cashflow_projection.py`, `src/services/query_service/app/services/cashflow_projection_service.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
