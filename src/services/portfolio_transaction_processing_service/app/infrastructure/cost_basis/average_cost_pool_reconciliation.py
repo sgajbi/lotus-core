@@ -1,3 +1,5 @@
+"""Reconcile persisted AVCO state through SQLAlchemy transaction boundaries."""
+
 from __future__ import annotations
 
 import logging
@@ -10,14 +12,14 @@ from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_R
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..application.cost_basis_processing import AverageCostPoolRebuildPlanner
-from ..domain import (
+from ...application.cost_basis_processing import AverageCostPoolRebuildPlanner
+from ...domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from ..domain.cost_basis import LOT_OPENING_BEHAVIORS
-from ..ports import (
+from ...domain.cost_basis import LOT_OPENING_BEHAVIORS
+from ...ports import (
     AverageCostPoolPersistedSummary,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
@@ -25,13 +27,11 @@ from ..ports import (
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
 )
-from .cost_basis import (
-    SqlAlchemyAverageCostPoolRepository,
-    SqlAlchemyCostBasisFxRateRepository,
-    SqlAlchemyCostBasisProcessingStateRepository,
-    SqlAlchemyCostBasisReferenceDataRepository,
-    SqlAlchemyCostBasisTransactionRepository,
-)
+from .average_cost_pool_repository import SqlAlchemyAverageCostPoolRepository
+from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
+from .processing_state_repository import SqlAlchemyCostBasisProcessingStateRepository
+from .reference_data_repository import SqlAlchemyCostBasisReferenceDataRepository
+from .transaction_repository import SqlAlchemyCostBasisTransactionRepository
 
 logger = logging.getLogger(__name__)
 
