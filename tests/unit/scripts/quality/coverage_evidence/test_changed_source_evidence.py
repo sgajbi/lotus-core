@@ -9,7 +9,7 @@ import pytest
 from scripts.quality.coverage_evidence.changed_source_evidence import (
     ChangedSourceFile,
     SourceChangeType,
-    coverage_import_target,
+    coverage_source_target,
     explicit_changed_sources,
     normalize_repo_path,
     parse_git_name_status,
@@ -215,14 +215,18 @@ def test_explicit_changed_sources_distinguishes_current_and_absent_paths(tmp_pat
         ),
     ],
 )
-def test_coverage_import_target_maps_repository_source_layouts(path: str, expected: str) -> None:
-    assert coverage_import_target(path) == expected
+def test_coverage_source_target_maps_repository_source_layouts(path: str, expected: str) -> None:
+    assert coverage_source_target(path) == expected
+
+
+def test_coverage_source_target_maps_migrations_to_measurable_directory() -> None:
+    assert coverage_source_target("alembic/versions/abc123_add_table.py") == "./alembic"
 
 
 @pytest.mark.parametrize(
     "path",
     ["docs/example.py", "src/app/not-python.txt", "src/libs/other-lib/package/module.py"],
 )
-def test_coverage_import_target_rejects_unsupported_source_layouts(path: str) -> None:
+def test_coverage_source_target_rejects_unsupported_source_layouts(path: str) -> None:
     with pytest.raises(ValueError):
-        coverage_import_target(path)
+        coverage_source_target(path)

@@ -28,16 +28,14 @@ def run(cmd: list[str]) -> None:
     subprocess.run(cmd, check=True)
 
 
-def _coverage_sources() -> tuple[str, ...]:
+def _changed_critical_paths() -> tuple[str, ...]:
     from scripts.quality.coverage_evidence.changed_source_evidence import (
-        coverage_import_target,
         read_git_changed_sources,
     )
     from scripts.quality.critical_path_coverage_guard import (
         CONTRACT_PATH,
         changed_critical_source_paths,
     )
-    from scripts.quality.test_manifest import SOURCE
 
     contract = json.loads((REPO_ROOT / CONTRACT_PATH).read_text(encoding="utf-8"))
     changed_base = os.environ.get(
@@ -45,16 +43,30 @@ def _coverage_sources() -> tuple[str, ...]:
         str(contract["changed_code_gate"]["default_base_ref"]),
     )
     changes = read_git_changed_sources(repo_root=REPO_ROOT, base_ref=changed_base)
-    critical_paths = changed_critical_source_paths(changes, contract=contract)
-    changed_targets = (coverage_import_target(path) for path in critical_paths)
+    return tuple(changed_critical_source_paths(changes, contract=contract))
+
+
+def _coverage_sources(critical_paths: tuple[str, ...]) -> tuple[str, ...]:
+    from scripts.quality.coverage_evidence.changed_source_evidence import coverage_source_target
+    from scripts.quality.test_manifest import SOURCE
+
+    changed_targets = (coverage_source_target(path) for path in critical_paths)
     return tuple(dict.fromkeys((SOURCE, *changed_targets)))
+
+
+def _coverage_include(critical_paths: tuple[str, ...]) -> str:
+    """Limit JSON evidence to aggregate scope plus exact changed critical files."""
+
+    normalized_for_host = (str(Path(path)) for path in (QUERY_SERVICE_INCLUDE, *critical_paths))
+    return ",".join(dict.fromkeys(normalized_for_host))
 
 
 def main() -> int:
     from scripts.quality.test_manifest import run_suite
     from scripts.quality.warning_budget_gate import run_suite_with_warning_budget
 
-    coverage_sources = _coverage_sources()
+    critical_paths = _changed_critical_paths()
+    coverage_sources = _coverage_sources(critical_paths)
 
     for artifact in REPO_ROOT.glob(".coverage*"):
         if artifact.is_file():
@@ -111,7 +123,17 @@ def main() -> int:
             str(QUERY_SERVICE_COVERAGE_JSON),
         ]
     )
-    run([sys.executable, "-m", "coverage", "json", "-o", str(COVERAGE_JSON)])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "json",
+            f"--include={_coverage_include(critical_paths)}",
+            "-o",
+            str(COVERAGE_JSON),
+        ]
+    )
     run(
         [
             sys.executable,

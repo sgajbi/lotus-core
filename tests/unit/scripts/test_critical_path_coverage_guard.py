@@ -414,10 +414,17 @@ def test_changed_code_report_retains_rename_and_delete_lineage() -> None:
 
 
 def test_changed_critical_source_paths_returns_only_current_governed_modules() -> None:
+    contract = _minimal_contract()
+    contract["critical_path_groups"][0]["source_globs"].append("alembic/**/*.py")
     paths = guard.changed_critical_source_paths(
         [
             ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/app/use_case.py"),
             ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/other/module.py"),
+            ChangedSourceFile(
+                "A",
+                SourceChangeType.ADDED,
+                "alembic/versions/abc123_add_table.py",
+            ),
             ChangedSourceFile(
                 "D",
                 SourceChangeType.DELETED,
@@ -426,7 +433,7 @@ def test_changed_critical_source_paths_returns_only_current_governed_modules() -
             ),
             ChangedSourceFile("M", SourceChangeType.MODIFIED, "docs/example.py"),
         ],
-        contract=_minimal_contract(),
+        contract=contract,
     )
 
-    assert paths == ["src/app/use_case.py"]
+    assert paths == ["alembic/versions/abc123_add_table.py", "src/app/use_case.py"]

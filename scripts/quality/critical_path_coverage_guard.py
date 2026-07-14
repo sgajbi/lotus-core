@@ -60,7 +60,7 @@ def _relative(path: Path, *, repo_root: Path) -> str:
 
 
 def _normalize_path(path: str) -> str:
-    return cast(str, normalize_repo_path(path))
+    return normalize_repo_path(path)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -364,7 +364,6 @@ def changed_critical_source_paths(
             path
             for change in changed_files
             if (path := change.current_path) is not None
-            and path.startswith("src/")
             and path.endswith(".py")
             and _critical_path_group_ids(path, contract=contract)
         }
@@ -383,9 +382,7 @@ def _changed_report(
     changed_python_source = sorted(
         path
         for change in changed_files
-        if (path := change.current_path) is not None
-        and path.endswith(".py")
-        and path.startswith("src/")
+        if (path := change.current_path) is not None and path.endswith(".py")
     )
 
     for path in changed_python_source:
