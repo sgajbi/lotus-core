@@ -177,10 +177,13 @@ async def test_consumer_propagates_settlement_rejection_for_dlq_mapping() -> Non
     assert raised.value is settlement_rejection
 
 
-async def test_consumer_rejects_malformed_payload_before_use_case() -> None:
+@pytest.mark.parametrize("message_value", [b"not-json", None])
+async def test_consumer_rejects_malformed_or_missing_payload_before_use_case(
+    message_value: bytes | None,
+) -> None:
     use_case = AsyncMock()
     message = _message()
-    message.value.return_value = b"not-json"
+    message.value.return_value = message_value
 
     with pytest.raises(ValueError):
         await _consumer(use_case).process_message(message)
