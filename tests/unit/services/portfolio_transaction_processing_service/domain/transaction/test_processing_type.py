@@ -1,3 +1,5 @@
+"""Test effective transaction processing classification."""
+
 from datetime import datetime
 from decimal import Decimal
 
