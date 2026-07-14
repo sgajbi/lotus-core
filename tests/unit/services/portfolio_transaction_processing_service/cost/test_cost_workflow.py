@@ -32,6 +32,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     normalize_cost_fee_amount,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    CorporateActionReconciliationRepository,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -191,6 +192,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     instrument_event = MagicMock()
     repo = AsyncMock(spec=CostCalculatorRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
         portfolio_id="PORT_COST_01",
         base_currency="USD",
@@ -215,6 +217,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         portfolio=portfolio,
         instrument=instrument,
         repo=repo,
+        reconciliation_repository=reconciliation_repository,
         cost_basis_method=CostBasisMethod.FIFO,
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
@@ -223,6 +226,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     workflow._build_emitted_transaction_events.assert_awaited_once_with(
         events_to_publish=[event],
         repo=repo,
+        reconciliation_repository=reconciliation_repository,
         correlation_id="cost-corr-id",
     )
     workflow._publish_transaction_events.assert_awaited_once_with(
@@ -256,6 +260,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
 
@@ -264,6 +269,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             workflow=MagicMock(),
             repository=repo,
             reference_data=reference_data,
+            reconciliation_repository=reconciliation_repository,
             outbox_repository=outbox_repo,
         ).stage_event(
             event=event,
@@ -615,6 +621,7 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     product_leg = TransactionEvent(
         transaction_id="DIV-GENERATED-01",
         portfolio_id="PORT_COST_01",
@@ -636,6 +643,7 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
     emitted = await cost_calculation_workflow._build_emitted_transaction_events(
         events_to_publish=[product_leg],
         repo=repo,
+        reconciliation_repository=reconciliation_repository,
         correlation_id="corr-generated-01",
     )
 
@@ -857,17 +865,19 @@ async def test_emitted_corporate_action_group_uses_application_reconciliation_bo
         net_cost_local="100",
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.load_group.return_value = ()
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
+    reconciliation_repository.load_group.return_value = ()
     observer = MagicMock()
     cost_calculation_workflow.configure_corporate_action_reconciliation_observer(observer)
 
     emitted = await cost_calculation_workflow._build_emitted_transaction_events(
         events_to_publish=[source, target],
         repo=repo,
+        reconciliation_repository=reconciliation_repository,
         correlation_id="corr-ca-01",
     )
 
     assert emitted == [source, target]
-    repo.load_group.assert_awaited_once()
-    repo.save_evidence.assert_awaited_once()
+    reconciliation_repository.load_group.assert_awaited_once()
+    reconciliation_repository.save_evidence.assert_awaited_once()
     observer.observe.assert_called_once()

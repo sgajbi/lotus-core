@@ -56,6 +56,7 @@ from ..domain.transaction.fx import (
 from ..ports import (
     AverageCostPoolCheckpointRecord,
     CorporateActionReconciliationObserver,
+    CorporateActionReconciliationRepository,
     CostBasisCalculationObserver,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
@@ -396,6 +397,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
         correlation_id: str,
@@ -414,6 +416,7 @@ class CostCalculationWorkflow:
         emitted_transactions = await self._build_emitted_transaction_events(
             events_to_publish=events_to_publish,
             repo=repo,
+            reconciliation_repository=reconciliation_repository,
             correlation_id=correlation_id,
         )
         await self._publish_transaction_events(
@@ -1044,11 +1047,12 @@ class CostCalculationWorkflow:
         *,
         events_to_publish: list[TransactionEvent],
         repo: CostCalculatorRepository,
+        reconciliation_repository: CorporateActionReconciliationRepository,
         correlation_id: str,
     ) -> list[TransactionEvent]:
         emitted_events: list[TransactionEvent] = []
         corporate_action_reconciliation = CorporateActionReconciliationCoordinator(
-            repo,
+            reconciliation_repository,
             observer=self._corporate_action_reconciliation_observer,
         )
         for processed_event in events_to_publish:

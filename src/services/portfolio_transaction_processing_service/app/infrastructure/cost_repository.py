@@ -3,7 +3,6 @@
 import hashlib
 import logging
 from collections.abc import Callable
-from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
 from time import monotonic
@@ -13,8 +12,6 @@ from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AverageCostPoolState,
     CostBasisProcessingState,
-    FinancialReconciliationFinding,
-    FinancialReconciliationRun,
     FxRate,
     PositionLotState,
     TransactionCost,
@@ -47,8 +44,6 @@ from ..domain.transaction import BookedTransaction
 from ..ports import (
     AverageCostPoolCheckpointRecord,
     AverageCostPoolPersistedSummary,
-    CorporateActionReconciliationEvidence,
-    CorporateActionReconciliationKey,
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
@@ -823,65 +818,6 @@ class CostCalculatorRepository:
         if transaction is None:
             return None
         return to_booked_transaction(TransactionEvent.model_validate(transaction))
-
-    async def load_group(
-        self, key: CorporateActionReconciliationKey
-    ) -> tuple[BookedTransaction, ...]:
-        """Load a linked corporate-action group as immutable domain transactions."""
-
-        stmt = (
-            select(DBTransaction)
-            .where(DBTransaction.portfolio_id == key.portfolio_id)
-            .where(DBTransaction.linked_transaction_group_id == key.linked_transaction_group_id)
-            .where(DBTransaction.parent_event_reference == key.parent_event_reference)
-            .where(
-                DBTransaction.transaction_type.in_(
-                    ("SPIN_OFF", "SPIN_IN", "DEMERGER_OUT", "DEMERGER_IN", "CASH_CONSIDERATION")
-                )
-            )
-        )
-        result = await self.db.execute(stmt)
-        rows = result.scalars().all()
-        return tuple(to_booked_transaction(TransactionEvent.model_validate(row)) for row in rows)
-
-    async def save_evidence(self, evidence: CorporateActionReconciliationEvidence) -> None:
-        """Map typed reconciliation evidence to the existing persistence contract."""
-
-        run = asdict(evidence.run)
-        findings = [asdict(finding) for finding in evidence.findings]
-        run_stmt = pg_insert(FinancialReconciliationRun).values(**run)
-        await self.db.execute(
-            run_stmt.on_conflict_do_update(
-                index_elements=["run_id"],
-                set_={
-                    "status": run_stmt.excluded.status,
-                    "summary": run_stmt.excluded.summary,
-                    "failure_reason": run_stmt.excluded.failure_reason,
-                    "completed_at": run_stmt.excluded.completed_at,
-                    "updated_at": func.now(),
-                },
-            )
-        )
-        for finding in findings:
-            finding_stmt = pg_insert(FinancialReconciliationFinding).values(**finding)
-            await self.db.execute(
-                finding_stmt.on_conflict_do_update(
-                    index_elements=["finding_id"],
-                    set_={
-                        "reconciliation_type": finding_stmt.excluded.reconciliation_type,
-                        "finding_type": finding_stmt.excluded.finding_type,
-                        "severity": finding_stmt.excluded.severity,
-                        "portfolio_id": finding_stmt.excluded.portfolio_id,
-                        "security_id": finding_stmt.excluded.security_id,
-                        "transaction_id": finding_stmt.excluded.transaction_id,
-                        "business_date": finding_stmt.excluded.business_date,
-                        "epoch": finding_stmt.excluded.epoch,
-                        "expected_value": finding_stmt.excluded.expected_value,
-                        "observed_value": finding_stmt.excluded.observed_value,
-                        "detail": finding_stmt.excluded.detail,
-                    },
-                )
-            )
 
     async def upsert_transaction_event(self, event: TransactionEvent) -> None:
         """Upsert one transaction event without exposing its persistence representation."""
