@@ -89,8 +89,10 @@ through typed application/domain contracts and ports. It must not reach into con
 or consumer implementations. Existing cost/cashflow/readiness events remain compatibility outbox
 events during migration. Transaction readiness registration is an application use case over
 epoch-fenced repository and event-staging ports; SQL and governed outbox event mapping remain
-infrastructure adapters. Compatibility events can be retired only after every downstream consumer
-has moved to the combined completion contract.
+infrastructure adapters. The atomic unit of work exposes this capability as `readiness` and composes
+the use case directly; no generic pipeline facade sits between application and adapters.
+Compatibility events can be retired only after every downstream consumer has moved to the combined
+completion contract.
 
 ## Migration Sequence
 

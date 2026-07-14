@@ -91,7 +91,7 @@ class PositionProcessingPort(Protocol):
     ) -> PositionProcessingResult: ...
 
 
-class PipelineStageProcessingPort(Protocol):
+class TransactionReadinessProcessingPort(Protocol):
     async def register_processed_transactions(
         self,
         transactions: tuple[BookedTransaction, ...],
@@ -115,7 +115,7 @@ class TransactionProcessingUnitOfWork(Protocol):
     def position(self) -> PositionProcessingPort: ...
 
     @property
-    def pipeline(self) -> PipelineStageProcessingPort: ...
+    def readiness(self) -> TransactionReadinessProcessingPort: ...
 
     async def __aenter__(self) -> Self: ...
 

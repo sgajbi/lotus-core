@@ -34,7 +34,6 @@ from .cost_basis import (
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     cost_basis_processing_lock_key,
 )
-from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position import PositionHistoryProcessingAdapter
 from .prometheus_observability import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
@@ -68,7 +67,6 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "PositionHistoryProcessingAdapter",
-    "PipelineStageProcessingAdapter",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER",

@@ -171,7 +171,7 @@ class _Position:
         )
 
 
-class _Pipeline:
+class _Readiness:
     def __init__(self, calls: list[str]) -> None:
         self.calls = calls
 
@@ -181,7 +181,7 @@ class _Pipeline:
         **_kwargs,
     ) -> None:
         for transaction in transactions:
-            self.calls.append(f"pipeline:{transaction.transaction_id}:{transaction.epoch or 0}")
+            self.calls.append(f"readiness:{transaction.transaction_id}:{transaction.epoch or 0}")
 
 
 class _UnitOfWork:
@@ -211,7 +211,7 @@ class _UnitOfWork:
             error_on=position_error_on,
             cashflow_rebuild_transactions_by_id=cashflow_rebuild_transactions_by_id,
         )
-        self.pipeline = _Pipeline(calls)
+        self.readiness = _Readiness(calls)
         self.committed = False
         self.rolled_back = False
 
@@ -322,8 +322,8 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
         "idempotency",
         "cost:TX-001",
         "position:TX-BACKDATED",
-        "pipeline:TX-BACKDATED:3",
-        "pipeline:TX-LATER:3",
+        "readiness:TX-BACKDATED:3",
+        "readiness:TX-LATER:3",
         "cashflow:TX-BACKDATED:3",
         "cashflow:TX-LATER:3",
         "commit",

@@ -197,7 +197,7 @@ class ProcessTransactionUseCase:
             rebuilt_transactions = _rebuilt_position_transactions(position_results)
             if rebuilt_transactions:
                 with self._observer.observe(TransactionProcessingOperation.PIPELINE):
-                    await unit_of_work.pipeline.register_processed_transactions(
+                    await unit_of_work.readiness.register_processed_transactions(
                         rebuilt_transactions,
                         correlation_id=metadata.correlation_id,
                         traceparent=metadata.traceparent,

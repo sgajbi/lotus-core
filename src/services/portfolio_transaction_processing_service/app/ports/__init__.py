@@ -59,13 +59,13 @@ from .transaction_processing import (
     CashflowProcessingResult,
     CostProcessingPort,
     CostProcessingResult,
-    PipelineStageProcessingPort,
     PositionProcessingPort,
     PositionProcessingResult,
     TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
     TransactionProcessingUnitOfWork,
     TransactionProcessingUnitOfWorkFactory,
+    TransactionReadinessProcessingPort,
 )
 from .transaction_readiness import (
     TransactionReadinessEventStagingPort,
@@ -112,7 +112,6 @@ __all__ = [
     "CostProcessingPort",
     "CostProcessingResult",
     "ForeignExchangeTransactionPersistencePort",
-    "PipelineStageProcessingPort",
     "OpenLotCheckpointRecord",
     "PositionHistoryObserver",
     "PositionHistoryRepository",
@@ -132,5 +131,6 @@ __all__ = [
     "TransactionProcessingUnitOfWork",
     "TransactionProcessingUnitOfWorkFactory",
     "TransactionReadinessEventStagingPort",
+    "TransactionReadinessProcessingPort",
     "TransactionReadinessRepository",
 ]

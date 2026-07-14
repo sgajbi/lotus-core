@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain import TransactionStageRecord
+from ...domain import TransactionStageRecord
 
 
 class SqlAlchemyTransactionStageRepository:
