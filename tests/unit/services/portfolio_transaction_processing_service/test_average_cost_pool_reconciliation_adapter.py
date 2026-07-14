@@ -18,6 +18,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.av
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolPersistedSummary,
+    CostBasisAverageCostPoolPort,
     CostBasisProcessingStatePort,
 )
 
@@ -74,13 +75,15 @@ def _adapter(
     repository: AsyncMock | None = None,
 ) -> tuple[SqlAlchemyAverageCostPoolReconciliationAdapter, AsyncMock, AsyncMock, AsyncMock]:
     resolved_workflow = workflow or AsyncMock(spec=CostCalculationWorkflow)
-    resolved_repository = repository or AsyncMock(spec=CostCalculatorRepository)
+    resolved_repository = repository or AsyncMock(spec=CostBasisAverageCostPoolPort)
+    history_repository = AsyncMock(spec=CostCalculatorRepository)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     return (
         SqlAlchemyAverageCostPoolReconciliationAdapter(
             session_factory=MagicMock(return_value=session),
             workflow=resolved_workflow,
-            repository_factory=MagicMock(return_value=resolved_repository),
+            repository_factory=MagicMock(return_value=history_repository),
+            average_cost_pool_factory=MagicMock(return_value=resolved_repository),
             processing_state_factory=MagicMock(return_value=processing_state),
         ),
         resolved_workflow,

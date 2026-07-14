@@ -57,6 +57,7 @@ from ..ports import (
     AverageCostPoolCheckpointRecord,
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
+    CostBasisAverageCostPoolPort,
     CostBasisCalculationObserver,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
@@ -291,11 +292,8 @@ class CostCalculationWorkflow:
         if normalized_type == "SELL":
             SELL_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
 
-    def _transform_event_for_engine(self, event: TransactionEvent) -> dict:
-        """
-        Transforms a TransactionEvent into a raw dictionary suitable for the
-        cost-calculator-service engine package, converting fee fields to a Fees object structure.
-        """
+    def _transform_event_for_engine(self, event: TransactionEvent) -> dict[str, Any]:
+        """Map a transaction event to the cost-basis engine's input structure."""
         event_dict = cast(dict[str, Any], event.model_dump(mode="python"))
         trade_fee = _normalize_fee_amount(
             event_dict.pop("trade_fee", "0"),
@@ -378,6 +376,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -390,6 +389,7 @@ class CostCalculationWorkflow:
             portfolio=portfolio,
             instrument=instrument,
             repo=repo,
+            average_cost_pools=average_cost_pools,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -404,6 +404,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -420,6 +421,7 @@ class CostCalculationWorkflow:
             portfolio=portfolio,
             instrument=instrument,
             repo=repo,
+            average_cost_pools=average_cost_pools,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -470,6 +472,7 @@ class CostCalculationWorkflow:
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -484,6 +487,7 @@ class CostCalculationWorkflow:
             portfolio_base_currency=portfolio.base_currency,
             instrument=instrument,
             repo=repo,
+            average_cost_pools=average_cost_pools,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -501,6 +505,7 @@ class CostCalculationWorkflow:
             event_transaction_type=event_transaction_type,
             open_lot_states=calculation.open_lot_states,
             repo=repo,
+            average_cost_pools=average_cost_pools,
             incremental=calculation.incremental,
             update_scope=calculation.open_lot_state_update_scope,
             cost_basis_method=cost_basis_method,
@@ -522,6 +527,7 @@ class CostCalculationWorkflow:
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -552,7 +558,7 @@ class CostCalculationWorkflow:
                     average_cost_pool_record = (
                         await self._get_compatible_average_cost_pool_checkpoint(
                             event=event,
-                            repo=repo,
+                            average_cost_pools=average_cost_pools,
                         )
                     )
                     if average_cost_pool_record is None:
@@ -692,9 +698,9 @@ class CostCalculationWorkflow:
     async def _get_compatible_average_cost_pool_checkpoint(
         *,
         event: TransactionEvent,
-        repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
     ) -> AverageCostPoolCheckpointRecord | None:
-        record = await repo.get_average_cost_pool_checkpoint_record(
+        record = await average_cost_pools.get_average_cost_pool_checkpoint_record(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
         )
@@ -884,13 +890,16 @@ class CostCalculationWorkflow:
         event_transaction_type: str,
         open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
+        average_cost_pools: CostBasisAverageCostPoolPort,
         incremental: bool,
         update_scope: OpenLotStateUpdateScope,
         cost_basis_method: CostBasisMethod,
         average_cost_pool_transition: AverageCostPoolTransition | None,
     ) -> None:
         if average_cost_pool_transition is not None:
-            await repo.apply_average_cost_pool_transition(average_cost_pool_transition)
+            await average_cost_pools.apply_average_cost_pool_transition(
+                average_cost_pool_transition
+            )
             return
 
         lot_behavior = _transaction_lot_behavior(event_transaction_type)
@@ -915,7 +924,7 @@ class CostCalculationWorkflow:
             not incremental or (mutates_lot_state and not incremental_opening)
         )
         if should_persist_complete_average_cost_pool:
-            await repo.upsert_average_cost_pool_checkpoint(
+            await average_cost_pools.upsert_average_cost_pool_checkpoint(
                 AverageCostPoolCheckpoint.from_open_lot_states(
                     portfolio_id=event.portfolio_id,
                     instrument_id=event.instrument_id,

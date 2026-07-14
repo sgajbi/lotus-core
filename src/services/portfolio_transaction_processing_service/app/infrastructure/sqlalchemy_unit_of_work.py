@@ -27,6 +27,7 @@ from .cashflow_processing_adapter import (
 )
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
@@ -151,6 +152,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self._cost = CostProcessingCompatibilityAdapter(
             workflow=self._cost_workflow,
             repository=CostCalculatorRepository(session),
+            average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=SqlAlchemyCostBasisProcessingStateRepository(session),
