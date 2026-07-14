@@ -35,6 +35,7 @@ from ..ports import (
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
+from .cost_basis.lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -164,36 +165,6 @@ def _transaction_cost_rows(
         )
         for fee_type, amount in _positive_fee_components(transaction_result.fees).items()
     ]
-
-
-def _buy_lot_payload(transaction_result: EngineTransaction) -> dict[str, object]:
-    accrued_interest_local = getattr(transaction_result, "accrued_interest", None) or Decimal(0)
-    return {
-        "lot_id": f"LOT-{transaction_result.transaction_id}",
-        "source_transaction_id": transaction_result.transaction_id,
-        "portfolio_id": transaction_result.portfolio_id,
-        "instrument_id": transaction_result.instrument_id,
-        "security_id": transaction_result.security_id,
-        "acquisition_date": transaction_result.transaction_date.date(),
-        "original_quantity": transaction_result.quantity,
-        "open_quantity": transaction_result.quantity,
-        "lot_cost_local": transaction_result.net_cost_local or Decimal(0),
-        "lot_cost_base": transaction_result.net_cost or Decimal(0),
-        "accrued_interest_paid_local": accrued_interest_local,
-        "economic_event_id": getattr(transaction_result, "economic_event_id", None),
-        "linked_transaction_group_id": getattr(
-            transaction_result, "linked_transaction_group_id", None
-        ),
-        "calculation_policy_id": getattr(transaction_result, "calculation_policy_id", None),
-        "calculation_policy_version": getattr(
-            transaction_result, "calculation_policy_version", None
-        ),
-        "source_system": getattr(transaction_result, "source_system", None),
-    }
-
-
-def _excluded_update_fields(insert_stmt: Any, immutable_fields: set[str]) -> dict[str, object]:
-    return {c.name: c for c in insert_stmt.excluded if c.name not in immutable_fields}
 
 
 def _scaled_persisted_value(
@@ -356,7 +327,7 @@ class CostCalculatorRepository:
 
         payloads = []
         for source_transaction in plan.source_transactions:
-            payload = _buy_lot_payload(source_transaction)
+            payload = buy_lot_state_payload(source_transaction)
             state = plan.source_states.get(source_transaction.transaction_id)
             payload.update(
                 open_quantity=state.quantity if state is not None else Decimal(0),
@@ -371,10 +342,7 @@ class CostCalculatorRepository:
             await self.db.execute(
                 stmt.on_conflict_do_update(
                     index_elements=["source_transaction_id"],
-                    set_=_excluded_update_fields(
-                        stmt,
-                        {"id", "lot_id", "source_transaction_id"},
-                    ),
+                    set_=mutable_lot_state_fields(stmt),
                 )
             )
 
@@ -692,8 +660,8 @@ class CostCalculatorRepository:
 
     async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
         """Persists BUY lot state as a durable, idempotent record."""
-        stmt = pg_insert(PositionLotState).values(**_buy_lot_payload(transaction_result))
-        update_dict = _excluded_update_fields(stmt, {"id", "lot_id", "source_transaction_id"})
+        stmt = pg_insert(PositionLotState).values(**buy_lot_state_payload(transaction_result))
+        update_dict = mutable_lot_state_fields(stmt)
         await self.db.execute(
             stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
         )
