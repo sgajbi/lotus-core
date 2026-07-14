@@ -37,7 +37,6 @@ from .cost_basis import StagedCostEffects, cost_basis_processing_lock_key
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
-    FxRateNotFoundError,
     OpenLotStateUpdateScope,
     UpstreamCashLegUnavailableError,
     normalize_cost_event_code,
@@ -77,7 +76,6 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
-    "FxRateNotFoundError",
     "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",
     "PositionHistoryProcessingAdapter",
