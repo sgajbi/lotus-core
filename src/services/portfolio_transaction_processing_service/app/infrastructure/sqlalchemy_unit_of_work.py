@@ -45,10 +45,10 @@ from .cost_basis import (
 )
 from .income import SqlAlchemyAccruedIncomeOffsetRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
-from .position_processing_adapter import PositionHistoryProcessingAdapter
-from .prometheus_position_history_observer import PROMETHEUS_POSITION_HISTORY_OBSERVER
-from .sqlalchemy_position_history_repository import SqlAlchemyPositionHistoryRepository
-from .sqlalchemy_position_recalculation_state_store import (
+from .position import (
+    PROMETHEUS_POSITION_HISTORY_OBSERVER,
+    PositionHistoryProcessingAdapter,
+    SqlAlchemyPositionHistoryRepository,
     SqlAlchemyPositionRecalculationStateStore,
 )
 from .transaction_stage_repository import SqlAlchemyTransactionStageRepository

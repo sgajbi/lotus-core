@@ -35,7 +35,7 @@ from .cost_basis import (
     cost_basis_processing_lock_key,
 )
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
-from .position_processing_adapter import PositionHistoryProcessingAdapter
+from .position import PositionHistoryProcessingAdapter
 from .prometheus_observability import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     PrometheusTransactionProcessingObserver,

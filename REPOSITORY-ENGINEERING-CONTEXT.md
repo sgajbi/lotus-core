@@ -1235,7 +1235,8 @@ Most relevant current governance:
     zeroing, and deterministic backdated replay planning without SQLAlchemy, repositories, outbox,
     metrics, `EpochFencer`, persistence models, Pydantic DTOs, or correlation context.
     `PositionHistoryProcessor` owns framework-neutral coordination through ports. SQLAlchemy
-    mapping, state access, persistence, metrics, and structured logs remain infrastructure adapters.
+    mapping, state access, persistence, metrics, and structured logs are organized under the
+    domain-owned `app/infrastructure/position` adapter package.
     `make architecture-guard` runs `scripts/quality/position_reducer_boundary_guard.py` so domain
     policy stays pure and the retired infrastructure workflow/repository cannot return.
 80. Protected business logic modules must stay directly testable without FastAPI, real databases,
@@ -2103,7 +2104,7 @@ Most relevant current governance:
      `portfolio_transaction_processing_service/app/domain/position`; caller-transaction
      orchestration is owned by `app/application/position_history.py`; contracts are owned by
      `app/ports/position_history.py`; SQLAlchemy, state-store, metric, and structured-log adapters
-     are owned by `app/infrastructure`. The production unit of work must pass `BookedTransaction`
+     are owned by `app/infrastructure/position`. The production unit of work must pass `BookedTransaction`
      directly to `PositionHistoryProcessor`; do not restore the
      `BookedTransaction -> TransactionEvent -> BookedTransaction` round trip or perform a second
      position-state read for epoch fencing. The former infrastructure workflow and repository are

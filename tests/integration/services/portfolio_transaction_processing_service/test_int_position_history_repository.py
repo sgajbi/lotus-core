@@ -15,7 +15,7 @@ from portfolio_common.database_models import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_history_repository import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
 )
 

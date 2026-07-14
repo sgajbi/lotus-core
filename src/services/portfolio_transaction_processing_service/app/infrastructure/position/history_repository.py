@@ -18,8 +18,8 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.position.history import PositionHistoryRecord
-from ..domain.transaction.booked import BookedTransaction
+from ...domain.position.history import PositionHistoryRecord
+from ...domain.transaction.booked import BookedTransaction
 
 logger = logging.getLogger(__name__)
 

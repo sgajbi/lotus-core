@@ -52,7 +52,7 @@ remain for downstream stage orchestration while registry/Kubernetes cutover and 
 package removal are completed. The pure reducer and deterministic history builder live in
 `app/domain/position`; the `PositionHistoryProcessor` application use case coordinates current and
 backdated materialization through explicit ports; SQLAlchemy, state-store, and observability
-adapters remain in infrastructure. The production unit of work passes immutable booked
+adapters are organized under `app/infrastructure/position`. The production unit of work passes immutable booked
 transactions directly to this use case, avoiding the former event DTO round trip and duplicate
 epoch-state read. The retired `position_calculator` source package is absent from the target image.
 
