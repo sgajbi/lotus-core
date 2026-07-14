@@ -26,6 +26,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CostCalculationWorkflow,
     CostCalculatorRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyCostBasisProcessingStateRepository,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -230,7 +233,9 @@ async def _seed_ordered_avco_key(
     )
     latest_buy = buys[-1]
     checkpoint = _processing_checkpoint(latest_buy)
-    await CostCalculatorRepository(session).upsert_cost_basis_processing_checkpoint(checkpoint)
+    await SqlAlchemyCostBasisProcessingStateRepository(
+        session
+    ).upsert_cost_basis_processing_checkpoint(checkpoint)
     session.add(
         AverageCostPoolState(
             portfolio_id=portfolio_id,

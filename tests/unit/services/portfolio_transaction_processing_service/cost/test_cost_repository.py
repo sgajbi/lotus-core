@@ -348,14 +348,14 @@ def _average_cost_rebuild_plan() -> AverageCostPoolRebuildPlan:
     )
 
 
-async def test_apply_average_cost_pool_rebuild_bulk_replaces_source_and_checkpoints() -> None:
+async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
     repository.AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 1
 
     await repository.apply_average_cost_pool_rebuild(_average_cost_rebuild_plan())
 
-    assert db_session.execute.await_count == 5
+    assert db_session.execute.await_count == 4
     close_sql = str(
         db_session.execute.call_args_list[0]
         .args[0]
@@ -381,9 +381,6 @@ async def test_apply_average_cost_pool_rebuild_bulk_replaces_source_and_checkpoi
     assert "6" in source_upsert_sql
     assert "INSERT INTO average_cost_pool_state" in str(
         db_session.execute.call_args_list[3].args[0]
-    )
-    assert "INSERT INTO cost_basis_processing_state" in str(
-        db_session.execute.call_args_list[4].args[0]
     )
 
 

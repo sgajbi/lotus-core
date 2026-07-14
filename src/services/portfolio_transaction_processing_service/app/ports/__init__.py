@@ -16,6 +16,7 @@ from .cost_basis import (
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     OpenLotCheckpointRecord,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "CostBasisFxRatePort",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
+    "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
