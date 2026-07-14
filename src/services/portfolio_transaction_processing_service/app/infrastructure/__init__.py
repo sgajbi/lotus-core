@@ -33,7 +33,7 @@ from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PrometheusCorporateActionReconciliationObserver,
 )
-from .cost_basis import StagedCostEffects
+from .cost_basis import StagedCostEffects, cost_basis_processing_lock_key
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -48,10 +48,7 @@ from .cost_processing_adapter import (
     CostProcessingCompatibilityAdapter,
     PortfolioNotFoundError,
 )
-from .cost_repository import (
-    CostCalculatorRepository,
-    cost_basis_processing_lock_key,
-)
+from .cost_repository import CostCalculatorRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
 from .prometheus_cost_basis_observability import (
