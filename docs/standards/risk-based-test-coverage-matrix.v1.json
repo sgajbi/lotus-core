@@ -398,7 +398,7 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/libs/portfolio-common/test_valuation_prices.py",
+            "tests/unit/libs/portfolio_common/domain/market_data/test_valuation_unit_price.py",
             "tests/unit/services/calculators/position_valuation_calculator/logic/test_valuation_logic.py"
           ]
         },

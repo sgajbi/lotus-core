@@ -51,6 +51,8 @@ They are archival proof, not current implementation guidance.
 - focused strict MyPy over shared Decimal and market-data policy: passed;
 - critical-path coverage contract migrated to all three canonical policy paths and their mirrored
   tests: passed;
+- risk-based valuation coverage evidence migrated to the canonical valuation-unit-price test:
+  passed;
 - retired-import scan and `git diff --check`: passed.
 
 ## Documentation Decision
