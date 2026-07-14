@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPoolCheckpoint,
     CostBasisProcessingCheckpoint,
+    OpenLotState,
     build_cost_basis_engine_input,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -521,3 +522,166 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         persisted_pool = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]
         assert persisted_pool.quantity == Decimal("10")
         assert persisted_pool.cost_base == Decimal("100")
+
+
+async def test_positive_average_cost_pool_without_representative_row_is_not_restored() -> None:
+    average_cost_pools = _average_cost_pool_port()
+    event = _event(
+        transaction_id="SELL-AVCO-MISSING-ROW",
+        transaction_date=datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc),
+        transaction_type="SELL",
+        quantity="2",
+    )
+    average_cost_pools.get_average_cost_pool_checkpoint_record.return_value = (
+        AverageCostPoolCheckpointRecord(
+            checkpoint=AverageCostPoolCheckpoint(
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                representative_source_transaction_id="BUY-AVCO-1",
+                quantity=Decimal("10"),
+                cost_local=Decimal("100"),
+                cost_base=Decimal("100"),
+            ),
+            representative_transaction=None,
+        )
+    )
+
+    checkpoint = await CostCalculationWorkflow._get_compatible_average_cost_pool_checkpoint(
+        event=event,
+        average_cost_pools=average_cost_pools,
+    )
+
+    assert checkpoint is None
+
+
+async def test_average_cost_pool_checkpoint_restore_handles_closed_missing_and_open_sources() -> (
+    None
+):
+    workflow = CostCalculationWorkflow()
+    closed_record = AverageCostPoolCheckpointRecord(
+        checkpoint=AverageCostPoolCheckpoint(
+            portfolio_id="P1",
+            instrument_id="I1",
+            security_id="S1",
+            representative_source_transaction_id=None,
+            quantity=Decimal(0),
+            cost_local=Decimal(0),
+            cost_base=Decimal(0),
+        ),
+        representative_transaction=None,
+    )
+    open_checkpoint = AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-AVCO-1",
+        quantity=Decimal("10"),
+        cost_local=Decimal("100"),
+        cost_base=Decimal("100"),
+    )
+
+    assert (
+        workflow._load_average_cost_pool_checkpoint_transaction(
+            record=closed_record,
+            portfolio_base_currency="USD",
+            instrument=None,
+        )
+        == []
+    )
+    with pytest.raises(ValueError, match="no representative transaction"):
+        workflow._load_average_cost_pool_checkpoint_transaction(
+            record=AverageCostPoolCheckpointRecord(
+                checkpoint=open_checkpoint,
+                representative_transaction=None,
+            ),
+            portfolio_base_currency="USD",
+            instrument=None,
+        )
+
+    restored = workflow._load_average_cost_pool_checkpoint_transaction(
+        record=AverageCostPoolCheckpointRecord(
+            checkpoint=open_checkpoint,
+            representative_transaction=_history_transaction(
+                _persisted_buy(
+                    "BUY-AVCO-1",
+                    datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                )
+            ),
+        ),
+        portfolio_base_currency="USD",
+        instrument=None,
+    )
+
+    assert len(restored) == 1
+    assert restored[0]["quantity"] == Decimal("10")
+    assert restored[0]["net_cost"] == Decimal("100")
+
+
+async def test_average_cost_pool_transition_rejects_missing_representative_state() -> None:
+    workflow = CostCalculationWorkflow()
+    closed_checkpoint = AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id=None,
+        quantity=Decimal(0),
+        cost_local=Decimal(0),
+        cost_base=Decimal(0),
+    )
+    closed_transition = workflow._build_average_cost_pool_transition(
+        checkpoint=closed_checkpoint,
+        open_lot_states={},
+    )
+    assert closed_transition.existing_sources_after == OpenLotState(
+        quantity=Decimal(0),
+        cost_local=Decimal(0),
+        cost_base=Decimal(0),
+    )
+
+    open_checkpoint = AverageCostPoolCheckpoint(
+        portfolio_id="P1",
+        instrument_id="I1",
+        security_id="S1",
+        representative_source_transaction_id="BUY-AVCO-1",
+        quantity=Decimal("10"),
+        cost_local=Decimal("100"),
+        cost_base=Decimal("100"),
+    )
+    with pytest.raises(ValueError, match="omitted the aggregate representative source"):
+        workflow._build_average_cost_pool_transition(
+            checkpoint=open_checkpoint,
+            open_lot_states={},
+        )
+
+    malformed_checkpoint = MagicMock(
+        quantity=Decimal("10"),
+        representative_source_transaction_id=None,
+    )
+    with pytest.raises(ValueError, match="no representative source"):
+        workflow._build_average_cost_pool_transition(
+            checkpoint=malformed_checkpoint,
+            open_lot_states={},
+        )
+
+
+async def test_recalculated_suffix_requires_the_incoming_transaction_before_writes() -> None:
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
+    lot_states = _lot_state_port()
+    income_offsets = AsyncMock()
+
+    with pytest.raises(ValueError, match="omitted the incoming transaction"):
+        await CostCalculationWorkflow()._persist_affected_processed_transactions(
+            processed=[
+                _processed_buy(
+                    "BUY-EXISTING",
+                    datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                )
+            ],
+            new_transaction_ids={"BUY-MISSING"},
+            repo=repository,
+            lot_states=lot_states,
+            income_offsets=income_offsets,
+        )
+
+    repository.apply_transaction_costs.assert_not_awaited()

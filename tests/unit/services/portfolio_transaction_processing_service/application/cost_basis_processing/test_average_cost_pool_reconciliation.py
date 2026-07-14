@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -140,3 +141,44 @@ def test_assessment_requires_reason_for_drift_or_failure() -> None:
             AverageCostPoolKey("P1", "S1"),
             AverageCostPoolReconciliationStatus.DRIFTED,
         )
+
+
+@pytest.mark.parametrize(
+    ("portfolio_id", "security_id"),
+    [("", "S1"), ("P1", "   ")],
+)
+def test_average_cost_pool_key_rejects_blank_identifiers(
+    portfolio_id: str,
+    security_id: str,
+) -> None:
+    with pytest.raises(ValueError, match="identifiers must not be blank"):
+        AverageCostPoolKey(portfolio_id, security_id)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"expected_source_count": -1}, "source count must be nonnegative"),
+        ({"source_count": -1}, "source count must be nonnegative"),
+        ({"expected_quantity": Decimal("-1")}, "amounts must be nonnegative"),
+        ({"reason_code": "unexpected_reason"}, "must not carry a failure reason"),
+        (
+            {
+                "status": AverageCostPoolReconciliationStatus.DRIFTED,
+                "reason_code": "reported_drift",
+            },
+            "must differ from replay truth",
+        ),
+    ],
+)
+def test_average_cost_pool_assessment_rejects_contradictory_state(
+    changes: dict[str, object],
+    message: str,
+) -> None:
+    current = assessment(
+        AverageCostPoolKey("P1", "S1"),
+        AverageCostPoolReconciliationStatus.CURRENT,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        replace(current, **changes)

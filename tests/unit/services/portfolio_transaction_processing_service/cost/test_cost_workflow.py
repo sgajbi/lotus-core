@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from portfolio_common.events import TransactionEvent
+from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_transaction_processing_service.app.application import (
@@ -15,10 +15,12 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
+    CostBasisTransaction,
     CostCalculationError,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
+    booked_transaction_event_mapper,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
@@ -449,3 +451,168 @@ async def test_emitted_corporate_action_group_uses_application_reconciliation_bo
     reconciliation_repository.load_group.assert_awaited_once()
     reconciliation_repository.save_evidence.assert_awaited_once()
     observer.observe.assert_called_once()
+
+
+async def test_cost_workflow_routes_foreign_exchange_and_cost_basis_independently() -> None:
+    workflow = CostCalculationWorkflow()
+    event = _bundle_a_transaction_event(
+        transaction_id="ROUTE-01",
+        transaction_type="BUY",
+        net_cost_local="100",
+    )
+    fx_result = ([event], [MagicMock(spec=InstrumentEvent)])
+    cost_result = ([event], [])
+    workflow._build_fx_events_to_publish = AsyncMock(return_value=fx_result)
+    workflow._build_cost_basis_events_to_publish = AsyncMock(return_value=cost_result)
+    dependencies = {
+        "event": event,
+        "event_transaction_type": "BUY",
+        "portfolio": MagicMock(spec=CostBasisPortfolioReference),
+        "instrument": MagicMock(spec=CostBasisInstrumentReference),
+        "repo": AsyncMock(spec=CostBasisTransactionStatePort),
+        "average_cost_pools": _average_cost_pool_port(),
+        "lot_states": _lot_state_port(),
+        "income_offsets": _income_offset_port(),
+        "fx_rates": AsyncMock(spec=CostBasisFxRatePort),
+        "processing_state": AsyncMock(spec=CostBasisProcessingStatePort),
+        "cost_basis_method": CostBasisMethod.FIFO,
+    }
+
+    assert (
+        await workflow._build_events_to_publish(
+            route=cost_basis_processing.CostProcessingRoute.FOREIGN_EXCHANGE,
+            **dependencies,
+        )
+        == fx_result
+    )
+    assert (
+        await workflow._build_events_to_publish(
+            route=cost_basis_processing.CostProcessingRoute.COST_BASIS,
+            **dependencies,
+        )
+        == cost_result
+    )
+
+    workflow._build_fx_events_to_publish.assert_awaited_once_with(
+        event=event, repo=dependencies["repo"]
+    )
+    workflow._build_cost_basis_events_to_publish.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("transaction_type", "fee", "persists_open_lot", "persists_accrued_income"),
+    [
+        ("BUY", Decimal("4.50"), True, True),
+        ("SELL", Decimal(0), False, False),
+        ("TRANSFER_IN", Decimal("1.25"), True, False),
+    ],
+)
+async def test_cost_persistence_applies_domain_specific_child_state(
+    transaction_type: str,
+    fee: Decimal,
+    persists_open_lot: bool,
+    persists_accrued_income: bool,
+) -> None:
+    event = TransactionEvent(
+        transaction_id=f"{transaction_type}-PERSIST-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="AAPL",
+        security_id="SEC_COST_01",
+        transaction_date=datetime(2025, 1, 15),
+        transaction_type=transaction_type,
+        quantity=Decimal("10"),
+        price=Decimal("150"),
+        gross_transaction_amount=Decimal("1500"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    processed = CostBasisTransaction(
+        transaction_id=event.transaction_id,
+        portfolio_id=event.portfolio_id,
+        instrument_id=event.instrument_id,
+        security_id=event.security_id,
+        transaction_type=transaction_type,
+        transaction_date=event.transaction_date,
+        quantity=event.quantity,
+        gross_transaction_amount=event.gross_transaction_amount,
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+        fees={"brokerage": fee},
+    )
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
+    repository.apply_transaction_costs.return_value = (
+        booked_transaction_event_mapper.to_booked_transaction(event)
+    )
+    lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
+
+    persisted = await CostCalculationWorkflow()._persist_processed_transaction(
+        processed_transaction=processed,
+        repo=repository,
+        lot_states=lot_states,
+        income_offsets=income_offsets,
+    )
+
+    assert persisted.trade_fee == fee
+    repository.apply_transaction_costs.assert_awaited_once_with(processed)
+    repository.replace_transaction_cost_breakdown.assert_awaited_once_with(processed)
+    if persists_open_lot:
+        lot_states.upsert_buy_lot_state.assert_awaited_once_with(processed)
+    else:
+        lot_states.upsert_buy_lot_state.assert_not_awaited()
+    if persists_accrued_income:
+        income_offsets.upsert_accrued_income_offset.assert_awaited_once_with(processed)
+    else:
+        income_offsets.upsert_accrued_income_offset.assert_not_awaited()
+
+
+@pytest.mark.parametrize("epoch", [None, 7])
+async def test_transaction_outbox_preserves_processing_epoch(epoch: int | None) -> None:
+    original = _bundle_a_transaction_event(
+        transaction_id="OUTBOX-ORIGINAL-01",
+        transaction_type="BUY",
+        net_cost_local="100",
+    )
+    original.epoch = epoch
+    emitted = _bundle_a_transaction_event(
+        transaction_id="OUTBOX-EMITTED-01",
+        transaction_type="BUY",
+        net_cost_local="100",
+    )
+    outbox = AsyncMock(spec=OutboxRepository)
+
+    await CostCalculationWorkflow()._publish_transaction_events(
+        original_event=original,
+        emitted_events=[emitted],
+        outbox_repo=outbox,
+        correlation_id="corr-outbox-01",
+    )
+
+    assert emitted.epoch == epoch
+    call = outbox.create_outbox_event.await_args
+    assert call.kwargs["aggregate_type"] == "ProcessedTransaction"
+    assert call.kwargs["aggregate_id"] == "PORT_COST_01"
+    assert call.kwargs["event_type"] == "ProcessedTransactionPersisted"
+    assert call.kwargs["correlation_id"] == "corr-outbox-01"
+
+
+async def test_instrument_update_is_written_to_outbox() -> None:
+    instrument_event = MagicMock(spec=InstrumentEvent)
+    instrument_event.security_id = "SEC-CREATED-01"
+    instrument_event.model_dump.return_value = {"security_id": "SEC-CREATED-01"}
+    outbox = AsyncMock(spec=OutboxRepository)
+
+    await CostCalculationWorkflow()._publish_instrument_events(
+        instrument_events=[instrument_event],
+        outbox_repo=outbox,
+        correlation_id="corr-instrument-01",
+    )
+
+    outbox.create_outbox_event.assert_awaited_once_with(
+        aggregate_type="Instrument",
+        aggregate_id="SEC-CREATED-01",
+        event_type="InstrumentUpserted",
+        topic="instruments.received",
+        payload={"security_id": "SEC-CREATED-01"},
+        correlation_id="corr-instrument-01",
+    )
