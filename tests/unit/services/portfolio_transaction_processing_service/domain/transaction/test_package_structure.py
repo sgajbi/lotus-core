@@ -5,7 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
 TRANSACTION_DOMAIN_ROOT = (
     REPO_ROOT
     / "src"
@@ -65,6 +66,18 @@ def test_transaction_domain_modules_have_responsibility_docstrings() -> None:
             missing_docstrings.append(module_path.relative_to(REPO_ROOT).as_posix())
 
     assert missing_docstrings == []
+
+
+def test_transaction_root_tests_mirror_the_domain_root() -> None:
+    target_names = {
+        "test_booking_metadata.py",
+        "test_package_structure.py",
+        "test_processing_type.py",
+        "test_semantic_identity.py",
+    }
+
+    assert all((SERVICE_TEST_ROOT / "domain/transaction" / name).is_file() for name in target_names)
+    assert list((SERVICE_TEST_ROOT / "transaction").glob("*.py")) == []
 
 
 def test_flat_transaction_domain_modules_are_retired() -> None:

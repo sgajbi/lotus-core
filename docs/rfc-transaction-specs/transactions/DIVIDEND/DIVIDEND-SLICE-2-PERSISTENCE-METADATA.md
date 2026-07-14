@@ -17,7 +17,7 @@ This slice hardens DIVIDEND metadata persistence preconditions by ensuring deter
 ## Evidence
 
 - Unit tests:
-  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/test_booking_metadata.py`
   - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_effect_coordination.py`
 - Consumer integration assertion verifies DIVIDEND metadata is present on persisted transaction update payload and outbox payload.
 

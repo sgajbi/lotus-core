@@ -63,7 +63,7 @@ This plan closes those gaps incrementally with deterministic validation, explici
 | --- | --- | --- |
 | 0 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-0-GAP-ASSESSMENT.md`, `tests/unit/transaction_specs/test_interest_slice0_characterization.py` |
 | 1 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-1-VALIDATION-REASON-CODES.md`, `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py` |
-| 2 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md`, `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` |
+| 2 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-2-PERSISTENCE-METADATA.md`, `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/test_booking_metadata.py`, `tests/integration/services/persistence_service/repositories/test_repositories.py` |
 | 3 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-3-CALCULATION-INVARIANTS.md`, `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py` |
 | 4 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-4-CASH-LINKAGE-WITHHOLDING.md`, `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py` |
 | 5 | Completed | `docs/rfc-transaction-specs/transactions/INTEREST/INTEREST-SLICE-5-QUERY-OBSERVABILITY.md`, `tests/integration/services/query_service/test_transactions_router.py` |
