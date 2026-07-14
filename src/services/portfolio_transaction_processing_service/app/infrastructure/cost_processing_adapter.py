@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Protocol
 
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
@@ -15,7 +16,12 @@ from ..application.cost_basis_processing import (
 )
 from ..domain import BookedTransaction
 from ..domain.transaction import SettlementCashValidationError
-from ..ports import CostProcessingResult
+from ..ports import (
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
+    CostProcessingResult,
+)
 from .booked_transaction_event_mapper import (
     to_booked_transaction,
     to_transaction_event,
@@ -44,10 +50,10 @@ class CostEffectsStager(Protocol):
         event: TransactionEvent,
         event_transaction_type: str,
         route: CostProcessingRoute,
-        portfolio: Any,
-        instrument: Any,
+        portfolio: CostBasisPortfolioReference,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
-        cost_basis_method: Any,
+        cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
         correlation_id: str,
     ) -> StagedCostEffects: ...
@@ -65,6 +71,7 @@ class CostProcessingCompatibilityAdapter:
     ) -> None:
         self._workflow = workflow
         self._repository = repository
+        self._reference_data: CostBasisReferenceDataPort = repository
         self._outbox_repository = outbox_repository
 
     async def stage_event(
@@ -74,11 +81,11 @@ class CostProcessingCompatibilityAdapter:
         correlation_id: str,
     ) -> StagedCostEffects:
         """Stage compatibility cost and outbox writes in the caller-owned transaction."""
-        portfolio = await self._repository.get_portfolio(event.portfolio_id)
+        portfolio = await self._reference_data.get_cost_basis_portfolio(event.portfolio_id)
         if not portfolio:
             raise PortfolioNotFoundError(f"Portfolio {event.portfolio_id} not found. Retrying...")
 
-        instrument = await self._repository.get_instrument(event.security_id)
+        instrument = await self._reference_data.get_cost_basis_instrument(event.security_id)
         prepared = prepare_cost_transaction(
             to_booked_transaction(event),
             cost_basis_method=portfolio.cost_basis_method,
