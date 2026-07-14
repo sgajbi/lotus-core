@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
-from portfolio_common.outbox_repository import OutboxRepository
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
@@ -37,6 +36,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
+    CostProcessingEffectStagingPort,
 )
 
 
@@ -75,7 +75,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         product_type="EQUITY",
         asset_class="EQUITY",
     )
-    outbox_repository = AsyncMock(spec=OutboxRepository)
+    effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
@@ -99,7 +99,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         fx_rates=fx_rates,
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
-        outbox_repository=outbox_repository,
+        effect_stager=effect_stager,
     )
 
     result = await adapter.process(
@@ -124,6 +124,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert build_call["lot_states"] is lot_states
     assert build_call["income_offsets"] is income_offsets
     assert build_call["processing_state"] is processing_state
+    assert build_call["effect_stager"] is effect_stager
 
 
 @pytest.mark.asyncio
@@ -160,7 +161,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         fx_rates=fx_rates,
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
-        outbox_repository=AsyncMock(spec=OutboxRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
     )
 
     with pytest.raises(TransactionProcessingError) as exc_info:
@@ -225,7 +226,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         fx_rates=fx_rates,
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
-        outbox_repository=AsyncMock(spec=OutboxRepository),
+        effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
     )
 
     with pytest.raises(TransactionProcessingRejected) as raised:

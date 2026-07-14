@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from portfolio_common.database_models import CostBasisProcessingState, PositionLotState
-from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -30,6 +29,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostProcessingEffectStagingPort,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -108,7 +110,7 @@ async def _stage_cost_calculation(
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=processing_state_factory(session),
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
-            outbox_repository=AsyncMock(spec=OutboxRepository),
+            effect_stager=AsyncMock(spec=CostProcessingEffectStagingPort),
         ).stage_event(
             event=event,
             correlation_id=f"corr-{event.transaction_id}",

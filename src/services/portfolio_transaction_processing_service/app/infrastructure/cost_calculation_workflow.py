@@ -2,14 +2,8 @@
 
 from typing import Any
 
-from portfolio_common.config import (
-    KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
-    KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-)
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
-from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
-from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.events import TransactionEvent
 
 from ..application import CorporateActionReconciliationCoordinator
 from ..application.cost_basis_processing import (
@@ -27,6 +21,7 @@ from ..domain.cost_basis import (
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from ..domain.transaction.fx import FxContractInstrument
 from ..ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationObserver,
@@ -40,6 +35,7 @@ from ..ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisTransactionStatePort,
+    CostProcessingEffectStagingPort,
 )
 from .booked_transaction_event_mapper import (
     to_booked_transaction,
@@ -47,22 +43,6 @@ from .booked_transaction_event_mapper import (
     with_booked_transaction_fields,
 )
 from .cost_basis.staged_effects import StagedCostEffects
-from .fx_event_mapper import to_fx_contract_instrument_event
-
-
-def _normalize_event_code(value: object) -> str:
-    return str(value or "").strip().upper()
-
-
-def _record_outbox_lifecycle(transaction_type: object) -> None:
-    """Preserve BUY/SELL outbox lifecycle metrics at the infrastructure boundary."""
-
-    counter = {
-        "BUY": BUY_LIFECYCLE_STAGE_TOTAL,
-        "SELL": SELL_LIFECYCLE_STAGE_TOTAL,
-    }.get(_normalize_event_code(transaction_type))
-    if counter is not None:
-        counter.labels("emit_outbox", "success").inc()
 
 
 class CostCalculationWorkflow:
@@ -112,7 +92,7 @@ class CostCalculationWorkflow:
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
-    ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
+    ) -> tuple[list[TransactionEvent], list[FxContractInstrument]]:
         if route is CostProcessingRoute.FOREIGN_EXCHANGE:
             return await self._build_fx_events_to_publish(event=event, repo=repo)
         return await self._build_cost_basis_events_to_publish(
@@ -145,7 +125,7 @@ class CostCalculationWorkflow:
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
-        outbox_repo: OutboxRepository,
+        effect_stager: CostProcessingEffectStagingPort,
         correlation_id: str,
     ) -> StagedCostEffects:
         """Stage all cost-derived events through one public infrastructure operation."""
@@ -170,15 +150,15 @@ class CostCalculationWorkflow:
             reconciliation_repository=reconciliation_repository,
             correlation_id=correlation_id,
         )
-        await self._publish_transaction_events(
-            original_event=event,
-            emitted_events=emitted_transactions,
-            outbox_repo=outbox_repo,
+        if event.epoch is not None:
+            for emitted_transaction in emitted_transactions:
+                emitted_transaction.epoch = event.epoch
+        await effect_stager.stage_processed_transactions(
+            tuple(to_booked_transaction(item) for item in emitted_transactions),
             correlation_id=correlation_id,
         )
-        await self._publish_instrument_events(
-            instrument_events=instrument_events,
-            outbox_repo=outbox_repo,
+        await effect_stager.stage_instrument_updates(
+            tuple(instrument_events),
             correlation_id=correlation_id,
         )
         return StagedCostEffects(
@@ -191,16 +171,16 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         repo: CostBasisTransactionStatePort,
-    ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
+    ) -> tuple[list[TransactionEvent], list[FxContractInstrument]]:
         booking = await book_foreign_exchange_transaction(
             transaction=to_booked_transaction(event),
             transaction_persistence=repo,
         )
         processed_event = with_booked_transaction_fields(event, booking.transaction)
-        instrument_events = []
-        if booking.contract_instrument is not None:
-            instrument_events.append(to_fx_contract_instrument_event(booking.contract_instrument))
-        return [processed_event], instrument_events
+        instruments = (
+            [booking.contract_instrument] if booking.contract_instrument is not None else []
+        )
+        return [processed_event], instruments
 
     async def _build_cost_basis_events_to_publish(
         self,
@@ -216,7 +196,7 @@ class CostCalculationWorkflow:
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
-    ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
+    ) -> tuple[list[TransactionEvent], list[FxContractInstrument]]:
         await processing_state.acquire_cost_basis_processing_lock(
             event.portfolio_id,
             event.security_id,
@@ -338,42 +318,3 @@ class CostCalculationWorkflow:
                 correlation_id=correlation_id,
             )
         return emitted_events
-
-    async def _publish_transaction_events(
-        self,
-        *,
-        original_event: TransactionEvent,
-        emitted_events: list[TransactionEvent],
-        outbox_repo: OutboxRepository,
-        correlation_id: str,
-    ) -> None:
-        for publish_event in emitted_events:
-            if original_event.epoch is not None:
-                publish_event.epoch = original_event.epoch
-
-            await outbox_repo.create_outbox_event(
-                aggregate_type="ProcessedTransaction",
-                aggregate_id=str(publish_event.portfolio_id),
-                event_type="ProcessedTransactionPersisted",
-                topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-                payload=event_business_payload(publish_event, mode="json"),
-                correlation_id=correlation_id,
-            )
-            _record_outbox_lifecycle(publish_event.transaction_type)
-
-    async def _publish_instrument_events(
-        self,
-        *,
-        instrument_events: list[InstrumentEvent],
-        outbox_repo: OutboxRepository,
-        correlation_id: str,
-    ) -> None:
-        for instrument_event in instrument_events:
-            await outbox_repo.create_outbox_event(
-                aggregate_type="Instrument",
-                aggregate_id=str(instrument_event.security_id),
-                event_type="InstrumentUpserted",
-                topic=KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
-                payload=instrument_event.model_dump(mode="json"),
-                correlation_id=correlation_id,
-            )

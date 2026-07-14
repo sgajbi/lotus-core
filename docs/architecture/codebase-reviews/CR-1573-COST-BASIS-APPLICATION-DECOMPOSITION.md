@@ -76,6 +76,10 @@ obscured ownership and encouraged further dumping into broad folders.
     versus deterministic full-rebuild selection, FIFO/AVCO checkpoint restoration, FX enrichment,
     and timeline execution over `BookedTransaction` and typed ports; moved the behavioral suite to
     the mirrored application package and guarded the retired infrastructure-owned test path.
+20. Added `ports.cost_basis.CostProcessingEffectStagingPort` over `BookedTransaction` and
+    `FxContractInstrument`, and moved topic selection, governed event mapping, payload serialization,
+    transactional outbox writes, and BUY/SELL lifecycle metrics into the mirrored
+    `infrastructure.cost_basis.effect_staging` adapter.
 
 ## Measurable Improvement
 
@@ -102,6 +106,12 @@ obscured ownership and encouraged further dumping into broad folders.
 - reduced `CostCalculationWorkflow` again from 729 to 379 lines by moving calculation policy into a
   390-line named application coordinator with 96% focused line/branch coverage and no framework,
   ORM, SQL, Kafka, or Prometheus imports.
+- reduced `CostCalculationWorkflow` from 379 to 320 lines and removed its direct Kafka topic,
+  outbox-repository, integration-payload, instrument-event, and lifecycle-counter dependencies;
+- replaced the concrete `OutboxRepository` contract in `CostBasisProcessingAdapter` with one typed
+  effect-staging port while preserving the caller-owned SQLAlchemy unit of work; and
+- moved transaction/instrument outbox tests from the broad workflow suite into the mirrored
+  infrastructure package with explicit topic, payload, correlation, epoch, and metric assertions.
 
 ## Compatibility
 
@@ -113,7 +123,7 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite after execution-observer extraction: `791 passed`;
+- complete transaction-processing unit suite after effect-staging extraction: `796 passed`;
 - settlement application, cost workflow, processing adapter, and composition tests: `27 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
@@ -130,6 +140,10 @@ the broader calculator-runtime retirement tracked by #719.
   `1 passed`.
 - application coordinator, package-ownership, and infrastructure integration proof: `27 passed`;
 - focused coordinator coverage: `96%` line/branch with `10 passed`.
+- focused effect-staging/workflow/processing-adapter tests: `18 passed`;
+- effect-staging package ownership and no-return guard included in a `24 passed` focused cohort;
+- strict MyPy and application-port, dependency-inversion, infrastructure-adapter, and repository-port
+  guards passed for the effect-staging slice.
 
 ## Documentation Decision
 
@@ -141,8 +155,9 @@ governed layered-architecture rule are unchanged.
 
 ## Remaining Work
 
-Keep #719 open. Further slices should evaluate event/outbox coordination as an independent
-boundary and retire the remaining infrastructure workflow only when delivery mapping has a narrow
-port contract and focused domain tests.
+Keep #719 open. Event/outbox coordination now has a narrow domain-valued port and infrastructure
+adapter. Further slices should move the remaining transaction/settlement coordination behind the
+application boundary and retire `CostCalculationWorkflow` only after direct caller and integration
+proof.
 Do not restore extracted behavior to `CostCalculationWorkflow`, create flat compatibility modules,
 or split the runtime without workload, failure-isolation, scaling, security, or ownership evidence.

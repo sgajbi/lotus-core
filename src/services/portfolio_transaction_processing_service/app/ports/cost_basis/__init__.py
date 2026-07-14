@@ -2,6 +2,7 @@
 
 from .average_cost_pool import CostBasisAverageCostPoolPort
 from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
+from .effect_staging import CostProcessingEffectStagingPort
 from .fx_rates import CostBasisFxRatePort
 from .lot_state import CostBasisLotStatePort
 from .observability import (
@@ -36,6 +37,7 @@ __all__ = [
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
     "CostBasisExecutionMode",
+    "CostProcessingEffectStagingPort",
     "CostBasisPersistenceObservation",
     "CostBasisPersistenceObserver",
     "CostBasisPersistenceStage",

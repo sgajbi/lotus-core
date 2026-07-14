@@ -36,6 +36,7 @@ from .cost_basis import (
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
     SqlAlchemyCostBasisTransactionRepository,
+    TransactionalCostProcessingEffectStager,
 )
 from .income import SqlAlchemyAccruedIncomeOffsetRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
@@ -162,7 +163,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=SqlAlchemyCostBasisProcessingStateRepository(session),
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
-            outbox_repository=outbox_repository,
+            effect_stager=TransactionalCostProcessingEffectStager(outbox_repository),
         )
         self._cashflow = CashflowProcessingCompatibilityAdapter(
             workflow=self._cashflow_workflow,

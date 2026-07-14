@@ -5,6 +5,7 @@ from .average_cost_pool_repository import SqlAlchemyAverageCostPoolRepository
 from .corporate_action_reconciliation_repository import (
     SqlAlchemyCorporateActionReconciliationRepository,
 )
+from .effect_staging import TransactionalCostProcessingEffectStager
 from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 from .observability import (
@@ -37,6 +38,7 @@ __all__ = [
     "SqlAlchemyCostBasisTransactionRepository",
     "CostBasisProcessingAdapter",
     "CostEffectsStager",
+    "TransactionalCostProcessingEffectStager",
     "PortfolioNotFoundError",
     "PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER",
     "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
