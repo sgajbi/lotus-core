@@ -18,6 +18,10 @@ from portfolio_common.domain.transaction.type_registry import (
     require_registered_transaction_type,
 )
 
+from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
+    TRANSFER_INFLOW_TRANSACTION_TYPES,
+    TRANSFER_OUTFLOW_TRANSACTION_TYPES,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CASH_INFLOW_TRANSACTION_TYPES as COST_SORTCASH_INFLOW_TRANSACTION_TYPES,
 )
@@ -40,10 +44,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     linkage as fx_linkage,
-)
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    TRANSFER_INFLOW_TRANSACTION_TYPES,
-    TRANSFER_OUTFLOW_TRANSACTION_TYPES,
 )
 from src.services.query_service.app.services.position_flow_effects import (
     CASH_POSITION_DECREASE_TRANSACTION_TYPES,
