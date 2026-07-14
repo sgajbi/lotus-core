@@ -17,11 +17,13 @@ from ..domain import (
 )
 from ..ports import (
     AverageCostPoolPersistedSummary,
+    CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
 )
 from .cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
@@ -52,6 +54,9 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         repository_factory: Callable[[AsyncSession], CostCalculatorRepository] = (
             CostCalculatorRepository
         ),
+        average_cost_pool_factory: Callable[[AsyncSession], CostBasisAverageCostPoolPort] = (
+            SqlAlchemyAverageCostPoolRepository
+        ),
         reference_data_factory: Callable[[AsyncSession], CostBasisReferenceDataPort] = (
             SqlAlchemyCostBasisReferenceDataRepository
         ),
@@ -65,6 +70,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         self._session_factory = session_factory
         self._workflow = workflow
         self._repository_factory = repository_factory
+        self._average_cost_pool_factory = average_cost_pool_factory
         self._reference_data_factory = reference_data_factory
         self._fx_rate_factory = fx_rate_factory
         self._processing_state_factory = processing_state_factory
@@ -126,6 +132,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
             async with self._session_factory() as session:
                 async with session.begin():
                     repository = self._repository_factory(session)
+                    average_cost_pools = self._average_cost_pool_factory(session)
                     reference_data = self._reference_data_factory(session)
                     fx_rates = self._fx_rate_factory(session)
                     processing_state = self._processing_state_factory(session)
@@ -144,9 +151,11 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                     expected_quantity = plan.checkpoint.quantity
                     expected_cost_local = plan.checkpoint.cost_local
                     expected_cost_base = plan.checkpoint.cost_base
-                    persisted_before = await repository.get_average_cost_pool_persisted_summary(
-                        portfolio_id=key.portfolio_id,
-                        security_id=key.security_id,
+                    persisted_before = (
+                        await average_cost_pools.get_average_cost_pool_persisted_summary(
+                            portfolio_id=key.portfolio_id,
+                            security_id=key.security_id,
+                        )
                     )
                     if _summary_matches_plan(
                         persisted_before,
@@ -179,13 +188,15 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                             ),
                         )
 
-                    await repository.apply_average_cost_pool_rebuild(plan)
+                    await average_cost_pools.apply_average_cost_pool_rebuild(plan)
                     await processing_state.upsert_cost_basis_processing_checkpoint(
                         plan.processing_checkpoint
                     )
-                    persisted_after = await repository.get_average_cost_pool_persisted_summary(
-                        portfolio_id=key.portfolio_id,
-                        security_id=key.security_id,
+                    persisted_after = (
+                        await average_cost_pools.get_average_cost_pool_persisted_summary(
+                            portfolio_id=key.portfolio_id,
+                            security_id=key.security_id,
+                        )
                     )
                     return _assessment(
                         key=key,

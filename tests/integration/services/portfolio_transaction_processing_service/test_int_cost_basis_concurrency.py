@@ -21,6 +21,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CostProcessingCompatibilityAdapter,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
@@ -96,6 +97,7 @@ async def _stage_cost_calculation(
         await CostProcessingCompatibilityAdapter(
             workflow=CostCalculationWorkflow(),
             repository=repository_factory(session),
+            average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=processing_state_factory(session),

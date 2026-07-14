@@ -28,6 +28,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolCheckpointRecord,
+    CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
@@ -49,6 +50,12 @@ def _processing_state_port() -> AsyncMock:
     """Provide an isolated replay-frontier dependency for one workflow test."""
 
     return AsyncMock(spec=CostBasisProcessingStatePort)
+
+
+def _average_cost_pool_port() -> AsyncMock:
+    """Provide an isolated average-cost persistence dependency for one workflow test."""
+
+    return AsyncMock(spec=CostBasisAverageCostPoolPort)
 
 
 def _event(
@@ -137,6 +144,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-1", buy_date)
@@ -179,6 +187,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             portfolio_base_currency="USD",
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
+            average_cost_pools=average_cost_pools,
             fx_rates=_fx_rate_port(),
             processing_state=processing_state,
             cost_basis_method=method,
@@ -207,6 +216,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
@@ -215,17 +225,19 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
     )
-    repo.get_average_cost_pool_checkpoint_record.return_value = AverageCostPoolCheckpointRecord(
-        checkpoint=AverageCostPoolCheckpoint(
-            portfolio_id="P1",
-            instrument_id="I1",
-            security_id="S1",
-            representative_source_transaction_id="BUY-AVCO-1",
-            quantity=Decimal("10"),
-            cost_local=Decimal("100"),
-            cost_base=Decimal("100"),
-        ),
-        representative_transaction=_history_transaction(_persisted_buy("BUY-AVCO-1", buy_date)),
+    average_cost_pools.get_average_cost_pool_checkpoint_record.return_value = (
+        AverageCostPoolCheckpointRecord(
+            checkpoint=AverageCostPoolCheckpoint(
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                representative_source_transaction_id="BUY-AVCO-1",
+                quantity=Decimal("10"),
+                cost_local=Decimal("100"),
+                cost_base=Decimal("100"),
+            ),
+            representative_transaction=_history_transaction(_persisted_buy("BUY-AVCO-1", buy_date)),
+        )
     )
     sell_event, sell_type, method = _prepare_event(
         _event(
@@ -243,6 +255,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        average_cost_pools=average_cost_pools,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -257,7 +270,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         "60"
     )
     assert calculation.average_cost_pool_transition.explicit_sources_after == {}
-    repo.get_average_cost_pool_checkpoint_record.assert_awaited_once_with(
+    average_cost_pools.get_average_cost_pool_checkpoint_record.assert_awaited_once_with(
         portfolio_id="P1",
         security_id="S1",
     )
@@ -269,6 +282,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", first_buy_date)
@@ -277,19 +291,21 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
     )
-    repo.get_average_cost_pool_checkpoint_record.return_value = AverageCostPoolCheckpointRecord(
-        checkpoint=AverageCostPoolCheckpoint(
-            portfolio_id="P1",
-            instrument_id="I1",
-            security_id="S1",
-            representative_source_transaction_id="BUY-AVCO-1",
-            quantity=Decimal("10"),
-            cost_local=Decimal("100"),
-            cost_base=Decimal("100"),
-        ),
-        representative_transaction=_history_transaction(
-            _persisted_buy("BUY-AVCO-1", first_buy_date)
-        ),
+    average_cost_pools.get_average_cost_pool_checkpoint_record.return_value = (
+        AverageCostPoolCheckpointRecord(
+            checkpoint=AverageCostPoolCheckpoint(
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                representative_source_transaction_id="BUY-AVCO-1",
+                quantity=Decimal("10"),
+                cost_local=Decimal("100"),
+                cost_base=Decimal("100"),
+            ),
+            representative_transaction=_history_transaction(
+                _persisted_buy("BUY-AVCO-1", first_buy_date)
+            ),
+        )
     )
     buy_event, buy_type, method = _prepare_event(
         _event(
@@ -307,6 +323,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        average_cost_pools=average_cost_pools,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -328,6 +345,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
@@ -336,7 +354,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
             prior_buy, cost_basis_method=CostBasisMethod.AVCO
         )
     )
-    repo.get_average_cost_pool_checkpoint_record.return_value = None
+    average_cost_pools.get_average_cost_pool_checkpoint_record.return_value = None
     repo.get_transaction_history.return_value = [
         _history_transaction(_persisted_buy("BUY-AVCO-1", buy_date))
     ]
@@ -356,6 +374,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        average_cost_pools=average_cost_pools,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -510,6 +529,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     later_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     earlier_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     later_buy = _processed_buy("BUY-LATER", later_date)
@@ -537,6 +557,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             portfolio_base_currency="USD",
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
+            average_cost_pools=average_cost_pools,
             fx_rates=_fx_rate_port(),
             processing_state=processing_state,
             cost_basis_method=CostBasisMethod.FIFO,
@@ -560,6 +581,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
+    average_cost_pools = _average_cost_pool_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     dividend_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     processing_state.get_cost_basis_processing_checkpoint.return_value = None
@@ -579,6 +601,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         portfolio_base_currency="USD",
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
+        average_cost_pools=average_cost_pools,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=cost_basis_method,
@@ -588,6 +611,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         event_transaction_type="DIVIDEND",
         open_lot_states=calculation.open_lot_states,
         repo=repo,
+        average_cost_pools=average_cost_pools,
         incremental=calculation.incremental,
         update_scope=calculation.open_lot_state_update_scope,
         cost_basis_method=cost_basis_method,
@@ -604,13 +628,13 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,
         )
-        repo.upsert_average_cost_pool_checkpoint.assert_not_awaited()
+        average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
     else:
         repo.update_open_lot_states.assert_awaited_once_with(
             portfolio_id="P1",
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,
         )
-        persisted_pool = repo.upsert_average_cost_pool_checkpoint.await_args.args[0]
+        persisted_pool = average_cost_pools.upsert_average_cost_pool_checkpoint.await_args.args[0]
         assert persisted_pool.quantity == Decimal("10")
         assert persisted_pool.cost_base == Decimal("100")

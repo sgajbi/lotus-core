@@ -19,22 +19,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain.cost_basis import (
-    AverageCostPoolCheckpoint,
-    AverageCostPoolRebuildPlan,
-    AverageCostPoolTransition,
-    OpenLotState,
-)
-from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from ..domain.cost_basis import OpenLotState
 from ..domain.transaction import BookedTransaction
-from ..ports import (
-    AverageCostPoolCheckpointRecord,
-    AverageCostPoolPersistedSummary,
-    OpenLotCheckpointRecord,
-)
+from ..ports import OpenLotCheckpointRecord
 from .booked_transaction_event_mapper import to_booked_transaction
-from .cost_basis.average_cost_pool_repository import SqlAlchemyAverageCostPoolRepository
 from .cost_basis.lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 
 TRANSACTION_METADATA_FIELDS = (
@@ -170,7 +160,6 @@ def _transaction_cost_rows(
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._average_cost_pools = SqlAlchemyAverageCostPoolRepository(db)
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
@@ -200,46 +189,6 @@ class CostCalculatorRepository:
             to_booked_transaction(TransactionEvent.model_validate(row))
             for row in result.scalars().all()
         ]
-
-    async def get_average_cost_pool_checkpoint_record(
-        self,
-        *,
-        portfolio_id: str,
-        security_id: str,
-    ) -> AverageCostPoolCheckpointRecord | None:
-        return await self._average_cost_pools.get_average_cost_pool_checkpoint_record(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-        )
-
-    async def upsert_average_cost_pool_checkpoint(
-        self,
-        checkpoint: AverageCostPoolCheckpoint,
-    ) -> None:
-        await self._average_cost_pools.upsert_average_cost_pool_checkpoint(checkpoint)
-
-    async def apply_average_cost_pool_transition(
-        self,
-        transition: AverageCostPoolTransition,
-    ) -> None:
-        await self._average_cost_pools.apply_average_cost_pool_transition(transition)
-
-    async def apply_average_cost_pool_rebuild(
-        self,
-        plan: AverageCostPoolRebuildPlan,
-    ) -> None:
-        await self._average_cost_pools.apply_average_cost_pool_rebuild(plan)
-
-    async def get_average_cost_pool_persisted_summary(
-        self,
-        *,
-        portfolio_id: str,
-        security_id: str,
-    ) -> AverageCostPoolPersistedSummary:
-        return await self._average_cost_pools.get_average_cost_pool_persisted_summary(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-        )
 
     async def get_open_lot_checkpoint_records(
         self, *, portfolio_id: str, security_id: str
@@ -447,12 +396,31 @@ class CostCalculatorRepository:
         security_id: str,
         states_by_source_transaction_id: dict[str, OpenLotState],
     ) -> None:
-        """Update an explicitly selected lot subset without closing omitted open lots."""
-        await self._average_cost_pools.update_selected_open_lot_states(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            states_by_source_transaction_id=states_by_source_transaction_id,
+        """Update selected source lots without closing omitted positions."""
+
+        if not states_by_source_transaction_id:
+            return
+
+        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
+        normalized_security_id = normalize_lookup_identifier(security_id)
+        source_transaction_ids = set(states_by_source_transaction_id)
+        stmt = select(PositionLotState).where(
+            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
+            func.trim(PositionLotState.security_id) == normalized_security_id,
+            PositionLotState.source_transaction_id.in_(source_transaction_ids),
         )
+        lot_rows = (await self.db.execute(stmt)).scalars().all()
+        persisted_source_ids = {lot_row.source_transaction_id for lot_row in lot_rows}
+        missing_source_ids = source_transaction_ids - persisted_source_ids
+        if missing_source_ids:
+            missing_ids = ", ".join(sorted(missing_source_ids))
+            raise ValueError(f"Selected cost-basis source lots are missing: {missing_ids}")
+
+        for lot_row in lot_rows:
+            state = states_by_source_transaction_id[lot_row.source_transaction_id]
+            lot_row.open_quantity = state.quantity
+            lot_row.lot_cost_local = state.cost_local
+            lot_row.lot_cost_base = state.cost_base
 
     async def upsert_accrued_income_offset_state(
         self, transaction_result: EngineTransaction

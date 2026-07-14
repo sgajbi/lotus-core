@@ -22,8 +22,10 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -219,7 +221,7 @@ async def test_historical_avco_reconciliation_rolls_back_partial_database_repair
     await async_db_session.commit()
     context = transaction_processing_test_context(async_db_session)
 
-    class FailingAfterRebuildRepository(CostCalculatorRepository):
+    class FailingAfterRebuildRepository(SqlAlchemyAverageCostPoolRepository):
         async def apply_average_cost_pool_rebuild(self, plan) -> None:
             await super().apply_average_cost_pool_rebuild(plan)
             raise RuntimeError("post-rebuild certification dependency failed")
@@ -227,7 +229,7 @@ async def test_historical_avco_reconciliation_rolls_back_partial_database_repair
     adapter = SqlAlchemyAverageCostPoolReconciliationAdapter(
         session_factory=context.session_factory,
         workflow=CostCalculationWorkflow(),
-        repository_factory=FailingAfterRebuildRepository,
+        average_cost_pool_factory=FailingAfterRebuildRepository,
     )
 
     assessment = await adapter.reconcile(

@@ -23,8 +23,8 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     SELL_AVCO_POLICY_ID,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculatorRepository,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_unit_of_work import (  # noqa: E501
     TRANSACTION_PROCESSING_SERVICE_NAME,
@@ -408,10 +408,10 @@ async def test_avco_checkpoint_failure_rolls_back_all_combined_processing_output
             correlation_id="corr-combined-avco-rollback",
         )
 
-    original_upsert = CostCalculatorRepository.upsert_average_cost_pool_checkpoint
+    original_upsert = SqlAlchemyAverageCostPoolRepository.upsert_average_cost_pool_checkpoint
 
     async def fail_disposal_checkpoint(
-        repository: CostCalculatorRepository,
+        repository: SqlAlchemyAverageCostPoolRepository,
         checkpoint,
     ) -> None:
         if checkpoint.quantity == Decimal("150"):
@@ -419,7 +419,7 @@ async def test_avco_checkpoint_failure_rolls_back_all_combined_processing_output
         await original_upsert(repository, checkpoint)
 
     monkeypatch.setattr(
-        CostCalculatorRepository,
+        SqlAlchemyAverageCostPoolRepository,
         "upsert_average_cost_pool_checkpoint",
         fail_disposal_checkpoint,
     )

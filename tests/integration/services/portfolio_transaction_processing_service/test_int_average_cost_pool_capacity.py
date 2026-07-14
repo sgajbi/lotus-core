@@ -24,9 +24,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
 )
 from tests.test_support.transaction_processing import (
@@ -158,8 +158,8 @@ async def test_average_cost_pool_lock_is_scoped_to_portfolio_security_key(
         second_transaction = second_session.begin()
         await first_transaction.start()
         await second_transaction.start()
-        first_repository = CostCalculatorRepository(first_session)
-        second_repository = CostCalculatorRepository(second_session)
+        first_repository = SqlAlchemyAverageCostPoolRepository(first_session)
+        second_repository = SqlAlchemyAverageCostPoolRepository(second_session)
         try:
             first_record = await first_repository.get_average_cost_pool_checkpoint_record(
                 portfolio_id=first_portfolio_id,
