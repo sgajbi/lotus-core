@@ -39,13 +39,14 @@ in the framework-neutral
 `portfolio_transaction_processing_service.app.domain.cashflow.calculation` policy. It consumes an
 immutable `BookedTransaction` and returns an immutable `CalculatedCashflow`.
 
-The transitional orchestration workflow remains in
-`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow`. Governed
-rule caching is isolated under `app.infrastructure.cashflow.rule_cache`; each composed runtime owns
-one concurrency-safe cache instance and immutable source-versioned snapshots. Event DTO mapping,
-metrics, logging, SQLAlchemy row construction, persistence, and outbox publication remain
-infrastructure concerns. The retired standalone calculator consumer is not part of the source tree
-or runtime.
+Application coordination lives in
+`portfolio_transaction_processing_service.app.application.cashflow_processing`. Governed ports
+separate rule resolution, processing state, persistence, event staging, and observability. Concrete
+adapters are organized under `app.infrastructure.cashflow`; each composed runtime owns one
+concurrency-safe rule cache and immutable source-versioned snapshots. Event DTO mapping, metrics,
+logging, SQLAlchemy row construction, persistence, and outbox publication remain infrastructure
+concerns. The retired standalone calculator consumer and compatibility workflow are not part of the
+source tree or runtime.
 
 Cash-entry mode validation, generated settlement-leg economics, and upstream product/cash pairing
 are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event

@@ -33,5 +33,5 @@ The service exposes the following critical Prometheus metrics at its `/metrics` 
   - **Action**: The upstream service is likely publishing a malformed `TransactionEvent`. The message in the DLQ will need to be inspected to identify the schema violation.
 
 - **Potential Cause 2: Missing Cashflow Rule**
-  - **Check**: The service logs for a `NoCashflowRuleError`. This error is logged when a transaction is received for a type that does not have a corresponding entry in the `cashflow_rules` table.
+  - **Check**: The processing outcome for reason code `cashflow_rule_missing`. This terminal error is emitted when a transaction is received for a type that does not have a corresponding entry in the `cashflow_rules` table.
   - **Action**: This is a configuration error. A business analyst or administrator needs to add a new rule to the `cashflow_rules` table for the missing transaction type. The affected message(s) can then be replayed from the DLQ.

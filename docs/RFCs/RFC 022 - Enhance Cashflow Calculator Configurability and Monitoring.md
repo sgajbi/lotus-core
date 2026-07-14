@@ -46,12 +46,12 @@ Evidence:
 - `alembic/versions/1a7b8c9d0e2f_feat_add_cashflow_rules_table.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_repository.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_cache.py`
-- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
+- `src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
 - `src/libs/portfolio-common/portfolio_common/monitoring.py`
 - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_repository.py`
 - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py`
-- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+- `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 
 ## Requirement-to-Implementation Traceability

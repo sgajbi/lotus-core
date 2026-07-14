@@ -44,7 +44,7 @@ Validation evidence:
  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_generated_cash_leg.py`
  - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_effect_coordination.py`
  - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
- - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
  - `tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py`
  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_upstream_cash_leg_pairing.py`
  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py`

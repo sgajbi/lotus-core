@@ -1739,9 +1739,10 @@ Most relevant current governance:
      `app/infrastructure/sqlalchemy_unit_of_work.py`: all module repositories and compatibility
      outbox writes use one session and one commit; new module-local commits or sessions are a
      boundary regression. The final live normal path has one target consumer of booked
-     transactions using the application-owned `PreparedCostProcessingUseCase` and transitional
-     `CashflowCalculationWorkflow`; separate calculator consumers are migration-only. Replay remains a separate
-     use case/consumer in the same deployable because it has distinct epoch and backlog controls.
+     transactions using the application-owned `PreparedCostProcessingUseCase` and
+     `ProcessTransactionCashflowUseCase`; separate calculator consumers are migration-only. Replay
+     remains a separate use case/consumer in the same deployable because it has distinct epoch and
+     backlog controls.
      `transactions.persisted` requires the canonical transaction row to exist first; ingestion owns
      that persistence, while combined processing atomically owns derived cost/lot, cashflow,
      position, idempotency, and compatibility outbox effects. Every transaction emitted by the cost

@@ -47,8 +47,9 @@ unchanged.
    repository transaction boundary, critical-path coverage, metric vocabulary, documentation/wiki,
    scoped Ruff/format, and diff checks pass.
 
-## Remaining Work
+## Closure
 
-Keep #719 open. Prove no remaining runtime consumer of `cashflow_staging_workflow.py` or
-`cashflow_processing_adapter.py`, move any unique tests to the new boundaries, and delete both
-compatibility modules without aliases.
+CR-1580 proved there were no remaining runtime consumers, mapped the unique behavior evidence to
+the new boundaries, and deleted both compatibility modules without aliases. Issue #719 remains open
+for the separately scoped event-to-ORM calculation compatibility surface and broader transaction
+processor consolidation.
