@@ -526,7 +526,7 @@
           "proof_family": "application_use_case",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py"
+            "tests/unit/services/portfolio_transaction_processing_service/application/test_process_transaction.py"
           ]
         },
         {

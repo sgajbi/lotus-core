@@ -91,7 +91,7 @@
       "evidence": [
         "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_cost_repository_lot_offset.py",
-        "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/test_process_transaction.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_atomic_unit_of_work.py"
       ],
       "deterministic_primitives": [
@@ -194,7 +194,7 @@
       "status": "representative_implemented",
       "lane": "unit-and-transaction-contract",
       "evidence": [
-        "tests/unit/services/portfolio_transaction_processing_service/test_process_transaction_use_case.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/test_process_transaction.py",
         "tests/unit/services/portfolio_transaction_processing_service/delivery/kafka/test_transaction_consumer.py",
         "tests/unit/transaction_specs/test_sell_slice0_characterization.py"
       ],

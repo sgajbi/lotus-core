@@ -1,3 +1,5 @@
+"""Verify the application use case that coordinates transaction processing."""
+
 from __future__ import annotations
 
 from dataclasses import replace
