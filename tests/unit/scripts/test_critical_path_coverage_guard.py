@@ -244,3 +244,22 @@ def test_changed_code_report_retains_rename_and_delete_lineage() -> None:
             "similarity_percent": None,
         },
     ]
+
+
+def test_changed_critical_source_paths_returns_only_current_governed_modules() -> None:
+    paths = guard.changed_critical_source_paths(
+        [
+            ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/app/use_case.py"),
+            ChangedSourceFile("M", SourceChangeType.MODIFIED, "src/other/module.py"),
+            ChangedSourceFile(
+                "D",
+                SourceChangeType.DELETED,
+                None,
+                previous_path="src/app/deleted.py",
+            ),
+            ChangedSourceFile("M", SourceChangeType.MODIFIED, "docs/example.py"),
+        ],
+        contract=_minimal_contract(),
+    )
+
+    assert paths == ["src/app/use_case.py"]

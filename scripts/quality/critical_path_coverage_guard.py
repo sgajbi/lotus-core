@@ -330,6 +330,31 @@ def _group_report(
     }
 
 
+def _critical_path_group_ids(path: str, *, contract: dict[str, Any]) -> list[str]:
+    return [
+        str(group["id"])
+        for group in contract["critical_path_groups"]
+        if _matches_any(path, [str(pattern) for pattern in group["source_globs"]])
+    ]
+
+
+def changed_critical_source_paths(
+    changed_files: list[ChangedSourceFile], *, contract: dict[str, Any]
+) -> list[str]:
+    """Return existing changed Python sources governed by a critical-path group."""
+
+    return sorted(
+        {
+            path
+            for change in changed_files
+            if (path := change.current_path) is not None
+            and path.startswith("src/")
+            and path.endswith(".py")
+            and _critical_path_group_ids(path, contract=contract)
+        }
+    )
+
+
 def _changed_report(
     *,
     changed_files: list[ChangedSourceFile],
@@ -348,11 +373,7 @@ def _changed_report(
     )
 
     for path in changed_python_source:
-        matched_groups = [
-            str(group["id"])
-            for group in contract["critical_path_groups"]
-            if _matches_any(path, [str(pattern) for pattern in group["source_globs"]])
-        ]
+        matched_groups = _critical_path_group_ids(path, contract=contract)
         if not matched_groups:
             continue
         record: dict[str, Any] = {"path": path, "critical_path_groups": matched_groups}
