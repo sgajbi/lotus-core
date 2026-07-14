@@ -17,8 +17,8 @@ from ...ports import (
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
 )
-from ..cost_basis_timeline import build_cost_basis_timeline_processor
 from .fx_enrichment import enrich_cost_basis_transactions_with_fx
+from .timeline import build_cost_basis_timeline_processor
 
 
 class AverageCostPoolRebuildPlanner:

@@ -44,7 +44,7 @@ Evidence:
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_calculation_workflow.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/cost_basis_strategies.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cost_metrics.py`
-- `src/services/portfolio_transaction_processing_service/app/application/cost_basis_timeline.py`
+- `src/services/portfolio_transaction_processing_service/app/application/cost_basis_processing/timeline.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_basis_strategies.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
 - `tests/integration/services/persistence_service/repositories/test_repositories.py`
