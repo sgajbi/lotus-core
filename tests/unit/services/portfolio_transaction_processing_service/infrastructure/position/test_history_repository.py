@@ -9,7 +9,7 @@ from portfolio_common.database_models import PositionHistory, Transaction
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.domain import PositionHistoryRecord
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_history_repository import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
     _position_history_replay_lock_key,
 )
@@ -153,7 +153,7 @@ async def test_acquire_replay_lock_uses_stable_normalized_key() -> None:
 
     with patch(
         "src.services.portfolio_transaction_processing_service.app.infrastructure."
-        "sqlalchemy_position_history_repository.observe_position_history_replay_lock_wait"
+        "position.history_repository.observe_position_history_replay_lock_wait"
     ) as observe_wait:
         await repository.acquire_replay_lock(
             portfolio_id=" PORT_COST_01 ", security_id=" SEC01 ", epoch=42
@@ -182,7 +182,7 @@ async def test_acquire_replay_lock_records_failure_without_swallowing() -> None:
     with (
         patch(
             "src.services.portfolio_transaction_processing_service.app.infrastructure."
-            "sqlalchemy_position_history_repository.observe_position_history_replay_lock_wait"
+            "position.history_repository.observe_position_history_replay_lock_wait"
         ) as observe_wait,
         pytest.raises(RuntimeError, match="lock unavailable"),
     ):

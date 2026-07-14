@@ -20,10 +20,10 @@ from src.services.portfolio_transaction_processing_service.app.application.posit
 from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     map_transaction_event,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_history_repository import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.history_repository import (  # noqa: E501
     SqlAlchemyPositionHistoryRepository,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_recalculation_state_store import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.recalculation_state import (  # noqa: E501
     SqlAlchemyPositionRecalculationStateStore,
 )
 from src.services.portfolio_transaction_processing_service.app.ports.position_history import (

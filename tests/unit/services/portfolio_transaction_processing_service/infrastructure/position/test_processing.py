@@ -12,7 +12,7 @@ from src.services.portfolio_transaction_processing_service.app.application.posit
     PositionHistoryProcessor,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position import (
     PositionHistoryProcessingAdapter,
 )
 

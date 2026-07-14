@@ -25,9 +25,9 @@ decision planning pure, typed, and independently testable.
 5. caller-owned transaction sequencing through ports.
 
 `app/ports/position_history.py` owns repository, recalculation-state, and observation contracts.
-`app/infrastructure/sqlalchemy_position_history_repository.py`,
-`sqlalchemy_position_recalculation_state_store.py`, and
-`prometheus_position_history_observer.py` own SQLAlchemy mapping, persistence, shared state access,
+`app/infrastructure/position/history_repository.py`,
+`position/recalculation_state.py`, and
+`position/observability.py` own SQLAlchemy mapping, persistence, shared state access,
 metrics, and structured support logs.
 
 ## Boundary Rules

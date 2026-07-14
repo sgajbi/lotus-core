@@ -8,7 +8,7 @@ from typing import cast
 from portfolio_common.database_models import PositionState
 from portfolio_common.position_state_repository import PositionStateRepository
 
-from ..domain.position.history import PositionRecalculationState
+from ...domain.position.history import PositionRecalculationState
 
 
 class SqlAlchemyPositionRecalculationStateStore:

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 from portfolio_common.position_state_repository import PositionStateRepository
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_position_recalculation_state_store import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.recalculation_state import (  # noqa: E501
     SqlAlchemyPositionRecalculationStateStore,
 )
 

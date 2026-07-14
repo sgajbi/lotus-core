@@ -8,7 +8,7 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     BookedTransaction,
     PositionRecalculationState,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.prometheus_position_history_observer import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.position.observability import (  # noqa: E501
     PrometheusPositionHistoryObserver,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
@@ -45,11 +45,11 @@ def _state() -> PositionRecalculationState:
 
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.POSITION_RECALCULATION_WORK_ITEMS"
+    "position.observability.POSITION_RECALCULATION_WORK_ITEMS"
 )
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.POSITION_RECALCULATION_COORDINATION_TOTAL"
+    "position.observability.POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
 def test_observer_preserves_coordination_and_work_metric_labels(
     coordination_metric,
@@ -75,11 +75,11 @@ def test_observer_preserves_coordination_and_work_metric_labels(
 
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.logger"
+    "position.observability.logger"
 )
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.EPOCH_MISMATCH_DROPPED_TOTAL"
+    "position.observability.EPOCH_MISMATCH_DROPPED_TOTAL"
 )
 def test_observer_preserves_stale_epoch_metric_and_structured_taxonomy(
     epoch_metric,
@@ -104,11 +104,11 @@ def test_observer_preserves_stale_epoch_metric_and_structured_taxonomy(
 
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.REPROCESSING_EPOCH_BUMPED_TOTAL"
+    "position.observability.REPROCESSING_EPOCH_BUMPED_TOTAL"
 )
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.POSITION_RECALCULATION_COORDINATION_TOTAL"
+    "position.observability.POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
 def test_observer_preserves_backdated_epoch_metrics(coordination_metric, epoch_metric) -> None:
     observer = PrometheusPositionHistoryObserver()
@@ -125,7 +125,7 @@ def test_observer_preserves_backdated_epoch_metrics(coordination_metric, epoch_m
 
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.logger"
+    "position.observability.logger"
 )
 def test_observer_emits_structured_rebuild_and_generation_logs(logger) -> None:
     observer = PrometheusPositionHistoryObserver()
@@ -160,11 +160,11 @@ def test_observer_emits_structured_rebuild_and_generation_logs(logger) -> None:
 
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.logger"
+    "position.observability.logger"
 )
 @patch(
     "src.services.portfolio_transaction_processing_service.app.infrastructure."
-    "prometheus_position_history_observer.POSITION_RECALCULATION_COORDINATION_TOTAL"
+    "position.observability.POSITION_RECALCULATION_COORDINATION_TOTAL"
 )
 def test_observer_contains_telemetry_failure(metric, logger) -> None:
     metric.labels.side_effect = RuntimeError("metrics unavailable")

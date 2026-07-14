@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ..application.position_history import PositionHistoryProcessor
-from ..domain import BookedTransaction
-from ..ports import PositionProcessingResult
+from ...application.position_history import PositionHistoryProcessor
+from ...domain import BookedTransaction
+from ...ports import PositionProcessingResult
 
 
 class PositionHistoryProcessingAdapter:

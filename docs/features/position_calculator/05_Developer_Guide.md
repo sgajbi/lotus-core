@@ -27,9 +27,9 @@ Capability ownership is explicit:
   ports while preserving the caller-owned transaction.
 - `app/ports/position_history.py` defines persistence, recalculation-state, and observation
   contracts.
-- `app/infrastructure/sqlalchemy_position_history_repository.py` and
-  `sqlalchemy_position_recalculation_state_store.py` map domain records to durable state.
-- `app/infrastructure/prometheus_position_history_observer.py` owns metrics and support logs.
+- `app/infrastructure/position/history_repository.py` and
+  `position/recalculation_state.py` map domain records to durable state.
+- `app/infrastructure/position/observability.py` owns metrics and support logs.
 
 Domain and application code must not import Kafka/Pydantic event DTOs, SQLAlchemy models or
 sessions, concrete repositories, metrics, or logging. Service-owned behavior must not be added to
