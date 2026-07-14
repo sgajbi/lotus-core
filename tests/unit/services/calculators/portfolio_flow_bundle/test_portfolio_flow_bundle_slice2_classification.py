@@ -1,15 +1,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from portfolio_common.database_models import CashflowRule
 from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain.cashflow import (
     CashflowClassification,
+    CashflowRule,
     CashflowTiming,
+    calculate_transaction_cashflow,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CashflowCalculator,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
+    to_booked_transaction,
 )
 
 
@@ -29,14 +30,13 @@ def test_slice2_tax_rule_alignment_marks_portfolio_flow_true() -> None:
         currency="USD",
     )
     rule = CashflowRule(
-        transaction_type="TAX",
         classification=CashflowClassification.EXPENSE,
         timing=CashflowTiming.EOD,
         is_position_flow=True,
         is_portfolio_flow=True,
     )
 
-    cashflow = CashflowCalculator.calculate(event, rule)
+    cashflow = calculate_transaction_cashflow(to_booked_transaction(event), rule)
 
     assert cashflow.amount == Decimal("-10")
     assert cashflow.is_portfolio_flow is True
@@ -44,7 +44,6 @@ def test_slice2_tax_rule_alignment_marks_portfolio_flow_true() -> None:
 
 def test_ca_transfer_classification_signs_for_in_and_out() -> None:
     rule = CashflowRule(
-        transaction_type="MERGER_IN",
         classification=CashflowClassification.TRANSFER,
         timing=CashflowTiming.EOD,
         is_position_flow=True,
@@ -68,8 +67,8 @@ def test_ca_transfer_classification_signs_for_in_and_out() -> None:
         update={"transaction_id": "TXN-CA-OUT-01", "transaction_type": "MERGER_OUT"}
     )
 
-    in_cashflow = CashflowCalculator.calculate(in_event, rule)
-    out_cashflow = CashflowCalculator.calculate(out_event, rule)
+    in_cashflow = calculate_transaction_cashflow(to_booked_transaction(in_event), rule)
+    out_cashflow = calculate_transaction_cashflow(to_booked_transaction(out_event), rule)
 
     assert in_cashflow.amount == Decimal("100")
     assert out_cashflow.amount == Decimal("-100")

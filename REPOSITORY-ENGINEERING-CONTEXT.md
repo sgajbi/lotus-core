@@ -2339,9 +2339,10 @@ Most relevant current governance:
      `BookedTransaction` plus immutable `CashflowRule` and returns `CalculatedCashflow`; it must not
      import event DTOs, SQLAlchemy models/sessions, repositories, metrics, logging adapters, or
      infrastructure packages. Event mapping and observability remain in infrastructure, while the
-     cashflow repository maps calculated results to existing SQLAlchemy rows. Preserve the
-     `CashflowCalculator` event/ORM facade only as a bounded compatibility path while callers migrate;
-     do not add new production callers to it. Domain monitoring imports are rejected by the global
+     cashflow repository maps calculated results to existing SQLAlchemy rows. The retired
+     event-to-ORM `CashflowCalculator` facade must not return: framework callers map once to
+     `BookedTransaction`, application coordination invokes domain policy, and persistence maps the
+     domain result at its adapter boundary. Domain monitoring imports are rejected by the global
      in-process boundary guard.
 173. Canonical INTEREST net and settlement-cash semantics live in
      `portfolio_transaction_processing_service.app.domain.transaction.settlement.interest`.

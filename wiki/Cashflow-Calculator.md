@@ -45,8 +45,10 @@ separate rule resolution, processing state, persistence, event staging, and obse
 adapters are organized under `app.infrastructure.cashflow`; each composed runtime owns one
 concurrency-safe rule cache and immutable source-versioned snapshots. Event DTO mapping, metrics,
 logging, SQLAlchemy row construction, persistence, and outbox publication remain infrastructure
-concerns. The retired standalone calculator consumer and compatibility workflow are not part of the
-source tree or runtime.
+concerns. Framework events are mapped once to `BookedTransaction`; the domain result is mapped to a
+database row only inside the repository adapter. The retired standalone calculator consumer,
+compatibility workflow, and event-to-ORM calculation facade are not part of the source tree or
+runtime.
 
 Cash-entry mode validation, generated settlement-leg economics, and upstream product/cash pairing
 are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event

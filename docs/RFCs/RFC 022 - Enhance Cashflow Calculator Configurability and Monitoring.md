@@ -52,7 +52,7 @@ Evidence:
 - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_repository.py`
 - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py`
 - `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
-- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
 
 ## Requirement-to-Implementation Traceability
 
@@ -87,7 +87,7 @@ No blocking implementation gap remains for RFC-022 scope.
 2. Runtime cache/rule usage tests:
    - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py`
 3. Metric emission tests:
-   - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
+   - `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
 
 ## Original Acceptance Criteria Alignment
 

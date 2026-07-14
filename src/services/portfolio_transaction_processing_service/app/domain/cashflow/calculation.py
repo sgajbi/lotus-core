@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from enum import Enum
 
 from portfolio_common.domain.transaction.fee_components import (
     TRANSACTION_FEE_COMPONENT_FIELDS,
@@ -22,6 +23,7 @@ from .types import (
     CashflowCalculationContext,
     CashflowCalculationType,
     CashflowClassification,
+    CashflowTiming,
 )
 
 _TRANSFER_LIFECYCLE_FAMILIES = frozenset({"transfer", "corporate_action", "rights"})
@@ -74,8 +76,8 @@ TRANSFER_OUTFLOW_TRANSACTION_TYPES = _transfer_transaction_types_for_position_ef
 class CashflowRule:
     """Govern classification, timing, and aggregation level for one transaction type."""
 
-    classification: str
-    timing: str
+    classification: str | CashflowClassification
+    timing: str | CashflowTiming
     is_position_flow: bool
     is_portfolio_flow: bool
 
@@ -148,6 +150,8 @@ def calculate_transaction_cashflow(
 
 
 def _normalize_code(value: object, default: str = "") -> str:
+    if isinstance(value, Enum):
+        value = value.value
     return str(value or default).strip().upper()
 
 

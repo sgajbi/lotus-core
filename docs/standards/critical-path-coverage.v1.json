@@ -120,7 +120,7 @@
         "tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cost_basis/**/*.py",
-        "tests/unit/services/portfolio_transaction_processing_service/cashflow/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/**/*.py",
         "tests/unit/services/calculators/position_valuation_calculator/**/*.py",
         "tests/integration/services/portfolio_transaction_processing_service/test_int_combined_*.py"

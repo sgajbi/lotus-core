@@ -455,7 +455,7 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py",
+            "tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py",
             "tests/unit/libs/portfolio_common/domain/analytics/test_cashflow_semantics.py"
           ]
         },
