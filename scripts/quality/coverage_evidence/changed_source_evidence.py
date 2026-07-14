@@ -193,7 +193,7 @@ def explicit_changed_sources(paths: list[str], *, repo_root: Path) -> list[Chang
 
 
 def coverage_source_target(path: str) -> str:
-    """Map a governed source path to the narrowest source target accepted by pytest-cov."""
+    """Map a governed source file to an import-safe pytest-cov directory target."""
 
     normalized = normalize_repo_path(path)
     if not normalized.endswith(".py"):
@@ -204,20 +204,14 @@ def coverage_source_target(path: str) -> str:
         # subsequently narrowed to the exact changed migration path.
         return "./alembic"
 
-    portfolio_common_prefix = "src/libs/portfolio-common/"
-    if normalized.startswith(portfolio_common_prefix):
-        module_path = normalized.removeprefix(portfolio_common_prefix)
-    elif normalized.startswith("src/"):
-        module_path = normalized
-    else:
+    if not (
+        normalized.startswith("src/services/")
+        or normalized.startswith("src/libs/portfolio-common/")
+    ):
         raise ValueError(f"Coverage source is outside the governed Python trees: {normalized}")
 
-    module_path = (
-        module_path.removesuffix("/__init__.py")
-        if module_path.endswith("/__init__.py")
-        else module_path.removesuffix(".py")
-    )
-    components = module_path.split("/")
-    if not components or any(not component.isidentifier() for component in components):
-        raise ValueError(f"Coverage source has no import-safe module target: {normalized}")
-    return ".".join(components)
+    # Coverage resolves dotted source targets with importlib.find_spec(). Exact
+    # module targets can therefore execute side-effectful parent packages before
+    # pytest collection. A parent directory is equally precise once JSON output
+    # is filtered to the governed changed file, without importing application code.
+    return Path(normalized).parent.as_posix()

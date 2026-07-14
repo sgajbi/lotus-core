@@ -131,7 +131,7 @@ def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_p
                 "critical_path_groups": [
                     {
                         "id": "cost_basis",
-                        "source_globs": ["src/app/**/*.py", "alembic/**/*.py"],
+                        "source_globs": ["src/services/core/app/**/*.py", "alembic/**/*.py"],
                     }
                 ],
             }
@@ -142,7 +142,11 @@ def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_p
         changed_source_evidence,
         "read_git_changed_sources",
         lambda **_kwargs: [
-            ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/use_case.py"),
+            ChangedSourceFile(
+                "A",
+                SourceChangeType.ADDED,
+                "src/services/core/app/use_case.py",
+            ),
             ChangedSourceFile(
                 "A",
                 SourceChangeType.ADDED,
@@ -156,13 +160,28 @@ def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_p
 
     assert critical_paths == (
         "alembic/versions/abc123_add_table.py",
-        "src/app/use_case.py",
+        "src/services/core/app/use_case.py",
     )
-    assert sources == (test_manifest.SOURCE, "./alembic", "src.app.use_case")
+    assert sources == (
+        test_manifest.SOURCE,
+        "./alembic",
+        "src/services/core/app",
+    )
     assert coverage_gate._coverage_include(critical_paths) == ",".join(
         (
             str(Path("src/services/query_service/app/*")),
             str(Path("alembic/versions/abc123_add_table.py")),
-            str(Path("src/app/use_case.py")),
+            str(Path("src/services/core/app/use_case.py")),
         )
     )
+
+
+def test_coverage_scope_deduplicates_changed_files_in_one_source_directory() -> None:
+    sources = coverage_gate._coverage_sources(
+        (
+            "src/services/core/app/first.py",
+            "src/services/core/app/second.py",
+        )
+    )
+
+    assert sources == (test_manifest.SOURCE, "src/services/core/app")
