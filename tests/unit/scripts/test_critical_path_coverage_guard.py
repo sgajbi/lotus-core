@@ -86,6 +86,11 @@ def test_current_critical_path_coverage_contract_is_valid() -> None:
     contract = json.loads((guard.REPO_ROOT / guard.CONTRACT_PATH).read_text(encoding="utf-8"))
 
     assert guard.validate_contract(contract=contract) == []
+    assert contract["aggregate_gate"]["coverage_json"].endswith("query-service-coverage.json")
+    assert contract["changed_code_gate"]["coverage_json"].endswith("coverage.json")
+    assert contract["changed_code_gate"]["unmeasured_critical_file_policy"] == "fail_closed"
+    assert contract["changed_code_gate"]["deleted_paths_are_audit_only"] is True
+    assert contract["changed_code_gate"]["rename_lineage_required"] is True
 
 
 def test_contract_validation_rejects_unknown_manifest_suite() -> None:

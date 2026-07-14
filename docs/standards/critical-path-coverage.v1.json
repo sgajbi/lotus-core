@@ -2,17 +2,23 @@
   "schema_version": "critical-path-coverage.v1",
   "owning_repository": "lotus-core",
   "issue": "sgajbi/lotus-core#612",
+  "current_hardening_issue": "sgajbi/lotus-core#766",
   "aggregate_gate": {
     "command": "make coverage-gate",
     "minimum_line_coverage_percent": 98.0,
     "branch_coverage_required": true,
-    "coverage_json": "output/coverage/coverage.json"
+    "source_scope": "src/services/query_service/app",
+    "coverage_json": "output/coverage/query-service-coverage.json"
   },
   "changed_code_gate": {
     "base_ref_environment_variable": "LOTUS_COVERAGE_CHANGED_BASE",
     "default_base_ref": "origin/main",
+    "change_detection": "git_name_status_with_rename_and_copy_detection",
+    "coverage_json": "output/coverage/coverage.json",
+    "deleted_paths_are_audit_only": true,
+    "rename_lineage_required": true,
     "minimum_measured_line_coverage_percent": 90.0,
-    "unmeasured_critical_file_policy": "reported_requires_follow_up",
+    "unmeasured_critical_file_policy": "fail_closed",
     "report_path": "output/coverage/critical-path-coverage-report.json"
   },
   "exception_policy": {
