@@ -2455,6 +2455,12 @@ Most relevant current governance:
      package resolution, global installs, or an unlocked transitive dependency graph. Compatibility
      overrides must be exact, tested on the governed Node runtime, security-audited, and removed when
      the upstream package contract is repaired and the clean lock can be upgraded safely.
+187. Destructive E2E fault scenarios must own unconditional, idempotent recovery of every shared
+     runtime dependency they stop. Reconcile Compose services with `up --detach --no-deps --wait`,
+     prove backing-resource readiness, restart the governed dependent service set, and prove service
+     readiness before returning control. Keep reusable lifecycle support under
+     `tests/test_support/runtime` with mirrored unit tests. Preserve the original test failure when
+     cleanup also fails, attaching cleanup diagnostics instead of replacing root-cause evidence.
 
 ## Context Maintenance Rule
 

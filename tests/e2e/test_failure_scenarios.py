@@ -1,6 +1,5 @@
 # tests/e2e/test_failure_scenarios.py
 import os
-import subprocess
 import time
 import uuid
 from collections.abc import Callable
@@ -16,13 +15,11 @@ from scripts.quality.ci_service_sets import (
     E2E_RECOVERY_SERVICES,
 )
 from tests.test_support.output_control import emit_test_output
+from tests.test_support.runtime.compose_fault_recovery import (
+    ComposeFaultRecoveryBoundary,
+)
 
 from .api_client import E2EApiClient
-
-
-def _compose_args(*compose_args: str) -> list[str]:
-    project_name = os.environ["COMPOSE_PROJECT_NAME"]
-    return ["docker", "compose", "-p", project_name, *compose_args]
 
 
 def _core_service_health_urls() -> list[str]:
@@ -30,6 +27,11 @@ def _core_service_health_urls() -> list[str]:
         f"http://localhost:{os.environ[E2E_RECOVERY_HEALTH_PORT_ENV[service]]}/health/ready"
         for service in E2E_RECOVERY_SERVICES
     ]
+
+
+def _wait_for_core_services_ready() -> None:
+    for health_url in _core_service_health_urls():
+        wait_for_service_ready(health_url, timeout=120)
 
 
 def _poll_until(
@@ -180,20 +182,17 @@ def test_db_outage_recovery(
 
     # 5. ACT: Simulate database outage.
     emit_test_output("\n--- Stopping PostgreSQL container ---")
-    subprocess.run(_compose_args("stop", "postgres"), check=True, capture_output=True)
-    wait_for_postgres_unavailable(db_engine)
-
-    emit_test_output("\n--- Starting PostgreSQL container ---")
-    subprocess.run(_compose_args("start", "postgres"), check=True, capture_output=True)
-    wait_for_postgres_ready(db_engine)
-
-    emit_test_output("\n--- Restarting persistence_service to ensure DB reconnection ---")
-    subprocess.run(_compose_args("restart", "persistence_service"), check=True, capture_output=True)
-
-    # 6. ACT: Wait for the persistence service to become healthy again
-    wait_for_service_ready(
-        f"http://localhost:{os.environ['LOTUS_PERSISTENCE_HOST_PORT']}/health/ready"
-    )
+    with ComposeFaultRecoveryBoundary(
+        project_name=os.environ["COMPOSE_PROJECT_NAME"],
+        faulted_service="postgres",
+        recovery_services=E2E_RECOVERY_SERVICES,
+        faulted_service_ready=lambda: wait_for_postgres_ready(db_engine, timeout=60),
+        recovery_services_ready=_wait_for_core_services_ready,
+    ) as outage:
+        wait_for_postgres_unavailable(db_engine)
+        emit_test_output("\n--- Reconciling PostgreSQL and dependent services ---")
+        outage.restore()
+    emit_test_output("\n--- Core services fully recovered after outage ---")
 
     # 7. ACT/ASSERT: Ingest and persist a new transaction after recovery.
     transaction_payload_after = {
@@ -235,14 +234,3 @@ def test_db_outage_recovery(
         f"A message was unexpectedly found in the DLQ: {msg.value() if msg else 'None'}"
     )
     emit_test_output("\n--- DLQ verified to be empty ---", verbose_only=True)
-
-    # 9. RECOVERY BARRIER: restart all core services and wait for end-to-end readiness
-    emit_test_output("\n--- Restarting all core services after DB outage scenario ---")
-    subprocess.run(
-        _compose_args("restart", *E2E_RECOVERY_SERVICES),
-        check=True,
-        capture_output=True,
-    )
-    for health_url in _core_service_health_urls():
-        wait_for_service_ready(health_url, timeout=120)
-    emit_test_output("\n--- Core services fully recovered after outage test ---")
