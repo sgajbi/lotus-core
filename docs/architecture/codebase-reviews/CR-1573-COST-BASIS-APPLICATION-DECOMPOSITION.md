@@ -72,6 +72,10 @@ obscured ownership and encouraged further dumping into broad folders.
 18. Extended the typed cost-basis calculation observer with bounded execution mode and restored-lot
     observations, moved the existing Prometheus counter/histogram calls behind the failure-contained
     adapter, and replaced workflow-global metric patching with port-level assertions.
+19. Added `application.cost_basis_processing.CostBasisCalculationCoordinator` to own ordered-append
+    versus deterministic full-rebuild selection, FIFO/AVCO checkpoint restoration, FX enrichment,
+    and timeline execution over `BookedTransaction` and typed ports; moved the behavioral suite to
+    the mirrored application package and guarded the retired infrastructure-owned test path.
 
 ## Measurable Improvement
 
@@ -94,7 +98,10 @@ obscured ownership and encouraged further dumping into broad folders.
   focused coverage;
 - removed every repository reference to the retired private persistence helpers; and
 - removed one settlement responsibility from the cost-basis package and reduced its application
-  dependency from a five-method cost-state port to a one-method settlement lookup contract.
+  dependency from a five-method cost-state port to a one-method settlement lookup contract; and
+- reduced `CostCalculationWorkflow` again from 729 to 379 lines by moving calculation policy into a
+  390-line named application coordinator with 96% focused line/branch coverage and no framework,
+  ORM, SQL, Kafka, or Prometheus imports.
 
 ## Compatibility
 
@@ -121,6 +128,8 @@ the broader calculator-runtime retirement tracked by #719.
 - focused strict MyPy, Ruff lint/format, import scans, and `git diff --check`: passed.
 - backdated suffix partial-write rollback on PostgreSQL after repository-level failure injection:
   `1 passed`.
+- application coordinator, package-ownership, and infrastructure integration proof: `27 passed`;
+- focused coordinator coverage: `96%` line/branch with `10 passed`.
 
 ## Documentation Decision
 
@@ -133,7 +142,7 @@ governed layered-architecture rule are unchanged.
 ## Remaining Work
 
 Keep #719 open. Further slices should evaluate event/outbox coordination as an independent
-boundary, extracting only when the application service has a narrow port contract and focused
-domain tests.
+boundary and retire the remaining infrastructure workflow only when delivery mapping has a narrow
+port contract and focused domain tests.
 Do not restore extracted behavior to `CostCalculationWorkflow`, create flat compatibility modules,
 or split the runtime without workload, failure-isolation, scaling, security, or ownership evidence.

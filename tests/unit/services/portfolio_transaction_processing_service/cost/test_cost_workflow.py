@@ -103,7 +103,13 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state(
         open_lot_persistence_scope=cost_basis_processing.OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
         average_cost_pool_transition=None,
     )
-    workflow._calculate_cost_basis = AsyncMock(return_value=calculation)
+    calculation_coordinator = MagicMock()
+    calculation_coordinator.return_value.calculate = AsyncMock(return_value=calculation)
+    monkeypatch.setattr(
+        cost_calculation_workflow_module,
+        "CostBasisCalculationCoordinator",
+        calculation_coordinator,
+    )
     persist_transactions = AsyncMock(return_value=())
     monkeypatch.setattr(
         cost_calculation_workflow_module,

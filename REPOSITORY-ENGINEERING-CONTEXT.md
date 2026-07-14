@@ -2461,6 +2461,11 @@ Most relevant current governance:
      the Prometheus/log adapter must contain telemetry failures so support tooling cannot roll back
      financial writes. Mirror persistence tests under the application package and do not test this
      behavior through private workflow methods.
+     Incremental-versus-full-rebuild selection, compatible FIFO/AVCO checkpoint restoration, FX
+     enrichment, and timeline execution belong in
+     `app/application/cost_basis_processing/calculation.py` over `BookedTransaction` and cost-basis
+     ports. Infrastructure must acquire the key lock before invoking that coordinator and must not
+     reintroduce calculation policy or framework event DTOs into the application package.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,

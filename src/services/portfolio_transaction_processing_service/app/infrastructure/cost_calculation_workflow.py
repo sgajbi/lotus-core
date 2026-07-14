@@ -1,6 +1,5 @@
 """Stage cost-basis effects inside the unified transaction-processing boundary."""
 
-from decimal import Decimal
 from typing import Any
 
 from portfolio_common.config import (
@@ -12,31 +11,17 @@ from portfolio_common.events import InstrumentEvent, TransactionEvent, event_bus
 from portfolio_common.monitoring import BUY_LIFECYCLE_STAGE_TOTAL, SELL_LIFECYCLE_STAGE_TOTAL
 from portfolio_common.outbox_repository import OutboxRepository
 
-from ..application import (
-    CorporateActionReconciliationCoordinator,
-    CostBasisTimelineProcessor,
-    build_cost_basis_timeline_processor,
-)
+from ..application import CorporateActionReconciliationCoordinator
 from ..application.cost_basis_processing import (
-    CostBasisCalculationResult,
+    CostBasisCalculationCoordinator,
     CostProcessingRoute,
-    OpenLotPersistenceScope,
-    enrich_cost_basis_transactions_with_fx,
     persist_cost_basis_transactions,
     persist_open_lot_state,
 )
 from ..application.foreign_exchange_processing import book_foreign_exchange_transaction
 from ..application.settlement_processing import link_settlement_cash_leg
 from ..domain.cost_basis import (
-    AVERAGE_COST_POOL_LOT_BEHAVIORS,
-    INCREMENTAL_SAFE_LOT_BEHAVIORS,
-    STATE_DEPENDENT_LOT_BEHAVIORS,
-    AverageCostPoolCheckpoint,
-    AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
-    OpenLotState,
-    build_cost_basis_engine_input,
-    transaction_lot_behavior,
     transaction_order_key,
 )
 from ..domain.cost_basis import (
@@ -44,12 +29,10 @@ from ..domain.cost_basis import (
 )
 from ..ports import (
     AccruedIncomeOffsetStatePort,
-    AverageCostPoolCheckpointRecord,
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisCalculationObserver,
-    CostBasisExecutionMode,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
     CostBasisLotStatePort,
@@ -113,14 +96,6 @@ class CostCalculationWorkflow:
         """Attach corporate-action support telemetry at the infrastructure boundary."""
 
         self._corporate_action_reconciliation_observer = observer
-
-    def _get_cost_basis_timeline_processor(
-        self, cost_basis_method: str | CostBasisMethod = CostBasisMethod.FIFO
-    ) -> CostBasisTimelineProcessor:
-        return build_cost_basis_timeline_processor(
-            cost_basis_method,
-            observer=self._cost_basis_observer,
-        )
 
     async def _build_events_to_publish(
         self,
@@ -246,16 +221,18 @@ class CostCalculationWorkflow:
             event.portfolio_id,
             event.security_id,
         )
-        calculation = await self._calculate_cost_basis(
-            event=event,
-            event_transaction_type=event_transaction_type,
-            portfolio_base_currency=portfolio.base_currency,
-            instrument=instrument,
-            repo=repo,
+        calculation = await CostBasisCalculationCoordinator(
+            transactions=repo,
             average_cost_pools=average_cost_pools,
             lot_states=lot_states,
             fx_rates=fx_rates,
             processing_state=processing_state,
+            observer=self._cost_basis_observer,
+        ).calculate(
+            transaction=to_booked_transaction(event),
+            transaction_type=event_transaction_type,
+            portfolio_base_currency=portfolio.base_currency,
+            instrument=instrument,
             cost_basis_method=cost_basis_method,
         )
 
@@ -296,326 +273,6 @@ class CostCalculationWorkflow:
 
         return events_to_publish, []
 
-    async def _calculate_cost_basis(
-        self,
-        *,
-        event: TransactionEvent,
-        event_transaction_type: str,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-        repo: CostBasisTransactionStatePort,
-        average_cost_pools: CostBasisAverageCostPoolPort,
-        lot_states: CostBasisLotStatePort,
-        fx_rates: CostBasisFxRatePort,
-        processing_state: CostBasisProcessingStatePort,
-        cost_basis_method: CostBasisMethod,
-    ) -> CostBasisCalculationResult:
-        checkpoint = await processing_state.get_cost_basis_processing_checkpoint(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-        )
-        lot_behavior = transaction_lot_behavior(event_transaction_type)
-        if checkpoint is not None and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS:
-            incoming_raw = await self._load_incoming_cost_basis_transaction(
-                event=event,
-                portfolio_base_currency=portfolio_base_currency,
-                instrument=instrument,
-                repo=repo,
-                fx_rates=fx_rates,
-            )
-            incoming_transaction = EngineTransaction(**incoming_raw)
-            if checkpoint.permits_append(
-                incoming_transaction,
-                cost_basis_method=cost_basis_method,
-            ):
-                average_cost_pool_record = None
-                if (
-                    cost_basis_method is CostBasisMethod.AVCO
-                    and lot_behavior in AVERAGE_COST_POOL_LOT_BEHAVIORS
-                ):
-                    average_cost_pool_record = (
-                        await self._get_compatible_average_cost_pool_checkpoint(
-                            event=event,
-                            average_cost_pools=average_cost_pools,
-                        )
-                    )
-                    if average_cost_pool_record is None:
-                        return await self._calculate_full_cost_rebuild(
-                            event=event,
-                            portfolio_base_currency=portfolio_base_currency,
-                            instrument=instrument,
-                            repo=repo,
-                            fx_rates=fx_rates,
-                            cost_basis_method=cost_basis_method,
-                        )
-                initial_open_lots_raw = []
-                open_lot_persistence_scope = OpenLotPersistenceScope.COMPLETE_SNAPSHOT
-                if average_cost_pool_record is not None:
-                    initial_open_lots_raw = self._load_average_cost_pool_checkpoint_transaction(
-                        record=average_cost_pool_record,
-                        portfolio_base_currency=portfolio_base_currency,
-                        instrument=instrument,
-                    )
-                    open_lot_persistence_scope = OpenLotPersistenceScope.AVERAGE_COST_POOL
-                elif lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS:
-                    required_fifo_quantity = (
-                        incoming_transaction.quantity
-                        if cost_basis_method is CostBasisMethod.FIFO
-                        and lot_behavior == "consume_lot"
-                        and incoming_transaction.quantity > Decimal(0)
-                        else None
-                    )
-                    initial_open_lots_raw = await self._load_open_lot_checkpoint_transactions(
-                        event=event,
-                        portfolio_base_currency=portfolio_base_currency,
-                        instrument=instrument,
-                        lot_states=lot_states,
-                        required_fifo_quantity=required_fifo_quantity,
-                    )
-                    if required_fifo_quantity is not None:
-                        open_lot_persistence_scope = OpenLotPersistenceScope.SELECTED_LOTS
-                if (
-                    average_cost_pool_record is not None
-                    or lot_behavior in STATE_DEPENDENT_LOT_BEHAVIORS
-                ) and self._cost_basis_observer is not None:
-                    self._cost_basis_observer.record_restored_open_lots(
-                        cost_basis_method=cost_basis_method.value,
-                        lot_count=len(initial_open_lots_raw),
-                    )
-                processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
-                    cost_basis_method
-                ).process_increment(
-                    initial_open_lots_raw=initial_open_lots_raw,
-                    new_transactions_raw=[incoming_raw],
-                )
-                average_cost_pool_transition = (
-                    self._build_average_cost_pool_transition(
-                        checkpoint=average_cost_pool_record.checkpoint,
-                        open_lot_states=open_lot_states,
-                    )
-                    if average_cost_pool_record is not None and not errored
-                    else None
-                )
-                if self._cost_basis_observer is not None:
-                    self._cost_basis_observer.record_execution(
-                        CostBasisExecutionMode.ORDERED_APPEND,
-                        cost_basis_method.value,
-                    )
-                return CostBasisCalculationResult(
-                    processed=processed,
-                    errored=errored,
-                    open_lot_states=open_lot_states,
-                    incremental=True,
-                    open_lot_persistence_scope=open_lot_persistence_scope,
-                    average_cost_pool_transition=average_cost_pool_transition,
-                )
-
-        return await self._calculate_full_cost_rebuild(
-            event=event,
-            portfolio_base_currency=portfolio_base_currency,
-            instrument=instrument,
-            repo=repo,
-            fx_rates=fx_rates,
-            cost_basis_method=cost_basis_method,
-        )
-
-    async def _calculate_full_cost_rebuild(
-        self,
-        *,
-        event: TransactionEvent,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-        repo: CostBasisTransactionStatePort,
-        fx_rates: CostBasisFxRatePort,
-        cost_basis_method: CostBasisMethod,
-    ) -> CostBasisCalculationResult:
-        all_transactions_raw = await self._load_cost_basis_transactions(
-            event=event,
-            portfolio_base_currency=portfolio_base_currency,
-            instrument=instrument,
-            repo=repo,
-            fx_rates=fx_rates,
-        )
-        processed, errored, open_lot_states = self._get_cost_basis_timeline_processor(
-            cost_basis_method
-        ).process_transactions(
-            existing_transactions_raw=[],
-            new_transactions_raw=all_transactions_raw,
-        )
-        if self._cost_basis_observer is not None:
-            self._cost_basis_observer.record_execution(
-                CostBasisExecutionMode.FULL_REBUILD,
-                cost_basis_method.value,
-            )
-        return CostBasisCalculationResult(
-            processed=processed,
-            errored=errored,
-            open_lot_states=open_lot_states,
-            incremental=False,
-            open_lot_persistence_scope=OpenLotPersistenceScope.COMPLETE_SNAPSHOT,
-            average_cost_pool_transition=None,
-        )
-
-    async def _load_incoming_cost_basis_transaction(
-        self,
-        *,
-        event: TransactionEvent,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-        repo: CostBasisTransactionStatePort,
-        fx_rates: CostBasisFxRatePort,
-    ) -> dict[str, Any]:
-        event_raw = build_cost_basis_engine_input(to_booked_transaction(event))
-        if instrument is not None:
-            self._attach_instrument_metadata(transactions=[event_raw], instrument=instrument)
-        enriched: list[dict[str, Any]] = await enrich_cost_basis_transactions_with_fx(
-            transactions=[event_raw],
-            portfolio_base_currency=portfolio_base_currency,
-            fx_rates=fx_rates,
-        )
-        return enriched[0]
-
-    @staticmethod
-    async def _get_compatible_average_cost_pool_checkpoint(
-        *,
-        event: TransactionEvent,
-        average_cost_pools: CostBasisAverageCostPoolPort,
-    ) -> AverageCostPoolCheckpointRecord | None:
-        record = await average_cost_pools.get_average_cost_pool_checkpoint_record(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-        )
-        if record is None or not record.checkpoint.is_compatible(
-            portfolio_id=event.portfolio_id,
-            instrument_id=event.instrument_id,
-            security_id=event.security_id,
-        ):
-            return None
-        if record.checkpoint.quantity > Decimal(0) and record.representative_transaction is None:
-            return None
-        return record
-
-    def _load_average_cost_pool_checkpoint_transaction(
-        self,
-        *,
-        record: AverageCostPoolCheckpointRecord,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-    ) -> list[dict[str, Any]]:
-        checkpoint = record.checkpoint
-        if checkpoint.quantity == Decimal(0):
-            return []
-        if record.representative_transaction is None:
-            raise ValueError("Open average cost pool has no representative transaction")
-        transaction_raw = build_cost_basis_engine_input(record.representative_transaction)
-        transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
-        transaction_raw["quantity"] = checkpoint.quantity
-        transaction_raw["net_cost_local"] = checkpoint.cost_local
-        transaction_raw["net_cost"] = checkpoint.cost_base
-        transaction_raw["portfolio_base_currency"] = portfolio_base_currency
-        if instrument is not None:
-            self._attach_instrument_metadata(
-                transactions=[transaction_raw],
-                instrument=instrument,
-            )
-        return [transaction_raw]
-
-    @staticmethod
-    def _build_average_cost_pool_transition(
-        *,
-        checkpoint: AverageCostPoolCheckpoint,
-        open_lot_states: dict[str, OpenLotState],
-    ) -> AverageCostPoolTransition:
-        remaining_states = dict(open_lot_states)
-        if checkpoint.quantity > Decimal(0):
-            representative_source_id = checkpoint.representative_source_transaction_id
-            if representative_source_id is None:
-                raise ValueError("Open average cost pool has no representative source")
-            existing_sources_after = remaining_states.pop(
-                representative_source_id,
-                None,
-            )
-            if existing_sources_after is None:
-                raise ValueError(
-                    "Average cost calculation omitted the aggregate representative source"
-                )
-        else:
-            existing_sources_after = OpenLotState(
-                quantity=Decimal(0),
-                cost_local=Decimal(0),
-                cost_base=Decimal(0),
-            )
-        return AverageCostPoolTransition(
-            before=checkpoint,
-            existing_sources_after=existing_sources_after,
-            explicit_sources_after=remaining_states,
-        )
-
-    async def _load_open_lot_checkpoint_transactions(
-        self,
-        *,
-        event: TransactionEvent,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-        lot_states: CostBasisLotStatePort,
-        required_fifo_quantity: Decimal | None = None,
-    ) -> list[dict[str, Any]]:
-        if required_fifo_quantity is None:
-            records = await lot_states.get_open_lot_checkpoint_records(
-                portfolio_id=event.portfolio_id,
-                security_id=event.security_id,
-            )
-        else:
-            records = await lot_states.get_fifo_disposal_lot_checkpoint_records(
-                portfolio_id=event.portfolio_id,
-                security_id=event.security_id,
-                required_quantity=required_fifo_quantity,
-            )
-        checkpoint_transactions: list[dict[str, Any]] = []
-        for record in records:
-            transaction_raw = build_cost_basis_engine_input(record.transaction)
-            transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
-            transaction_raw["quantity"] = record.quantity
-            transaction_raw["net_cost_local"] = record.cost_local
-            transaction_raw["net_cost"] = record.cost_base
-            transaction_raw["portfolio_base_currency"] = portfolio_base_currency
-            checkpoint_transactions.append(transaction_raw)
-        if instrument is not None:
-            self._attach_instrument_metadata(
-                transactions=checkpoint_transactions,
-                instrument=instrument,
-            )
-        return checkpoint_transactions
-
-    async def _load_cost_basis_transactions(
-        self,
-        *,
-        event: TransactionEvent,
-        portfolio_base_currency: str,
-        instrument: CostBasisInstrumentReference | None,
-        repo: CostBasisTransactionStatePort,
-        fx_rates: CostBasisFxRatePort,
-    ) -> list[dict[str, Any]]:
-        history = await repo.get_transaction_history(
-            portfolio_id=event.portfolio_id,
-            security_id=event.security_id,
-            exclude_id=event.transaction_id,
-        )
-        history_raw = [build_cost_basis_engine_input(transaction) for transaction in history]
-        event_raw = build_cost_basis_engine_input(to_booked_transaction(event))
-        all_transactions_raw = [*history_raw, event_raw]
-        if instrument is not None:
-            self._attach_instrument_metadata(
-                transactions=all_transactions_raw,
-                instrument=instrument,
-            )
-        enriched_transactions: list[dict[str, Any]] = await enrich_cost_basis_transactions_with_fx(
-            transactions=all_transactions_raw,
-            portfolio_base_currency=portfolio_base_currency,
-            fx_rates=fx_rates,
-        )
-        return enriched_transactions
-
     @staticmethod
     async def _persist_cost_basis_processing_checkpoint(
         *,
@@ -630,16 +287,6 @@ class CostCalculationWorkflow:
                 cost_basis_method=cost_basis_method,
             )
         )
-
-    @staticmethod
-    def _attach_instrument_metadata(
-        *,
-        transactions: list[dict[str, Any]],
-        instrument: CostBasisInstrumentReference,
-    ) -> None:
-        for txn_raw in transactions:
-            txn_raw["product_type"] = instrument.product_type
-            txn_raw["asset_class"] = instrument.asset_class
 
     @staticmethod
     def _raise_for_transaction_engine_errors(
