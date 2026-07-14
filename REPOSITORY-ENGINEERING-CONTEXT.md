@@ -1582,9 +1582,9 @@ Most relevant current governance:
      authority and domain language must determine module boundaries instead of legacy facade
      adjacency.
 120. Kafka consumers must keep transport responsibilities separate from application orchestration.
-     The active combined path uses `ProcessTransactionUseCase` and target ports. Transitional cost
-     SQL/outbox staging belongs to `CostProcessingCompatibilityAdapter`; the quarantined legacy
-     consumer alone retains its physical idempotency claim, concrete repository construction, and
+     The active combined path uses `ProcessTransactionUseCase` and target ports. Cost-basis
+     SQL/outbox staging belongs to the domain-owned `CostBasisProcessingAdapter`; the quarantined
+     legacy consumer alone retains its physical idempotency claim, concrete repository construction, and
      retry/DLQ lifecycle for rollback characterization. Do not recreate
      `cost_calculation_processor.py` or copy this compatibility delivery shape into new consumers.
      New consumers with idempotency, repository, publication, or reconciliation behavior require a
@@ -2126,9 +2126,9 @@ Most relevant current governance:
      the legacy `transaction_processor.py` path or generic aliases. Workflow, SQL repository, and
      compatibility delivery remain separate migration slices with their own ports and transaction
      boundary proof.
-152. Cost compatibility staging is target infrastructure behavior owned by
-     `CostProcessingCompatibilityAdapter`, not a second application use case. It may temporarily
-     describe the legacy workflow's private method surface and concrete SQL/outbox collaborators,
+152. Cost-basis staging is target infrastructure behavior owned by
+     `CostBasisProcessingAdapter`, not a second application use case. Its delegated workflow may
+     temporarily describe the legacy workflow's private method surface and concrete SQL/outbox collaborators,
      but those types must not leak into target application or domain packages. The combined path
      remains `ProcessTransactionUseCase` -> `CostProcessingPort` -> adapter inside one SQLAlchemy
      unit of work. Keep legacy physical idempotency only in the quarantined consumer; never restore

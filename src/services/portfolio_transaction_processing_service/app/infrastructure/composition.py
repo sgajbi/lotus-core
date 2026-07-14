@@ -23,8 +23,8 @@ from .cashflow_staging_workflow import CashflowCalculationWorkflow
 from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
 )
+from .cost_basis import CostEffectsStager
 from .cost_calculation_workflow import CostCalculationWorkflow
-from .cost_processing_adapter import CostEffectsStager
 from .prometheus_cost_basis_observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
 )
