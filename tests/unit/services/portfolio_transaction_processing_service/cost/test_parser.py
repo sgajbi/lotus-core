@@ -1,3 +1,5 @@
+"""Test raw ledger mapping into cost-basis transaction values."""
+
 from decimal import Decimal
 
 import pytest
@@ -9,16 +11,19 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 
 
 @pytest.fixture
-def error_reporter():
+def error_reporter() -> CostCalculationErrorCollector:
     return CostCalculationErrorCollector()
 
 
 @pytest.fixture
-def parser(error_reporter):
+def parser(error_reporter: CostCalculationErrorCollector) -> CostTransactionParser:
     return CostTransactionParser(error_reporter=error_reporter)
 
 
-def test_parse_valid_transaction(parser, error_reporter):
+def test_parse_valid_transaction(
+    parser: CostTransactionParser,
+    error_reporter: CostCalculationErrorCollector,
+) -> None:
     raw_data = [
         {
             "transaction_id": "txn1",
@@ -40,7 +45,10 @@ def test_parse_valid_transaction(parser, error_reporter):
     assert parsed[0].quantity == Decimal("10.0")
 
 
-def test_parse_invalid_transaction(parser, error_reporter):
+def test_parse_invalid_transaction(
+    parser: CostTransactionParser,
+    error_reporter: CostCalculationErrorCollector,
+) -> None:
     raw_data = [{"transaction_id": "txn1"}]  # Missing fields
     parsed = parser.parse_transactions(raw_data)
     assert len(parsed) == 1
@@ -48,7 +56,10 @@ def test_parse_invalid_transaction(parser, error_reporter):
     assert error_reporter.has_errors_for("txn1")
 
 
-def test_parse_transaction_missing_multiple_fields_creates_valid_stub(parser, error_reporter):
+def test_parse_transaction_missing_multiple_fields_creates_valid_stub(
+    parser: CostTransactionParser,
+    error_reporter: CostCalculationErrorCollector,
+) -> None:
     """
     GIVEN a raw transaction dictionary missing multiple required fields
     (including portfolio_base_currency)
