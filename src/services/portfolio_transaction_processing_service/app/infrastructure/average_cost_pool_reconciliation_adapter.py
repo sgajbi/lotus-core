@@ -10,6 +10,7 @@ from portfolio_common.domain.transaction.type_registry import TRANSACTION_TYPE_R
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..application.cost_basis_processing import AverageCostPoolRebuildPlanner
 from ..domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
@@ -31,7 +32,6 @@ from .cost_basis import (
     SqlAlchemyCostBasisReferenceDataRepository,
     SqlAlchemyCostBasisTransactionRepository,
 )
-from .cost_calculation_workflow import CostCalculationWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         self,
         *,
         session_factory: Callable[[], AsyncSession],
-        workflow: CostCalculationWorkflow,
+        rebuild_planner: AverageCostPoolRebuildPlanner,
         repository_factory: Callable[[AsyncSession], CostBasisTransactionStatePort] = (
             SqlAlchemyCostBasisTransactionRepository
         ),
@@ -67,7 +67,7 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         ),
     ) -> None:
         self._session_factory = session_factory
-        self._workflow = workflow
+        self._rebuild_planner = rebuild_planner
         self._repository_factory = repository_factory
         self._average_cost_pool_factory = average_cost_pool_factory
         self._reference_data_factory = reference_data_factory
@@ -139,10 +139,10 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
                         key.portfolio_id,
                         key.security_id,
                     )
-                    plan = await self._workflow.build_average_cost_pool_rebuild_plan(
+                    plan = await self._rebuild_planner.build(
                         portfolio_id=key.portfolio_id,
                         security_id=key.security_id,
-                        repo=repository,
+                        transactions=repository,
                         reference_data=reference_data,
                         fx_rates=fx_rates,
                     )

@@ -6,7 +6,11 @@ from unittest.mock import MagicMock
 from portfolio_common.reprocessing_repository import ReprocessingRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+    AverageCostPoolRebuildPlanner,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+    PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
     CashflowCalculationWorkflow,
@@ -110,4 +114,11 @@ def test_average_cost_reconciliation_builder_uses_target_application_boundary() 
         SqlAlchemyAverageCostPoolReconciliationAdapter,
     )
     assert use_case._reconciliation._session_factory is session_factory
-    assert isinstance(use_case._reconciliation._workflow, CostCalculationWorkflow)
+    assert isinstance(
+        use_case._reconciliation._rebuild_planner,
+        AverageCostPoolRebuildPlanner,
+    )
+    assert (
+        use_case._reconciliation._rebuild_planner._observer
+        is PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER
+    )
