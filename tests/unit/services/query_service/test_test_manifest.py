@@ -1,3 +1,5 @@
+"""Verify governed test-suite composition and runtime-mode contracts."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -54,9 +56,11 @@ def test_sell_contract_suite_includes_sell_query_contract_tests() -> None:
 def test_fx_contract_suite_includes_fx_contract_surfaces() -> None:
     fx_suite = get_suite("transaction-fx-contract")
     assert (
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/"
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/"
         "test_validation.py"
     ) in fx_suite
+    retired_prefix = "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/"
+    assert all(not path.startswith(retired_prefix) for path in fx_suite)
     assert "tests/integration/services/query_service/test_transactions_router.py" in fx_suite
     assert (
         "tests/integration/services/persistence_service/repositories/test_repositories.py"
