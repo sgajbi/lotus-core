@@ -1,7 +1,7 @@
 # CR-1371 Cashflow Rule Cache Governance
 
 Current implementation ownership was refined by
-[CR-1576](./CR-1576-CASHFLOW-RULE-CACHE-OWNERSHIP.md): the same governed behavior now lives in an
+[CR-1588](./CR-1588-CASHFLOW-RULE-CACHE-OWNERSHIP.md): the same governed behavior now lives in an
 instance-owned `infrastructure/cashflow/rule_cache.py` adapter rather than mutable workflow-module
 state.
 
