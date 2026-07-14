@@ -68,7 +68,10 @@
       "title": "Cost basis, P&L, cashflow, accrued income, valuation, price, and FX calculations",
       "risk": "Weak calculation coverage can produce incorrect client economics while aggregate coverage remains stable.",
       "source_globs": [
-        "src/libs/portfolio-common/portfolio_common/cost_basis.py",
+        "src/libs/portfolio-common/portfolio_common/domain/analytics/cashflow_semantics.py",
+        "src/libs/portfolio-common/portfolio_common/domain/cost_basis_method.py",
+        "src/libs/portfolio-common/portfolio_common/domain/currency.py",
+        "src/libs/portfolio-common/portfolio_common/domain/decimal_amount.py",
         "src/libs/portfolio-common/portfolio_common/fx_rates.py",
         "src/libs/portfolio-common/portfolio_common/valuation*.py",
         "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/**/*.py",
@@ -98,6 +101,7 @@
         "transaction-portfolio-flow-bundle-contract"
       ],
       "required_test_globs": [
+        "tests/unit/libs/portfolio_common/domain/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/**/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cashflow/**/*.py",
         "tests/unit/services/calculators/position_valuation_calculator/**/*.py",

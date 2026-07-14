@@ -1,5 +1,6 @@
 """Normalize ISO 4217 currency codes across Core capabilities."""
 
+
 def normalize_currency_code(currency_code: object) -> str:
     if not isinstance(currency_code, str):
         raise ValueError("Currency code must be a string.")
