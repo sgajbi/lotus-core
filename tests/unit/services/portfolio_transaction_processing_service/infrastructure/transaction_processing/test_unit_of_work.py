@@ -1,3 +1,5 @@
+"""Tests for the aggregate transaction-processing SQLAlchemy unit of work."""
+
 from __future__ import annotations
 
 from contextlib import nullcontext
@@ -9,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from src.services.portfolio_transaction_processing_service.app.application import (
     ProcessTransactionCashflowUseCase,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
     CashflowRuleCache,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
 

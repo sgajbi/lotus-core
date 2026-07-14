@@ -27,7 +27,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Framework-neutral booked transaction and one DTO mapping boundary | implemented-local | CR-1431 provides 98-field drift and round-trip tests; CR-1586 gives governed transaction and synthetic FX-instrument translation one domain-owned anti-corruption package and removes both flat mapping roots. |
 | One `ProcessTransactionUseCase` | implemented-local | CR-1432; ordered cost/cashflow/position execution. |
 | Cost, cashflow, and position caller-owned adapters | implemented-local | CR-1433 through CR-1435. |
-| One SQLAlchemy session/commit and combined idempotency fence | implemented-local | CR-1436 provides atomic rollback; CR-1491 adds versioned domain identity, content fingerprint, physical/semantic duplicate classification, and material-conflict rejection. |
+| One SQLAlchemy session/commit and combined idempotency fence | implemented-local | CR-1436 provides atomic rollback; CR-1491 adds versioned domain identity, content fingerprint, physical/semantic duplicate classification, and material-conflict rejection; CR-1590 gives the concrete unit of work aggregate transaction-processing package ownership and removes its flat/root compatibility surface. |
 | Domain-owned idempotency infrastructure | implemented-local | CR-1585 moves claim persistence, stable service identity, and outcome translation out of the SQLAlchemy unit-of-work module; mirrored tests cover every semantic outcome and repair-claim result. |
 | Plain cost and cashflow workflows independent of Kafka delivery | implemented-local | CR-1437 and CR-1438. |
 | One final normal-path consumer and governed dependency builder | implemented-local | CR-1439 and CR-1440; not registered yet. |

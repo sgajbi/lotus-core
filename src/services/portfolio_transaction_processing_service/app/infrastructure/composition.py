@@ -26,8 +26,10 @@ from .cost_basis import (
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
-from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
-from .transaction_processing import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
+from .transaction_processing import (
+    PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    SqlAlchemyTransactionProcessingUnitOfWork,
+)
 from .transaction_replay import (
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,

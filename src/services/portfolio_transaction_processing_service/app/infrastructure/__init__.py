@@ -31,7 +31,6 @@ from .cost_basis import (
     cost_basis_processing_lock_key,
 )
 from .position import PositionHistoryProcessingAdapter
-from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
 
 __all__ = [
     "CanonicalBookedTransactionReplayerFactory",
@@ -52,7 +51,6 @@ __all__ = [
     "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PrometheusCostBasisCalculationObserver",
     "SqlAlchemyAverageCostPoolReconciliationAdapter",
-    "SqlAlchemyTransactionProcessingUnitOfWork",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "UpstreamCashLegUnavailableError",
     "build_process_transaction_use_case",

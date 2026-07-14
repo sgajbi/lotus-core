@@ -83,7 +83,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 COPY --chown=appuser:appuser src/__init__.py /app/src/__init__.py
 COPY --chown=appuser:appuser src/services/__init__.py /app/src/services/__init__.py
 
-RUN python -c "import app.main; import app.infrastructure.sqlalchemy_unit_of_work"
+RUN python -c "import app.main; import app.infrastructure.transaction_processing.unit_of_work"
 
 USER appuser
 EXPOSE 8085

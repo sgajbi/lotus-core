@@ -1737,9 +1737,9 @@ Most relevant current governance:
      agent-generated code. `ProcessTransactionUseCase` owns normal-path ordering and atomicity;
      concrete repositories, Kafka, SQLAlchemy sessions, and compatibility event models remain
      behind ports/adapters. The concrete normal-path transaction owner is
-     `app/infrastructure/sqlalchemy_unit_of_work.py`: all module repositories and compatibility
-     outbox writes use one session and one commit; new module-local commits or sessions are a
-     boundary regression. The final live normal path has one target consumer of booked
+     `app/infrastructure/transaction_processing/unit_of_work.py`: all module repositories and
+     compatibility outbox writes use one session and one commit; new module-local commits or
+     sessions are a boundary regression. The final live normal path has one target consumer of booked
      transactions using the application-owned `PreparedCostProcessingUseCase` and
      `ProcessTransactionCashflowUseCase`; separate calculator consumers are migration-only. Replay
      remains a separate use case/consumer in the same deployable because it has distinct epoch and

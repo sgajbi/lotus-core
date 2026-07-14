@@ -1,3 +1,5 @@
+"""Own the atomic SQLAlchemy boundary for combined transaction processing."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -10,18 +12,18 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
-from ..application.cashflow_processing import ProcessTransactionCashflowUseCase
-from ..application.cost_basis_processing import PreparedCostProcessingUseCase
-from ..application.position_history import PositionHistoryProcessor
-from ..application.transaction_readiness import RegisterTransactionReadinessUseCase
-from ..ports import (
+from ...application.cashflow_processing import ProcessTransactionCashflowUseCase
+from ...application.cost_basis_processing import PreparedCostProcessingUseCase
+from ...application.position_history import PositionHistoryProcessor
+from ...application.transaction_readiness import RegisterTransactionReadinessUseCase
+from ...ports import (
     CashflowProcessingPort,
     CostProcessingPort,
     PositionProcessingPort,
     TransactionIdempotencyPort,
     TransactionReadinessProcessingPort,
 )
-from .cashflow import (
+from ..cashflow import (
     PROMETHEUS_CASHFLOW_CALCULATION_OBSERVER,
     CachedCashflowRuleResolver,
     CashflowRuleCache,
@@ -29,7 +31,7 @@ from .cashflow import (
     SqlAlchemyCashflowRepository,
     TransactionalCashflowEventStager,
 )
-from .cost_basis import (
+from ..cost_basis import (
     CostBasisProcessingAdapter,
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
@@ -40,15 +42,15 @@ from .cost_basis import (
     SqlAlchemyCostBasisTransactionRepository,
     TransactionalCostProcessingEffectStager,
 )
-from .idempotency import SqlAlchemyTransactionIdempotencyAdapter
-from .income import SqlAlchemyAccruedIncomeOffsetRepository
-from .position import (
+from ..idempotency import SqlAlchemyTransactionIdempotencyAdapter
+from ..income import SqlAlchemyAccruedIncomeOffsetRepository
+from ..position import (
     PROMETHEUS_POSITION_HISTORY_OBSERVER,
     PositionHistoryProcessingAdapter,
     SqlAlchemyPositionHistoryRepository,
     SqlAlchemyPositionRecalculationStateStore,
 )
-from .transaction_readiness import (
+from ..transaction_readiness import (
     SqlAlchemyTransactionStageRepository,
     TransactionalTransactionReadinessEventStager,
 )
@@ -57,6 +59,8 @@ _AdapterT = TypeVar("_AdapterT")
 
 
 class SqlAlchemyTransactionProcessingUnitOfWork:
+    """Compose module adapters over one atomic SQLAlchemy transaction."""
+
     def __init__(
         self,
         *,

@@ -42,8 +42,8 @@ def test_target_image_uses_bounded_source_closure_without_legacy_wheel_collision
     )
     assert "src/services/pipeline_orchestrator_service" not in dockerfile
     assert (
-        'RUN python -c "import app.main; import app.infrastructure.sqlalchemy_unit_of_work"'
-        in dockerfile
+        'RUN python -c "import app.main; '
+        'import app.infrastructure.transaction_processing.unit_of_work"' in dockerfile
     )
     install_command = (
         "pip install --no-index --find-links=/wheels portfolio-transaction-processing-service"

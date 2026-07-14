@@ -21,7 +21,7 @@
 - Evidence:
   - `src/libs/portfolio-common/portfolio_common/idempotency_repository.py`
   - `src/services/portfolio_transaction_processing_service/app/application/process_transaction.py`
-  - `src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_unit_of_work.py`
+  - `src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_processing/unit_of_work.py`
   - `src/services/portfolio_transaction_processing_service/app/delivery/kafka/transaction_processing_consumer.py`
   - `src/services/calculators/position_valuation_calculator/app/consumers/*`
 
