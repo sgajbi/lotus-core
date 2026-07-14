@@ -32,9 +32,7 @@ async def validate_upstream_cash_leg(
 
     external_cash_transaction_id = (product_leg.external_cash_transaction_id or "").strip()
     if not external_cash_transaction_id:
-        raise ValueError(
-            "UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg."
-        )
+        raise ValueError("UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.")
 
     cash_leg = await transactions.get_booked_transaction(
         external_cash_transaction_id,
