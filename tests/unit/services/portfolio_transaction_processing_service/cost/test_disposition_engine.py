@@ -56,7 +56,7 @@ def test_add_buy_lot_delegates_to_strategy(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     """
     Tests that add_buy_lot correctly calls the underlying strategy.
     """
@@ -71,7 +71,7 @@ def test_add_buy_lot_ignores_zero_quantity(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     """
     Tests that a transaction with zero quantity is not added as a lot.
     """
@@ -89,7 +89,7 @@ def test_consume_sell_quantity_delegates_to_strategy(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     """
     Tests that consume_sell_quantity correctly calls and returns values from the strategy.
     """
@@ -118,7 +118,7 @@ def test_consume_sell_quantity_normalizes_quantity_once(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     quantity = _StringCountedAmount("10")
     sample_transaction.transaction_type = "SELL"
     sample_transaction.quantity = quantity
@@ -144,7 +144,7 @@ def test_set_initial_lots_delegates_to_strategy(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     """
     Tests that set_initial_lots correctly calls the underlying strategy with only BUY transactions.
     """
@@ -165,7 +165,7 @@ def test_set_initial_lots_normalizes_buy_transaction_type(
     disposition_engine: LotDispositionEngine,
     mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
-):
+) -> None:
     padded_buy = sample_transaction.model_copy(update={"transaction_type": " buy "})
     sell_transaction = sample_transaction.model_copy(update={"transaction_type": " sell "})
 
@@ -176,7 +176,7 @@ def test_set_initial_lots_normalizes_buy_transaction_type(
 
 def test_restore_open_lots_preserves_non_buy_source_semantics(
     disposition_engine: LotDispositionEngine,
-    mock_strategy,
+    mock_strategy: MagicMock,
     sample_transaction: CostBasisTransaction,
 ) -> None:
     transfer_in = sample_transaction.model_copy(update={"transaction_type": "TRANSFER_IN"})
