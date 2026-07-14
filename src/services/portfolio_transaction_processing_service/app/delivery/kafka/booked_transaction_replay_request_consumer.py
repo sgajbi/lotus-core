@@ -5,6 +5,7 @@ import logging
 from confluent_kafka import Message
 from portfolio_common.exceptions import RetryableConsumerError
 from portfolio_common.kafka_consumer import BaseConsumer
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 
 from ...application import (
     BookedTransactionReplayDependencyUnavailable,
@@ -24,11 +25,25 @@ class BookedTransactionReplayRequestConsumer(BaseConsumer):
 
     def __init__(
         self,
-        *args,
+        bootstrap_servers: str,
+        topic: str,
+        group_id: str,
+        dlq_topic: str | None = None,
+        service_prefix: str = "SVC",
+        metrics: dict[str, object] | None = None,
+        execution_profile: KafkaConsumerExecutionProfile | None = None,
+        *,
         use_case: ReplayBookedTransactionUseCase,
-        **kwargs,
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            bootstrap_servers=bootstrap_servers,
+            topic=topic,
+            group_id=group_id,
+            dlq_topic=dlq_topic,
+            service_prefix=service_prefix,
+            metrics=metrics,
+            execution_profile=execution_profile,
+        )
         self._use_case = use_case
 
     async def process_message(self, msg: Message) -> None:

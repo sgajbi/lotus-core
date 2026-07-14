@@ -354,6 +354,10 @@ Current repository posture:
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ATTEMPTS` and/or
     `KAFKA_CONSUMER_RETRYABLE_FAILURE_MAX_ELAPSED_SECONDS` to route repeatedly retryable messages
     to DLQ after a bounded in-process budget, committing only after DLQ success.
+    The shared base now exposes a typed subclass boundary while its legacy implementation remains a
+    silently followed migration module. New or changed consumers must declare explicit constructor
+    dependencies and base configuration parameters; do not hide delivery contracts behind untyped
+    `*args` or `**kwargs` forwarding.
 39. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

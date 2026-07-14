@@ -227,7 +227,7 @@ class BaseConsumer(ABC):
         service_prefix: str = "SVC",
         metrics: Optional[Dict] = None,
         execution_profile: KafkaConsumerExecutionProfile | None = None,
-    ):
+    ) -> None:
         self.topic = topic
         self._group_id = group_id
         self.dlq_topic = dlq_topic
@@ -606,13 +606,13 @@ class BaseConsumer(ABC):
             break
 
     @abstractmethod
-    def process_message(self, msg: Message):
+    def process_message(self, msg: Message) -> object:
         """
         Abstract method to be implemented by subclasses. Can be sync or async.
         """
         pass
 
-    async def run(self):
+    async def run(self) -> None:
         """
         The main consumer loop. Polls for messages, processes them, handles errors,
         and commits offsets.
@@ -1216,7 +1216,7 @@ class BaseConsumer(ABC):
             "committing the terminal message offset."
         )
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """Stop polling, drain active work, and then release Kafka resources."""
         if self._shutdown_finalized:
             return
