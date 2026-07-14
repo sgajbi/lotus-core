@@ -35,6 +35,11 @@ Repository gates include:
    per-service OpenAPI JSON artifacts under `output/openapi/` and enforces operation IDs,
    descriptions, summaries, tags, and common successful `2xx` response declarations.
 
+The Spectral gate installs only the committed dependency graph in `tools/api_governance/` with
+`npm ci` and invokes that package's local executable. Unversioned `npx` resolution and global
+Spectral installations are not valid evidence because they can change independently of the Core
+commit under validation.
+
 The broader `spectral:oas` advisory rule family is not yet claimed as clean; Decimal/string example
 alignment, global tag declarations, trailing slash paths, and contact metadata remain follow-up API
 quality work.

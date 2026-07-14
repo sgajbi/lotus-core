@@ -2432,6 +2432,12 @@ Most relevant current governance:
      this single-execution local contract with cross-platform command tests; do not mitigate Windows
      socket exhaustion with sleeps, retries, reduced test selection, or weakened warning/coverage
      thresholds.
+186. Node-based quality gates must execute repository-owned tooling from a committed lockfile.
+     OpenAPI Spectral tooling belongs under `tools/api_governance`; the Python gate installs it with
+     `npm ci` in that directory and invokes only its local binary. Do not restore unversioned `npx`
+     package resolution, global installs, or an unlocked transitive dependency graph. Compatibility
+     overrides must be exact, tested on the governed Node runtime, security-audited, and removed when
+     the upstream package contract is repaired and the clean lock can be upgraded safely.
 
 ## Context Maintenance Rule
 
