@@ -1,6 +1,5 @@
 """Stage cost-basis effects inside the unified transaction-processing boundary."""
 
-from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -26,7 +25,7 @@ from ..application.cost_basis_processing import (
     persist_cost_basis_transactions,
     persist_open_lot_state,
 )
-from ..application.settlement_processing import validate_upstream_cash_leg
+from ..application.settlement_processing import link_settlement_cash_leg
 from ..domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
     INCREMENTAL_SAFE_LOT_BEHAVIORS,
@@ -41,10 +40,6 @@ from ..domain.cost_basis import (
 )
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
-)
-from ..domain.transaction import (
-    build_generated_settlement_cash_leg,
-    should_generate_settlement_cash_leg,
 )
 from ..domain.transaction.fx import (
     assert_fx_processed_transaction_valid,
@@ -673,28 +668,24 @@ class CostCalculationWorkflow:
         )
         for processed_event in events_to_publish:
             booked_transaction = to_booked_transaction(processed_event)
-            await validate_upstream_cash_leg(product_leg=booked_transaction, transactions=repo)
-            generated_cash_leg = None
-            if should_generate_settlement_cash_leg(booked_transaction):
-                generated_cash_transaction = build_generated_settlement_cash_leg(booked_transaction)
-                generated_cash_leg = to_transaction_event(
-                    generated_cash_transaction,
-                    correlation_id=None,
-                    traceparent=None,
-                )
-                await repo.upsert_booked_transaction(generated_cash_transaction)
-                linked_product_transaction = replace(
-                    booked_transaction,
-                    external_cash_transaction_id=generated_cash_transaction.transaction_id,
-                )
-                processed_event = with_booked_transaction_fields(
-                    processed_event,
-                    linked_product_transaction,
-                )
-                await repo.upsert_booked_transaction(linked_product_transaction)
+            linking_result = await link_settlement_cash_leg(
+                product_leg=booked_transaction,
+                transaction_lookup=repo,
+                transaction_persistence=repo,
+            )
+            processed_event = with_booked_transaction_fields(
+                processed_event,
+                linking_result.product_leg,
+            )
             emitted_events.append(processed_event)
-            if generated_cash_leg is not None:
-                emitted_events.append(generated_cash_leg)
+            if linking_result.generated_cash_leg is not None:
+                emitted_events.append(
+                    to_transaction_event(
+                        linking_result.generated_cash_leg,
+                        correlation_id=None,
+                        traceparent=None,
+                    )
+                )
 
             await corporate_action_reconciliation.reconcile(
                 to_booked_transaction(processed_event),
