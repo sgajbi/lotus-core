@@ -1,3 +1,5 @@
+"""Verify the transaction worker's HTTP health and build-metadata contract."""
+
 from __future__ import annotations
 
 import importlib
@@ -10,10 +12,20 @@ from portfolio_common import health
 
 from src.services.portfolio_transaction_processing_service.app import web
 
-SECURITY_COVERAGE_CONTRACT = Path("contracts/security/security-control-coverage.v1.json")
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+TARGET_TEST = SERVICE_TEST_ROOT / "delivery/http/test_health_contract.py"
+RETIRED_ROOT_TEST = SERVICE_TEST_ROOT / "test_web_health_contract.py"
+SECURITY_COVERAGE_CONTRACT = REPO_ROOT / "contracts/security/security-control-coverage.v1.json"
 
 
-def test_combined_health_app_has_explicit_health_only_security_coverage() -> None:
+def test_health_contract_is_owned_by_http_delivery_boundary() -> None:
+    assert Path(__file__).resolve() == TARGET_TEST.resolve()
+    assert not RETIRED_ROOT_TEST.exists()
+    assert list(SERVICE_TEST_ROOT.glob("test_*.py")) == []
+
+
+def test_transaction_worker_health_app_has_explicit_security_coverage() -> None:
     contract = json.loads(SECURITY_COVERAGE_CONTRACT.read_text(encoding="utf-8"))
     entry = next(
         item
@@ -55,7 +67,7 @@ def _build_metadata_environment(monkeypatch) -> dict[str, str]:
     return values
 
 
-def test_combined_health_app_exposes_ready_dependencies_and_version_metadata(
+def test_transaction_worker_health_app_exposes_dependencies_and_build_metadata(
     monkeypatch,
 ) -> None:
     metadata = _build_metadata_environment(monkeypatch)
@@ -108,7 +120,7 @@ def test_combined_health_app_exposes_ready_dependencies_and_version_metadata(
     }
 
 
-def test_combined_health_app_fails_readiness_when_runtime_task_failed() -> None:
+def test_transaction_worker_health_app_fails_when_runtime_task_failed() -> None:
     with (
         patch.object(health, "check_db_health", AsyncMock(return_value=True)),
         patch.object(health, "check_kafka_health", AsyncMock(return_value=True)),

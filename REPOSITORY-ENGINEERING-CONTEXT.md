@@ -1809,8 +1809,10 @@ Most relevant current governance:
      belong under the matching `domain/<capability>` test package. Cross-layer legacy import and
      retired-facade confinement belongs under the service's `architecture` test package. Runtime
      wheel, Docker source-closure, and image contract tests belong under the service's `packaging`
-     test package. Do not return delivery, runtime, application behavior, domain-structure,
-     cross-layer architecture, or packaging tests to the flat service-test root.
+     test package. Worker health, readiness, metrics, version, and HTTP security contracts belong
+     under `delivery/http`. Do not return delivery, runtime, application behavior, domain-structure,
+     cross-layer architecture, or packaging tests to the flat service-test root; keep that root free
+     of test modules so new coverage must declare an owned capability or layer.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.
