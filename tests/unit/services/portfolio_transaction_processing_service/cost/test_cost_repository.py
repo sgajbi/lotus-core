@@ -8,7 +8,6 @@ from portfolio_common.database_models import (
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
-from portfolio_common.events import TransactionEvent
 from sqlalchemy.dialects import postgresql
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501  # noqa: E501
@@ -850,14 +849,11 @@ async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
     assert db_transaction.settlement_cash_account_id == "CASH-USD-01"
 
 
-async def test_upsert_transaction_event_ignores_event_envelope_fields() -> None:
+async def test_upsert_booked_transaction_persists_only_canonical_table_fields() -> None:
     db_session = AsyncMock()
     repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
-    event = TransactionEvent(
-        event_type="ProcessedTransactionPersisted",
-        schema_version="1.0.0",
-        correlation_id="ING:FX-CORR-01",
+    transaction = BookedTransaction(
         transaction_id="FX-OPEN-001",
         portfolio_id="PORT_COST_01",
         instrument_id="FXC-2026-0001",
@@ -877,15 +873,16 @@ async def test_upsert_transaction_event_ignores_event_envelope_fields() -> None:
         sell_amount=Decimal("1000000"),
         contract_rate=Decimal("1.095"),
         fx_contract_id="FXC-2026-0001",
+        brokerage=Decimal("10"),
+        epoch=7,
     )
 
-    result = await repository.upsert_transaction_event(event)
+    result = await repository.upsert_booked_transaction(transaction)
 
     assert result is None
     db_session.execute.assert_awaited_once()
     statement = db_session.execute.await_args.args[0]
     parameters = statement.compile().params
     assert parameters["transaction_id"] == "FX-OPEN-001"
-    assert "event_type" not in parameters
-    assert "schema_version" not in parameters
-    assert "correlation_id" not in parameters
+    assert "brokerage" not in parameters
+    assert "epoch" not in parameters

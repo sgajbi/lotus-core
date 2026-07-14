@@ -467,7 +467,7 @@ class CostCalculationWorkflow:
         processed_transaction = build_fx_processed_transaction(to_booked_transaction(event))
         assert_fx_processed_transaction_valid(processed_transaction)
         processed_event = with_booked_transaction_fields(event, processed_transaction)
-        await repo.upsert_transaction_event(processed_event)
+        await repo.upsert_booked_transaction(processed_transaction)
         instrument_events = []
         contract_instrument = build_fx_contract_instrument(processed_transaction)
         if contract_instrument is not None:
@@ -1120,20 +1120,22 @@ class CostCalculationWorkflow:
             booked_transaction = to_booked_transaction(processed_event)
             generated_cash_leg = None
             if should_generate_settlement_cash_leg(booked_transaction):
+                generated_cash_transaction = build_generated_settlement_cash_leg(booked_transaction)
                 generated_cash_leg = to_transaction_event(
-                    build_generated_settlement_cash_leg(booked_transaction),
+                    generated_cash_transaction,
                     correlation_id=None,
                     traceparent=None,
                 )
-                await repo.upsert_transaction_event(generated_cash_leg)
+                await repo.upsert_booked_transaction(generated_cash_transaction)
+                linked_product_transaction = replace(
+                    booked_transaction,
+                    external_cash_transaction_id=generated_cash_transaction.transaction_id,
+                )
                 processed_event = with_booked_transaction_fields(
                     processed_event,
-                    replace(
-                        booked_transaction,
-                        external_cash_transaction_id=generated_cash_leg.transaction_id,
-                    ),
+                    linked_product_transaction,
                 )
-                await repo.upsert_transaction_event(processed_event)
+                await repo.upsert_booked_transaction(linked_product_transaction)
             emitted_events.append(processed_event)
             if generated_cash_leg is not None:
                 emitted_events.append(generated_cash_leg)

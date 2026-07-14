@@ -2,8 +2,6 @@
 
 from typing import Protocol
 
-from portfolio_common.events import TransactionEvent
-
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
 
@@ -30,7 +28,7 @@ class CostBasisTransactionStatePort(Protocol):
         portfolio_id: str | None = None,
     ) -> BookedTransaction | None: ...
 
-    async def upsert_transaction_event(self, event: TransactionEvent) -> None: ...
+    async def upsert_booked_transaction(self, transaction: BookedTransaction) -> None: ...
 
     async def replace_transaction_cost_breakdown(
         self,
