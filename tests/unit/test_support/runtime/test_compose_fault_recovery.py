@@ -93,6 +93,43 @@ def test_context_exit_recovers_after_primary_failure() -> None:
     assert runner.call_count == 3
 
 
+def test_context_entry_recovers_then_reraises_stop_failure() -> None:
+    stop_failure = subprocess.CalledProcessError(1, ["docker", "compose", "stop"])
+    runner = MagicMock(
+        side_effect=[
+            stop_failure,
+            _successful_run([]),
+            _successful_run([]),
+        ]
+    )
+    boundary = _boundary(runner=runner)
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        with boundary:
+            pytest.fail("context body must not execute after failed fault injection")
+
+    assert raised.value is stop_failure
+    assert boundary._restored is True
+    assert [call.args[0][4] for call in runner.call_args_list] == ["stop", "up", "restart"]
+
+
+def test_context_entry_preserves_stop_failure_when_recovery_also_fails() -> None:
+    stop_failure = subprocess.CalledProcessError(1, ["docker", "compose", "stop"])
+    recovery_failure = subprocess.CalledProcessError(1, ["docker", "compose", "up"])
+    runner = MagicMock(side_effect=[stop_failure, recovery_failure])
+    boundary = _boundary(runner=runner)
+
+    with pytest.raises(subprocess.CalledProcessError) as raised:
+        with boundary:
+            pytest.fail("context body must not execute after failed fault injection")
+
+    assert raised.value is stop_failure
+    assert raised.value.__notes__ == [
+        "Docker Compose recovery also failed: "
+        "CalledProcessError: Command '['docker', 'compose', 'up']' returned non-zero exit status 1."
+    ]
+
+
 def test_context_exit_preserves_primary_failure_when_recovery_also_fails() -> None:
     recovery_failure = subprocess.CalledProcessError(1, ["docker", "compose", "up"])
     runner = MagicMock(side_effect=[_successful_run([]), recovery_failure])
