@@ -25,6 +25,7 @@ from ..application.cost_basis_processing import (
     persist_cost_basis_transactions,
     persist_open_lot_state,
 )
+from ..application.foreign_exchange_processing import book_foreign_exchange_transaction
 from ..application.settlement_processing import link_settlement_cash_leg
 from ..domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
@@ -40,11 +41,6 @@ from ..domain.cost_basis import (
 )
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
-)
-from ..domain.transaction.fx import (
-    assert_fx_processed_transaction_valid,
-    build_fx_contract_instrument,
-    build_fx_processed_transaction,
 )
 from ..ports import (
     AccruedIncomeOffsetStatePort,
@@ -221,14 +217,14 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         repo: CostBasisTransactionStatePort,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
-        processed_transaction = build_fx_processed_transaction(to_booked_transaction(event))
-        assert_fx_processed_transaction_valid(processed_transaction)
-        processed_event = with_booked_transaction_fields(event, processed_transaction)
-        await repo.upsert_booked_transaction(processed_transaction)
+        booking = await book_foreign_exchange_transaction(
+            transaction=to_booked_transaction(event),
+            transaction_persistence=repo,
+        )
+        processed_event = with_booked_transaction_fields(event, booking.transaction)
         instrument_events = []
-        contract_instrument = build_fx_contract_instrument(processed_transaction)
-        if contract_instrument is not None:
-            instrument_events.append(to_fx_contract_instrument_event(contract_instrument))
+        if booking.contract_instrument is not None:
+            instrument_events.append(to_fx_contract_instrument_event(booking.contract_instrument))
         return [processed_event], instrument_events
 
     async def _build_cost_basis_events_to_publish(

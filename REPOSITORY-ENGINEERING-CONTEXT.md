@@ -2438,6 +2438,10 @@ Most relevant current governance:
      linking belong in `app/application/settlement_processing/cash_leg_linking.py` over the narrow
      settlement lookup and persistence ports. Event-envelope mapping, outbox staging, and
      corporate-action reconciliation remain infrastructure concerns.
+     Validated FX transaction persistence and optional synthetic contract-instrument derivation
+     belong in `app/application/foreign_exchange_processing/booking.py` over the narrow foreign-
+     exchange persistence port. Baseline FX economics and validation remain domain policy under
+     `app/domain/transaction/fx`; governed transaction/instrument event mapping remains infrastructure.
      Cost-basis timeline orchestration belongs at
      `app/application/cost_basis_processing/timeline.py`. Average-cost-pool reconciliation must use
      the same explicit capability name under `domain/cost_basis`, `ports/cost_basis`,
