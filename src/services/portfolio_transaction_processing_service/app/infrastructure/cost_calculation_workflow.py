@@ -235,7 +235,13 @@ class CostCalculationWorkflow:
             raise ValueError("Average cost pool rebuild requires transaction history")
 
         history_raw = [
-            self._transform_event_for_engine(TransactionEvent.model_validate(transaction))
+            self._transform_event_for_engine(
+                to_transaction_event(
+                    transaction,
+                    correlation_id=None,
+                    traceparent=None,
+                )
+            )
             for transaction in history
         ]
         self._attach_instrument_metadata(transactions=history_raw, instrument=instrument)
@@ -774,13 +780,20 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
     ) -> list[dict[str, Any]]:
-        history_db = await repo.get_transaction_history(
+        history = await repo.get_transaction_history(
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
             exclude_id=event.transaction_id,
         )
         history_raw = [
-            self._transform_event_for_engine(TransactionEvent.model_validate(t)) for t in history_db
+            self._transform_event_for_engine(
+                to_transaction_event(
+                    transaction,
+                    correlation_id=None,
+                    traceparent=None,
+                )
+            )
+            for transaction in history
         ]
         event_raw = self._transform_event_for_engine(event)
         all_transactions_raw = [*history_raw, event_raw]

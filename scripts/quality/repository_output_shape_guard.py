@@ -27,9 +27,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_transaction_by_id": (
         "Transaction",
     ),
-    "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:get_transaction_history": (
-        "Transaction",
-    ),
     "src/services/portfolio_transaction_processing_service/app/infrastructure/cost_repository.py:update_transaction_costs": (
         "Transaction",
     ),

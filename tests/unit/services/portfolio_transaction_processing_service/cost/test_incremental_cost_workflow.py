@@ -17,6 +17,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
+from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
+    BookedTransaction,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     AverageCostPoolCheckpointRecord,
     CostCalculationWorkflow,
@@ -104,6 +107,14 @@ def _persisted_buy(transaction_id: str, transaction_date: datetime) -> DBTransac
         transaction_fx_rate=Decimal("1"),
         net_cost_local=Decimal("100"),
         net_cost=Decimal("100"),
+    )
+
+
+def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
+    """Map a persisted test row through the repository's canonical history boundary."""
+
+    return booked_transaction_event_mapper.to_booked_transaction(
+        TransactionEvent.model_validate(transaction)
     )
 
 
@@ -299,7 +310,9 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         )
     )
     repo.get_average_cost_pool_checkpoint_record.return_value = None
-    repo.get_transaction_history.return_value = [_persisted_buy("BUY-AVCO-1", buy_date)]
+    repo.get_transaction_history.return_value = [
+        _history_transaction(_persisted_buy("BUY-AVCO-1", buy_date))
+    ]
     sell_event, sell_type, method = _prepare_event(
         _event(
             transaction_id="SELL-AVCO-1",
@@ -343,32 +356,36 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
         asset_class="EQUITY",
     )
     repo.get_transaction_history.return_value = [
-        _persisted_buy("BUY-AVCO-1", first_buy_date),
-        DBTransaction(
-            transaction_id="BUY-AVCO-2",
-            portfolio_id="P1",
-            instrument_id="I1",
-            security_id="S1",
-            transaction_type="BUY",
-            transaction_date=second_buy_date,
-            quantity=Decimal("5"),
-            price=Decimal("10"),
-            gross_transaction_amount=Decimal("50"),
-            trade_currency="USD",
-            currency="USD",
+        _history_transaction(_persisted_buy("BUY-AVCO-1", first_buy_date)),
+        _history_transaction(
+            DBTransaction(
+                transaction_id="BUY-AVCO-2",
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                transaction_type="BUY",
+                transaction_date=second_buy_date,
+                quantity=Decimal("5"),
+                price=Decimal("10"),
+                gross_transaction_amount=Decimal("50"),
+                trade_currency="USD",
+                currency="USD",
+            )
         ),
-        DBTransaction(
-            transaction_id="SELL-AVCO-1",
-            portfolio_id="P1",
-            instrument_id="I1",
-            security_id="S1",
-            transaction_type="SELL",
-            transaction_date=sell_date,
-            quantity=Decimal("4"),
-            price=Decimal("12"),
-            gross_transaction_amount=Decimal("48"),
-            trade_currency="USD",
-            currency="USD",
+        _history_transaction(
+            DBTransaction(
+                transaction_id="SELL-AVCO-1",
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                transaction_type="SELL",
+                transaction_date=sell_date,
+                quantity=Decimal("4"),
+                price=Decimal("12"),
+                gross_transaction_amount=Decimal("48"),
+                trade_currency="USD",
+                currency="USD",
+            )
         ),
     ]
 
@@ -426,18 +443,20 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
         asset_class="EQUITY",
     )
     repo.get_transaction_history.return_value = [
-        DBTransaction(
-            transaction_id="SELL-AVCO-INVALID",
-            portfolio_id="P1",
-            instrument_id="I1",
-            security_id="S1",
-            transaction_type="SELL",
-            transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
-            quantity=Decimal("1"),
-            price=Decimal("12"),
-            gross_transaction_amount=Decimal("12"),
-            trade_currency="USD",
-            currency="USD",
+        _history_transaction(
+            DBTransaction(
+                transaction_id="SELL-AVCO-INVALID",
+                portfolio_id="P1",
+                instrument_id="I1",
+                security_id="S1",
+                transaction_type="SELL",
+                transaction_date=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+                quantity=Decimal("1"),
+                price=Decimal("12"),
+                gross_transaction_amount=Decimal("12"),
+                trade_currency="USD",
+                currency="USD",
+            )
         )
     ]
 
@@ -460,7 +479,9 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             later_buy, cost_basis_method=CostBasisMethod.FIFO
         )
     )
-    repo.get_transaction_history.return_value = [_persisted_buy("BUY-LATER", later_date)]
+    repo.get_transaction_history.return_value = [
+        _history_transaction(_persisted_buy("BUY-LATER", later_date))
+    ]
 
     with patch(
         "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_calculation_workflow."
@@ -500,7 +521,9 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     dividend_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     repo.get_cost_basis_processing_checkpoint.return_value = None
-    repo.get_transaction_history.return_value = [_persisted_buy("BUY-1", buy_date)]
+    repo.get_transaction_history.return_value = [
+        _history_transaction(_persisted_buy("BUY-1", buy_date))
+    ]
     dividend = _event(
         transaction_id="DIVIDEND-1",
         transaction_date=dividend_date,
