@@ -1801,6 +1801,10 @@ Most relevant current governance:
      from the owned capability package (`cashflow`, `cost_basis`, `position`, `idempotency`,
      `transaction_mapping`, `transaction_processing`, `transaction_readiness`, or
      `transaction_replay`); do not restore cross-capability root exports.
+     Unit tests mirror production ownership: Kafka mapper/consumer tests belong under
+     `tests/unit/services/portfolio_transaction_processing_service/delivery/kafka`, while consumer
+     composition and lifecycle-manager tests belong under the sibling `runtime` package. Do not
+     return delivery or runtime tests to the flat service-test root.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.

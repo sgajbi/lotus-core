@@ -1,3 +1,5 @@
+"""Tests for canonical booked-transaction Kafka delivery."""
+
 from __future__ import annotations
 
 import json
