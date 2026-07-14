@@ -4,12 +4,9 @@ from decimal import Decimal
 from typing import Any
 
 from portfolio_common.database_models import (
-    AccruedIncomeOffsetState,
-    TransactionCost,
-)
-from portfolio_common.database_models import (
     Transaction as DBTransaction,
 )
+from portfolio_common.database_models import TransactionCost
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
@@ -258,37 +255,4 @@ class CostCalculatorRepository:
 
         self.db.add_all(
             _transaction_cost_rows(transaction_result=transaction_result, db_txn=db_txn)
-        )
-
-    async def upsert_accrued_income_offset_state(
-        self, transaction_result: EngineTransaction
-    ) -> None:
-        """Initializes or updates accrued-income offset state for BUY transactions."""
-        accrued_interest_local = getattr(transaction_result, "accrued_interest", None) or Decimal(0)
-        payload = {
-            "offset_id": f"AIO-{transaction_result.transaction_id}",
-            "source_transaction_id": transaction_result.transaction_id,
-            "portfolio_id": transaction_result.portfolio_id,
-            "instrument_id": transaction_result.instrument_id,
-            "security_id": transaction_result.security_id,
-            "accrued_interest_paid_local": accrued_interest_local,
-            "remaining_offset_local": accrued_interest_local,
-            "economic_event_id": getattr(transaction_result, "economic_event_id", None),
-            "linked_transaction_group_id": getattr(
-                transaction_result, "linked_transaction_group_id", None
-            ),
-            "calculation_policy_id": getattr(transaction_result, "calculation_policy_id", None),
-            "calculation_policy_version": getattr(
-                transaction_result, "calculation_policy_version", None
-            ),
-            "source_system": getattr(transaction_result, "source_system", None),
-        }
-        stmt = pg_insert(AccruedIncomeOffsetState).values(**payload)
-        update_dict = {
-            c.name: c
-            for c in stmt.excluded
-            if c.name not in ["id", "offset_id", "source_transaction_id"]
-        }
-        await self.db.execute(
-            stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
         )

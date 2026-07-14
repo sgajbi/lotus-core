@@ -26,6 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     StagedCostEffects,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
@@ -77,6 +78,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
+    income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow = MagicMock()
     workflow.stage_prepared_event = AsyncMock(
@@ -90,6 +92,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,
@@ -117,6 +120,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert build_call["fx_rates"] is fx_rates
     assert build_call["average_cost_pools"] is average_cost_pools
     assert build_call["lot_states"] is lot_states
+    assert build_call["income_offsets"] is income_offsets
     assert build_call["processing_state"] is processing_state
 
 
@@ -141,6 +145,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
+    income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
     adapter = CostProcessingCompatibilityAdapter(
@@ -148,6 +153,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,
@@ -195,6 +201,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = AsyncMock(spec=CostBasisAverageCostPoolPort)
     lot_states = AsyncMock(spec=CostBasisLotStatePort)
+    income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow.stage_prepared_event = AsyncMock(
         side_effect=SettlementCashValidationError(
@@ -211,6 +218,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         repository=repository,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         reference_data=reference_data,
         fx_rates=fx_rates,
         processing_state=processing_state,

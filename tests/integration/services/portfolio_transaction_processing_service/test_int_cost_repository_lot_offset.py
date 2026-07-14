@@ -28,6 +28,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisLotRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
+    SqlAlchemyAccruedIncomeOffsetRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -190,8 +193,8 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     )
     await async_db_session.commit()
 
-    repo = CostCalculatorRepository(async_db_session)
     lot_repo = SqlAlchemyCostBasisLotRepository(async_db_session)
+    income_offset_repo = SqlAlchemyAccruedIncomeOffsetRepository(async_db_session)
     txn = EngineTransaction(
         transaction_id="TXN_SLICE4_01",
         portfolio_id="PORT_SLICE4_01",
@@ -214,7 +217,7 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     )
 
     await lot_repo.upsert_buy_lot_state(txn)
-    await repo.upsert_accrued_income_offset_state(txn)
+    await income_offset_repo.upsert_accrued_income_offset(txn)
     await async_db_session.commit()
 
     lot_stmt = select(PositionLotState).where(

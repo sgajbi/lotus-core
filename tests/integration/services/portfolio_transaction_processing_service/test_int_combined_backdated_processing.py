@@ -588,12 +588,16 @@ async def test_backdated_cost_suffix_failure_rolls_back_all_corrections(
     workflow = context.use_case._unit_of_work_factory.cost_workflow
     persist_processed_transaction = workflow._persist_processed_transaction
 
-    async def fail_later_suffix_persistence(*, processed_transaction, repo):
+    async def fail_later_suffix_persistence(
+        *, processed_transaction, repo, lot_states, income_offsets
+    ):
         if processed_transaction.transaction_id == later_sell.transaction_id:
             raise RuntimeError("later suffix persistence failed")
         return await persist_processed_transaction(
             processed_transaction=processed_transaction,
             repo=repo,
+            lot_states=lot_states,
+            income_offsets=income_offsets,
         )
 
     monkeypatch.setattr(

@@ -54,6 +54,7 @@ from ..domain.transaction.fx import (
     build_fx_processed_transaction,
 )
 from ..ports import (
+    AccruedIncomeOffsetStatePort,
     AverageCostPoolCheckpointRecord,
     CorporateActionReconciliationObserver,
     CorporateActionReconciliationRepository,
@@ -379,6 +380,7 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -393,6 +395,7 @@ class CostCalculationWorkflow:
             repo=repo,
             average_cost_pools=average_cost_pools,
             lot_states=lot_states,
+            income_offsets=income_offsets,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -409,6 +412,7 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -427,6 +431,7 @@ class CostCalculationWorkflow:
             repo=repo,
             average_cost_pools=average_cost_pools,
             lot_states=lot_states,
+            income_offsets=income_offsets,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -479,6 +484,7 @@ class CostCalculationWorkflow:
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -507,6 +513,7 @@ class CostCalculationWorkflow:
             new_transaction_ids=new_transaction_ids,
             repo=repo,
             lot_states=lot_states,
+            income_offsets=income_offsets,
         )
         await self._update_open_lot_states_if_required(
             event=event,
@@ -872,6 +879,7 @@ class CostCalculationWorkflow:
         new_transaction_ids: set[str],
         repo: CostCalculatorRepository,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
     ) -> list[TransactionEvent]:
         first_affected_index = next(
             (
@@ -890,6 +898,7 @@ class CostCalculationWorkflow:
                 processed_transaction=processed_transaction,
                 repo=repo,
                 lot_states=lot_states,
+                income_offsets=income_offsets,
             )
             if processed_transaction.transaction_id in new_transaction_ids:
                 events_to_publish.append(persisted_event)
@@ -988,6 +997,7 @@ class CostCalculationWorkflow:
         processed_transaction: Any,
         repo: CostCalculatorRepository,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
     ) -> TransactionEvent:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_transaction_costs", "attempt"
@@ -1014,7 +1024,7 @@ class CostCalculationWorkflow:
         if processed_transaction.transaction_type == "BUY":
             await self._persist_accrued_income_offset(
                 processed_transaction=processed_transaction,
-                repo=repo,
+                income_offsets=income_offsets,
             )
         if processed_transaction.transaction_type == "SELL":
             self._log_processed_transaction_state(
@@ -1055,14 +1065,14 @@ class CostCalculationWorkflow:
         self,
         *,
         processed_transaction: Any,
-        repo: CostCalculatorRepository,
+        income_offsets: AccruedIncomeOffsetStatePort,
     ) -> None:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type,
             "persist_accrued_offset_state",
             "attempt",
         )
-        await repo.upsert_accrued_income_offset_state(processed_transaction)
+        await income_offsets.upsert_accrued_income_offset(processed_transaction)
         self._record_lifecycle_stage(
             processed_transaction.transaction_type,
             "persist_accrued_offset_state",
