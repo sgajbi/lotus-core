@@ -35,7 +35,6 @@ from .corporate_action_reconciliation_observability import (
 )
 from .cost_basis import StagedCostEffects, cost_basis_processing_lock_key
 from .cost_calculation_workflow import (
-    LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
     UpstreamCashLegUnavailableError,
@@ -74,7 +73,6 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
-    "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",
     "PositionHistoryProcessingAdapter",
     "PipelineStageProcessingAdapter",

@@ -11,7 +11,6 @@ from portfolio_common.config import (
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
-from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.monitoring import (
     BUY_LIFECYCLE_STAGE_TOTAL,
@@ -29,12 +28,18 @@ from ..application.cost_basis_processing import (
     enrich_cost_basis_transactions_with_fx,
 )
 from ..domain.cost_basis import (
+    AVERAGE_COST_POOL_LOT_BEHAVIORS,
+    INCREMENTAL_SAFE_LOT_BEHAVIORS,
+    LOT_OPENING_BEHAVIORS,
+    LOT_STATE_MUTATING_BEHAVIORS,
+    STATE_DEPENDENT_LOT_BEHAVIORS,
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
     OpenLotState,
     build_cost_basis_engine_input,
+    transaction_lot_behavior,
     transaction_order_key,
 )
 from ..domain.cost_basis import (
@@ -78,25 +83,6 @@ from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_
 from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
-LOT_OPENING_BEHAVIORS = {
-    "basis_allocation_in",
-    "open_lot",
-    "open_rights_lot",
-    "preserve_or_restate_lot",
-    "transfer_basis_in",
-}
-LOT_STATE_MUTATING_BEHAVIORS = LOT_OPENING_BEHAVIORS | {
-    "consume_lot",
-    "consume_rights_lot",
-    "partial_basis_transfer",
-    "preserve_or_consume_lot",
-    "transfer_basis_out",
-}
-STATE_DEPENDENT_LOT_BEHAVIORS = LOT_STATE_MUTATING_BEHAVIORS - LOT_OPENING_BEHAVIORS
-INCREMENTAL_SAFE_LOT_BEHAVIORS = LOT_OPENING_BEHAVIORS | STATE_DEPENDENT_LOT_BEHAVIORS | {"none"}
-AVERAGE_COST_POOL_LOT_BEHAVIORS = {"open_lot", "consume_lot"}
-
-
 class OpenLotStateUpdateScope(str, Enum):
     COMPLETE_SNAPSHOT = "complete_snapshot"
     SELECTED_LOTS = "selected_lots"
@@ -115,11 +101,6 @@ class CostEngineCalculation:
 
 def _normalize_event_code(value: object) -> str:
     return str(value or "").strip().upper()
-
-
-def _transaction_lot_behavior(transaction_type: object) -> str:
-    definition = get_transaction_type_definition(_normalize_event_code(transaction_type))
-    return definition.lot_behavior if definition is not None else "unknown"
 
 
 class UpstreamCashLegUnavailableError(Exception):
@@ -200,7 +181,7 @@ class CostCalculationWorkflow:
         source_transactions = tuple(
             transaction
             for transaction in processed
-            if _transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS
+            if transaction_lot_behavior(transaction.transaction_type) in LOT_OPENING_BEHAVIORS
         )
         checkpoint = AverageCostPoolCheckpoint.from_open_lot_states(
             portfolio_id=portfolio_id,
@@ -410,7 +391,7 @@ class CostCalculationWorkflow:
             portfolio_id=event.portfolio_id,
             security_id=event.security_id,
         )
-        lot_behavior = _transaction_lot_behavior(event_transaction_type)
+        lot_behavior = transaction_lot_behavior(event_transaction_type)
         if checkpoint is not None and lot_behavior in INCREMENTAL_SAFE_LOT_BEHAVIORS:
             incoming_raw = await self._load_incoming_cost_basis_transaction(
                 event=event,
@@ -761,7 +742,7 @@ class CostCalculationWorkflow:
             )
             return
 
-        lot_behavior = _transaction_lot_behavior(event_transaction_type)
+        lot_behavior = transaction_lot_behavior(event_transaction_type)
         mutates_lot_state = lot_behavior in LOT_STATE_MUTATING_BEHAVIORS
         incremental_opening = incremental and lot_behavior in LOT_OPENING_BEHAVIORS
         should_update_lot_states = not incremental or (
@@ -851,7 +832,7 @@ class CostCalculationWorkflow:
         )
 
         if (
-            _transaction_lot_behavior(processed_transaction.transaction_type)
+            transaction_lot_behavior(processed_transaction.transaction_type)
             in LOT_OPENING_BEHAVIORS
         ):
             await self._persist_open_lot_state(

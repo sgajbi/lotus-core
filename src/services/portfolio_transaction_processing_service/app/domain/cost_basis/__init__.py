@@ -41,6 +41,14 @@ from .corporate_action_reconciliation import (
     missing_corporate_action_dependencies,
     reconcile_corporate_action_basis,
 )
+from .lot_behavior import (
+    AVERAGE_COST_POOL_LOT_BEHAVIORS,
+    INCREMENTAL_SAFE_LOT_BEHAVIORS,
+    LOT_OPENING_BEHAVIORS,
+    LOT_STATE_MUTATING_BEHAVIORS,
+    STATE_DEPENDENT_LOT_BEHAVIORS,
+    transaction_lot_behavior,
+)
 from .models.calculation_error import CostCalculationError
 from .models.cost_basis_transaction import CostBasisTransaction, Fees
 from .models.effective_fx_rate import EffectiveFxRate
@@ -66,6 +74,7 @@ __all__ = [
     "AverageCostSourceContribution",
     "AverageCostPoolTransition",
     "AVERAGE_COST_POOL_STATE_VERSION",
+    "AVERAGE_COST_POOL_LOT_BEHAVIORS",
     "CASH_INFLOW_TRANSACTION_TYPES",
     "CASH_OUTFLOW_TRANSACTION_TYPES",
     "CorporateActionCashEconomics",
@@ -85,9 +94,13 @@ __all__ = [
     "DEFAULT_CORPORATE_ACTION_BASIS_TOLERANCE",
     "EffectiveFxRate",
     "FIFOBasisStrategy",
+    "INCREMENTAL_SAFE_LOT_BEHAVIORS",
     "Fees",
     "LotDispositionEngine",
+    "LOT_OPENING_BEHAVIORS",
+    "LOT_STATE_MUTATING_BEHAVIORS",
     "OpenLotState",
+    "STATE_DEPENDENT_LOT_BEHAVIORS",
     "CostBasisTransaction",
     "TransactionOrderKey",
     "calculate_corporate_action_cash_economics",
@@ -95,4 +108,5 @@ __all__ = [
     "normalize_cost_fee_amount",
     "reconcile_corporate_action_basis",
     "transaction_order_key",
+    "transaction_lot_behavior",
 ]
