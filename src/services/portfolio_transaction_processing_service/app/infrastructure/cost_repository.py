@@ -12,7 +12,6 @@ from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AverageCostPoolState,
     CostBasisProcessingState,
-    FxRate,
     PositionLotState,
     TransactionCost,
 )
@@ -24,10 +23,9 @@ from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait
 from portfolio_common.utils import async_timed
-from sqlalchemy import func, or_, select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
@@ -47,6 +45,7 @@ from ..ports import (
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
+from .cost_basis.fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +241,7 @@ class CostCalculatorRepository:
     def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
         self._clock = clock
+        self._fx_rates = SqlAlchemyCostBasisFxRateRepository(db)
 
     @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
     async def acquire_cost_basis_processing_lock(
@@ -294,42 +294,14 @@ class CostCalculatorRepository:
         start_date: date,
         end_date: date,
     ) -> list[EffectiveFxRate]:
-        """Fetch the effective-rate seed and all pair rates inside a date window."""
-        if start_date > end_date:
-            raise ValueError("FX rate window start_date must be on or before end_date")
+        """Delegate effective-rate lookup to the dedicated FX adapter."""
 
-        normalized_from_currency = normalize_currency_code(from_currency)
-        normalized_to_currency = normalize_currency_code(to_currency)
-        from_currency_expr = func.upper(func.trim(FxRate.from_currency))
-        to_currency_expr = func.upper(func.trim(FxRate.to_currency))
-        prior_rate = aliased(FxRate)
-        prior_rate_date = (
-            select(func.max(prior_rate.rate_date))
-            .where(
-                func.upper(func.trim(prior_rate.from_currency)) == normalized_from_currency,
-                func.upper(func.trim(prior_rate.to_currency)) == normalized_to_currency,
-                prior_rate.rate_date < start_date,
-            )
-            .scalar_subquery()
+        return await self._fx_rates.get_fx_rate_window(
+            from_currency,
+            to_currency,
+            start_date=start_date,
+            end_date=end_date,
         )
-        stmt = (
-            select(FxRate)
-            .where(
-                from_currency_expr == normalized_from_currency,
-                to_currency_expr == normalized_to_currency,
-                FxRate.rate_date <= end_date,
-                or_(
-                    FxRate.rate_date >= start_date,
-                    FxRate.rate_date == prior_rate_date,
-                ),
-            )
-            .order_by(FxRate.rate_date.asc())
-        )
-        result = await self.db.execute(stmt)
-        return [
-            EffectiveFxRate(effective_date=row.rate_date, rate=row.rate)
-            for row in result.scalars().all()
-        ]
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None

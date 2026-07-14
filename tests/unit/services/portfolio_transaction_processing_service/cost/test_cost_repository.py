@@ -6,7 +6,6 @@ import pytest
 from portfolio_common.database_models import (
     AverageCostPoolState,
     CostBasisProcessingState,
-    FxRate,
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
@@ -18,7 +17,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostPoolRebuildPlan,
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
-    EffectiveFxRate,
     OpenLotState,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
@@ -75,62 +73,6 @@ async def test_acquire_cost_basis_processing_lock_records_failure_without_swallo
         await repository.acquire_cost_basis_processing_lock("P1", "S1")
 
     observe_wait.assert_called_once_with(outcome="failed", seconds=0.25)
-
-
-async def test_get_fx_rate_window_fetches_one_seed_plus_bounded_effective_window():
-    db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
-    execute_result = MagicMock()
-    persisted_rates = [
-        FxRate(
-            from_currency="EUR",
-            to_currency="SGD",
-            rate_date=date(2026, 4, 1),
-            rate=Decimal("1.40"),
-        ),
-        FxRate(
-            from_currency="EUR",
-            to_currency="SGD",
-            rate_date=date(2026, 4, 10),
-            rate=Decimal("1.45"),
-        ),
-    ]
-    execute_result.scalars.return_value.all.return_value = persisted_rates
-    db_session.execute.return_value = execute_result
-
-    rates = await repository.get_fx_rate_window(
-        " eur ",
-        " sgd ",
-        start_date=date(2026, 4, 5),
-        end_date=date(2026, 4, 15),
-    )
-
-    assert rates == [
-        EffectiveFxRate(effective_date=date(2026, 4, 1), rate=Decimal("1.40")),
-        EffectiveFxRate(effective_date=date(2026, 4, 10), rate=Decimal("1.45")),
-    ]
-    compiled_query = str(
-        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
-    ).lower()
-    assert "upper(trim(fx_rates.from_currency)) = 'eur'" in compiled_query
-    assert "upper(trim(fx_rates.to_currency)) = 'sgd'" in compiled_query
-    assert "fx_rates.rate_date <= '2026-04-15'" in compiled_query
-    assert "fx_rates.rate_date >= '2026-04-05'" in compiled_query
-    assert "max(fx_rates_1.rate_date)" in compiled_query
-    assert "fx_rates_1.rate_date < '2026-04-05'" in compiled_query
-    assert "order by fx_rates.rate_date asc" in compiled_query
-
-
-async def test_get_fx_rate_window_rejects_reversed_date_bounds():
-    repository = CostCalculatorRepository(AsyncMock())
-
-    with pytest.raises(ValueError, match="start_date must be on or before end_date"):
-        await repository.get_fx_rate_window(
-            "EUR",
-            "SGD",
-            start_date=date(2026, 4, 15),
-            end_date=date(2026, 4, 5),
-        )
 
 
 async def test_get_transaction_history_trims_portfolio_security_and_excluded_transaction_ids():
