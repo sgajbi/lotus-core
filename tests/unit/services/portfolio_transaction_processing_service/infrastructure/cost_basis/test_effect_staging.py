@@ -12,15 +12,15 @@ from src.services.portfolio_transaction_processing_service.app.domain import Boo
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     FxContractInstrument,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    booked_transaction_event_mapper,
-    fx_event_mapper,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     TransactionalCostProcessingEffectStager,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     effect_staging as effect_staging_module,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping import (  # noqa: E501
+    booked_transaction,
+    foreign_exchange_instrument,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -75,7 +75,7 @@ async def test_stage_processed_transaction_preserves_payload_and_epoch(epoch: in
         correlation_id="corr-outbox-01",
     )
 
-    expected_event = booked_transaction_event_mapper.to_transaction_event(
+    expected_event = booked_transaction.to_transaction_event(
         transaction,
         correlation_id=None,
         traceparent=None,
@@ -140,7 +140,7 @@ async def test_stage_fx_contract_instrument_preserves_integration_contract() -> 
         correlation_id="corr-instrument-01",
     )
 
-    expected_event = fx_event_mapper.to_fx_contract_instrument_event(instrument)
+    expected_event = foreign_exchange_instrument.to_fx_contract_instrument_event(instrument)
     outbox.create_outbox_event.assert_awaited_once_with(
         aggregate_type="Instrument",
         aggregate_id="FX-CONTRACT-01",

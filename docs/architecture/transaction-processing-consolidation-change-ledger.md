@@ -24,7 +24,7 @@ tests move with their owning module; they are not deleted merely because a servi
 | Surface | Status | Evidence / next condition |
 |---|---|---|
 | Target layered package (`delivery -> application -> domain/ports -> infrastructure -> runtime`) | implemented-local | CR-1430 through CR-1440; architecture guards pass. |
-| Framework-neutral booked transaction and one DTO mapping boundary | implemented-local | CR-1431; 98-field drift and round-trip tests. |
+| Framework-neutral booked transaction and one DTO mapping boundary | implemented-local | CR-1431 provides 98-field drift and round-trip tests; CR-1586 gives governed transaction and synthetic FX-instrument translation one domain-owned anti-corruption package and removes both flat mapping roots. |
 | One `ProcessTransactionUseCase` | implemented-local | CR-1432; ordered cost/cashflow/position execution. |
 | Cost, cashflow, and position caller-owned adapters | implemented-local | CR-1433 through CR-1435. |
 | One SQLAlchemy session/commit and combined idempotency fence | implemented-local | CR-1436 provides atomic rollback; CR-1491 adds versioned domain identity, content fingerprint, physical/semantic duplicate classification, and material-conflict rejection. |

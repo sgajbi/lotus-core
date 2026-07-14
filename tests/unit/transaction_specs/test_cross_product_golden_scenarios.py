@@ -26,7 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     calculate_next_position_state,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping.booked_transaction import (  # noqa: E501
     to_booked_transaction,
 )
 

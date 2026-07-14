@@ -12,8 +12,10 @@ from portfolio_common.outbox_repository import OutboxRepository
 
 from ...domain.transaction import BookedTransaction
 from ...domain.transaction.fx import FxContractInstrument
-from ..booked_transaction_event_mapper import to_transaction_event
-from ..fx_event_mapper import to_fx_contract_instrument_event
+from ..transaction_mapping.booked_transaction import to_transaction_event
+from ..transaction_mapping.foreign_exchange_instrument import (
+    to_fx_contract_instrument_event,
+)
 
 
 def _normalize_transaction_type(value: object) -> str:

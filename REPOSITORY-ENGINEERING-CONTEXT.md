@@ -1993,6 +1993,12 @@ Most relevant current governance:
      transaction lifecycle, and adapter composition; do not embed the idempotency adapter in that
      module or restore its broad infrastructure-root re-export. Tests and support queries that need
      the persisted service identity must import it from the idempotency package.
+     Governed transaction-event and synthetic FX-instrument translation belongs under
+     `app/infrastructure/transaction_mapping`, with explicit `booked_transaction.py` and
+     `foreign_exchange_instrument.py` modules. Cost, cashflow, repository, and test consumers must
+     use that anti-corruption boundary; do not restore flat `booked_transaction_event_mapper.py` or
+     `fx_event_mapper.py` infrastructure roots or place Pydantic event mapping in domain/application
+     modules.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary

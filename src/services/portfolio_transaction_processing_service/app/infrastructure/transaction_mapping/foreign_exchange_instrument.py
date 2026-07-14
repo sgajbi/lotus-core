@@ -2,7 +2,7 @@
 
 from portfolio_common.events import InstrumentEvent
 
-from ..domain.transaction.fx import FxContractInstrument
+from ...domain.transaction.fx import FxContractInstrument
 
 
 def to_fx_contract_instrument_event(

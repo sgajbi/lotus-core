@@ -17,7 +17,7 @@ from ...ports import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
 )
-from ..booked_transaction_event_mapper import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction
 
 
 class SqlAlchemyCorporateActionReconciliationRepository:

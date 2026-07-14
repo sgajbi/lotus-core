@@ -23,12 +23,12 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    booked_transaction_event_mapper,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping import (  # noqa: E501
+    booked_transaction,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
@@ -263,9 +263,7 @@ async def _seed_ordered_avco_key(
 
 
 def _processing_checkpoint(event) -> CostBasisProcessingCheckpoint:
-    raw = build_cost_basis_engine_input(
-        booked_transaction_event_mapper.to_booked_transaction(event)
-    )
+    raw = build_cost_basis_engine_input(booked_transaction.to_booked_transaction(event))
     raw.update(
         portfolio_base_currency="USD",
         net_cost_local=event.gross_transaction_amount,
