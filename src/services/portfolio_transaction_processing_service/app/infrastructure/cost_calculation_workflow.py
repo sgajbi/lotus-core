@@ -26,6 +26,7 @@ from ..application import (
 from ..application.cost_basis_processing import (
     CostProcessingRoute,
     enrich_cost_basis_transactions_with_fx,
+    validate_upstream_cash_leg,
 )
 from ..domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
@@ -45,11 +46,7 @@ from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 from ..domain.transaction import (
-    ADJUSTMENT_TRANSACTION_TYPE,
-    assert_cash_entry_mode_supported,
-    assert_upstream_cash_leg_pairing,
     build_generated_settlement_cash_leg,
-    is_upstream_provided_cash_entry_mode,
     should_generate_settlement_cash_leg,
 )
 from ..domain.transaction.fx import (
@@ -99,12 +96,6 @@ class CostEngineCalculation:
 
 def _normalize_event_code(value: object) -> str:
     return str(value or "").strip().upper()
-
-
-class UpstreamCashLegUnavailableError(Exception):
-    """Raised when a required upstream cash leg is not yet persisted."""
-
-    pass
 
 
 class CostCalculationWorkflow:
@@ -873,8 +864,8 @@ class CostCalculationWorkflow:
             observer=self._corporate_action_reconciliation_observer,
         )
         for processed_event in events_to_publish:
-            await self._validate_upstream_cash_leg(processed_event=processed_event, repo=repo)
             booked_transaction = to_booked_transaction(processed_event)
+            await validate_upstream_cash_leg(product_leg=booked_transaction, transactions=repo)
             generated_cash_leg = None
             if should_generate_settlement_cash_leg(booked_transaction):
                 generated_cash_transaction = build_generated_settlement_cash_leg(booked_transaction)
@@ -902,60 +893,6 @@ class CostCalculationWorkflow:
                 correlation_id=correlation_id,
             )
         return emitted_events
-
-    async def _validate_upstream_cash_leg(
-        self,
-        *,
-        processed_event: TransactionEvent,
-        repo: CostBasisTransactionStatePort,
-    ) -> None:
-        assert_cash_entry_mode_supported(to_booked_transaction(processed_event))
-        if not self._requires_upstream_cash_leg_validation(processed_event):
-            return
-
-        external_cash_id = self._required_external_cash_transaction_id(processed_event)
-        cash_leg = await self._load_upstream_cash_leg(
-            external_cash_id=external_cash_id,
-            processed_event=processed_event,
-            repo=repo,
-        )
-        assert_upstream_cash_leg_pairing(
-            to_booked_transaction(processed_event),
-            to_booked_transaction(cash_leg),
-        )
-
-    @staticmethod
-    def _requires_upstream_cash_leg_validation(processed_event: TransactionEvent) -> bool:
-        return (
-            processed_event.cash_entry_mode is not None
-            and is_upstream_provided_cash_entry_mode(processed_event.cash_entry_mode)
-            and _normalize_event_code(processed_event.transaction_type)
-            != ADJUSTMENT_TRANSACTION_TYPE
-        )
-
-    @staticmethod
-    def _required_external_cash_transaction_id(processed_event: TransactionEvent) -> str:
-        external_cash_id = (processed_event.external_cash_transaction_id or "").strip()
-        if external_cash_id:
-            return external_cash_id
-        raise ValueError("UPSTREAM_PROVIDED requires external_cash_transaction_id on product leg.")
-
-    @staticmethod
-    async def _load_upstream_cash_leg(
-        *,
-        external_cash_id: str,
-        processed_event: TransactionEvent,
-        repo: CostBasisTransactionStatePort,
-    ) -> TransactionEvent:
-        cash_leg = await repo.get_booked_transaction(
-            external_cash_id, portfolio_id=processed_event.portfolio_id
-        )
-        if cash_leg is None:
-            raise UpstreamCashLegUnavailableError(
-                f"Cash leg {external_cash_id} not found for portfolio "
-                f"{processed_event.portfolio_id}."
-            )
-        return to_transaction_event(cash_leg, correlation_id=None, traceparent=None)
 
     async def _publish_transaction_events(
         self,

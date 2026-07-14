@@ -13,6 +13,7 @@ from ...application.cost_basis_processing import (
     CostProcessingRoute,
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
+    UpstreamCashLegUnavailableError,
     prepare_cost_transaction,
 )
 from ...domain import BookedTransaction
@@ -34,9 +35,6 @@ from ..booked_transaction_event_mapper import (
     to_booked_transaction,
     to_transaction_event,
     with_booked_transaction_fields,
-)
-from ..cost_calculation_workflow import (
-    UpstreamCashLegUnavailableError,
 )
 from .staged_effects import StagedCostEffects
 
