@@ -1,5 +1,6 @@
 """Tests for Git changed-source parsing and normalization."""
 
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -99,7 +100,45 @@ def test_read_git_changed_sources_uses_merge_base_diff_first(monkeypatch) -> Non
         "-z",
         "--find-renames",
         "--find-copies",
+        "--find-copies-harder",
         "origin/main...HEAD",
+    ]
+
+
+def test_read_git_changed_sources_detects_copy_from_unchanged_file(tmp_path: Path) -> None:
+    def _git(*args: str) -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    _git("init")
+    _git("config", "user.email", "coverage-evidence@example.test")
+    _git("config", "user.name", "Coverage Evidence Test")
+    source = tmp_path / "src/app/source.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def calculate() -> int:\n    return 42\n", encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-m", "add source")
+
+    copied = tmp_path / "src/app/copied.py"
+    copied.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-m", "copy source")
+
+    changes = read_git_changed_sources(repo_root=tmp_path, base_ref="HEAD~1")
+
+    assert changes == [
+        ChangedSourceFile(
+            "C100",
+            SourceChangeType.COPIED,
+            "src/app/copied.py",
+            previous_path="src/app/source.py",
+            similarity_percent=100,
+        )
     ]
 
 

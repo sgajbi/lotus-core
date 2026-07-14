@@ -151,6 +151,7 @@ def read_git_changed_sources(*, repo_root: Path, base_ref: str | None) -> list[C
                 "-z",
                 "--find-renames",
                 "--find-copies",
+                "--find-copies-harder",
                 *revision_args,
             ],
             cwd=repo_root,
