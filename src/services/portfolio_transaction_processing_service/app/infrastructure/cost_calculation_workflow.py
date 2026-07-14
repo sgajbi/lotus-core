@@ -4,15 +4,13 @@ import logging
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 from portfolio_common.config import (
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
     KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.domain.cost_basis_method import CostBasisMethod, normalize_cost_basis_method
-from portfolio_common.domain.decimal_amount import decimal_or_none
-from portfolio_common.domain.transaction.fee_components import resolve_transaction_trade_fee
 from portfolio_common.domain.transaction.type_registry import get_transaction_type_definition
 from portfolio_common.events import InstrumentEvent, TransactionEvent, event_business_payload
 from portfolio_common.monitoring import (
@@ -36,6 +34,7 @@ from ..domain.cost_basis import (
     AverageCostPoolTransition,
     CostBasisProcessingCheckpoint,
     OpenLotState,
+    build_cost_basis_engine_input,
     transaction_order_key,
 )
 from ..domain.cost_basis import (
@@ -123,59 +122,6 @@ def _transaction_lot_behavior(transaction_type: object) -> str:
     return definition.lot_behavior if definition is not None else "unknown"
 
 
-def _normalize_fee_amount(value: object, *, field_name: str) -> Decimal:
-    if value is None or (isinstance(value, str) and not value.strip()):
-        return Decimal(0)
-    amount = cast(Decimal | None, decimal_or_none(value))
-    if amount is None:
-        raise ValueError(f"{field_name} must be numeric.")
-    return amount
-
-
-normalize_cost_event_code = _normalize_event_code
-normalize_cost_fee_amount = _normalize_fee_amount
-
-
-FEE_COMPONENT_FIELDS = ("brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees")
-
-
-def _pop_fee_components(event_dict: dict[str, Any]) -> dict[str, object]:
-    return {field_name: event_dict.pop(field_name, None) for field_name in FEE_COMPONENT_FIELDS}
-
-
-def _has_fee_components(fee_components: dict[str, object]) -> bool:
-    return any(value is not None for value in fee_components.values())
-
-
-def _normalize_fee_components(fee_components: dict[str, object]) -> dict[str, Decimal]:
-    return {
-        field_name: _normalize_fee_amount(value, field_name=field_name)
-        for field_name, value in fee_components.items()
-    }
-
-
-def _apply_engine_fee_fields(
-    *,
-    event_dict: dict[str, Any],
-    resolved_trade_fee: Decimal,
-    normalized_components: dict[str, Decimal],
-    has_fee_components: bool,
-) -> None:
-    if has_fee_components:
-        event_dict["fees"] = {
-            field_name: str(amount) for field_name, amount in normalized_components.items()
-        }
-        event_dict["trade_fee"] = str(resolved_trade_fee)
-        return
-
-    if resolved_trade_fee and resolved_trade_fee > 0:
-        event_dict["fees"] = {"brokerage": str(resolved_trade_fee)}
-        event_dict["trade_fee"] = str(resolved_trade_fee)
-        return
-
-    event_dict["trade_fee"] = "0"
-
-
 class UpstreamCashLegUnavailableError(Exception):
     """Raised when a required upstream cash leg is not yet persisted."""
 
@@ -239,16 +185,7 @@ class CostCalculationWorkflow:
         if not history:
             raise ValueError("Average cost pool rebuild requires transaction history")
 
-        history_raw = [
-            self._transform_event_for_engine(
-                to_transaction_event(
-                    transaction,
-                    correlation_id=None,
-                    traceparent=None,
-                )
-            )
-            for transaction in history
-        ]
+        history_raw = [build_cost_basis_engine_input(transaction) for transaction in history]
         self._attach_instrument_metadata(transactions=history_raw, instrument=instrument)
         enriched_history = await enrich_cost_basis_transactions_with_fx(
             transactions=history_raw,
@@ -288,29 +225,6 @@ class CostCalculationWorkflow:
             BUY_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
         if normalized_type == "SELL":
             SELL_LIFECYCLE_STAGE_TOTAL.labels(stage, status).inc()
-
-    def _transform_event_for_engine(self, event: TransactionEvent) -> dict[str, Any]:
-        """Map a transaction event to the cost-basis engine's input structure."""
-        event_dict = cast(dict[str, Any], event.model_dump(mode="python"))
-        trade_fee = _normalize_fee_amount(
-            event_dict.pop("trade_fee", "0"),
-            field_name="trade_fee",
-        )
-        fee_components = _pop_fee_components(event_dict)
-        has_fee_components = _has_fee_components(fee_components)
-        normalized_components = _normalize_fee_components(fee_components)
-        resolved_trade_fee = resolve_transaction_trade_fee(
-            trade_fee,
-            normalized_components if has_fee_components else {},
-        )
-        _apply_engine_fee_fields(
-            event_dict=event_dict,
-            resolved_trade_fee=resolved_trade_fee,
-            normalized_components=normalized_components,
-            has_fee_components=has_fee_components,
-        )
-
-        return event_dict
 
     async def _build_events_to_publish(
         self,
@@ -644,10 +558,10 @@ class CostCalculationWorkflow:
         repo: CostBasisTransactionStatePort,
         fx_rates: CostBasisFxRatePort,
     ) -> dict[str, Any]:
-        event_raw = self._transform_event_for_engine(event)
+        event_raw = build_cost_basis_engine_input(to_booked_transaction(event))
         if instrument is not None:
             self._attach_instrument_metadata(transactions=[event_raw], instrument=instrument)
-        enriched = await enrich_cost_basis_transactions_with_fx(
+        enriched: list[dict[str, Any]] = await enrich_cost_basis_transactions_with_fx(
             transactions=[event_raw],
             portfolio_base_currency=portfolio_base_currency,
             fx_rates=fx_rates,
@@ -686,13 +600,7 @@ class CostCalculationWorkflow:
             return []
         if record.representative_transaction is None:
             raise ValueError("Open average cost pool has no representative transaction")
-        transaction_raw = self._transform_event_for_engine(
-            to_transaction_event(
-                record.representative_transaction,
-                correlation_id=None,
-                traceparent=None,
-            )
-        )
+        transaction_raw = build_cost_basis_engine_input(record.representative_transaction)
         transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
         transaction_raw["quantity"] = checkpoint.quantity
         transaction_raw["net_cost_local"] = checkpoint.cost_local
@@ -758,13 +666,7 @@ class CostCalculationWorkflow:
             )
         checkpoint_transactions: list[dict[str, Any]] = []
         for record in records:
-            transaction_raw = self._transform_event_for_engine(
-                to_transaction_event(
-                    record.transaction,
-                    correlation_id=None,
-                    traceparent=None,
-                )
-            )
+            transaction_raw = build_cost_basis_engine_input(record.transaction)
             transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
             transaction_raw["quantity"] = record.quantity
             transaction_raw["net_cost_local"] = record.cost_local
@@ -792,28 +694,20 @@ class CostCalculationWorkflow:
             security_id=event.security_id,
             exclude_id=event.transaction_id,
         )
-        history_raw = [
-            self._transform_event_for_engine(
-                to_transaction_event(
-                    transaction,
-                    correlation_id=None,
-                    traceparent=None,
-                )
-            )
-            for transaction in history
-        ]
-        event_raw = self._transform_event_for_engine(event)
+        history_raw = [build_cost_basis_engine_input(transaction) for transaction in history]
+        event_raw = build_cost_basis_engine_input(to_booked_transaction(event))
         all_transactions_raw = [*history_raw, event_raw]
         if instrument is not None:
             self._attach_instrument_metadata(
                 transactions=all_transactions_raw,
                 instrument=instrument,
             )
-        return await enrich_cost_basis_transactions_with_fx(
+        enriched_transactions: list[dict[str, Any]] = await enrich_cost_basis_transactions_with_fx(
             transactions=all_transactions_raw,
             portfolio_base_currency=portfolio_base_currency,
             fx_rates=fx_rates,
         )
+        return enriched_transactions
 
     async def _persist_affected_processed_transactions(
         self,

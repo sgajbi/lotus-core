@@ -1,8 +1,7 @@
 """Cost workflow, persistence staging, FX, and reconciliation behavior tests."""
 
 import inspect
-import json
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -24,7 +23,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
-    normalize_cost_fee_amount,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
@@ -64,18 +62,6 @@ async def test_cost_workflow_does_not_depend_on_retired_delivery_subclass() -> N
     assert "CostCalculatorConsumer" not in workflow_source
     assert "record_bundle_a_reconciliation_evidence" not in workflow_source
     assert "FinancialReconciliationRun" not in workflow_source
-
-
-class _StringCountedAmount:
-    """Test value that records string normalization calls."""
-
-    def __init__(self, value: str) -> None:
-        self.value = value
-        self.string_call_count = 0
-
-    def __str__(self) -> str:
-        self.string_call_count += 1
-        return self.value
 
 
 async def test_cost_workflow_constructs_without_kafka_delivery_runtime() -> None:
@@ -173,32 +159,6 @@ def _bundle_a_transaction_event(
 @pytest.fixture
 def cost_calculation_workflow() -> CostCalculationWorkflow:
     return CostCalculationWorkflow()
-
-
-@pytest.fixture
-def mock_buy_kafka_message() -> MagicMock:
-    """Creates a mock Kafka message for a BUY transaction with a fee."""
-    buy_event = TransactionEvent(
-        transaction_id="BUY_WITH_FEE_01",
-        portfolio_id="PORT_COST_01",
-        instrument_id="AAPL",
-        security_id="SEC_COST_01",
-        transaction_date=datetime(2025, 1, 15),
-        transaction_type="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("150.0"),
-        gross_transaction_amount=Decimal("1500.0"),
-        trade_fee=Decimal("7.50"),
-        trade_currency="USD",
-        currency="USD",
-    )
-    mock_msg = MagicMock()
-    mock_msg.value.return_value = buy_event.model_dump_json().encode("utf-8")
-    mock_msg.topic.return_value = "transactions.persisted"
-    mock_msg.partition.return_value = 0
-    mock_msg.offset.return_value = 2
-    mock_msg.headers.return_value = []
-    return mock_msg
 
 
 async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consumer():
@@ -410,64 +370,6 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
     repository.replace_transaction_cost_breakdown.assert_not_awaited()
     lot_states.upsert_buy_lot_state.assert_not_awaited()
     income_offsets.upsert_accrued_income_offset.assert_not_awaited()
-
-
-async def test_transform_event_rejects_post_validation_negative_trade_fee(
-    cost_calculation_workflow: CostCalculationWorkflow,
-    mock_buy_kafka_message: MagicMock,
-):
-    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
-    event.trade_fee = Decimal("-0.01")
-
-    with pytest.raises(ValueError, match="trade_fee"):
-        cost_calculation_workflow._transform_event_for_engine(event)
-
-
-async def test_transform_event_rejects_post_validation_negative_fee_component(
-    cost_calculation_workflow: CostCalculationWorkflow,
-    mock_buy_kafka_message: MagicMock,
-):
-    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
-    event.brokerage = Decimal("-0.01")
-
-    with pytest.raises(ValueError, match="brokerage"):
-        cost_calculation_workflow._transform_event_for_engine(event)
-
-
-async def test_transform_event_maps_positive_trade_fee_to_brokerage_fee(
-    cost_calculation_workflow: CostCalculationWorkflow,
-    mock_buy_kafka_message: MagicMock,
-):
-    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
-
-    transformed = cost_calculation_workflow._transform_event_for_engine(event)
-
-    assert transformed["trade_fee"] == "7.50"
-    assert transformed["fees"] == {"brokerage": "7.50"}
-
-
-async def test_transform_event_preserves_typed_corporate_action_metadata(
-    cost_calculation_workflow: CostCalculationWorkflow,
-    mock_buy_kafka_message: MagicMock,
-) -> None:
-    event = TransactionEvent.model_validate(json.loads(mock_buy_kafka_message.value()))
-    event.synthetic_flow_effective_date = date(2026, 7, 5)
-    event.synthetic_flow_amount_local = Decimal("-1200")
-    event.synthetic_flow_amount_base = Decimal("-1450")
-
-    transformed = cost_calculation_workflow._transform_event_for_engine(event)
-
-    assert transformed["synthetic_flow_effective_date"] == date(2026, 7, 5)
-    assert transformed["synthetic_flow_amount_local"] == Decimal("-1200")
-    assert transformed["synthetic_flow_amount_base"] == Decimal("-1450")
-
-
-async def test_fee_amount_normalizer_normalizes_counted_amount_once() -> None:
-    amount = _StringCountedAmount("2.50")
-
-    assert normalize_cost_fee_amount(amount, field_name="brokerage") == Decimal("2.50")
-    assert normalize_cost_fee_amount(" ", field_name="stamp_duty") == Decimal("0")
-    assert amount.string_call_count == 1
 
 
 async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
