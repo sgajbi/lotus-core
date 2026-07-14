@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    CostBasisTransaction,
     CostCalculationErrorCollector,
     CostTransactionParser,
 )
@@ -84,3 +85,31 @@ def test_parse_transaction_missing_multiple_fields_creates_valid_stub(
     # Verify the stub has valid defaults for required fields
     assert stub.portfolio_id == "UNKNOWN"
     assert stub.portfolio_base_currency == "UNK"
+
+
+def test_unexpected_model_construction_failure_creates_diagnostic_stub(
+    parser: CostTransactionParser,
+    error_reporter: CostCalculationErrorCollector,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def construct_or_fail(**data):
+        if "error_reason" not in data:
+            raise RuntimeError("model adapter unavailable")
+        return CostBasisTransaction(**data)
+
+    monkeypatch.setattr(
+        (
+            "src.services.portfolio_transaction_processing_service.app.domain.cost_basis."
+            "calculation.transaction_parser.CostBasisTransaction"
+        ),
+        construct_or_fail,
+    )
+
+    parsed = parser.parse_transactions([{"transaction_id": "TXN-MODEL-FAILURE-01"}])
+
+    assert len(parsed) == 1
+    assert parsed[0].transaction_id == "TXN-MODEL-FAILURE-01"
+    assert parsed[0].error_reason == (
+        "Unexpected parsing error: RuntimeError: model adapter unavailable"
+    )
+    assert error_reporter.get_errors()[0].error_reason == parsed[0].error_reason

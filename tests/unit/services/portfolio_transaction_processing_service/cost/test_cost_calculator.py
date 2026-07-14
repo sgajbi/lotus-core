@@ -186,6 +186,34 @@ def test_cost_calculator_normalizes_same_currency_codes_before_fx_requirement(
     mock_disposition_engine.add_buy_lot.assert_called_once_with(same_currency_buy)
 
 
+def test_cost_calculator_rejects_cross_currency_booking_without_fx_rate(
+    cost_calculator, mock_disposition_engine, error_reporter
+) -> None:
+    cross_currency_buy = CostBasisTransaction(
+        transaction_id="BUY_MISSING_CROSS_CURRENCY_FX_01",
+        portfolio_id="P_SGD",
+        instrument_id="BOND_EUR_01",
+        security_id="BOND_EUR_01",
+        transaction_type="BUY",
+        transaction_date=datetime(2026, 7, 1),
+        quantity=Decimal("100"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="EUR",
+        portfolio_base_currency="SGD",
+        transaction_fx_rate=None,
+    )
+
+    cost_calculator.calculate_transaction_costs(cross_currency_buy)
+
+    errors = error_reporter.get_errors()
+    assert errors[0].error_reason == (
+        "Missing/invalid FX rate for cross-currency transaction from EUR to SGD."
+    )
+    assert cross_currency_buy.net_cost is None
+    assert cross_currency_buy.net_cost_local is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+
+
 def test_cost_calculator_rejects_non_positive_same_currency_fx_rate(
     cost_calculator, mock_disposition_engine, error_reporter
 ):
@@ -425,6 +453,39 @@ def test_cross_currency_adjustment_uses_direction_aware_cash_basis(
     assert transaction.gross_cost == expected_base
     assert transaction.realized_gain_loss_local is None
     assert transaction.realized_gain_loss is None
+
+
+def test_adjustment_rejects_non_domain_movement_direction(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+) -> None:
+    transaction = CostBasisTransaction(
+        transaction_id="ADJUSTMENT-INVALID-DIRECTION-01",
+        portfolio_id="P1",
+        instrument_id="CASH_EUR",
+        security_id="CASH_EUR",
+        transaction_type="ADJUSTMENT",
+        transaction_date=datetime(2026, 5, 10),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("60"),
+        trade_currency="EUR",
+        portfolio_base_currency="SGD",
+        transaction_fx_rate=Decimal("1.35"),
+        movement_direction="REVERSAL",
+    )
+
+    cost_calculator.calculate_transaction_costs(transaction)
+
+    errors = error_reporter.get_errors()
+    assert errors[0].error_reason == (
+        "ADJUSTMENT invariant violation: movement_direction must be INFLOW or OUTFLOW."
+    )
+    assert transaction.net_cost is None
+    assert transaction.net_cost_local is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
 def test_cash_consideration_strategy_records_disposed_basis_and_realized_pnl(
