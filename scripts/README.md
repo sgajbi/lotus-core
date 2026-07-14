@@ -9,7 +9,9 @@ points; Python module paths are implementation details governed with the reposit
 2. `generators/` - deterministic documentation and contract artifact generation.
 3. `operations/` - production diagnostics, capacity profiles, recovery, reconciliation, and
    transaction cutover workflows.
-4. `quality/` - architecture, API, contract, security, test, and CI quality gates.
+4. `quality/` - architecture, API, contract, security, test, and CI quality gates. The coverage
+   runner composes warning-budget and coverage evidence from one unit-suite execution for local
+   parity; the standalone warning runner remains available to hosted lanes for early feedback.
 5. `release/` - image build, exact-source CI image-set transport, SBOM, provenance, and
    release-manifest automation. `prebuild_ci_images.py` owns reusable local builds and timing
    evidence; `runtime_image_set.py` owns portable bundle creation, integrity manifests, load, and

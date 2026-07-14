@@ -494,7 +494,7 @@ ci: verify-dependencies $(CI_GATES)
 
 ci-main: verify-dependencies-clean $(CI_GATES) test-release-gates
 
-ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate warning-gate test-unit-db test-integration-lite coverage-gate
+ci-local: verify-dependencies lint no-alias-gate typecheck architecture-guard openapi-gate api-vocabulary-gate test-unit-db coverage-gate
 
 docker-build:
 	docker build -f src/services/query_service/Dockerfile -t portfolio-analytics-query-service:ci .

@@ -17,6 +17,7 @@ FAIL_UNDER = "98"
 COVERAGE_OUTPUT_DIR = REPO_ROOT / "output" / "coverage"
 COVERAGE_JSON = COVERAGE_OUTPUT_DIR / "coverage.json"
 CRITICAL_PATH_REPORT = COVERAGE_OUTPUT_DIR / "critical-path-coverage-report.json"
+UNIT_WARNING_BUDGET = 0
 
 
 def run(cmd: list[str]) -> None:
@@ -25,12 +26,21 @@ def run(cmd: list[str]) -> None:
 
 def main() -> int:
     from scripts.quality.test_manifest import run_suite
+    from scripts.quality.warning_budget_gate import run_suite_with_warning_budget
 
     for artifact in REPO_ROOT.glob(".coverage*"):
         if artifact.is_file():
             artifact.unlink()
 
-    if run_suite("unit", with_coverage=True, coverage_file=".coverage.unit") != 0:
+    if (
+        run_suite_with_warning_budget(
+            suite="unit",
+            max_warnings=UNIT_WARNING_BUDGET,
+            with_coverage=True,
+            coverage_file=".coverage.unit",
+        )
+        != 0
+    ):
         return 1
     if (
         run_suite(

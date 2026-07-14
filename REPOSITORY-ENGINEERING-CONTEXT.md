@@ -2413,6 +2413,14 @@ Most relevant current governance:
      Keep generation and aggregation persistence service-owned, and keep #714 open until measured
      daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence decides runtime
      topology.
+184. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
+     collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
+     enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,
+     collects unit and integration-lite coverage, and emits aggregate/critical-path reports.
+     Hosted `CI_GATES` retains the standalone `warning-gate` for earlier failure isolation. Preserve
+     this single-execution local contract with cross-platform command tests; do not mitigate Windows
+     socket exhaustion with sleeps, retries, reduced test selection, or weakened warning/coverage
+     thresholds.
 
 ## Context Maintenance Rule
 

@@ -61,6 +61,10 @@ or production-grade operational behavior.
 - `make ci-main`
   main releasability parity
 
+`make ci-local` obtains the unit warning budget and coverage evidence from one complete unit-suite
+execution. Its coverage gate also owns the integration-lite execution, avoiding duplicate local
+test work while preserving the standalone `make warning-gate` used by hosted CI for early feedback.
+
 Because the repo is expensive to validate fully, the normal workflow is:
 
 1. run the smallest credible local proof
