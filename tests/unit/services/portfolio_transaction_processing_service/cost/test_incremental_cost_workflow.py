@@ -25,6 +25,10 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     OpenLotStateUpdateScope,
     booked_transaction_event_mapper,
 )
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -328,8 +332,16 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 3, 10, 0, tzinfo=timezone.utc)
-    repo.get_portfolio.return_value = MagicMock(cost_basis_method="AVCO", base_currency="USD")
-    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+        portfolio_id="P1",
+        base_currency="USD",
+        cost_basis_method=CostBasisMethod.AVCO,
+    )
+    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+        security_id="S1",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
     repo.get_transaction_history.return_value = [
         _persisted_buy("BUY-AVCO-1", first_buy_date),
         DBTransaction(
@@ -385,7 +397,11 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
 
 async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_portfolio.return_value = MagicMock(cost_basis_method="FIFO", base_currency="USD")
+    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+        portfolio_id="P1",
+        base_currency="USD",
+        cost_basis_method=CostBasisMethod.FIFO,
+    )
 
     with pytest.raises(ValueError, match="requires an AVCO portfolio"):
         await CostCalculationWorkflow().build_average_cost_pool_rebuild_plan(
@@ -399,8 +415,16 @@ async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> No
 
 async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_portfolio.return_value = MagicMock(cost_basis_method="AVCO", base_currency="USD")
-    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+        portfolio_id="P1",
+        base_currency="USD",
+        cost_basis_method=CostBasisMethod.AVCO,
+    )
+    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+        security_id="S1",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
     repo.get_transaction_history.return_value = [
         DBTransaction(
             transaction_id="SELL-AVCO-INVALID",

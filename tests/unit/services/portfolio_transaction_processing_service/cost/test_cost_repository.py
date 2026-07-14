@@ -7,9 +7,12 @@ from portfolio_common.database_models import (
     AverageCostPoolState,
     CostBasisProcessingState,
     FxRate,
+    Instrument,
+    Portfolio,
     PositionLotState,
 )
 from portfolio_common.database_models import Transaction as DBTransaction
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from sqlalchemy.dialects import postgresql
 
@@ -33,6 +36,8 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CorporateActionReconciliationFindingEvidence,
     CorporateActionReconciliationKey,
     CorporateActionReconciliationRunEvidence,
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -228,17 +233,49 @@ async def test_get_fx_rate_window_rejects_reversed_date_bounds():
         )
 
 
-async def test_get_instrument_trims_security_id_before_query():
+async def test_get_cost_basis_portfolio_maps_orm_to_immutable_reference() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    persisted_portfolio = Portfolio(
+        portfolio_id="PORT_COST_01",
+        base_currency="SGD",
+        cost_basis_method=" avco ",
+    )
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.first.return_value = persisted_portfolio
+    db_session.execute.return_value = execute_result
+
+    portfolio = await repository.get_cost_basis_portfolio("PORT_COST_01")
+
+    assert portfolio == CostBasisPortfolioReference(
+        portfolio_id="PORT_COST_01",
+        base_currency="SGD",
+        cost_basis_method=CostBasisMethod.AVCO,
+    )
+    assert portfolio is not persisted_portfolio
+
+
+async def test_get_cost_basis_instrument_maps_reference_and_trims_lookup_identifier() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
 
+    persisted_instrument = Instrument(
+        security_id="SEC_A",
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
+    )
     execute_result = MagicMock()
-    execute_result.scalars.return_value.first.return_value = None
+    execute_result.scalars.return_value.first.return_value = persisted_instrument
     db_session.execute.return_value = execute_result
 
-    instrument = await repository.get_instrument(" SEC_A ")
+    instrument = await repository.get_cost_basis_instrument(" SEC_A ")
 
-    assert instrument is None
+    assert instrument == CostBasisInstrumentReference(
+        security_id="SEC_A",
+        product_type="BOND",
+        asset_class="FIXED_INCOME",
+    )
+    assert instrument is not persisted_instrument
     compiled_query = str(
         db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
     )

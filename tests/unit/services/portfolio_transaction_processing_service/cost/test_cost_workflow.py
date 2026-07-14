@@ -7,7 +7,6 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
-from portfolio_common.database_models import Portfolio
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
@@ -30,6 +29,10 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     OpenLotStateUpdateScope,
     PortfolioNotFoundError,
     normalize_cost_fee_amount,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -186,8 +189,16 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     instrument_event = MagicMock()
     repo = AsyncMock(spec=CostCalculatorRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
-    repo.get_portfolio.return_value = Portfolio(base_currency="USD", portfolio_id="PORT_COST_01")
-    repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
+    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+        portfolio_id="PORT_COST_01",
+        base_currency="USD",
+        cost_basis_method=CostBasisMethod.FIFO,
+    )
+    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+        security_id="SEC_COST_01",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
 
     workflow = CostCalculationWorkflow()
     workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
@@ -199,8 +210,8 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         event=event,
         event_transaction_type="BUY",
         route=cost_basis_processing.CostProcessingRoute.COST_BASIS,
-        portfolio=repo.get_portfolio.return_value,
-        instrument=repo.get_instrument.return_value,
+        portfolio=repo.get_cost_basis_portfolio.return_value,
+        instrument=repo.get_cost_basis_instrument.return_value,
         repo=repo,
         cost_basis_method=CostBasisMethod.FIFO,
         outbox_repo=outbox_repo,
@@ -243,7 +254,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     )
     repo = AsyncMock(spec=CostCalculatorRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
-    repo.get_portfolio.return_value = None
+    repo.get_cost_basis_portfolio.return_value = None
 
     with pytest.raises(PortfolioNotFoundError):
         await CostProcessingCompatibilityAdapter(
@@ -255,7 +266,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             correlation_id="cost-corr-id",
         )
 
-    repo.get_instrument.assert_not_awaited()
+    repo.get_cost_basis_instrument.assert_not_awaited()
 
 
 async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_incoming(

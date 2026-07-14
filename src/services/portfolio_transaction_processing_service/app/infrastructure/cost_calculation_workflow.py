@@ -56,6 +56,8 @@ from ..domain.transaction.fx import (
 from ..ports import (
     CorporateActionReconciliationObserver,
     CostBasisCalculationObserver,
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
 )
 from .booked_transaction_event_mapper import (
     to_booked_transaction,
@@ -215,14 +217,14 @@ class CostCalculationWorkflow:
         security_id: str,
         repo: CostCalculatorRepository,
     ) -> AverageCostPoolRebuildPlan:
-        portfolio = await repo.get_portfolio(portfolio_id)
+        portfolio = await repo.get_cost_basis_portfolio(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio {portfolio_id} was not found")
         cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
         if cost_basis_method is not CostBasisMethod.AVCO:
             raise ValueError("Average cost pool rebuild requires an AVCO portfolio")
 
-        instrument = await repo.get_instrument(security_id)
+        instrument = await repo.get_cost_basis_instrument(security_id)
         if instrument is None:
             raise ValueError(f"Instrument {security_id} was not found")
         history = await repo.get_transaction_history(
@@ -360,8 +362,8 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         event_transaction_type: str,
         route: CostProcessingRoute,
-        portfolio: Any,
-        instrument: Any,
+        portfolio: CostBasisPortfolioReference,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
@@ -382,8 +384,8 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         event_transaction_type: str,
         route: CostProcessingRoute,
-        portfolio: Any,
-        instrument: Any,
+        portfolio: CostBasisPortfolioReference,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
         outbox_repo: OutboxRepository,
@@ -442,8 +444,8 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         event_transaction_type: str,
-        portfolio: Any,
-        instrument: Any,
+        portfolio: CostBasisPortfolioReference,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
@@ -488,7 +490,7 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         event_transaction_type: str,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
@@ -601,7 +603,7 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
@@ -635,7 +637,7 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
     ) -> dict[str, Any]:
         event_raw = self._transform_event_for_engine(event)
@@ -673,7 +675,7 @@ class CostCalculationWorkflow:
         *,
         record: AverageCostPoolCheckpointRecord,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
     ) -> list[dict[str, Any]]:
         checkpoint = record.checkpoint
         if checkpoint.quantity == Decimal(0):
@@ -731,7 +733,7 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         required_fifo_quantity: Decimal | None = None,
     ) -> list[dict[str, Any]]:
@@ -769,7 +771,7 @@ class CostCalculationWorkflow:
         *,
         event: TransactionEvent,
         portfolio_base_currency: str,
-        instrument: Any,
+        instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
     ) -> list[dict[str, Any]]:
         history_db = await repo.get_transaction_history(
@@ -887,7 +889,7 @@ class CostCalculationWorkflow:
     def _attach_instrument_metadata(
         *,
         transactions: list[dict[str, Any]],
-        instrument: Any,
+        instrument: CostBasisInstrumentReference,
     ) -> None:
         for txn_raw in transactions:
             txn_raw["product_type"] = instrument.product_type

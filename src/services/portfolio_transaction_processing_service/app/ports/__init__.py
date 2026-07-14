@@ -10,6 +10,11 @@ from .corporate_action_reconciliation import (
     CorporateActionReconciliationRepository,
     CorporateActionReconciliationRunEvidence,
 )
+from .cost_basis import (
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
+)
 from .cost_basis_observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
@@ -49,6 +54,9 @@ __all__ = [
     "CashflowProcessingResult",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
+    "CostBasisInstrumentReference",
+    "CostBasisPortfolioReference",
+    "CostBasisReferenceDataPort",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
     "CorporateActionReconciliationKey",

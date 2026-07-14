@@ -6,7 +6,7 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.database_models import Portfolio
+from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
@@ -24,6 +24,10 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
     StagedCostEffects,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisInstrumentReference,
+    CostBasisPortfolioReference,
 )
 
 
@@ -51,11 +55,16 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         }
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_portfolio.return_value = Portfolio(
+    repository.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",
         portfolio_id="PB-001",
+        cost_basis_method=CostBasisMethod.FIFO,
     )
-    repository.get_instrument.return_value = MagicMock()
+    repository.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+        security_id="SEC-001",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
     outbox_repository = AsyncMock(spec=OutboxRepository)
     workflow = MagicMock()
     workflow.stage_prepared_event = AsyncMock(
@@ -105,7 +114,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         currency="SGD",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_portfolio.return_value = None
+    repository.get_cost_basis_portfolio.return_value = None
     adapter = CostProcessingCompatibilityAdapter(
         workflow=MagicMock(),
         repository=repository,
@@ -136,11 +145,16 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         currency="SGD",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.get_portfolio.return_value = Portfolio(
+    repository.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",
         portfolio_id="PB-001",
+        cost_basis_method=CostBasisMethod.FIFO,
     )
-    repository.get_instrument.return_value = MagicMock()
+    repository.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+        security_id="SEC-001",
+        product_type="EQUITY",
+        asset_class="EQUITY",
+    )
     workflow = MagicMock()
     workflow.stage_prepared_event = AsyncMock(
         side_effect=SettlementCashValidationError(
