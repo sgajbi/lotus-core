@@ -24,11 +24,13 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostProcessingCompatibilityAdapter,
     FxRateNotFoundError,
     OpenLotStateUpdateScope,
-    PortfolioNotFoundError,
     normalize_cost_fee_amount,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    CostBasisProcessingAdapter,
+    PortfolioNotFoundError,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AccruedIncomeOffsetStatePort,
@@ -294,7 +296,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     assert result.instrument_update_count == 1
 
 
-async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
+async def test_cost_basis_stage_reports_missing_portfolio_dependency():
     event = TransactionEvent(
         transaction_id="BUY-STAGE-01",
         portfolio_id="PORT_COST_01",
@@ -320,7 +322,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     reference_data.get_cost_basis_portfolio.return_value = None
 
     with pytest.raises(PortfolioNotFoundError):
-        await CostProcessingCompatibilityAdapter(
+        await CostBasisProcessingAdapter(
             workflow=MagicMock(),
             repository=repo,
             average_cost_pools=average_cost_pools,

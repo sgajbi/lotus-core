@@ -1,4 +1,4 @@
-"""Adapt the transitional cost workflow to the transaction-processing application port."""
+"""Adapt cost-basis processing to the unified transaction-processing application port."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
-from ..application import TransactionProcessingError, build_settlement_cash_rejection
-from ..application.cost_basis_processing import (
+from ...application import TransactionProcessingError, build_settlement_cash_rejection
+from ...application.cost_basis_processing import (
     CostProcessingRoute,
     InstrumentReferenceUnavailableError,
     prepare_cost_transaction,
 )
-from ..domain import BookedTransaction
-from ..domain.transaction import SettlementCashValidationError
-from ..ports import (
+from ...domain import BookedTransaction
+from ...domain.transaction import SettlementCashValidationError
+from ...ports import (
     AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
@@ -29,16 +29,16 @@ from ..ports import (
     CostBasisTransactionStatePort,
     CostProcessingResult,
 )
-from .booked_transaction_event_mapper import (
+from ..booked_transaction_event_mapper import (
     to_booked_transaction,
     to_transaction_event,
     with_booked_transaction_fields,
 )
-from .cost_basis import StagedCostEffects
-from .cost_calculation_workflow import (
+from ..cost_calculation_workflow import (
     FxRateNotFoundError,
     UpstreamCashLegUnavailableError,
 )
+from .staged_effects import StagedCostEffects
 
 
 class PortfolioNotFoundError(Exception):
@@ -69,8 +69,8 @@ class CostEffectsStager(Protocol):
     ) -> StagedCostEffects: ...
 
 
-class CostProcessingCompatibilityAdapter:
-    """Run the current cost policy inside the combined caller-owned unit of work."""
+class CostBasisProcessingAdapter:
+    """Run cost-basis processing inside the combined caller-owned unit of work."""
 
     def __init__(
         self,
@@ -103,7 +103,7 @@ class CostProcessingCompatibilityAdapter:
         event: TransactionEvent,
         correlation_id: str,
     ) -> StagedCostEffects:
-        """Stage compatibility cost and outbox writes in the caller-owned transaction."""
+        """Stage cost-basis and outbox writes in the caller-owned transaction."""
         portfolio = await self._reference_data.get_cost_basis_portfolio(event.portfolio_id)
         if not portfolio:
             raise PortfolioNotFoundError(f"Portfolio {event.portfolio_id} not found. Retrying...")

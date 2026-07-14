@@ -6,6 +6,11 @@ from .corporate_action_reconciliation_repository import (
 )
 from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
+from .processing_adapter import (
+    CostBasisProcessingAdapter,
+    CostEffectsStager,
+    PortfolioNotFoundError,
+)
 from .processing_state_repository import (
     SqlAlchemyCostBasisProcessingStateRepository,
     cost_basis_processing_lock_key,
@@ -22,6 +27,9 @@ __all__ = [
     "SqlAlchemyCostBasisProcessingStateRepository",
     "SqlAlchemyCostBasisReferenceDataRepository",
     "SqlAlchemyCostBasisTransactionRepository",
+    "CostBasisProcessingAdapter",
+    "CostEffectsStager",
+    "PortfolioNotFoundError",
     "StagedCostEffects",
     "cost_basis_processing_lock_key",
 ]

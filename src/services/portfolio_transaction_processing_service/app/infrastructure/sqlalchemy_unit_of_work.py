@@ -27,6 +27,8 @@ from .cashflow_processing_adapter import (
 )
 from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_basis import (
+    CostBasisProcessingAdapter,
+    CostEffectsStager,
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
@@ -35,7 +37,6 @@ from .cost_basis import (
     SqlAlchemyCostBasisReferenceDataRepository,
     SqlAlchemyCostBasisTransactionRepository,
 )
-from .cost_processing_adapter import CostEffectsStager, CostProcessingCompatibilityAdapter
 from .income import SqlAlchemyAccruedIncomeOffsetRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
@@ -151,7 +152,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         outbox_repository = OutboxRepository(session)
         idempotency_repository = IdempotencyRepository(session)
         self._idempotency = SqlAlchemyTransactionIdempotencyAdapter(idempotency_repository)
-        self._cost = CostProcessingCompatibilityAdapter(
+        self._cost = CostBasisProcessingAdapter(
             workflow=self._cost_workflow,
             repository=SqlAlchemyCostBasisTransactionRepository(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),

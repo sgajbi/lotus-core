@@ -1,3 +1,5 @@
+"""Verify cost-basis processing adapter mapping and error behavior."""
+
 from __future__ import annotations
 
 from dataclasses import fields
@@ -20,8 +22,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostProcessingCompatibilityAdapter,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    CostBasisProcessingAdapter,
     StagedCostEffects,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
@@ -87,7 +89,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
             instrument_update_count=1,
         )
     )
-    adapter = CostProcessingCompatibilityAdapter(
+    adapter = CostBasisProcessingAdapter(
         workflow=workflow,
         repository=repository,
         average_cost_pools=average_cost_pools,
@@ -148,7 +150,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     income_offsets = AsyncMock(spec=AccruedIncomeOffsetStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
-    adapter = CostProcessingCompatibilityAdapter(
+    adapter = CostBasisProcessingAdapter(
         workflow=MagicMock(),
         repository=repository,
         average_cost_pools=average_cost_pools,
@@ -213,7 +215,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
             net_settlement_amount=Decimal("-1"),
         )
     )
-    adapter = CostProcessingCompatibilityAdapter(
+    adapter = CostBasisProcessingAdapter(
         workflow=workflow,
         repository=repository,
         average_cost_pools=average_cost_pools,
