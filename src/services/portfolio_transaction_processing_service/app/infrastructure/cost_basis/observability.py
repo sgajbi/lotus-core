@@ -9,8 +9,11 @@ from types import TracebackType
 
 from prometheus_client import Histogram
 
-from ..ports import CostBasisCalculationObservation, CostBasisCalculationObserver
-from .cost_metrics import (
+from ...ports.cost_basis.observability import (
+    CostBasisCalculationObservation,
+    CostBasisCalculationObserver,
+)
+from .metrics import (
     RECALCULATION_DEPTH,
     RECALCULATION_DURATION_SECONDS,
 )

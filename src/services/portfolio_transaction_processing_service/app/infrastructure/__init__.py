@@ -32,6 +32,8 @@ from .corporate_action_reconciliation_observability import (
     PrometheusCorporateActionReconciliationObserver,
 )
 from .cost_basis import (
+    PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+    PrometheusCostBasisCalculationObserver,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     StagedCostEffects,
     cost_basis_processing_lock_key,
@@ -39,10 +41,6 @@ from .cost_basis import (
 from .cost_calculation_workflow import CostCalculationWorkflow
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
-from .prometheus_cost_basis_observability import (
-    PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
-    PrometheusCostBasisCalculationObserver,
-)
 from .prometheus_observability import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     PrometheusTransactionProcessingObserver,
