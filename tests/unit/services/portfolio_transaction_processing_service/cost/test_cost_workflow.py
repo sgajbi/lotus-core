@@ -726,7 +726,15 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
     assert generated_cash_leg.originating_transaction_id == "DIV-GENERATED-01"
     assert emitted[0].external_cash_transaction_id == "DIV-GENERATED-01-CASHLEG"
     assert product_leg.external_cash_transaction_id is None
-    assert repo.upsert_transaction_event.await_count == 2
+    assert repo.upsert_booked_transaction.await_count == 2
+    persisted_transactions = [
+        call.args[0] for call in repo.upsert_booked_transaction.await_args_list
+    ]
+    assert all(isinstance(transaction, BookedTransaction) for transaction in persisted_transactions)
+    assert [transaction.transaction_id for transaction in persisted_transactions] == [
+        "DIV-GENERATED-01-CASHLEG",
+        "DIV-GENERATED-01",
+    ]
 
 
 async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(

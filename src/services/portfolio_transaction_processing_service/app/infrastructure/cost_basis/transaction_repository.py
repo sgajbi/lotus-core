@@ -1,5 +1,6 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
+from dataclasses import fields
 from decimal import Decimal
 from typing import Any
 
@@ -8,7 +9,7 @@ from portfolio_common.database_models import (
 )
 from portfolio_common.database_models import TransactionCost
 from portfolio_common.domain.currency import normalize_currency_code
-from portfolio_common.events import TransactionEvent, event_business_payload
+from portfolio_common.events import TransactionEvent
 from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -96,19 +97,19 @@ TRANSACTION_METADATA_FIELDS = (
 )
 
 TRANSACTION_TABLE_FIELDS = frozenset(DBTransaction.__table__.columns.keys())
-TRANSACTION_EVENT_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
+BOOKED_TRANSACTION_FIELD_NAMES = tuple(field.name for field in fields(BookedTransaction))
+BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS = frozenset(
     {"id", "epoch", "brokerage", "stamp_duty", "exchange_fee", "gst", "other_fees"}
 )
 
 
-def _transaction_event_payload(event: TransactionEvent) -> dict[str, Any]:
-    event_payload = event_business_payload(event, mode="python")
+def _booked_transaction_payload(transaction: BookedTransaction) -> dict[str, Any]:
     return {
-        field: value
-        for field, value in event_payload.items()
-        if value is not None
-        and field in TRANSACTION_TABLE_FIELDS
-        and field not in TRANSACTION_EVENT_PERSISTENCE_EXCLUDE_FIELDS
+        field_name: value
+        for field_name in BOOKED_TRANSACTION_FIELD_NAMES
+        if (value := getattr(transaction, field_name)) is not None
+        and field_name in TRANSACTION_TABLE_FIELDS
+        and field_name not in BOOKED_TRANSACTION_PERSISTENCE_EXCLUDE_FIELDS
     }
 
 
@@ -221,12 +222,16 @@ class SqlAlchemyCostBasisTransactionRepository:
             return None
         return to_booked_transaction(TransactionEvent.model_validate(transaction))
 
-    async def upsert_transaction_event(self, event: TransactionEvent) -> None:
-        """Upsert one transaction event without exposing its persistence representation."""
+    async def upsert_booked_transaction(self, transaction: BookedTransaction) -> None:
+        """Upsert one canonical booked transaction."""
 
-        event_dict = _transaction_event_payload(event)
-        stmt = pg_insert(DBTransaction).values(**event_dict)
-        update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
+        transaction_values = _booked_transaction_payload(transaction)
+        stmt = pg_insert(DBTransaction).values(**transaction_values)
+        update_fields = [
+            field_name
+            for field_name in transaction_values
+            if field_name not in {"id", "transaction_id"}
+        ]
         update_dict = {field: getattr(stmt.excluded, field) for field in update_fields}
         await self.db.execute(
             stmt.on_conflict_do_update(index_elements=["transaction_id"], set_=update_dict)
