@@ -37,6 +37,12 @@ canonical publisher, maps dependency failures, and enforces that one transaction
 or one record. Delivery code owns retry and DLQ handling; replay infrastructure is not exported from
 the broad infrastructure package root.
 
+Aggregate live and replay stage telemetry is an infrastructure adapter under
+`app/infrastructure/transaction_processing`. It implements the application observer port and keeps
+Prometheus counters, histograms, clocks, and telemetry-failure containment outside application and
+domain code. The adapter is not a broad infrastructure-root export, and metric names, bounded stage
+and outcome labels, and failure behavior remain operational contracts.
+
 ## Ordinary Transaction Domain
 
 The service-owned `app/domain/transaction` package owns ordinary BUY, SELL, DIVIDEND, and INTEREST:

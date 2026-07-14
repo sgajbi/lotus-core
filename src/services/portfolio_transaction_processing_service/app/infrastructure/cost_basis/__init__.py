@@ -2,6 +2,10 @@
 
 from .average_cost_pool_reconciliation import SqlAlchemyAverageCostPoolReconciliationAdapter
 from .average_cost_pool_repository import SqlAlchemyAverageCostPoolRepository
+from .corporate_action_observability import (
+    PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
+    PrometheusCorporateActionReconciliationObserver,
+)
 from .corporate_action_reconciliation_repository import (
     SqlAlchemyCorporateActionReconciliationRepository,
 )
@@ -29,6 +33,8 @@ __all__ = [
     "SqlAlchemyAverageCostPoolRepository",
     "SqlAlchemyAverageCostPoolReconciliationAdapter",
     "SqlAlchemyCorporateActionReconciliationRepository",
+    "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
+    "PrometheusCorporateActionReconciliationObserver",
     "SqlAlchemyCostBasisFxRateRepository",
     "SqlAlchemyCostBasisLotRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",
