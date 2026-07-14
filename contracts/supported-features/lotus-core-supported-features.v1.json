@@ -134,6 +134,9 @@
         "src/services/portfolio_transaction_processing_service/app/domain/cashflow",
         "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow",
+        "src/services/portfolio_transaction_processing_service/app/application/transaction_readiness",
+        "src/services/portfolio_transaction_processing_service/app/ports/transaction_readiness.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness",
         "src/services/valuation_orchestrator_service",
         "src/services/pipeline_orchestrator_service",
         "src/services/query_service/app/routers/cashflow_projection.py"

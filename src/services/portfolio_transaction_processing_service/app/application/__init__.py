@@ -38,6 +38,7 @@ from .replay_booked_transaction import (
 )
 from .results import ProcessTransactionResult, TransactionProcessingStatus
 from .settlement_cash_rejection import build_settlement_cash_rejection
+from .transaction_readiness import RegisterTransactionReadinessUseCase
 
 __all__ = [
     "BookedTransactionReplayDependencyUnavailable",
@@ -71,4 +72,5 @@ __all__ = [
     "TransactionProcessingError",
     "TransactionProcessingRejected",
     "TransactionProcessingStatus",
+    "RegisterTransactionReadinessUseCase",
 ]

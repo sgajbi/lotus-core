@@ -1977,6 +1977,10 @@ Most relevant current governance:
      dispatched. Serialize readiness registration for the exact stage/portfolio/transaction key,
      compare the incoming epoch with the latest registered epoch under that transaction-scoped lock,
      and reject only older epochs. Never emit superseded transaction or valuation readiness.
+     Keep that coordination in the `application/transaction_readiness` use case behind the
+     `ports/transaction_readiness.py` repository and event-staging contracts. Governed event DTOs,
+     topics, payload mapping, and transactional outbox writes belong to
+     `infrastructure/transaction_readiness`; do not restore readiness policy to a SQL/outbox adapter.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary
