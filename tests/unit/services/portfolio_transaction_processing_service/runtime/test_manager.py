@@ -1,3 +1,5 @@
+"""Tests for the transaction-processing runtime lifecycle manager."""
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

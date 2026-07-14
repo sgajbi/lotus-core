@@ -21,3 +21,17 @@ def test_dependency_composition_uses_runtime_package() -> None:
     assert "build_process_transaction_use_case" not in root_exports
     assert "build_replay_booked_transaction_use_case" not in root_exports
     assert "build_reconcile_average_cost_pools_use_case" not in root_exports
+
+
+def test_runtime_tests_use_the_mirrored_package() -> None:
+    """Keep runtime lifecycle and composition tests out of the service root."""
+
+    service_test_root = (
+        REPOSITORY_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+    )
+    runtime_test_root = service_test_root / "runtime"
+
+    assert (runtime_test_root / "test_consumer_composition.py").is_file()
+    assert (runtime_test_root / "test_manager.py").is_file()
+    assert not (service_test_root / "test_consumer_composition.py").exists()
+    assert not (service_test_root / "test_runtime_manager.py").exists()

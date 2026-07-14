@@ -1,3 +1,5 @@
+"""Tests for final transaction consumer runtime composition."""
+
 from __future__ import annotations
 
 from typing import Any

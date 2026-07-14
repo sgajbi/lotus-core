@@ -1,3 +1,5 @@
+"""Tests for booked-transaction replay request Kafka delivery."""
+
 from __future__ import annotations
 
 import asyncio

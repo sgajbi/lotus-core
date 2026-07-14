@@ -1,3 +1,5 @@
+"""Tests for the Kafka transaction-event anti-corruption mapper."""
+
 from dataclasses import FrozenInstanceError, fields
 from datetime import datetime, timezone
 from decimal import Decimal

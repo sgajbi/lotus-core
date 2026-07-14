@@ -42,6 +42,7 @@
       "risk": "Incorrect lifecycle or transaction-type behavior can corrupt booking state, replay behavior, and downstream analytics inputs.",
       "source_globs": [
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/delivery/kafka/*.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_mapping/*.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_processing/*.py",
         "src/services/portfolio_transaction_processing_service/app/runtime/dependency_composition.py",
@@ -68,6 +69,7 @@
       ],
       "required_test_globs": [
         "tests/unit/transaction_specs/test_*_slice0_characterization.py",
+        "tests/unit/services/portfolio_transaction_processing_service/delivery/kafka/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_mapping/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_processing/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/runtime/*.py",
