@@ -838,10 +838,10 @@ class CostCalculatorRepository:
             await result.close()
         return records
 
-    async def update_transaction_costs(
+    async def apply_transaction_costs(
         self, transaction_result: EngineTransaction
-    ) -> DBTransaction | None:
-        """Finds a transaction by its ID and updates its calculated cost fields."""
+    ) -> BookedTransaction | None:
+        """Apply calculated costs and return the updated canonical domain transaction."""
         stmt = select(DBTransaction).filter_by(transaction_id=transaction_result.transaction_id)
         result = await self.db.execute(stmt)
         db_txn_to_update = result.scalars().first()
@@ -858,16 +858,23 @@ class CostCalculatorRepository:
                 if field_value is not None:
                     setattr(db_txn_to_update, field_name, field_value)
 
-        return db_txn_to_update
+        if db_txn_to_update is None:
+            return None
+        return to_booked_transaction(TransactionEvent.model_validate(db_txn_to_update))
 
-    async def get_transaction_by_id(
+    async def get_booked_transaction(
         self, transaction_id: str, *, portfolio_id: str | None = None
-    ) -> DBTransaction | None:
+    ) -> BookedTransaction | None:
+        """Load one persisted transaction as an immutable domain transaction."""
+
         stmt = select(DBTransaction).where(DBTransaction.transaction_id == transaction_id)
         if portfolio_id:
             stmt = stmt.where(DBTransaction.portfolio_id == portfolio_id)
         result = await self.db.execute(stmt)
-        return result.scalars().first()
+        transaction = result.scalars().first()
+        if transaction is None:
+            return None
+        return to_booked_transaction(TransactionEvent.model_validate(transaction))
 
     async def load_group(
         self, key: CorporateActionReconciliationKey
@@ -928,7 +935,9 @@ class CostCalculatorRepository:
                 )
             )
 
-    async def create_or_update_transaction_event(self, event: TransactionEvent) -> DBTransaction:
+    async def upsert_transaction_event(self, event: TransactionEvent) -> None:
+        """Upsert one transaction event without exposing its persistence representation."""
+
         event_dict = _transaction_event_payload(event)
         stmt = pg_insert(DBTransaction).values(**event_dict)
         update_fields = [k for k in event_dict.keys() if k not in {"id", "transaction_id"}]
@@ -936,7 +945,6 @@ class CostCalculatorRepository:
         await self.db.execute(
             stmt.on_conflict_do_update(index_elements=["transaction_id"], set_=update_dict)
         )
-        return DBTransaction(**event_dict)
 
     async def replace_transaction_cost_breakdown(
         self, transaction_result: EngineTransaction

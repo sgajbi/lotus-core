@@ -438,7 +438,7 @@ class CostCalculationWorkflow:
         processed_transaction = build_fx_processed_transaction(to_booked_transaction(event))
         assert_fx_processed_transaction_valid(processed_transaction)
         processed_event = with_booked_transaction_fields(event, processed_transaction)
-        await repo.create_or_update_transaction_event(processed_event)
+        await repo.upsert_transaction_event(processed_event)
         instrument_events = []
         contract_instrument = build_fx_contract_instrument(processed_transaction)
         if contract_instrument is not None:
@@ -928,8 +928,8 @@ class CostCalculationWorkflow:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_transaction_costs", "attempt"
         )
-        updated_txn = await repo.update_transaction_costs(processed_transaction)
-        if updated_txn is None:
+        updated_transaction = await repo.apply_transaction_costs(processed_transaction)
+        if updated_transaction is None:
             raise ValueError(
                 "Canonical transaction row was not found during cost persistence: "
                 f"{processed_transaction.transaction_id}"
@@ -958,11 +958,16 @@ class CostCalculationWorkflow:
                 processed_transaction=processed_transaction,
             )
 
-        if processed_transaction.fees and processed_transaction.fees.total_fees > 0:
-            updated_txn.trade_fee = processed_transaction.fees.total_fees
-        else:
-            updated_txn.trade_fee = Decimal(0)
-        return TransactionEvent.model_validate(updated_txn)
+        trade_fee = (
+            processed_transaction.fees.total_fees
+            if processed_transaction.fees and processed_transaction.fees.total_fees > 0
+            else Decimal(0)
+        )
+        return to_transaction_event(
+            replace(updated_transaction, trade_fee=trade_fee),
+            correlation_id=None,
+            traceparent=None,
+        )
 
     async def _persist_open_lot_state(
         self,
@@ -1045,7 +1050,7 @@ class CostCalculationWorkflow:
                     correlation_id=None,
                     traceparent=None,
                 )
-                await repo.create_or_update_transaction_event(generated_cash_leg)
+                await repo.upsert_transaction_event(generated_cash_leg)
                 processed_event = with_booked_transaction_fields(
                     processed_event,
                     replace(
@@ -1053,7 +1058,7 @@ class CostCalculationWorkflow:
                         external_cash_transaction_id=generated_cash_leg.transaction_id,
                     ),
                 )
-                await repo.create_or_update_transaction_event(processed_event)
+                await repo.upsert_transaction_event(processed_event)
             emitted_events.append(processed_event)
             if generated_cash_leg is not None:
                 emitted_events.append(generated_cash_leg)
@@ -1108,15 +1113,15 @@ class CostCalculationWorkflow:
         processed_event: TransactionEvent,
         repo: CostCalculatorRepository,
     ) -> TransactionEvent:
-        cash_leg_db = await repo.get_transaction_by_id(
+        cash_leg = await repo.get_booked_transaction(
             external_cash_id, portfolio_id=processed_event.portfolio_id
         )
-        if cash_leg_db is None:
+        if cash_leg is None:
             raise UpstreamCashLegUnavailableError(
                 f"Cash leg {external_cash_id} not found for portfolio "
                 f"{processed_event.portfolio_id}."
             )
-        return TransactionEvent.model_validate(cash_leg_db)
+        return to_transaction_event(cash_leg, correlation_id=None, traceparent=None)
 
     async def _publish_transaction_events(
         self,
