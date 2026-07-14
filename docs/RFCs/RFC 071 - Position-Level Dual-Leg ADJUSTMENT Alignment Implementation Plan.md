@@ -41,13 +41,13 @@ Delivered:
 
 Validation evidence:
 1. `pytest` targeted unit suites:
- - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_generated_cash_leg.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_generated_cash_leg.py`
  - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_effect_coordination.py`
  - `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
  - `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
  - `tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py`
- - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_upstream_cash_leg_pairing.py`
- - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_upstream_pairing.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py`
  - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
 2. Migration contract gate:
  - `python scripts/quality/migration_contract_check.py --mode alembic-sql`
