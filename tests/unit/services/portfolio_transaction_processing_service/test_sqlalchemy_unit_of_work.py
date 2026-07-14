@@ -47,7 +47,7 @@ async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_on
         assert entered.cashflow is unit_of_work.cashflow
         assert isinstance(entered.cashflow, ProcessTransactionCashflowUseCase)
         assert entered.position is unit_of_work.position
-        assert entered.pipeline is unit_of_work.pipeline
+        assert entered.readiness is unit_of_work.readiness
         await entered.commit()
 
     transaction.start.assert_awaited_once_with()

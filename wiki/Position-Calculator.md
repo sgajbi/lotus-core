@@ -59,6 +59,10 @@ SQLAlchemy, state-store, and observability adapters are organized under
 directly to this use case, avoiding the former event DTO round trip and duplicate epoch-state read.
 The retired `position_calculator` source package is absent from the target image.
 
+The transaction-processing unit of work exposes this capability as `readiness` and composes the
+application use case directly from package-owned SQL and outbox adapters. There is no flat
+pipeline-stage processing facade in the target package.
+
 The former `position_calculation_workflow.py` and `position_repository.py` modules are retired.
 Canonical PostgreSQL tests now prove rollback atomicity, replay deduplication, same-key
 serialization, and different-key/epoch parallelism through the application and adapter boundaries;

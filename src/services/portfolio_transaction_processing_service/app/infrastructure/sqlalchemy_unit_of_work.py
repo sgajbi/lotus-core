@@ -16,13 +16,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from ..application.cashflow_processing import ProcessTransactionCashflowUseCase
 from ..application.cost_basis_processing import PreparedCostProcessingUseCase
 from ..application.position_history import PositionHistoryProcessor
+from ..application.transaction_readiness import RegisterTransactionReadinessUseCase
 from ..ports import (
     CashflowProcessingPort,
     CostProcessingPort,
-    PipelineStageProcessingPort,
     PositionProcessingPort,
     TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
+    TransactionReadinessProcessingPort,
 )
 from .cashflow import (
     PROMETHEUS_CASHFLOW_CALCULATION_OBSERVER,
@@ -44,14 +45,16 @@ from .cost_basis import (
     TransactionalCostProcessingEffectStager,
 )
 from .income import SqlAlchemyAccruedIncomeOffsetRepository
-from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position import (
     PROMETHEUS_POSITION_HISTORY_OBSERVER,
     PositionHistoryProcessingAdapter,
     SqlAlchemyPositionHistoryRepository,
     SqlAlchemyPositionRecalculationStateStore,
 )
-from .transaction_stage_repository import SqlAlchemyTransactionStageRepository
+from .transaction_readiness import (
+    SqlAlchemyTransactionStageRepository,
+    TransactionalTransactionReadinessEventStager,
+)
 
 TRANSACTION_PROCESSING_SERVICE_NAME = "portfolio-transaction-processing"
 _AdapterT = TypeVar("_AdapterT")
@@ -115,7 +118,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self._cost: CostProcessingPort | None = None
         self._cashflow: CashflowProcessingPort | None = None
         self._position: PositionProcessingPort | None = None
-        self._pipeline: PipelineStageProcessingPort | None = None
+        self._readiness: TransactionReadinessProcessingPort | None = None
 
     @property
     def idempotency(self) -> TransactionIdempotencyPort:
@@ -134,8 +137,8 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         return _required_adapter(self._position, "position")
 
     @property
-    def pipeline(self) -> PipelineStageProcessingPort:
-        return _required_adapter(self._pipeline, "pipeline")
+    def readiness(self) -> TransactionReadinessProcessingPort:
+        return _required_adapter(self._readiness, "readiness")
 
     async def __aenter__(self) -> SqlAlchemyTransactionProcessingUnitOfWork:
         if self._session is not None:
@@ -189,9 +192,9 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
                 observer=PROMETHEUS_POSITION_HISTORY_OBSERVER,
             ),
         )
-        self._pipeline = PipelineStageProcessingAdapter(
-            SqlAlchemyTransactionStageRepository(session),
-            outbox_repository,
+        self._readiness = RegisterTransactionReadinessUseCase(
+            repository=SqlAlchemyTransactionStageRepository(session),
+            events=TransactionalTransactionReadinessEventStager(outbox_repository),
         )
 
     async def __aexit__(

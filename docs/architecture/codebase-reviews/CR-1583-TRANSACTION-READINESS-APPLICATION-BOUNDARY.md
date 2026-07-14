@@ -67,6 +67,6 @@ contracts did not change.
 
 ## Remaining Work
 
-Keep #719 open. Compose the application use case directly in the SQLAlchemy unit of work, move the
-stage repository into the transaction-readiness infrastructure package, delete the compatibility
-adapter without an alias, and guard every retired flat path.
+CR-1584 composes the use case directly, moves stage persistence into the transaction-readiness
+package, deletes the compatibility adapter without an alias, and guards every retired flat path.
+Keep #719 open for the broader persistence and runtime consolidation campaign.

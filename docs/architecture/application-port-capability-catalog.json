@@ -417,7 +417,7 @@
         "TransactionReadinessEventStagingPort"
       ],
       "adapter_modules": [
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_stage_repository.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness/stage_repository.py",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness/event_staging.py"
       ],
       "consumer_modules": [

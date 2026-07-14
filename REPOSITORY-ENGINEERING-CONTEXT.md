@@ -1981,6 +1981,12 @@ Most relevant current governance:
      `ports/transaction_readiness.py` repository and event-staging contracts. Governed event DTOs,
      topics, payload mapping, and transactional outbox writes belong to
      `infrastructure/transaction_readiness`; do not restore readiness policy to a SQL/outbox adapter.
+     `TransactionProcessingUnitOfWork.readiness` composes that application use case directly from
+     the package-owned stage repository and event stager. Do not restore the ambiguous `pipeline`
+     unit-of-work property or a flat compatibility adapter.
+     Any facade or package-root re-export deletion must run `make warning-gate` before commit;
+     focused owner tests do not prove that tests or tooling elsewhere in the repository stopped
+     importing the retired surface.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary
