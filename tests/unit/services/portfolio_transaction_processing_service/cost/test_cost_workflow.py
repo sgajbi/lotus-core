@@ -14,6 +14,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     cost_basis_processing,
 )
+from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
@@ -318,7 +319,7 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
         transaction_type="BUY",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
-    repository.update_transaction_costs.return_value = None
+    repository.apply_transaction_costs.return_value = None
 
     with pytest.raises(
         ValueError,
@@ -562,7 +563,51 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
             repo=repo,
         )
 
-    repo.get_transaction_by_id.assert_not_awaited()
+    repo.get_booked_transaction.assert_not_awaited()
+
+
+async def test_load_upstream_cash_leg_maps_domain_transaction_to_event(
+    cost_calculation_workflow: CostCalculationWorkflow,
+) -> None:
+    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo.get_booked_transaction.return_value = BookedTransaction(
+        transaction_id="CASH-UP-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_date=datetime(2025, 1, 20),
+        transaction_type="CASH_INFLOW",
+        quantity=Decimal("25"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    product_event = TransactionEvent(
+        transaction_id="INT-UP-01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="BOND-001",
+        security_id="SEC-BOND-001",
+        transaction_date=datetime(2025, 1, 20),
+        transaction_type="INTEREST",
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_transaction_amount=Decimal("25"),
+        trade_currency="USD",
+        currency="USD",
+    )
+
+    cash_leg = await cost_calculation_workflow._load_upstream_cash_leg(
+        external_cash_id="CASH-UP-01",
+        processed_event=product_event,
+        repo=repo,
+    )
+
+    assert cash_leg.transaction_id == "CASH-UP-01"
+    assert cash_leg.transaction_type == "CASH_INFLOW"
+    repo.get_booked_transaction.assert_awaited_once_with(
+        "CASH-UP-01", portfolio_id="PORT_COST_01"
+    )
 
 
 async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contract(
@@ -604,7 +649,7 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
     assert generated_cash_leg.originating_transaction_id == "DIV-GENERATED-01"
     assert emitted[0].external_cash_transaction_id == "DIV-GENERATED-01-CASHLEG"
     assert product_leg.external_cash_transaction_id is None
-    assert repo.create_or_update_transaction_event.await_count == 2
+    assert repo.upsert_transaction_event.await_count == 2
 
 
 async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(

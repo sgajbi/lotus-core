@@ -340,6 +340,52 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
     )
 
 
+async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfolio() -> None:
+    db_session = AsyncMock()
+    repository = CostCalculatorRepository(db_session)
+    persisted_transaction = DBTransaction(
+        transaction_id="CASH01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="CASH_OUTFLOW",
+        transaction_date=datetime(2026, 1, 3, 10, 0, 0),
+        quantity=Decimal("1000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+    )
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.first.return_value = persisted_transaction
+    db_session.execute.return_value = execute_result
+
+    transaction = await repository.get_booked_transaction(
+        "CASH01", portfolio_id="PORT_COST_01"
+    )
+
+    assert transaction == BookedTransaction(
+        transaction_id="CASH01",
+        portfolio_id="PORT_COST_01",
+        instrument_id="CASH_USD",
+        security_id="CASH_USD",
+        transaction_type="CASH_OUTFLOW",
+        transaction_date=datetime(2026, 1, 3, 10, 0, 0, tzinfo=UTC),
+        quantity=Decimal("1000"),
+        price=Decimal("1"),
+        gross_transaction_amount=Decimal("1000"),
+        trade_currency="USD",
+        currency="USD",
+        trade_fee=None,
+    )
+    assert transaction is not persisted_transaction
+    compiled_query = str(
+        db_session.execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "transactions.transaction_id = 'CASH01'" in compiled_query
+    assert "transactions.portfolio_id = 'PORT_COST_01'" in compiled_query
+
+
 async def test_get_cost_basis_processing_checkpoint_maps_durable_ordering_state() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
@@ -1034,7 +1080,7 @@ async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
     db_session.execute.assert_not_awaited()
 
 
-async def test_update_transaction_costs_persists_linkage_metadata() -> None:
+async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
 
@@ -1080,9 +1126,11 @@ async def test_update_transaction_costs_persists_linkage_metadata() -> None:
         settlement_cash_account_id="CASH-USD-01",
     )
 
-    updated_transaction = await repository.update_transaction_costs(engine_transaction)
+    updated_transaction = await repository.apply_transaction_costs(engine_transaction)
 
-    assert updated_transaction is db_transaction
+    assert isinstance(updated_transaction, BookedTransaction)
+    assert updated_transaction is not db_transaction
+    assert updated_transaction.net_cost == Decimal("1002")
     assert db_transaction.net_cost == Decimal("1002")
     assert db_transaction.economic_event_id == "EVT-BUY-PORT_COST_01-BUY01"
     assert db_transaction.linked_transaction_group_id == "LTG-BUY-PORT_COST_01-BUY01"
@@ -1092,7 +1140,7 @@ async def test_update_transaction_costs_persists_linkage_metadata() -> None:
     assert db_transaction.settlement_cash_account_id == "CASH-USD-01"
 
 
-async def test_create_or_update_transaction_event_ignores_event_envelope_fields() -> None:
+async def test_upsert_transaction_event_ignores_event_envelope_fields() -> None:
     db_session = AsyncMock()
     repository = CostCalculatorRepository(db_session)
 
@@ -1121,8 +1169,13 @@ async def test_create_or_update_transaction_event_ignores_event_envelope_fields(
         fx_contract_id="FXC-2026-0001",
     )
 
-    persisted = await repository.create_or_update_transaction_event(event)
+    result = await repository.upsert_transaction_event(event)
 
-    assert persisted.transaction_id == "FX-OPEN-001"
-    assert not hasattr(persisted, "event_type")
+    assert result is None
     db_session.execute.assert_awaited_once()
+    statement = db_session.execute.await_args.args[0]
+    parameters = statement.compile().params
+    assert parameters["transaction_id"] == "FX-OPEN-001"
+    assert "event_type" not in parameters
+    assert "schema_version" not in parameters
+    assert "correlation_id" not in parameters
