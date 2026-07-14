@@ -14,7 +14,10 @@ from ..application import (
     ReconcileAverageCostPoolsUseCase,
     ReplayBookedTransactionUseCase,
 )
-from ..application.cost_basis_processing import AverageCostPoolRebuildPlanner
+from ..application.cost_basis_processing import (
+    AverageCostPoolRebuildPlanner,
+    PreparedCostProcessingUseCase,
+)
 from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
 from .cashflow_processing_adapter import CashflowStagingWorkflow
 from .cashflow_staging_workflow import CashflowCalculationWorkflow
@@ -24,10 +27,8 @@ from .corporate_action_reconciliation_observability import (
 from .cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
-    CostEffectsStager,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
-from .cost_calculation_workflow import CostCalculationWorkflow
 from .prometheus_observability import PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
 from .transaction_replay_adapter import (
@@ -39,13 +40,13 @@ from .transaction_replay_adapter import (
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
     session_factory: Callable[[], AsyncSession]
-    cost_workflow: CostEffectsStager
+    cost_processor: PreparedCostProcessingUseCase
     cashflow_workflow: CashflowStagingWorkflow
 
     def __call__(self) -> TransactionProcessingUnitOfWork:
         return SqlAlchemyTransactionProcessingUnitOfWork(
             session_factory=self.session_factory,
-            cost_workflow=self.cost_workflow,
+            cost_processor=self.cost_processor,
             cashflow_workflow=self.cashflow_workflow,
         )
 
@@ -70,17 +71,14 @@ def build_process_transaction_use_case(
     observer: TransactionProcessingObserver | None = None,
 ) -> ProcessTransactionUseCase:
     resolved_session_factory = session_factory or get_async_session_factory()
-    cost_workflow = CostCalculationWorkflow()
-    cost_workflow.configure_cost_basis_observer(PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER)
-    cost_workflow.configure_cost_basis_persistence_observer(
-        PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER
-    )
-    cost_workflow.configure_corporate_action_reconciliation_observer(
-        PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER
+    cost_processor = PreparedCostProcessingUseCase(
+        calculation_observer=PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
+        persistence_observer=PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
+        reconciliation_observer=PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     )
     unit_of_work_factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=resolved_session_factory,
-        cost_workflow=cost_workflow,
+        cost_processor=cost_processor,
         cashflow_workflow=CashflowCalculationWorkflow(),
     )
     return ProcessTransactionUseCase(

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
     AverageCostPoolRebuildPlanner,
+    PreparedCostProcessingUseCase,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
@@ -15,7 +16,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     CanonicalBookedTransactionReplayerFactory,
     CashflowCalculationWorkflow,
-    CostCalculationWorkflow,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
@@ -26,13 +26,13 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 
 
-def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message() -> None:
+def test_composition_reuses_application_processors_and_creates_unit_of_work_per_message() -> None:
     session_factory = MagicMock(spec=lambda: AsyncSession())
-    cost_workflow = CostCalculationWorkflow()
+    cost_processor = PreparedCostProcessingUseCase()
     cashflow_workflow = CashflowCalculationWorkflow()
     factory = SqlAlchemyTransactionProcessingUnitOfWorkFactory(
         session_factory=session_factory,
-        cost_workflow=cost_workflow,
+        cost_processor=cost_processor,
         cashflow_workflow=cashflow_workflow,
     )
 
@@ -42,9 +42,9 @@ def test_composition_reuses_plain_workflows_and_creates_unit_of_work_per_message
     assert isinstance(first, SqlAlchemyTransactionProcessingUnitOfWork)
     assert isinstance(second, SqlAlchemyTransactionProcessingUnitOfWork)
     assert first is not second
-    assert first._cost_workflow is second._cost_workflow is cost_workflow
+    assert first._cost_processor is second._cost_processor is cost_processor
     assert first._cashflow_workflow is second._cashflow_workflow is cashflow_workflow
-    assert not hasattr(cost_workflow, "_consumer_config")
+    assert not hasattr(cost_processor, "_consumer_config")
     assert not hasattr(cashflow_workflow, "_consumer_config")
 
 
@@ -78,7 +78,7 @@ def test_use_case_builder_accepts_repository_standard_session_factory() -> None:
     assert unit_of_work._session_factory is session_factory
     assert use_case._observer is PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER
     assert (
-        use_case._unit_of_work_factory.cost_workflow._cost_basis_persistence_observer
+        use_case._unit_of_work_factory.cost_processor._persistence_observer
         is PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER
     )
 

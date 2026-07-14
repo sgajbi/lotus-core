@@ -1722,8 +1722,8 @@ Most relevant current governance:
      `app/infrastructure/sqlalchemy_unit_of_work.py`: all module repositories and compatibility
      outbox writes use one session and one commit; new module-local commits or sessions are a
      boundary regression. The final live normal path has one target consumer of booked
-     transactions using plain `CostCalculationWorkflow` and `CashflowCalculationWorkflow`
-     collaborators; separate calculator consumers are migration-only. Replay remains a separate
+     transactions using the application-owned `PreparedCostProcessingUseCase` and transitional
+     `CashflowCalculationWorkflow`; separate calculator consumers are migration-only. Replay remains a separate
      use case/consumer in the same deployable because it has distinct epoch and backlog controls.
      `transactions.persisted` requires the canonical transaction row to exist first; ingestion owns
      that persistence, while combined processing atomically owns derived cost/lot, cashflow,
@@ -1994,10 +1994,10 @@ Most relevant current governance:
      growth are terminal evidence and must stop polling before another sleep. App certification
      delegates runtime ownership to the managed Docker-smoke driver; do not add a second lifecycle
      owner around it.
-140. Active cost workflow, SQL repository, financial staging, AVCO/FIFO state, corporate-action
-     reconciliation, and workflow metrics belong to
-     `portfolio_transaction_processing_service.app.infrastructure` and its target domain and
-     application collaborators. The installed target image must not copy
+140. Active cost execution, SQL repositories, financial staging, AVCO/FIFO state, corporate-action
+     reconciliation, and metrics belong to `portfolio_transaction_processing_service`: application
+     execution and effect coordination live under `app/application/cost_basis_processing`; SQL,
+     event, outbox, and Prometheus adapters live under `app/infrastructure/cost_basis`. The installed target image must not copy
      `calculators/cost_calculator_service`. The standalone `CostCalculatorConsumer` and its
      physical-idempotency, retry, and DLQ transaction boundary are retired. Unified Kafka delivery
      tests, `ProcessTransactionUseCase`, target adapters, and combined PostgreSQL tests are the
@@ -2137,13 +2137,14 @@ Most relevant current governance:
      the legacy `transaction_processor.py` path or generic aliases. Workflow, SQL repository, and
      compatibility delivery remain separate migration slices with their own ports and transaction
      boundary proof.
-152. Cost-basis staging is target infrastructure behavior owned by
-     `CostBasisProcessingAdapter`, not a second application use case. Its delegated workflow may
-     temporarily describe the legacy workflow's private method surface and concrete SQL/outbox collaborators,
-     but those types must not leak into target application or domain packages. The combined path
-     remains `ProcessTransactionUseCase` -> `CostProcessingPort` -> adapter inside one SQLAlchemy
-     unit of work. Keep legacy physical idempotency only in the quarantined consumer; never restore
-     `cost_calculation_processor.py`, its dependency bundle/factory, or generic processor aliases.
+152. Cost-basis and FX execution is application behavior owned by
+     `PreparedCostProcessingUseCase`; settlement/reconciliation/outbox coordination crosses domain
+     values through `coordinate_cost_processing_effects` and `CostProcessingEffectStagingPort`.
+     `CostBasisProcessingAdapter` maps reference-data availability and application errors only. The
+     combined path remains `ProcessTransactionUseCase` -> `CostProcessingPort` -> adapter ->
+     application use case inside one SQLAlchemy unit of work. Never restore
+     `cost_calculation_workflow.py`, `staged_effects.py`, framework-event round trips, generic
+     processor aliases, or a second transaction boundary.
 153. Every independently built service wheel must discover packages from the service root and
      explicitly include the runtime `app` namespace. Use setuptools `where = ["."]` with an
      `app*` include unless a separately proven packaging model replaces it. A Dockerfile entrypoint
@@ -2432,7 +2433,7 @@ Most relevant current governance:
      belong in the cost-basis application package; concrete SQL persistence remains infrastructure.
      SQL-backed AVCO reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these
      packages in tests;
-     do not return these responsibilities to `CostCalculationWorkflow`, create flat compatibility
+     do not return these responsibilities to an infrastructure workflow, create flat compatibility
      modules, or place application behavior in infrastructure.
      Generated settlement cash-leg validation, creation, ordered persistence, and product-leg
      linking belong in `app/application/settlement_processing/cash_leg_linking.py` over the narrow
@@ -2464,12 +2465,13 @@ Most relevant current governance:
      observations use typed stage/status records;
      the Prometheus/log adapter must contain telemetry failures so support tooling cannot roll back
      financial writes. Mirror persistence tests under the application package and do not test this
-     behavior through private workflow methods.
+     behavior through private orchestration methods.
      Incremental-versus-full-rebuild selection, compatible FIFO/AVCO checkpoint restoration, FX
      enrichment, and timeline execution belong in
      `app/application/cost_basis_processing/calculation.py` over `BookedTransaction` and cost-basis
-     ports. Infrastructure must acquire the key lock before invoking that coordinator and must not
-     reintroduce calculation policy or framework event DTOs into the application package.
+     ports. `PreparedCostProcessingUseCase` must acquire the key lock before invoking that
+     coordinator; infrastructure must not reintroduce calculation policy or framework event DTOs
+     into the application package.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,

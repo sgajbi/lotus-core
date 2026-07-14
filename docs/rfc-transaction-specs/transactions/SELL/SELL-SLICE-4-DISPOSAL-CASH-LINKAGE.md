@@ -20,7 +20,7 @@ This slice hardens deterministic disposal behavior and cash-linkage metadata pro
 
 - Unit tests:
   - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
-  - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_workflow.py`
+  - `tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_effect_coordination.py`
   - `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`
 
 ## Notes

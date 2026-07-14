@@ -80,6 +80,10 @@ obscured ownership and encouraged further dumping into broad folders.
     `FxContractInstrument`, and moved topic selection, governed event mapping, payload serialization,
     transactional outbox writes, and BUY/SELL lifecycle metrics into the mirrored
     `infrastructure.cost_basis.effect_staging` adapter.
+21. Added `PreparedCostProcessingUseCase` and `coordinate_cost_processing_effects` as domain-valued
+    application boundaries, reduced `CostBasisProcessingAdapter` to reference/error mapping, deleted
+    the remaining 320-line `CostCalculationWorkflow` and transport-valued `StagedCostEffects`, and
+    moved the mixed legacy workflow tests into mirrored application and infrastructure packages.
 
 ## Measurable Improvement
 
@@ -112,6 +116,12 @@ obscured ownership and encouraged further dumping into broad folders.
   effect-staging port while preserving the caller-owned SQLAlchemy unit of work; and
 - moved transaction/instrument outbox tests from the broad workflow suite into the mirrored
   infrastructure package with explicit topic, payload, correlation, epoch, and metric assertions.
+- removed the remaining 320-line infrastructure workflow and its 456-line mixed-owner test file;
+- eliminated the booked-transaction -> framework-event -> booked-transaction round trip from the
+  cost adapter and made locking, calculation/FX routing, settlement linking, reconciliation, and
+  effect staging explicit application responsibilities; and
+- replaced the stale `Any` calculation-error collection with `CostCalculationError` and updated
+  active transaction test manifests, RFC evidence, schema ownership, context, and wiki paths.
 
 ## Compatibility
 
@@ -123,8 +133,11 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite after effect-staging extraction: `796 passed`;
-- settlement application, cost workflow, processing adapter, and composition tests: `27 passed`;
+- complete transaction-processing unit suite after workflow retirement: `794 passed`;
+- prepared execution, effect coordination, adapter, effect staging, composition, and ownership
+  tests: `34 passed`;
+- PostgreSQL same-key BUY/SELL/replay concurrency: `2 passed`;
+- PostgreSQL atomic unit-of-work integration: `12 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
 - PostgreSQL generated settlement cash reconciliation: `3 passed`;
@@ -140,7 +153,7 @@ the broader calculator-runtime retirement tracked by #719.
   `1 passed`.
 - application coordinator, package-ownership, and infrastructure integration proof: `27 passed`;
 - focused coordinator coverage: `96%` line/branch with `10 passed`.
-- focused effect-staging/workflow/processing-adapter tests: `18 passed`;
+- focused effect-staging/workflow/processing-adapter tests before retirement: `18 passed`;
 - effect-staging package ownership and no-return guard included in a `24 passed` focused cohort;
 - strict MyPy and application-port, dependency-inversion, infrastructure-adapter, and repository-port
   guards passed for the effect-staging slice.
@@ -155,9 +168,10 @@ governed layered-architecture rule are unchanged.
 
 ## Remaining Work
 
-Keep #719 open. Event/outbox coordination now has a narrow domain-valued port and infrastructure
-adapter. Further slices should move the remaining transaction/settlement coordination behind the
-application boundary and retire `CostCalculationWorkflow` only after direct caller and integration
-proof.
-Do not restore extracted behavior to `CostCalculationWorkflow`, create flat compatibility modules,
-or split the runtime without workload, failure-isolation, scaling, security, or ownership evidence.
+Keep #719 open. Cost-basis/FX execution, settlement/reconciliation coordination, and transactional
+effect staging now use domain-valued application and port boundaries; the infrastructure cost
+workflow is retired. Further slices should remove the transitional cashflow compatibility workflow,
+clarify the remaining pipeline registration boundary, and continue calculator-source retirement
+with direct caller, PostgreSQL, and contract proof. Do not restore the retired workflow, create flat
+compatibility modules, or split the runtime without workload, failure-isolation, scaling, security,
+or ownership evidence.

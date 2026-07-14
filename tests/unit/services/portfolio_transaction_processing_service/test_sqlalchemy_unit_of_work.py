@@ -27,7 +27,7 @@ def _unit_of_work():
     session.begin.return_value = transaction
     unit_of_work = SqlAlchemyTransactionProcessingUnitOfWork(
         session_factory=lambda: session,
-        cost_workflow=MagicMock(),
+        cost_processor=MagicMock(),
         cashflow_workflow=MagicMock(),
     )
     return unit_of_work, session, transaction
