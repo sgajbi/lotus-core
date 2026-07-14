@@ -31,6 +31,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -342,15 +343,16 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
 async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history() -> None:
     workflow = CostCalculationWorkflow()
     repo = AsyncMock(spec=CostCalculatorRepository)
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 3, 10, 0, tzinfo=timezone.utc)
-    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         portfolio_id="P1",
         base_currency="USD",
         cost_basis_method=CostBasisMethod.AVCO,
     )
-    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
         security_id="S1",
         product_type="EQUITY",
         asset_class="EQUITY",
@@ -393,6 +395,7 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
         portfolio_id="P1",
         security_id="S1",
         repo=repo,
+        reference_data=reference_data,
     )
 
     assert [transaction.transaction_id for transaction in plan.source_transactions] == [
@@ -414,7 +417,8 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
 
 async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         portfolio_id="P1",
         base_currency="USD",
         cost_basis_method=CostBasisMethod.FIFO,
@@ -425,6 +429,7 @@ async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> No
             portfolio_id="P1",
             security_id="S1",
             repo=repo,
+            reference_data=reference_data,
         )
 
     repo.get_transaction_history.assert_not_awaited()
@@ -432,12 +437,13 @@ async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> No
 
 async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
-    repo.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
+    reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         portfolio_id="P1",
         base_currency="USD",
         cost_basis_method=CostBasisMethod.AVCO,
     )
-    repo.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
+    reference_data.get_cost_basis_instrument.return_value = CostBasisInstrumentReference(
         security_id="S1",
         product_type="EQUITY",
         asset_class="EQUITY",
@@ -465,6 +471,7 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
             portfolio_id="P1",
             security_id="S1",
             repo=repo,
+            reference_data=reference_data,
         )
 
 

@@ -67,11 +67,12 @@ class CostProcessingCompatibilityAdapter:
         *,
         workflow: CostEffectsStager,
         repository: CostCalculatorRepository,
+        reference_data: CostBasisReferenceDataPort,
         outbox_repository: OutboxRepository,
     ) -> None:
         self._workflow = workflow
         self._repository = repository
-        self._reference_data: CostBasisReferenceDataPort = repository
+        self._reference_data = reference_data
         self._outbox_repository = outbox_repository
 
     async def stage_event(

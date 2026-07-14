@@ -58,6 +58,7 @@ from ..ports import (
     CostBasisCalculationObserver,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
+    CostBasisReferenceDataPort,
 )
 from .booked_transaction_event_mapper import (
     to_booked_transaction,
@@ -216,15 +217,16 @@ class CostCalculationWorkflow:
         portfolio_id: str,
         security_id: str,
         repo: CostCalculatorRepository,
+        reference_data: CostBasisReferenceDataPort,
     ) -> AverageCostPoolRebuildPlan:
-        portfolio = await repo.get_cost_basis_portfolio(portfolio_id)
+        portfolio = await reference_data.get_cost_basis_portfolio(portfolio_id)
         if portfolio is None:
             raise ValueError(f"Portfolio {portfolio_id} was not found")
         cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
         if cost_basis_method is not CostBasisMethod.AVCO:
             raise ValueError("Average cost pool rebuild requires an AVCO portfolio")
 
-        instrument = await repo.get_cost_basis_instrument(security_id)
+        instrument = await reference_data.get_cost_basis_instrument(security_id)
         if instrument is None:
             raise ValueError(f"Instrument {security_id} was not found")
         history = await repo.get_transaction_history(
