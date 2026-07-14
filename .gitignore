@@ -67,6 +67,9 @@ docker-compose.override.yml
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Repository-owned Node tooling caches
+tools/api_governance/node_modules/
+
 # Local QA evidence artifacts
 output/qa-*/
 output/

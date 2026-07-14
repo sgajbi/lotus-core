@@ -346,8 +346,15 @@ def test_quality_baseline_runs_manifest_integration_lite_collection_gate() -> No
 def test_quality_baseline_runs_openapi_spectral_gate() -> None:
     workflow_text = Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8")
     makefile_text = Path("Makefile").read_text(encoding="utf-8")
+    spectral_gate_text = Path("scripts/quality/openapi_spectral_gate.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "quality-openapi-spectral-gate:" in makefile_text
+    assert Path("tools/api_governance/package-lock.json").is_file()
+    assert "npm_ci_command" in spectral_gate_text
+    assert "cwd=SPECTRAL_TOOL_ROOT" in spectral_gate_text
+    assert '"@stoplight/spectral-cli"' not in spectral_gate_text
     assert "actions/setup-node@v6" in workflow_text
     assert "OpenAPI Spectral gate" in workflow_text
     assert "make quality-openapi-spectral-gate" in workflow_text

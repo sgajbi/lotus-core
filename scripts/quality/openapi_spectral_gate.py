@@ -13,12 +13,47 @@ if str(REPO_ROOT) not in sys.path:
 
 DEFAULT_OPENAPI_OUTPUT_DIR = REPO_ROOT / "output" / "openapi"
 DEFAULT_RULESET = REPO_ROOT / ".spectral.yaml"
+SPECTRAL_TOOL_ROOT = REPO_ROOT / "tools" / "api_governance"
 
 
-def npx_executable(platform: str = sys.platform) -> str:
-    if platform.startswith("win"):
-        return "npx.cmd"
-    return "npx"
+def npm_executable(platform: str = sys.platform) -> str:
+    """Return the npm executable name for the current platform."""
+
+    return "npm.cmd" if platform.startswith("win") else "npm"
+
+
+def npm_ci_command(platform: str = sys.platform) -> list[str]:
+    """Return the deterministic dependency-install command."""
+
+    return [
+        npm_executable(platform),
+        "ci",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-fund",
+    ]
+
+
+def install_spectral_tooling(*, platform: str = sys.platform) -> int:
+    """Install the lock-backed API-governance tooling in its owned directory."""
+
+    completed = subprocess.run(
+        npm_ci_command(platform),
+        cwd=SPECTRAL_TOOL_ROOT,
+        check=False,
+    )
+    return completed.returncode
+
+
+def spectral_executable(
+    platform: str = sys.platform,
+    *,
+    tool_root: Path = SPECTRAL_TOOL_ROOT,
+) -> str:
+    """Return the lock-installed Spectral executable for the current platform."""
+
+    executable = "spectral.cmd" if platform.startswith("win") else "spectral"
+    return str(tool_root / "node_modules" / ".bin" / executable)
 
 
 def spectral_command(
@@ -27,11 +62,10 @@ def spectral_command(
     ruleset: Path = DEFAULT_RULESET,
     fail_severity: str = "warn",
     platform: str = sys.platform,
+    tool_root: Path = SPECTRAL_TOOL_ROOT,
 ) -> list[str]:
     return [
-        npx_executable(platform),
-        "--yes",
-        "@stoplight/spectral-cli",
+        spectral_executable(platform, tool_root=tool_root),
         "lint",
         *[str(path) for path in artifacts],
         "--ruleset",
@@ -78,6 +112,14 @@ def main() -> int:
         help="Lowest Spectral severity that fails the gate.",
     )
     args = parser.parse_args()
+
+    install_returncode = install_spectral_tooling()
+    if install_returncode != 0:
+        print(
+            "Failed to install lock-backed API-governance tooling.",
+            file=sys.stderr,
+        )
+        return install_returncode
 
     artifacts = write_openapi_artifacts(output_dir=args.output_dir)
     for path in artifacts:
