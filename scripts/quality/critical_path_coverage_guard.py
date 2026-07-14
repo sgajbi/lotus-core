@@ -13,15 +13,15 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from scripts.quality.coverage_evidence.changed_source_evidence import (
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.quality.coverage_evidence.changed_source_evidence import (  # noqa: E402
     ChangedSourceFile,
     explicit_changed_sources,
     read_git_changed_sources,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 CONTRACT_PATH = Path("docs/standards/critical-path-coverage.v1.json")
 DEFAULT_REPORT_PATH = Path("output/coverage/critical-path-coverage-report.json")
