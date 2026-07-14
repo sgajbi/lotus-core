@@ -11,9 +11,12 @@ from .corporate_action_reconciliation import (
     CorporateActionReconciliationRunEvidence,
 )
 from .cost_basis import (
+    AverageCostPoolCheckpointRecord,
+    AverageCostPoolPersistedSummary,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
+    OpenLotCheckpointRecord,
 )
 from .cost_basis_observability import (
     CostBasisCalculationObservation,
@@ -48,6 +51,8 @@ from .transaction_processing import (
 from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
+    "AverageCostPoolCheckpointRecord",
+    "AverageCostPoolPersistedSummary",
     "AverageCostPoolReconciliationPort",
     "CashflowProcessingPort",
     "BookedTransactionReplayPort",
@@ -67,6 +72,7 @@ __all__ = [
     "CostProcessingPort",
     "CostProcessingResult",
     "PipelineStageProcessingPort",
+    "OpenLotCheckpointRecord",
     "PositionHistoryObserver",
     "PositionHistoryRepository",
     "PositionProcessingPort",

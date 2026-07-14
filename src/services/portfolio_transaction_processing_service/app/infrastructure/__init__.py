@@ -49,10 +49,7 @@ from .cost_processing_adapter import (
     PortfolioNotFoundError,
 )
 from .cost_repository import (
-    AverageCostPoolCheckpointRecord,
-    AverageCostPoolPersistedSummary,
     CostCalculatorRepository,
-    OpenLotCheckpointRecord,
     cost_basis_processing_lock_key,
 )
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
@@ -76,8 +73,6 @@ from .transaction_replay_adapter import (
 )
 
 __all__ = [
-    "AverageCostPoolCheckpointRecord",
-    "AverageCostPoolPersistedSummary",
     "CanonicalBookedTransactionReplayerFactory",
     "CanonicalTransactionReplayer",
     "CashflowCalculationWorkflow",
@@ -97,7 +92,6 @@ __all__ = [
     "FxRateNotFoundError",
     "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",
-    "OpenLotCheckpointRecord",
     "PositionHistoryProcessingAdapter",
     "PipelineStageProcessingAdapter",
     "PortfolioNotFoundError",

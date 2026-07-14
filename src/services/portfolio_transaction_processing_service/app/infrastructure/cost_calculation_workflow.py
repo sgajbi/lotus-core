@@ -54,6 +54,7 @@ from ..domain.transaction.fx import (
     build_fx_processed_transaction,
 )
 from ..ports import (
+    AverageCostPoolCheckpointRecord,
     CorporateActionReconciliationObserver,
     CostBasisCalculationObserver,
     CostBasisInstrumentReference,
@@ -67,7 +68,7 @@ from .booked_transaction_event_mapper import (
 )
 from .cost_basis import StagedCostEffects
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
-from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
+from .cost_repository import CostCalculatorRepository
 from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
@@ -691,7 +692,11 @@ class CostCalculationWorkflow:
         if record.representative_transaction is None:
             raise ValueError("Open average cost pool has no representative transaction")
         transaction_raw = self._transform_event_for_engine(
-            TransactionEvent.model_validate(record.representative_transaction)
+            to_transaction_event(
+                record.representative_transaction,
+                correlation_id=None,
+                traceparent=None,
+            )
         )
         transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
         transaction_raw["quantity"] = checkpoint.quantity
@@ -759,7 +764,11 @@ class CostCalculationWorkflow:
         checkpoint_transactions: list[dict[str, Any]] = []
         for record in records:
             transaction_raw = self._transform_event_for_engine(
-                TransactionEvent.model_validate(record.transaction)
+                to_transaction_event(
+                    record.transaction,
+                    correlation_id=None,
+                    traceparent=None,
+                )
             )
             transaction_raw["source_lot_order_quantity"] = transaction_raw["quantity"]
             transaction_raw["quantity"] = record.quantity
