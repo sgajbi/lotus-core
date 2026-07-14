@@ -1,17 +1,23 @@
+"""Run bounded average-cost-pool reconciliation through one application port."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain.cost_basis.reconciliation import (
+from ...domain.cost_basis.average_cost_pool_reconciliation import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from ..ports.average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
+from ...ports.cost_basis.average_cost_pool_reconciliation import (
+    AverageCostPoolReconciliationPort,
+)
 
 
 @dataclass(frozen=True, slots=True)
 class ReconcileAverageCostPoolsCommand:
+    """Request one ordered, bounded AVCO reconciliation page."""
+
     apply: bool = False
     limit: int = 100
     portfolio_id: str | None = None
@@ -29,6 +35,8 @@ class ReconcileAverageCostPoolsCommand:
 
 @dataclass(frozen=True, slots=True)
 class ReconcileAverageCostPoolsResult:
+    """Summarize one AVCO reconciliation page and its continuation cursor."""
+
     apply: bool
     assessments: tuple[AverageCostPoolReconciliationAssessment, ...]
     next_cursor: AverageCostPoolKey | None
@@ -54,6 +62,8 @@ class ReconcileAverageCostPoolsResult:
 
 
 class ReconcileAverageCostPoolsUseCase:
+    """Assess or repair ordered average-cost-pool candidates through the port."""
+
     def __init__(self, reconciliation: AverageCostPoolReconciliationPort) -> None:
         self._reconciliation = reconciliation
 

@@ -1,6 +1,11 @@
 """Expose application policy for canonical cost-basis processing."""
 
 from .average_cost_pool_rebuild import AverageCostPoolRebuildPlanner
+from .average_cost_pool_reconciliation import (
+    ReconcileAverageCostPoolsCommand,
+    ReconcileAverageCostPoolsResult,
+    ReconcileAverageCostPoolsUseCase,
+)
 from .calculation_result import CostBasisCalculationResult
 from .fx_enrichment import FxRateNotFoundError, enrich_cost_basis_transactions_with_fx
 from .lot_state_persistence import OpenLotPersistenceScope, persist_open_lot_state
@@ -22,6 +27,9 @@ __all__ = [
     "InstrumentReferenceUnavailableError",
     "OpenLotPersistenceScope",
     "PreparedCostTransaction",
+    "ReconcileAverageCostPoolsCommand",
+    "ReconcileAverageCostPoolsResult",
+    "ReconcileAverageCostPoolsUseCase",
     "UpstreamCashLegUnavailableError",
     "build_cost_basis_timeline_processor",
     "enrich_cost_basis_transactions_with_fx",

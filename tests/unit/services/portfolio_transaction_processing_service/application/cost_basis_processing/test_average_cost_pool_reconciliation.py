@@ -3,11 +3,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.services.portfolio_transaction_processing_service.app.application.reconcile_average_cost_pools import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing.average_cost_pool_reconciliation import (  # noqa: E501
     ReconcileAverageCostPoolsCommand,
     ReconcileAverageCostPoolsUseCase,
 )
-from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.reconciliation import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis.average_cost_pool_reconciliation import (  # noqa: E501
     AverageCostPoolKey,
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,

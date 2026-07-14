@@ -1,6 +1,7 @@
 """Framework-neutral ports for cost-basis processing dependencies."""
 
 from .average_cost_pool import CostBasisAverageCostPoolPort
+from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
 from .fx_rates import CostBasisFxRatePort
 from .lot_state import CostBasisLotStatePort
 from .processing_state import CostBasisProcessingStatePort
@@ -19,6 +20,7 @@ from .transaction_state import CostBasisTransactionStatePort
 __all__ = [
     "AverageCostPoolCheckpointRecord",
     "AverageCostPoolPersistedSummary",
+    "AverageCostPoolReconciliationPort",
     "CostBasisAverageCostPoolPort",
     "CostBasisFxRatePort",
     "CostBasisLotStatePort",

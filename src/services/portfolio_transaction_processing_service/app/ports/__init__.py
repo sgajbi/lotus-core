@@ -1,6 +1,5 @@
 """Framework-neutral transaction processing capability ports."""
 
-from .average_cost_pool_reconciliation import AverageCostPoolReconciliationPort
 from .corporate_action_reconciliation import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
@@ -13,6 +12,7 @@ from .corporate_action_reconciliation import (
 from .cost_basis import (
     AverageCostPoolCheckpointRecord,
     AverageCostPoolPersistedSummary,
+    AverageCostPoolReconciliationPort,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
