@@ -1,3 +1,5 @@
+"""Replay one booked transaction through the canonical transaction publisher."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -8,13 +10,15 @@ from portfolio_common.reprocessing_replay import ReprocessingReplayError
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..application import (
+from ...application import (
     BookedTransactionReplayDependencyUnavailable,
     BookedTransactionReplayInvariantViolation,
 )
 
 
 class CanonicalTransactionReplayer(Protocol):
+    """Describe the canonical publisher used by the replay adapter."""
+
     async def reprocess_transactions_by_ids(
         self,
         transaction_ids: list[str],
@@ -25,6 +29,8 @@ class CanonicalTransactionReplayer(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyBookedTransactionReplayAdapter:
+    """Replay one transaction using a fresh SQLAlchemy session."""
+
     session_factory: Callable[[], AsyncSession]
     replayer_factory: Callable[[AsyncSession], CanonicalTransactionReplayer]
 

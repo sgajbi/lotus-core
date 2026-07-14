@@ -1774,7 +1774,12 @@ Most relevant current governance:
      `ReplayBookedTransactionUseCase` -> replay port -> SQLAlchemy/canonical replay adapter. Delivery
      must not create sessions, repositories, or producers, and must not implement a second retry or
      DLQ loop. Map database and canonical publication failures to the application-owned dependency
-     error, then let `BaseConsumer` own bounded retry, exhaustion, DLQ, and offset handling. Preserve
+     error. Canonical replay infrastructure belongs under
+     `app/infrastructure/transaction_replay/booked_transaction.py`. The adapter owns its short-lived
+     SQLAlchemy session, publisher delegation, dependency error mapping, and zero-or-one cardinality
+     invariant behind `BookedTransactionReplayPort`; do not restore a flat replay adapter module or
+     broad infrastructure-root export.
+     Then let `BaseConsumer` own bounded retry, exhaustion, DLQ, and offset handling. Preserve
      header-first correlation, payload fallback, and acknowledged missing/not-found requests unless
      a future contract change is intentional and versioned. Keep replay as the second consumer in
      the combined deployable because its backlog and operator controls differ from normal booking.

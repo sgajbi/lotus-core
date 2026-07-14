@@ -1,3 +1,5 @@
+"""Verify canonical booked transaction replay adaptation."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -10,7 +12,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     BookedTransactionReplayDependencyUnavailable,
     BookedTransactionReplayInvariantViolation,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
     SqlAlchemyBookedTransactionReplayAdapter,
 )
 

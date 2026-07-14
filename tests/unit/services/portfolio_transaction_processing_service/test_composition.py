@@ -17,12 +17,14 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CanonicalBookedTransactionReplayerFactory,
     CashflowRuleCache,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
-    SqlAlchemyBookedTransactionReplayAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
     build_reconcile_average_cost_pools_use_case,
     build_replay_booked_transaction_use_case,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
+    SqlAlchemyBookedTransactionReplayAdapter,
 )
 
 

@@ -40,14 +40,9 @@ from .prometheus_observability import (
     PrometheusTransactionProcessingObserver,
 )
 from .sqlalchemy_unit_of_work import SqlAlchemyTransactionProcessingUnitOfWork
-from .transaction_replay_adapter import (
-    CanonicalTransactionReplayer,
-    SqlAlchemyBookedTransactionReplayAdapter,
-)
 
 __all__ = [
     "CanonicalBookedTransactionReplayerFactory",
-    "CanonicalTransactionReplayer",
     "CASHFLOW_PROCESSING_SERVICE_NAME",
     "CachedCashflowRule",
     "CachedCashflowRuleResolver",
@@ -69,7 +64,6 @@ __all__ = [
     "PrometheusTransactionProcessingObserver",
     "PrometheusCostBasisCalculationObserver",
     "SqlAlchemyAverageCostPoolReconciliationAdapter",
-    "SqlAlchemyBookedTransactionReplayAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWork",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "UpstreamCashLegUnavailableError",

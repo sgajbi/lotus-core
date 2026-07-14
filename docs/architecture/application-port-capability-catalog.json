@@ -408,6 +408,32 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "transaction-processing.booked-transaction-replay",
+      "capability_family": "replay-publisher",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/transaction_replay.py",
+      "port_symbols": [
+        "BookedTransactionReplayPort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_replay/booked_transaction.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/replay_booked_transaction.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/transaction_replay_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "transaction-processing.idempotency-claims",
       "capability_family": "audit-idempotency-store",
       "owner_service": "portfolio_transaction_processing_service",
