@@ -17,6 +17,7 @@ from ..application.cost_basis_processing import (
 from ..domain import BookedTransaction
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import (
+    AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
@@ -60,6 +61,7 @@ class CostEffectsStager(Protocol):
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -79,6 +81,7 @@ class CostProcessingCompatibilityAdapter:
         repository: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
+        income_offsets: AccruedIncomeOffsetStatePort,
         reference_data: CostBasisReferenceDataPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
@@ -89,6 +92,7 @@ class CostProcessingCompatibilityAdapter:
         self._repository = repository
         self._average_cost_pools = average_cost_pools
         self._lot_states = lot_states
+        self._income_offsets = income_offsets
         self._reference_data = reference_data
         self._fx_rates = fx_rates
         self._processing_state = processing_state
@@ -122,6 +126,7 @@ class CostProcessingCompatibilityAdapter:
             repo=self._repository,
             average_cost_pools=self._average_cost_pools,
             lot_states=self._lot_states,
+            income_offsets=self._income_offsets,
             fx_rates=self._fx_rates,
             processing_state=self._processing_state,
             reconciliation_repository=self._reconciliation_repository,

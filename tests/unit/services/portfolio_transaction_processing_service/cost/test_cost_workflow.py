@@ -32,6 +32,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     normalize_cost_fee_amount,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    AccruedIncomeOffsetStatePort,
     CorporateActionReconciliationRepository,
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
@@ -51,6 +52,10 @@ def _average_cost_pool_port() -> AsyncMock:
 
 def _lot_state_port() -> AsyncMock:
     return AsyncMock(spec=CostBasisLotStatePort)
+
+
+def _income_offset_port() -> AsyncMock:
+    return AsyncMock(spec=AccruedIncomeOffsetStatePort)
 
 
 async def test_cost_workflow_does_not_depend_on_retired_delivery_subclass() -> None:
@@ -101,6 +106,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
     workflow = CostCalculationWorkflow()
     calculation = MagicMock(
         processed=[],
@@ -123,6 +129,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         repo=repo,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         fx_rates=fx_rates,
         processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
@@ -214,6 +221,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
@@ -242,6 +250,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         repo=repo,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         fx_rates=fx_rates,
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
@@ -259,6 +268,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         repo=repo,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
+        income_offsets=income_offsets,
         fx_rates=fx_rates,
         processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
@@ -304,6 +314,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
@@ -314,6 +325,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             repository=repo,
             average_cost_pools=average_cost_pools,
             lot_states=lot_states,
+            income_offsets=income_offsets,
             reference_data=reference_data,
             fx_rates=fx_rates,
             processing_state=processing_state,
@@ -337,6 +349,7 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
     later_event = MagicMock(spec=TransactionEvent)
     repository = MagicMock()
     lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
     cost_calculation_workflow._persist_processed_transaction = AsyncMock(
         side_effect=(incoming_event, later_event)
     )
@@ -346,6 +359,7 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
         new_transaction_ids={incoming.transaction_id},
         repo=repository,
         lot_states=lot_states,
+        income_offsets=income_offsets,
     )
 
     assert events == [incoming_event]
@@ -379,6 +393,7 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
     lot_states = _lot_state_port()
+    income_offsets = _income_offset_port()
     repository.apply_transaction_costs.return_value = None
 
     with pytest.raises(
@@ -389,11 +404,12 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
             processed_transaction=processed_transaction,
             repo=repository,
             lot_states=lot_states,
+            income_offsets=income_offsets,
         )
 
     repository.replace_transaction_cost_breakdown.assert_not_awaited()
     lot_states.upsert_buy_lot_state.assert_not_awaited()
-    repository.upsert_accrued_income_offset_state.assert_not_awaited()
+    income_offsets.upsert_accrued_income_offset.assert_not_awaited()
 
 
 async def test_transform_event_rejects_post_validation_negative_trade_fee(

@@ -26,6 +26,7 @@ from .cost_basis_observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
 )
+from .income import AccruedIncomeOffsetStatePort
 from .position_history import (
     PositionHistoryObserver,
     PositionHistoryRepository,
@@ -55,6 +56,7 @@ from .transaction_processing import (
 from .transaction_replay import BookedTransactionReplayPort
 
 __all__ = [
+    "AccruedIncomeOffsetStatePort",
     "AverageCostPoolCheckpointRecord",
     "AverageCostPoolPersistedSummary",
     "AverageCostPoolReconciliationPort",

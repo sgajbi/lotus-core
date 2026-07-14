@@ -28,6 +28,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
+    SqlAlchemyAccruedIncomeOffsetRepository,
+)
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
     canonical_transaction_record,
@@ -100,6 +103,7 @@ async def _stage_cost_calculation(
             repository=repository_factory(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_states=SqlAlchemyCostBasisLotRepository(session),
+            income_offsets=SqlAlchemyAccruedIncomeOffsetRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=processing_state_factory(session),

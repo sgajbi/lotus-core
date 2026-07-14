@@ -36,6 +36,7 @@ from .cost_basis import (
 )
 from .cost_processing_adapter import CostEffectsStager, CostProcessingCompatibilityAdapter
 from .cost_repository import CostCalculatorRepository
+from .income import SqlAlchemyAccruedIncomeOffsetRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
 from .prometheus_position_history_observer import PROMETHEUS_POSITION_HISTORY_OBSERVER
@@ -155,6 +156,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             repository=CostCalculatorRepository(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
             lot_states=SqlAlchemyCostBasisLotRepository(session),
+            income_offsets=SqlAlchemyAccruedIncomeOffsetRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=SqlAlchemyCostBasisProcessingStateRepository(session),
