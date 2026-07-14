@@ -88,7 +88,9 @@ Current repository posture:
    `make critical-path-coverage-guard`, and is reported by `make coverage-gate` under
    `output/coverage/critical-path-coverage-report.json`. Git name-status evidence preserves
    rename/copy/delete lineage, coverage evaluates only post-change files, and current changed
-   critical modules fail closed when absent from the measured-source artifact. Query Service
+   critical modules fail closed when absent from the measured-source artifact or when Git cannot
+   establish comparison evidence. Measured changed critical modules enforce both line and branch
+   thresholds. Query Service
    aggregate evidence remains separate at `output/coverage/query-service-coverage.json`, so
    aggregate, changed-code, and critical-path coverage cannot be conflated. Risk-based test-family
    coverage governance lives in
