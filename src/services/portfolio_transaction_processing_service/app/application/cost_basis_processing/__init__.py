@@ -1,5 +1,6 @@
 """Expose application policy for canonical cost-basis processing."""
 
+from .average_cost_pool_rebuild import AverageCostPoolRebuildPlanner
 from .fx_enrichment import FxRateNotFoundError, enrich_cost_basis_transactions_with_fx
 from .preparation import (
     CostProcessingRoute,
@@ -9,6 +10,7 @@ from .preparation import (
 )
 
 __all__ = [
+    "AverageCostPoolRebuildPlanner",
     "CostProcessingRoute",
     "FxRateNotFoundError",
     "InstrumentReferenceUnavailableError",

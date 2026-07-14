@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+    AverageCostPoolRebuildPlanner,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
-)
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.average_cost_pool_reconciliation_adapter import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,
@@ -71,22 +71,22 @@ def _plan() -> SimpleNamespace:
 def _adapter(
     *,
     session: MagicMock,
-    workflow: AsyncMock | None = None,
+    rebuild_planner: AsyncMock | None = None,
     repository: AsyncMock | None = None,
 ) -> tuple[SqlAlchemyAverageCostPoolReconciliationAdapter, AsyncMock, AsyncMock, AsyncMock]:
-    resolved_workflow = workflow or AsyncMock(spec=CostCalculationWorkflow)
+    resolved_rebuild_planner = rebuild_planner or AsyncMock(spec=AverageCostPoolRebuildPlanner)
     resolved_repository = repository or AsyncMock(spec=CostBasisAverageCostPoolPort)
     history_repository = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     return (
         SqlAlchemyAverageCostPoolReconciliationAdapter(
             session_factory=MagicMock(return_value=session),
-            workflow=resolved_workflow,
+            rebuild_planner=resolved_rebuild_planner,
             repository_factory=MagicMock(return_value=history_repository),
             average_cost_pool_factory=MagicMock(return_value=resolved_repository),
             processing_state_factory=MagicMock(return_value=processing_state),
         ),
-        resolved_workflow,
+        resolved_rebuild_planner,
         resolved_repository,
         processing_state,
     )
@@ -125,8 +125,8 @@ async def test_candidate_listing_uses_ordered_bounded_avco_lot_source_keys() -> 
 
 async def test_dry_run_reports_replay_proven_drift_without_writes() -> None:
     session = _session()
-    adapter, workflow, repository, processing_state = _adapter(session=session)
-    workflow.build_average_cost_pool_rebuild_plan.return_value = _plan()
+    adapter, rebuild_planner, repository, processing_state = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
     repository.get_average_cost_pool_persisted_summary.return_value = _summary(pool_present=False)
 
     assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=False)
@@ -140,9 +140,9 @@ async def test_dry_run_reports_replay_proven_drift_without_writes() -> None:
 
 async def test_apply_commits_only_after_post_write_exact_reconciliation() -> None:
     session = _session()
-    adapter, workflow, repository, processing_state = _adapter(session=session)
+    adapter, rebuild_planner, repository, processing_state = _adapter(session=session)
     plan = _plan()
-    workflow.build_average_cost_pool_rebuild_plan.return_value = plan
+    rebuild_planner.build.return_value = plan
     repository.get_average_cost_pool_persisted_summary.side_effect = [
         _summary(quantity="14", cost_local="168", cost_base="182"),
         _summary(),
@@ -163,8 +163,8 @@ async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_n
     None
 ):
     session = _session()
-    adapter, workflow, repository, _ = _adapter(session=session)
-    workflow.build_average_cost_pool_rebuild_plan.return_value = _plan()
+    adapter, rebuild_planner, repository, _ = _adapter(session=session)
+    rebuild_planner.build.return_value = _plan()
     repository.get_average_cost_pool_persisted_summary.side_effect = [
         _summary(quantity="14", cost_local="168", cost_base="182"),
         _summary(quantity="13", cost_local="156", cost_base="169"),
@@ -181,8 +181,8 @@ async def test_apply_rolls_back_and_reports_failure_when_post_write_state_does_n
 
 async def test_replay_failure_is_isolated_as_bounded_key_failure() -> None:
     session = _session()
-    adapter, workflow, repository, _ = _adapter(session=session)
-    workflow.build_average_cost_pool_rebuild_plan.side_effect = ValueError("invalid history")
+    adapter, rebuild_planner, repository, _ = _adapter(session=session)
+    rebuild_planner.build.side_effect = ValueError("invalid history")
 
     assessment = await adapter.reconcile(key=AverageCostPoolKey("P1", "S1"), apply=True)
 

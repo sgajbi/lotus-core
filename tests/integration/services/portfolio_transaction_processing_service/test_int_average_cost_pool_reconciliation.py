@@ -16,12 +16,14 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     ReconcileAverageCostPoolsCommand,
     ReconcileAverageCostPoolsUseCase,
 )
+from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
+    AverageCostPoolRebuildPlanner,
+)
 from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculationWorkflow,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
@@ -105,7 +107,7 @@ async def test_historical_avco_reconciliation_repairs_stale_sources_and_is_idemp
     use_case = ReconcileAverageCostPoolsUseCase(
         SqlAlchemyAverageCostPoolReconciliationAdapter(
             session_factory=context.session_factory,
-            workflow=CostCalculationWorkflow(),
+            rebuild_planner=AverageCostPoolRebuildPlanner(),
         )
     )
 
@@ -228,7 +230,7 @@ async def test_historical_avco_reconciliation_rolls_back_partial_database_repair
 
     adapter = SqlAlchemyAverageCostPoolReconciliationAdapter(
         session_factory=context.session_factory,
-        workflow=CostCalculationWorkflow(),
+        rebuild_planner=AverageCostPoolRebuildPlanner(),
         average_cost_pool_factory=FailingAfterRebuildRepository,
     )
 
