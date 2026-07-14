@@ -52,6 +52,11 @@ transitions. SQLAlchemy-based AVCO reconciliation remains an infrastructure adap
 coordination. Lot-opening, consumption, preservation, and basis-transfer behavior remains pure
 policy under `app/domain/cost_basis`.
 
+Timeline replay and bounded average-cost-pool reconciliation are grouped under the same cost-basis
+capability in every layer. Their domain assessment, application use case, port, SQL adapter, and
+tests use matching `cost_basis` or `cost_basis_processing` package paths; flat compatibility roots
+are not extension points.
+
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
 processing paths and tests use the combined application use case, target modules, and ports.
