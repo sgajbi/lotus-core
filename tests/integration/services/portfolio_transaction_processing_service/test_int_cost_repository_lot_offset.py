@@ -25,6 +25,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyCostBasisLotRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -188,6 +191,7 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
     await async_db_session.commit()
 
     repo = CostCalculatorRepository(async_db_session)
+    lot_repo = SqlAlchemyCostBasisLotRepository(async_db_session)
     txn = EngineTransaction(
         transaction_id="TXN_SLICE4_01",
         portfolio_id="PORT_SLICE4_01",
@@ -209,7 +213,7 @@ async def test_cost_repository_persists_buy_lot_and_offset_state(
         source_system="OMS_PRIMARY",
     )
 
-    await repo.upsert_buy_lot_state(txn)
+    await lot_repo.upsert_buy_lot_state(txn)
     await repo.upsert_accrued_income_offset_state(txn)
     await async_db_session.commit()
 
@@ -281,8 +285,8 @@ async def test_cost_repository_updates_current_lot_quantity_and_cost_from_engine
     )
     await async_db_session.commit()
 
-    repo = CostCalculatorRepository(async_db_session)
-    await repo.update_open_lot_states(
+    lot_repo = SqlAlchemyCostBasisLotRepository(async_db_session)
+    await lot_repo.update_open_lot_states(
         portfolio_id="PORT_SLICE4_02",
         security_id="BOND_USD_02",
         states_by_source_transaction_id={
@@ -362,8 +366,8 @@ async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
         )
     await async_db_session.commit()
 
-    repo = CostCalculatorRepository(async_db_session)
-    records = await repo.get_fifo_disposal_lot_checkpoint_records(
+    lot_repo = SqlAlchemyCostBasisLotRepository(async_db_session)
+    records = await lot_repo.get_fifo_disposal_lot_checkpoint_records(
         portfolio_id=portfolio_id,
         security_id=security_id,
         required_quantity=Decimal("6"),
@@ -373,7 +377,7 @@ async def test_fifo_disposal_reads_and_updates_only_required_open_lots(
         "BUY_FIFO_01",
         "BUY_FIFO_02",
     ]
-    await repo.update_selected_open_lot_states(
+    await lot_repo.update_selected_open_lot_states(
         portfolio_id=portfolio_id,
         security_id=security_id,
         states_by_source_transaction_id={
@@ -465,7 +469,7 @@ async def test_cost_repository_upserts_buy_lot_state_idempotently(
     )
     await async_db_session.commit()
 
-    repo = CostCalculatorRepository(async_db_session)
+    lot_repo = SqlAlchemyCostBasisLotRepository(async_db_session)
     txn = EngineTransaction(
         transaction_id="TXN_SLICE4_04",
         portfolio_id="PORT_SLICE4_04",
@@ -487,7 +491,7 @@ async def test_cost_repository_upserts_buy_lot_state_idempotently(
         source_system="OMS_PRIMARY",
     )
 
-    await repo.upsert_buy_lot_state(txn)
+    await lot_repo.upsert_buy_lot_state(txn)
     await async_db_session.commit()
 
     lot_stmt = select(PositionLotState).where(

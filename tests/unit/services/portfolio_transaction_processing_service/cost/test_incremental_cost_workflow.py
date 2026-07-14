@@ -31,6 +31,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
@@ -56,6 +57,12 @@ def _average_cost_pool_port() -> AsyncMock:
     """Provide an isolated average-cost persistence dependency for one workflow test."""
 
     return AsyncMock(spec=CostBasisAverageCostPoolPort)
+
+
+def _lot_state_port() -> AsyncMock:
+    """Provide an isolated open-lot persistence dependency for one workflow test."""
+
+    return AsyncMock(spec=CostBasisLotStatePort)
 
 
 def _event(
@@ -145,6 +152,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-1", buy_date)
@@ -153,7 +161,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             prior_buy, cost_basis_method=CostBasisMethod.FIFO
         )
     )
-    repo.get_fifo_disposal_lot_checkpoint_records.return_value = [
+    lot_states.get_fifo_disposal_lot_checkpoint_records.return_value = [
         OpenLotCheckpointRecord(
             transaction=_history_transaction(_persisted_buy("BUY-1", buy_date)),
             quantity=Decimal("10"),
@@ -188,6 +196,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             fx_rates=_fx_rate_port(),
             processing_state=processing_state,
             cost_basis_method=method,
@@ -200,12 +209,12 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("6")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("60")
     repo.get_transaction_history.assert_not_awaited()
-    repo.get_fifo_disposal_lot_checkpoint_records.assert_awaited_once_with(
+    lot_states.get_fifo_disposal_lot_checkpoint_records.assert_awaited_once_with(
         portfolio_id="P1",
         security_id="S1",
         required_quantity=Decimal("4"),
     )
-    repo.get_open_lot_checkpoint_records.assert_not_awaited()
+    lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
     execution_metric.labels.assert_called_once_with(mode="ordered_append", cost_basis_method="FIFO")
     execution_metric.labels.return_value.inc.assert_called_once_with()
     restore_metric.labels.assert_called_once_with(cost_basis_method="FIFO")
@@ -217,6 +226,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
@@ -256,6 +266,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -274,8 +285,8 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
         portfolio_id="P1",
         security_id="S1",
     )
-    repo.get_open_lot_checkpoint_records.assert_not_awaited()
-    repo.get_fifo_disposal_lot_checkpoint_records.assert_not_awaited()
+    lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
+    lot_states.get_fifo_disposal_lot_checkpoint_records.assert_not_awaited()
 
 
 async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source() -> None:
@@ -283,6 +294,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", first_buy_date)
@@ -324,6 +336,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -338,7 +351,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
     assert transition.after.quantity == Decimal("15")
     assert transition.after.representative_source_transaction_id == "BUY-AVCO-2"
     repo.get_transaction_history.assert_not_awaited()
-    repo.get_open_lot_checkpoint_records.assert_not_awaited()
+    lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
 
 
 async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() -> None:
@@ -346,6 +359,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     sell_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     prior_buy = _processed_buy("BUY-AVCO-1", buy_date)
@@ -375,6 +389,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=method,
@@ -384,7 +399,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
     assert calculation.average_cost_pool_transition is None
     assert calculation.errored == []
     repo.get_transaction_history.assert_awaited_once()
-    repo.get_open_lot_checkpoint_records.assert_not_awaited()
+    lot_states.get_open_lot_checkpoint_records.assert_not_awaited()
 
 
 async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history() -> None:
@@ -530,6 +545,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     later_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     earlier_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     later_buy = _processed_buy("BUY-LATER", later_date)
@@ -558,6 +574,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
             instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             fx_rates=_fx_rate_port(),
             processing_state=processing_state,
             cost_basis_method=CostBasisMethod.FIFO,
@@ -582,6 +599,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     repo = AsyncMock(spec=CostCalculatorRepository)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     dividend_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
     processing_state.get_cost_basis_processing_checkpoint.return_value = None
@@ -602,6 +620,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         instrument=MagicMock(product_type="EQUITY", asset_class="EQUITY"),
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=_fx_rate_port(),
         processing_state=processing_state,
         cost_basis_method=cost_basis_method,
@@ -612,6 +631,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         open_lot_states=calculation.open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=calculation.incremental,
         update_scope=calculation.open_lot_state_update_scope,
         cost_basis_method=cost_basis_method,
@@ -623,14 +643,14 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("10")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("100")
     if cost_basis_method is CostBasisMethod.FIFO:
-        repo.update_open_lot_states.assert_awaited_once_with(
+        lot_states.update_open_lot_states.assert_awaited_once_with(
             portfolio_id="P1",
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,
         )
         average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
     else:
-        repo.update_open_lot_states.assert_awaited_once_with(
+        lot_states.update_open_lot_states.assert_awaited_once_with(
             portfolio_id="P1",
             security_id="S1",
             states_by_source_transaction_id=calculation.open_lot_states,

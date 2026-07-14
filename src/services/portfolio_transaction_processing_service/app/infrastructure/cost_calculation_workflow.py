@@ -61,6 +61,7 @@ from ..ports import (
     CostBasisCalculationObserver,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
@@ -377,6 +378,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -390,6 +392,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -405,6 +408,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -422,6 +426,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -473,6 +478,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -488,6 +494,7 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             fx_rates=fx_rates,
             processing_state=processing_state,
             cost_basis_method=cost_basis_method,
@@ -499,6 +506,7 @@ class CostCalculationWorkflow:
             processed=calculation.processed,
             new_transaction_ids=new_transaction_ids,
             repo=repo,
+            lot_states=lot_states,
         )
         await self._update_open_lot_states_if_required(
             event=event,
@@ -506,6 +514,7 @@ class CostCalculationWorkflow:
             open_lot_states=calculation.open_lot_states,
             repo=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             incremental=calculation.incremental,
             update_scope=calculation.open_lot_state_update_scope,
             cost_basis_method=cost_basis_method,
@@ -528,6 +537,7 @@ class CostCalculationWorkflow:
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         cost_basis_method: CostBasisMethod,
@@ -591,7 +601,7 @@ class CostCalculationWorkflow:
                         event=event,
                         portfolio_base_currency=portfolio_base_currency,
                         instrument=instrument,
-                        repo=repo,
+                        lot_states=lot_states,
                         required_fifo_quantity=required_fifo_quantity,
                     )
                     if required_fifo_quantity is not None:
@@ -782,16 +792,16 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        lot_states: CostBasisLotStatePort,
         required_fifo_quantity: Decimal | None = None,
     ) -> list[dict[str, Any]]:
         if required_fifo_quantity is None:
-            records = await repo.get_open_lot_checkpoint_records(
+            records = await lot_states.get_open_lot_checkpoint_records(
                 portfolio_id=event.portfolio_id,
                 security_id=event.security_id,
             )
         else:
-            records = await repo.get_fifo_disposal_lot_checkpoint_records(
+            records = await lot_states.get_fifo_disposal_lot_checkpoint_records(
                 portfolio_id=event.portfolio_id,
                 security_id=event.security_id,
                 required_quantity=required_fifo_quantity,
@@ -861,6 +871,7 @@ class CostCalculationWorkflow:
         processed: list[Any],
         new_transaction_ids: set[str],
         repo: CostCalculatorRepository,
+        lot_states: CostBasisLotStatePort,
     ) -> list[TransactionEvent]:
         first_affected_index = next(
             (
@@ -878,6 +889,7 @@ class CostCalculationWorkflow:
             persisted_event = await self._persist_processed_transaction(
                 processed_transaction=processed_transaction,
                 repo=repo,
+                lot_states=lot_states,
             )
             if processed_transaction.transaction_id in new_transaction_ids:
                 events_to_publish.append(persisted_event)
@@ -891,6 +903,7 @@ class CostCalculationWorkflow:
         open_lot_states: dict[str, OpenLotState],
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         incremental: bool,
         update_scope: OpenLotStateUpdateScope,
         cost_basis_method: CostBasisMethod,
@@ -910,9 +923,9 @@ class CostCalculationWorkflow:
         )
         if should_update_lot_states:
             update_lot_states = (
-                repo.update_selected_open_lot_states
+                lot_states.update_selected_open_lot_states
                 if update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
-                else repo.update_open_lot_states
+                else lot_states.update_open_lot_states
             )
             await update_lot_states(
                 portfolio_id=event.portfolio_id,
@@ -974,6 +987,7 @@ class CostCalculationWorkflow:
         *,
         processed_transaction: Any,
         repo: CostCalculatorRepository,
+        lot_states: CostBasisLotStatePort,
     ) -> TransactionEvent:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_transaction_costs", "attempt"
@@ -995,7 +1009,7 @@ class CostCalculationWorkflow:
         ):
             await self._persist_open_lot_state(
                 processed_transaction=processed_transaction,
-                repo=repo,
+                lot_states=lot_states,
             )
         if processed_transaction.transaction_type == "BUY":
             await self._persist_accrued_income_offset(
@@ -1023,12 +1037,12 @@ class CostCalculationWorkflow:
         self,
         *,
         processed_transaction: Any,
-        repo: CostCalculatorRepository,
+        lot_states: CostBasisLotStatePort,
     ) -> None:
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_lot_state", "attempt"
         )
-        await repo.upsert_buy_lot_state(processed_transaction)
+        await lot_states.upsert_buy_lot_state(processed_transaction)
         self._record_lifecycle_stage(
             processed_transaction.transaction_type, "persist_lot_state", "success"
         )

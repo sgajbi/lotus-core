@@ -36,6 +36,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
@@ -46,6 +47,10 @@ pytestmark = pytest.mark.asyncio
 
 def _average_cost_pool_port() -> AsyncMock:
     return AsyncMock(spec=CostBasisAverageCostPoolPort)
+
+
+def _lot_state_port() -> AsyncMock:
+    return AsyncMock(spec=CostBasisLotStatePort)
 
 
 async def test_cost_workflow_does_not_depend_on_retired_delivery_subclass() -> None:
@@ -95,6 +100,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     workflow = CostCalculationWorkflow()
     calculation = MagicMock(
         processed=[],
@@ -116,6 +122,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         instrument=MagicMock(),
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=fx_rates,
         processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
@@ -206,6 +213,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
@@ -233,6 +241,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         instrument=instrument,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=fx_rates,
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
@@ -249,6 +258,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         instrument=instrument,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         fx_rates=fx_rates,
         processing_state=processing_state,
         cost_basis_method=CostBasisMethod.FIFO,
@@ -293,6 +303,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     outbox_repo = AsyncMock(spec=OutboxRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
@@ -302,6 +313,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
             workflow=MagicMock(),
             repository=repo,
             average_cost_pools=average_cost_pools,
+            lot_states=lot_states,
             reference_data=reference_data,
             fx_rates=fx_rates,
             processing_state=processing_state,
@@ -324,6 +336,7 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
     incoming_event = MagicMock(spec=TransactionEvent)
     later_event = MagicMock(spec=TransactionEvent)
     repository = MagicMock()
+    lot_states = _lot_state_port()
     cost_calculation_workflow._persist_processed_transaction = AsyncMock(
         side_effect=(incoming_event, later_event)
     )
@@ -332,6 +345,7 @@ async def test_backdated_cost_persistence_updates_suffix_but_publishes_only_inco
         processed=[prior, incoming, later],
         new_transaction_ids={incoming.transaction_id},
         repo=repository,
+        lot_states=lot_states,
     )
 
     assert events == [incoming_event]
@@ -364,6 +378,7 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
         transaction_type="BUY",
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
+    lot_states = _lot_state_port()
     repository.apply_transaction_costs.return_value = None
 
     with pytest.raises(
@@ -373,10 +388,11 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
         await cost_calculation_workflow._persist_processed_transaction(
             processed_transaction=processed_transaction,
             repo=repository,
+            lot_states=lot_states,
         )
 
     repository.replace_transaction_cost_breakdown.assert_not_awaited()
-    repository.upsert_buy_lot_state.assert_not_awaited()
+    lot_states.upsert_buy_lot_state.assert_not_awaited()
     repository.upsert_accrued_income_offset_state.assert_not_awaited()
 
 
@@ -702,6 +718,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
 ):
     repo = AsyncMock(spec=CostCalculatorRepository)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     event = TransactionEvent(
         transaction_id="DIV-LOT-01",
         portfolio_id="PORT_COST_01",
@@ -730,30 +747,32 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         open_lot_states=open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=False,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
     )
-    repo.update_open_lot_states.assert_awaited_once_with(
+    lot_states.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
         states_by_source_transaction_id=open_lot_states,
     )
 
-    repo.reset_mock()
+    lot_states.reset_mock()
     await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="DIVIDEND",
         open_lot_states=open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=True,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
     )
-    repo.update_open_lot_states.assert_not_awaited()
+    lot_states.update_open_lot_states.assert_not_awaited()
 
     await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
@@ -761,35 +780,37 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
         open_lot_states=open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=False,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
     )
-    repo.update_open_lot_states.assert_awaited_once_with(
+    lot_states.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
         states_by_source_transaction_id=open_lot_states,
     )
 
-    repo.reset_mock()
+    lot_states.reset_mock()
     await cost_calculation_workflow._update_open_lot_states_if_required(
         event=event,
         event_transaction_type="SELL",
         open_lot_states=open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=True,
         update_scope=OpenLotStateUpdateScope.SELECTED_LOTS,
         cost_basis_method=CostBasisMethod.FIFO,
         average_cost_pool_transition=None,
     )
-    repo.update_selected_open_lot_states.assert_awaited_once_with(
+    lot_states.update_selected_open_lot_states.assert_awaited_once_with(
         portfolio_id="PORT_COST_01",
         security_id="DIV-SEC",
         states_by_source_transaction_id=open_lot_states,
     )
-    repo.update_open_lot_states.assert_not_awaited()
+    lot_states.update_open_lot_states.assert_not_awaited()
 
 
 async def test_update_open_lot_states_applies_average_cost_pool_transition(
@@ -797,6 +818,7 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     event = TransactionEvent(
         transaction_id="SELL-AVCO-1",
         portfolio_id="P1",
@@ -834,6 +856,7 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
         open_lot_states={"BUY-1": transition.existing_sources_after},
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=True,
         update_scope=OpenLotStateUpdateScope.AVERAGE_COST_POOL,
         cost_basis_method=CostBasisMethod.AVCO,
@@ -841,8 +864,8 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
     )
 
     average_cost_pools.apply_average_cost_pool_transition.assert_awaited_once_with(transition)
-    repo.update_open_lot_states.assert_not_awaited()
-    repo.update_selected_open_lot_states.assert_not_awaited()
+    lot_states.update_open_lot_states.assert_not_awaited()
+    lot_states.update_selected_open_lot_states.assert_not_awaited()
     average_cost_pools.upsert_average_cost_pool_checkpoint.assert_not_awaited()
 
 
@@ -851,6 +874,7 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
 ) -> None:
     repo = AsyncMock(spec=CostCalculatorRepository)
     average_cost_pools = _average_cost_pool_port()
+    lot_states = _lot_state_port()
     event = TransactionEvent(
         transaction_id="DIV-1",
         portfolio_id="P1",
@@ -878,6 +902,7 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
         open_lot_states=open_lot_states,
         repo=repo,
         average_cost_pools=average_cost_pools,
+        lot_states=lot_states,
         incremental=False,
         update_scope=OpenLotStateUpdateScope.COMPLETE_SNAPSHOT,
         cost_basis_method=CostBasisMethod.AVCO,
@@ -889,7 +914,7 @@ async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
     assert persisted_checkpoint.cost_local == Decimal("100")
     assert persisted_checkpoint.cost_base == Decimal("105")
     assert persisted_checkpoint.representative_source_transaction_id == "BUY-1"
-    repo.update_open_lot_states.assert_awaited_once_with(
+    lot_states.update_open_lot_states.assert_awaited_once_with(
         portfolio_id="P1",
         security_id="S1",
         states_by_source_transaction_id=open_lot_states,

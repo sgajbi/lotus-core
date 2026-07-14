@@ -20,11 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
-from ..domain.cost_basis import OpenLotState
 from ..domain.transaction import BookedTransaction
-from ..ports import OpenLotCheckpointRecord
 from .booked_transaction_event_mapper import to_booked_transaction
-from .cost_basis.lot_state_repository import SqlAlchemyCostBasisLotRepository
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -159,7 +156,6 @@ def _transaction_cost_rows(
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._lot_states = SqlAlchemyCostBasisLotRepository(db)
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
@@ -189,27 +185,6 @@ class CostCalculatorRepository:
             to_booked_transaction(TransactionEvent.model_validate(row))
             for row in result.scalars().all()
         ]
-
-    async def get_open_lot_checkpoint_records(
-        self, *, portfolio_id: str, security_id: str
-    ) -> list[OpenLotCheckpointRecord]:
-        return await self._lot_states.get_open_lot_checkpoint_records(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-        )
-
-    async def get_fifo_disposal_lot_checkpoint_records(
-        self,
-        *,
-        portfolio_id: str,
-        security_id: str,
-        required_quantity: Decimal,
-    ) -> list[OpenLotCheckpointRecord]:
-        return await self._lot_states.get_fifo_disposal_lot_checkpoint_records(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            required_quantity=required_quantity,
-        )
 
     async def apply_transaction_costs(
         self, transaction_result: EngineTransaction
@@ -283,38 +258,6 @@ class CostCalculatorRepository:
 
         self.db.add_all(
             _transaction_cost_rows(transaction_result=transaction_result, db_txn=db_txn)
-        )
-
-    async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
-        """Persists BUY lot state as a durable, idempotent record."""
-        await self._lot_states.upsert_buy_lot_state(transaction_result)
-
-    async def update_open_lot_states(
-        self,
-        *,
-        portfolio_id: str,
-        security_id: str,
-        states_by_source_transaction_id: dict[str, OpenLotState],
-    ) -> None:
-        """Reconciles persisted quantity and cost with the latest engine-derived lot state."""
-        await self._lot_states.update_open_lot_states(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            states_by_source_transaction_id=states_by_source_transaction_id,
-        )
-
-    async def update_selected_open_lot_states(
-        self,
-        *,
-        portfolio_id: str,
-        security_id: str,
-        states_by_source_transaction_id: dict[str, OpenLotState],
-    ) -> None:
-        """Update selected source lots without closing omitted positions."""
-        await self._lot_states.update_selected_open_lot_states(
-            portfolio_id=portfolio_id,
-            security_id=security_id,
-            states_by_source_transaction_id=states_by_source_transaction_id,
         )
 
     async def upsert_accrued_income_offset_state(
