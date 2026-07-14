@@ -20,7 +20,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.delivery.kafka import (
     map_transaction_event,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
     build_process_transaction_use_case,
 )
 

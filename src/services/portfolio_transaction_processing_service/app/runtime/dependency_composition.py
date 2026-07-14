@@ -1,3 +1,5 @@
+"""Compose transaction-processing application use cases from concrete adapters."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -18,22 +20,22 @@ from ..application.cost_basis_processing import (
     AverageCostPoolRebuildPlanner,
     PreparedCostProcessingUseCase,
 )
-from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
-from .cashflow import CashflowRuleCache
-from .cost_basis import (
+from ..infrastructure.cashflow import CashflowRuleCache
+from ..infrastructure.cost_basis import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
-from .transaction_processing import (
+from ..infrastructure.transaction_processing import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
-from .transaction_replay import (
+from ..infrastructure.transaction_replay import (
     CanonicalTransactionReplayer,
     SqlAlchemyBookedTransactionReplayAdapter,
 )
+from ..ports import TransactionProcessingObserver, TransactionProcessingUnitOfWork
 
 
 @dataclass(frozen=True, slots=True)

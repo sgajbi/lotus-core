@@ -25,11 +25,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingIntent,
     TransactionProcessingRejected,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    build_replay_booked_transaction_use_case,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
+)
+from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E501
+    build_replay_booked_transaction_use_case,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,
