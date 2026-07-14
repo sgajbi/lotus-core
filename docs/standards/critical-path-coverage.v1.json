@@ -232,6 +232,8 @@
         "src/services/ingestion_service/app/infrastructure/**/*.py",
         "src/services/event_replay_service/app/application/**/*.py",
         "src/services/event_replay_service/app/routers/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/application/transaction_readiness/*.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness/*.py",
         "src/libs/portfolio-common/portfolio_common/outbox*.py",
         "src/libs/portfolio-common/portfolio_common/reprocessing*.py"
       ],
@@ -251,6 +253,8 @@
       "required_test_globs": [
         "tests/unit/services/ingestion_service/**/*.py",
         "tests/unit/services/event_replay_service/**/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/application/transaction_readiness/*.py",
+        "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_readiness/*.py",
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
         "tests/integration/libs/portfolio-common/test_outbox_dispatcher*.py"
       ]

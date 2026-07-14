@@ -45,16 +45,19 @@ reconciles to original basis.
 The app-local/CI unified transaction processor uses the same detection, ordering, lock, epoch
 fence, and watermark rules, but rebuilds current-epoch position history inside the shared
 transaction. This avoids depending on a legacy normal-path replay consumer. The combined path also
-registers cost-stage pipeline readiness for every rebuilt current-epoch transaction before staging
-matching cashflow completion signals. Legacy cost publication remains limited to the incoming
-transaction so compatibility consumers cannot double-apply the rebuilt suffix. Compatibility events
-remain for downstream stage orchestration while registry/Kubernetes cutover and remaining legacy
-package removal are completed. The pure reducer and deterministic history builder live in
-`app/domain/position`; the `PositionHistoryProcessor` application use case coordinates current and
-backdated materialization through explicit ports; SQLAlchemy, state-store, and observability
-adapters are organized under `app/infrastructure/position`. The production unit of work passes immutable booked
-transactions directly to this use case, avoiding the former event DTO round trip and duplicate
-epoch-state read. The retired `position_calculator` source package is absent from the target image.
+registers transaction readiness for every rebuilt current-epoch transaction before staging matching
+cashflow completion signals. `application/transaction_readiness` owns exact-key locking, monotonic
+epoch policy, and completion claiming behind repository and event-staging ports; governed event
+mapping and outbox writes remain in `infrastructure/transaction_readiness`. Legacy cost publication
+remains limited to the incoming transaction so compatibility consumers cannot double-apply the
+rebuilt suffix. Compatibility events remain for downstream stage orchestration while
+registry/Kubernetes cutover and remaining legacy package removal are completed. The pure reducer
+and deterministic history builder live in `app/domain/position`; the `PositionHistoryProcessor`
+application use case coordinates current and backdated materialization through explicit ports;
+SQLAlchemy, state-store, and observability adapters are organized under
+`app/infrastructure/position`. The production unit of work passes immutable booked transactions
+directly to this use case, avoiding the former event DTO round trip and duplicate epoch-state read.
+The retired `position_calculator` source package is absent from the target image.
 
 The former `position_calculation_workflow.py` and `position_repository.py` modules are retired.
 Canonical PostgreSQL tests now prove rollback atomicity, replay deduplication, same-key

@@ -408,6 +408,35 @@
       "runtime_boundary": "design-modularity-only"
     },
     {
+      "capability_id": "transaction-processing.transaction-readiness",
+      "capability_family": "epoch-fenced-transactional-event-writer",
+      "owner_service": "portfolio_transaction_processing_service",
+      "port_module": "src/services/portfolio_transaction_processing_service/app/ports/transaction_readiness.py",
+      "port_symbols": [
+        "TransactionReadinessRepository",
+        "TransactionReadinessEventStagingPort"
+      ],
+      "adapter_modules": [
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_stage_repository.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness/event_staging.py"
+      ],
+      "consumer_modules": [
+        "src/services/portfolio_transaction_processing_service/app/application/transaction_readiness/registration.py"
+      ],
+      "guard_scripts": [
+        "scripts/quality/application_port_catalog_guard.py",
+        "scripts/quality/application_dependency_inversion_guard.py",
+        "scripts/quality/repository_transaction_boundary_guard.py"
+      ],
+      "standards": [
+        "docs/standards/application-port-layer-standard.md",
+        "docs/standards/infrastructure-adapter-layer-standard.md",
+        "docs/standards/repository-transaction-boundary-standard.md"
+      ],
+      "status": "implemented-representative",
+      "runtime_boundary": "design-modularity-only"
+    },
+    {
       "capability_id": "runtime.provider-ports",
       "capability_family": "clock-id-provider",
       "owner_service": "portfolio_common",

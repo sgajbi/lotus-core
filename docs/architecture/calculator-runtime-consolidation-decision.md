@@ -87,8 +87,10 @@ moving folders; complete the cost/cashflow target-ownership work first.
 `ProcessTransactionUseCase` coordinates cost policy, cashflow policy, and the position reducer
 through typed application/domain contracts and ports. It must not reach into concrete repositories
 or consumer implementations. Existing cost/cashflow/readiness events remain compatibility outbox
-events during migration; they can be retired only after every downstream consumer has moved to the
-combined completion contract.
+events during migration. Transaction readiness registration is an application use case over
+epoch-fenced repository and event-staging ports; SQL and governed outbox event mapping remain
+infrastructure adapters. Compatibility events can be retired only after every downstream consumer
+has moved to the combined completion contract.
 
 ## Migration Sequence
 
