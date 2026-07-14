@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from decimal import Decimal
+from typing import TypedDict
 
 from portfolio_common.domain.transaction_control_codes import (
     normalize_transaction_control_code,
@@ -20,6 +21,23 @@ class UnsupportedFxRealizedPnlModeError(ValueError):
     """Raised when baseline FX processing is asked to simulate advanced P&L modes."""
 
 
+class FxBaselineProcessingUpdate(TypedDict):
+    """Calculated cost and realized-P&L fields for one FX component."""
+
+    fx_realized_pnl_mode: str
+    gross_cost: Decimal
+    net_cost: Decimal
+    realized_gain_loss: Decimal
+    net_cost_local: Decimal
+    realized_gain_loss_local: Decimal
+    realized_capital_pnl_local: Decimal
+    realized_fx_pnl_local: Decimal
+    realized_total_pnl_local: Decimal
+    realized_capital_pnl_base: Decimal
+    realized_fx_pnl_base: Decimal
+    realized_total_pnl_base: Decimal
+
+
 def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTransaction:
     """Apply explicit baseline cost and realized-P&L semantics to an FX component."""
 
@@ -27,14 +45,35 @@ def build_fx_processed_transaction(transaction: BookedTransaction) -> BookedTran
     return replace(transaction, **update)
 
 
-def build_fx_baseline_processing_update(source: object) -> dict[str, object]:
+def build_fx_baseline_processing_update(source: object) -> FxBaselineProcessingUpdate:
     realized_mode = normalize_transaction_control_code(
         getattr(source, "fx_realized_pnl_mode", None) or "NONE"
     )
     _assert_supported_baseline_realized_mode(realized_mode)
-    update = _build_base_fx_processing_update(source, realized_mode)
-    update.update(_build_realized_pnl_update(source, realized_mode))
-    return update
+    (
+        capital_local,
+        fx_local,
+        total_local,
+        capital_base,
+        fx_base,
+        total_base,
+    ) = _resolve_realized_pnl_values(source, realized_mode)
+    return {
+        "fx_realized_pnl_mode": realized_mode,
+        "gross_cost": _decimal_or_zero(getattr(source, "gross_cost", None)),
+        "net_cost": _decimal_or_zero(getattr(source, "net_cost", None)),
+        "realized_gain_loss": _decimal_or_zero(getattr(source, "realized_gain_loss", None)),
+        "net_cost_local": _decimal_or_zero(getattr(source, "net_cost_local", None)),
+        "realized_gain_loss_local": _decimal_or_zero(
+            getattr(source, "realized_gain_loss_local", None)
+        ),
+        "realized_capital_pnl_local": capital_local,
+        "realized_fx_pnl_local": fx_local,
+        "realized_total_pnl_local": total_local,
+        "realized_capital_pnl_base": capital_base,
+        "realized_fx_pnl_base": fx_base,
+        "realized_total_pnl_base": total_base,
+    }
 
 
 def _assert_supported_baseline_realized_mode(realized_mode: str) -> None:
@@ -51,59 +90,27 @@ def _decimal_or_zero(value: Decimal | None) -> Decimal:
     return value if value is not None else Decimal(0)
 
 
-def _build_base_fx_processing_update(
+def _resolve_realized_pnl_values(
     source: object,
     realized_mode: str,
-) -> dict[str, object]:
-    return {
-        "fx_realized_pnl_mode": realized_mode,
-        "gross_cost": _decimal_or_zero(getattr(source, "gross_cost", None)),
-        "net_cost": _decimal_or_zero(getattr(source, "net_cost", None)),
-        "realized_gain_loss": _decimal_or_zero(getattr(source, "realized_gain_loss", None)),
-        "net_cost_local": _decimal_or_zero(getattr(source, "net_cost_local", None)),
-        "realized_gain_loss_local": _decimal_or_zero(
-            getattr(source, "realized_gain_loss_local", None)
-        ),
-    }
-
-
-def _build_realized_pnl_update(
-    source: object,
-    realized_mode: str,
-) -> dict[str, object]:
+) -> tuple[Decimal, Decimal, Decimal, Decimal, Decimal, Decimal]:
     if realized_mode == "NONE":
-        return _build_zero_realized_pnl_update()
-    return _build_upstream_realized_pnl_update(source)
-
-
-def _build_zero_realized_pnl_update() -> dict[str, object]:
-    return {
-        "realized_capital_pnl_local": Decimal(0),
-        "realized_fx_pnl_local": Decimal(0),
-        "realized_total_pnl_local": Decimal(0),
-        "realized_capital_pnl_base": Decimal(0),
-        "realized_fx_pnl_base": Decimal(0),
-        "realized_total_pnl_base": Decimal(0),
-    }
-
-
-def _build_upstream_realized_pnl_update(source: object) -> dict[str, object]:
+        zero = Decimal(0)
+        return zero, zero, zero, zero, zero, zero
     capital_local = _decimal_or_zero(getattr(source, "realized_capital_pnl_local", None))
     capital_base = _decimal_or_zero(getattr(source, "realized_capital_pnl_base", None))
     fx_local = _decimal_or_zero(getattr(source, "realized_fx_pnl_local", None))
     fx_base = _decimal_or_zero(getattr(source, "realized_fx_pnl_base", None))
-    return {
-        "realized_capital_pnl_local": capital_local,
-        "realized_capital_pnl_base": capital_base,
-        "realized_fx_pnl_local": fx_local,
-        "realized_fx_pnl_base": fx_base,
-        "realized_total_pnl_local": _resolve_total_pnl(
+    return (
+        capital_local,
+        fx_local,
+        _resolve_total_pnl(
             getattr(source, "realized_total_pnl_local", None), capital_local, fx_local
         ),
-        "realized_total_pnl_base": _resolve_total_pnl(
-            getattr(source, "realized_total_pnl_base", None), capital_base, fx_base
-        ),
-    }
+        capital_base,
+        fx_base,
+        _resolve_total_pnl(getattr(source, "realized_total_pnl_base", None), capital_base, fx_base),
+    )
 
 
 def _resolve_total_pnl(
