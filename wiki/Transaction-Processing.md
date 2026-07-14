@@ -17,6 +17,12 @@ transaction domain; valuation, timeseries, and downstream analytics remain separ
    unit of work.
 6. A failure rolls back the combined state transition; replay uses the same application path.
 
+The combined unit of work owns session lifecycle and adapter composition only. Transaction claim
+persistence, the stable processing service identity, and physical/semantic outcome translation live
+under `app/infrastructure/idempotency`; application orchestration consumes them only through
+`TransactionIdempotencyPort`. Do not add concrete claim repository behavior back to the unit of
+work or expose the adapter through the broad infrastructure package root.
+
 ## Ordinary Transaction Domain
 
 The service-owned `app/domain/transaction` package owns ordinary BUY, SELL, DIVIDEND, and INTEREST:

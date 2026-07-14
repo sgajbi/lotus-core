@@ -26,7 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.sqlalchemy_unit_of_work import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
 )
 from tests.test_support.transaction_processing import (

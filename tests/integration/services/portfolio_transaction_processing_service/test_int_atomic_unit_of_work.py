@@ -24,8 +24,10 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
-    TRANSACTION_PROCESSING_SERVICE_NAME,
     SqlAlchemyTransactionProcessingUnitOfWork,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
+    TRANSACTION_PROCESSING_SERVICE_NAME,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,
