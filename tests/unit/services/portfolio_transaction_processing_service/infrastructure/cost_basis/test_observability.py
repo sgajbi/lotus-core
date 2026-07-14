@@ -15,6 +15,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     PrometheusCostBasisPersistenceObserver,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    CostBasisExecutionMode,
     CostBasisPersistenceObservation,
     CostBasisPersistenceStage,
     CostBasisPersistenceStatus,
@@ -36,6 +37,36 @@ def test_prometheus_cost_basis_observer_records_depth_and_duration() -> None:
 
     depth.observe.assert_called_once_with(17)
     duration.observe.assert_called_once_with(0.25)
+
+
+def test_prometheus_cost_basis_observer_records_execution_and_restored_lots() -> None:
+    execution = MagicMock()
+    restored_open_lots = MagicMock()
+    observer = PrometheusCostBasisCalculationObserver(
+        execution=execution,
+        restored_open_lots=restored_open_lots,
+    )
+
+    observer.record_execution(CostBasisExecutionMode.ORDERED_APPEND, "AVCO")
+    observer.record_restored_open_lots(cost_basis_method="AVCO", lot_count=7)
+
+    execution.labels.assert_called_once_with(mode="ordered_append", cost_basis_method="AVCO")
+    execution.labels.return_value.inc.assert_called_once_with()
+    restored_open_lots.labels.assert_called_once_with(cost_basis_method="AVCO")
+    restored_open_lots.labels.return_value.observe.assert_called_once_with(7)
+
+
+def test_prometheus_cost_basis_execution_observation_contains_metric_failures(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    execution = MagicMock()
+    execution.labels.side_effect = RuntimeError("metrics unavailable")
+    observer = PrometheusCostBasisCalculationObserver(execution=execution)
+
+    with caplog.at_level(logging.ERROR):
+        observer.record_execution(CostBasisExecutionMode.FULL_REBUILD, "FIFO")
+
+    assert "Cost-basis execution metric recording failed." in caplog.messages
 
 
 def _persistence_observation(

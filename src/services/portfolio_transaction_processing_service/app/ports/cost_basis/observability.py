@@ -29,9 +29,29 @@ class CostBasisCalculationObservation(Protocol):
 class CostBasisCalculationObserver(Protocol):
     """Create bounded observations without exposing a metrics framework."""
 
+    def record_execution(
+        self,
+        mode: "CostBasisExecutionMode",
+        cost_basis_method: str,
+    ) -> None: ...
+
+    def record_restored_open_lots(
+        self,
+        *,
+        cost_basis_method: str,
+        lot_count: int,
+    ) -> None: ...
+
     def observe_recalculation(
         self,
     ) -> AbstractContextManager[CostBasisCalculationObservation]: ...
+
+
+class CostBasisExecutionMode(StrEnum):
+    """Name a bounded cost-basis calculation execution path."""
+
+    ORDERED_APPEND = "ordered_append"
+    FULL_REBUILD = "full_rebuild"
 
 
 class CostBasisPersistenceStage(StrEnum):

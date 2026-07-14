@@ -2450,7 +2450,9 @@ Most relevant current governance:
      Cost-basis observation protocols belong under `app/ports/cost_basis/observability.py`;
      Prometheus instruments and their adapter belong under `app/infrastructure/cost_basis` as
      `metrics.py` and `observability.py`. Preserve the existing metric contracts while keeping
-     framework dependencies outside domain and application code.
+     framework dependencies outside domain and application code. Ordered-append/full-rebuild mode
+     and restored-open-lot counts must cross the typed calculation observer; application or workflow
+     code must not import Prometheus counters or histograms directly.
      Calculated transaction-cost persistence belongs in
      `app/application/cost_basis_processing/transaction_persistence.py`: it accepts domain
      transactions and persistence ports, writes only the affected deterministic suffix, and returns
