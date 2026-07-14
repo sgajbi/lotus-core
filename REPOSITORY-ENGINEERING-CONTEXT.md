@@ -477,6 +477,14 @@ Current repository posture:
     E2E transaction-type coverage support derives supported types, transfer sign sets, cash
     instrument routing, and no-cashflow-rule exceptions from the registry while preserving
     migration-only `OTHER` coverage and explicit fallback exceptions.
+44. Keep `portfolio_common` limited to demonstrated multi-capability contracts, immutable value
+    objects, and pure infrastructure primitives. Service-specific domain policy, application
+    workflow, DTO mapping, repositories, and persistence behavior belong under the owning service
+    even when another service has similar code. Shared async decorators must preserve concrete
+    `Coroutine` signatures with `ParamSpec`; a broader `Awaitable` return weakens structural port
+    conformance. `mypy.ini` exposes the worktree-local common library and follows only deliberately
+    typed shared modules so strict service checks do not depend on a stale editable installation or
+    implicitly opt the whole legacy common package into typed ownership.
 
 ## Defect Tracking During Refactoring
 
