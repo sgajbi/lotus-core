@@ -79,6 +79,11 @@ Ordinary transaction booking metadata and settlement-leg policy are owned by
 existing governed event envelope only in infrastructure. The shared transaction package no longer
 contains duplicate BUY, SELL, DIVIDEND, or INTEREST canonical models or policy facades.
 
+Foreign-exchange baseline economics, validation, and synthetic contract identity remain under
+`app/domain/transaction/fx`. `app/application/foreign_exchange_processing` owns validated canonical
+transaction persistence through a narrow port; infrastructure alone maps the resulting transaction
+and optional contract instrument onto governed integration events.
+
 For an eligible persisted transaction event, the service:
 
 1. validates idempotency and portfolio readiness

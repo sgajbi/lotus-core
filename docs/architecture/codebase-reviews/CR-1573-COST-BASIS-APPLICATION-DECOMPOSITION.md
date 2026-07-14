@@ -66,6 +66,9 @@ obscured ownership and encouraged further dumping into broad folders.
     lookup and persistence ports; moved generated cash-leg validation, construction, ordered writes,
     and immutable product linkage out of infrastructure while retaining event-envelope mapping and
     corporate-action reconciliation at the adapter boundary.
+17. Added `application.foreign_exchange_processing.book_foreign_exchange_transaction` over a
+    one-method persistence port; it returns the validated domain transaction and optional synthetic
+    contract instrument while infrastructure retains governed event mapping.
 
 ## Measurable Improvement
 
@@ -79,11 +82,13 @@ obscured ownership and encouraged further dumping into broad folders.
   package paths and retirement guards; and
 - retained one combined transaction-processing runtime and application use case without adding a
   deployable service boundary;
-- reduced `CostCalculationWorkflow` from 869 to 733 lines across the persistence and settlement
+- reduced `CostCalculationWorkflow` from 869 to 729 lines across the persistence, settlement, and FX
   follow-ups while placing
   its 146-line application function and 256-line behavioral suite in mirrored owner packages; and
 - added a 53-line settlement-linking application service with a 118-line mirrored behavioral suite
   and 100% focused line/branch coverage;
+- added a 36-line FX booking application service with a 109-line mirrored behavioral suite and 100%
+  focused coverage;
 - removed every repository reference to the retired private persistence helpers; and
 - removed one settlement responsibility from the cost-basis package and reduced its application
   dependency from a five-method cost-state port to a one-method settlement lookup contract.
@@ -98,7 +103,7 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite after settlement linking extraction: `785 passed`;
+- complete transaction-processing unit suite after FX booking extraction: `789 passed`;
 - settlement application, cost workflow, processing adapter, and composition tests: `27 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
@@ -123,8 +128,8 @@ governed layered-architecture rule are unchanged.
 
 ## Remaining Work
 
-Keep #719 open. Further slices should evaluate foreign-exchange booking and event/outbox
-coordination as independent boundaries, extracting only when each application service has a narrow
-port contract and focused domain tests.
+Keep #719 open. Further slices should evaluate event/outbox coordination as an independent
+boundary, extracting only when the application service has a narrow port contract and focused
+domain tests.
 Do not restore extracted behavior to `CostCalculationWorkflow`, create flat compatibility modules,
 or split the runtime without workload, failure-isolation, scaling, security, or ownership evidence.

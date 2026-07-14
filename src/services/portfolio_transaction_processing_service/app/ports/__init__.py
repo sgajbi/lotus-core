@@ -29,6 +29,7 @@ from .cost_basis import (
     CostBasisTransactionStatePort,
     OpenLotCheckpointRecord,
 )
+from .foreign_exchange import ForeignExchangeTransactionPersistencePort
 from .income import AccruedIncomeOffsetStatePort
 from .position_history import (
     PositionHistoryObserver,
@@ -90,6 +91,7 @@ __all__ = [
     "CorporateActionReconciliationRunEvidence",
     "CostProcessingPort",
     "CostProcessingResult",
+    "ForeignExchangeTransactionPersistencePort",
     "PipelineStageProcessingPort",
     "OpenLotCheckpointRecord",
     "PositionHistoryObserver",
