@@ -13,9 +13,23 @@ from .classification import (
 class CorporateActionOrderable(Protocol):
     """Expose the fields required for deterministic linked-leg ordering."""
 
-    transaction_type: str
-    child_sequence_hint: int | None
-    target_instrument_id: str | None
+    @property
+    def transaction_type(self) -> str:
+        """Return the corporate-action transaction type."""
+
+        ...
+
+    @property
+    def child_sequence_hint(self) -> int | None:
+        """Return the explicit linked-child sequence when present."""
+
+        ...
+
+    @property
+    def target_instrument_id(self) -> str | None:
+        """Return the linked target instrument when present."""
+
+        ...
 
 
 _SOURCE_OUT_RANK_TYPES = SOURCE_BASIS_TRANSFER_TRANSACTION_TYPES | {
