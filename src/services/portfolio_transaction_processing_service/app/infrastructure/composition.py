@@ -24,7 +24,7 @@ from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
 )
 from .cost_calculation_workflow import CostCalculationWorkflow
-from .cost_processing_adapter import CostStagingWorkflow
+from .cost_processing_adapter import CostEffectsStager
 from .prometheus_cost_basis_observability import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
 )
@@ -39,7 +39,7 @@ from .transaction_replay_adapter import (
 @dataclass(frozen=True, slots=True)
 class SqlAlchemyTransactionProcessingUnitOfWorkFactory:
     session_factory: Callable[[], AsyncSession]
-    cost_workflow: CostStagingWorkflow
+    cost_workflow: CostEffectsStager
     cashflow_workflow: CashflowStagingWorkflow
 
     def __call__(self) -> TransactionProcessingUnitOfWork:

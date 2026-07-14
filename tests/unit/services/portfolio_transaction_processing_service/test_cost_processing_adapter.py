@@ -13,6 +13,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingError,
     TransactionProcessingRejected,
+    cost_basis_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
@@ -22,6 +23,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
+    StagedCostEffects,
 )
 
 
@@ -48,7 +50,6 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
             "traceparent": "trace-001",
         }
     )
-    instrument_event = MagicMock()
     repository = AsyncMock(spec=CostCalculatorRepository)
     repository.get_portfolio.return_value = Portfolio(
         base_currency="SGD",
@@ -57,12 +58,12 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     repository.get_instrument.return_value = MagicMock()
     outbox_repository = AsyncMock(spec=OutboxRepository)
     workflow = MagicMock()
-    workflow._build_events_to_publish = AsyncMock(
-        return_value=([processed_event], [instrument_event])
+    workflow.stage_prepared_event = AsyncMock(
+        return_value=StagedCostEffects(
+            emitted_transactions=(processed_event,),
+            instrument_update_count=1,
+        )
     )
-    workflow._build_emitted_transaction_events = AsyncMock(return_value=[processed_event])
-    workflow._publish_transaction_events = AsyncMock()
-    workflow._publish_instrument_events = AsyncMock()
     adapter = CostProcessingCompatibilityAdapter(
         workflow=workflow,
         repository=repository,
@@ -77,7 +78,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
 
     assert [item.transaction_id for item in result.processed_transactions] == ["TX-001-COSTED"]
     assert result.instrument_update_count == 1
-    build_call = workflow._build_events_to_publish.await_args.kwargs
+    build_call = workflow.stage_prepared_event.await_args.kwargs
     input_event = build_call["event"]
     assert input_event.transaction_id == "TX-001"
     assert input_event.correlation_id == "corr-001"
@@ -85,6 +86,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
     assert input_event.economic_event_id == "EVT-BUY-PB-001-TX-001"
     assert build_call["event_transaction_type"] == "BUY"
     assert build_call["cost_basis_method"].value == "FIFO"
+    assert build_call["route"] is cost_basis_processing.CostProcessingRoute.COST_BASIS
 
 
 @pytest.mark.asyncio
@@ -140,7 +142,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
     )
     repository.get_instrument.return_value = MagicMock()
     workflow = MagicMock()
-    workflow._build_events_to_publish = AsyncMock(
+    workflow.stage_prepared_event = AsyncMock(
         side_effect=SettlementCashValidationError(
             reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),
             field="trade_fee",

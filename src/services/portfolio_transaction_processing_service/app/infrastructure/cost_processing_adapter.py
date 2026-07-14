@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Protocol
 
-from portfolio_common.events import InstrumentEvent, TransactionEvent
+from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
 from ..application import TransactionProcessingError, build_settlement_cash_rejection
@@ -22,6 +21,7 @@ from .booked_transaction_event_mapper import (
     to_transaction_event,
     with_booked_transaction_fields,
 )
+from .cost_basis import StagedCostEffects
 from .cost_calculation_workflow import (
     FxRateNotFoundError,
     UpstreamCashLegUnavailableError,
@@ -35,10 +35,10 @@ class PortfolioNotFoundError(Exception):
     """Report that cost processing cannot yet resolve its portfolio dependency."""
 
 
-class CostStagingWorkflow(Protocol):
-    """Describe the transitional workflow surface isolated by this adapter."""
+class CostEffectsStager(Protocol):
+    """Stage prepared cost effects inside the caller-owned database transaction."""
 
-    async def _build_events_to_publish(
+    async def stage_prepared_event(
         self,
         *,
         event: TransactionEvent,
@@ -48,40 +48,9 @@ class CostStagingWorkflow(Protocol):
         instrument: Any,
         repo: CostCalculatorRepository,
         cost_basis_method: Any,
-    ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]: ...
-
-    async def _build_emitted_transaction_events(
-        self,
-        *,
-        events_to_publish: list[TransactionEvent],
-        repo: CostCalculatorRepository,
-        correlation_id: str,
-    ) -> list[TransactionEvent]: ...
-
-    async def _publish_transaction_events(
-        self,
-        *,
-        original_event: TransactionEvent,
-        emitted_events: list[TransactionEvent],
         outbox_repo: OutboxRepository,
         correlation_id: str,
-    ) -> None: ...
-
-    async def _publish_instrument_events(
-        self,
-        *,
-        instrument_events: list[InstrumentEvent],
-        outbox_repo: OutboxRepository,
-        correlation_id: str,
-    ) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class CostStagingResult:
-    """Describe costed transaction and instrument events staged for commit."""
-
-    emitted_events: tuple[TransactionEvent, ...]
-    instrument_event_count: int
+    ) -> StagedCostEffects: ...
 
 
 class CostProcessingCompatibilityAdapter:
@@ -90,7 +59,7 @@ class CostProcessingCompatibilityAdapter:
     def __init__(
         self,
         *,
-        workflow: CostStagingWorkflow,
+        workflow: CostEffectsStager,
         repository: CostCalculatorRepository,
         outbox_repository: OutboxRepository,
     ) -> None:
@@ -103,7 +72,7 @@ class CostProcessingCompatibilityAdapter:
         *,
         event: TransactionEvent,
         correlation_id: str,
-    ) -> CostStagingResult:
+    ) -> StagedCostEffects:
         """Stage compatibility cost and outbox writes in the caller-owned transaction."""
         portfolio = await self._repository.get_portfolio(event.portfolio_id)
         if not portfolio:
@@ -116,7 +85,7 @@ class CostProcessingCompatibilityAdapter:
             instrument_reference_available=instrument is not None,
         )
         prepared_event = with_booked_transaction_fields(event, prepared.transaction)
-        events_to_publish, instrument_events = await self._workflow._build_events_to_publish(
+        return await self._workflow.stage_prepared_event(
             event=prepared_event,
             event_transaction_type=prepared.transaction_type,
             route=prepared.route,
@@ -124,26 +93,8 @@ class CostProcessingCompatibilityAdapter:
             instrument=instrument,
             repo=self._repository,
             cost_basis_method=prepared.cost_basis_method,
-        )
-        emitted_events = await self._workflow._build_emitted_transaction_events(
-            events_to_publish=events_to_publish,
-            repo=self._repository,
-            correlation_id=correlation_id,
-        )
-        await self._workflow._publish_transaction_events(
-            original_event=prepared_event,
-            emitted_events=emitted_events,
             outbox_repo=self._outbox_repository,
             correlation_id=correlation_id,
-        )
-        await self._workflow._publish_instrument_events(
-            instrument_events=instrument_events,
-            outbox_repo=self._outbox_repository,
-            correlation_id=correlation_id,
-        )
-        return CostStagingResult(
-            emitted_events=tuple(emitted_events),
-            instrument_event_count=len(instrument_events),
         )
 
     async def process(
@@ -182,7 +133,7 @@ class CostProcessingCompatibilityAdapter:
             ) from exc
         return CostProcessingResult(
             processed_transactions=tuple(
-                to_booked_transaction(item) for item in stage_result.emitted_events
+                to_booked_transaction(item) for item in stage_result.emitted_transactions
             ),
-            instrument_update_count=stage_result.instrument_event_count,
+            instrument_update_count=stage_result.instrument_update_count,
         )

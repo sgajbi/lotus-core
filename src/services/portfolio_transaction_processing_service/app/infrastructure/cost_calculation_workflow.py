@@ -62,6 +62,7 @@ from .booked_transaction_event_mapper import (
     to_transaction_event,
     with_booked_transaction_fields,
 )
+from .cost_basis import StagedCostEffects
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepository
 from .fx_event_mapper import to_fx_contract_instrument_event
@@ -373,6 +374,51 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             cost_basis_method=cost_basis_method,
+        )
+
+    async def stage_prepared_event(
+        self,
+        *,
+        event: TransactionEvent,
+        event_transaction_type: str,
+        route: CostProcessingRoute,
+        portfolio: Any,
+        instrument: Any,
+        repo: CostCalculatorRepository,
+        cost_basis_method: CostBasisMethod,
+        outbox_repo: OutboxRepository,
+        correlation_id: str,
+    ) -> StagedCostEffects:
+        """Stage all cost-derived events through one public infrastructure operation."""
+
+        events_to_publish, instrument_events = await self._build_events_to_publish(
+            event=event,
+            event_transaction_type=event_transaction_type,
+            route=route,
+            portfolio=portfolio,
+            instrument=instrument,
+            repo=repo,
+            cost_basis_method=cost_basis_method,
+        )
+        emitted_transactions = await self._build_emitted_transaction_events(
+            events_to_publish=events_to_publish,
+            repo=repo,
+            correlation_id=correlation_id,
+        )
+        await self._publish_transaction_events(
+            original_event=event,
+            emitted_events=emitted_transactions,
+            outbox_repo=outbox_repo,
+            correlation_id=correlation_id,
+        )
+        await self._publish_instrument_events(
+            instrument_events=instrument_events,
+            outbox_repo=outbox_repo,
+            correlation_id=correlation_id,
+        )
+        return StagedCostEffects(
+            emitted_transactions=tuple(emitted_transactions),
+            instrument_update_count=len(instrument_events),
         )
 
     async def _build_fx_events_to_publish(

@@ -33,6 +33,7 @@ from .corporate_action_reconciliation_observability import (
     PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER,
     PrometheusCorporateActionReconciliationObserver,
 )
+from .cost_basis import StagedCostEffects
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
@@ -43,9 +44,8 @@ from .cost_calculation_workflow import (
     normalize_cost_fee_amount,
 )
 from .cost_processing_adapter import (
+    CostEffectsStager,
     CostProcessingCompatibilityAdapter,
-    CostStagingResult,
-    CostStagingWorkflow,
     PortfolioNotFoundError,
 )
 from .cost_repository import (
@@ -89,12 +89,11 @@ __all__ = [
     "CashflowRuleSetVersion",
     "CashflowStageResult",
     "CostProcessingCompatibilityAdapter",
+    "CostEffectsStager",
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
     "CostCalculatorRepository",
-    "CostStagingResult",
-    "CostStagingWorkflow",
     "FxRateNotFoundError",
     "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",
@@ -113,6 +112,7 @@ __all__ = [
     "SqlAlchemyTransactionIdempotencyAdapter",
     "SqlAlchemyTransactionProcessingUnitOfWork",
     "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
+    "StagedCostEffects",
     "TRANSACTION_PROCESSING_SERVICE_NAME",
     "TRANSFER_INFLOW_TRANSACTION_TYPES",
     "TRANSFER_OUTFLOW_TRANSACTION_TYPES",
