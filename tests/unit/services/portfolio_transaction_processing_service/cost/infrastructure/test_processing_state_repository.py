@@ -25,10 +25,13 @@ async def test_acquire_processing_lock_uses_stable_normalized_key() -> None:
         clock=MagicMock(side_effect=[10.0, 10.125]),
     )
 
-    with patch(
-        "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis."
-        "processing_state_repository.observe_cost_basis_processing_lock_wait"
-    ) as observe_wait:
+    with (
+        patch(
+            "src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis."
+            "processing_state_repository.observe_cost_basis_processing_lock_wait"
+        ) as observe_wait,
+        patch("portfolio_common.utils.DB_OPERATION_LATENCY_SECONDS") as latency,
+    ):
         await repository.acquire_cost_basis_processing_lock(" PORT_COST_01 ", " SEC01 ")
 
     statement = db_session.execute.call_args.args[0]
@@ -40,6 +43,10 @@ async def test_acquire_processing_lock_uses_stable_normalized_key() -> None:
         cost_basis_processing_lock_key("PORT_COST_01", "SEC01")
     )
     observe_wait.assert_called_once_with(outcome="acquired", seconds=0.125)
+    latency.labels.assert_called_once_with(
+        repository="CostBasisProcessingStateRepository",
+        method="acquire_cost_basis_processing_lock",
+    )
 
 
 async def test_acquire_processing_lock_records_failure_without_swallowing() -> None:
