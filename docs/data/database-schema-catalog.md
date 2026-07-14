@@ -1331,7 +1331,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Rule catalog for transaction-to-cashflow mapping.
 - **Description**: Configurable policy table describing classification/timing behavior by transaction type.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_cache.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_rules_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_calculation.py`
+- **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_cache.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_repository.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`, `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_calculation.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Governed cash-in-lieu rule**: `CASH_IN_LIEU` is a position-level, non-portfolio `TRANSFER` rule. It represents fractional product disposal and must not be classified as income; the linked `ADJUSTMENT` owns the real cash-account settlement.
 - **Column definitions**:

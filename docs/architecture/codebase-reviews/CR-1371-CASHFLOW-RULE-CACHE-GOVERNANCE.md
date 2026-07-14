@@ -12,7 +12,7 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 
 ## Changes
 
-- Added `CashflowRuleSetVersion` and `CashflowRulesRepository.get_rule_set_version()`.
+- Added `CashflowRuleSetVersion` and `SqlAlchemyCashflowRuleRepository.get_rule_set_version()`.
 - Added rule-set version and latest effective timestamp metadata to `CashflowRuleCacheState` and
   each `CachedCashflowRule`.
 - Changed fresh cache reads to verify the source rule-set version before serving a cached rule.
@@ -52,7 +52,7 @@ explicit stale-read behavior, invalidation ownership, metrics, and tests.
 ## Validation Evidence
 
 ```powershell
-python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py
+python -m pytest -q tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_repository.py
 ```
 
 Final lint, docs, architecture, and diff checks are recorded in the issue comment before commit.

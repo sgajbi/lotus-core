@@ -12,6 +12,16 @@ def test_repository_output_shape_guard_accepts_current_truth() -> None:
     assert guard.evaluate_repository_output_shapes() == []
 
 
+def test_cashflow_rule_repository_exception_tracks_domain_owned_package() -> None:
+    exception_keys = set(guard.TRANSITIONAL_ORM_RETURN_EXCEPTIONS)
+
+    assert (
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "cashflow/rule_repository.py:get_all_rules" in exception_keys
+    )
+    assert not any("cashflow_rules_repository.py" in key for key in exception_keys)
+
+
 def test_repository_output_shape_guard_rejects_unregistered_orm_return(
     tmp_path: Path,
 ) -> None:
