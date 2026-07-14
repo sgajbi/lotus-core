@@ -1,5 +1,8 @@
+"""Test deterministic position state transitions and replay decisions."""
+
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +13,16 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
     cash_position_deltas,
     plan_backdated_recalculation,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+TARGET_TEST = SERVICE_TEST_ROOT / "domain/position/test_reducer.py"
+RETIRED_TEST = SERVICE_TEST_ROOT / "position/test_position_reducer.py"
+
+
+def test_position_reducer_tests_are_owned_by_domain_boundary() -> None:
+    assert Path(__file__).resolve() == TARGET_TEST.resolve()
+    assert not RETIRED_TEST.exists()
 
 
 def _txn(
