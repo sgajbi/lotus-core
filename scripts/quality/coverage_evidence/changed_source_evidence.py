@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 class SourceChangeType(StrEnum):
@@ -36,7 +36,21 @@ _CHANGE_TYPES = {
 def normalize_repo_path(path: str) -> str:
     """Return one repository-relative path representation on every operating system."""
 
-    return path.replace("\\", "/").lstrip("./")
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+
+    candidate = PurePosixPath(normalized)
+    has_windows_drive = bool(candidate.parts and candidate.parts[0].endswith(":"))
+    if (
+        not normalized
+        or normalized == "."
+        or candidate.is_absolute()
+        or has_windows_drive
+        or ".." in candidate.parts
+    ):
+        raise ValueError(f"Source path must be repository-relative: {path!r}")
+    return candidate.as_posix()
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +141,7 @@ def read_git_changed_sources(*, repo_root: Path, base_ref: str | None) -> list[C
         return []
 
     candidates = ([f"{base_ref}...HEAD"], [base_ref, "HEAD"])
+    failures: list[str] = []
     for revision_args in candidates:
         completed = subprocess.run(
             [
@@ -147,7 +162,10 @@ def read_git_changed_sources(*, repo_root: Path, base_ref: str | None) -> list[C
         )
         if completed.returncode == 0:
             return parse_git_name_status(completed.stdout)
-    return []
+        failures.append(
+            f"{' '.join(revision_args)}: {completed.stderr.strip() or 'git diff failed'}"
+        )
+    raise RuntimeError("Unable to determine changed source evidence; " + "; ".join(failures))
 
 
 def explicit_changed_sources(paths: list[str], *, repo_root: Path) -> list[ChangedSourceFile]:

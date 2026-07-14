@@ -10,6 +10,7 @@ from scripts.quality.coverage_evidence.changed_source_evidence import (
     SourceChangeType,
     coverage_import_target,
     explicit_changed_sources,
+    normalize_repo_path,
     parse_git_name_status,
     read_git_changed_sources,
 )
@@ -58,6 +59,16 @@ def test_parse_git_name_status_normalizes_windows_paths() -> None:
     changes = parse_git_name_status("M\0src\\app\\use_case.py\0")
 
     assert changes[0].current_path == "src/app/use_case.py"
+
+
+def test_normalize_repo_path_preserves_leading_dot_directory() -> None:
+    assert normalize_repo_path("./.github/workflows/ci.yml") == ".github/workflows/ci.yml"
+
+
+@pytest.mark.parametrize("path", ["../src/app.py", "/src/app.py", "C:\\src\\app.py", ""])
+def test_normalize_repo_path_rejects_paths_outside_repository(path: str) -> None:
+    with pytest.raises(ValueError, match="repository-relative"):
+        normalize_repo_path(path)
 
 
 @pytest.mark.parametrize("output", ["M\0", "R100\0old.py\0", "\0path.py\0"])
@@ -110,6 +121,19 @@ def test_read_git_changed_sources_falls_back_when_merge_base_is_missing(monkeypa
 
     assert changes[0].change_type is SourceChangeType.ADDED
     assert calls[1][-2:] == ["origin/main", "HEAD"]
+
+
+def test_read_git_changed_sources_fails_closed_when_all_diffs_fail(monkeypatch) -> None:
+    def _fake_run(args, **_kwargs):
+        return SimpleNamespace(returncode=128, stdout="", stderr=f"invalid revision: {args[-1]}")
+
+    monkeypatch.setattr(
+        "scripts.quality.coverage_evidence.changed_source_evidence.subprocess.run",
+        _fake_run,
+    )
+
+    with pytest.raises(RuntimeError, match="Unable to determine changed source evidence"):
+        read_git_changed_sources(repo_root=Path("."), base_ref="missing-base")
 
 
 def test_explicit_changed_sources_distinguishes_current_and_absent_paths(tmp_path: Path) -> None:
