@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any
 
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.domain.transaction.type_registry import (
@@ -15,6 +15,8 @@ from portfolio_common.domain.transaction_control_codes import (
     normalize_optional_transaction_control_code,
     normalize_transaction_control_code,
 )
+
+from .transaction_source import FxTransactionSource
 
 FX_BUSINESS_TRANSACTION_TYPES = production_transaction_types_for_lifecycle_families("fx")
 FX_COMPONENT_TYPES = {
@@ -33,56 +35,6 @@ def _optional_source_value(source: object, field_name: str) -> Any:
     """Read an optional extension value from a structurally compatible source."""
 
     return getattr(source, field_name, None)
-
-
-class FxTransactionSource(Protocol):
-    """Structural input required to build canonical FX transaction values."""
-
-    transaction_id: str
-    transaction_type: str
-    component_type: str | None
-    component_id: str | None
-    linked_component_ids: tuple[str, ...] | list[str] | None
-    portfolio_id: str
-    instrument_id: str
-    security_id: str
-    transaction_date: datetime
-    settlement_date: datetime | None
-    quantity: Decimal
-    price: Decimal
-    gross_transaction_amount: Decimal
-    trade_currency: str
-    currency: str
-    pair_base_currency: str | None
-    pair_quote_currency: str | None
-    fx_rate_quote_convention: str | None
-    buy_currency: str | None
-    sell_currency: str | None
-    buy_amount: Decimal | None
-    sell_amount: Decimal | None
-    contract_rate: Decimal | None
-    economic_event_id: str | None
-    linked_transaction_group_id: str | None
-    calculation_policy_id: str | None
-    calculation_policy_version: str | None
-    fx_cash_leg_role: str | None
-    linked_fx_cash_leg_id: str | None
-    settlement_status: str | None
-    fx_contract_id: str | None
-    fx_contract_open_transaction_id: str | None
-    fx_contract_close_transaction_id: str | None
-    settlement_of_fx_contract_id: str | None
-    swap_event_id: str | None
-    near_leg_group_id: str | None
-    far_leg_group_id: str | None
-    spot_exposure_model: str | None
-    fx_realized_pnl_mode: str | None
-    realized_capital_pnl_local: Decimal | None
-    realized_fx_pnl_local: Decimal | None
-    realized_total_pnl_local: Decimal | None
-    realized_capital_pnl_base: Decimal | None
-    realized_fx_pnl_base: Decimal | None
-    realized_total_pnl_base: Decimal | None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
