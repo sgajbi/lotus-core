@@ -47,6 +47,8 @@ obscured ownership and encouraged further dumping into broad folders.
    `application.cost_basis_processing` package and guarded the retired flat paths.
 10. Aligned average-cost-pool reconciliation across explicitly named domain, port, application, and
     infrastructure modules, replacing the flat application/port roots and vague domain filename.
+11. Grouped the cost-basis observation protocol under `ports.cost_basis`, and the Prometheus adapter
+    and instruments under `infrastructure.cost_basis`, with a mirrored infrastructure test.
 
 ## Measurable Improvement
 
@@ -77,6 +79,7 @@ the broader calculator-runtime retirement tracked by #719.
 - focused domain, application, and infrastructure tests: passed;
 - timeline/backdated/incremental/private-banking scenario tests: `52 passed`;
 - reconciliation use-case, adapter, composition, and operator-report tests: `30 passed`;
+- cost-basis observability, composition, timeline, and incremental-workflow tests: `23 passed`;
 - application-layer, dependency-inversion, domain-layer, and infrastructure-adapter guards:
   passed;
 - focused strict MyPy, Ruff lint/format, import scans, and `git diff --check`: passed.

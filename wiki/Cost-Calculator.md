@@ -57,6 +57,10 @@ capability in every layer. Their domain assessment, application use case, port, 
 tests use matching `cost_basis` or `cost_basis_processing` package paths; flat compatibility roots
 are not extension points.
 
+Cost-basis calculation observation remains framework-neutral at the port boundary. Prometheus
+instruments and adapters are grouped under `app/infrastructure/cost_basis`; metric names, labels,
+and buckets remain stable operational contracts.
+
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
 processing paths and tests use the combined application use case, target modules, and ports.
