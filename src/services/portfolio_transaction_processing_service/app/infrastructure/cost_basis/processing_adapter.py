@@ -13,9 +13,9 @@ from ...application.cost_basis_processing import (
     CostProcessingRoute,
     FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
-    UpstreamCashLegUnavailableError,
     prepare_cost_transaction,
 )
+from ...application.settlement_processing import UpstreamCashLegUnavailableError
 from ...domain import BookedTransaction
 from ...domain.transaction import SettlementCashValidationError
 from ...ports import (

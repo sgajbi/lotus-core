@@ -31,8 +31,8 @@ obscured ownership and encouraged further dumping into broad folders.
 2. Added `application.cost_basis_processing.AverageCostPoolRebuildPlanner` to replay canonical
    `BookedTransaction` history through existing ports and produce a validated rebuild plan without
    persistence side effects.
-3. Added `application.cost_basis_processing.validate_upstream_cash_leg` to resolve and validate
-   required settlement cash legs through `CostBasisTransactionStatePort`.
+3. Added `application.settlement_processing.validate_upstream_cash_leg` to resolve and validate
+   required settlement cash legs through the narrow `SettlementTransactionLookupPort`.
 4. Moved the SQLAlchemy reconciliation adapter into the nested
    `infrastructure.cost_basis.average_cost_pool_reconciliation` package.
 5. Added `application.cost_basis_processing.persist_open_lot_state` and
@@ -59,6 +59,9 @@ obscured ownership and encouraged further dumping into broad folders.
 14. Removed the persistence private methods and duplicate tests from the broad infrastructure
     workflow/test roots, and changed the rollback integration test to inject failure at the concrete
     repository adapter instead of a retired workflow implementation detail.
+15. Moved upstream cash-leg validation and its tests out of the cost-basis package into mirrored
+    settlement-processing packages, replaced its five-method cost-state dependency with a one-method
+    lookup port, and guarded the retired and flat paths without compatibility aliases.
 
 ## Measurable Improvement
 
@@ -75,6 +78,8 @@ obscured ownership and encouraged further dumping into broad folders.
 - reduced `CostCalculationWorkflow` from 869 to 742 lines in the persistence follow-up while placing
   its 146-line application function and 256-line behavioral suite in mirrored owner packages; and
 - removed every repository reference to the retired private persistence helpers.
+- removed one settlement responsibility from the cost-basis package and reduced its application
+  dependency from a five-method cost-state port to a one-method settlement lookup contract.
 
 ## Compatibility
 
@@ -86,7 +91,8 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite after persistence extraction: `780 passed`;
+- complete transaction-processing unit suite after settlement ownership correction: `781 passed`;
+- settlement application, cost workflow, processing adapter, and composition tests: `27 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
 - focused domain, application, and infrastructure tests: passed;

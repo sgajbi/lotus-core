@@ -1,6 +1,6 @@
 """Concrete transaction processing infrastructure adapters."""
 
-from ..application.cost_basis_processing import UpstreamCashLegUnavailableError
+from ..application.settlement_processing import UpstreamCashLegUnavailableError
 from .cashflow_calculation import (
     TRANSFER_INFLOW_TRANSACTION_TYPES,
     TRANSFER_OUTFLOW_TRANSACTION_TYPES,
