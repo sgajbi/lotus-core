@@ -23,7 +23,7 @@ tests move with their owning module; they are not deleted merely because a servi
 
 | Surface | Status | Evidence / next condition |
 |---|---|---|
-| Target layered package (`delivery -> application -> domain/ports -> infrastructure -> runtime`) | implemented-local | CR-1430 through CR-1440; architecture guards pass. |
+| Target layered package (`delivery -> application -> domain/ports -> infrastructure -> runtime`) | implemented-local | CR-1430 through CR-1440 establish the layers; CR-1592 retires the broad infrastructure facade so adapter dependencies name their owned capability package. Architecture guards pass. |
 | Framework-neutral booked transaction and one DTO mapping boundary | implemented-local | CR-1431 provides 98-field drift and round-trip tests; CR-1586 gives governed transaction and synthetic FX-instrument translation one domain-owned anti-corruption package and removes both flat mapping roots. |
 | One `ProcessTransactionUseCase` | implemented-local | CR-1432 provides ordered cost/cashflow/position execution; CR-1591 places concrete use-case assembly in the runtime composition root and removes infrastructure-root builder exports. |
 | Cost, cashflow, and position caller-owned adapters | implemented-local | CR-1433 through CR-1435. |

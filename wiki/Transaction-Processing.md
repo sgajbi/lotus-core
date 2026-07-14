@@ -33,6 +33,10 @@ Concrete use-case builders live at `app/runtime/dependency_composition.py`. The 
 composition and the AVCO reconciliation operator command import this explicit composition root;
 infrastructure packages expose adapters, not application assembly functions.
 
+The `app/infrastructure` root is namespace-only. Runtime code and tests import adapters through
+their named capability packages so cashflow, cost basis, position, idempotency, mapping, processing,
+readiness, and replay ownership remains visible in every dependency.
+
 The event anti-corruption boundary is `app/infrastructure/transaction_mapping`. Its
 `booked_transaction` mapper preserves all governed envelope and domain fields in both directions;
 its `foreign_exchange_instrument` mapper translates synthetic FX contract domain values to the

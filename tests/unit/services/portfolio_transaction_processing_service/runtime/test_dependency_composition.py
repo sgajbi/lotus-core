@@ -12,10 +12,12 @@ from src.services.portfolio_transaction_processing_service.app.application.cost_
     AverageCostPoolRebuildPlanner,
     PreparedCostProcessingUseCase,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cashflow import (
+    CashflowRuleCache,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
-    CashflowRuleCache,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501

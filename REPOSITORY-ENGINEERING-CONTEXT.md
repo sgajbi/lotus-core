@@ -1797,6 +1797,10 @@ Most relevant current governance:
      `app/runtime/dependency_composition.py`. Runtime consumers, operator commands, and test support
      must import those builders directly from the composition root; do not restore infrastructure-
      root builder exports or place dependency assembly inside adapters.
+     The `app/infrastructure` root is a namespace, not a public adapter facade. Callers must import
+     from the owned capability package (`cashflow`, `cost_basis`, `position`, `idempotency`,
+     `transaction_mapping`, `transaction_processing`, `transaction_readiness`, or
+     `transaction_replay`); do not restore cross-capability root exports.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.

@@ -23,10 +23,8 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolKey,
     AverageCostPoolReconciliationStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    SqlAlchemyAverageCostPoolReconciliationAdapter,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolReconciliationAdapter,
     SqlAlchemyAverageCostPoolRepository,
 )
 from tests.test_support.transaction_processing import (
