@@ -12,6 +12,9 @@ from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    cost_basis_processing,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
@@ -186,18 +189,21 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     repo.get_portfolio.return_value = Portfolio(base_currency="USD", portfolio_id="PORT_COST_01")
     repo.get_instrument.return_value = MagicMock(product_type="EQUITY", asset_class="EQUITY")
 
-    workflow = MagicMock()
+    workflow = CostCalculationWorkflow()
     workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
     workflow._build_emitted_transaction_events = AsyncMock(return_value=[event])
     workflow._publish_transaction_events = AsyncMock()
     workflow._publish_instrument_events = AsyncMock()
 
-    result = await CostProcessingCompatibilityAdapter(
-        workflow=workflow,
-        repository=repo,
-        outbox_repository=outbox_repo,
-    ).stage_event(
+    result = await workflow.stage_prepared_event(
         event=event,
+        event_transaction_type="BUY",
+        route=cost_basis_processing.CostProcessingRoute.COST_BASIS,
+        portfolio=repo.get_portfolio.return_value,
+        instrument=repo.get_instrument.return_value,
+        repo=repo,
+        cost_basis_method=CostBasisMethod.FIFO,
+        outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
     )
 
@@ -206,9 +212,8 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         repo=repo,
         correlation_id="cost-corr-id",
     )
-    prepared_event = workflow._build_events_to_publish.await_args.kwargs["event"]
     workflow._publish_transaction_events.assert_awaited_once_with(
-        original_event=prepared_event,
+        original_event=event,
         emitted_events=[event],
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
@@ -218,8 +223,8 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         outbox_repo=outbox_repo,
         correlation_id="cost-corr-id",
     )
-    assert result.emitted_events == (event,)
-    assert result.instrument_event_count == 1
+    assert result.emitted_transactions == (event,)
+    assert result.instrument_update_count == 1
 
 
 async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():

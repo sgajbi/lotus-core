@@ -26,7 +26,7 @@ from .cashflow_processing_adapter import (
     CashflowStagingWorkflow,
 )
 from .cashflow_repository import SqlAlchemyCashflowRepository
-from .cost_processing_adapter import CostProcessingCompatibilityAdapter, CostStagingWorkflow
+from .cost_processing_adapter import CostEffectsStager, CostProcessingCompatibilityAdapter
 from .cost_repository import CostCalculatorRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
@@ -86,7 +86,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         self,
         *,
         session_factory: Callable[[], AsyncSession],
-        cost_workflow: CostStagingWorkflow,
+        cost_workflow: CostEffectsStager,
         cashflow_workflow: CashflowStagingWorkflow,
     ) -> None:
         self._session_factory = session_factory
