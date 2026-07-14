@@ -31,6 +31,9 @@
       "output/**/*.md",
       "output/**/*.log"
     ],
+    "allowed_service_emails": [
+      "support.ops@lotus.local"
+    ],
     "allowed_redacted_values": [
       "<redacted>",
       "<token>",

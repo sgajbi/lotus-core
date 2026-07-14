@@ -35,6 +35,7 @@ def _minimal_standard(repo_root: Path) -> dict[str, object]:
                 "docs/standards/synthetic-test-data-governance.v1.json",
             ],
             "optional_generated_evidence_globs": ["output/**/*.json"],
+            "allowed_service_emails": ["support.ops@lotus.local"],
         },
         "canonical_synthetic_identifiers": [
             {
@@ -117,6 +118,51 @@ def test_synthetic_fixture_guard_rejects_personal_and_account_data(tmp_path: Pat
         "personal-email-address",
         "concrete-account-number",
     }
+
+
+def test_synthetic_fixture_guard_allows_only_exact_governed_service_email(
+    tmp_path: Path,
+) -> None:
+    standard = _minimal_standard(tmp_path)
+    standard_path = _write_standard(tmp_path, standard)
+    _write(
+        tmp_path / "output/openapi.json",
+        '{"contact":"support.ops@lotus.local"}',
+    )
+
+    assert (
+        guard.evaluate_synthetic_fixture_governance(
+            repo_root=tmp_path,
+            standard_path=standard_path,
+        )
+        == []
+    )
+
+    _write(
+        tmp_path / "output/openapi.json",
+        '{"contact":"support.admin@lotus.local"}',
+    )
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "personal-email-address" for finding in findings)
+
+
+def test_synthetic_fixture_guard_rejects_external_service_email_allowlist(
+    tmp_path: Path,
+) -> None:
+    standard = _minimal_standard(tmp_path)
+    standard["leakage_guard"]["allowed_service_emails"] = ["support@example.com"]  # type: ignore[index]
+    standard_path = _write_standard(tmp_path, standard)
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    assert any(finding.rule == "invalid-allowed-service-email" for finding in findings)
 
 
 def test_synthetic_fixture_guard_rejects_uncataloged_cif_identifier(tmp_path: Path) -> None:

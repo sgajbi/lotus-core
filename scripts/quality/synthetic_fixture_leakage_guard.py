@@ -96,13 +96,24 @@ def evaluate_synthetic_fixture_governance(
 
     standard = load_standard(standard_path)
     findings = _validate_standard(standard, repo_root=repo_root)
+    allowed_service_emails = {
+        str(value).lower()
+        for value in standard.get("leakage_guard", {}).get("allowed_service_emails", [])
+    }
     allowed_cif_ids = {
         str(item.get("identifier"))
         for item in standard.get("canonical_synthetic_identifiers", [])
         if isinstance(item, dict)
     }
     for path in _candidate_files(repo_root, standard):
-        findings.extend(_evaluate_file(path, repo_root=repo_root, allowed_cif_ids=allowed_cif_ids))
+        findings.extend(
+            _evaluate_file(
+                path,
+                repo_root=repo_root,
+                allowed_cif_ids=allowed_cif_ids,
+                allowed_service_emails=allowed_service_emails,
+            )
+        )
     return findings
 
 
@@ -138,6 +149,7 @@ def _validate_standard(
             )
         )
     _validate_scanned_globs(standard, findings)
+    _validate_allowed_service_emails(standard, findings)
     _validate_canonical_identifiers(standard, findings)
     _validate_fixture_catalog(standard, repo_root=repo_root, findings=findings)
     return findings
@@ -159,6 +171,43 @@ def _validate_scanned_globs(
                 detail="leakage_guard.scanned_path_globs must be a non-empty string list",
             )
         )
+
+
+def _validate_allowed_service_emails(
+    standard: dict[str, Any],
+    findings: list[SyntheticFixtureFinding],
+) -> None:
+    values = standard.get("leakage_guard", {}).get("allowed_service_emails")
+    if not isinstance(values, list):
+        findings.append(
+            SyntheticFixtureFinding(
+                path=STANDARD_PATH.relative_to(REPO_ROOT).as_posix(),
+                rule="invalid-allowed-service-emails",
+                detail="leakage_guard.allowed_service_emails must be a list",
+            )
+        )
+        return
+
+    normalized: set[str] = set()
+    for value in values:
+        candidate = str(value).lower()
+        if EMAIL_RE.fullmatch(candidate) is None or not candidate.endswith(".local"):
+            findings.append(
+                SyntheticFixtureFinding(
+                    path=STANDARD_PATH.relative_to(REPO_ROOT).as_posix(),
+                    rule="invalid-allowed-service-email",
+                    detail=_redact_detail(str(value)),
+                )
+            )
+        elif candidate in normalized:
+            findings.append(
+                SyntheticFixtureFinding(
+                    path=STANDARD_PATH.relative_to(REPO_ROOT).as_posix(),
+                    rule="duplicate-allowed-service-email",
+                    detail=candidate,
+                )
+            )
+        normalized.add(candidate)
 
 
 def _validate_canonical_identifiers(
@@ -352,13 +401,22 @@ def _evaluate_file(
     *,
     repo_root: Path,
     allowed_cif_ids: set[str],
+    allowed_service_emails: set[str],
 ) -> list[SyntheticFixtureFinding]:
     text = path.read_text(encoding="utf-8")
     rel = path.relative_to(repo_root).as_posix()
     findings: list[SyntheticFixtureFinding] = []
     _append_regex_findings(findings, rel, "concrete-bearer-token", BEARER_RE, text)
     _append_regex_findings(findings, rel, "credentialed-database-url", DATABASE_URL_RE, text)
-    _append_regex_findings(findings, rel, "personal-email-address", EMAIL_RE, text)
+    for match in EMAIL_RE.finditer(text):
+        if match.group(0).lower() not in allowed_service_emails:
+            findings.append(
+                SyntheticFixtureFinding(
+                    path=rel,
+                    rule="personal-email-address",
+                    detail=_redact_detail(match.group(0)),
+                )
+            )
     _append_regex_findings(findings, rel, "real-looking-client-name", CLIENT_NAME_JSON_RE, text)
     _append_regex_findings(findings, rel, "real-looking-client-name", CLIENT_NAME_MD_RE, text)
     _append_regex_findings(findings, rel, "concrete-account-number", ACCOUNT_NUMBER_RE, text)
