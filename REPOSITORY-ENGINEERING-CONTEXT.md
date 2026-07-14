@@ -2432,6 +2432,11 @@ Most relevant current governance:
      reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these packages in tests;
      do not return these responsibilities to `CostCalculationWorkflow`, create flat compatibility
      modules, or place application behavior in infrastructure.
+     Cost-basis timeline orchestration belongs at
+     `app/application/cost_basis_processing/timeline.py`. Average-cost-pool reconciliation must use
+     the same explicit capability name under `domain/cost_basis`, `ports/cost_basis`,
+     `application/cost_basis_processing`, and `infrastructure/cost_basis`; do not restore flat
+     application/port modules or a vague domain `reconciliation.py`.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,
