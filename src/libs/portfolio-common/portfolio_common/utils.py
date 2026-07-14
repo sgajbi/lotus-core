@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import functools
 import time
-from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, ParamSpec, TypeVar
 
 from .monitoring import DB_OPERATION_LATENCY_SECONDS
 
@@ -17,8 +17,8 @@ def async_timed(
     repository: str,
     method: str,
 ) -> Callable[
-    [Callable[_P, Awaitable[_ResultT]]],
-    Callable[_P, Awaitable[_ResultT]],
+    [Callable[_P, Coroutine[Any, Any, _ResultT]]],
+    Callable[_P, Coroutine[Any, Any, _ResultT]],
 ]:
     """
     A decorator that times an async function and records the latency
@@ -30,8 +30,8 @@ def async_timed(
     """
 
     def decorator(
-        func: Callable[_P, Awaitable[_ResultT]],
-    ) -> Callable[_P, Awaitable[_ResultT]]:
+        func: Callable[_P, Coroutine[Any, Any, _ResultT]],
+    ) -> Callable[_P, Coroutine[Any, Any, _ResultT]]:
         @functools.wraps(func)
         async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _ResultT:
             start_time = time.monotonic()
