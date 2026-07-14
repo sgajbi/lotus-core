@@ -488,7 +488,9 @@ Current repository posture:
     `Coroutine` signatures with `ParamSpec`; a broader `Awaitable` return weakens structural port
     conformance. `mypy.ini` exposes the worktree-local common library and follows only deliberately
     typed shared modules so strict service checks do not depend on a stale editable installation or
-    implicitly opt the whole legacy common package into typed ownership.
+    implicitly opt the whole legacy common package into typed ownership. `make typecheck` includes
+    the complete `portfolio_transaction_processing_service/app` tree; do not narrow that scope when
+    adding modules or resolving unrelated legacy typing debt.
 
 ## Defect Tracking During Refactoring
 
