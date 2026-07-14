@@ -25,8 +25,8 @@ from ..application.cost_basis_processing import (
     enrich_cost_basis_transactions_with_fx,
     persist_cost_basis_transactions,
     persist_open_lot_state,
-    validate_upstream_cash_leg,
 )
+from ..application.settlement_processing import validate_upstream_cash_leg
 from ..domain.cost_basis import (
     AVERAGE_COST_POOL_LOT_BEHAVIORS,
     INCREMENTAL_SAFE_LOT_BEHAVIORS,

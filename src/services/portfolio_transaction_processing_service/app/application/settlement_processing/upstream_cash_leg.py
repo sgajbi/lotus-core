@@ -7,7 +7,7 @@ from ...domain.transaction import (
     assert_upstream_cash_leg_pairing,
     is_upstream_provided_cash_entry_mode,
 )
-from ...ports import CostBasisTransactionStatePort
+from ...ports.settlement import SettlementTransactionLookupPort
 
 
 class UpstreamCashLegUnavailableError(Exception):
@@ -17,7 +17,7 @@ class UpstreamCashLegUnavailableError(Exception):
 async def validate_upstream_cash_leg(
     *,
     product_leg: BookedTransaction,
-    transactions: CostBasisTransactionStatePort,
+    transactions: SettlementTransactionLookupPort,
 ) -> None:
     """Validate the referenced upstream cash leg when product policy requires one."""
 

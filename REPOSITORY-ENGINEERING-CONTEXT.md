@@ -2425,11 +2425,13 @@ Most relevant current governance:
      daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence decides runtime
      topology.
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
-     AVCO rebuild planning and upstream cash-leg resolution/pairing belong under
-     `app/application/cost_basis_processing` and operate on canonical booked transactions through
-     ports. Open-lot persistence scope and FIFO/AVCO checkpoint decisions also belong in that
-     application package; concrete SQL persistence remains infrastructure. SQL-backed AVCO
-     reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these packages in tests;
+     AVCO rebuild planning belongs under `app/application/cost_basis_processing`. Upstream linked
+     cash-leg resolution and pairing belongs under `app/application/settlement_processing` and uses
+     the narrow `ports/settlement/transaction_lookup.py` contract. Both operate on canonical booked
+     transactions through ports. Open-lot persistence scope and FIFO/AVCO checkpoint decisions also
+     belong in the cost-basis application package; concrete SQL persistence remains infrastructure.
+     SQL-backed AVCO reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these
+     packages in tests;
      do not return these responsibilities to `CostCalculationWorkflow`, create flat compatibility
      modules, or place application behavior in infrastructure.
      Cost-basis timeline orchestration belongs at

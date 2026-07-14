@@ -7,18 +7,20 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.services.portfolio_transaction_processing_service.app.application.cost_basis_processing import (  # noqa: E501
-    UpstreamCashLegUnavailableError,
-    validate_upstream_cash_leg,
+from src.services.portfolio_transaction_processing_service.app.application import (
+    settlement_processing,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
-    CostBasisTransactionStatePort,
+    SettlementTransactionLookupPort,
 )
 
 pytestmark = pytest.mark.asyncio
+
+UpstreamCashLegUnavailableError = settlement_processing.UpstreamCashLegUnavailableError
+validate_upstream_cash_leg = settlement_processing.validate_upstream_cash_leg
 
 
 def _product_leg() -> BookedTransaction:
@@ -60,7 +62,7 @@ def _cash_leg() -> BookedTransaction:
 
 
 async def test_upstream_product_leg_requires_external_cash_transaction_id() -> None:
-    transactions = AsyncMock(spec=CostBasisTransactionStatePort)
+    transactions = AsyncMock(spec=SettlementTransactionLookupPort)
 
     with pytest.raises(
         ValueError,
@@ -75,7 +77,7 @@ async def test_upstream_product_leg_requires_external_cash_transaction_id() -> N
 
 
 async def test_upstream_product_leg_fails_retryably_when_cash_leg_is_unavailable() -> None:
-    transactions = AsyncMock(spec=CostBasisTransactionStatePort)
+    transactions = AsyncMock(spec=SettlementTransactionLookupPort)
     transactions.get_booked_transaction.return_value = None
 
     with pytest.raises(UpstreamCashLegUnavailableError, match="TXN-CASH-001"):
@@ -91,7 +93,7 @@ async def test_upstream_product_leg_fails_retryably_when_cash_leg_is_unavailable
 
 
 async def test_upstream_product_leg_validates_canonical_cash_pair() -> None:
-    transactions = AsyncMock(spec=CostBasisTransactionStatePort)
+    transactions = AsyncMock(spec=SettlementTransactionLookupPort)
     transactions.get_booked_transaction.return_value = _cash_leg()
 
     await validate_upstream_cash_leg(
@@ -119,7 +121,7 @@ async def test_upstream_product_leg_validates_canonical_cash_pair() -> None:
 async def test_transaction_without_external_product_cash_dependency_skips_lookup(
     product_leg: BookedTransaction,
 ) -> None:
-    transactions = AsyncMock(spec=CostBasisTransactionStatePort)
+    transactions = AsyncMock(spec=SettlementTransactionLookupPort)
 
     await validate_upstream_cash_leg(product_leg=product_leg, transactions=transactions)
 

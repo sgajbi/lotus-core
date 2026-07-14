@@ -17,7 +17,6 @@ from .preparation import (
 )
 from .timeline import CostBasisTimelineProcessor, build_cost_basis_timeline_processor
 from .transaction_persistence import persist_cost_basis_transactions
-from .upstream_cash_leg import UpstreamCashLegUnavailableError, validate_upstream_cash_leg
 
 __all__ = [
     "AverageCostPoolRebuildPlanner",
@@ -31,11 +30,9 @@ __all__ = [
     "ReconcileAverageCostPoolsCommand",
     "ReconcileAverageCostPoolsResult",
     "ReconcileAverageCostPoolsUseCase",
-    "UpstreamCashLegUnavailableError",
     "build_cost_basis_timeline_processor",
     "enrich_cost_basis_transactions_with_fx",
     "prepare_cost_transaction",
     "persist_open_lot_state",
     "persist_cost_basis_transactions",
-    "validate_upstream_cash_leg",
 ]

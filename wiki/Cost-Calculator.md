@@ -43,11 +43,13 @@ adapters. `ProcessTransactionUseCase` remains the single combined application co
 repository explicitly maps the domain's `calculation_state_version` to the compatible
 `engine_state_version` database column.
 
-Deterministic AVCO rebuild planning and upstream-provided cash-leg validation are application
-services under `app/application/cost_basis_processing`. They operate on canonical booked
-transactions through transaction-state, reference-data, and FX ports. The same application package
-owns the persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO
-transitions. The same package owns calculated transaction persistence: it writes the affected
+Deterministic AVCO rebuild planning is an application service under
+`app/application/cost_basis_processing`. Upstream-provided cash-leg resolution and pairing is a
+separate settlement service under `app/application/settlement_processing` over a narrow canonical
+transaction lookup port. Cost-basis services operate on canonical booked transactions through
+transaction-state, reference-data, and FX ports. The cost-basis application package owns the
+persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO transitions.
+The same package owns calculated transaction persistence: it writes the affected
 timeline suffix through transaction, lot-state, and accrued-income-offset ports and returns
 immutable booked transactions. Infrastructure maps those values to event DTOs and outbox payloads.
 SQLAlchemy-based AVCO reconciliation remains an infrastructure adapter under
