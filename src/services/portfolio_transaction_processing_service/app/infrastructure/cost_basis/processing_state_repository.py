@@ -35,7 +35,10 @@ class SqlAlchemyCostBasisProcessingStateRepository:
         self._session = session
         self._clock = clock
 
-    @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
+    @async_timed(
+        repository="CostBasisProcessingStateRepository",
+        method="acquire_cost_basis_processing_lock",
+    )
     async def acquire_cost_basis_processing_lock(
         self,
         portfolio_id: str,
