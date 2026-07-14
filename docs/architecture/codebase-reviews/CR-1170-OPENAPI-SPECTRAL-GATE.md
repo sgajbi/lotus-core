@@ -96,3 +96,10 @@ complete by this blocker-subset gate.
 
 Updated the codebase review ledger, API governance docs, quality scorecard, refactor health report,
 and repo-local wiki validation/CI guidance because CI/API governance truth changed.
+
+## Current Execution Contract
+
+The original unversioned `npx` execution described above is historical evidence and was superseded
+by [CR-1574](./CR-1574-DETERMINISTIC-SPECTRAL-TOOLCHAIN.md). Current validation installs the
+committed `tools/api_governance/package-lock.json` and invokes only the repository-local Spectral
+binary.
