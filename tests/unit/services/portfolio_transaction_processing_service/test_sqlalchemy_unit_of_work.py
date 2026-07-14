@@ -10,8 +10,12 @@ from portfolio_common.idempotency_repository import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from src.services.portfolio_transaction_processing_service.app.application import (
+    ProcessTransactionCashflowUseCase,
+)
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
+    CashflowRuleCache,
     SqlAlchemyTransactionIdempotencyAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
 )
@@ -28,7 +32,7 @@ def _unit_of_work():
     unit_of_work = SqlAlchemyTransactionProcessingUnitOfWork(
         session_factory=lambda: session,
         cost_processor=MagicMock(),
-        cashflow_workflow=MagicMock(),
+        cashflow_rule_cache=CashflowRuleCache(),
     )
     return unit_of_work, session, transaction
 
@@ -41,6 +45,7 @@ async def test_unit_of_work_builds_every_adapter_from_one_session_and_commits_on
         assert entered.idempotency is unit_of_work.idempotency
         assert entered.cost is unit_of_work.cost
         assert entered.cashflow is unit_of_work.cashflow
+        assert isinstance(entered.cashflow, ProcessTransactionCashflowUseCase)
         assert entered.position is unit_of_work.position
         assert entered.pipeline is unit_of_work.pipeline
         await entered.commit()

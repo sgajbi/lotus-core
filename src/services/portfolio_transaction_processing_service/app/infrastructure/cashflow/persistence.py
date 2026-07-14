@@ -36,7 +36,7 @@ class SqlAlchemyCashflowRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
-    async def create_cashflow(
+    async def create(
         self,
         cashflow: CalculatedCashflow | Cashflow,
     ) -> StoredCashflow:
@@ -77,7 +77,7 @@ class SqlAlchemyCashflowRepository:
             )
             raise
 
-    async def replace_cashflow(
+    async def replace(
         self,
         cashflow: CalculatedCashflow | Cashflow,
     ) -> StoredCashflow:

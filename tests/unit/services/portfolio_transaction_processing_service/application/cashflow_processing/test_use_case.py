@@ -19,6 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
     StoredCashflow,
 )
 from src.services.portfolio_transaction_processing_service.app.ports.cashflow import (
+    CashflowCalculationObserver,
     CashflowEventStagingPort,
     CashflowPersistencePort,
     CashflowProcessingStatePort,
@@ -76,11 +77,13 @@ def _use_case() -> tuple[
     AsyncMock,
     AsyncMock,
     AsyncMock,
+    AsyncMock,
 ]:
     rules = AsyncMock(spec=CashflowRuleResolutionPort)
     state = AsyncMock(spec=CashflowProcessingStatePort)
     persistence = AsyncMock(spec=CashflowPersistencePort)
     events = AsyncMock(spec=CashflowEventStagingPort)
+    observer = AsyncMock(spec=CashflowCalculationObserver)
     state.accepts_epoch.return_value = True
     state.claim_semantic_event.return_value = True
     rules.resolve.return_value = CashflowRule(
@@ -95,21 +98,23 @@ def _use_case() -> tuple[
             state=state,
             persistence=persistence,
             events=events,
+            observer=observer,
         ),
         rules,
         state,
         persistence,
         events,
+        observer,
     )
 
 
 async def test_use_case_calculates_persists_and_stages_cashflow() -> None:
-    use_case, rules, state, persistence, events = _use_case()
+    use_case, rules, state, persistence, events, observer = _use_case()
     transaction = _transaction()
     stored = _stored_cashflow(transaction)
     persistence.create.return_value = stored
 
-    result = await use_case.execute(
+    result = await use_case.process(
         transaction,
         event_id="transactions.persisted-0-42",
         correlation_id="corr-001",
@@ -129,6 +134,7 @@ async def test_use_case_calculates_persists_and_stages_cashflow() -> None:
     calculated = persistence.create.await_args.args[0]
     assert calculated.amount == Decimal("-252")
     assert calculated.cashflow_date == transaction.settlement_date.date()
+    observer.calculated.assert_called_once_with(calculated)
     events.stage_calculated_cashflow.assert_awaited_once_with(
         stored,
         transaction,
@@ -137,10 +143,10 @@ async def test_use_case_calculates_persists_and_stages_cashflow() -> None:
 
 
 async def test_use_case_returns_no_effect_for_semantic_duplicate() -> None:
-    use_case, rules, state, persistence, events = _use_case()
+    use_case, rules, state, persistence, events, observer = _use_case()
     state.claim_semantic_event.return_value = False
 
-    result = await use_case.execute(
+    result = await use_case.process(
         _transaction(),
         event_id="transactions.persisted-0-42",
         correlation_id=None,
@@ -151,15 +157,16 @@ async def test_use_case_returns_no_effect_for_semantic_duplicate() -> None:
     rules.resolve.assert_not_awaited()
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 async def test_repair_replaces_cashflow_without_semantic_reclaim() -> None:
-    use_case, _rules, state, persistence, events = _use_case()
+    use_case, _rules, state, persistence, events, observer = _use_case()
     transaction = _transaction()
     stored = _stored_cashflow(transaction)
     persistence.replace.return_value = stored
 
-    result = await use_case.execute(
+    result = await use_case.process(
         transaction,
         event_id="transactions.persisted-0-42",
         correlation_id="corr-repair",
@@ -173,14 +180,15 @@ async def test_repair_replaces_cashflow_without_semantic_reclaim() -> None:
     persistence.create.assert_not_awaited()
     persistence.replace.assert_awaited_once()
     events.stage_calculated_cashflow.assert_awaited_once()
+    observer.calculated.assert_called_once()
 
 
 async def test_use_case_rejects_stale_epoch_before_other_effects() -> None:
-    use_case, rules, state, persistence, events = _use_case()
+    use_case, rules, state, persistence, events, observer = _use_case()
     state.accepts_epoch.return_value = False
 
     with pytest.raises(TransactionProcessingRejected) as raised:
-        await use_case.execute(
+        await use_case.process(
             _transaction(),
             event_id="transactions.persisted-0-42",
             correlation_id=None,
@@ -192,14 +200,15 @@ async def test_use_case_rejects_stale_epoch_before_other_effects() -> None:
     rules.resolve.assert_not_awaited()
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 async def test_use_case_maps_missing_rule_to_terminal_processing_error() -> None:
-    use_case, rules, _state, persistence, events = _use_case()
+    use_case, rules, _state, persistence, events, observer = _use_case()
     rules.resolve.return_value = None
 
     with pytest.raises(TransactionProcessingError) as raised:
-        await use_case.execute(
+        await use_case.process(
             _transaction(),
             event_id="transactions.persisted-0-42",
             correlation_id=None,
@@ -210,13 +219,14 @@ async def test_use_case_maps_missing_rule_to_terminal_processing_error() -> None
     assert raised.value.retryable is False
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 async def test_use_case_maps_missing_linked_cash_leg_to_terminal_error() -> None:
-    use_case, rules, _state, persistence, events = _use_case()
+    use_case, rules, _state, persistence, events, observer = _use_case()
 
     with pytest.raises(TransactionProcessingError) as raised:
-        await use_case.execute(
+        await use_case.process(
             _transaction(cash_entry_mode="UPSTREAM_PROVIDED"),
             event_id="transactions.persisted-0-42",
             correlation_id=None,
@@ -228,13 +238,14 @@ async def test_use_case_maps_missing_linked_cash_leg_to_terminal_error() -> None
     rules.resolve.assert_not_awaited()
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 async def test_use_case_maps_invalid_settlement_economics_to_governed_rejection() -> None:
-    use_case, _rules, _state, persistence, events = _use_case()
+    use_case, _rules, _state, persistence, events, observer = _use_case()
 
     with pytest.raises(TransactionProcessingRejected) as raised:
-        await use_case.execute(
+        await use_case.process(
             _transaction(
                 transaction_type="DIVIDEND",
                 gross_transaction_amount=Decimal("10"),
@@ -249,12 +260,13 @@ async def test_use_case_maps_invalid_settlement_economics_to_governed_rejection(
     assert raised.value.detail["net_settlement_amount"] == "-1"
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()
 
 
 async def test_non_cashflow_fx_lifecycle_returns_no_effect_after_claim() -> None:
-    use_case, rules, state, persistence, events = _use_case()
+    use_case, rules, state, persistence, events, observer = _use_case()
 
-    result = await use_case.execute(
+    result = await use_case.process(
         _transaction(transaction_type="FX_FORWARD", component_type="FX_CONTRACT_OPEN"),
         event_id="transactions.persisted-0-42",
         correlation_id=None,
@@ -266,3 +278,4 @@ async def test_non_cashflow_fx_lifecycle_returns_no_effect_after_claim() -> None
     rules.resolve.assert_not_awaited()
     persistence.create.assert_not_awaited()
     events.stage_calculated_cashflow.assert_not_awaited()
+    observer.calculated.assert_not_called()

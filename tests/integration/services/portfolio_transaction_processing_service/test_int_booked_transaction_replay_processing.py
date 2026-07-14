@@ -376,7 +376,7 @@ async def test_concurrent_missing_cashflow_repairs_converge_on_one_row(
     async def repair(amount: Decimal) -> int:
         async with context.session_factory() as session, session.begin():
             repository = SqlAlchemyCashflowRepository(session)
-            stored = await repository.replace_cashflow(
+            stored = await repository.replace(
                 Cashflow(
                     transaction_id=transaction_id,
                     portfolio_id=portfolio_id,

@@ -4,6 +4,7 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import TypeVar
 
+from portfolio_common.config import KAFKA_TRANSACTIONS_PERSISTED_TOPIC
 from portfolio_common.idempotency_repository import (
     IdempotencyRepository,
     SemanticEventClaimOutcome,
@@ -12,6 +13,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.position_state_repository import PositionStateRepository
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from ..application.cashflow_processing import ProcessTransactionCashflowUseCase
 from ..application.cost_basis_processing import PreparedCostProcessingUseCase
 from ..application.position_history import PositionHistoryProcessor
 from ..ports import (
@@ -22,10 +24,13 @@ from ..ports import (
     TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
 )
-from .cashflow.persistence import SqlAlchemyCashflowRepository
-from .cashflow_processing_adapter import (
-    CashflowProcessingCompatibilityAdapter,
-    CashflowStagingWorkflow,
+from .cashflow import (
+    PROMETHEUS_CASHFLOW_CALCULATION_OBSERVER,
+    CachedCashflowRuleResolver,
+    CashflowRuleCache,
+    SqlAlchemyCashflowProcessingState,
+    SqlAlchemyCashflowRepository,
+    TransactionalCashflowEventStager,
 )
 from .cost_basis import (
     CostBasisProcessingAdapter,
@@ -98,11 +103,11 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
         *,
         session_factory: Callable[[], AsyncSession],
         cost_processor: PreparedCostProcessingUseCase,
-        cashflow_workflow: CashflowStagingWorkflow,
+        cashflow_rule_cache: CashflowRuleCache,
     ) -> None:
         self._session_factory = session_factory
         self._cost_processor = cost_processor
-        self._cashflow_workflow = cashflow_workflow
+        self._cashflow_rule_cache = cashflow_rule_cache
         self._session: AsyncSession | None = None
         self._transaction: AsyncSessionTransaction | None = None
         self._committed = False
@@ -165,12 +170,16 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             reconciliation_repository=SqlAlchemyCorporateActionReconciliationRepository(session),
             effect_stager=TransactionalCostProcessingEffectStager(outbox_repository),
         )
-        self._cashflow = CashflowProcessingCompatibilityAdapter(
-            workflow=self._cashflow_workflow,
-            db_session=session,
-            repository=SqlAlchemyCashflowRepository(session),
-            idempotency_repository=idempotency_repository,
-            outbox_repository=outbox_repository,
+        self._cashflow = ProcessTransactionCashflowUseCase(
+            rules=CachedCashflowRuleResolver(session, self._cashflow_rule_cache),
+            state=SqlAlchemyCashflowProcessingState(
+                session,
+                idempotency_repository,
+                source_topic=KAFKA_TRANSACTIONS_PERSISTED_TOPIC,
+            ),
+            persistence=SqlAlchemyCashflowRepository(session),
+            events=TransactionalCashflowEventStager(outbox_repository),
+            observer=PROMETHEUS_CASHFLOW_CALCULATION_OBSERVER,
         )
         position_state_repository = PositionStateRepository(session)
         self._position = PositionHistoryProcessingAdapter(

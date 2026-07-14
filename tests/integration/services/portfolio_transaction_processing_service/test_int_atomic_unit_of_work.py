@@ -126,7 +126,7 @@ def _unit_of_work_factory(
     return lambda: _AtomicProofUnitOfWork(
         session_factory=session_factory,
         cost_processor=object(),
-        cashflow_workflow=object(),
+        cashflow_rule_cache=object(),
         fail_at=fail_at,
     )
 
