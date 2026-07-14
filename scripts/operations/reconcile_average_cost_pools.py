@@ -25,7 +25,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain import (  # noqa: E402
     AverageCostPoolKey,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (  # noqa: E402
+from src.services.portfolio_transaction_processing_service.app.runtime.dependency_composition import (  # noqa: E402, E501
     build_reconcile_average_cost_pools_use_case,
 )
 

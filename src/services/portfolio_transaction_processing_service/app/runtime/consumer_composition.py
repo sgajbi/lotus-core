@@ -19,7 +19,7 @@ from ..delivery.kafka import (
     BookedTransactionReplayRequestConsumer,
     TransactionProcessingConsumer,
 )
-from ..infrastructure import (
+from .dependency_composition import (
     build_process_transaction_use_case,
     build_replay_booked_transaction_use_case,
 )

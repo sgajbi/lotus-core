@@ -1793,6 +1793,10 @@ Most relevant current governance:
      close the consumer from delivery code or add a second local drain loop. The manager has one
      composition path: the live transaction consumer plus replay-request consumer. The removed
      six-consumer registry must not be restored.
+     Concrete live, replay, and AVCO-reconciliation dependency assembly belongs in
+     `app/runtime/dependency_composition.py`. Runtime consumers, operator commands, and test support
+     must import those builders directly from the composition root; do not restore infrastructure-
+     root builder exports or place dependency assembly inside adapters.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.

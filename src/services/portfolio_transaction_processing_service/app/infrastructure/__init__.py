@@ -16,13 +16,6 @@ from .cashflow import (
     TransactionalCashflowEventStager,
     cashflow_calculated_event,
 )
-from .composition import (
-    CanonicalBookedTransactionReplayerFactory,
-    SqlAlchemyTransactionProcessingUnitOfWorkFactory,
-    build_process_transaction_use_case,
-    build_reconcile_average_cost_pools_use_case,
-    build_replay_booked_transaction_use_case,
-)
 from .cost_basis import (
     PROMETHEUS_COST_BASIS_CALCULATION_OBSERVER,
     PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER,
@@ -33,7 +26,6 @@ from .cost_basis import (
 from .position import PositionHistoryProcessingAdapter
 
 __all__ = [
-    "CanonicalBookedTransactionReplayerFactory",
     "CASHFLOW_PROCESSING_SERVICE_NAME",
     "CachedCashflowRule",
     "CachedCashflowRuleResolver",
@@ -51,11 +43,7 @@ __all__ = [
     "PROMETHEUS_COST_BASIS_PERSISTENCE_OBSERVER",
     "PrometheusCostBasisCalculationObserver",
     "SqlAlchemyAverageCostPoolReconciliationAdapter",
-    "SqlAlchemyTransactionProcessingUnitOfWorkFactory",
     "UpstreamCashLegUnavailableError",
-    "build_process_transaction_use_case",
     "cashflow_calculated_event",
     "cost_basis_processing_lock_key",
-    "build_reconcile_average_cost_pools_use_case",
-    "build_replay_booked_transaction_use_case",
 ]

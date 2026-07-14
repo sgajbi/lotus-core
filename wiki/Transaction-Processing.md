@@ -29,6 +29,10 @@ readiness, idempotency, and outbox adapters over one SQLAlchemy session and one 
 not exported from the broad infrastructure root; runtime builders obtain it through the aggregate
 transaction-processing package.
 
+Concrete use-case builders live at `app/runtime/dependency_composition.py`. The live/replay consumer
+composition and the AVCO reconciliation operator command import this explicit composition root;
+infrastructure packages expose adapters, not application assembly functions.
+
 The event anti-corruption boundary is `app/infrastructure/transaction_mapping`. Its
 `booked_transaction` mapper preserves all governed envelope and domain fields in both directions;
 its `foreign_exchange_instrument` mapper translates synthetic FX contract domain values to the
