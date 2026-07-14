@@ -202,16 +202,16 @@ def test_explicit_changed_sources_distinguishes_current_and_absent_paths(tmp_pat
         (
             "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/"
             "calculation/engine_input.py",
-            "src.services.portfolio_transaction_processing_service.app.domain.cost_basis."
-            "calculation.engine_input",
+            "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/"
+            "calculation",
         ),
         (
             "src/libs/portfolio-common/portfolio_common/domain/currency.py",
-            "portfolio_common.domain.currency",
+            "src/libs/portfolio-common/portfolio_common/domain",
         ),
         (
             "src/services/query_service/app/services/__init__.py",
-            "src.services.query_service.app.services",
+            "src/services/query_service/app/services",
         ),
     ],
 )
@@ -225,7 +225,11 @@ def test_coverage_source_target_maps_migrations_to_measurable_directory() -> Non
 
 @pytest.mark.parametrize(
     "path",
-    ["docs/example.py", "src/app/not-python.txt", "src/libs/other-lib/package/module.py"],
+    [
+        "docs/example.py",
+        "src/app/not-python.txt",
+        "src/libs/other-lib/package/module.py",
+    ],
 )
 def test_coverage_source_target_rejects_unsupported_source_layouts(path: str) -> None:
     with pytest.raises(ValueError):
