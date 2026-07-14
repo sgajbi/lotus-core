@@ -21,17 +21,17 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     BookedTransaction,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    AverageCostPoolCheckpointRecord,
     CostCalculationWorkflow,
     CostCalculatorRepository,
-    OpenLotCheckpointRecord,
     OpenLotStateUpdateScope,
     booked_transaction_event_mapper,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    AverageCostPoolCheckpointRecord,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
+    OpenLotCheckpointRecord,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -132,7 +132,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
     )
     repo.get_fifo_disposal_lot_checkpoint_records.return_value = [
         OpenLotCheckpointRecord(
-            transaction=_persisted_buy("BUY-1", buy_date),
+            transaction=_history_transaction(_persisted_buy("BUY-1", buy_date)),
             quantity=Decimal("10"),
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
@@ -207,7 +207,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
         ),
-        representative_transaction=_persisted_buy("BUY-AVCO-1", buy_date),
+        representative_transaction=_history_transaction(_persisted_buy("BUY-AVCO-1", buy_date)),
     )
     sell_event, sell_type, method = _prepare_event(
         _event(
@@ -266,7 +266,9 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
             cost_local=Decimal("100"),
             cost_base=Decimal("100"),
         ),
-        representative_transaction=_persisted_buy("BUY-AVCO-1", first_buy_date),
+        representative_transaction=_history_transaction(
+            _persisted_buy("BUY-AVCO-1", first_buy_date)
+        ),
     )
     buy_event, buy_type, method = _prepare_event(
         _event(

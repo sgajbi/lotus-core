@@ -15,16 +15,13 @@ from ..domain import (
     AverageCostPoolReconciliationAssessment,
     AverageCostPoolReconciliationStatus,
 )
-from ..ports import CostBasisReferenceDataPort
+from ..ports import AverageCostPoolPersistedSummary, CostBasisReferenceDataPort
 from .cost_basis import SqlAlchemyCostBasisReferenceDataRepository
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
 )
-from .cost_repository import (
-    AverageCostPoolPersistedSummary,
-    CostCalculatorRepository,
-)
+from .cost_repository import CostCalculatorRepository
 
 logger = logging.getLogger(__name__)
 

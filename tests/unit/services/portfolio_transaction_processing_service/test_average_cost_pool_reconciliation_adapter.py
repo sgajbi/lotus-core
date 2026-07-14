@@ -10,12 +10,14 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     AverageCostPoolReconciliationStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    AverageCostPoolPersistedSummary,
     CostCalculationWorkflow,
     CostCalculatorRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.average_cost_pool_reconciliation_adapter import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,
+)
+from src.services.portfolio_transaction_processing_service.app.ports import (
+    AverageCostPoolPersistedSummary,
 )
 
 pytestmark = pytest.mark.asyncio

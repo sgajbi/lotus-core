@@ -5,9 +5,17 @@ from .reference_data import (
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
 )
+from .state_records import (
+    AverageCostPoolCheckpointRecord,
+    AverageCostPoolPersistedSummary,
+    OpenLotCheckpointRecord,
+)
 
 __all__ = [
+    "AverageCostPoolCheckpointRecord",
+    "AverageCostPoolPersistedSummary",
     "CostBasisInstrumentReference",
     "CostBasisPortfolioReference",
     "CostBasisReferenceDataPort",
+    "OpenLotCheckpointRecord",
 ]

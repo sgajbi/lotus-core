@@ -406,7 +406,9 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
     )
 
     assert len(records) == 1
-    assert records[0].transaction is transaction
+    assert isinstance(records[0].transaction, BookedTransaction)
+    assert records[0].transaction is not transaction
+    assert records[0].transaction.transaction_id == "BUY01"
     assert records[0].quantity == Decimal("4")
     assert records[0].cost_local == Decimal("400")
     assert records[0].cost_base == Decimal("420")
@@ -456,7 +458,9 @@ async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineag
     )
 
     assert record is not None
-    assert record.representative_transaction is transaction
+    assert isinstance(record.representative_transaction, BookedTransaction)
+    assert record.representative_transaction is not transaction
+    assert record.representative_transaction.transaction_id == "BUY-2"
     assert record.checkpoint == AverageCostPoolCheckpoint(
         portfolio_id="P1",
         instrument_id="I1",

@@ -3,7 +3,7 @@
 import hashlib
 import logging
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
 from time import monotonic
@@ -45,8 +45,11 @@ from ..domain.cost_basis import (
 )
 from ..domain.transaction import BookedTransaction
 from ..ports import (
+    AverageCostPoolCheckpointRecord,
+    AverageCostPoolPersistedSummary,
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationKey,
+    OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
 
@@ -162,31 +165,6 @@ FEE_COMPONENT_FIELDS = (
     "gst",
     "other_fees",
 )
-
-
-@dataclass(frozen=True, slots=True)
-class OpenLotCheckpointRecord:
-    transaction: DBTransaction
-    quantity: Decimal
-    cost_local: Decimal
-    cost_base: Decimal
-
-
-@dataclass(frozen=True, slots=True)
-class AverageCostPoolCheckpointRecord:
-    checkpoint: AverageCostPoolCheckpoint
-    representative_transaction: DBTransaction | None
-
-
-@dataclass(frozen=True, slots=True)
-class AverageCostPoolPersistedSummary:
-    source_count: int
-    source_quantity: Decimal
-    source_cost_local: Decimal
-    source_cost_base: Decimal
-    pool_quantity: Decimal | None
-    pool_cost_local: Decimal | None
-    pool_cost_base: Decimal | None
 
 
 def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
@@ -473,7 +451,11 @@ class CostCalculatorRepository:
                 cost_base=state.pool_cost_base,
                 state_version=state.state_version,
             ),
-            representative_transaction=representative_transaction,
+            representative_transaction=(
+                to_booked_transaction(TransactionEvent.model_validate(representative_transaction))
+                if representative_transaction is not None
+                else None
+            ),
         )
 
     async def upsert_average_cost_pool_checkpoint(
@@ -740,7 +722,7 @@ class CostCalculatorRepository:
         rows = (await self.db.execute(stmt)).all()
         return [
             OpenLotCheckpointRecord(
-                transaction=transaction,
+                transaction=to_booked_transaction(TransactionEvent.model_validate(transaction)),
                 quantity=lot.open_quantity,
                 cost_local=lot.lot_cost_local,
                 cost_base=lot.lot_cost_base,
@@ -789,7 +771,9 @@ class CostCalculatorRepository:
             async for lot, transaction in result:
                 records.append(
                     OpenLotCheckpointRecord(
-                        transaction=transaction,
+                        transaction=to_booked_transaction(
+                            TransactionEvent.model_validate(transaction)
+                        ),
                         quantity=lot.open_quantity,
                         cost_local=lot.lot_cost_local,
                         cost_base=lot.lot_cost_base,
