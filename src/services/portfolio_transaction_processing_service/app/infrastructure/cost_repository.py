@@ -5,7 +5,6 @@ from typing import Any
 
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
-    PositionLotState,
     TransactionCost,
 )
 from portfolio_common.database_models import (
@@ -25,7 +24,7 @@ from ..domain.cost_basis import OpenLotState
 from ..domain.transaction import BookedTransaction
 from ..ports import OpenLotCheckpointRecord
 from .booked_transaction_event_mapper import to_booked_transaction
-from .cost_basis.lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
+from .cost_basis.lot_state_repository import SqlAlchemyCostBasisLotRepository
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -160,6 +159,7 @@ def _transaction_cost_rows(
 class CostCalculatorRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._lot_states = SqlAlchemyCostBasisLotRepository(db)
 
     async def get_transaction_history(
         self, portfolio_id: str, security_id: str, exclude_id: str | None = None
@@ -193,37 +193,10 @@ class CostCalculatorRepository:
     async def get_open_lot_checkpoint_records(
         self, *, portfolio_id: str, security_id: str
     ) -> list[OpenLotCheckpointRecord]:
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        stmt = (
-            select(PositionLotState, DBTransaction)
-            .join(
-                DBTransaction,
-                DBTransaction.transaction_id == PositionLotState.source_transaction_id,
-            )
-            .where(
-                func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
-                func.trim(PositionLotState.security_id) == normalized_security_id,
-                func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
-                func.trim(DBTransaction.security_id) == normalized_security_id,
-                PositionLotState.open_quantity > Decimal(0),
-            )
-            .order_by(
-                DBTransaction.transaction_date.asc(),
-                DBTransaction.quantity.desc(),
-                DBTransaction.transaction_id.asc(),
-            )
+        return await self._lot_states.get_open_lot_checkpoint_records(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
         )
-        rows = (await self.db.execute(stmt)).all()
-        return [
-            OpenLotCheckpointRecord(
-                transaction=to_booked_transaction(TransactionEvent.model_validate(transaction)),
-                quantity=lot.open_quantity,
-                cost_local=lot.lot_cost_local,
-                cost_base=lot.lot_cost_base,
-            )
-            for lot, transaction in rows
-        ]
 
     async def get_fifo_disposal_lot_checkpoint_records(
         self,
@@ -232,54 +205,11 @@ class CostCalculatorRepository:
         security_id: str,
         required_quantity: Decimal,
     ) -> list[OpenLotCheckpointRecord]:
-        """Stream the oldest open lots needed to cover one FIFO disposal."""
-        if required_quantity <= Decimal(0):
-            raise ValueError("FIFO disposal checkpoint quantity must be positive")
-
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        stmt = (
-            select(PositionLotState, DBTransaction)
-            .join(
-                DBTransaction,
-                DBTransaction.transaction_id == PositionLotState.source_transaction_id,
-            )
-            .where(
-                func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
-                func.trim(PositionLotState.security_id) == normalized_security_id,
-                func.trim(DBTransaction.portfolio_id) == normalized_portfolio_id,
-                func.trim(DBTransaction.security_id) == normalized_security_id,
-                PositionLotState.open_quantity > Decimal(0),
-            )
-            .order_by(
-                DBTransaction.transaction_date.asc(),
-                DBTransaction.quantity.desc(),
-                DBTransaction.transaction_id.asc(),
-            )
-            .execution_options(yield_per=64)
+        return await self._lot_states.get_fifo_disposal_lot_checkpoint_records(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            required_quantity=required_quantity,
         )
-
-        records: list[OpenLotCheckpointRecord] = []
-        covered_quantity = Decimal(0)
-        result = await self.db.stream(stmt)
-        try:
-            async for lot, transaction in result:
-                records.append(
-                    OpenLotCheckpointRecord(
-                        transaction=to_booked_transaction(
-                            TransactionEvent.model_validate(transaction)
-                        ),
-                        quantity=lot.open_quantity,
-                        cost_local=lot.lot_cost_local,
-                        cost_base=lot.lot_cost_base,
-                    )
-                )
-                covered_quantity += lot.open_quantity
-                if covered_quantity >= required_quantity:
-                    break
-        finally:
-            await result.close()
-        return records
 
     async def apply_transaction_costs(
         self, transaction_result: EngineTransaction
@@ -357,11 +287,7 @@ class CostCalculatorRepository:
 
     async def upsert_buy_lot_state(self, transaction_result: EngineTransaction) -> None:
         """Persists BUY lot state as a durable, idempotent record."""
-        stmt = pg_insert(PositionLotState).values(**buy_lot_state_payload(transaction_result))
-        update_dict = mutable_lot_state_fields(stmt)
-        await self.db.execute(
-            stmt.on_conflict_do_update(index_elements=["source_transaction_id"], set_=update_dict)
-        )
+        await self._lot_states.upsert_buy_lot_state(transaction_result)
 
     async def update_open_lot_states(
         self,
@@ -371,23 +297,11 @@ class CostCalculatorRepository:
         states_by_source_transaction_id: dict[str, OpenLotState],
     ) -> None:
         """Reconciles persisted quantity and cost with the latest engine-derived lot state."""
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        stmt = select(PositionLotState).where(
-            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
-            func.trim(PositionLotState.security_id) == normalized_security_id,
+        await self._lot_states.update_open_lot_states(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            states_by_source_transaction_id=states_by_source_transaction_id,
         )
-        lot_rows = (await self.db.execute(stmt)).scalars().all()
-        for lot_row in lot_rows:
-            state = states_by_source_transaction_id.get(lot_row.source_transaction_id)
-            if state is None:
-                lot_row.open_quantity = Decimal(0)
-                lot_row.lot_cost_local = Decimal(0)
-                lot_row.lot_cost_base = Decimal(0)
-                continue
-            lot_row.open_quantity = state.quantity
-            lot_row.lot_cost_local = state.cost_local
-            lot_row.lot_cost_base = state.cost_base
 
     async def update_selected_open_lot_states(
         self,
@@ -397,30 +311,11 @@ class CostCalculatorRepository:
         states_by_source_transaction_id: dict[str, OpenLotState],
     ) -> None:
         """Update selected source lots without closing omitted positions."""
-
-        if not states_by_source_transaction_id:
-            return
-
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        source_transaction_ids = set(states_by_source_transaction_id)
-        stmt = select(PositionLotState).where(
-            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
-            func.trim(PositionLotState.security_id) == normalized_security_id,
-            PositionLotState.source_transaction_id.in_(source_transaction_ids),
+        await self._lot_states.update_selected_open_lot_states(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            states_by_source_transaction_id=states_by_source_transaction_id,
         )
-        lot_rows = (await self.db.execute(stmt)).scalars().all()
-        persisted_source_ids = {lot_row.source_transaction_id for lot_row in lot_rows}
-        missing_source_ids = source_transaction_ids - persisted_source_ids
-        if missing_source_ids:
-            missing_ids = ", ".join(sorted(missing_source_ids))
-            raise ValueError(f"Selected cost-basis source lots are missing: {missing_ids}")
-
-        for lot_row in lot_rows:
-            state = states_by_source_transaction_id[lot_row.source_transaction_id]
-            lot_row.open_quantity = state.quantity
-            lot_row.lot_cost_local = state.cost_local
-            lot_row.lot_cost_base = state.cost_base
 
     async def upsert_accrued_income_offset_state(
         self, transaction_result: EngineTransaction
