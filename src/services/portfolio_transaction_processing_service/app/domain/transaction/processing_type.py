@@ -10,8 +10,17 @@ from portfolio_common.domain.transaction_control_codes import normalize_transact
 class ProcessingTypeSource(Protocol):
     """Structural transaction fields required by processing-type policies."""
 
-    transaction_type: str
-    component_type: str | None
+    @property
+    def transaction_type(self) -> str:
+        """Return the booked business transaction type."""
+
+        ...
+
+    @property
+    def component_type(self) -> str | None:
+        """Return the concrete processing component type when present."""
+
+        ...
 
 
 FX_COMPONENT_PROCESSING_TYPES = {
@@ -24,7 +33,7 @@ NON_CASHFLOW_PROCESSING_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
 
 
 def normalize_processing_type(value: str | None) -> str:
-    return normalize_transaction_control_code(value)
+    return str(normalize_transaction_control_code(value))
 
 
 def resolve_effective_processing_transaction_type(transaction: ProcessingTypeSource) -> str:
