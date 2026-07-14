@@ -1,5 +1,6 @@
 """Expose organized infrastructure adapters and records for cost-basis processing."""
 
+from .average_cost_pool_repository import SqlAlchemyAverageCostPoolRepository
 from .corporate_action_reconciliation_repository import (
     SqlAlchemyCorporateActionReconciliationRepository,
 )
@@ -12,6 +13,7 @@ from .reference_data_repository import SqlAlchemyCostBasisReferenceDataRepositor
 from .staged_effects import StagedCostEffects
 
 __all__ = [
+    "SqlAlchemyAverageCostPoolRepository",
     "SqlAlchemyCorporateActionReconciliationRepository",
     "SqlAlchemyCostBasisFxRateRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",

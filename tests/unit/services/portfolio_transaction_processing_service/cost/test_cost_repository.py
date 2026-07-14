@@ -27,6 +27,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculatorRepository,
 )
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
+    SqlAlchemyAverageCostPoolRepository,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -185,7 +188,7 @@ async def test_get_open_lot_checkpoint_records_returns_only_positive_lots() -> N
 
 async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineage() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     persisted = AverageCostPoolState(
         portfolio_id="P1",
         instrument_id="I1",
@@ -244,7 +247,7 @@ async def test_get_average_cost_pool_checkpoint_maps_aggregate_and_source_lineag
 
 async def test_upsert_average_cost_pool_checkpoint_is_idempotent_and_normalized() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
 
     await repository.upsert_average_cost_pool_checkpoint(
         AverageCostPoolCheckpoint(
@@ -350,8 +353,8 @@ def _average_cost_rebuild_plan() -> AverageCostPoolRebuildPlan:
 
 async def test_apply_average_cost_pool_rebuild_bulk_replaces_lot_and_pool_state() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
-    repository.AVERAGE_COST_REBUILD_UPSERT_CHUNK_SIZE = 1
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
+    repository.REBUILD_UPSERT_CHUNK_SIZE = 1
 
     await repository.apply_average_cost_pool_rebuild(_average_cost_rebuild_plan())
 
@@ -397,7 +400,9 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
     )
     db_session.execute.side_effect = [pool_result, source_result]
 
-    summary = await CostCalculatorRepository(db_session).get_average_cost_pool_persisted_summary(
+    summary = await SqlAlchemyAverageCostPoolRepository(
+        db_session
+    ).get_average_cost_pool_persisted_summary(
         portfolio_id=" P1 ",
         security_id=" S1 ",
     )
@@ -421,7 +426,7 @@ async def test_get_average_cost_pool_persisted_summary_maps_missing_pool_and_sou
 
 async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_residual() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     scale_result = MagicMock()
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = (
@@ -473,7 +478,7 @@ async def test_apply_average_cost_pool_transition_scales_sources_and_assigns_res
 
 async def test_apply_average_cost_pool_transition_rejects_missing_close_sources() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     close_result = MagicMock(rowcount=0)
     db_session.execute.return_value = close_result
     transition = AverageCostPoolTransition(
@@ -494,7 +499,7 @@ async def test_apply_average_cost_pool_transition_rejects_missing_close_sources(
 
 async def test_apply_average_cost_pool_transition_rejects_negative_residual() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     aggregate_result = MagicMock()
     aggregate_result.one.return_value = (
         Decimal("10"),
@@ -520,7 +525,7 @@ async def test_apply_average_cost_pool_transition_rejects_negative_residual() ->
 
 async def test_apply_average_cost_pool_transition_updates_explicit_new_source() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     new_lot = PositionLotState(
         lot_id="LOT-BUY-3",
         source_transaction_id="BUY-3",
@@ -699,7 +704,7 @@ async def test_update_open_lot_states_trims_ids_and_reconciles_quantity_and_cost
 
 async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     selected_lot = PositionLotState(
         lot_id="LOT-BUY01",
         source_transaction_id="BUY01",
@@ -754,7 +759,7 @@ async def test_update_selected_open_lot_states_does_not_close_omitted_lots() -> 
 
 async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
     execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = []
     db_session.execute.return_value = execute_result
@@ -775,7 +780,7 @@ async def test_update_selected_open_lot_states_rejects_missing_source_lot() -> N
 
 async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyAverageCostPoolRepository(db_session)
 
     await repository.update_selected_open_lot_states(
         portfolio_id="PORT_COST_01",
