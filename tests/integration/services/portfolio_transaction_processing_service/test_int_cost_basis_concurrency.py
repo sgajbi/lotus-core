@@ -17,7 +17,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
@@ -27,6 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
+    SqlAlchemyCostBasisTransactionRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
@@ -47,7 +47,7 @@ pytestmark = [
 ]
 
 
-class _HeldHistoryCostRepository(CostCalculatorRepository):
+class _HeldHistoryCostRepository(SqlAlchemyCostBasisTransactionRepository):
     def __init__(
         self,
         db: AsyncSession,
@@ -181,7 +181,7 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         _stage_cost_calculation(
             session_factory=session_factory,
             event=sell,
-            repository_factory=CostCalculatorRepository,
+            repository_factory=SqlAlchemyCostBasisTransactionRepository,
             processing_state_factory=lambda session: _ObservedProcessingStateRepository(
                 session,
                 lock_attempted=sell_lock_attempted,
@@ -192,7 +192,7 @@ async def test_same_key_buy_sell_and_replay_serialize_to_deterministic_fifo_lot_
         _stage_cost_calculation(
             session_factory=session_factory,
             event=sell,
-            repository_factory=CostCalculatorRepository,
+            repository_factory=SqlAlchemyCostBasisTransactionRepository,
             processing_state_factory=lambda session: _ObservedProcessingStateRepository(
                 session,
                 lock_attempted=replay_lock_attempted,

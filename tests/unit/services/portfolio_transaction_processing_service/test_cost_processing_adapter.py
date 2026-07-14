@@ -21,7 +21,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     SettlementCashValidationError,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
     StagedCostEffects,
 )
@@ -35,6 +34,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
 )
 
 
@@ -61,7 +61,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
             "traceparent": "trace-001",
         }
     )
-    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",
@@ -139,7 +139,7 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
         trade_currency="SGD",
         currency="SGD",
     )
-    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
@@ -184,7 +184,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         trade_currency="SGD",
         currency="SGD",
     )
-    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         base_currency="SGD",

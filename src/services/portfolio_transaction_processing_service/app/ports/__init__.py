@@ -20,6 +20,7 @@ from .cost_basis import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
     OpenLotCheckpointRecord,
 )
 from .cost_basis_observability import (
@@ -72,6 +73,7 @@ __all__ = [
     "CostBasisPortfolioReference",
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
+    "CostBasisTransactionStatePort",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
     "CorporateActionReconciliationKey",

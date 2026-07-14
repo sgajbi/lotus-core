@@ -14,6 +14,7 @@ from .state_records import (
     AverageCostPoolPersistedSummary,
     OpenLotCheckpointRecord,
 )
+from .transaction_state import CostBasisTransactionStatePort
 
 __all__ = [
     "AverageCostPoolCheckpointRecord",
@@ -25,5 +26,6 @@ __all__ = [
     "CostBasisPortfolioReference",
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
+    "CostBasisTransactionStatePort",
     "OpenLotCheckpointRecord",
 ]

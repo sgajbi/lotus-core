@@ -24,7 +24,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
     CostProcessingCompatibilityAdapter,
     FxRateNotFoundError,
     OpenLotStateUpdateScope,
@@ -41,6 +40,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -101,7 +101,7 @@ async def test_cost_basis_acquires_key_lock_before_reading_processing_state() ->
         trade_currency="USD",
         currency="USD",
     )
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
@@ -216,7 +216,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         currency="USD",
     )
     instrument_event = MagicMock()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
@@ -308,7 +308,7 @@ async def test_cost_compatibility_stage_reports_missing_portfolio_dependency():
         trade_currency="USD",
         currency="USD",
     )
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
@@ -391,7 +391,7 @@ async def test_cost_persistence_fails_before_child_writes_when_canonical_row_is_
         transaction_id="BUY-MISSING-CANONICAL",
         transaction_type="BUY",
     )
-    repository = AsyncMock(spec=CostCalculatorRepository)
+    repository = AsyncMock(spec=CostBasisTransactionStatePort)
     lot_states = _lot_state_port()
     income_offsets = _income_offset_port()
     repository.apply_transaction_costs.return_value = None
@@ -614,7 +614,7 @@ async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_ra
 async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
     cost_calculation_workflow: CostCalculationWorkflow,
 ):
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processed_event = TransactionEvent(
         transaction_id="INT-UP-01",
         portfolio_id="PORT_COST_01",
@@ -646,7 +646,7 @@ async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(
 async def test_load_upstream_cash_leg_maps_domain_transaction_to_event(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     repo.get_booked_transaction.return_value = BookedTransaction(
         transaction_id="CASH-UP-01",
         portfolio_id="PORT_COST_01",
@@ -688,7 +688,7 @@ async def test_load_upstream_cash_leg_maps_domain_transaction_to_event(
 async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contract(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     product_leg = TransactionEvent(
         transaction_id="DIV-GENERATED-01",
@@ -732,7 +732,7 @@ async def test_build_emitted_events_maps_generated_cash_leg_back_to_event_contra
 async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
     cost_calculation_workflow: CostCalculationWorkflow,
 ):
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
     event = TransactionEvent(
@@ -832,7 +832,7 @@ async def test_update_open_lot_states_refreshes_full_rebuild_snapshots(
 async def test_update_open_lot_states_applies_average_cost_pool_transition(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
     event = TransactionEvent(
@@ -888,7 +888,7 @@ async def test_update_open_lot_states_applies_average_cost_pool_transition(
 async def test_full_avco_rebuild_establishes_pool_checkpoint_for_non_lot_event(
     cost_calculation_workflow: CostCalculationWorkflow,
 ) -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
     event = TransactionEvent(
@@ -950,7 +950,7 @@ async def test_emitted_corporate_action_group_uses_application_reconciliation_bo
         transaction_type="DEMERGER_IN",
         net_cost_local="100",
     )
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reconciliation_repository.load_group.return_value = ()
     observer = MagicMock()

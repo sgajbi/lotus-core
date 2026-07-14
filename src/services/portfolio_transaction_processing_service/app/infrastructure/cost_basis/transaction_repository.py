@@ -14,11 +14,9 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.cost_basis import (
-    CostBasisTransaction as EngineTransaction,
-)
-from ..domain.transaction import BookedTransaction
-from .booked_transaction_event_mapper import to_booked_transaction
+from ...domain.cost_basis import CostBasisTransaction
+from ...domain.transaction import BookedTransaction
+from ..booked_transaction_event_mapper import to_booked_transaction
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -135,7 +133,7 @@ def _positive_fee_components(fees: object | None) -> dict[str, Decimal]:
 
 def _transaction_cost_rows(
     *,
-    transaction_result: EngineTransaction,
+    transaction_result: CostBasisTransaction,
     db_txn: DBTransaction,
 ) -> list[TransactionCost]:
     currency = normalize_currency_code(db_txn.trade_currency or db_txn.currency)
@@ -150,7 +148,9 @@ def _transaction_cost_rows(
     ]
 
 
-class CostCalculatorRepository:
+class SqlAlchemyCostBasisTransactionRepository:
+    """Persist canonical transaction economics and load cost-basis history."""
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -184,7 +184,7 @@ class CostCalculatorRepository:
         ]
 
     async def apply_transaction_costs(
-        self, transaction_result: EngineTransaction
+        self, transaction_result: CostBasisTransaction
     ) -> BookedTransaction | None:
         """Apply calculated costs and return the updated canonical domain transaction."""
         stmt = select(DBTransaction).filter_by(transaction_id=transaction_result.transaction_id)
@@ -233,7 +233,7 @@ class CostCalculatorRepository:
         )
 
     async def replace_transaction_cost_breakdown(
-        self, transaction_result: EngineTransaction
+        self, transaction_result: CostBasisTransaction
     ) -> None:
         """
         Replaces the per-fee breakdown rows for a transaction.

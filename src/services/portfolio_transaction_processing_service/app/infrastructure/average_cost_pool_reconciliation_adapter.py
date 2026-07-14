@@ -21,18 +21,19 @@ from ..ports import (
     CostBasisFxRatePort,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
 )
 from .cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisFxRateRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
+    SqlAlchemyCostBasisTransactionRepository,
 )
 from .cost_calculation_workflow import (
     LOT_OPENING_BEHAVIORS,
     CostCalculationWorkflow,
 )
-from .cost_repository import CostCalculatorRepository
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,8 @@ class SqlAlchemyAverageCostPoolReconciliationAdapter:
         *,
         session_factory: Callable[[], AsyncSession],
         workflow: CostCalculationWorkflow,
-        repository_factory: Callable[[AsyncSession], CostCalculatorRepository] = (
-            CostCalculatorRepository
+        repository_factory: Callable[[AsyncSession], CostBasisTransactionStatePort] = (
+            SqlAlchemyCostBasisTransactionRepository
         ),
         average_cost_pool_factory: Callable[[AsyncSession], CostBasisAverageCostPoolPort] = (
             SqlAlchemyAverageCostPoolRepository

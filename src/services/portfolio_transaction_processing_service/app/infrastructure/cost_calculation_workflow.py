@@ -66,6 +66,7 @@ from ..ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
 )
 from .booked_transaction_event_mapper import (
     to_booked_transaction,
@@ -74,7 +75,6 @@ from .booked_transaction_event_mapper import (
 )
 from .cost_basis import StagedCostEffects
 from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
-from .cost_repository import CostCalculatorRepository
 from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ class CostCalculationWorkflow:
         *,
         portfolio_id: str,
         security_id: str,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         reference_data: CostBasisReferenceDataPort,
         fx_rates: CostBasisFxRatePort,
     ) -> AverageCostPoolRebuildPlan:
@@ -377,7 +377,7 @@ class CostCalculationWorkflow:
         route: CostProcessingRoute,
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -409,7 +409,7 @@ class CostCalculationWorkflow:
         route: CostProcessingRoute,
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -462,7 +462,7 @@ class CostCalculationWorkflow:
         self,
         *,
         event: TransactionEvent,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
         processed_transaction = build_fx_processed_transaction(to_booked_transaction(event))
         assert_fx_processed_transaction_valid(processed_transaction)
@@ -481,7 +481,7 @@ class CostCalculationWorkflow:
         event_transaction_type: str,
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -542,7 +542,7 @@ class CostCalculationWorkflow:
         event_transaction_type: str,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
@@ -662,7 +662,7 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         fx_rates: CostBasisFxRatePort,
         cost_basis_method: CostBasisMethod,
     ) -> CostEngineCalculation:
@@ -698,7 +698,7 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         fx_rates: CostBasisFxRatePort,
     ) -> dict[str, Any]:
         event_raw = self._transform_event_for_engine(event)
@@ -841,7 +841,7 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         portfolio_base_currency: str,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         fx_rates: CostBasisFxRatePort,
     ) -> list[dict[str, Any]]:
         history = await repo.get_transaction_history(
@@ -877,7 +877,7 @@ class CostCalculationWorkflow:
         *,
         processed: list[Any],
         new_transaction_ids: set[str],
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
     ) -> list[TransactionEvent]:
@@ -910,7 +910,7 @@ class CostCalculationWorkflow:
         event: TransactionEvent,
         event_transaction_type: str,
         open_lot_states: dict[str, OpenLotState],
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         incremental: bool,
@@ -995,7 +995,7 @@ class CostCalculationWorkflow:
         self,
         *,
         processed_transaction: Any,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
     ) -> TransactionEvent:
@@ -1106,7 +1106,7 @@ class CostCalculationWorkflow:
         self,
         *,
         events_to_publish: list[TransactionEvent],
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         correlation_id: str,
     ) -> list[TransactionEvent]:
@@ -1148,7 +1148,7 @@ class CostCalculationWorkflow:
         self,
         *,
         processed_event: TransactionEvent,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
     ) -> None:
         assert_cash_entry_mode_supported(to_booked_transaction(processed_event))
         if not self._requires_upstream_cash_leg_validation(processed_event):
@@ -1186,7 +1186,7 @@ class CostCalculationWorkflow:
         *,
         external_cash_id: str,
         processed_event: TransactionEvent,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
     ) -> TransactionEvent:
         cash_leg = await repo.get_booked_transaction(
             external_cash_id, portfolio_id=processed_event.portfolio_id
