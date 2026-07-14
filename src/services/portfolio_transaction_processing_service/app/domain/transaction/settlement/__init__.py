@@ -11,7 +11,6 @@ from .cash_entry import (
 from .cash_movement import (
     ORDINARY_SETTLEMENT_TRANSACTION_TYPES,
     SettlementCashMovement,
-    SettlementCashRejectionReasonCode,
     SettlementCashValidationError,
     calculate_settlement_cash_movement,
 )
@@ -26,6 +25,7 @@ from .interest import (
     InterestSettlementEconomics,
     calculate_interest_settlement_economics,
 )
+from .reason_codes import SettlementCashRejectionReasonCode
 from .upstream_pairing import (
     UpstreamCashLegPairingError,
     UpstreamCashLegPairingIssue,
