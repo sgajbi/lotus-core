@@ -132,7 +132,8 @@
         "src/services/portfolio_transaction_processing_service/app/infrastructure/sqlalchemy_position_recalculation_state_store.py",
         "src/services/calculators/position_valuation_calculator",
         "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_calculation.py",
-        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py",
+        "src/services/portfolio_transaction_processing_service/app/application/cashflow_processing",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow",
         "src/services/valuation_orchestrator_service",
         "src/services/pipeline_orchestrator_service",
         "src/services/query_service/app/routers/cashflow_projection.py"

@@ -6,7 +6,7 @@ Slice 4 completes INTEREST cash-entry mode behavior parity with DIVIDEND and int
 
 ## Delivered Artifacts
 
-- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
+- `src/services/portfolio_transaction_processing_service/app/application/cashflow_processing/use_case.py`
   - UPSTREAM_PROVIDED cash-entry bypass now supports both `DIVIDEND` and `INTEREST`
   - deterministic linkage enforcement for `external_cash_transaction_id`
 - `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
@@ -18,7 +18,7 @@ Slice 4 completes INTEREST cash-entry mode behavior parity with DIVIDEND and int
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/validation/income.py`
   - non-negative withholding/deduction checks
   - net-interest reconciliation identity checks
-- `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+- `tests/unit/services/portfolio_transaction_processing_service/application/cashflow_processing/test_use_case.py`
   - INTEREST UPSTREAM_PROVIDED mode skip + error-path tests
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
   - INTEREST income/expense sign tests
