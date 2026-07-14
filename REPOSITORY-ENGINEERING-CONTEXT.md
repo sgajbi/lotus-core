@@ -2436,8 +2436,11 @@ Most relevant current governance:
      modules, or place application behavior in infrastructure.
      Generated settlement cash-leg validation, creation, ordered persistence, and product-leg
      linking belong in `app/application/settlement_processing/cash_leg_linking.py` over the narrow
-     settlement lookup and persistence ports. Event-envelope mapping, outbox staging, and
-     corporate-action reconciliation remain infrastructure concerns.
+     settlement lookup and persistence ports. Processed transaction and FX-contract instrument
+     effects cross `ports/cost_basis/effect_staging.py` as domain values; governed event mapping,
+     topic selection, payload serialization, BUY/SELL outbox metrics, and transactional outbox writes
+     belong in `app/infrastructure/cost_basis/effect_staging.py`. Corporate-action reconciliation
+     persistence remains an infrastructure concern.
      Validated FX transaction persistence and optional synthetic contract-instrument derivation
      belong in `app/application/foreign_exchange_processing/booking.py` over the narrow foreign-
      exchange persistence port. Baseline FX economics and validation remain domain policy under
@@ -2456,8 +2459,9 @@ Most relevant current governance:
      Calculated transaction-cost persistence belongs in
      `app/application/cost_basis_processing/transaction_persistence.py`: it accepts domain
      transactions and persistence ports, writes only the affected deterministic suffix, and returns
-     immutable `BookedTransaction` values. Event DTO mapping and outbox publication remain
-     infrastructure concerns. Persistence lifecycle observations use typed stage/status records;
+     immutable `BookedTransaction` values. Event DTO mapping and transactional outbox staging remain
+     behind the domain-valued effect-staging port and infrastructure adapter. Persistence lifecycle
+     observations use typed stage/status records;
      the Prometheus/log adapter must contain telemetry failures so support tooling cannot roll back
      financial writes. Mirror persistence tests under the application package and do not test this
      behavior through private workflow methods.

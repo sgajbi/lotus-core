@@ -7,8 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
-from portfolio_common.events import InstrumentEvent, TransactionEvent
-from portfolio_common.outbox_repository import OutboxRepository
+from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     cost_basis_processing,
@@ -16,6 +15,9 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (  # noqa: E501
     CostCalculationError,
+)
+from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
+    FxContractInstrument,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
@@ -38,6 +40,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
+    CostProcessingEffectStagingPort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -185,15 +188,16 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         gross_transaction_amount=Decimal("1500.0"),
         trade_currency="USD",
         currency="USD",
+        epoch=7,
     )
-    instrument_event = MagicMock()
+    instrument_event = MagicMock(spec=FxContractInstrument)
     repo = AsyncMock(spec=CostBasisTransactionStatePort)
     fx_rates = AsyncMock(spec=CostBasisFxRatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
     income_offsets = _income_offset_port()
-    outbox_repo = AsyncMock(spec=OutboxRepository)
+    effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     portfolio = CostBasisPortfolioReference(
         portfolio_id="PORT_COST_01",
@@ -209,8 +213,6 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
     workflow = CostCalculationWorkflow()
     workflow._build_events_to_publish = AsyncMock(return_value=([event], [instrument_event]))
     workflow._build_emitted_transaction_events = AsyncMock(return_value=[event])
-    workflow._publish_transaction_events = AsyncMock()
-    workflow._publish_instrument_events = AsyncMock()
 
     result = await workflow.stage_prepared_event(
         event=event,
@@ -226,7 +228,7 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         processing_state=processing_state,
         reconciliation_repository=reconciliation_repository,
         cost_basis_method=CostBasisMethod.FIFO,
-        outbox_repo=outbox_repo,
+        effect_stager=effect_stager,
         correlation_id="cost-corr-id",
     )
 
@@ -250,18 +252,17 @@ async def test_cost_compatibility_adapter_executes_workflow_without_kafka_consum
         reconciliation_repository=reconciliation_repository,
         correlation_id="cost-corr-id",
     )
-    workflow._publish_transaction_events.assert_awaited_once_with(
-        original_event=event,
-        emitted_events=[event],
-        outbox_repo=outbox_repo,
-        correlation_id="cost-corr-id",
-    )
-    workflow._publish_instrument_events.assert_awaited_once_with(
-        instrument_events=[instrument_event],
-        outbox_repo=outbox_repo,
+    staged_transactions = effect_stager.stage_processed_transactions.await_args.args[0]
+    assert len(staged_transactions) == 1
+    assert staged_transactions[0].transaction_id == event.transaction_id
+    assert staged_transactions[0].portfolio_id == event.portfolio_id
+    assert staged_transactions[0].epoch == 7
+    effect_stager.stage_instrument_updates.assert_awaited_once_with(
+        (instrument_event,),
         correlation_id="cost-corr-id",
     )
     assert result.emitted_transactions == (event,)
+    assert result.emitted_transactions[0].epoch == 7
     assert result.instrument_update_count == 1
 
 
@@ -287,7 +288,7 @@ async def test_cost_basis_stage_reports_missing_portfolio_dependency():
     lot_states = _lot_state_port()
     income_offsets = _income_offset_port()
     reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
-    outbox_repo = AsyncMock(spec=OutboxRepository)
+    effect_stager = AsyncMock(spec=CostProcessingEffectStagingPort)
     reference_data.get_cost_basis_portfolio.return_value = None
 
     with pytest.raises(PortfolioNotFoundError):
@@ -301,7 +302,7 @@ async def test_cost_basis_stage_reports_missing_portfolio_dependency():
             fx_rates=fx_rates,
             processing_state=processing_state,
             reconciliation_repository=reconciliation_repository,
-            outbox_repository=outbox_repo,
+            effect_stager=effect_stager,
         ).stage_event(
             event=event,
             correlation_id="cost-corr-id",
@@ -416,7 +417,7 @@ async def test_cost_workflow_routes_foreign_exchange_and_cost_basis_independentl
         transaction_type="BUY",
         net_cost_local="100",
     )
-    fx_result = ([event], [MagicMock(spec=InstrumentEvent)])
+    fx_result = ([event], [MagicMock(spec=FxContractInstrument)])
     cost_result = ([event], [])
     workflow._build_fx_events_to_publish = AsyncMock(return_value=fx_result)
     workflow._build_cost_basis_events_to_publish = AsyncMock(return_value=cost_result)
@@ -453,55 +454,3 @@ async def test_cost_workflow_routes_foreign_exchange_and_cost_basis_independentl
         event=event, repo=dependencies["repo"]
     )
     workflow._build_cost_basis_events_to_publish.assert_awaited_once()
-
-
-@pytest.mark.parametrize("epoch", [None, 7])
-async def test_transaction_outbox_preserves_processing_epoch(epoch: int | None) -> None:
-    original = _bundle_a_transaction_event(
-        transaction_id="OUTBOX-ORIGINAL-01",
-        transaction_type="BUY",
-        net_cost_local="100",
-    )
-    original.epoch = epoch
-    emitted = _bundle_a_transaction_event(
-        transaction_id="OUTBOX-EMITTED-01",
-        transaction_type="BUY",
-        net_cost_local="100",
-    )
-    outbox = AsyncMock(spec=OutboxRepository)
-
-    await CostCalculationWorkflow()._publish_transaction_events(
-        original_event=original,
-        emitted_events=[emitted],
-        outbox_repo=outbox,
-        correlation_id="corr-outbox-01",
-    )
-
-    assert emitted.epoch == epoch
-    call = outbox.create_outbox_event.await_args
-    assert call.kwargs["aggregate_type"] == "ProcessedTransaction"
-    assert call.kwargs["aggregate_id"] == "PORT_COST_01"
-    assert call.kwargs["event_type"] == "ProcessedTransactionPersisted"
-    assert call.kwargs["correlation_id"] == "corr-outbox-01"
-
-
-async def test_instrument_update_is_written_to_outbox() -> None:
-    instrument_event = MagicMock(spec=InstrumentEvent)
-    instrument_event.security_id = "SEC-CREATED-01"
-    instrument_event.model_dump.return_value = {"security_id": "SEC-CREATED-01"}
-    outbox = AsyncMock(spec=OutboxRepository)
-
-    await CostCalculationWorkflow()._publish_instrument_events(
-        instrument_events=[instrument_event],
-        outbox_repo=outbox,
-        correlation_id="corr-instrument-01",
-    )
-
-    outbox.create_outbox_event.assert_awaited_once_with(
-        aggregate_type="Instrument",
-        aggregate_id="SEC-CREATED-01",
-        event_type="InstrumentUpserted",
-        topic="instruments.received",
-        payload={"security_id": "SEC-CREATED-01"},
-        correlation_id="corr-instrument-01",
-    )

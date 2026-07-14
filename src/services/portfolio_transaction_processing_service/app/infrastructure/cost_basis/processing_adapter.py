@@ -6,7 +6,6 @@ from typing import Protocol
 
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
 from portfolio_common.events import TransactionEvent
-from portfolio_common.outbox_repository import OutboxRepository
 
 from ...application import TransactionProcessingError, build_settlement_cash_rejection
 from ...application.cost_basis_processing import (
@@ -29,6 +28,7 @@ from ...ports import (
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
+    CostProcessingEffectStagingPort,
     CostProcessingResult,
 )
 from ..booked_transaction_event_mapper import (
@@ -62,7 +62,7 @@ class CostEffectsStager(Protocol):
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
         cost_basis_method: CostBasisMethod,
-        outbox_repo: OutboxRepository,
+        effect_stager: CostProcessingEffectStagingPort,
         correlation_id: str,
     ) -> StagedCostEffects: ...
 
@@ -82,7 +82,7 @@ class CostBasisProcessingAdapter:
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
-        outbox_repository: OutboxRepository,
+        effect_stager: CostProcessingEffectStagingPort,
     ) -> None:
         self._workflow = workflow
         self._repository = repository
@@ -93,7 +93,7 @@ class CostBasisProcessingAdapter:
         self._fx_rates = fx_rates
         self._processing_state = processing_state
         self._reconciliation_repository = reconciliation_repository
-        self._outbox_repository = outbox_repository
+        self._effect_stager = effect_stager
 
     async def stage_event(
         self,
@@ -127,7 +127,7 @@ class CostBasisProcessingAdapter:
             processing_state=self._processing_state,
             reconciliation_repository=self._reconciliation_repository,
             cost_basis_method=prepared.cost_basis_method,
-            outbox_repo=self._outbox_repository,
+            effect_stager=self._effect_stager,
             correlation_id=correlation_id,
         )
 

@@ -28,6 +28,7 @@ from .cost_basis import (
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
     CostBasisTransactionStatePort,
+    CostProcessingEffectStagingPort,
     OpenLotCheckpointRecord,
 )
 from .foreign_exchange import ForeignExchangeTransactionPersistencePort
@@ -84,6 +85,7 @@ __all__ = [
     "CostBasisProcessingStatePort",
     "CostBasisReferenceDataPort",
     "CostBasisTransactionStatePort",
+    "CostProcessingEffectStagingPort",
     "CorporateActionReconciliationEvidence",
     "CorporateActionReconciliationFindingEvidence",
     "CorporateActionReconciliationKey",

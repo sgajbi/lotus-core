@@ -53,7 +53,10 @@ transaction-state, reference-data, and FX ports. The cost-basis application pack
 persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO transitions.
 The same package owns calculated transaction persistence: it writes the affected
 timeline suffix through transaction, lot-state, and accrued-income-offset ports and returns
-immutable booked transactions. Infrastructure maps those values to event DTOs and outbox payloads.
+immutable booked transactions. Processed transactions and derived FX contract instruments cross a
+typed effect-staging port as domain values. The transactional infrastructure adapter alone maps
+those values to governed event DTOs, topics, payloads, lifecycle metrics, and outbox rows using the
+same caller-owned SQL transaction.
 SQLAlchemy-based AVCO reconciliation remains an infrastructure adapter under
 `app/infrastructure/cost_basis`; it invokes the application planner and owns only persistence
 coordination. Lot-opening, consumption, preservation, and basis-transfer behavior remains pure
@@ -69,7 +72,7 @@ infrastructure workflow acquires the portfolio-security lock. It accepts an immu
 transaction, restores compatible FIFO lots or an AVCO pool through narrow ports, enriches the
 calculation timeline with effective FX evidence, and invokes the governed timeline processor.
 Framework event DTO mapping, SQL transaction ownership, and outbox publication stay outside that
-application boundary.
+application boundary behind the cost-processing effect-staging port.
 
 Cost-basis calculation observation remains framework-neutral at the port boundary. Prometheus
 instruments and adapters are grouped under `app/infrastructure/cost_basis`; metric names, labels,

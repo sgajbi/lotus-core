@@ -79,3 +79,39 @@ def test_cost_basis_calculation_has_application_owned_paths() -> None:
     workflow_source = infrastructure_workflow.read_text(encoding="utf-8")
     assert "_calculate_cost_basis" not in workflow_source
     assert "transaction_lot_behavior" not in workflow_source
+
+
+def test_cost_processing_effect_staging_has_port_and_infrastructure_paths() -> None:
+    """Keep domain effect contracts separate from concrete event and outbox staging."""
+
+    app_root = APPLICATION_ROOT.parent
+    port_path = app_root / "ports" / "cost_basis" / "effect_staging.py"
+    adapter_path = app_root / "infrastructure" / "cost_basis" / "effect_staging.py"
+    adapter_test_path = UNIT_TEST_ROOT / "infrastructure" / "cost_basis" / "test_effect_staging.py"
+    workflow_path = app_root / "infrastructure" / "cost_calculation_workflow.py"
+    assert port_path.is_file()
+    assert adapter_path.is_file()
+    assert adapter_test_path.is_file()
+    assert not (app_root / "ports" / "cost_effect_staging.py").exists()
+    assert not (app_root / "infrastructure" / "cost_effect_staging.py").exists()
+
+    port_source = port_path.read_text(encoding="utf-8")
+    for forbidden_dependency in (
+        "TransactionEvent",
+        "InstrumentEvent",
+        "OutboxRepository",
+        "portfolio_common.events",
+        "portfolio_common.monitoring",
+    ):
+        assert forbidden_dependency not in port_source
+
+    workflow_source = workflow_path.read_text(encoding="utf-8")
+    for retired_workflow_dependency in (
+        "OutboxRepository",
+        "event_business_payload",
+        "KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC",
+        "BUY_LIFECYCLE_STAGE_TOTAL",
+        "_publish_transaction_events",
+        "_publish_instrument_events",
+    ):
+        assert retired_workflow_dependency not in workflow_source
