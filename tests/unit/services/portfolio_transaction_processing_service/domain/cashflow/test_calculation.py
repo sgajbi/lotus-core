@@ -13,7 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
     CashflowTiming,
     calculate_transaction_cashflow,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping.booked_transaction import (  # noqa: E501
     to_booked_transaction,
 )
 

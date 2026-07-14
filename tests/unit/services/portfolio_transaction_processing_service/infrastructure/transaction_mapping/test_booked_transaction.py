@@ -1,3 +1,5 @@
+"""Verify governed event and booked transaction mapping parity."""
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -8,8 +10,8 @@ import pytest
 from portfolio_common.events import TransactionEvent
 
 from src.services.portfolio_transaction_processing_service.app.domain import BookedTransaction
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    booked_transaction_event_mapper as mapper,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping import (  # noqa: E501
+    booked_transaction as mapper,
 )
 
 

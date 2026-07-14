@@ -24,8 +24,8 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    booked_transaction_event_mapper,
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping import (  # noqa: E501
+    booked_transaction,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolCheckpointRecord,
@@ -117,7 +117,7 @@ async def _calculate_cost_basis(
         processing_state=processing_state,
         observer=observer,
     ).calculate(
-        transaction=booked_transaction_event_mapper.to_booked_transaction(event),
+        transaction=booked_transaction.to_booked_transaction(event),
         transaction_type=event_transaction_type,
         portfolio_base_currency=portfolio_base_currency,
         instrument=instrument,
@@ -149,7 +149,7 @@ def _event(
 
 def _processed_buy(transaction_id: str, transaction_date: datetime) -> EngineTransaction:
     payload = build_cost_basis_engine_input(
-        booked_transaction_event_mapper.to_booked_transaction(
+        booked_transaction.to_booked_transaction(
             _event(
                 transaction_id=transaction_id,
                 transaction_date=transaction_date,
@@ -171,12 +171,12 @@ def _prepare_event(
     cost_basis_method: CostBasisMethod,
 ) -> tuple[TransactionEvent, str, CostBasisMethod]:
     prepared = cost_basis_processing.prepare_cost_transaction(
-        booked_transaction_event_mapper.to_booked_transaction(event),
+        booked_transaction.to_booked_transaction(event),
         cost_basis_method=cost_basis_method,
         instrument_reference_available=True,
     )
     return (
-        booked_transaction_event_mapper.with_booked_transaction_fields(event, prepared.transaction),
+        booked_transaction.with_booked_transaction_fields(event, prepared.transaction),
         prepared.transaction_type,
         prepared.cost_basis_method,
     )
@@ -204,9 +204,7 @@ def _persisted_buy(transaction_id: str, transaction_date: datetime) -> DBTransac
 def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
     """Map a persisted test row through the repository's canonical history boundary."""
 
-    return booked_transaction_event_mapper.to_booked_transaction(
-        TransactionEvent.model_validate(transaction)
-    )
+    return booked_transaction.to_booked_transaction(TransactionEvent.model_validate(transaction))
 
 
 async def test_later_sell_restores_open_lots_without_loading_full_history() -> None:
@@ -535,7 +533,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         cost_basis_method=cost_basis_method,
     )
     await persist_open_lot_state(
-        transaction=booked_transaction_event_mapper.to_booked_transaction(dividend),
+        transaction=booked_transaction.to_booked_transaction(dividend),
         effective_transaction_type="DIVIDEND",
         open_lot_states=calculation.open_lot_states,
         average_cost_pools=average_cost_pools,
@@ -599,7 +597,7 @@ async def test_positive_average_cost_pool_without_representative_row_is_not_rest
         processing_state=_processing_state_port(),
     )
     checkpoint = await coordinator._get_compatible_average_cost_pool_checkpoint(
-        booked_transaction_event_mapper.to_booked_transaction(event)
+        booked_transaction.to_booked_transaction(event)
     )
 
     assert checkpoint is None

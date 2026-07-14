@@ -6,7 +6,7 @@ from dataclasses import fields
 
 from portfolio_common.events import GOVERNED_EVENT_ENVELOPE_FIELDS, TransactionEvent
 
-from ..domain import BookedTransaction
+from ...domain import BookedTransaction
 
 _DOMAIN_FIELD_NAMES = tuple(field.name for field in fields(BookedTransaction))
 _DOMAIN_FIELD_SET = frozenset(_DOMAIN_FIELD_NAMES)

@@ -7,7 +7,7 @@ from portfolio_common.reprocessing import EpochFencer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain import BookedTransaction
-from ..booked_transaction_event_mapper import to_transaction_event
+from ..transaction_mapping.booked_transaction import to_transaction_event
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.cost_basis import CostBasisTransaction
 from ...domain.transaction import BookedTransaction
-from ..booked_transaction_event_mapper import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",

@@ -9,10 +9,11 @@ from portfolio_common.identifiers import normalize_lookup_identifier
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from ...domain.cost_basis import CostBasisTransaction, OpenLotState
 from ...ports import OpenLotCheckpointRecord
-from ..booked_transaction_event_mapper import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 
 
@@ -131,7 +132,9 @@ class SqlAlchemyCostBasisLotRepository:
             lot_row.lot_cost_base = state.cost_base
 
     @staticmethod
-    def _open_lot_checkpoint_statement(*, portfolio_id: str, security_id: str):
+    def _open_lot_checkpoint_statement(
+        *, portfolio_id: str, security_id: str
+    ) -> Select[tuple[PositionLotState, DBTransaction]]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
         return (

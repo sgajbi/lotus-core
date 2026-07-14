@@ -18,7 +18,7 @@ from ...domain.cost_basis import (
     OpenLotState,
 )
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
-from ..booked_transaction_event_mapper import to_booked_transaction
+from ..transaction_mapping.booked_transaction import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
 from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 

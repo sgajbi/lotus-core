@@ -42,6 +42,7 @@
       "risk": "Incorrect lifecycle or transaction-type behavior can corrupt booking state, replay behavior, and downstream analytics inputs.",
       "source_globs": [
         "src/services/portfolio_transaction_processing_service/app/domain/transaction/**/*.py",
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_mapping/*.py",
         "src/libs/portfolio-common/portfolio_common/domain/transaction/type_registry.py",
         "src/services/ingestion_service/app/domain/**/*.py",
         "src/services/ingestion_service/app/services/ingestion_job_lifecycle*.py",
@@ -65,6 +66,7 @@
       ],
       "required_test_globs": [
         "tests/unit/transaction_specs/test_*_slice0_characterization.py",
+        "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_mapping/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_*_validation.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py",
         "tests/unit/services/ingestion_service/domain/test_ingestion_job_lifecycle_policy.py",

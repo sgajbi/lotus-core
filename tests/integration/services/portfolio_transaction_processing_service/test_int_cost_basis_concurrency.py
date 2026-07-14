@@ -17,9 +17,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
     BUY_DEFAULT_POLICY_ID,
     BUY_DEFAULT_POLICY_VERSION,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
-    to_booked_transaction,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     CostBasisProcessingAdapter,
     SqlAlchemyAverageCostPoolRepository,
@@ -32,6 +29,9 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_mapping.booked_transaction import (  # noqa: E501
+    to_booked_transaction,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CostProcessingEffectStagingPort,

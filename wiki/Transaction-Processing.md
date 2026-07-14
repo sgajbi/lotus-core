@@ -23,6 +23,13 @@ under `app/infrastructure/idempotency`; application orchestration consumes them 
 `TransactionIdempotencyPort`. Do not add concrete claim repository behavior back to the unit of
 work or expose the adapter through the broad infrastructure package root.
 
+The event anti-corruption boundary is `app/infrastructure/transaction_mapping`. Its
+`booked_transaction` mapper preserves all governed envelope and domain fields in both directions;
+its `foreign_exchange_instrument` mapper translates synthetic FX contract domain values to the
+governed instrument event. Domain and application modules remain independent of Pydantic event
+models, and new transaction event translations belong in this package rather than flat
+infrastructure files.
+
 ## Ordinary Transaction Domain
 
 The service-owned `app/domain/transaction` package owns ordinary BUY, SELL, DIVIDEND, and INTEREST:
