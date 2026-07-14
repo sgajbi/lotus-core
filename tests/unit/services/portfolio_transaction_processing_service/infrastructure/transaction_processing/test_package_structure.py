@@ -14,9 +14,16 @@ def test_transaction_processing_observability_uses_owned_package() -> None:
     root_exports = (source_root / "__init__.py").read_text(encoding="utf-8")
 
     assert (source_root / "transaction_processing/observability.py").is_file()
+    assert (source_root / "transaction_processing/unit_of_work.py").is_file()
     assert not (source_root / "prometheus_observability.py").exists()
+    assert not (source_root / "sqlalchemy_unit_of_work.py").exists()
     assert not (
         REPOSITORY_ROOT / "tests/unit/services/portfolio_transaction_processing_service/"
         "test_prometheus_observability.py"
     ).exists()
+    assert not (
+        REPOSITORY_ROOT / "tests/unit/services/portfolio_transaction_processing_service/"
+        "test_sqlalchemy_unit_of_work.py"
+    ).exists()
     assert "PrometheusTransactionProcessingObserver" not in root_exports
+    assert '"SqlAlchemyTransactionProcessingUnitOfWork",' not in root_exports

@@ -22,14 +22,12 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
     build_transaction_correction_identity,
     build_transaction_semantic_identity,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    SqlAlchemyTransactionProcessingUnitOfWork,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    SqlAlchemyTransactionProcessingUnitOfWork,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
     CashflowProcessingResult,

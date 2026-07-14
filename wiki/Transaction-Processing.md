@@ -23,6 +23,12 @@ under `app/infrastructure/idempotency`; application orchestration consumes them 
 `TransactionIdempotencyPort`. Do not add concrete claim repository behavior back to the unit of
 work or expose the adapter through the broad infrastructure package root.
 
+The concrete atomic boundary is
+`app/infrastructure/transaction_processing/unit_of_work.py`. It composes cost, cashflow, position,
+readiness, idempotency, and outbox adapters over one SQLAlchemy session and one commit. The class is
+not exported from the broad infrastructure root; runtime builders obtain it through the aggregate
+transaction-processing package.
+
 The event anti-corruption boundary is `app/infrastructure/transaction_mapping`. Its
 `booked_transaction` mapper preserves all governed envelope and domain fields in both directions;
 its `foreign_exchange_instrument` mapper translates synthetic FX contract domain values to the

@@ -16,7 +16,6 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     CanonicalBookedTransactionReplayerFactory,
     CashflowRuleCache,
     SqlAlchemyAverageCostPoolReconciliationAdapter,
-    SqlAlchemyTransactionProcessingUnitOfWork,
     SqlAlchemyTransactionProcessingUnitOfWorkFactory,
     build_process_transaction_use_case,
     build_reconcile_average_cost_pools_use_case,
@@ -24,6 +23,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_processing import (  # noqa: E501
     PROMETHEUS_TRANSACTION_PROCESSING_OBSERVER,
+    SqlAlchemyTransactionProcessingUnitOfWork,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.transaction_replay import (  # noqa: E501
     SqlAlchemyBookedTransactionReplayAdapter,
