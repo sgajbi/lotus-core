@@ -21,6 +21,7 @@ from ..ports import (
     CostBasisAverageCostPoolPort,
     CostBasisFxRatePort,
     CostBasisInstrumentReference,
+    CostBasisLotStatePort,
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
@@ -58,6 +59,7 @@ class CostEffectsStager(Protocol):
         instrument: CostBasisInstrumentReference | None,
         repo: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
         reconciliation_repository: CorporateActionReconciliationRepository,
@@ -76,6 +78,7 @@ class CostProcessingCompatibilityAdapter:
         workflow: CostEffectsStager,
         repository: CostCalculatorRepository,
         average_cost_pools: CostBasisAverageCostPoolPort,
+        lot_states: CostBasisLotStatePort,
         reference_data: CostBasisReferenceDataPort,
         fx_rates: CostBasisFxRatePort,
         processing_state: CostBasisProcessingStatePort,
@@ -85,6 +88,7 @@ class CostProcessingCompatibilityAdapter:
         self._workflow = workflow
         self._repository = repository
         self._average_cost_pools = average_cost_pools
+        self._lot_states = lot_states
         self._reference_data = reference_data
         self._fx_rates = fx_rates
         self._processing_state = processing_state
@@ -117,6 +121,7 @@ class CostProcessingCompatibilityAdapter:
             instrument=instrument,
             repo=self._repository,
             average_cost_pools=self._average_cost_pools,
+            lot_states=self._lot_states,
             fx_rates=self._fx_rates,
             processing_state=self._processing_state,
             reconciliation_repository=self._reconciliation_repository,

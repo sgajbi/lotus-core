@@ -30,6 +30,7 @@ from .cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
@@ -153,6 +154,7 @@ class SqlAlchemyTransactionProcessingUnitOfWork:
             workflow=self._cost_workflow,
             repository=CostCalculatorRepository(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
+            lot_states=SqlAlchemyCostBasisLotRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=SqlAlchemyCostBasisProcessingStateRepository(session),

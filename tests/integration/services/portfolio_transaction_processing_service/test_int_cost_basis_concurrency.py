@@ -24,6 +24,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure.co
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCorporateActionReconciliationRepository,
     SqlAlchemyCostBasisFxRateRepository,
+    SqlAlchemyCostBasisLotRepository,
     SqlAlchemyCostBasisProcessingStateRepository,
     SqlAlchemyCostBasisReferenceDataRepository,
 )
@@ -98,6 +99,7 @@ async def _stage_cost_calculation(
             workflow=CostCalculationWorkflow(),
             repository=repository_factory(session),
             average_cost_pools=SqlAlchemyAverageCostPoolRepository(session),
+            lot_states=SqlAlchemyCostBasisLotRepository(session),
             reference_data=SqlAlchemyCostBasisReferenceDataRepository(session),
             fx_rates=SqlAlchemyCostBasisFxRateRepository(session),
             processing_state=processing_state_factory(session),
