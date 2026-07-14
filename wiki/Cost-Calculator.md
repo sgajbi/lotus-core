@@ -45,10 +45,12 @@ repository explicitly maps the domain's `calculation_state_version` to the compa
 
 Deterministic AVCO rebuild planning and upstream-provided cash-leg validation are application
 services under `app/application/cost_basis_processing`. They operate on canonical booked
-transactions through transaction-state, reference-data, and FX ports. SQLAlchemy-based AVCO
-reconciliation remains an infrastructure adapter under `app/infrastructure/cost_basis`; it invokes
-the application planner and owns only persistence coordination. Lot-opening, consumption,
-preservation, and basis-transfer behavior remains pure policy under `app/domain/cost_basis`.
+transactions through transaction-state, reference-data, and FX ports. The same application package
+owns the persistence-scope decision for complete snapshots, selected FIFO lots, and atomic AVCO
+transitions. SQLAlchemy-based AVCO reconciliation remains an infrastructure adapter under
+`app/infrastructure/cost_basis`; it invokes the application planner and owns only persistence
+coordination. Lot-opening, consumption, preservation, and basis-transfer behavior remains pure
+policy under `app/domain/cost_basis`.
 
 The legacy cost calculator source root, standalone consumer, mixed processor, and separate
 physical-idempotency/retry/DLQ transaction boundary are retired and are not extension points. New
