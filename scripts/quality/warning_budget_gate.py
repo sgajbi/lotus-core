@@ -6,6 +6,7 @@ import argparse
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 
 WARNING_SUMMARY_RE = re.compile(r"(?P<count>\d+)\s+warnings?\s+in\s+", re.IGNORECASE)
 
@@ -23,6 +24,7 @@ def run_suite_with_warning_budget(
     max_warnings: int,
     quiet: bool = False,
     with_coverage: bool = False,
+    coverage_sources: Sequence[str] | None = None,
     coverage_file: str | None = None,
 ) -> int:
     """Run one manifest suite and fail when its warning budget is exceeded."""
@@ -31,6 +33,8 @@ def run_suite_with_warning_budget(
         cmd.append("--quiet")
     if with_coverage:
         cmd.append("--with-coverage")
+    for coverage_source in coverage_sources or ():
+        cmd.extend(["--coverage-source", coverage_source])
     if coverage_file is not None:
         cmd.extend(["--coverage-file", coverage_file])
 
@@ -73,6 +77,12 @@ def main() -> int:
         default=None,
         help="Set COVERAGE_FILE through the governed test manifest.",
     )
+    parser.add_argument(
+        "--coverage-source",
+        action="append",
+        default=None,
+        help="Forward one pytest-cov import target; repeat for multiple changed modules.",
+    )
     args = parser.parse_args()
 
     return run_suite_with_warning_budget(
@@ -80,6 +90,7 @@ def main() -> int:
         max_warnings=args.max_warnings,
         quiet=args.quiet,
         with_coverage=args.with_coverage,
+        coverage_sources=args.coverage_source,
         coverage_file=args.coverage_file,
     )
 

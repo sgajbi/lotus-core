@@ -31,6 +31,7 @@ def test_warning_budget_runner_preserves_manifest_coverage_options(monkeypatch) 
         suite="unit",
         max_warnings=0,
         with_coverage=True,
+        coverage_sources=("src.services.query_service.app", "src.services.core.domain.cost_basis"),
         coverage_file=".coverage.unit",
     )
 
@@ -43,6 +44,10 @@ def test_warning_budget_runner_preserves_manifest_coverage_options(monkeypatch) 
                 "--suite",
                 "unit",
                 "--with-coverage",
+                "--coverage-source",
+                "src.services.query_service.app",
+                "--coverage-source",
+                "src.services.core.domain.cost_basis",
                 "--coverage-file",
                 ".coverage.unit",
             ],

@@ -6,6 +6,7 @@ import argparse
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -205,6 +206,7 @@ def suite_pytest_command(
     *,
     quiet: bool = False,
     with_coverage: bool = False,
+    coverage_sources: Sequence[str] | None = None,
     collect_only: bool = False,
 ) -> list[str]:
     validate_suite_paths(name)
@@ -215,7 +217,9 @@ def suite_pytest_command(
     if quiet:
         cmd.append("-q")
     if with_coverage:
-        cmd.extend([f"--cov={SOURCE}", "--cov-report="])
+        resolved_sources = tuple(dict.fromkeys(coverage_sources or (SOURCE,)))
+        cmd.extend(f"--cov={source}" for source in resolved_sources)
+        cmd.append("--cov-report=")
     return cmd
 
 
@@ -224,6 +228,7 @@ def run_suite(
     *,
     quiet: bool = False,
     with_coverage: bool = False,
+    coverage_sources: Sequence[str] | None = None,
     coverage_file: str | None = None,
     collect_only: bool = False,
 ) -> int:
@@ -233,6 +238,7 @@ def run_suite(
         name,
         quiet=quiet,
         with_coverage=with_coverage,
+        coverage_sources=coverage_sources,
         collect_only=collect_only,
     )
 
@@ -282,6 +288,12 @@ def main() -> int:
         help="Set COVERAGE_FILE while running the suite.",
     )
     parser.add_argument(
+        "--coverage-source",
+        action="append",
+        default=None,
+        help="Add one pytest-cov import target; repeat for multiple changed source modules.",
+    )
+    parser.add_argument(
         "--validate-only",
         action="store_true",
         help="Validate suite paths and exit.",
@@ -302,6 +314,7 @@ def main() -> int:
         args.suite,
         quiet=args.quiet,
         with_coverage=args.with_coverage,
+        coverage_sources=args.coverage_source,
         coverage_file=args.coverage_file,
         collect_only=args.collect_only,
     )
