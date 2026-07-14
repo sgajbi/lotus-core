@@ -1,3 +1,5 @@
+"""Test deterministic FX linkage and swap grouping."""
+
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal

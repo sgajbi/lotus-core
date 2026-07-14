@@ -71,6 +71,6 @@ This slice establishes the canonical FX contract for validation, metadata carria
 5. downstream query views dedicated to FX lifecycle interpretation
 
 ## Exit Evidence
-1. `tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py`
+1. `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/fx/test_validation.py`
 2. `tests/unit/transaction_specs/test_fx_slice0_characterization.py`
 3. Alembic migration for FX transaction metadata fields

@@ -1,3 +1,5 @@
+"""Test FX validation rules and stable reason codes."""
+
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal

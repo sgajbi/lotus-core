@@ -1,3 +1,5 @@
+"""Test realized FX baseline processing and cost-basis effects."""
+
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
