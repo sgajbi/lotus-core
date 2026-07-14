@@ -28,6 +28,7 @@ from ..application import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
 )
+from ..application.cost_basis_processing import CostProcessingRoute
 from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
@@ -40,22 +41,17 @@ from ..domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
 )
 from ..domain.transaction import (
+    ADJUSTMENT_TRANSACTION_TYPE,
     assert_cash_entry_mode_supported,
     assert_upstream_cash_leg_pairing,
     build_generated_settlement_cash_leg,
-    enrich_booking_metadata,
     is_upstream_provided_cash_entry_mode,
     should_generate_settlement_cash_leg,
-)
-from ..domain.transaction.corporate_action import (
-    assert_bundle_a_corporate_action_valid,
-    is_bundle_a_corporate_action,
 )
 from ..domain.transaction.fx import (
     assert_fx_processed_transaction_valid,
     build_fx_contract_instrument,
     build_fx_processed_transaction,
-    enrich_fx_transaction_metadata,
 )
 from ..ports import (
     CorporateActionReconciliationObserver,
@@ -71,13 +67,6 @@ from .cost_repository import AverageCostPoolCheckpointRecord, CostCalculatorRepo
 from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
-ADJUSTMENT_TRANSACTION_TYPE = "ADJUSTMENT"
-INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES = {
-    ADJUSTMENT_TRANSACTION_TYPE,
-    "FX_SPOT",
-    "FX_FORWARD",
-    "FX_SWAP",
-}
 LOT_OPENING_BEHAVIORS = {
     "basis_allocation_in",
     "open_lot",
@@ -183,12 +172,6 @@ class FxRateNotFoundError(Exception):
 
 class UpstreamCashLegUnavailableError(Exception):
     """Raised when a required upstream cash leg is not yet persisted."""
-
-    pass
-
-
-class InstrumentReferenceUnavailableError(Exception):
-    """Raised when a product transaction references an unavailable instrument master."""
 
     pass
 
@@ -370,33 +353,18 @@ class CostCalculationWorkflow:
 
         return transactions
 
-    async def _prepare_transaction_event(
-        self,
-        event: TransactionEvent,
-        portfolio: Any,
-    ) -> tuple[TransactionEvent, str, CostBasisMethod]:
-        cost_basis_method = normalize_cost_basis_method(portfolio.cost_basis_method)
-        booked_transaction = enrich_booking_metadata(
-            to_booked_transaction(event),
-            cost_basis_method=cost_basis_method,
-        )
-        booked_transaction = enrich_fx_transaction_metadata(booked_transaction)
-        event = with_booked_transaction_fields(event, booked_transaction)
-        if is_bundle_a_corporate_action(event.transaction_type):
-            assert_bundle_a_corporate_action_valid(booked_transaction)
-        return event, _normalize_event_code(event.transaction_type), cost_basis_method
-
     async def _build_events_to_publish(
         self,
         *,
         event: TransactionEvent,
         event_transaction_type: str,
+        route: CostProcessingRoute,
         portfolio: Any,
         instrument: Any,
         repo: CostCalculatorRepository,
         cost_basis_method: CostBasisMethod,
     ) -> tuple[list[TransactionEvent], list[InstrumentEvent]]:
-        if event_transaction_type in {"FX_SPOT", "FX_FORWARD", "FX_SWAP"}:
+        if route is CostProcessingRoute.FOREIGN_EXCHANGE:
             return await self._build_fx_events_to_publish(event=event, repo=repo)
         return await self._build_cost_basis_events_to_publish(
             event=event,
@@ -405,22 +373,6 @@ class CostCalculationWorkflow:
             instrument=instrument,
             repo=repo,
             cost_basis_method=cost_basis_method,
-        )
-
-    @staticmethod
-    def _assert_required_instrument_reference_available(
-        *,
-        event: TransactionEvent,
-        event_transaction_type: str,
-        instrument: Any,
-    ) -> None:
-        if event_transaction_type in INSTRUMENT_REFERENCE_OPTIONAL_TRANSACTION_TYPES:
-            return
-        if instrument is not None:
-            return
-        raise InstrumentReferenceUnavailableError(
-            f"Instrument reference {event.security_id} not found for transaction "
-            f"{event.transaction_id}. Retrying until instrument master data is available."
         )
 
     async def _build_fx_events_to_publish(

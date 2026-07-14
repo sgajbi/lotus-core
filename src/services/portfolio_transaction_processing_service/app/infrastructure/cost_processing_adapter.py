@@ -9,13 +9,21 @@ from portfolio_common.events import InstrumentEvent, TransactionEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
 from ..application import TransactionProcessingError, build_settlement_cash_rejection
+from ..application.cost_basis_processing import (
+    CostProcessingRoute,
+    InstrumentReferenceUnavailableError,
+    prepare_cost_transaction,
+)
 from ..domain import BookedTransaction
 from ..domain.transaction import SettlementCashValidationError
 from ..ports import CostProcessingResult
-from .booked_transaction_event_mapper import to_booked_transaction, to_transaction_event
+from .booked_transaction_event_mapper import (
+    to_booked_transaction,
+    to_transaction_event,
+    with_booked_transaction_fields,
+)
 from .cost_calculation_workflow import (
     FxRateNotFoundError,
-    InstrumentReferenceUnavailableError,
     UpstreamCashLegUnavailableError,
 )
 from .cost_repository import (
@@ -30,25 +38,12 @@ class PortfolioNotFoundError(Exception):
 class CostStagingWorkflow(Protocol):
     """Describe the transitional workflow surface isolated by this adapter."""
 
-    async def _prepare_transaction_event(
-        self,
-        event: TransactionEvent,
-        portfolio: Any,
-    ) -> tuple[TransactionEvent, str, Any]: ...
-
-    def _assert_required_instrument_reference_available(
-        self,
-        *,
-        event: TransactionEvent,
-        event_transaction_type: str,
-        instrument: Any,
-    ) -> None: ...
-
     async def _build_events_to_publish(
         self,
         *,
         event: TransactionEvent,
         event_transaction_type: str,
+        route: CostProcessingRoute,
         portfolio: Any,
         instrument: Any,
         repo: CostCalculatorRepository,
@@ -114,24 +109,21 @@ class CostProcessingCompatibilityAdapter:
         if not portfolio:
             raise PortfolioNotFoundError(f"Portfolio {event.portfolio_id} not found. Retrying...")
 
-        (
-            prepared_event,
-            event_transaction_type,
-            cost_basis_method,
-        ) = await self._workflow._prepare_transaction_event(event, portfolio)
-        instrument = await self._repository.get_instrument(prepared_event.security_id)
-        self._workflow._assert_required_instrument_reference_available(
-            event=prepared_event,
-            event_transaction_type=event_transaction_type,
-            instrument=instrument,
+        instrument = await self._repository.get_instrument(event.security_id)
+        prepared = prepare_cost_transaction(
+            to_booked_transaction(event),
+            cost_basis_method=portfolio.cost_basis_method,
+            instrument_reference_available=instrument is not None,
         )
+        prepared_event = with_booked_transaction_fields(event, prepared.transaction)
         events_to_publish, instrument_events = await self._workflow._build_events_to_publish(
             event=prepared_event,
-            event_transaction_type=event_transaction_type,
+            event_transaction_type=prepared.transaction_type,
+            route=prepared.route,
             portfolio=portfolio,
             instrument=instrument,
             repo=self._repository,
-            cost_basis_method=cost_basis_method,
+            cost_basis_method=prepared.cost_basis_method,
         )
         emitted_events = await self._workflow._build_emitted_transaction_events(
             events_to_publish=events_to_publish,
