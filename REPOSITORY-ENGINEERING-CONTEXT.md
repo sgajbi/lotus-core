@@ -1831,7 +1831,9 @@ Most relevant current governance:
 130. Full-history cost FX enrichment must batch authoritative effective-dated reads by normalized
      `(trade_currency, portfolio_base_currency)` pair. For `N` cross-currency transactions over `P`
      distinct pairs, issue `P` indexed seed-plus-window queries, then select the latest rate on or
-     before each transaction date from immutable `EffectiveFxRate` domain records. Do not return
+     before each transaction date from immutable `EffectiveFxRate` domain records. The framework-
+     neutral `application.cost_basis_processing.enrich_cost_basis_transactions_with_fx` policy owns
+     this selection; infrastructure supplies the port and stages its result. Do not return
      SQLAlchemy `FxRate` rows from new repository methods, issue per-transaction FX queries, cache
      effective rates without explicit freshness/invalidation ownership, or substitute a future,
      default, or inferred rate when the seed is missing. Same-currency rows require no FX read.

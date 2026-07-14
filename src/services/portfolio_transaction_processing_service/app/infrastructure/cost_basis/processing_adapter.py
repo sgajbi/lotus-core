@@ -11,6 +11,7 @@ from portfolio_common.outbox_repository import OutboxRepository
 from ...application import TransactionProcessingError, build_settlement_cash_rejection
 from ...application.cost_basis_processing import (
     CostProcessingRoute,
+    FxRateNotFoundError,
     InstrumentReferenceUnavailableError,
     prepare_cost_transaction,
 )
@@ -35,7 +36,6 @@ from ..booked_transaction_event_mapper import (
     with_booked_transaction_fields,
 )
 from ..cost_calculation_workflow import (
-    FxRateNotFoundError,
     UpstreamCashLegUnavailableError,
 )
 from .staged_effects import StagedCostEffects

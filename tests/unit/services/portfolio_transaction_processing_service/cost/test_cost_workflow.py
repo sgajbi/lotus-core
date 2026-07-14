@@ -4,7 +4,7 @@ import inspect
 import json
 from datetime import date, datetime
 from decimal import Decimal
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.domain.cost_basis_method import CostBasisMethod
@@ -19,12 +19,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     AverageCostPoolCheckpoint,
     AverageCostPoolTransition,
     CostCalculationError,
-    EffectiveFxRate,
     OpenLotState,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    FxRateNotFoundError,
     OpenLotStateUpdateScope,
     normalize_cost_fee_amount,
 )
@@ -470,147 +468,6 @@ async def test_fee_amount_normalizer_normalizes_counted_amount_once() -> None:
     assert normalize_cost_fee_amount(amount, field_name="brokerage") == Decimal("2.50")
     assert normalize_cost_fee_amount(" ", field_name="stamp_duty") == Decimal("0")
     assert amount.string_call_count == 1
-
-
-async def test_fx_enrichment_normalizes_same_currency_without_lookup(
-    cost_calculation_workflow: CostCalculationWorkflow,
-):
-    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
-    transactions = [
-        {
-            "transaction_id": "BUY_PADDED_CCY_01",
-            "transaction_date": "2025-12-05T10:00:00Z",
-            "trade_currency": " usd ",
-        }
-    ]
-
-    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
-        transactions=transactions,
-        portfolio_base_currency=" USD ",
-        fx_rates=fx_rates,
-    )
-
-    fx_rates.get_fx_rate_window.assert_not_awaited()
-    assert enriched[0]["trade_currency"] == "USD"
-    assert enriched[0]["portfolio_base_currency"] == "USD"
-    assert "transaction_fx_rate" not in enriched[0]
-
-
-async def test_fx_enrichment_batches_effective_dated_history_by_currency_pair(
-    cost_calculation_workflow: CostCalculationWorkflow,
-) -> None:
-    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
-    fx_rates.get_fx_rate_window.return_value = [
-        EffectiveFxRate(
-            effective_date=date(2026, 4, 1),
-            rate=Decimal("1.40"),
-        ),
-        EffectiveFxRate(
-            effective_date=date(2026, 4, 10),
-            rate=Decimal("1.45"),
-        ),
-    ]
-    transaction_dates = ("05", "10", "15") * 100
-    transactions = [
-        {
-            "transaction_id": f"EUR-{index:03d}",
-            "transaction_date": f"2026-04-{day}T10:00:00Z",
-            "trade_currency": " eur " if index == 0 else "EUR",
-        }
-        for index, day in enumerate(transaction_dates)
-    ]
-
-    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
-        transactions=transactions,
-        portfolio_base_currency="SGD",
-        fx_rates=fx_rates,
-    )
-
-    fx_rates.get_fx_rate_window.assert_awaited_once_with(
-        from_currency="EUR",
-        to_currency="SGD",
-        start_date=date(2026, 4, 5),
-        end_date=date(2026, 4, 15),
-    )
-    assert len(enriched) == 300
-    assert [transaction["transaction_fx_rate"] for transaction in enriched] == [
-        Decimal("1.40") if day == "05" else Decimal("1.45") for day in transaction_dates
-    ]
-
-
-async def test_fx_enrichment_issues_one_window_read_for_each_distinct_currency_pair(
-    cost_calculation_workflow: CostCalculationWorkflow,
-) -> None:
-    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
-    fx_rates.get_fx_rate_window.side_effect = [
-        [EffectiveFxRate(effective_date=date(2026, 4, 1), rate=Decimal("1.40"))],
-        [EffectiveFxRate(effective_date=date(2026, 4, 2), rate=Decimal("1.75"))],
-    ]
-    transactions = [
-        {
-            "transaction_id": "EUR-001",
-            "transaction_date": "2026-04-05T10:00:00Z",
-            "trade_currency": "EUR",
-        },
-        {
-            "transaction_id": "EUR-002",
-            "transaction_date": "2026-04-06T10:00:00Z",
-            "trade_currency": "EUR",
-        },
-        {
-            "transaction_id": "GBP-001",
-            "transaction_date": "2026-04-07T10:00:00Z",
-            "trade_currency": "GBP",
-        },
-    ]
-
-    enriched = await cost_calculation_workflow._enrich_transactions_with_fx(
-        transactions=transactions,
-        portfolio_base_currency="SGD",
-        fx_rates=fx_rates,
-    )
-
-    assert fx_rates.get_fx_rate_window.await_args_list == [
-        call(
-            from_currency="EUR",
-            to_currency="SGD",
-            start_date=date(2026, 4, 5),
-            end_date=date(2026, 4, 6),
-        ),
-        call(
-            from_currency="GBP",
-            to_currency="SGD",
-            start_date=date(2026, 4, 7),
-            end_date=date(2026, 4, 7),
-        ),
-    ]
-    assert [transaction["transaction_fx_rate"] for transaction in enriched] == [
-        Decimal("1.40"),
-        Decimal("1.40"),
-        Decimal("1.75"),
-    ]
-
-
-async def test_fx_enrichment_rejects_a_transaction_before_the_first_available_rate(
-    cost_calculation_workflow: CostCalculationWorkflow,
-) -> None:
-    fx_rates = AsyncMock(spec=CostBasisFxRatePort)
-    fx_rates.get_fx_rate_window.return_value = [
-        EffectiveFxRate(effective_date=date(2026, 4, 10), rate=Decimal("1.45"))
-    ]
-
-    with pytest.raises(FxRateNotFoundError, match="EUR->SGD"):
-        await cost_calculation_workflow._enrich_transactions_with_fx(
-            transactions=[
-                {
-                    "transaction_id": "EUR-BEFORE-FIRST-RATE",
-                    "transaction_date": "2026-04-05T10:00:00Z",
-                    "trade_currency": "EUR",
-                }
-            ],
-            portfolio_base_currency="SGD",
-            fx_rates=fx_rates,
-        )
 
 
 async def test_validate_upstream_cash_leg_requires_external_cash_transaction_id(

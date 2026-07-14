@@ -1,12 +1,10 @@
 """Stage cost-basis effects inside the unified transaction-processing boundary."""
 
 import logging
-from bisect import bisect_right
 from dataclasses import dataclass, replace
-from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, List, cast
+from typing import Any, cast
 
 from portfolio_common.config import (
     KAFKA_INSTRUMENTS_RECEIVED_TOPIC,
@@ -28,7 +26,10 @@ from ..application import (
     CostBasisTimelineProcessor,
     build_cost_basis_timeline_processor,
 )
-from ..application.cost_basis_processing import CostProcessingRoute
+from ..application.cost_basis_processing import (
+    CostProcessingRoute,
+    enrich_cost_basis_transactions_with_fx,
+)
 from ..domain.cost_basis import (
     AverageCostPoolCheckpoint,
     AverageCostPoolRebuildPlan,
@@ -175,12 +176,6 @@ def _apply_engine_fee_fields(
     event_dict["trade_fee"] = "0"
 
 
-class FxRateNotFoundError(Exception):
-    """Raised when a required FX rate is not yet available in the database."""
-
-    pass
-
-
 class UpstreamCashLegUnavailableError(Exception):
     """Raised when a required upstream cash leg is not yet persisted."""
 
@@ -255,7 +250,7 @@ class CostCalculationWorkflow:
             for transaction in history
         ]
         self._attach_instrument_metadata(transactions=history_raw, instrument=instrument)
-        enriched_history = await self._enrich_transactions_with_fx(
+        enriched_history = await enrich_cost_basis_transactions_with_fx(
             transactions=history_raw,
             portfolio_base_currency=portfolio.base_currency,
             fx_rates=fx_rates,
@@ -316,58 +311,6 @@ class CostCalculationWorkflow:
         )
 
         return event_dict
-
-    async def _enrich_transactions_with_fx(
-        self,
-        transactions: List[dict[str, Any]],
-        portfolio_base_currency: str,
-        fx_rates: CostBasisFxRatePort,
-    ) -> List[dict[str, Any]]:
-        """Attach latest-on-or-before FX rates using one bounded read per currency pair."""
-        portfolio_base_currency = _normalize_event_code(portfolio_base_currency)
-        transactions_by_pair: dict[
-            tuple[str, str],
-            list[tuple[dict[str, Any], date]],
-        ] = {}
-        for txn_raw in transactions:
-            trade_currency = _normalize_event_code(txn_raw.get("trade_currency"))
-            txn_raw["trade_currency"] = trade_currency
-            txn_raw["portfolio_base_currency"] = portfolio_base_currency
-
-            if trade_currency == portfolio_base_currency:
-                continue
-
-            transaction_date_value = txn_raw["transaction_date"]
-            transaction_date = (
-                transaction_date_value.date()
-                if isinstance(transaction_date_value, datetime)
-                else datetime.fromisoformat(
-                    str(transaction_date_value).replace("Z", "+00:00")
-                ).date()
-            )
-            transactions_by_pair.setdefault((trade_currency, portfolio_base_currency), []).append(
-                (txn_raw, transaction_date)
-            )
-
-        for (trade_currency, base_currency), pair_transactions in transactions_by_pair.items():
-            requested_dates = [transaction_date for _, transaction_date in pair_transactions]
-            rate_window = await fx_rates.get_fx_rate_window(
-                from_currency=trade_currency,
-                to_currency=base_currency,
-                start_date=min(requested_dates),
-                end_date=max(requested_dates),
-            )
-            rate_dates = [fx_rate.effective_date for fx_rate in rate_window]
-            for txn_raw, transaction_date in pair_transactions:
-                effective_rate_index = bisect_right(rate_dates, transaction_date) - 1
-                if effective_rate_index < 0:
-                    raise FxRateNotFoundError(
-                        f"FX rate for {trade_currency}->{base_currency} on "
-                        f"{txn_raw['transaction_date']} not found. Retrying..."
-                    )
-                txn_raw["transaction_fx_rate"] = rate_window[effective_rate_index].rate
-
-        return transactions
 
     async def _build_events_to_publish(
         self,
@@ -704,7 +647,7 @@ class CostCalculationWorkflow:
         event_raw = self._transform_event_for_engine(event)
         if instrument is not None:
             self._attach_instrument_metadata(transactions=[event_raw], instrument=instrument)
-        enriched = await self._enrich_transactions_with_fx(
+        enriched = await enrich_cost_basis_transactions_with_fx(
             transactions=[event_raw],
             portfolio_base_currency=portfolio_base_currency,
             fx_rates=fx_rates,
@@ -866,7 +809,7 @@ class CostCalculationWorkflow:
                 transactions=all_transactions_raw,
                 instrument=instrument,
             )
-        return await self._enrich_transactions_with_fx(
+        return await enrich_cost_basis_transactions_with_fx(
             transactions=all_transactions_raw,
             portfolio_base_currency=portfolio_base_currency,
             fx_rates=fx_rates,
