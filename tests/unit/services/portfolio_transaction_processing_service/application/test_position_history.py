@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -22,6 +23,16 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     PositionRecalculationStateStore,
     PositionReplayMode,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[5]
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+TARGET_TEST = SERVICE_TEST_ROOT / "application/test_position_history.py"
+RETIRED_MIXED_TEST = SERVICE_TEST_ROOT / "position/test_position_history_processor.py"
+
+
+def test_position_history_processor_is_owned_by_application_boundary() -> None:
+    assert Path(__file__).resolve() == TARGET_TEST.resolve()
+    assert not RETIRED_MIXED_TEST.exists()
 
 
 def _transaction(

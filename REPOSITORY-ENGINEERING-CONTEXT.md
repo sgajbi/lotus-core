@@ -1805,9 +1805,10 @@ Most relevant current governance:
      `tests/unit/services/portfolio_transaction_processing_service/delivery/kafka`, while consumer
      composition and lifecycle-manager tests belong under the sibling `runtime` package. Core
      transaction processing and booked-transaction replay use-case tests belong under the sibling
-     `application` package and use production-aligned module names. Domain package-structure guards
-     belong under the matching `domain/<capability>` test package. Cross-layer legacy import and
-     retired-facade confinement belongs under the service's `architecture` test package. Runtime
+     `application` package and use production-aligned module names; position-history orchestration
+     tests follow the same application ownership. Domain package-structure guards belong under the
+     matching `domain/<capability>` test package. Cross-layer legacy import and retired-facade
+     confinement belongs under the service's `architecture` test package. Runtime
      wheel, Docker source-closure, and image contract tests belong under the service's `packaging`
      test package. Worker health, readiness, metrics, version, and HTTP security contracts belong
      under `delivery/http`. Do not return delivery, runtime, application behavior, domain-structure,

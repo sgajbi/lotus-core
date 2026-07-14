@@ -198,7 +198,7 @@
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py",
         "tests/unit/services/portfolio_transaction_processing_service/position/test_position_reducer.py",
         "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_domain.py",
-        "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_processor.py"
+        "tests/unit/services/portfolio_transaction_processing_service/application/test_position_history.py"
       ]
     },
     {

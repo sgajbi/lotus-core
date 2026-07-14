@@ -173,7 +173,7 @@
           "proof_family": "application_use_case",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/portfolio_transaction_processing_service/position/test_position_history_processor.py",
+            "tests/unit/services/portfolio_transaction_processing_service/application/test_position_history.py",
             "tests/unit/services/portfolio_transaction_processing_service/infrastructure/position/test_processing.py",
             "tests/unit/services/query_service/services/test_position_service.py",
             "tests/unit/services/query_service/services/test_position_holdings_response.py"
