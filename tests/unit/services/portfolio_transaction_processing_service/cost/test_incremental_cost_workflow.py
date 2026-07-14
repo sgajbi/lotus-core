@@ -23,7 +23,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    OpenLotStateUpdateScope,
     booked_transaction_event_mapper,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
@@ -37,6 +36,9 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
 )
 
 pytestmark = pytest.mark.asyncio
+
+OpenLotPersistenceScope = cost_basis_processing.OpenLotPersistenceScope
+persist_open_lot_state = cost_basis_processing.persist_open_lot_state
 
 
 def _fx_rate_port() -> AsyncMock:
@@ -203,7 +205,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
         )
 
     assert calculation.incremental is True
-    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.SELECTED_LOTS
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.SELECTED_LOTS
     assert calculation.errored == []
     assert calculation.processed[0].realized_gain_loss == Decimal("8")
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("6")
@@ -274,7 +276,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
 
     assert calculation.incremental is True
     assert calculation.errored == []
-    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.AVERAGE_COST_POOL
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.AVERAGE_COST_POOL
     assert calculation.average_cost_pool_transition is not None
     assert calculation.average_cost_pool_transition.existing_sources_after.quantity == Decimal("6")
     assert calculation.average_cost_pool_transition.existing_sources_after.cost_base == Decimal(
@@ -443,7 +445,7 @@ async def test_backdated_transaction_uses_full_deterministic_history() -> None:
         )
 
     assert calculation.incremental is False
-    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.COMPLETE_SNAPSHOT
     assert calculation.errored == []
     assert [transaction.transaction_id for transaction in calculation.processed] == [
         "BUY-EARLIER",
@@ -487,21 +489,20 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
         processing_state=processing_state,
         cost_basis_method=cost_basis_method,
     )
-    await workflow._update_open_lot_states_if_required(
-        event=dividend,
-        event_transaction_type="DIVIDEND",
+    await persist_open_lot_state(
+        transaction=booked_transaction_event_mapper.to_booked_transaction(dividend),
+        effective_transaction_type="DIVIDEND",
         open_lot_states=calculation.open_lot_states,
-        repo=repo,
         average_cost_pools=average_cost_pools,
         lot_states=lot_states,
         incremental=calculation.incremental,
-        update_scope=calculation.open_lot_state_update_scope,
+        persistence_scope=calculation.open_lot_persistence_scope,
         cost_basis_method=cost_basis_method,
         average_cost_pool_transition=calculation.average_cost_pool_transition,
     )
 
     assert calculation.incremental is False
-    assert calculation.open_lot_state_update_scope is OpenLotStateUpdateScope.COMPLETE_SNAPSHOT
+    assert calculation.open_lot_persistence_scope is OpenLotPersistenceScope.COMPLETE_SNAPSHOT
     assert calculation.open_lot_states["BUY-1"].quantity == Decimal("10")
     assert calculation.open_lot_states["BUY-1"].cost_base == Decimal("100")
     if cost_basis_method is CostBasisMethod.FIFO:

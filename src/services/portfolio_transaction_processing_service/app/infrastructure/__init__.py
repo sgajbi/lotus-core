@@ -36,10 +36,7 @@ from .cost_basis import (
     StagedCostEffects,
     cost_basis_processing_lock_key,
 )
-from .cost_calculation_workflow import (
-    CostCalculationWorkflow,
-    OpenLotStateUpdateScope,
-)
+from .cost_calculation_workflow import CostCalculationWorkflow
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
 from .prometheus_cost_basis_observability import (
@@ -74,7 +71,6 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
-    "OpenLotStateUpdateScope",
     "PositionHistoryProcessingAdapter",
     "PipelineStageProcessingAdapter",
     "LinkedCashLegError",
