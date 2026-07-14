@@ -21,7 +21,7 @@ from ...domain.cost_basis import (
     LotDispositionEngine,
     OpenLotState,
 )
-from ...ports.cost_basis_observability import (
+from ...ports.cost_basis.observability import (
     CostBasisCalculationObservation,
     CostBasisCalculationObserver,
 )

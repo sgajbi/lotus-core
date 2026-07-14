@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis.observability import (  # noqa: E501
     PrometheusCostBasisCalculationObserver,
 )
 

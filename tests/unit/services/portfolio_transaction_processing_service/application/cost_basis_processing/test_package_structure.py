@@ -37,3 +37,18 @@ def test_average_cost_pool_reconciliation_has_layer_owned_paths() -> None:
     ).is_file()
     assert (app_root / "ports" / "cost_basis" / "average_cost_pool_reconciliation.py").is_file()
     assert (app_root / "domain" / "cost_basis" / "average_cost_pool_reconciliation.py").is_file()
+
+
+def test_cost_basis_observability_has_layer_owned_paths() -> None:
+    """Keep the observation port, metrics, adapter, and tests in cost-basis packages."""
+
+    app_root = APPLICATION_ROOT.parent
+    infrastructure_root = app_root / "infrastructure"
+    assert not (app_root / "ports" / "cost_basis_observability.py").exists()
+    assert not (infrastructure_root / "prometheus_cost_basis_observability.py").exists()
+    assert not (infrastructure_root / "cost_metrics.py").exists()
+    assert not (UNIT_TEST_ROOT / "test_prometheus_cost_basis_observability.py").exists()
+    assert (app_root / "ports" / "cost_basis" / "observability.py").is_file()
+    assert (infrastructure_root / "cost_basis" / "observability.py").is_file()
+    assert (infrastructure_root / "cost_basis" / "metrics.py").is_file()
+    assert (UNIT_TEST_ROOT / "infrastructure" / "cost_basis" / "test_observability.py").is_file()

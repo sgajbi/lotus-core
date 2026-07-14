@@ -74,8 +74,8 @@ from .booked_transaction_event_mapper import (
     to_transaction_event,
     with_booked_transaction_fields,
 )
+from .cost_basis.metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .cost_basis.staged_effects import StagedCostEffects
-from .cost_metrics import COST_PROCESSING_EXECUTION_TOTAL, COST_PROCESSING_OPEN_LOTS_RESTORED
 from .fx_event_mapper import to_fx_contract_instrument_event
 
 logger = logging.getLogger(__name__)
