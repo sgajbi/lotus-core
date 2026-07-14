@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from scripts.quality import critical_path_coverage_guard as guard
@@ -91,6 +93,19 @@ def test_current_critical_path_coverage_contract_is_valid() -> None:
     assert contract["changed_code_gate"]["unmeasured_critical_file_policy"] == "fail_closed"
     assert contract["changed_code_gate"]["deleted_paths_are_audit_only"] is True
     assert contract["changed_code_gate"]["rename_lineage_required"] is True
+
+
+def test_guard_direct_script_entrypoint_resolves_coverage_evidence_package() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/quality/critical_path_coverage_guard.py", "--help"],
+        cwd=guard.REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "--aggregate-coverage-json" in completed.stdout
 
 
 def test_contract_validation_rejects_unknown_manifest_suite() -> None:
