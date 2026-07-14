@@ -65,5 +65,7 @@ calculation, metric, Docker runtime, deployment topology, or downstream response
   path/Git and branch-threshold hardening.
 - Strict MyPy passed for all five affected quality modules.
 - Scoped Ruff and `git diff --check` passed for each implementation slice.
-- Full `make coverage-gate`, documentation evidence, wiki, and repository-native CI gates remain
-  required before PR readiness.
+- Full `make coverage-gate` emitted separate aggregate, measured-source, and critical-path report
+  artifacts; a direct guard rerun accepted that evidence.
+- `make docs-evidence-pack`, `make quality-wiki-docs-gate`, and
+  `make architecture-docs-catalog-guard` passed.
