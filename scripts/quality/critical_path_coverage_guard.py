@@ -26,6 +26,7 @@ from scripts.quality.coverage_evidence.changed_source_evidence import (  # noqa:
 
 CONTRACT_PATH = Path("docs/standards/critical-path-coverage.v1.json")
 DEFAULT_REPORT_PATH = Path("output/coverage/critical-path-coverage-report.json")
+DEFAULT_CONTRACT_REPORT_PATH = Path("output/coverage/critical-path-coverage-contract-report.json")
 SCHEMA_VERSION = "critical-path-coverage.v1"
 CHANGED_CRITICAL_SOURCE_UNMEASURED = "CHANGED_CRITICAL_SOURCE_UNMEASURED"
 UNMEASURED_CRITICAL_FILE_POLICIES = {"fail_closed", "reported_requires_follow_up"}
@@ -59,7 +60,7 @@ def _relative(path: Path, *, repo_root: Path) -> str:
 
 
 def _normalize_path(path: str) -> str:
-    return normalize_repo_path(path)
+    return cast(str, normalize_repo_path(path))
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -232,6 +233,13 @@ def validate_contract(
             {
                 "contract": CONTRACT_PATH.as_posix(),
                 "invalid_schema_version": contract.get("schema_version"),
+            }
+        )
+    if not contract.get("contract_validation_report_path"):
+        findings.append(
+            {
+                "contract": CONTRACT_PATH.as_posix(),
+                "missing": "contract_validation_report_path",
             }
         )
 
@@ -548,6 +556,14 @@ def run_guard(
     return findings, report
 
 
+def resolve_report_path(*, output: Path | None, contract_only: bool) -> Path:
+    """Keep contract validation evidence separate from measured coverage evidence."""
+
+    if output is not None:
+        return output
+    return DEFAULT_CONTRACT_REPORT_PATH if contract_only else DEFAULT_REPORT_PATH
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -561,7 +577,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Coverage JSON used for the separately enforced aggregate scope.",
     )
-    parser.add_argument("--output", type=Path, default=DEFAULT_REPORT_PATH)
+    parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--changed-base",
         default=os.environ.get("LOTUS_COVERAGE_CHANGED_BASE", "origin/main"),
@@ -585,11 +601,12 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    report_path = resolve_report_path(output=args.output, contract_only=args.contract_only)
     findings, report = run_guard(
         repo_root=REPO_ROOT,
         contract_path=args.contract,
         coverage_json_path=args.coverage_json,
-        report_path=args.output,
+        report_path=report_path,
         changed_base=args.changed_base,
         changed_files=args.changed_file,
         thresholds=not args.contract_only,
@@ -600,7 +617,7 @@ def main() -> int:
         print("Critical-path coverage guard failed:")
         print(json.dumps(findings, indent=2, sort_keys=True))
         return 1
-    print(f"Critical-path coverage guard passed. Report: {args.output.as_posix()}")
+    print(f"Critical-path coverage guard passed. Report: {report_path.as_posix()}")
     return 0
 
 
