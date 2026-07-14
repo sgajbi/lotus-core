@@ -18,9 +18,11 @@ from src.services.portfolio_transaction_processing_service.app.application impor
     TransactionProcessingStatus,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    TRANSACTION_PROCESSING_SERVICE_NAME,
     SqlAlchemyCashflowRepository,
     build_replay_booked_transaction_use_case,
+)
+from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
+    TRANSACTION_PROCESSING_SERVICE_NAME,
 )
 from tests.test_support.transaction_processing import (
     booked_transaction_event,

@@ -37,6 +37,7 @@ modules while cataloged as transitional `clock-id-provider` capabilities.
 | `qcp.portfolio-tax-lot-reader` | repository reader | `query_control_plane_service/app/ports/dpm_source_readiness.py` | `PortfolioTaxLotWindow:v1` resolver; SQLAlchemy adapter in `query_control_plane_service/app/infrastructure/dpm_portfolio_state_sources.py` |
 | `query.unit-of-work` | unit of work | `query_service/app/ports/unit_of_work.py` | `SimulationService`; SQLAlchemy adapter in `query_service/app/infrastructure/unit_of_work.py` |
 | `reconciliation.repository-port` | repository reader/writer | `financial_reconciliation_service/app/ports/reconciliation_repository_ports.py` | `ReconciliationService` |
+| `transaction-processing.idempotency-claims` | audit/idempotency store | `portfolio_transaction_processing_service/app/ports/transaction_processing.py` | `ProcessTransactionUseCase`; SQLAlchemy adapter in `portfolio_transaction_processing_service/app/infrastructure/idempotency/processing_claims.py` |
 | `runtime.provider-ports` | clock/ID provider | `portfolio_common/runtime_providers.py` | `ReconciliationService`, `CoreSnapshotService`, `SimulationService` |
 
 ## Enforcement

@@ -4,23 +4,14 @@ from contextlib import nullcontext
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from portfolio_common.idempotency_repository import (
-    IdempotencyRepository,
-    SemanticEventClaimOutcome,
-)
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from src.services.portfolio_transaction_processing_service.app.application import (
     ProcessTransactionCashflowUseCase,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    TRANSACTION_PROCESSING_SERVICE_NAME,
     CashflowRuleCache,
-    SqlAlchemyTransactionIdempotencyAdapter,
     SqlAlchemyTransactionProcessingUnitOfWork,
-)
-from src.services.portfolio_transaction_processing_service.app.ports import (
-    TransactionIdempotencyOutcome,
 )
 
 
@@ -72,31 +63,6 @@ async def test_unit_of_work_rolls_back_uncommitted_duplicate_or_failure(
     transaction.start.assert_awaited_once_with()
     transaction.rollback.assert_awaited_once_with()
     session.close.assert_awaited_once_with()
-
-
-@pytest.mark.asyncio
-async def test_idempotency_adapter_uses_combined_service_identity() -> None:
-    repository = AsyncMock(spec=IdempotencyRepository)
-    repository.claim_semantic_event_processing.return_value = SemanticEventClaimOutcome.CLAIMED
-    adapter = SqlAlchemyTransactionIdempotencyAdapter(repository)
-
-    claimed = await adapter.claim(
-        event_id="transactions.persisted-0-42",
-        portfolio_id="PB-001",
-        semantic_key="transaction-processing:v1:PB-001:TX-001:0",
-        payload_fingerprint="sha256:abc123",
-        correlation_id="corr-001",
-    )
-
-    assert claimed is TransactionIdempotencyOutcome.CLAIMED
-    repository.claim_semantic_event_processing.assert_awaited_once_with(
-        event_id="transactions.persisted-0-42",
-        portfolio_id="PB-001",
-        service_name=TRANSACTION_PROCESSING_SERVICE_NAME,
-        semantic_key="transaction-processing:v1:PB-001:TX-001:0",
-        payload_fingerprint="sha256:abc123",
-        correlation_id="corr-001",
-    )
 
 
 @pytest.mark.asyncio

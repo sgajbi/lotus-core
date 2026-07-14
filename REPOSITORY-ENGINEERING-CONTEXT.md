@@ -1987,6 +1987,12 @@ Most relevant current governance:
      Any facade or package-root re-export deletion must run `make warning-gate` before commit;
      focused owner tests do not prove that tests or tooling elsewhere in the repository stopped
      importing the retired surface.
+     Transaction claim persistence, the stable `portfolio-transaction-processing` service identity,
+     and repository-to-application claim outcome translation belong under
+     `app/infrastructure/idempotency`. `SqlAlchemyTransactionProcessingUnitOfWork` owns one session,
+     transaction lifecycle, and adapter composition; do not embed the idempotency adapter in that
+     module or restore its broad infrastructure-root re-export. Tests and support queries that need
+     the persisted service identity must import it from the idempotency package.
      Retain `cashflows.calculated`, `transaction_processing.ready`, and compatible stage fields only
      until downstream usage and retention evidence permit governed retirement. Event supportability
      actor names and full-stack test service/port inventories must use current runtime-boundary

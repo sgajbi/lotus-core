@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.portfolio_transaction_processing_service.app.application import (
     TransactionProcessingStatus,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
+from src.services.portfolio_transaction_processing_service.app.infrastructure.idempotency import (
     TRANSACTION_PROCESSING_SERVICE_NAME,
 )
 from tests.test_support.transaction_processing import (
