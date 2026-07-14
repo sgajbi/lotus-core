@@ -48,7 +48,7 @@ Validation evidence:
  - `tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py`
  - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_upstream_pairing.py`
  - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py`
- - `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
+ - `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py`
 2. Migration contract gate:
  - `python scripts/quality/migration_contract_check.py --mode alembic-sql`
 

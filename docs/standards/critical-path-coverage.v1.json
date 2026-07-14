@@ -73,7 +73,7 @@
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_mapping/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/transaction_processing/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/runtime/*.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_*_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/fx/test_validation.py",
         "tests/unit/services/ingestion_service/domain/test_ingestion_job_lifecycle_policy.py",
         "tests/integration/services/ingestion_service/test_ingestion_routers.py"

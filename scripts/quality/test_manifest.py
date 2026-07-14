@@ -46,7 +46,7 @@ SUITES: dict[str, list[str]] = {
     ],
     "transaction-buy-contract": [
         "tests/unit/transaction_specs/test_buy_slice0_characterization.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_trades.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
         "tests/unit/libs/portfolio_common/test_transaction_metadata_contract.py",
         "tests/unit/services/ingestion_service/test_transaction_model.py",
@@ -60,7 +60,7 @@ SUITES: dict[str, list[str]] = {
     "transaction-sell-contract": [
         "tests/unit/transaction_specs/test_ordinary_settlement_cash_golden_vectors.py",
         "tests/unit/transaction_specs/test_sell_slice0_characterization.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_trades.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/cost_basis_processing/test_execution.py",
@@ -72,7 +72,7 @@ SUITES: dict[str, list[str]] = {
     "transaction-dividend-contract": [
         "tests/unit/transaction_specs/test_ordinary_settlement_cash_golden_vectors.py",
         "tests/unit/transaction_specs/test_dividend_slice0_characterization.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_generated_cash_leg.py",
@@ -91,7 +91,7 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/transaction_specs/test_ordinary_settlement_cash_golden_vectors.py",
         "tests/unit/transaction_specs/test_interest_slice0_characterization.py",
         "tests/unit/transaction_specs/test_interest_settlement_golden_vectors.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_interest.py",
         "tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py",

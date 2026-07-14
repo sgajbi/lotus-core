@@ -22,7 +22,7 @@ Slice 4 completes INTEREST cash-entry mode behavior parity with DIVIDEND and int
   - INTEREST UPSTREAM_PROVIDED mode skip + error-path tests
 - `tests/unit/services/portfolio_transaction_processing_service/domain/cashflow/test_calculation.py`
   - INTEREST income/expense sign tests
-- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_income_validation.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_income.py`
   - withholding and net-reconciliation tests
 
 ## Cash-Entry Mode Behavior

@@ -34,7 +34,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 | Requirement | Current State | Evidence |
 | --- | --- | --- |
 | Slice artifact trail (0..6) | Implemented | `docs/rfc-transaction-specs/transactions/SELL/SELL-SLICE-0-GAP-ASSESSMENT.md` .. `SELL-SLICE-6-CONFORMANCE-REPORT.md` |
-| SELL validation + reason codes | Implemented | `tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py`; slice-1 artifact |
+| SELL validation + reason codes | Implemented | `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_trades.py`; slice-1 artifact |
 | Linkage and policy metadata persistence | Implemented | `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`; slice-2 artifact |
 | Calculation and invariants | Implemented | `tests/unit/services/portfolio_transaction_processing_service/cost/test_cost_calculator.py`; slice-3 artifact |
 | Disposal/cash-linkage behavior | Implemented | slice-4 artifact; calculator/query tests |
@@ -60,7 +60,7 @@ The RFC content still reads partly as a forward-looking plan, so this standardiz
 
 ## Test and Validation Evidence
 1. `docs/rfc-transaction-specs/transactions/SELL/SELL-SLICE-6-CONFORMANCE-REPORT.md`
-2. `tests/unit/services/portfolio_transaction_processing_service/transaction/test_trade_validation.py`
+2. `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/validation/test_trades.py`
 3. `tests/unit/services/portfolio_transaction_processing_service/transaction/test_booking_metadata.py`
 4. `tests/integration/services/query_service/test_sell_state_router.py`
 5. `scripts/quality/test_manifest.py` and `.github/workflows/ci.yml` (`transaction-sell-contract`)
