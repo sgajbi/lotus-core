@@ -1,7 +1,7 @@
 """Enrich foreign-exchange transaction components with deterministic linkage."""
 
 from dataclasses import replace
-from typing import cast
+from typing import TypedDict
 
 from portfolio_common.domain.transaction_control_codes import normalize_transaction_control_code
 
@@ -11,6 +11,27 @@ from .models import FX_BUSINESS_TRANSACTION_TYPES
 FX_DEFAULT_POLICY_ID = "FX_DEFAULT_POLICY"
 FX_DEFAULT_POLICY_VERSION = "1.0.0"
 FX_CONTRACT_COMPONENT_TYPES = {"FX_CONTRACT_OPEN", "FX_CONTRACT_CLOSE"}
+
+
+class FxMetadataUpdate(TypedDict):
+    """Deterministic linkage and policy fields for one FX component."""
+
+    economic_event_id: str
+    linked_transaction_group_id: str
+    calculation_policy_id: str
+    calculation_policy_version: str
+    component_id: str
+    fx_contract_id: str | None
+    swap_event_id: str | None
+    near_leg_group_id: str | None
+    far_leg_group_id: str | None
+    fx_cash_leg_role: str | None
+    instrument_id: str
+    security_id: str
+    fx_contract_open_transaction_id: str | None
+    fx_contract_close_transaction_id: str | None
+    spot_exposure_model: str
+    fx_realized_pnl_mode: str
 
 
 def enrich_fx_transaction_metadata(transaction: BookedTransaction) -> BookedTransaction:
@@ -107,7 +128,7 @@ def _resolve_fx_contract_id(
     far_leg_group_id: str | None,
 ) -> str | None:
     if transaction.fx_contract_id:
-        return cast(str, transaction.fx_contract_id)
+        return str(transaction.fx_contract_id)
     if _requires_swap_contract_id(transaction_type, component_type):
         return f"FXC-{far_leg_group_id}"
     if _requires_forward_contract_id(transaction_type, component_type):
@@ -125,7 +146,7 @@ def _requires_forward_contract_id(transaction_type: str, component_type: str) ->
 
 def _resolve_fx_cash_leg_role(transaction: BookedTransaction, component_type: str) -> str | None:
     if transaction.fx_cash_leg_role:
-        return cast(str, transaction.fx_cash_leg_role)
+        return str(transaction.fx_cash_leg_role)
     if component_type == "FX_CASH_SETTLEMENT_BUY":
         return "BUY"
     if component_type == "FX_CASH_SETTLEMENT_SELL":
@@ -194,37 +215,7 @@ def _build_fx_metadata_update(
     security_id: str,
     fx_contract_open_transaction_id: str | None,
     fx_contract_close_transaction_id: str | None,
-) -> dict[str, object]:
-    update: dict[str, object] = {}
-    update.update(
-        _build_core_linkage_update(transaction, economic_event_id, linked_transaction_group_id)
-    )
-    update.update(
-        _build_contract_linkage_update(
-            fx_contract_id=fx_contract_id,
-            swap_event_id=swap_event_id,
-            near_leg_group_id=near_leg_group_id,
-            far_leg_group_id=far_leg_group_id,
-            fx_cash_leg_role=_resolve_fx_cash_leg_role(transaction, component_type),
-        )
-    )
-    update.update(
-        _build_instrument_lifecycle_update(
-            instrument_id=instrument_id,
-            security_id=security_id,
-            fx_contract_open_transaction_id=fx_contract_open_transaction_id,
-            fx_contract_close_transaction_id=fx_contract_close_transaction_id,
-        )
-    )
-    update.update(_build_fx_processing_mode_update(transaction))
-    return update
-
-
-def _build_core_linkage_update(
-    transaction: BookedTransaction,
-    economic_event_id: str,
-    linked_transaction_group_id: str,
-) -> dict[str, object]:
+) -> FxMetadataUpdate:
     return {
         "economic_event_id": economic_event_id,
         "linked_transaction_group_id": linked_transaction_group_id,
@@ -233,45 +224,15 @@ def _build_core_linkage_update(
             transaction.calculation_policy_version or FX_DEFAULT_POLICY_VERSION
         ),
         "component_id": transaction.component_id or transaction.transaction_id,
-    }
-
-
-def _build_contract_linkage_update(
-    *,
-    fx_contract_id: str | None,
-    swap_event_id: str | None,
-    near_leg_group_id: str | None,
-    far_leg_group_id: str | None,
-    fx_cash_leg_role: str | None,
-) -> dict[str, object]:
-    return {
         "fx_contract_id": fx_contract_id,
         "swap_event_id": swap_event_id,
         "near_leg_group_id": near_leg_group_id,
         "far_leg_group_id": far_leg_group_id,
-        "fx_cash_leg_role": fx_cash_leg_role,
-    }
-
-
-def _build_instrument_lifecycle_update(
-    *,
-    instrument_id: str,
-    security_id: str,
-    fx_contract_open_transaction_id: str | None,
-    fx_contract_close_transaction_id: str | None,
-) -> dict[str, object]:
-    return {
+        "fx_cash_leg_role": _resolve_fx_cash_leg_role(transaction, component_type),
         "instrument_id": instrument_id,
         "security_id": security_id,
         "fx_contract_open_transaction_id": fx_contract_open_transaction_id,
         "fx_contract_close_transaction_id": fx_contract_close_transaction_id,
-    }
-
-
-def _build_fx_processing_mode_update(
-    transaction: BookedTransaction,
-) -> dict[str, object]:
-    return {
         "spot_exposure_model": normalize_transaction_control_code(
             transaction.spot_exposure_model or "NONE"
         ),
