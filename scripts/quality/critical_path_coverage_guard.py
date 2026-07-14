@@ -535,11 +535,15 @@ def run_guard(
     ):
         aggregate_coverage_json = _load_json(repo_root / aggregate_coverage_json_path)
 
-    resolved_changed_files = (
-        explicit_changed_sources(changed_files, repo_root=repo_root)
-        if changed_files is not None
-        else read_git_changed_sources(repo_root=repo_root, base_ref=changed_base)
-    )
+    if changed_files is not None:
+        resolved_changed_files = explicit_changed_sources(changed_files, repo_root=repo_root)
+    elif thresholds:
+        resolved_changed_files = read_git_changed_sources(
+            repo_root=repo_root,
+            base_ref=changed_base,
+        )
+    else:
+        resolved_changed_files = []
 
     report = build_coverage_report(
         contract=contract,

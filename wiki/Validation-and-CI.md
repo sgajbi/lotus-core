@@ -158,8 +158,8 @@ scans and signs images, emits attestations/SBOMs, and records digest-based promo
   from current-file counts, and fails with `CHANGED_CRITICAL_SOURCE_UNMEASURED` when a current
   changed critical module is absent from the governed coverage execution. Measured changed
   critical modules must pass both the contract's line and branch thresholds; unavailable Git
-  comparison evidence also fails closed. Contract-only validation writes
-  `critical-path-coverage-contract-report.json` and never replaces the measured report.
+  comparison evidence fails measured coverage closed. History-independent contract-only validation
+  writes `critical-path-coverage-contract-report.json` and never replaces the measured report.
 - `make generated-artifact-tracking-guard`
   fails if disposable build, cache, package, coverage, or generated `output/` artifacts become
   tracked repository source truth. Local ignored generated artifacts remain removable through

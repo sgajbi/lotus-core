@@ -18,7 +18,8 @@ closed when a current critical module is absent from governed coverage data.
 - Changed critical modules must satisfy both the 90% line and 85% branch thresholds.
 - Missing current critical-module evidence returns the stable
   `CHANGED_CRITICAL_SOURCE_UNMEASURED` finding.
-- Invalid or unavailable Git comparison evidence fails the gate instead of becoming an empty diff.
+- Invalid or unavailable Git comparison evidence fails measured coverage instead of becoming an
+  empty diff; history-independent contract validation does not derive changed-source evidence.
 
 ## Implementation
 
@@ -34,6 +35,8 @@ closed when a current critical module is absent from governed coverage data.
   parent-traversing paths.
 - Separated contract-only output from measured coverage output so documentation validation cannot
   overwrite release evidence with empty totals.
+- Kept contract-only schema validation independent of Git history; measured threshold execution
+  remains fail-closed when comparison evidence is unavailable.
 
 ## Tests Added
 
@@ -46,6 +49,9 @@ closed when a current critical module is absent from governed coverage data.
   and branch thresholds.
 - Contract-only report selection preserves the measured report while honoring explicit output
   overrides.
+- Contract-only execution is covered against accidental Git-history access so shallow lint jobs do
+  not weaken or impersonate measured changed-code evidence.
+- Contract-only execution does not invoke changed-source discovery.
 
 ## Downstream Compatibility
 

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.quality import critical_path_coverage_guard as guard
 from scripts.quality.coverage_evidence.changed_source_evidence import (
@@ -337,6 +338,33 @@ def test_run_guard_writes_report_with_explicit_changed_files(tmp_path: Path) -> 
     assert findings == []
     assert report["changed_code_coverage"]["measured_line_coverage_percent"] == 100.0
     assert (tmp_path / "output/coverage/report.json").exists()
+
+
+def test_contract_only_guard_does_not_require_git_history(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "docs/standards/critical-path-coverage.v1.json",
+        json.dumps(_minimal_contract()),
+    )
+    _write(tmp_path / "src/app/use_case.py", "def demo():\n    return 1\n")
+    _write(tmp_path / "tests/unit/test_use_case.py", "def test_demo():\n    assert True\n")
+
+    with patch.object(
+        guard,
+        "read_git_changed_sources",
+        side_effect=AssertionError("contract-only validation must not inspect Git history"),
+    ):
+        findings, report = guard.run_guard(
+            repo_root=tmp_path,
+            contract_path=Path("docs/standards/critical-path-coverage.v1.json"),
+            coverage_json_path=None,
+            report_path=Path("output/coverage/contract-report.json"),
+            changed_base="origin/main",
+            changed_files=None,
+            thresholds=False,
+        )
+
+    assert findings == []
+    assert report["changed_code_coverage"]["changed_file_lineage"] == []
 
 
 def test_changed_code_report_retains_rename_and_delete_lineage() -> None:
