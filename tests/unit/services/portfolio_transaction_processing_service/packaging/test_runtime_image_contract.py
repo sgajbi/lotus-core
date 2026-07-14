@@ -1,11 +1,18 @@
+"""Verify the transaction runtime wheel and container source closure."""
+
 from __future__ import annotations
 
 import tomllib
 from pathlib import Path
 
-SERVICE_ROOT = (
-    Path(__file__).resolve().parents[4] / "src/services/portfolio_transaction_processing_service"
-)
+REPO_ROOT = Path(__file__).resolve().parents[5]
+SERVICE_ROOT = REPO_ROOT / "src/services/portfolio_transaction_processing_service"
+SERVICE_TEST_ROOT = REPO_ROOT / "tests/unit/services/portfolio_transaction_processing_service"
+
+
+def test_runtime_image_contract_is_packaging_owned() -> None:
+    assert Path(__file__).resolve().parent == SERVICE_TEST_ROOT / "packaging"
+    assert not (SERVICE_TEST_ROOT / "test_image_package_contract.py").exists()
 
 
 def test_target_package_declares_one_bounded_runtime_distribution() -> None:
