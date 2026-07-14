@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scripts.quality.coverage_evidence.changed_source_evidence import (
     ChangedSourceFile,
@@ -62,7 +62,10 @@ def _normalize_path(path: str) -> str:
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Coverage evidence must be a JSON object: {path}")
+    return cast(dict[str, Any], payload)
 
 
 def _repo_files(*, repo_root: Path) -> list[str]:
@@ -410,6 +413,7 @@ def build_coverage_report(
     contract: dict[str, Any],
     coverage_json: dict[str, Any] | None,
     changed_files: list[ChangedSourceFile],
+    aggregate_coverage_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     coverage_files = _coverage_files(coverage_json)
     group_reports = [
@@ -420,7 +424,8 @@ def build_coverage_report(
         "schema_version": SCHEMA_VERSION,
         "owning_repository": contract["owning_repository"],
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "aggregate_coverage": (coverage_json or {}).get("totals", {}),
+        "aggregate_coverage": (aggregate_coverage_json or coverage_json or {}).get("totals", {}),
+        "measured_source_coverage": (coverage_json or {}).get("totals", {}),
         "changed_code_coverage": _changed_report(
             changed_files=changed_files,
             contract=contract,
@@ -487,6 +492,7 @@ def run_guard(
     changed_base: str | None,
     changed_files: list[str] | None,
     thresholds: bool,
+    aggregate_coverage_json_path: Path | None = None,
 ) -> tuple[list[dict[str, object]], dict[str, Any]]:
     contract = _load_json(repo_root / contract_path)
     findings = validate_contract(contract=contract, repo_root=repo_root)
@@ -494,6 +500,13 @@ def run_guard(
     coverage_json = None
     if coverage_json_path is not None and (repo_root / coverage_json_path).exists():
         coverage_json = _load_json(repo_root / coverage_json_path)
+
+    aggregate_coverage_json = None
+    if (
+        aggregate_coverage_json_path is not None
+        and (repo_root / aggregate_coverage_json_path).exists()
+    ):
+        aggregate_coverage_json = _load_json(repo_root / aggregate_coverage_json_path)
 
     resolved_changed_files = (
         explicit_changed_sources(changed_files, repo_root=repo_root)
@@ -505,6 +518,7 @@ def run_guard(
         contract=contract,
         coverage_json=coverage_json,
         changed_files=resolved_changed_files,
+        aggregate_coverage_json=aggregate_coverage_json,
     )
     if thresholds:
         findings.extend(evaluate_coverage_thresholds(report))
@@ -523,6 +537,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--contract", type=Path, default=CONTRACT_PATH)
     parser.add_argument("--coverage-json", type=Path)
+    parser.add_argument(
+        "--aggregate-coverage-json",
+        type=Path,
+        help="Coverage JSON used for the separately enforced aggregate scope.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_REPORT_PATH)
     parser.add_argument(
         "--changed-base",
@@ -555,6 +574,7 @@ def main() -> int:
         changed_base=args.changed_base,
         changed_files=args.changed_file,
         thresholds=not args.contract_only,
+        aggregate_coverage_json_path=args.aggregate_coverage_json,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
     if findings:

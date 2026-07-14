@@ -136,6 +136,18 @@ def test_changed_code_report_classifies_measured_and_unmeasured_critical_files()
     ]
 
 
+def test_coverage_report_keeps_aggregate_and_measured_source_totals_distinct() -> None:
+    report = guard.build_coverage_report(
+        contract=_minimal_contract(),
+        coverage_json=_coverage_payload(covered_lines=9, statements=10),
+        aggregate_coverage_json=_coverage_payload(covered_lines=99, statements=100),
+        changed_files=[],
+    )
+
+    assert report["aggregate_coverage"]["percent_covered"] == 99.0
+    assert report["measured_source_coverage"]["percent_covered"] == 90.0
+
+
 def test_threshold_evaluation_rejects_low_measured_critical_group_coverage() -> None:
     report = guard.build_coverage_report(
         contract=_minimal_contract(),

@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from scripts.quality import coverage_gate, test_manifest, warning_budget_gate
+from scripts.quality import critical_path_coverage_guard as critical_guard
+from scripts.quality.coverage_evidence import changed_source_evidence
+from scripts.quality.coverage_evidence.changed_source_evidence import (
+    ChangedSourceFile,
+    SourceChangeType,
+)
 
 
 def _redirect_coverage_output(monkeypatch, tmp_path: Path) -> None:
@@ -12,6 +19,11 @@ def _redirect_coverage_output(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(coverage_gate, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(coverage_gate, "COVERAGE_OUTPUT_DIR", output_dir)
     monkeypatch.setattr(coverage_gate, "COVERAGE_JSON", output_dir / "coverage.json")
+    monkeypatch.setattr(
+        coverage_gate,
+        "QUERY_SERVICE_COVERAGE_JSON",
+        output_dir / "query-service-coverage.json",
+    )
     monkeypatch.setattr(
         coverage_gate,
         "CRITICAL_PATH_REPORT",
@@ -42,6 +54,11 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
     )
     monkeypatch.setattr(test_manifest, "run_suite", run_suite)
     monkeypatch.setattr(coverage_gate, "run", report_calls.append)
+    monkeypatch.setattr(
+        coverage_gate,
+        "_coverage_sources",
+        lambda: ("src/services/query_service/app", "src.services.core.domain.cost_basis"),
+    )
 
     assert coverage_gate.main() == 0
     assert warning_calls == [
@@ -49,6 +66,10 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
             "suite": "unit",
             "max_warnings": 0,
             "with_coverage": True,
+            "coverage_sources": (
+                "src/services/query_service/app",
+                "src.services.core.domain.cost_basis",
+            ),
             "coverage_file": ".coverage.unit",
         }
     ]
@@ -57,11 +78,18 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
             "integration-lite",
             {
                 "with_coverage": True,
+                "coverage_sources": (
+                    "src/services/query_service/app",
+                    "src.services.core.domain.cost_basis",
+                ),
                 "coverage_file": ".coverage.integration_lite",
             },
         )
     ]
-    assert len(report_calls) == 4
+    assert len(report_calls) == 5
+    assert f"--include={coverage_gate.QUERY_SERVICE_INCLUDE}" in report_calls[1]
+    assert str(coverage_gate.QUERY_SERVICE_COVERAGE_JSON) in report_calls[2]
+    assert "--aggregate-coverage-json" in report_calls[4]
 
 
 def test_coverage_gate_stops_when_unit_warning_evidence_fails(monkeypatch, tmp_path: Path) -> None:
@@ -71,5 +99,30 @@ def test_coverage_gate_stops_when_unit_warning_evidence_fails(monkeypatch, tmp_p
         "run_suite_with_warning_budget",
         lambda **kwargs: 1,
     )
+    monkeypatch.setattr(coverage_gate, "_coverage_sources", lambda: ())
 
     assert coverage_gate.main() == 1
+
+
+def test_coverage_sources_adds_current_changed_critical_module(monkeypatch, tmp_path: Path) -> None:
+    _redirect_coverage_output(monkeypatch, tmp_path)
+    contract_path = tmp_path / critical_guard.CONTRACT_PATH
+    contract_path.parent.mkdir(parents=True)
+    contract_path.write_text(
+        json.dumps(
+            {
+                "changed_code_gate": {"default_base_ref": "origin/main"},
+                "critical_path_groups": [{"id": "cost_basis", "source_globs": ["src/app/**/*.py"]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        changed_source_evidence,
+        "read_git_changed_sources",
+        lambda **_kwargs: [ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/use_case.py")],
+    )
+
+    sources = coverage_gate._coverage_sources()
+
+    assert sources == (test_manifest.SOURCE, "src.app.use_case")
