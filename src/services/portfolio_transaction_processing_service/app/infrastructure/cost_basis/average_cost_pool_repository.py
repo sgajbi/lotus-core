@@ -20,6 +20,7 @@ from ...domain.cost_basis import (
 from ...ports import AverageCostPoolCheckpointRecord, AverageCostPoolPersistedSummary
 from ..booked_transaction_event_mapper import to_booked_transaction
 from .lot_state_mapper import buy_lot_state_payload, mutable_lot_state_fields
+from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 
 
 def _scaled_persisted_value(
@@ -46,6 +47,7 @@ class SqlAlchemyAverageCostPoolRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._lot_states = SqlAlchemyCostBasisLotRepository(session)
 
     async def get_average_cost_pool_checkpoint_record(
         self,
@@ -237,30 +239,11 @@ class SqlAlchemyAverageCostPoolRepository:
         states_by_source_transaction_id: dict[str, OpenLotState],
     ) -> None:
         """Update selected pool source lots without closing omitted open lots."""
-
-        if not states_by_source_transaction_id:
-            return
-
-        normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-        normalized_security_id = normalize_lookup_identifier(security_id)
-        source_transaction_ids = set(states_by_source_transaction_id)
-        statement = select(PositionLotState).where(
-            func.trim(PositionLotState.portfolio_id) == normalized_portfolio_id,
-            func.trim(PositionLotState.security_id) == normalized_security_id,
-            PositionLotState.source_transaction_id.in_(source_transaction_ids),
+        await self._lot_states.update_selected_open_lot_states(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
+            states_by_source_transaction_id=states_by_source_transaction_id,
         )
-        lot_rows = (await self._session.execute(statement)).scalars().all()
-        persisted_source_ids = {lot_row.source_transaction_id for lot_row in lot_rows}
-        missing_source_ids = source_transaction_ids - persisted_source_ids
-        if missing_source_ids:
-            missing_ids = ", ".join(sorted(missing_source_ids))
-            raise ValueError(f"Selected cost-basis source lots are missing: {missing_ids}")
-
-        for lot_row in lot_rows:
-            state = states_by_source_transaction_id[lot_row.source_transaction_id]
-            lot_row.open_quantity = state.quantity
-            lot_row.lot_cost_local = state.cost_local
-            lot_row.lot_cost_base = state.cost_base
 
     async def _scale_existing_average_cost_sources(
         self,

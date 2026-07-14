@@ -5,6 +5,7 @@ from .corporate_action_reconciliation_repository import (
     SqlAlchemyCorporateActionReconciliationRepository,
 )
 from .fx_rate_repository import SqlAlchemyCostBasisFxRateRepository
+from .lot_state_repository import SqlAlchemyCostBasisLotRepository
 from .processing_state_repository import (
     SqlAlchemyCostBasisProcessingStateRepository,
     cost_basis_processing_lock_key,
@@ -16,6 +17,7 @@ __all__ = [
     "SqlAlchemyAverageCostPoolRepository",
     "SqlAlchemyCorporateActionReconciliationRepository",
     "SqlAlchemyCostBasisFxRateRepository",
+    "SqlAlchemyCostBasisLotRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",
     "SqlAlchemyCostBasisReferenceDataRepository",
     "StagedCostEffects",
