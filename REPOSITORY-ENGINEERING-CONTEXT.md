@@ -2437,6 +2437,10 @@ Most relevant current governance:
      the same explicit capability name under `domain/cost_basis`, `ports/cost_basis`,
      `application/cost_basis_processing`, and `infrastructure/cost_basis`; do not restore flat
      application/port modules or a vague domain `reconciliation.py`.
+     Cost-basis observation protocols belong under `app/ports/cost_basis/observability.py`;
+     Prometheus instruments and their adapter belong under `app/infrastructure/cost_basis` as
+     `metrics.py` and `observability.py`. Preserve the existing metric contracts while keeping
+     framework dependencies outside domain and application code.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,
