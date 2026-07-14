@@ -169,11 +169,11 @@ position, valuation, or idempotency state.
 | `CASHFLOW_RULE_CACHE_TTL_SECONDS` | `300` | Maximum age for an in-process cashflow rule cache entry before full reload. |
 
 Each cached rule carries the loaded rule-set version fingerprint and latest effective timestamp.
-Before serving a fresh cached rule, the consumer checks the source rule-set version derived from
-rule count and max `cashflow_rules.updated_at`. If that source version changes, the worker treats
+Before serving a fresh cached rule, the combined transaction runtime checks the source rule-set
+version derived from rule count and max `cashflow_rules.updated_at`. If that source version changes, the worker treats
 the cache as stale and reloads before calculating the message.
 
-Explicit `invalidate_cashflow_rule_cache()` clears only the current process. Multi-process
+Explicit `CashflowRuleCache.invalidate()` clears only the owning runtime instance. Multi-process
 deployments must make rule changes source-owned by updating `cashflow_rules.updated_at`; workers use
 that source version to avoid stale reads before TTL expiry. Missing rules force one immediate reload
 before the message is classified as no-rule and sent to DLQ.

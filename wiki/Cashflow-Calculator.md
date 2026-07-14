@@ -39,11 +39,13 @@ in the framework-neutral
 `portfolio_transaction_processing_service.app.domain.cashflow.calculation` policy. It consumes an
 immutable `BookedTransaction` and returns an immutable `CalculatedCashflow`.
 
-The active workflow is implemented by
-`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow`. Event DTO
-mapping, rule loading, metrics, logging, SQLAlchemy row construction, persistence, and outbox
-publication remain infrastructure concerns. The retired standalone calculator consumer is not part
-of the source tree or runtime.
+The transitional orchestration workflow remains in
+`portfolio_transaction_processing_service.app.infrastructure.cashflow_staging_workflow`. Governed
+rule caching is isolated under `app.infrastructure.cashflow.rule_cache`; each composed runtime owns
+one concurrency-safe cache instance and immutable source-versioned snapshots. Event DTO mapping,
+metrics, logging, SQLAlchemy row construction, persistence, and outbox publication remain
+infrastructure concerns. The retired standalone calculator consumer is not part of the source tree
+or runtime.
 
 Cash-entry mode validation, generated settlement-leg economics, and upstream product/cash pairing
 are service-owned transaction-domain policies over immutable `BookedTransaction`. Framework event
@@ -87,7 +89,8 @@ external portfolio funding.
 The service also keeps operational rule lookup supportable through cache refresh and invalidation
 behavior rather than requiring a restart for every rule update. Rule writes, including upgrade and
 downgrade migrations, advance `cashflow_rules.updated_at` so every worker observes the new rule-set
-version before serving another fresh cache hit.
+version before serving another fresh cache hit. Explicit invalidation acts on the runtime-owned
+cache instance; there is no hidden process-global rule snapshot.
 
 For mixed corporate actions, `CASH_CONSIDERATION` produces a positive position-level product flow
 classified as `CORPORATE_ACTION_PROCEEDS`; it is not income-since-inception. The real cash-account

@@ -1,25 +1,15 @@
-import asyncio
 import logging
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Optional
 
-from portfolio_common.config import (
-    CASHFLOW_RULE_CACHE_TTL_SECONDS as DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS,
-)
 from portfolio_common.config import (
     KAFKA_CASHFLOWS_CALCULATED_TOPIC,
 )
-from portfolio_common.domain.transaction_control_codes import (
-    normalize_transaction_control_code,
-)
 from portfolio_common.events import CashflowCalculatedEvent, TransactionEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
-from portfolio_common.monitoring import observe_cashflow_rule_cache_event
 from portfolio_common.outbox_repository import OutboxRepository
 from portfolio_common.reprocessing import EpochFencer
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..domain import BookedTransaction
 from ..domain.cashflow import CashflowCalculationContext, StoredCashflow
@@ -34,102 +24,13 @@ from ..domain.transaction.corporate_action import (
     is_bundle_a_corporate_action,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
+from .cashflow.rule_cache import CachedCashflowRule, CashflowRuleCache
 from .cashflow_calculation import calculate_observed_transaction_cashflow
 from .cashflow_repository import SqlAlchemyCashflowRepository
-from .cashflow_rules_repository import (
-    CashflowRuleSetVersion,
-    SqlAlchemyCashflowRulesRepository,
-)
 
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "cashflow-calculator"
-
-CASHFLOW_RULE_CACHE_TTL_SECONDS = DEFAULT_CASHFLOW_RULE_CACHE_TTL_SECONDS
-
-
-@dataclass
-class CachedCashflowRule:
-    classification: str
-    timing: str
-    is_position_flow: bool
-    is_portfolio_flow: bool
-    rule_set_version: str
-    rule_set_effective_at_utc: datetime | None
-
-
-@dataclass
-class CashflowRuleCacheState:
-    rules_by_transaction_type: Dict[str, CachedCashflowRule]
-    loaded_at_monotonic_seconds: float
-    rule_set_version: str
-    rule_set_effective_at_utc: datetime | None
-
-
-# Module-level cache for cashflow rules.
-_cashflow_rule_cache_state: Optional[CashflowRuleCacheState] = None
-_cashflow_rule_cache_lock: Optional[asyncio.Lock] = None
-
-
-def invalidate_cashflow_rule_cache() -> None:
-    """
-    Explicit cache invalidation hook.
-
-    Intended for operational use and tests where rules are updated and
-    immediate refresh is required without process restart.
-    """
-    global _cashflow_rule_cache_state
-    _cashflow_rule_cache_state = None
-    observe_cashflow_rule_cache_event("invalidate", "explicit")
-
-
-def _get_cashflow_rule_cache_lock() -> asyncio.Lock:
-    global _cashflow_rule_cache_lock
-    if _cashflow_rule_cache_lock is None:
-        _cashflow_rule_cache_lock = asyncio.Lock()
-    return _cashflow_rule_cache_lock
-
-
-def _cache_is_fresh(cache_state: CashflowRuleCacheState) -> bool:
-    if CASHFLOW_RULE_CACHE_TTL_SECONDS <= 0:
-        return False
-    age_seconds = time.monotonic() - cache_state.loaded_at_monotonic_seconds
-    return bool(age_seconds < CASHFLOW_RULE_CACHE_TTL_SECONDS)
-
-
-def _rule_from_cache(
-    cache_state: CashflowRuleCacheState,
-    transaction_type_key: str,
-) -> Optional[CachedCashflowRule]:
-    return cache_state.rules_by_transaction_type.get(transaction_type_key)
-
-
-def _cashflow_rule_set_version_from_rules(rules_list: list[object]) -> CashflowRuleSetVersion:
-    latest_updated_at = _latest_cashflow_rule_updated_at(rules_list)
-    return CashflowRuleSetVersion(
-        rule_count=len(rules_list),
-        latest_updated_at=latest_updated_at,
-    )
-
-
-def _latest_cashflow_rule_updated_at(rules_list: list[object]) -> datetime | None:
-    timestamps = [
-        _utc_timestamp_or_none(getattr(rule, "updated_at", None))
-        or _utc_timestamp_or_none(getattr(rule, "created_at", None))
-        for rule in rules_list
-    ]
-    known_timestamps = [timestamp for timestamp in timestamps if timestamp is not None]
-    if not known_timestamps:
-        return None
-    return max(known_timestamps)
-
-
-def _utc_timestamp_or_none(value: object) -> datetime | None:
-    if not isinstance(value, datetime):
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
 
 
 class NoCashflowRuleError(ValueError):
@@ -318,120 +219,25 @@ class CashflowCalculationWorkflow:
     remain outside this workflow.
     """
 
-    async def _load_cashflow_rules_cache(self, db_session) -> CashflowRuleCacheState:
-        repo = SqlAlchemyCashflowRulesRepository(db_session)
-        rules_list = await repo.get_all_rules()
-        rule_set_version = _cashflow_rule_set_version_from_rules(rules_list)
-        logger.info("Loaded %s cashflow rules from repository.", len(rules_list))
-        cache_state = CashflowRuleCacheState(
-            rules_by_transaction_type={
-                normalize_transaction_control_code(rule.transaction_type): CachedCashflowRule(
-                    classification=rule.classification,
-                    timing=rule.timing,
-                    is_position_flow=rule.is_position_flow,
-                    is_portfolio_flow=rule.is_portfolio_flow,
-                    rule_set_version=rule_set_version.fingerprint,
-                    rule_set_effective_at_utc=rule_set_version.latest_updated_at,
-                )
-                for rule in rules_list
-            },
-            loaded_at_monotonic_seconds=time.monotonic(),
-            rule_set_version=rule_set_version.fingerprint,
-            rule_set_effective_at_utc=rule_set_version.latest_updated_at,
-        )
-        observe_cashflow_rule_cache_event("reload", "repository_load")
-        return cache_state
+    def __init__(self, rule_cache: CashflowRuleCache | None = None) -> None:
+        self._rule_cache = rule_cache or CashflowRuleCache()
+
+    def invalidate_rule_cache(self) -> None:
+        """Force the next cashflow rule lookup to load a current snapshot."""
+
+        self._rule_cache.invalidate()
 
     async def _get_rule_for_transaction(
-        self, db_session, transaction_type: str
-    ) -> Optional[CachedCashflowRule]:
-        """
-        Retrieves the cashflow rule for a given transaction type, using a
-        lazy-loaded in-memory cache with TTL refresh and missing-rule refresh.
-        """
-        global _cashflow_rule_cache_state
-
-        transaction_type_key = normalize_transaction_control_code(transaction_type)
-        rule = await self._fresh_cached_rule_or_none(
-            db_session,
-            _cashflow_rule_cache_state,
-            transaction_type_key,
-        )
-        if rule is not None:
-            return rule
-
-        lock = _get_cashflow_rule_cache_lock()
-        async with lock:
-            _cashflow_rule_cache_state = await self._fresh_or_reloaded_rule_cache(db_session)
-            rule = _rule_from_cache(_cashflow_rule_cache_state, transaction_type_key)
-            if rule is None:
-                _cashflow_rule_cache_state = await self._reload_cache_for_missing_rule(
-                    db_session,
-                    transaction_type_key,
-                )
-                rule = _rule_from_cache(_cashflow_rule_cache_state, transaction_type_key)
-            return rule
-
-    async def _fresh_cached_rule_or_none(
         self,
-        db_session,
-        cache_state: Optional[CashflowRuleCacheState],
-        transaction_type_key: str,
-    ) -> Optional[CachedCashflowRule]:
-        if cache_state is None:
-            observe_cashflow_rule_cache_event("miss", "empty")
-            return None
-        if not _cache_is_fresh(cache_state):
-            observe_cashflow_rule_cache_event("stale", "ttl_expired")
-            return None
-        if not await self._cache_source_version_matches(db_session, cache_state):
-            observe_cashflow_rule_cache_event("stale", "source_version_changed")
-            return None
-        rule = _rule_from_cache(cache_state, transaction_type_key)
-        if rule is None:
-            observe_cashflow_rule_cache_event("missing_rule", "fresh_cache")
-            return None
-        observe_cashflow_rule_cache_event("hit", "fresh")
-        return rule
-
-    async def _cache_source_version_matches(
-        self,
-        db_session,
-        cache_state: CashflowRuleCacheState,
-    ) -> bool:
-        repo = SqlAlchemyCashflowRulesRepository(db_session)
-        source_version = await repo.get_rule_set_version()
-        return bool(source_version.fingerprint == cache_state.rule_set_version)
-
-    async def _fresh_or_reloaded_rule_cache(self, db_session) -> CashflowRuleCacheState:
-        cache_state = _cashflow_rule_cache_state
-        if (
-            cache_state is not None
-            and _cache_is_fresh(cache_state)
-            and await self._cache_source_version_matches(db_session, cache_state)
-        ):
-            return cache_state
-        logger.info("Cashflow rules cache miss/stale; refreshing from database.")
-        return await self._load_cashflow_rules_cache(db_session)
-
-    async def _reload_cache_for_missing_rule(
-        self,
-        db_session,
-        transaction_type_key: str,
-    ) -> CashflowRuleCacheState:
-        # Force one immediate refresh when a requested rule is missing.
-        # This supports near-real-time rule updates without waiting for TTL expiry.
-        logger.info(
-            "Cashflow rule '%s' not found in cache; forcing immediate refresh.",
-            transaction_type_key,
-        )
-        observe_cashflow_rule_cache_event("missing_rule", "reload")
-        return await self._load_cashflow_rules_cache(db_session)
+        db_session: AsyncSession,
+        transaction_type: str,
+    ) -> CachedCashflowRule | None:
+        return await self._rule_cache.resolve(db_session, transaction_type)
 
     async def stage_valid_event(
         self,
         *,
-        db,
+        db: AsyncSession,
         cashflow_repo: SqlAlchemyCashflowRepository,
         idempotency_repo: IdempotencyRepository,
         outbox_repo: OutboxRepository,
@@ -472,7 +278,7 @@ class CashflowCalculationWorkflow:
     async def _fence_or_semantic_duplicate_outcome(
         self,
         *,
-        db,
+        db: AsyncSession,
         idempotency_repo: IdempotencyRepository,
         event: TransactionEvent,
         event_id: str,
@@ -500,7 +306,7 @@ class CashflowCalculationWorkflow:
     async def _stage_cashflow_processing(
         self,
         *,
-        db,
+        db: AsyncSession,
         cashflow_repo: SqlAlchemyCashflowRepository,
         outbox_repo: OutboxRepository,
         event: TransactionEvent,
@@ -554,7 +360,7 @@ class CashflowCalculationWorkflow:
 
     async def _required_rule_for_transaction(
         self,
-        db,
+        db: AsyncSession,
         event_transaction_type: str,
     ) -> CachedCashflowRule:
         rule = await self._get_rule_for_transaction(db, event_transaction_type)

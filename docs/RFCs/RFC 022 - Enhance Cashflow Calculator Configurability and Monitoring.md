@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Implemented |
 | Created | 2025-09-02 |
-| Last Updated | 2026-03-05 |
-| Owners | `cashflow_calculator_service`, `portfolio-common` |
+| Last Updated | 2026-07-14 |
+| Owners | `portfolio_transaction_processing_service` |
 | Depends On | RFC 001 |
 | Scope | DB-driven cashflow rules, runtime rule refresh behavior, business-level cashflow metrics |
 
@@ -33,9 +33,10 @@ Original RFC 022 requested:
 Implemented:
 1. `cashflow_rules` schema exists via Alembic migration.
 2. Service loads rules from DB through `CashflowRulesRepository`.
-3. Consumer uses in-memory cache with deterministic refresh controls:
+3. Combined transaction processing uses an instance-owned in-memory cache with deterministic
+   refresh controls:
    1. TTL-based refresh (`CASHFLOW_RULE_CACHE_TTL_SECONDS`).
-   2. Explicit invalidation hook (`invalidate_cashflow_rule_cache`).
+   2. Explicit runtime-owned invalidation (`CashflowRuleCache.invalidate`).
    3. Missing-rule forced refresh to pick up newly added rule types immediately.
 4. Missing rule path sends event to DLQ as non-retryable configuration error.
 5. `CASHFLOWS_CREATED_TOTAL` counter is defined and incremented in `CashflowLogic.calculate`.
@@ -44,10 +45,12 @@ Implemented:
 Evidence:
 - `alembic/versions/1a7b8c9d0e2f_feat_add_cashflow_rules_table.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_rules_repository.py`
+- `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow/rule_cache.py`
 - `src/services/portfolio_transaction_processing_service/app/infrastructure/cashflow_staging_workflow.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cashflow/calculation.py`
 - `src/libs/portfolio-common/portfolio_common/monitoring.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py`
+- `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 
@@ -56,9 +59,9 @@ Evidence:
 | Original Requirement | Current Implementation in lotus-core | Evidence |
 | --- | --- | --- |
 | Replace hardcoded rules with DB policy table | Implemented (`cashflow_rules`) | migration + repository |
-| Load/cached rule lookup in consumer | Implemented (TTL cache + explicit invalidation + missing-rule forced refresh) | `transaction_consumer.py`; consumer unit tests |
-| Metric `cashflows_created_total` with labels | Implemented | `monitoring.py`; `cashflow_logic.py`; core tests |
-| Dynamic rule updates without restart | Implemented | `transaction_consumer.py`; `test_cashflow_transaction_consumer.py` |
+| Load/cached rule lookup in combined processing | Implemented (instance-owned TTL cache + explicit invalidation + missing-rule forced refresh) | `cashflow/rule_cache.py`; mirrored infrastructure tests |
+| Metric `cashflows_created_total` with labels | Implemented | `monitoring.py`; domain calculation adapter tests |
+| Dynamic rule updates without restart | Implemented | source-versioned rule cache; `test_rule_cache.py` |
 
 ## Design Reasoning and Trade-offs
 
@@ -81,8 +84,8 @@ No blocking implementation gap remains for RFC-022 scope.
 
 1. Repository query behavior tests:
    - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_rules_repository.py`
-2. Consumer cache/rule usage tests:
-   - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_staging_workflow.py`
+2. Runtime cache/rule usage tests:
+   - `tests/unit/services/portfolio_transaction_processing_service/infrastructure/cashflow/test_rule_cache.py`
 3. Metric emission tests:
    - `tests/unit/services/portfolio_transaction_processing_service/cashflow/test_cashflow_calculation.py`
 
@@ -100,4 +103,4 @@ Aligned:
 
 ## Next Actions
 
-1. Maintain cache refresh regression tests as part of consumer suite.
+1. Maintain cache refresh regression tests at the mirrored infrastructure boundary.
