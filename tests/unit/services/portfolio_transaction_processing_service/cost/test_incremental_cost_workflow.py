@@ -13,6 +13,7 @@ from src.services.portfolio_transaction_processing_service.app.application impor
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     AverageCostPoolCheckpoint,
     CostBasisProcessingCheckpoint,
+    build_cost_basis_engine_input,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
@@ -88,12 +89,14 @@ def _event(
 
 
 def _processed_buy(transaction_id: str, transaction_date: datetime) -> EngineTransaction:
-    payload = CostCalculationWorkflow()._transform_event_for_engine(
-        _event(
-            transaction_id=transaction_id,
-            transaction_date=transaction_date,
-            transaction_type="BUY",
-            quantity="10",
+    payload = build_cost_basis_engine_input(
+        booked_transaction_event_mapper.to_booked_transaction(
+            _event(
+                transaction_id=transaction_id,
+                transaction_date=transaction_date,
+                transaction_type="BUY",
+                quantity="10",
+            )
         )
     )
     payload.update(

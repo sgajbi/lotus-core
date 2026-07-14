@@ -5,14 +5,14 @@ from portfolio_common.database_models import Transaction as DBTransaction
 from portfolio_common.events import TransactionEvent
 
 from services.ingestion_service.app.DTOs.transaction_dto import Transaction
+from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
+    build_cost_basis_engine_input,
+)
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     PositionBalanceState as PositionStateDTO,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.position.reducer import (
     calculate_next_position_state,
-)
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
     to_booked_transaction,
@@ -41,7 +41,6 @@ def test_buy_ingestion_transaction_defaults_trade_fee_to_zero() -> None:
 
 
 def test_buy_fee_transformation_to_engine_fees_structure() -> None:
-    workflow = CostCalculationWorkflow()
     event = TransactionEvent(
         transaction_id="BUY_SLICE0_002",
         portfolio_id="PORT_SLICE0",
@@ -57,7 +56,7 @@ def test_buy_fee_transformation_to_engine_fees_structure() -> None:
         trade_fee=Decimal("7.50"),
     )
 
-    transformed = workflow._transform_event_for_engine(event)
+    transformed = build_cost_basis_engine_input(to_booked_transaction(event))
     assert transformed["transaction_type"] == "BUY"
     assert transformed["fees"] == {"brokerage": "7.50"}
 

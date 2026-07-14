@@ -18,6 +18,7 @@ from .calculation.cost_basis_strategies import (
     CostBasisStrategy,
     FIFOBasisStrategy,
 )
+from .calculation.engine_input import build_cost_basis_engine_input, normalize_cost_fee_amount
 from .calculation.lot_disposition import LotDispositionEngine
 from .calculation.lot_state import CostLot, OpenLotState
 from .calculation.transaction_ordering import (
@@ -72,6 +73,7 @@ __all__ = [
     "CorporateActionBasisReconciliation",
     "CorporateActionBasisReconciliationStatus",
     "CostBasisCalculator",
+    "build_cost_basis_engine_input",
     "COST_BASIS_STATE_VERSION",
     "CostBasisProcessingCheckpoint",
     "CostBasisStrategy",
@@ -90,6 +92,7 @@ __all__ = [
     "TransactionOrderKey",
     "calculate_corporate_action_cash_economics",
     "missing_corporate_action_dependencies",
+    "normalize_cost_fee_amount",
     "reconcile_corporate_action_basis",
     "transaction_order_key",
 ]

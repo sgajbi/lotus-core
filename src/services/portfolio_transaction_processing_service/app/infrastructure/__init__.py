@@ -39,8 +39,6 @@ from .cost_calculation_workflow import (
     CostCalculationWorkflow,
     OpenLotStateUpdateScope,
     UpstreamCashLegUnavailableError,
-    normalize_cost_event_code,
-    normalize_cost_fee_amount,
 )
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
@@ -99,8 +97,6 @@ __all__ = [
     "build_process_transaction_use_case",
     "cashflow_calculated_event_from_stored_cashflow",
     "cost_basis_processing_lock_key",
-    "normalize_cost_event_code",
-    "normalize_cost_fee_amount",
     "build_reconcile_average_cost_pools_use_case",
     "build_replay_booked_transaction_use_case",
 ]

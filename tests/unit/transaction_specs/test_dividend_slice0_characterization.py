@@ -14,6 +14,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.cashflow i
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisCalculator,
     CostCalculationErrorCollector,
+    build_cost_basis_engine_input,
 )
 from src.services.portfolio_transaction_processing_service.app.domain.cost_basis import (
     CostBasisTransaction as EngineTransaction,
@@ -26,7 +27,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.position.r
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CashflowCalculator,
-    CostCalculationWorkflow,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.booked_transaction_event_mapper import (  # noqa: E501
     to_booked_transaction,
@@ -57,7 +57,6 @@ def test_dividend_ingestion_allows_zero_quantity_and_price_with_default_fee() ->
 
 
 def test_dividend_fee_transformation_to_engine_fees_structure() -> None:
-    workflow = CostCalculationWorkflow()
     event = TransactionEvent(
         transaction_id="DIV_SLICE0_002",
         portfolio_id="PORT_SLICE0",
@@ -73,7 +72,7 @@ def test_dividend_fee_transformation_to_engine_fees_structure() -> None:
         trade_fee=Decimal("3.25"),
     )
 
-    transformed = workflow._transform_event_for_engine(event)
+    transformed = build_cost_basis_engine_input(to_booked_transaction(event))
     assert transformed["transaction_type"] == "DIVIDEND"
     assert transformed["fees"] == {"brokerage": "3.25"}
 
