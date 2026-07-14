@@ -111,7 +111,7 @@ Executed suites include:
 - `src/services/portfolio_transaction_processing_service/app/domain/transaction/corporate_action/classification.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/cost_basis/calculation/transaction_ordering.py`
 - `src/services/portfolio_transaction_processing_service/app/domain/position/history.py`
-- `tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_ordering.py`
+- `tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/test_ordering.py`
 - `tests/unit/services/portfolio_transaction_processing_service/cost/test_sorter.py`
 
 ## 9. Current Status

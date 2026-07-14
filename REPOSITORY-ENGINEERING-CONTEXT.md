@@ -1807,7 +1807,8 @@ Most relevant current governance:
      transaction processing and booked-transaction replay use-case tests belong under the sibling
      `application` package and use production-aligned module names; position-history orchestration
      tests follow the same application ownership. Domain behavior and package-structure guards
-     belong under the matching `domain/<capability>` test package. Cross-layer legacy import and retired-facade
+     belong under the matching `domain/<capability>` or `domain/<capability>/<family>` test package.
+     Cross-layer legacy import and retired-facade
      confinement belongs under the service's `architecture` test package. Runtime
      wheel, Docker source-closure, and image contract tests belong under the service's `packaging`
      test package. Worker health, readiness, metrics, version, and HTTP security contracts belong

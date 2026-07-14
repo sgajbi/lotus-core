@@ -359,9 +359,9 @@
           "proof_family": "unit_domain",
           "gap_status": "covered",
           "current_coverage": [
-            "tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_validation.py",
+            "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/test_validation.py",
             "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py",
-            "tests/unit/services/portfolio_transaction_processing_service/transaction/test_corporate_action_ordering.py"
+            "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/test_ordering.py"
           ]
         },
         {
