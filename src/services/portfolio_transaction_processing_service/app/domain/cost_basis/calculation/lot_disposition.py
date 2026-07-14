@@ -1,6 +1,5 @@
 """Coordinate opening-lot restoration, acquisition, and disposition."""
 
-import logging
 from decimal import Decimal
 
 from portfolio_common.domain.decimal_amount import required_decimal
@@ -8,8 +7,6 @@ from portfolio_common.domain.decimal_amount import required_decimal
 from ..models.cost_basis_transaction import CostBasisTransaction
 from .cost_basis_strategies import CostBasisStrategy
 from .lot_state import OpenLotState
-
-logger = logging.getLogger(__name__)
 
 
 def _is_buy_transaction(transaction: CostBasisTransaction) -> bool:
@@ -21,10 +18,10 @@ class LotDispositionEngine:
     Manages 'cost lots', delegating calculation logic to a specific strategy.
     """
 
-    def __init__(self, cost_basis_strategy: CostBasisStrategy):
+    def __init__(self, cost_basis_strategy: CostBasisStrategy) -> None:
         self._cost_basis_strategy = cost_basis_strategy
 
-    def add_buy_lot(self, transaction: CostBasisTransaction):
+    def add_buy_lot(self, transaction: CostBasisTransaction) -> None:
         if transaction.quantity > Decimal(0):
             self._cost_basis_strategy.add_buy_lot(transaction)
 
@@ -53,7 +50,7 @@ class LotDispositionEngine:
             cost_local,
         )
 
-    def set_initial_lots(self, transactions: list[CostBasisTransaction]):
+    def set_initial_lots(self, transactions: list[CostBasisTransaction]) -> None:
         filtered_buys = [
             txn for txn in transactions if _is_buy_transaction(txn) and txn.quantity > Decimal(0)
         ]
