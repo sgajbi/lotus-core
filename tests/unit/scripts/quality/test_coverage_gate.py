@@ -56,8 +56,16 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
     monkeypatch.setattr(coverage_gate, "run", report_calls.append)
     monkeypatch.setattr(
         coverage_gate,
+        "_changed_critical_paths",
+        lambda: ("src/services/core/domain/cost_basis.py",),
+    )
+    monkeypatch.setattr(
+        coverage_gate,
         "_coverage_sources",
-        lambda: ("src/services/query_service/app", "src.services.core.domain.cost_basis"),
+        lambda _critical_paths: (
+            "src/services/query_service/app",
+            "src.services.core.domain.cost_basis",
+        ),
     )
 
     assert coverage_gate.main() == 0
@@ -89,6 +97,13 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
     assert len(report_calls) == 5
     assert f"--include={coverage_gate.QUERY_SERVICE_INCLUDE}" in report_calls[1]
     assert str(coverage_gate.QUERY_SERVICE_COVERAGE_JSON) in report_calls[2]
+    expected_include = ",".join(
+        (
+            str(Path("src/services/query_service/app/*")),
+            str(Path("src/services/core/domain/cost_basis.py")),
+        )
+    )
+    assert f"--include={expected_include}" in report_calls[3]
     assert "--aggregate-coverage-json" in report_calls[4]
 
 
@@ -99,12 +114,13 @@ def test_coverage_gate_stops_when_unit_warning_evidence_fails(monkeypatch, tmp_p
         "run_suite_with_warning_budget",
         lambda **kwargs: 1,
     )
-    monkeypatch.setattr(coverage_gate, "_coverage_sources", lambda: ())
+    monkeypatch.setattr(coverage_gate, "_changed_critical_paths", lambda: ())
+    monkeypatch.setattr(coverage_gate, "_coverage_sources", lambda _critical_paths: ())
 
     assert coverage_gate.main() == 1
 
 
-def test_coverage_sources_adds_current_changed_critical_module(monkeypatch, tmp_path: Path) -> None:
+def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_path: Path) -> None:
     _redirect_coverage_output(monkeypatch, tmp_path)
     contract_path = tmp_path / critical_guard.CONTRACT_PATH
     contract_path.parent.mkdir(parents=True)
@@ -112,7 +128,12 @@ def test_coverage_sources_adds_current_changed_critical_module(monkeypatch, tmp_
         json.dumps(
             {
                 "changed_code_gate": {"default_base_ref": "origin/main"},
-                "critical_path_groups": [{"id": "cost_basis", "source_globs": ["src/app/**/*.py"]}],
+                "critical_path_groups": [
+                    {
+                        "id": "cost_basis",
+                        "source_globs": ["src/app/**/*.py", "alembic/**/*.py"],
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -120,9 +141,28 @@ def test_coverage_sources_adds_current_changed_critical_module(monkeypatch, tmp_
     monkeypatch.setattr(
         changed_source_evidence,
         "read_git_changed_sources",
-        lambda **_kwargs: [ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/use_case.py")],
+        lambda **_kwargs: [
+            ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/use_case.py"),
+            ChangedSourceFile(
+                "A",
+                SourceChangeType.ADDED,
+                "alembic/versions/abc123_add_table.py",
+            ),
+        ],
     )
 
-    sources = coverage_gate._coverage_sources()
+    critical_paths = coverage_gate._changed_critical_paths()
+    sources = coverage_gate._coverage_sources(critical_paths)
 
-    assert sources == (test_manifest.SOURCE, "src.app.use_case")
+    assert critical_paths == (
+        "alembic/versions/abc123_add_table.py",
+        "src/app/use_case.py",
+    )
+    assert sources == (test_manifest.SOURCE, "./alembic", "src.app.use_case")
+    assert coverage_gate._coverage_include(critical_paths) == ",".join(
+        (
+            str(Path("src/services/query_service/app/*")),
+            str(Path("alembic/versions/abc123_add_table.py")),
+            str(Path("src/app/use_case.py")),
+        )
+    )

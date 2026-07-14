@@ -192,12 +192,17 @@ def explicit_changed_sources(paths: list[str], *, repo_root: Path) -> list[Chang
     return changes
 
 
-def coverage_import_target(path: str) -> str:
-    """Map a repository source path to the import target expected by pytest-cov."""
+def coverage_source_target(path: str) -> str:
+    """Map a governed source path to the narrowest source target accepted by pytest-cov."""
 
     normalized = normalize_repo_path(path)
     if not normalized.endswith(".py"):
         raise ValueError(f"Coverage source is not a Python module: {normalized}")
+
+    if normalized.startswith("alembic/"):
+        # Coverage.py cannot target one migration file, so the JSON report is
+        # subsequently narrowed to the exact changed migration path.
+        return "./alembic"
 
     portfolio_common_prefix = "src/libs/portfolio-common/"
     if normalized.startswith(portfolio_common_prefix):
@@ -205,7 +210,7 @@ def coverage_import_target(path: str) -> str:
     elif normalized.startswith("src/"):
         module_path = normalized
     else:
-        raise ValueError(f"Coverage source is outside the governed src tree: {normalized}")
+        raise ValueError(f"Coverage source is outside the governed Python trees: {normalized}")
 
     module_path = (
         module_path.removesuffix("/__init__.py")
