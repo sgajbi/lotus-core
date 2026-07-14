@@ -1,5 +1,11 @@
 """Framework-neutral transaction processing capability ports."""
 
+from .cashflow import (
+    CashflowEventStagingPort,
+    CashflowPersistencePort,
+    CashflowProcessingStatePort,
+    CashflowRuleResolutionPort,
+)
 from .corporate_action_reconciliation import (
     CorporateActionReconciliationEvidence,
     CorporateActionReconciliationFindingEvidence,
@@ -67,9 +73,13 @@ __all__ = [
     "AverageCostPoolCheckpointRecord",
     "AverageCostPoolPersistedSummary",
     "AverageCostPoolReconciliationPort",
+    "CashflowEventStagingPort",
+    "CashflowPersistencePort",
     "CashflowProcessingPort",
     "BookedTransactionReplayPort",
     "CashflowProcessingResult",
+    "CashflowProcessingStatePort",
+    "CashflowRuleResolutionPort",
     "CostBasisCalculationObservation",
     "CostBasisCalculationObserver",
     "CostBasisExecutionMode",

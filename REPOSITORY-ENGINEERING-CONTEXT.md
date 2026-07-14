@@ -1466,6 +1466,12 @@ Most relevant current governance:
      session private, map ORM rows to `StoredCashflow` at the adapter boundary, and mirror adapter
      tests under the same infrastructure package. Do not restore flat cashflow persistence modules
      or place infrastructure tests beside domain calculation tests.
+     Cashflow orchestration belongs in `application/cashflow_processing/` and may depend only on
+     `BookedTransaction`, cashflow domain values, application errors/results, and protocols under
+     `ports/cashflow/`. Keep SQLAlchemy sessions, ORM rows, Kafka/Pydantic events, outbox helpers,
+     cache implementations, and transport mappers in infrastructure. The #719 runtime migration is
+     incomplete until composition uses this application boundary and deletes the compatibility
+     workflow; do not add new behavior to that workflow while the replacement is in progress.
      Every ORM, repository, raw SQL, migration, and migration-downgrade rule mutation must advance
      `cashflow_rules.updated_at` explicitly; ORM `onupdate` does not apply to raw SQL.
 106. Source-data read-model fallbacks must be source-owned and field-explicit. HoldingsAsOf now
