@@ -8,13 +8,15 @@ correct layers and cohesive domain-owned packages.
 
 ## Finding
 
-`CostCalculationWorkflow` remained a 1,067-line infrastructure coordinator with four distinct
+`CostCalculationWorkflow` remained a 1,067-line infrastructure coordinator with five distinct
 responsibilities mixed into it:
 
 1. deciding which transaction types open, consume, preserve, or transfer cost lots;
 2. replaying canonical history to construct an average-cost-pool rebuild plan;
 3. loading and validating upstream-provided cash legs; and
-4. coordinating SQL reconciliation of persisted average-cost-pool state.
+4. deciding which calculated lot-state scope to persist for incremental FIFO, AVCO, and full
+   rebuilds; and
+5. coordinating SQL reconciliation of persisted average-cost-pool state.
 
 The first responsibility is stable cost-basis domain policy. The next two are application behavior
 over transaction, reference-data, and FX ports. Only the final responsibility belongs in
@@ -32,14 +34,21 @@ obscured ownership and encouraged further dumping into broad folders.
    required settlement cash legs through `CostBasisTransactionStatePort`.
 4. Moved the SQLAlchemy reconciliation adapter into the nested
    `infrastructure.cost_basis.average_cost_pool_reconciliation` package.
-5. Mirrored every new or moved production package in the unit-test tree and removed tests coupled
+5. Added `application.cost_basis_processing.persist_open_lot_state` and
+   `CostBasisCalculationResult`, removed the transport-coupled private persistence method, and
+   removed the unused transaction-repository dependency from that policy.
+6. Renamed the internal persistence selector to `OpenLotPersistenceScope` and removed its obsolete
+   infrastructure export without a compatibility facade.
+7. Mirrored every new or moved production package in the unit-test tree and removed tests coupled
    to private infrastructure workflow methods.
-6. Preserved the public infrastructure import for the upstream-unavailable exception while moving
+8. Preserved the public infrastructure import for the upstream-unavailable exception while moving
    its implementation to the application layer.
 
 ## Measurable Improvement
 
-- removed three policy/application responsibilities from the 1,067-line infrastructure workflow;
+- removed four policy/application responsibilities from the 1,067-line infrastructure workflow;
+- removed 99 lines of lot-state policy from infrastructure and replaced private-method tests with
+  five direct application-port scenarios;
 - replaced ORM-row-oriented rebuild tests with canonical application-port tests;
 - made lot behavior independently testable without infrastructure imports;
 - organized reconciliation code and tests below explicit `cost_basis` packages; and
@@ -56,7 +65,7 @@ the broader calculator-runtime retirement tracked by #719.
 
 ## Validation
 
-- complete transaction-processing unit suite: `752 passed`;
+- complete transaction-processing unit suite: `754 passed`;
 - PostgreSQL AVCO reconciliation: `2 passed`;
 - PostgreSQL combined cash-in-lieu lifecycle: `1 passed`;
 - focused domain, application, and infrastructure tests: passed;

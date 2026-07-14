@@ -2427,9 +2427,11 @@ Most relevant current governance:
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
      AVCO rebuild planning and upstream cash-leg resolution/pairing belong under
      `app/application/cost_basis_processing` and operate on canonical booked transactions through
-     ports. SQL-backed AVCO reconciliation belongs under `app/infrastructure/cost_basis`. Mirror
-     these packages in tests; do not return these responsibilities to `CostCalculationWorkflow`,
-     create flat compatibility modules, or place application behavior in infrastructure.
+     ports. Open-lot persistence scope and FIFO/AVCO checkpoint decisions also belong in that
+     application package; concrete SQL persistence remains infrastructure. SQL-backed AVCO
+     reconciliation belongs under `app/infrastructure/cost_basis`. Mirror these packages in tests;
+     do not return these responsibilities to `CostCalculationWorkflow`, create flat compatibility
+     modules, or place application behavior in infrastructure.
 185. `make ci-local` must not run the complete unit or integration-lite corpus twice solely to
      collect different evidence. `scripts/quality/coverage_gate.py` owns the local unit execution,
      enforces the zero-warning budget through `warning_budget_gate.run_suite_with_warning_budget`,
