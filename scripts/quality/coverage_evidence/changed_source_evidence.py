@@ -171,3 +171,29 @@ def explicit_changed_sources(paths: list[str], *, repo_root: Path) -> list[Chang
             )
         )
     return changes
+
+
+def coverage_import_target(path: str) -> str:
+    """Map a repository source path to the import target expected by pytest-cov."""
+
+    normalized = normalize_repo_path(path)
+    if not normalized.endswith(".py"):
+        raise ValueError(f"Coverage source is not a Python module: {normalized}")
+
+    portfolio_common_prefix = "src/libs/portfolio-common/"
+    if normalized.startswith(portfolio_common_prefix):
+        module_path = normalized.removeprefix(portfolio_common_prefix)
+    elif normalized.startswith("src/"):
+        module_path = normalized
+    else:
+        raise ValueError(f"Coverage source is outside the governed src tree: {normalized}")
+
+    module_path = (
+        module_path.removesuffix("/__init__.py")
+        if module_path.endswith("/__init__.py")
+        else module_path.removesuffix(".py")
+    )
+    components = module_path.split("/")
+    if not components or any(not component.isidentifier() for component in components):
+        raise ValueError(f"Coverage source has no import-safe module target: {normalized}")
+    return ".".join(components)

@@ -8,6 +8,7 @@ import pytest
 from scripts.quality.coverage_evidence.changed_source_evidence import (
     ChangedSourceFile,
     SourceChangeType,
+    coverage_import_target,
     explicit_changed_sources,
     parse_git_name_status,
     read_git_changed_sources,
@@ -130,3 +131,35 @@ def test_explicit_changed_sources_distinguishes_current_and_absent_paths(tmp_pat
             previous_path="src/app/deleted.py",
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        (
+            "src/services/portfolio_transaction_processing_service/app/domain/cost_basis/"
+            "calculation/engine_input.py",
+            "src.services.portfolio_transaction_processing_service.app.domain.cost_basis."
+            "calculation.engine_input",
+        ),
+        (
+            "src/libs/portfolio-common/portfolio_common/domain/currency.py",
+            "portfolio_common.domain.currency",
+        ),
+        (
+            "src/services/query_service/app/services/__init__.py",
+            "src.services.query_service.app.services",
+        ),
+    ],
+)
+def test_coverage_import_target_maps_repository_source_layouts(path: str, expected: str) -> None:
+    assert coverage_import_target(path) == expected
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["docs/example.py", "src/app/not-python.txt", "src/libs/other-lib/package/module.py"],
+)
+def test_coverage_import_target_rejects_unsupported_source_layouts(path: str) -> None:
+    with pytest.raises(ValueError):
+        coverage_import_target(path)
