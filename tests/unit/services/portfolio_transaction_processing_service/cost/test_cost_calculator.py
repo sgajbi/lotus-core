@@ -583,6 +583,36 @@ def test_fx_strategy_preserves_upstream_provided_realized_fx_pnl(
     mock_disposition_engine.consume_sell_quantity.assert_not_called()
 
 
+def test_fx_strategy_rejects_missing_canonical_economic_fields(
+    cost_calculator,
+    mock_disposition_engine,
+    error_reporter,
+):
+    incomplete_fx_transaction = CostBasisTransaction(
+        transaction_id="FX-INCOMPLETE-001",
+        portfolio_id="PORT-FX",
+        instrument_id="FXC-EURUSD-001",
+        security_id="FXC-EURUSD-001",
+        transaction_type="FX_FORWARD",
+        transaction_date=datetime(2026, 7, 1, 9, 0, 0),
+        quantity=Decimal("0"),
+        gross_transaction_amount=Decimal("0"),
+        trade_currency="USD",
+        portfolio_base_currency="USD",
+    )
+
+    cost_calculator.calculate_transaction_costs(incomplete_fx_transaction)
+
+    errors = error_reporter.get_errors()
+    assert error_reporter.has_errors_for("FX-INCOMPLETE-001")
+    assert errors[0].error_reason == (
+        "FX validation failed: required canonical FX fields are incomplete."
+    )
+    assert incomplete_fx_transaction.net_cost is None
+    mock_disposition_engine.add_buy_lot.assert_not_called()
+    mock_disposition_engine.consume_sell_quantity.assert_not_called()
+
+
 def test_fx_strategy_rejects_invalid_swap_linkage(
     cost_calculator,
     mock_disposition_engine,

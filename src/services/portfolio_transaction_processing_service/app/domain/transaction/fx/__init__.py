@@ -28,6 +28,7 @@ from .models import (
     FxCanonicalTransaction,
 )
 from .reason_codes import FxValidationReasonCode
+from .transaction_source import FxTransactionSource
 from .validation import FxValidationError, FxValidationIssue, validate_fx_transaction
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "FX_SPOT_EXPOSURE_MODELS",
     "FX_REALIZED_PNL_MODES",
     "FxCanonicalTransaction",
+    "FxTransactionSource",
     "FX_DEFAULT_POLICY_ID",
     "FX_DEFAULT_POLICY_VERSION",
     "enrich_fx_transaction_metadata",
