@@ -11,6 +11,7 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.domain.transaction.fx import (
     UnsupportedFxRealizedPnlModeError,
+    build_fx_baseline_processing_update,
     build_fx_processed_transaction,
 )
 
@@ -89,3 +90,35 @@ def test_build_fx_processed_transaction_rejects_unsupported_cash_lot_mode() -> N
         match="CASH_LOT_COST_METHOD.*supported modes are NONE and UPSTREAM_PROVIDED",
     ):
         build_fx_processed_transaction(transaction)
+
+
+def test_baseline_update_preserves_cost_engine_mapping_contract() -> None:
+    update = build_fx_baseline_processing_update(
+        _fx_transaction(
+            fx_realized_pnl_mode="UPSTREAM_PROVIDED",
+            gross_cost=Decimal("11"),
+            net_cost=Decimal("12"),
+            realized_gain_loss=Decimal("13"),
+            net_cost_local=Decimal("14"),
+            realized_gain_loss_local=Decimal("15"),
+            realized_capital_pnl_local=Decimal("16"),
+            realized_fx_pnl_local=Decimal("17"),
+            realized_capital_pnl_base=Decimal("18"),
+            realized_fx_pnl_base=Decimal("19"),
+        )
+    )
+
+    assert update == {
+        "fx_realized_pnl_mode": "UPSTREAM_PROVIDED",
+        "gross_cost": Decimal("11"),
+        "net_cost": Decimal("12"),
+        "realized_gain_loss": Decimal("13"),
+        "net_cost_local": Decimal("14"),
+        "realized_gain_loss_local": Decimal("15"),
+        "realized_capital_pnl_local": Decimal("16"),
+        "realized_fx_pnl_local": Decimal("17"),
+        "realized_total_pnl_local": Decimal("33"),
+        "realized_capital_pnl_base": Decimal("18"),
+        "realized_fx_pnl_base": Decimal("19"),
+        "realized_total_pnl_base": Decimal("37"),
+    }
