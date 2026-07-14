@@ -1,7 +1,5 @@
 """SQLAlchemy persistence for transaction cost-basis processing."""
 
-import hashlib
-import logging
 from collections.abc import Callable
 from decimal import Decimal
 from time import monotonic
@@ -10,7 +8,6 @@ from typing import Any
 from portfolio_common.database_models import (
     AccruedIncomeOffsetState,
     AverageCostPoolState,
-    CostBasisProcessingState,
     PositionLotState,
     TransactionCost,
 )
@@ -20,9 +17,7 @@ from portfolio_common.database_models import (
 from portfolio_common.domain.currency import normalize_currency_code
 from portfolio_common.events import TransactionEvent, event_business_payload
 from portfolio_common.identifiers import normalize_lookup_identifier
-from portfolio_common.monitoring import observe_cost_basis_processing_lock_wait
-from portfolio_common.utils import async_timed
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,17 +38,7 @@ from ..ports import (
     OpenLotCheckpointRecord,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
-
-logger = logging.getLogger(__name__)
-
-
-def cost_basis_processing_lock_key(portfolio_id: str, security_id: str) -> int:
-    normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
-    normalized_security_id = normalize_lookup_identifier(security_id)
-    lock_scope = f"cost-basis-processing:{normalized_portfolio_id}:{normalized_security_id}"
-    digest = hashlib.blake2b(lock_scope.encode("utf-8"), digest_size=8).digest()
-    return int.from_bytes(digest, byteorder="big", signed=True)
-
+from .cost_basis.processing_state_repository import SqlAlchemyCostBasisProcessingStateRepository
 
 TRANSACTION_METADATA_FIELDS = (
     "economic_event_id",
@@ -237,49 +222,18 @@ class CostCalculatorRepository:
 
     def __init__(self, db: AsyncSession, *, clock: Callable[[], float] = monotonic):
         self.db = db
-        self._clock = clock
+        self._processing_state = SqlAlchemyCostBasisProcessingStateRepository(db, clock=clock)
 
-    @async_timed(repository="CostCalculatorRepository", method="acquire_cost_basis_processing_lock")
     async def acquire_cost_basis_processing_lock(
         self,
         portfolio_id: str,
         security_id: str,
     ) -> None:
-        """Serialize cost-basis state transitions for one portfolio/security key."""
-        lock_key = cost_basis_processing_lock_key(portfolio_id, security_id)
-        started_at = self._clock()
-        try:
-            await self.db.execute(
-                text("SELECT pg_advisory_xact_lock(:lock_key)").bindparams(lock_key=lock_key)
-            )
-        except BaseException:
-            wait_seconds = max(0.0, self._clock() - started_at)
-            observe_cost_basis_processing_lock_wait(
-                outcome="failed",
-                seconds=wait_seconds,
-            )
-            logger.warning(
-                "Cost-basis processing lock acquisition failed.",
-                extra={
-                    "portfolio_id": normalize_lookup_identifier(portfolio_id),
-                    "security_id": normalize_lookup_identifier(security_id),
-                    "lock_wait_seconds": wait_seconds,
-                },
-                exc_info=True,
-            )
-            raise
-        wait_seconds = max(0.0, self._clock() - started_at)
-        observe_cost_basis_processing_lock_wait(
-            outcome="acquired",
-            seconds=wait_seconds,
-        )
-        logger.info(
-            "Cost-basis processing lock acquired.",
-            extra={
-                "portfolio_id": normalize_lookup_identifier(portfolio_id),
-                "security_id": normalize_lookup_identifier(security_id),
-                "lock_wait_seconds": wait_seconds,
-            },
+        """Delegate stream serialization to the processing-state adapter."""
+
+        await self._processing_state.acquire_cost_basis_processing_lock(
+            portfolio_id,
+            security_id,
         )
 
     async def get_transaction_history(
@@ -314,54 +268,15 @@ class CostCalculatorRepository:
     async def get_cost_basis_processing_checkpoint(
         self, *, portfolio_id: str, security_id: str
     ) -> CostBasisProcessingCheckpoint | None:
-        stmt = select(CostBasisProcessingState).where(
-            CostBasisProcessingState.portfolio_id == normalize_lookup_identifier(portfolio_id),
-            CostBasisProcessingState.security_id == normalize_lookup_identifier(security_id),
-        )
-        row = (await self.db.execute(stmt)).scalars().first()
-        if row is None:
-            return None
-        return CostBasisProcessingCheckpoint(
-            portfolio_id=row.portfolio_id,
-            security_id=row.security_id,
-            cost_basis_method=row.cost_basis_method,
-            latest_transaction_date=row.latest_transaction_date,
-            latest_dependency_rank=row.latest_dependency_rank,
-            latest_cash_dependency_rank=row.latest_cash_dependency_rank,
-            latest_child_sequence=row.latest_child_sequence,
-            latest_target_instrument_id=row.latest_target_instrument_id,
-            latest_quantity=row.latest_quantity,
-            latest_transaction_id=row.latest_transaction_id,
-            calculation_state_version=row.engine_state_version,
+        return await self._processing_state.get_cost_basis_processing_checkpoint(
+            portfolio_id=portfolio_id,
+            security_id=security_id,
         )
 
     async def upsert_cost_basis_processing_checkpoint(
         self, checkpoint: CostBasisProcessingCheckpoint
     ) -> None:
-        payload = {
-            "portfolio_id": checkpoint.portfolio_id,
-            "security_id": checkpoint.security_id,
-            "cost_basis_method": checkpoint.cost_basis_method,
-            "latest_transaction_date": checkpoint.latest_transaction_date,
-            "latest_dependency_rank": checkpoint.latest_dependency_rank,
-            "latest_cash_dependency_rank": checkpoint.latest_cash_dependency_rank,
-            "latest_child_sequence": checkpoint.latest_child_sequence,
-            "latest_target_instrument_id": checkpoint.latest_target_instrument_id,
-            "latest_quantity": checkpoint.latest_quantity,
-            "latest_transaction_id": checkpoint.latest_transaction_id,
-            "engine_state_version": checkpoint.calculation_state_version,
-        }
-        stmt = pg_insert(CostBasisProcessingState).values(**payload)
-        await self.db.execute(
-            stmt.on_conflict_do_update(
-                index_elements=["portfolio_id", "security_id"],
-                set_={
-                    field_name: getattr(stmt.excluded, field_name)
-                    for field_name in payload
-                    if field_name not in {"portfolio_id", "security_id"}
-                },
-            )
-        )
+        await self._processing_state.upsert_cost_basis_processing_checkpoint(checkpoint)
 
     async def get_average_cost_pool_checkpoint_record(
         self,
