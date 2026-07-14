@@ -196,7 +196,7 @@
         "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/corporate_action/*.py",
         "tests/unit/services/portfolio_transaction_processing_service/cost/test_corporate_action_basis_reconciliation.py",
         "tests/unit/services/portfolio_transaction_processing_service/infrastructure/cost_basis/test_corporate_action_observability.py",
-        "tests/unit/services/portfolio_transaction_processing_service/transaction/test_cash_entry_policy.py",
+        "tests/unit/services/portfolio_transaction_processing_service/domain/transaction/settlement/test_cash_entry.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_reducer.py",
         "tests/unit/services/portfolio_transaction_processing_service/domain/position/test_history.py",
         "tests/unit/services/portfolio_transaction_processing_service/application/test_position_history.py"
