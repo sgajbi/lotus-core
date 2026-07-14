@@ -15,6 +15,8 @@ closed when a current critical module is absent from governed coverage data.
 - Rename and copy records retain previous path, current path, Git status, and similarity evidence.
 - Query Service keeps its established branch-aware 98% aggregate scope.
 - Changed critical modules are added to the same governed unit and integration-lite coverage run.
+- Governed Python paths outside `src/`, including Alembic migrations, remain eligible for exact
+  changed-critical evidence instead of being dropped by source-tree assumptions.
 - Changed critical modules must satisfy both the 90% line and 85% branch thresholds.
 - Missing current critical-module evidence returns the stable
   `CHANGED_CRITICAL_SOURCE_UNMEASURED` finding.
@@ -37,6 +39,8 @@ closed when a current critical module is absent from governed coverage data.
   overwrite release evidence with empty totals.
 - Kept contract-only schema validation independent of Git history; measured threshold execution
   remains fail-closed when comparison evidence is unavailable.
+- Mapped changed Alembic migrations to the measurable `./alembic` coverage source while narrowing
+  JSON evidence to the exact changed migration path.
 
 ## Tests Added
 
@@ -52,6 +56,7 @@ closed when a current critical module is absent from governed coverage data.
 - Contract-only execution is covered against accidental Git-history access so shallow lint jobs do
   not weaken or impersonate measured changed-code evidence.
 - Contract-only execution does not invoke changed-source discovery.
+- Non-`src` critical-path selection and exact Alembic migration source/include mapping.
 
 ## Downstream Compatibility
 
@@ -75,6 +80,8 @@ calculation, metric, Docker runtime, deployment topology, or downstream response
   path/Git and branch-threshold hardening.
 - Strict MyPy passed for all five affected quality modules.
 - Scoped Ruff and `git diff --check` passed for each implementation slice.
+- Review fix-forward pack: 40 focused coverage tests, strict MyPy, `make
+  critical-path-coverage-guard`, and full `make lint` passed.
 - Full `make coverage-gate` passed with 4,509 unit tests, 10 deselected tests, 136 integration-lite
   tests, zero unit warnings, the branch-aware 98% Query Service aggregate display, and separate
   aggregate, measured-source, and passing critical-path report artifacts.
