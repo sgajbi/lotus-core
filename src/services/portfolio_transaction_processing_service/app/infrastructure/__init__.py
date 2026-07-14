@@ -48,7 +48,6 @@ from .cost_processing_adapter import (
     CostProcessingCompatibilityAdapter,
     PortfolioNotFoundError,
 )
-from .cost_repository import CostCalculatorRepository
 from .pipeline_stage_processing_adapter import PipelineStageProcessingAdapter
 from .position_processing_adapter import PositionHistoryProcessingAdapter
 from .prometheus_cost_basis_observability import (
@@ -85,7 +84,6 @@ __all__ = [
     "PROMETHEUS_CORPORATE_ACTION_RECONCILIATION_OBSERVER",
     "PrometheusCorporateActionReconciliationObserver",
     "CostCalculationWorkflow",
-    "CostCalculatorRepository",
     "FxRateNotFoundError",
     "LOT_OPENING_BEHAVIORS",
     "OpenLotStateUpdateScope",

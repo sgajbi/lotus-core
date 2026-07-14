@@ -12,6 +12,7 @@ from .processing_state_repository import (
 )
 from .reference_data_repository import SqlAlchemyCostBasisReferenceDataRepository
 from .staged_effects import StagedCostEffects
+from .transaction_repository import SqlAlchemyCostBasisTransactionRepository
 
 __all__ = [
     "SqlAlchemyAverageCostPoolRepository",
@@ -20,6 +21,7 @@ __all__ = [
     "SqlAlchemyCostBasisLotRepository",
     "SqlAlchemyCostBasisProcessingStateRepository",
     "SqlAlchemyCostBasisReferenceDataRepository",
+    "SqlAlchemyCostBasisTransactionRepository",
     "StagedCostEffects",
     "cost_basis_processing_lock_key",
 ]

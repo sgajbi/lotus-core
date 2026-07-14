@@ -22,7 +22,6 @@ from src.services.portfolio_transaction_processing_service.app.domain.transactio
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
     OpenLotStateUpdateScope,
     booked_transaction_event_mapper,
 )
@@ -35,6 +34,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
     OpenLotCheckpointRecord,
 )
 
@@ -149,7 +149,7 @@ def _history_transaction(transaction: DBTransaction) -> BookedTransaction:
 
 async def test_later_sell_restores_open_lots_without_loading_full_history() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
@@ -223,7 +223,7 @@ async def test_later_sell_restores_open_lots_without_loading_full_history() -> N
 
 async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
@@ -291,7 +291,7 @@ async def test_ordered_avco_sell_restores_one_aggregate_pool_source() -> None:
 
 async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
@@ -356,7 +356,7 @@ async def test_ordered_avco_buy_preserves_existing_pool_and_adds_explicit_source
 
 async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
@@ -404,7 +404,7 @@ async def test_ordered_avco_event_without_pool_checkpoint_uses_full_rebuild() ->
 
 async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     first_buy_date = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
     second_buy_date = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
@@ -479,7 +479,7 @@ async def test_average_cost_pool_rebuild_plan_replays_complete_canonical_history
 
 
 async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         portfolio_id="P1",
@@ -500,7 +500,7 @@ async def test_average_cost_pool_rebuild_plan_rejects_non_avco_portfolio() -> No
 
 
 async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() -> None:
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
     reference_data.get_cost_basis_portfolio.return_value = CostBasisPortfolioReference(
         portfolio_id="P1",
@@ -542,7 +542,7 @@ async def test_average_cost_pool_rebuild_plan_fails_closed_on_invalid_history() 
 
 async def test_backdated_transaction_uses_full_deterministic_history() -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()
@@ -596,7 +596,7 @@ async def test_non_lot_full_rebuild_refreshes_open_lot_cost_snapshot(
     cost_basis_method: CostBasisMethod,
 ) -> None:
     workflow = CostCalculationWorkflow()
-    repo = AsyncMock(spec=CostCalculatorRepository)
+    repo = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = _processing_state_port()
     average_cost_pools = _average_cost_pool_port()
     lot_states = _lot_state_port()

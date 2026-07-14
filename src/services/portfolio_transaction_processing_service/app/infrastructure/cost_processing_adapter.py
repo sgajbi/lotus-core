@@ -26,6 +26,7 @@ from ..ports import (
     CostBasisPortfolioReference,
     CostBasisProcessingStatePort,
     CostBasisReferenceDataPort,
+    CostBasisTransactionStatePort,
     CostProcessingResult,
 )
 from .booked_transaction_event_mapper import (
@@ -37,9 +38,6 @@ from .cost_basis import StagedCostEffects
 from .cost_calculation_workflow import (
     FxRateNotFoundError,
     UpstreamCashLegUnavailableError,
-)
-from .cost_repository import (
-    CostCalculatorRepository,
 )
 
 
@@ -58,7 +56,7 @@ class CostEffectsStager(Protocol):
         route: CostProcessingRoute,
         portfolio: CostBasisPortfolioReference,
         instrument: CostBasisInstrumentReference | None,
-        repo: CostCalculatorRepository,
+        repo: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,
@@ -78,7 +76,7 @@ class CostProcessingCompatibilityAdapter:
         self,
         *,
         workflow: CostEffectsStager,
-        repository: CostCalculatorRepository,
+        repository: CostBasisTransactionStatePort,
         average_cost_pools: CostBasisAverageCostPoolPort,
         lot_states: CostBasisLotStatePort,
         income_offsets: AccruedIncomeOffsetStatePort,

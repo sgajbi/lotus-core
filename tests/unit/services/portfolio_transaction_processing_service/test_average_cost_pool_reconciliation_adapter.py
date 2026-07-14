@@ -11,7 +11,6 @@ from src.services.portfolio_transaction_processing_service.app.domain import (
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure import (
     CostCalculationWorkflow,
-    CostCalculatorRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.average_cost_pool_reconciliation_adapter import (  # noqa: E501
     SqlAlchemyAverageCostPoolReconciliationAdapter,
@@ -20,6 +19,7 @@ from src.services.portfolio_transaction_processing_service.app.ports import (
     AverageCostPoolPersistedSummary,
     CostBasisAverageCostPoolPort,
     CostBasisProcessingStatePort,
+    CostBasisTransactionStatePort,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -76,7 +76,7 @@ def _adapter(
 ) -> tuple[SqlAlchemyAverageCostPoolReconciliationAdapter, AsyncMock, AsyncMock, AsyncMock]:
     resolved_workflow = workflow or AsyncMock(spec=CostCalculationWorkflow)
     resolved_repository = repository or AsyncMock(spec=CostBasisAverageCostPoolPort)
-    history_repository = AsyncMock(spec=CostCalculatorRepository)
+    history_repository = AsyncMock(spec=CostBasisTransactionStatePort)
     processing_state = AsyncMock(spec=CostBasisProcessingStatePort)
     return (
         SqlAlchemyAverageCostPoolReconciliationAdapter(

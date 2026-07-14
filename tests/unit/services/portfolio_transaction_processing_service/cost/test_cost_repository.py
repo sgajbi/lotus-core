@@ -24,12 +24,10 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
 from src.services.portfolio_transaction_processing_service.app.domain.transaction import (
     BookedTransaction,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyAverageCostPoolRepository,
     SqlAlchemyCostBasisLotRepository,
+    SqlAlchemyCostBasisTransactionRepository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -37,7 +35,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_get_transaction_history_trims_portfolio_security_and_excluded_transaction_ids():
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
     execute_result = MagicMock()
     persisted_transaction = DBTransaction(
@@ -92,7 +90,7 @@ async def test_get_transaction_history_trims_portfolio_security_and_excluded_tra
 
 async def test_get_booked_transaction_maps_domain_transaction_and_scopes_portfolio() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
     persisted_transaction = DBTransaction(
         transaction_id="CASH01",
         portfolio_id="PORT_COST_01",
@@ -794,7 +792,7 @@ async def test_update_selected_open_lot_states_skips_empty_selection() -> None:
 
 async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
     db_transaction = DBTransaction(
         transaction_id="BUY01",
@@ -854,7 +852,7 @@ async def test_apply_transaction_costs_persists_linkage_metadata() -> None:
 
 async def test_upsert_transaction_event_ignores_event_envelope_fields() -> None:
     db_session = AsyncMock()
-    repository = CostCalculatorRepository(db_session)
+    repository = SqlAlchemyCostBasisTransactionRepository(db_session)
 
     event = TransactionEvent(
         event_type="ProcessedTransactionPersisted",

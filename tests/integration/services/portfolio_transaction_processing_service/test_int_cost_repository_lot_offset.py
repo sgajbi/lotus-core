@@ -22,11 +22,9 @@ from src.services.portfolio_transaction_processing_service.app.domain.cost_basis
     Fees,
     OpenLotState,
 )
-from src.services.portfolio_transaction_processing_service.app.infrastructure import (
-    CostCalculatorRepository,
-)
 from src.services.portfolio_transaction_processing_service.app.infrastructure.cost_basis import (
     SqlAlchemyCostBasisLotRepository,
+    SqlAlchemyCostBasisTransactionRepository,
 )
 from src.services.portfolio_transaction_processing_service.app.infrastructure.income import (
     SqlAlchemyAccruedIncomeOffsetRepository,
@@ -557,7 +555,7 @@ async def test_cost_repository_replaces_transaction_cost_breakdown_idempotently(
     )
     await async_db_session.commit()
 
-    repo = CostCalculatorRepository(async_db_session)
+    repo = SqlAlchemyCostBasisTransactionRepository(async_db_session)
     txn = EngineTransaction(
         transaction_id="TXN_SLICE4_03",
         portfolio_id="PORT_SLICE4_03",
