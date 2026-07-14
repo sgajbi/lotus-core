@@ -5,7 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = (
+    REPO_ROOT / "tests" / "unit" / "services" / "portfolio_transaction_processing_service"
+)
 COST_BASIS_DOMAIN_ROOT = (
     REPO_ROOT
     / "src"
@@ -27,6 +30,11 @@ RETIRED_COST_ENGINE_ROOT = (
 LEGACY_COST_APPLICATION_ROOT = (
     REPO_ROOT / "src" / "services" / "calculators" / "cost_calculator_service" / "app"
 )
+
+
+def test_cost_basis_structure_guard_is_domain_owned() -> None:
+    assert Path(__file__).resolve().parent == SERVICE_TEST_ROOT / "domain" / "cost_basis"
+    assert not (SERVICE_TEST_ROOT / "test_cost_basis_domain_structure.py").exists()
 
 
 def test_cost_basis_domain_modules_have_responsibility_docstrings() -> None:

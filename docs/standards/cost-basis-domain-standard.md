@@ -18,7 +18,7 @@ framework-independent so cost processing can run without API, event, or persiste
 
 ## Current Guard
 
-`tests/unit/services/portfolio_transaction_processing_service/test_cost_basis_domain_structure.py`
+`tests/unit/services/portfolio_transaction_processing_service/domain/cost_basis/test_package_structure.py`
 checks package naming, module docstrings, and legacy-path retirement. The generic testability
 architecture guard enforces framework and infrastructure independence for the complete target
 domain package.

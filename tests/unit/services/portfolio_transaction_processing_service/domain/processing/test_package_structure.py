@@ -5,7 +5,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[6]
+SERVICE_TEST_ROOT = (
+    REPO_ROOT / "tests" / "unit" / "services" / "portfolio_transaction_processing_service"
+)
 PROCESSING_DOMAIN_ROOT = (
     REPO_ROOT
     / "src"
@@ -15,6 +18,11 @@ PROCESSING_DOMAIN_ROOT = (
     / "domain"
     / "processing"
 )
+
+
+def test_processing_structure_guard_is_domain_owned() -> None:
+    assert Path(__file__).resolve().parent == SERVICE_TEST_ROOT / "domain" / "processing"
+    assert not (SERVICE_TEST_ROOT / "test_processing_domain_structure.py").exists()
 
 
 def test_processing_domain_modules_have_responsibility_docstrings() -> None:

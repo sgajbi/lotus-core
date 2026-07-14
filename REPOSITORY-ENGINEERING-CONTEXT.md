@@ -1805,8 +1805,9 @@ Most relevant current governance:
      `tests/unit/services/portfolio_transaction_processing_service/delivery/kafka`, while consumer
      composition and lifecycle-manager tests belong under the sibling `runtime` package. Core
      transaction processing and booked-transaction replay use-case tests belong under the sibling
-     `application` package and use production-aligned module names. Do not return delivery,
-     runtime, or application behavior tests to the flat service-test root.
+     `application` package and use production-aligned module names. Domain package-structure guards
+     belong under the matching `domain/<capability>` test package. Do not return delivery, runtime,
+     application behavior, or domain-structure tests to the flat service-test root.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.
