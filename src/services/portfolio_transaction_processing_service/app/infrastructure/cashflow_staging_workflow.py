@@ -24,9 +24,9 @@ from ..domain.transaction.corporate_action import (
     is_bundle_a_corporate_action,
 )
 from .booked_transaction_event_mapper import to_booked_transaction
+from .cashflow.persistence import SqlAlchemyCashflowRepository
 from .cashflow.rule_cache import CachedCashflowRule, CashflowRuleCache
 from .cashflow_calculation import calculate_observed_transaction_cashflow
-from .cashflow_repository import SqlAlchemyCashflowRepository
 
 logger = logging.getLogger(__name__)
 

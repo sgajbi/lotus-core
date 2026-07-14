@@ -22,11 +22,11 @@ from ..ports import (
     TransactionIdempotencyOutcome,
     TransactionIdempotencyPort,
 )
+from .cashflow.persistence import SqlAlchemyCashflowRepository
 from .cashflow_processing_adapter import (
     CashflowProcessingCompatibilityAdapter,
     CashflowStagingWorkflow,
 )
-from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cost_basis import (
     CostBasisProcessingAdapter,
     SqlAlchemyAverageCostPoolRepository,

@@ -8,21 +8,19 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..domain.cashflow import CalculatedCashflow, StoredCashflow
+from ...domain.cashflow import CalculatedCashflow, StoredCashflow
 
 logger = logging.getLogger(__name__)
 
 
 class SqlAlchemyCashflowRepository:
-    """
-    Handles all database operations for the Cashflow model.
-    """
+    """Persist calculated cashflows in the transaction-processing ledger."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(self, session: AsyncSession):
+        self._session = session
 
     async def portfolio_exists(self, portfolio_id: str) -> bool:
-        result = await self.db.execute(
+        result = await self._session.execute(
             select(Portfolio.portfolio_id).where(Portfolio.portfolio_id == portfolio_id)
         )
         return result.scalar_one_or_none() is not None
@@ -35,22 +33,20 @@ class SqlAlchemyCashflowRepository:
         )
         if portfolio_id is not None:
             stmt = stmt.where(Transaction.portfolio_id == portfolio_id)
-        result = await self.db.execute(stmt)
+        result = await self._session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
     async def create_cashflow(
         self,
         cashflow: CalculatedCashflow | Cashflow,
     ) -> StoredCashflow:
-        """
-        Saves a new Cashflow record to the database within a managed transaction.
-        """
+        """Stage a cashflow or return the existing transaction/epoch row."""
         cashflow_row = _to_cashflow_row(cashflow)
         try:
-            async with self.db.begin_nested():
-                self.db.add(cashflow_row)
-                await self.db.flush()
-            await self.db.refresh(cashflow_row)
+            async with self._session.begin_nested():
+                self._session.add(cashflow_row)
+                await self._session.flush()
+            await self._session.refresh(cashflow_row)
             logger.info(
                 "Successfully staged cashflow record for transaction_id '%s' in epoch %s",
                 cashflow_row.transaction_id,
@@ -64,7 +60,7 @@ class SqlAlchemyCashflowRepository:
                 cashflow_row.transaction_id,
                 cashflow_row.epoch,
             )
-            result = await self.db.execute(
+            result = await self._session.execute(
                 select(Cashflow).where(
                     Cashflow.transaction_id == cashflow_row.transaction_id,
                     Cashflow.epoch == cashflow_row.epoch,
@@ -74,11 +70,10 @@ class SqlAlchemyCashflowRepository:
             if existing_cashflow is None:
                 raise
             return _to_stored_cashflow(existing_cashflow)
-        except Exception as e:
-            logger.error(
-                "An unexpected error occurred while staging cashflow for txn "
-                f"{cashflow_row.transaction_id}: {e}",
-                exc_info=True,
+        except Exception:
+            logger.exception(
+                "Unexpected error while staging cashflow for transaction_id '%s'",
+                cashflow_row.transaction_id,
             )
             raise
 
@@ -96,7 +91,7 @@ class SqlAlchemyCashflowRepository:
         }
         update_values["updated_at"] = func.now()
         cashflow_id = (
-            await self.db.execute(
+            await self._session.execute(
                 insert_statement.on_conflict_do_update(
                     constraint="_transaction_epoch_uc",
                     set_=update_values,
@@ -104,7 +99,7 @@ class SqlAlchemyCashflowRepository:
             )
         ).scalar_one()
         stored = (
-            await self.db.execute(select(Cashflow).where(Cashflow.id == cashflow_id))
+            await self._session.execute(select(Cashflow).where(Cashflow.id == cashflow_id))
         ).scalar_one()
         return _to_stored_cashflow(stored)
 

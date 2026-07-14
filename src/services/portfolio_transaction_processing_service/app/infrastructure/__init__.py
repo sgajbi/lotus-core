@@ -1,6 +1,7 @@
 """Concrete transaction processing infrastructure adapters."""
 
 from ..application.settlement_processing import UpstreamCashLegUnavailableError
+from .cashflow.persistence import SqlAlchemyCashflowRepository
 from .cashflow.rule_cache import CachedCashflowRule, CashflowRuleCache, CashflowRuleCacheState
 from .cashflow.rule_repository import (
     CashflowRuleSetVersion,
@@ -12,7 +13,6 @@ from .cashflow_calculation import (
     CashflowCalculator,
 )
 from .cashflow_processing_adapter import CashflowProcessingCompatibilityAdapter
-from .cashflow_repository import SqlAlchemyCashflowRepository
 from .cashflow_staging_workflow import (
     CashflowCalculationWorkflow,
     CashflowProcessingOutcome,
