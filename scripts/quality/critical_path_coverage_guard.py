@@ -26,6 +26,8 @@ if str(REPO_ROOT) not in sys.path:
 CONTRACT_PATH = Path("docs/standards/critical-path-coverage.v1.json")
 DEFAULT_REPORT_PATH = Path("output/coverage/critical-path-coverage-report.json")
 SCHEMA_VERSION = "critical-path-coverage.v1"
+CHANGED_CRITICAL_SOURCE_UNMEASURED = "CHANGED_CRITICAL_SOURCE_UNMEASURED"
+UNMEASURED_CRITICAL_FILE_POLICIES = {"fail_closed", "reported_requires_follow_up"}
 
 
 @dataclass(frozen=True)
@@ -242,6 +244,13 @@ def validate_contract(
         findings.append(
             {"changed_code_gate": "minimum_measured_line_coverage_percent must be non-negative"}
         )
+    if changed.get("unmeasured_critical_file_policy") not in UNMEASURED_CRITICAL_FILE_POLICIES:
+        findings.append(
+            {
+                "changed_code_gate": "invalid unmeasured_critical_file_policy",
+                "value": changed.get("unmeasured_critical_file_policy"),
+            }
+        )
 
     groups = contract.get("critical_path_groups")
     if not isinstance(groups, list) or not groups:
@@ -435,6 +444,15 @@ def evaluate_coverage_thresholds(report: dict[str, Any]) -> list[dict[str, objec
                 "line_coverage_percent": changed["measured_line_coverage_percent"],
                 "minimum": changed["minimum_measured_line_coverage_percent"],
             }
+        )
+    if changed["unmeasured_critical_file_policy"] == "fail_closed":
+        findings.extend(
+            {
+                "code": CHANGED_CRITICAL_SOURCE_UNMEASURED,
+                "critical_path_groups": unmeasured["critical_path_groups"],
+                "path": unmeasured["path"],
+            }
+            for unmeasured in changed["unmeasured_critical_changed_files"]
         )
     return findings
 

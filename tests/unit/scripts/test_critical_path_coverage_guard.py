@@ -101,6 +101,18 @@ def test_contract_validation_rejects_unknown_manifest_suite() -> None:
     } in findings
 
 
+def test_contract_validation_rejects_unknown_unmeasured_file_policy() -> None:
+    contract = _minimal_contract()
+    contract["changed_code_gate"]["unmeasured_critical_file_policy"] = "ignore"
+
+    findings = guard.validate_contract(contract=contract)
+
+    assert {
+        "changed_code_gate": "invalid unmeasured_critical_file_policy",
+        "value": "ignore",
+    } in findings
+
+
 def test_changed_code_report_classifies_measured_and_unmeasured_critical_files() -> None:
     report = guard.build_coverage_report(
         contract=_minimal_contract(),
@@ -142,6 +154,24 @@ def test_threshold_evaluation_rejects_low_measured_critical_group_coverage() -> 
         "changed_code": "measured critical changed-code coverage below minimum",
         "line_coverage_percent": 80.0,
         "minimum": 90.0,
+    } in findings
+
+
+def test_threshold_evaluation_fails_closed_for_unmeasured_changed_critical_source() -> None:
+    contract = _minimal_contract()
+    contract["changed_code_gate"]["unmeasured_critical_file_policy"] = "fail_closed"
+    report = guard.build_coverage_report(
+        contract=contract,
+        coverage_json=_coverage_payload(covered_lines=10, statements=10),
+        changed_files=[ChangedSourceFile("A", SourceChangeType.ADDED, "src/app/not_measured.py")],
+    )
+
+    findings = guard.evaluate_coverage_thresholds(report)
+
+    assert {
+        "code": guard.CHANGED_CRITICAL_SOURCE_UNMEASURED,
+        "critical_path_groups": "demo_critical_path",
+        "path": "src/app/not_measured.py",
     } in findings
 
 
