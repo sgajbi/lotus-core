@@ -26,6 +26,7 @@ from src.services.portfolio_transaction_processing_service.app.infrastructure im
     StagedCostEffects,
 )
 from src.services.portfolio_transaction_processing_service.app.ports import (
+    CorporateActionReconciliationRepository,
     CostBasisInstrumentReference,
     CostBasisPortfolioReference,
     CostBasisReferenceDataPort,
@@ -68,6 +69,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         asset_class="EQUITY",
     )
     outbox_repository = AsyncMock(spec=OutboxRepository)
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow = MagicMock()
     workflow.stage_prepared_event = AsyncMock(
         return_value=StagedCostEffects(
@@ -79,6 +81,7 @@ async def test_cost_adapter_maps_domain_and_returns_every_processed_leg() -> Non
         workflow=workflow,
         repository=repository,
         reference_data=reference_data,
+        reconciliation_repository=reconciliation_repository,
         outbox_repository=outbox_repository,
     )
 
@@ -118,11 +121,13 @@ async def test_cost_adapter_maps_missing_reference_data_to_retryable_application
     )
     repository = AsyncMock(spec=CostCalculatorRepository)
     reference_data = AsyncMock(spec=CostBasisReferenceDataPort)
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     reference_data.get_cost_basis_portfolio.return_value = None
     adapter = CostProcessingCompatibilityAdapter(
         workflow=MagicMock(),
         repository=repository,
         reference_data=reference_data,
+        reconciliation_repository=reconciliation_repository,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )
 
@@ -162,6 +167,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         asset_class="EQUITY",
     )
     workflow = MagicMock()
+    reconciliation_repository = AsyncMock(spec=CorporateActionReconciliationRepository)
     workflow.stage_prepared_event = AsyncMock(
         side_effect=SettlementCashValidationError(
             reason_code=(SettlementCashRejectionReasonCode.SELL_NON_POSITIVE_NET_SETTLEMENT),
@@ -176,6 +182,7 @@ async def test_cost_adapter_maps_settlement_rejection_to_non_retryable_error() -
         workflow=workflow,
         repository=repository,
         reference_data=reference_data,
+        reconciliation_repository=reconciliation_repository,
         outbox_repository=AsyncMock(spec=OutboxRepository),
     )
 
