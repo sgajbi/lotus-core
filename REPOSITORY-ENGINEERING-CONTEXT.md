@@ -91,8 +91,9 @@ Current repository posture:
    rename/copy/delete lineage, coverage evaluates only post-change files, and current changed
    critical modules fail closed when absent from the measured-source artifact or when measured
    coverage cannot establish Git comparison evidence. Contract-only validation does not require
-   changed-source history. Measured changed critical modules enforce both line and branch
-   thresholds. Query Service
+   changed-source history. Selection follows contract globs across all governed Python paths, not
+   only `src/`; changed Alembic migrations use the `./alembic` coverage source and exact-path JSON
+   inclusion. Measured changed critical modules enforce both line and branch thresholds. Query Service
    aggregate evidence remains separate at `output/coverage/query-service-coverage.json`, so
    aggregate, changed-code, and critical-path coverage cannot be conflated. Risk-based test-family
    coverage governance lives in

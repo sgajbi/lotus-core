@@ -360,7 +360,8 @@ Coverage posture:
   Rename/copy records preserve previous and current paths, deleted paths are audit-only, and an
   existing changed critical module absent from coverage fails with
   `CHANGED_CRITICAL_SOURCE_UNMEASURED`. Measured changed critical modules must satisfy both the
-  governed line and branch thresholds.
+  governed line and branch thresholds. Contract matching covers governed Python paths outside
+  `src/`, including exact changed Alembic migrations.
 - `docs/standards/critical-path-coverage.v1.json` is the governed contract for critical-path
   module groups, source scopes, minimum measured coverage expectations, test-family expectations,
   fail-closed changed-source evidence, and exception policy.
