@@ -217,6 +217,21 @@ def test_workflows_opt_into_node24_action_runtime() -> None:
     assert missing_opt_in == []
 
 
+def test_api_governance_node_cache_is_bound_to_owned_lockfile() -> None:
+    workflow = (
+        yaml.safe_load(Path(".github/workflows/quality-baseline.yml").read_text(encoding="utf-8"))
+        or {}
+    )
+    steps = workflow["jobs"]["api-governance-gate"]["steps"]
+    setup_node = next(step for step in steps if step.get("uses") == "actions/setup-node@v6")
+
+    assert setup_node["with"] == {
+        "node-version": "${{ env.NODE_VERSION }}",
+        "cache": "npm",
+        "cache-dependency-path": "tools/api_governance/package-lock.json",
+    }
+
+
 def test_runtime_latency_gates_use_bounded_demo_seed_history() -> None:
     for workflow_path in GOVERNED_RUNTIME_WORKFLOWS:
         workflow_text = workflow_path.read_text(encoding="utf-8")
