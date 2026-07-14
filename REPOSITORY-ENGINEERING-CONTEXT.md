@@ -1807,9 +1807,10 @@ Most relevant current governance:
      transaction processing and booked-transaction replay use-case tests belong under the sibling
      `application` package and use production-aligned module names. Domain package-structure guards
      belong under the matching `domain/<capability>` test package. Cross-layer legacy import and
-     retired-facade confinement belongs under the service's `architecture` test package. Do not
-     return delivery, runtime, application behavior, domain-structure, or cross-layer architecture
-     tests to the flat service-test root.
+     retired-facade confinement belongs under the service's `architecture` test package. Runtime
+     wheel, Docker source-closure, and image contract tests belong under the service's `packaging`
+     test package. Do not return delivery, runtime, application behavior, domain-structure,
+     cross-layer architecture, or packaging tests to the flat service-test root.
      Consumer lag must be observed only after a successful offset commit using cached Kafka high
      watermarks. Keep lag labels bounded to service/topic/group/partition, never query the broker per
      message, and isolate missing watermark or metric failures from transaction outcomes.
