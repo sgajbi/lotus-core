@@ -2,7 +2,8 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; deployable consolidation and interruption recovery fixed locally, load/release certification pending
+Status: In progress; deployable consolidation, interruption recovery, and aggregation fan-in
+certification fixed locally; remaining workload/release certification pending
 
 ## Objective
 
@@ -114,6 +115,7 @@ compatibility package.
 | Durable position-to-portfolio latency evidence | none | one sample per portfolio/date/epoch |
 | Missing latency evidence posture | report could remain green | stage sample counts fail closed |
 | DB/container workload resource evidence | none | peak connection, lock, CPU, and memory samples |
+| Certifying 1,000-position fan-in | none | exact outputs, clean reconciliation, no lock contention |
 
 The generator test count initially stayed stable because database-heavy consumer scenarios moved
 to application and infrastructure owners instead of being deleted; it now includes an additional
@@ -250,6 +252,20 @@ cross-window state.
   position-to-portfolio p95 was `1.80691335s`, five resource samples completed with no sampling
   errors, peak DB connections were 19, and no lock waiter or blocked session was observed. This is
   orchestration evidence only and is not accepted as daily/fan-in capacity proof.
+- Exact-source certifying fan-in run `20260715T100128Z` completed in `231.148s`: 1,000
+  transactions produced exactly 1,000 snapshots, 1,000 position-timeseries rows, and one
+  portfolio-timeseries row. Valuation-to-position p50/p95/p99/max was
+  `2.895919s`/`5.6004667s`/`8.03734857s`/`8.410595s`; the one portfolio-stage sample completed in
+  `1.723829s`. All queues closed, expected quantity and market value tied exactly, reconciliation
+  had zero findings, and inspected services had zero error lines.
+- The corrected resource query produced 33 error-free samples with peak 24 database connections,
+  three active connections, four idle-in-transaction connections, zero lock waiters, zero blocked
+  sessions, `77.05%` combined-runtime CPU, and `92,148,858` bytes memory. Run
+  `20260715T095358Z` remains valid for output/latency evidence, but its blocked-session sample is
+  superseded because its first lock query excluded transaction-ID waits.
+- The configured aggregation lease is `900s`, over 500 times the measured fan-in portfolio-stage
+  maximum. Fan-in alone does not justify heartbeat renewal; that remains a provisional conclusion
+  until backdated and failure profiles measure the longest owned aggregation execution.
 - Signed commit `dbdd729ed` adds a managed interruption gate that pauses the exact unified
   container, proves source snapshots and committed lag accumulate, then requires exact output
   counts, closed valuation/aggregation queues, baseline lag recovery, zero reconciliation
@@ -293,10 +309,9 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Run the managed daily and fan-in profiles plus burst and backdated profiles, then compare both
-   stage p50/p95/p99/max results
-   against the configured lease duration. Use those measured job durations to decide whether fixed
-   expiry is sufficient or heartbeat renewal is required.
+1. Run the managed daily, burst, and backdated profiles, then compare both stage p50/p95/p99/max
+   results against the configured lease duration. Use the longest measured owned-job duration to
+   finalize whether fixed expiry is sufficient or heartbeat renewal is required.
 2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
    validation before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can

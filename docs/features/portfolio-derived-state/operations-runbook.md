@@ -46,11 +46,18 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 
 ## 4. Gaps and Design Considerations
 
-Daily, price/FX burst, backdated, fan-in, release, and rollback certification remains required
-before #714 closure. Resource sampling is now reusable across those profiles, but source tests do
-not substitute for measured runtime evidence. Runtime consolidation does not permit position and
-portfolio workload metrics to lose their separate attribution.
+The exact-source fan-in profile is certified locally: 1,000 transactions produced exactly 1,000
+snapshots, 1,000 position rows, and one portfolio row with clean reconciliation, closed queues,
+zero lock waiters, and zero blocked sessions. Its portfolio-stage maximum was `1.723829s` against a
+`900s` aggregation lease. This does not certify daily, price/FX burst, backdated, release, or
+rollback behavior, and it does not yet close the fixed-lease versus heartbeat decision.
+
+Daily, price/FX burst, backdated, release, and rollback certification remains required before #714
+closure. Runtime consolidation does not permit position and portfolio workload metrics to lose
+their separate attribution.
 
 Run `make profile-derived-state-daily` and `make profile-derived-state-fan-in` for the two managed
 certifying shapes. `make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
-used as daily-volume, fan-in, lease-duration, or production-capacity evidence.
+used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
+with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
+clean reconciliation, and no failures as profile evidence.

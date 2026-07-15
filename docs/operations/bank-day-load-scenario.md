@@ -147,6 +147,14 @@ operator rules for this harness:
    main lag can sit between valuation completion and position-timeseries breadth rather than in
    portfolio aggregation.
 
+The exact-source certifying fan-in run `20260715T100128Z` proved the one-portfolio x 1,000-position
+shape. It produced exact transaction/snapshot/position counts and one reconciled portfolio row,
+closed both durable queues, and reported zero service-log errors. Valuation-to-position
+p50/p95/p99/max was `2.895919s`/`5.6004667s`/`8.03734857s`/`8.410595s`; portfolio aggregation
+completed in `1.723829s`. Across 33 complete resource samples, peaks were 24 database connections,
+three active connections, four idle-in-transaction connections, zero lock waiters, zero blocked
+sessions, `77.05%` combined-runtime CPU, and `92,148,858` bytes memory.
+
 For completed runs that already converged, use
 `python scripts/operations/bank_day_load_reconciliation_report.py --run-id <run_id> --business-date <YYYY-MM-DD>`
 to collect sampled or exhaustive reconciliation evidence without reseeding data. Increase
