@@ -1,5 +1,6 @@
 from scripts.quality.ci_service_sets import (
     DERIVED_STATE_RECOVERY_GATE_SERVICES,
+    DERIVED_STATE_WORKLOAD_GATE_SERVICES,
     DOCKER_SMOKE_SERVICES,
     E2E_RECOVERY_HEALTH_PORT_ENV,
     E2E_RECOVERY_SERVICES,
@@ -34,6 +35,7 @@ def test_runtime_prebuild_groups_include_schema_and_topic_bootstrap_images() -> 
         PERFORMANCE_GATE_SERVICES,
         FAILURE_RECOVERY_GATE_SERVICES,
         DERIVED_STATE_RECOVERY_GATE_SERVICES,
+        DERIVED_STATE_WORKLOAD_GATE_SERVICES,
     )
 
     for group in runtime_groups:
@@ -54,6 +56,7 @@ def test_compose_runtime_sets_use_only_the_combined_transaction_processor() -> N
         PERFORMANCE_GATE_SERVICES,
         FAILURE_RECOVERY_GATE_SERVICES,
         DERIVED_STATE_RECOVERY_GATE_SERVICES,
+        DERIVED_STATE_WORKLOAD_GATE_SERVICES,
         E2E_RECOVERY_SERVICES,
     ):
         assert target in group
@@ -73,6 +76,7 @@ def test_runtime_sets_and_images_use_one_portfolio_derived_state_service() -> No
         LATENCY_GATE_SERVICES,
         INSTITUTIONAL_COMPLETION_GATE_SERVICES,
         DERIVED_STATE_RECOVERY_GATE_SERVICES,
+        DERIVED_STATE_WORKLOAD_GATE_SERVICES,
         E2E_RECOVERY_SERVICES,
     ):
         assert target in group
