@@ -3,6 +3,7 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import (
     GOVERNED_EVENT_SCHEMA_VERSION,
     PortfolioDayReadyForValuationEvent,
@@ -138,7 +139,9 @@ async def test_readiness_event_is_noop_when_already_processed(
     mock_idempotency_repo.mark_event_processed.assert_not_called()
 
 
-async def test_invalid_payload_is_sent_to_dlq(consumer: ValuationReadinessConsumer):
+async def test_invalid_payload_is_raised_to_shared_recovery_boundary(
+    consumer: ValuationReadinessConsumer,
+):
     msg = MagicMock()
     msg.value.return_value = json.dumps({"portfolio_id": "x"}).encode("utf-8")
     msg.key.return_value = b"bad"
@@ -147,9 +150,10 @@ async def test_invalid_payload_is_sent_to_dlq(consumer: ValuationReadinessConsum
     msg.offset.return_value = 2
     msg.headers.return_value = []
 
-    await consumer.process_message(msg)
+    with pytest.raises(EventContractValidationError):
+        await consumer.process_message(msg)
 
-    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 async def test_readiness_event_uses_header_correlation_for_direct_processing(

@@ -9,6 +9,7 @@ from portfolio_common.events import (
     FinancialReconciliationRequestedEvent,
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.financial_reconciliation_service.app.consumers import (
@@ -204,7 +205,7 @@ async def test_reconciliation_request_is_noop_when_already_processed(
     mock_idempotency_repo.mark_event_processed.assert_not_called()
 
 
-async def test_invalid_reconciliation_request_payload_is_sent_to_dlq(
+async def test_invalid_reconciliation_request_is_raised_to_shared_recovery_boundary(
     consumer: consumer_module.ReconciliationRequestedConsumer,
 ):
     msg = MagicMock()
@@ -215,9 +216,10 @@ async def test_invalid_reconciliation_request_payload_is_sent_to_dlq(
     msg.offset.return_value = 8
     msg.headers.return_value = []
 
-    await consumer.process_message(msg)
+    with pytest.raises(ValidationError):
+        await consumer.process_message(msg)
 
-    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 async def test_reconciliation_request_preserves_payload_correlation_over_header_override(

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from portfolio_common.events import FxRateEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.consumers.fx_rate_consumer import FxRateConsumer
@@ -119,9 +120,9 @@ async def test_process_message_sends_nonpositive_fx_rate_to_dlq(
     with patch.object(
         fx_rate_consumer, "_send_to_dlq_async", new_callable=AsyncMock
     ) as mock_send_to_dlq:
-        with pytest.raises(ValueError, match="Poison pill"):
+        with pytest.raises(ValidationError):
             await fx_rate_consumer.process_message(mock_kafka_message)
 
     mock_idempotency_repo.claim_event_processing.assert_not_called()
     mock_repo.upsert_fx_rate.assert_not_called()
-    mock_send_to_dlq.assert_awaited_once()
+    mock_send_to_dlq.assert_not_awaited()

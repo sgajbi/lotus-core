@@ -46,25 +46,16 @@ class PositionTimeseriesConsumer(BaseConsumer):
         self._use_case = use_case
 
     async def process_message(self, msg: Message) -> None:
-        """Retry transient integrity races and terminally route exhausted delivery."""
+        """Retry transient integrity races and surface exhausted delivery."""
 
         retry_config = retry(
             wait=wait_fixed(3),
             stop=stop_after_attempt(15),
             before=before_log(logger, logging.INFO),
             retry=retry_if_exception_type(IntegrityError),
+            reraise=True,
         )
-        try:
-            await retry_config(self._process_message_with_retry)(msg)
-        except Exception as error:
-            logger.error(
-                "Position-timeseries delivery exhausted retries for %s-%s-%s.",
-                msg.topic(),
-                msg.partition(),
-                msg.offset(),
-                exc_info=True,
-            )
-            await self._send_to_dlq_async(msg, error)
+        await retry_config(self._process_message_with_retry)(msg)
 
     async def _process_message_with_retry(self, msg: Message) -> None:
         try:
@@ -91,15 +82,15 @@ class PositionTimeseriesConsumer(BaseConsumer):
                         "dependent_propagation_truncated": (result.dependent_propagation_truncated),
                     },
                 )
-        except (json.JSONDecodeError, ValidationError) as error:
+        except (json.JSONDecodeError, ValidationError):
             logger.error("Position snapshot event validation failed.", exc_info=True)
-            await self._send_to_dlq_async(msg, error)
+            raise
         except IntegrityError:
             logger.warning("Position-timeseries persistence raced; retrying.", exc_info=True)
             raise
-        except Exception as error:
+        except Exception:
             logger.error("Position-timeseries materialization failed.", exc_info=True)
-            await self._send_to_dlq_async(msg, error)
+            raise
 
 
 def _message_value(msg: Message) -> str:

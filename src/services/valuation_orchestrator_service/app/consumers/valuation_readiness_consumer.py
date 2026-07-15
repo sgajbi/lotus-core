@@ -57,11 +57,11 @@ class ValuationReadinessConsumer(BaseConsumer):
                             correlation_id=correlation_id,
                         )
         except (json.JSONDecodeError, ValidationError, EventContractValidationError):
-            logger.error("Invalid valuation readiness payload; sending to DLQ.", exc_info=True)
-            await self._send_to_dlq_async(msg, ValueError("invalid payload"))
+            logger.error("Invalid valuation readiness payload.", exc_info=True)
+            raise
         except (DBAPIError, IntegrityError):
             logger.warning("DB error in valuation readiness consumer; retrying.")
             raise
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception:  # pragma: no cover - defensive
             logger.error("Unexpected valuation readiness consumer error.", exc_info=True)
-            await self._send_to_dlq_async(msg, exc)
+            raise

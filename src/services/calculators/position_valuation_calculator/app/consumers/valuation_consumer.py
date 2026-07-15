@@ -58,13 +58,13 @@ class ValuationConsumer(BaseConsumer):
                 self._log_valuation_job_start(event)
                 await self._valuation_processor.process_valid_event(event, event_id, correlation_id)
 
-        except (json.JSONDecodeError, ValidationError) as exc:
+        except (json.JSONDecodeError, ValidationError):
             logger.error(
-                "Message validation failed for key '%s'. Sending to DLQ.",
+                "Message validation failed for key '%s'.",
                 key,
                 exc_info=True,
             )
-            await self._send_to_dlq_async(msg, exc)
+            raise
         except (DBAPIError, OperationalError) as exc:
             logger.warning(
                 "DB or data availability error for event %s: %s. Retrying...",
@@ -75,13 +75,13 @@ class ValuationConsumer(BaseConsumer):
             raise
         except Exception as exc:
             logger.error(
-                "Unexpected error processing message with key '%s'. Sending to DLQ.",
+                "Unexpected error processing message with key '%s'.",
                 key,
                 exc_info=True,
             )
             if event:
                 await self._valuation_processor.mark_failed_after_unexpected_error(event, exc)
-            await self._send_to_dlq_async(msg, exc)
+            raise
 
     @staticmethod
     def _log_valuation_job_start(event: PortfolioValuationRequiredEvent) -> None:

@@ -1,6 +1,7 @@
 # src/services/valuation_orchestrator_service/app/consumers/price_event_consumer.py
 import json
 import logging
+from typing import cast
 
 from confluent_kafka import Message
 from portfolio_common.db import get_async_db_session
@@ -107,11 +108,9 @@ class PriceEventConsumer(BaseConsumer):
                             correlation_id=event_correlation_id,
                         )
 
-        except (json.JSONDecodeError, ValidationError, EventContractValidationError) as e:
-            logger.error(
-                f"Message validation failed for key '{key}'. Sending to DLQ.", exc_info=True
-            )
-            await self._send_to_dlq_async(msg, e)
+        except (json.JSONDecodeError, ValidationError, EventContractValidationError):
+            logger.error(f"Message validation failed for key '{key}'.", exc_info=True)
+            raise
         except (DBAPIError, OperationalError) as e:
             logger.warning(
                 "Database error while processing price event for "
@@ -119,12 +118,12 @@ class PriceEventConsumer(BaseConsumer):
                 exc_info=False,
             )
             raise
-        except Exception as e:
+        except Exception:
             logger.error(
-                f"Unexpected error processing message with key '{key}'. Sending to DLQ.",
+                f"Unexpected error processing message with key '{key}'.",
                 exc_info=True,
             )
-            await self._send_to_dlq_async(msg, e)
+            raise
 
     async def _queue_immediate_valuation_jobs(
         self,
@@ -138,8 +137,11 @@ class PriceEventConsumer(BaseConsumer):
         if latest_business_date is None or event.price_date > latest_business_date:
             return []
 
-        open_position_keys = await valuation_repo.find_open_position_keys_for_security_on_date(
-            event.security_id, event.price_date
+        open_position_keys = cast(
+            list[tuple[str, str, int]],
+            await valuation_repo.find_open_position_keys_for_security_on_date(
+                event.security_id, event.price_date
+            ),
         )
         for portfolio_id, security_id, epoch in open_position_keys:
             await job_repo.upsert_job(
