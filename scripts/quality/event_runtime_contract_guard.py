@@ -24,6 +24,18 @@ RUNTIME_BOUNDARY_CATALOG_PATH = (
     REPO_ROOT / "docs" / "architecture" / "runtime-boundary-decision-catalog.json"
 )
 TECHNICAL_EVENT_ACTORS = frozenset({"BaseConsumer"})
+GOVERNED_DLQ_PUBLICATION_BOUNDARIES = frozenset(
+    {
+        (
+            "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+            "_recover_exhausted_retryable_failure",
+        ),
+        (
+            "src/libs/portfolio-common/portfolio_common/kafka_consumer.py",
+            "_handle_terminal_processing_error",
+        ),
+    }
+)
 EXCLUDED_SOURCE_DIRECTORY_NAMES = frozenset(
     {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "build", "dist"}
 )
@@ -63,6 +75,18 @@ class ConsumerDlqTopicWiring:
     @property
     def diagnostic_key(self) -> str:
         return f"{self.source}:{self.function_name}: {self.consumer_name}"
+
+
+@dataclass(frozen=True)
+class ConsumerDlqPublication:
+    """A direct call into the shared consumer's terminal DLQ publisher."""
+
+    source: str
+    function_name: str
+
+    @property
+    def diagnostic_key(self) -> str:
+        return f"{self.source}:{self.function_name}"
 
 
 def _literal_string(node: ast.AST) -> str | None:
@@ -167,6 +191,7 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
         self.emissions: list[OutboxEventEmission] = []
         self.direct_publishes: list[DirectKafkaPublish] = []
         self.consumer_dlq_wirings: list[ConsumerDlqTopicWiring] = []
+        self.consumer_dlq_publications: list[ConsumerDlqPublication] = []
         self._topic_bindings_stack: list[dict[str, str]] = [{}]
         self._consumer_factory_bindings_stack: list[dict[str, str]] = [{}]
 
@@ -197,6 +222,13 @@ class _OutboxEmissionVisitor(ast.NodeVisitor):
                     )
                 )
         call_name = _call_name(node)
+        if call_name == "_send_to_dlq_async":
+            self.consumer_dlq_publications.append(
+                ConsumerDlqPublication(
+                    source=self.source,
+                    function_name=self.function_name,
+                )
+            )
         consumer_name = self._consumer_factory_bindings.get(call_name or "", call_name)
         dlq_topic_node = _call_keyword_value(node, "dlq_topic")
         if consumer_name in self.consumer_class_names and dlq_topic_node is not None:
@@ -345,6 +377,22 @@ def discover_consumer_dlq_topic_wirings(
     )
 
 
+def discover_consumer_dlq_publications(
+    source_root: Path = SOURCE_ROOT,
+) -> tuple[ConsumerDlqPublication, ...]:
+    """Find direct DLQ publication calls across runtime source."""
+
+    publications: list[ConsumerDlqPublication] = []
+    consumer_class_names = _discover_consumer_class_names(source_root)
+    for source_file in _python_source_files(source_root):
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+        source = _source_label(source_file, source_root)
+        visitor = _OutboxEmissionVisitor(source, consumer_class_names=consumer_class_names)
+        visitor.visit(tree)
+        publications.extend(visitor.consumer_dlq_publications)
+    return tuple(sorted(set(publications), key=lambda item: item.diagnostic_key))
+
+
 def _discover_consumer_class_names(source_root: Path = SOURCE_ROOT) -> set[str]:
     class_bases: dict[str, set[str]] = {}
     for source_file in _python_source_files(source_root):
@@ -426,6 +474,7 @@ def evaluate_outbox_event_contracts(
         DirectKafkaTopicDefinition, ...
     ] = DIRECT_KAFKA_TOPIC_DEFINITIONS,
     consumer_dlq_wirings: tuple[ConsumerDlqTopicWiring, ...] | None = None,
+    consumer_dlq_publications: tuple[ConsumerDlqPublication, ...] | None = None,
     runtime_service_ids: frozenset[str] | None = None,
 ) -> list[str]:
     errors: list[str] = []
@@ -457,6 +506,11 @@ def evaluate_outbox_event_contracts(
         discover_consumer_dlq_topic_wirings()
         if consumer_dlq_wirings is None
         else consumer_dlq_wirings
+    )
+    consumer_dlq_publications = (
+        discover_consumer_dlq_publications()
+        if consumer_dlq_publications is None
+        else consumer_dlq_publications
     )
     definitions_by_event_type = {
         definition.event_type: definition for definition in event_definitions
@@ -495,6 +549,14 @@ def evaluate_outbox_event_contracts(
             errors.append(
                 f"{wiring.diagnostic_key} wires DLQ topic {wiring.topic!r} missing from the "
                 "RFC-0083 direct Kafka topic catalog"
+            )
+
+    for publication in consumer_dlq_publications:
+        boundary = (publication.source, publication.function_name)
+        if boundary not in GOVERNED_DLQ_PUBLICATION_BOUNDARIES:
+            errors.append(
+                f"{publication.diagnostic_key} publishes directly to the consumer DLQ; "
+                "raise the failure so BaseConsumer owns DLQ confirmation and offset commit"
             )
 
     return errors

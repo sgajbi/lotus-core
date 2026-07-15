@@ -60,6 +60,38 @@ def test_discover_consumer_dlq_wirings_finds_current_base_consumer_topics() -> N
     assert "BookedTransactionReplayRequestConsumer" in consumer_names
 
 
+def test_current_consumers_delegate_terminal_dlq_publication_to_shared_boundary() -> None:
+    publications = guard.discover_consumer_dlq_publications()
+
+    assert {(item.source, item.function_name) for item in publications} == set(
+        guard.GOVERNED_DLQ_PUBLICATION_BOUNDARIES
+    )
+
+
+def test_event_runtime_guard_rejects_consumer_owned_dlq_publication(tmp_path: Path) -> None:
+    source_file = tmp_path / "service_consumer.py"
+    source_file.write_text(
+        """
+async def process_message(self, msg):
+    await self._send_to_dlq_async(msg, ValueError("invalid payload"))
+""",
+        encoding="utf-8",
+    )
+    publications = guard.discover_consumer_dlq_publications(source_root=tmp_path)
+
+    errors = guard.evaluate_outbox_event_contracts(
+        emissions=(),
+        direct_publishes=(),
+        consumer_dlq_wirings=(),
+        consumer_dlq_publications=publications,
+    )
+
+    assert errors == [
+        "service_consumer.py:process_message publishes directly to the consumer DLQ; "
+        "raise the failure so BaseConsumer owns DLQ confirmation and offset commit"
+    ]
+
+
 def test_evaluate_outbox_event_contracts_accepts_current_runtime_emissions() -> None:
     assert guard.evaluate_outbox_event_contracts() == []
 
