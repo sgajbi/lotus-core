@@ -7,6 +7,10 @@ from collections.abc import Sequence
 from typing import Any
 
 import uvicorn
+from portfolio_common.config import (
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+)
 from portfolio_common.kafka_admin import ensure_topics_exist
 from portfolio_common.kafka_utils import get_kafka_producer
 from portfolio_common.outbox_dispatcher import OutboxDispatcher
@@ -47,6 +51,10 @@ class ConsumerManager:
     async def run(self) -> None:
         await run_kafka_worker_runtime(
             consumers=self.consumers,
+            published_topics=(
+                KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+                KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+            ),
             dispatcher=self.dispatcher,
             web_app=web_app,
             web_port=8085,

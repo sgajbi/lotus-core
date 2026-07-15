@@ -8,6 +8,7 @@ from portfolio_common.config import (
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -70,7 +71,10 @@ class ConsumerManager:
     async def run(self):
         ensure_topics_exist(
             [consumer.topic for consumer in self.consumers]
-            + [KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC]
+            + [
+                KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
+                KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
+            ]
         )
 
         signal.signal(signal.SIGINT, self._signal_handler)

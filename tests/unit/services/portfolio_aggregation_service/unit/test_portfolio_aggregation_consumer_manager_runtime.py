@@ -102,6 +102,28 @@ async def test_consumer_manager_honors_configured_consumer_pool(_patch_runtime, 
     ]
 
 
+async def test_consumer_manager_ensures_consumed_and_owned_output_topics(
+    _patch_runtime, monkeypatch
+):
+    ensured_topics = []
+    monkeypatch.setattr(
+        consumer_manager,
+        "ensure_topics_exist",
+        lambda topics: ensured_topics.extend(topics),
+    )
+    monkeypatch.setattr(consumer_manager, "PortfolioTimeseriesConsumer", _FakeSuccessConsumer)
+    manager = consumer_manager.ConsumerManager()
+    manager._shutdown_event.set()
+
+    await manager.run()
+
+    assert ensured_topics == [
+        consumer_manager.KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
+        consumer_manager.KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
+        consumer_manager.KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
+    ]
+
+
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "PortfolioTimeseriesConsumer", _FakeFailingConsumer)
     manager = consumer_manager.ConsumerManager()
