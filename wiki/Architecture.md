@@ -81,8 +81,9 @@ Control execution and reconciliation run contracts.
 - one framework-neutral ordinary transaction domain for BUY, SELL, DIVIDEND, and INTEREST booking
   metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing;
   delivery and infrastructure map governed event DTOs at the boundary
-- one authoritative `transactions.cost.processed` completion input to pipeline readiness; the
-  retained `cashflows.calculated` compatibility fact is not a second prerequisite
+- transaction readiness and valuation readiness staged directly after cost, position, and cashflow
+  effects succeed in the same unit of work; retained `transactions.cost.processed` and
+  `cashflows.calculated` compatibility facts have no active in-repo consumer
 - independently scalable position valuation worker
 - timeseries generator
 

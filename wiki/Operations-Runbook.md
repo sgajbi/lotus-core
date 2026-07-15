@@ -49,10 +49,13 @@ make test-performance-load-gate
 Treat load-gate throughput as completed cost/cashflow/position processing. Request submission rate
 alone is not capacity evidence. Keep the target and legacy topologies mutually exclusive.
 
-`pipeline_orchestrator_service` consumes `transactions.cost.processed` as the authoritative atomic
-completion fact. It does not consume `cashflows.calculated`. Investigate target outbox dispatch,
-`pipeline_orchestrator_processed_txn_group` lag, and pipeline stage claims when valuation readiness
-is delayed; do not restore the retired cashflow consumer group as a recovery action.
+`portfolio_transaction_processing_service` stages transaction and valuation readiness after cost,
+position, and cashflow effects succeed in one database transaction. Neither
+`transactions.cost.processed` nor `cashflows.calculated` has an active in-repo consumer. When
+valuation readiness is delayed, inspect the target transaction-processing result, readiness-stage
+claim, database transaction rollback, and outbox dispatch. Do not restore a compatibility-event
+consumer group as a recovery action. `pipeline_orchestrator_service` participates later in
+portfolio aggregation-to-reconciliation and reconciliation-to-controls coordination only.
 
 ## Preferred diagnostics
 

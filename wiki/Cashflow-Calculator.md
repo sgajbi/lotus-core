@@ -121,9 +121,10 @@ These outputs feed:
 - transaction-to-cashflow reconciliation controls
 - support and replay investigations
 
-No active in-repo consumer waits for `cashflows.calculated`. Pipeline readiness is driven by the
-atomic `transactions.cost.processed` completion fact, so restoring a cashflow readiness consumer
-would reintroduce redundant ordering and lag failure modes.
+No active in-repo consumer waits for `cashflows.calculated` or `transactions.cost.processed`.
+Transaction readiness is staged directly after cost, position, and cashflow effects succeed in the
+same unit of work, so restoring a compatibility-event readiness consumer would reintroduce
+redundant ordering and lag failure modes.
 
 ## Why it matters
 
