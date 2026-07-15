@@ -41,9 +41,7 @@ FORBIDDEN_SCHEDULER_SNIPPETS = {
     "set_control_queue_oldest_pending_age_seconds": (
         "metric functions belong behind the scheduler metrics sink"
     ),
-    "observe_control_queue_outcome": (
-        "metric functions belong behind the scheduler metrics sink"
-    ),
+    "observe_control_queue_outcome": ("metric functions belong behind the scheduler metrics sink"),
 }
 REQUIRED_ADAPTER_SNIPPETS = (
     "class SqlAlchemyAggregationSchedulerRepositoryProvider",
