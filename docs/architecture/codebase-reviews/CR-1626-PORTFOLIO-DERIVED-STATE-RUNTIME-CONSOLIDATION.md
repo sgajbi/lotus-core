@@ -47,7 +47,8 @@ Use the governed dependency direction for position-timeseries materialization:
 1. the Kafka adapter validates the source event and maps it to a framework-neutral command;
 2. `MaterializePositionTimeseries` coordinates current-day calculation and bounded backdated
    propagation;
-3. `PositionTimeseriesLogic` retains calculation policy;
+3. the pure `calculate_position_timeseries` function and immutable records own calculation policy
+   under `app/domain/position_timeseries`;
 4. a typed repository port carries immutable domain records and durable effects;
 5. the SQLAlchemy provider owns the transaction, ORM mapping, and aggregation-job staging.
 
@@ -89,7 +90,9 @@ compatibility package.
 | Framework-neutral application command/result | no | yes |
 | Typed position-timeseries repository/provider ports | no | yes |
 | Trigger-to-snapshot identity validation | no | yes |
-| Timeseries-generator unit tests | 42 | 42 |
+| Timeseries-generator unit tests | 42 | 43 |
+| Position-timeseries calculation package | legacy `app/core` class | pure domain function |
+| Position-timeseries domain tests coupled to ORM models | yes | no |
 | Portfolio aggregation consumer source lines | 209 | 81 |
 | Portfolio consumer-owned SQL/outbox/calculation concerns | yes | no |
 | Typed portfolio command/result/repository/calculator/UoW ports | no | yes |
@@ -104,9 +107,10 @@ compatibility package.
 | Claimed-job worker concurrency | Kafka partition/consumer pool | bounded application workers |
 | Terminal ownership predicate | portfolio/date/status | job id + lease token + status |
 
-The generator test count stayed stable because database-heavy consumer scenarios moved to
-application and infrastructure owners instead of being deleted. The aggregation count increased
-as source resolution and pure contribution invariants gained separate focused coverage.
+The generator test count initially stayed stable because database-heavy consumer scenarios moved
+to application and infrastructure owners instead of being deleted; it now includes an additional
+first-position-day domain invariant. The aggregation count increased as source resolution and pure
+contribution invariants gained separate focused coverage.
 
 ## Correctness And Performance
 
@@ -126,11 +130,21 @@ as source resolution and pure contribution invariants gained separate focused co
 - Portfolio arithmetic rejects mixed portfolios, future-date or future-epoch input, and duplicate
   security rows while preserving authoritative prior-state carry-forward.
 - Instrument reads remain batched and positive FX rates remain cached by currency pair and date.
+- Position-timeseries arithmetic is a framework-independent pure function over immutable domain
+  records; the legacy `app/core` package is retired and guarded against restoration.
 
 ## Compatibility
 
-No Kafka topic, event schema, database table, queue identity, calculation field, query/QCP API,
-OpenAPI schema, image, health endpoint, metric, or downstream response changed in this slice.
+External event schemas, queue identity, calculation fields, query/QCP APIs, OpenAPI schemas, images,
+health endpoints, metrics, and downstream responses remain compatible. The batch intentionally:
+
+1. added nullable lease owner/token/UTC-expiry fields and supporting queue constraints/indexes;
+2. retired the same-owner internal aggregation request topic, producer, and consumer after proving
+   there was no external consumer;
+3. retained the valuation-snapshot input and aggregation-completion/reconciliation output events.
+
+The deployable names, images, and health identities have not changed yet; those surfaces move
+atomically with the later combined-runtime cutover.
 
 Intentional fail-closed changes apply to:
 
@@ -183,14 +197,22 @@ cross-window state.
   calculation ownership change.
 - The repository documentation/wiki gate, application-port catalog guard, and `18` focused
   catalog/front-door/wiki guard tests passed after current handoff and ownership docs were aligned.
+- Signed commit `24e375327` moves position-timeseries models and arithmetic into the named domain
+  package, replaces the static `Logic` class with a pure function, decouples domain tests from ORM
+  models, and guards the retired `app/core` and flat record paths.
+- `43` tests collect in the complete timeseries-generator unit suite; the focused generator plus
+  package-ownership run passed `49` tests. Configured MyPy over `235` source files, Ruff,
+  architecture, domain-layer, application-dependency, and workflow-policy guards passed.
 
 ## Same-Pattern Review
 
-Both delivery paths are now thin and application-owned. Portfolio market-data enrichment and pure
-arithmetic have separate owners, and the retired legacy paths have no-return coverage. The next
-same-pattern target is the internal scheduler-to-Kafka-to-consumer command hop. It remains tracked
-by #714; no duplicate issue is required. The aggregation scheduler's typed provider, repository,
-clock, metric, and publication boundaries must not be flattened during consolidation.
+Both delivery paths are now thin and application-owned. Position and portfolio arithmetic are pure
+domain policies under explicitly named packages, source enrichment is application-owned, and the
+retired legacy paths have no-return coverage. The internal scheduler-to-Kafka-to-consumer command
+hop is already removed. The next same-pattern target is package and runtime composition under
+`portfolio_derived_state_service`; no duplicate issue is required. The position materializer and
+aggregation scheduler/processor must remain separately testable modules with independent
+concurrency and attributable metrics during consolidation.
 
 ## Documentation Decision
 
@@ -201,6 +223,9 @@ OpenAPI, supported-features, and migration material remain explicit no-change de
 deployable topology and public/operator contracts are still unchanged. Runtime-facing surfaces
 must change atomically with the later cutover. The additive lease-operation slice changes no
 runtime-facing surface and therefore requires no additional front-door, API, event, or wiki update.
+The position-domain package move updates only repository context and this review evidence; README,
+wiki, OpenAPI, operator runbooks, schemas, and supported-feature material remain explicit no-change
+decisions because calculation behavior and runtime topology are unchanged.
 
 ## Remaining Work
 
