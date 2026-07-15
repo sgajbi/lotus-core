@@ -68,8 +68,10 @@ false missing-reference failure.
 Resolve and cache instrument/FX inputs in `CalculatePortfolioTimeseries`, then pass immutable
 portfolio-currency contributions to the pure `calculate_portfolio_timeseries` domain function.
 Reject blank portfolio or instrument currencies, blank portfolio identity, cross-portfolio rows,
-rows from another business date or epoch, duplicate normalized security rows, and non-positive FX
-rates before derived output. Do not restore the mixed `app/core` module or the empty repository
+future-dated or future-epoch rows, duplicate normalized security rows, and non-positive FX rates
+before derived output. Accept prior-date and prior-epoch rows selected by the repository's
+latest-state-at-or-before target-window query; those rows are authoritative carry-forward state,
+not cross-window contamination. Do not restore the mixed `app/core` module or the empty repository
 compatibility package.
 
 ## Layering Scorecard
@@ -89,9 +91,9 @@ compatibility package.
 | Missing-instrument portfolio behavior | silently skip position | fail closed |
 | Market-data I/O mixed with portfolio arithmetic | yes | no |
 | Framework-free portfolio arithmetic | no | yes |
-| Portfolio/date/epoch/duplicate-security contribution validation | no | yes |
+| Portfolio/window/duplicate-security contribution validation | no | yes |
 | Obsolete portfolio calculation/repository paths | 2 | 0 |
-| Portfolio-aggregation unit tests | 50 | 73 |
+| Portfolio-aggregation unit tests | 50 | 74 |
 
 The generator test count stayed stable because database-heavy consumer scenarios moved to
 application and infrastructure owners instead of being deleted. The aggregation count increased
@@ -112,7 +114,8 @@ as source resolution and pure contribution invariants gained separate focused co
 - Portfolio output and completion/reconciliation events share one transaction.
 - Missing or invalid FX and missing instrument reference data cannot publish partial aggregates.
 - Missing portfolio/instrument currency cannot be mistaken for a valid same-currency pair.
-- Portfolio arithmetic rejects mixed portfolio, date, or epoch input and duplicate security rows.
+- Portfolio arithmetic rejects mixed portfolios, future-date or future-epoch input, and duplicate
+  security rows while preserving authoritative prior-state carry-forward.
 - Instrument reads remain batched and positive FX rates remain cached by currency pair and date.
 
 ## Compatibility
@@ -124,8 +127,8 @@ Intentional fail-closed changes apply to:
 
 1. a malformed position trigger whose repeated identity disagrees with its persisted snapshot;
 2. a portfolio position whose authoritative instrument reference data is absent;
-3. portfolio aggregation with missing currency identity, mixed portfolio/date/epoch contributions,
-   duplicate normalized security contributions, or non-positive FX.
+3. portfolio aggregation with missing currency identity, mixed portfolios, future-date/future-epoch
+   contributions, duplicate normalized security contributions, or non-positive FX.
 
 These cases now fail before derived output instead of risking mixed-identity, understated, or
 cross-window state.
@@ -147,6 +150,11 @@ cross-window state.
   from arithmetic.
 - Signed commit `7c3fa9393` contains the application/domain split, source and contribution
   invariants, retired-path guard, test redistribution, and empty package removal.
+- Signed commit `3165bd41a` aligns the pure contribution guard with the repository's
+  latest-state-at-or-before semantics: authoritative prior state carries forward and future state
+  fails closed.
+- `74 passed` across the complete portfolio-aggregation unit package after the carry-forward
+  correction.
 - The complete architecture gate and configured MyPy over `235` source files passed after the
   calculation ownership change.
 - The repository documentation/wiki gate, application-port catalog guard, and `18` focused
