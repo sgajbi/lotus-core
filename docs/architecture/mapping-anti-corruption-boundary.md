@@ -68,12 +68,12 @@ Current coverage:
 - JSON payload to governed `TransactionEvent`;
 - Kafka message payload to persistence event adapter envelope, including event identity,
   correlation lineage, idempotency key, portfolio scope, and non-transaction fallback behavior;
-- shared Kafka event mapping for valuation, pipeline, and persistence consumers, including invalid
+- shared Kafka event mapping for valuation and persistence consumers, including invalid
   JSON, validation errors, Decimal/date fidelity, schema/correlation preservation, DLQ handoff, and
   outbox payload serialization;
-- pipeline stage outbox event mapping through `pipeline_event_factory`, keeping event type, topic,
-  aggregate identity, and serialized payload construction out of `PipelineOrchestratorService`
-  while preserving the shared outbox payload adapter;
+- aggregation and financial-reconciliation outbox mapping through capability-owned infrastructure
+  stagers, preserving event type, topic, aggregate identity, serialized payload, and correlation
+  while keeping transport DTOs outside application/domain policy;
 - transaction event to persistence record values;
 - unknown and missing transaction event field rejection;
 - typed portfolio tax-lot read-record mapping to `PortfolioTaxLotWindow:v1` source-data envelope;

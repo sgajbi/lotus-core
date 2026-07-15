@@ -63,9 +63,12 @@ The active path is:
    `portfolio_day.aggregation.job.requested`
 7. `portfolio_aggregation_service` worker consumes the job request and upserts
    `portfolio_timeseries`
-8. `portfolio_aggregation_service` emits `portfolio_day.aggregation.completed`
-9. `pipeline_orchestrator_service` uses that completion signal to trigger downstream
-   reconciliation controls
+8. `portfolio_aggregation_service` atomically stages the
+   `portfolio_day.aggregation.completed` compatibility fact and
+   `portfolio_day.reconciliation.requested`
+9. `financial_reconciliation_service` runs the control bundle, persists monotonic/latest-epoch
+   control evidence, and atomically stages reconciliation completion plus
+   `portfolio_day.controls.evaluated`
 
 This sequence matches the current trigger matrix and runtime code. It does not assume the planned
 RFC-081 future topology where more stage transitions are orchestrator-issued.

@@ -1,7 +1,7 @@
 # Calculator Runtime Consolidation Decision
 
 Status: Implemented locally; registry/cluster rollout and post-merge certification pending
-Date: 2026-07-10  
+Date: 2026-07-15
 Issue: #468  
 Target: `portfolio_transaction_processing_service`
 
@@ -42,11 +42,10 @@ has production workload evidence, run a separate boundary review for:
 
 - `timeseries_generator_service`;
 - `valuation_orchestrator_service`;
-- `pipeline_orchestrator_service`;
 - `portfolio_aggregation_service`;
 - `position_valuation_calculator`.
 
-Do not assume that these five services should either remain separate or collapse into one runtime.
+Do not assume that these four services should either remain separate or collapse into one runtime.
 Evaluate each capability by command/trigger model, source and derived state ownership, transaction
 boundary, ordering, scaling profile, backfill volume, failure isolation, deployment cadence,
 security boundary, SLO, and operational ownership. Prefer one deployable with explicit in-process
@@ -55,10 +54,9 @@ independent scaling, isolation, or ownership value exceeds its operational cost.
 
 The review must test these specific hypotheses:
 
-1. Unified transaction completion made the transaction-specific part of
-   `pipeline_orchestrator_service` redundant; that consumer, service, policy, and persistence path
-   is retired. Reassign or retire the remaining portfolio-day transitions before deleting the
-   deployable.
+1. Unified transaction completion made the pipeline coordinator redundant. All surviving
+   transitions are now owned by transaction processing, portfolio aggregation, or financial
+   reconciliation; the former runtime, image, consumers, and package are retired under #712.
 2. Position valuation is market-data/job driven and currently has a different scale and failure
    profile from booked-transaction processing, so it remains separate unless workload evidence
    disproves that boundary.

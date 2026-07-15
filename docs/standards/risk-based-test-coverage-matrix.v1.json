@@ -753,7 +753,7 @@
           "current_coverage": [
             "make test-failure-recovery-gate",
             "make concurrency-duplicate-delivery-guard",
-            "tests/unit/services/pipeline_orchestrator_service/application/test_pipeline_stage_message_handler.py",
+            "tests/unit/services/financial_reconciliation_service/application/test_record_reconciliation_completion.py",
             "tests/unit/services/event_replay_service/test_consumer_dlq_replay_commands.py"
           ]
         }

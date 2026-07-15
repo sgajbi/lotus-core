@@ -1131,11 +1131,11 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 
 ## `pipeline_stage_state`
 
-- **Purpose**: Durable stage-gate state for orchestrated pipeline readiness.
-- **Description**: Tracks prerequisite completion signals and emission state for gate events at transaction scope.
+- **Purpose**: Shared compatibility evidence for transaction readiness and portfolio-day financial controls.
+- **Description**: Tracks epoch-fenced transaction readiness plus monotonic reconciliation control outcomes consumed by QCP support reads. The retired pipeline runtime does not own this table.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py`, `src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py`
-- **Typical access patterns**: Idempotent upserts from independent completion streams, conditional status transition updates, and status-filtered operational reads.
+- **Usage (modules/features)**: `src/services/portfolio_transaction_processing_service/app/infrastructure/transaction_readiness/stage_repository.py`, `src/services/financial_reconciliation_service/app/infrastructure/reconciliation_control_evidence_repository.py`, `src/services/query_control_plane_service/app/infrastructure/operations/repository.py`
+- **Typical access patterns**: Epoch-fenced transaction-stage claims, monotonic reconciliation-control upserts, latest-epoch suppression, and status-filtered operational reads.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `stage_name` (String): Stage identifier (for example `TRANSACTION_PROCESSING`).

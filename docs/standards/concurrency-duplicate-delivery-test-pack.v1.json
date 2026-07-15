@@ -169,7 +169,7 @@
       "status": "implemented",
       "lane": "unit-and-integration-all",
       "evidence": [
-        "tests/unit/services/pipeline_orchestrator_service/application/test_pipeline_stage_message_handler.py",
+        "tests/unit/services/financial_reconciliation_service/application/test_record_reconciliation_completion.py",
         "tests/unit/services/event_replay_service/test_consumer_dlq_replay_commands.py",
         "tests/unit/services/ingestion_service/services/test_ingestion_replay_audits.py"
       ],

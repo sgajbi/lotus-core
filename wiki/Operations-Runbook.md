@@ -54,8 +54,10 @@ position, and cashflow effects succeed in one database transaction. Neither
 `transactions.cost.processed` nor `cashflows.calculated` has an active in-repo consumer. When
 valuation readiness is delayed, inspect the target transaction-processing result, readiness-stage
 claim, database transaction rollback, and outbox dispatch. Do not restore a compatibility-event
-consumer group as a recovery action. `pipeline_orchestrator_service` participates later in
-portfolio aggregation-to-reconciliation and reconciliation-to-controls coordination only.
+consumer group as a recovery action. Portfolio aggregation directly stages reconciliation requests;
+financial reconciliation persists control evidence and stages the controls decision in the same
+transaction as reconciliation completion. The former pipeline orchestrator runtime is retired and
+must not be restored as a recovery action.
 
 ## Preferred diagnostics
 
