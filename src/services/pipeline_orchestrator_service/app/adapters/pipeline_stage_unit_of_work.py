@@ -7,7 +7,6 @@ from portfolio_common.db import get_async_db_session
 from portfolio_common.events import (
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
-    TransactionEvent,
 )
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
@@ -41,13 +40,6 @@ class SqlAlchemyPipelineStageUnitOfWork:
                 correlation_id,
             ),
         )
-
-    async def register_processed_transaction(
-        self,
-        event: TransactionEvent,
-        correlation_id: str | None,
-    ) -> None:
-        await self._service.register_processed_transaction(event, correlation_id)
 
     async def register_portfolio_aggregation_completed(
         self,
