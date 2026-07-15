@@ -8,7 +8,7 @@ import subprocess
 import sys
 from contextlib import ExitStack
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Protocol, cast
@@ -42,6 +42,7 @@ class DerivedStateWorkloadProfile:
     sample_size: int
     drain_timeout_seconds: int
     certifying: bool
+    business_date_count: int = 1
     market_price_correction_multiplier: Decimal | None = None
 
     @property
@@ -78,6 +79,17 @@ _CERTIFYING_PROFILES = {
         sample_size=5,
         drain_timeout_seconds=3600,
         certifying=True,
+        market_price_correction_multiplier=Decimal("1.05"),
+    ),
+    "price-restatement": DerivedStateWorkloadProfile(
+        name="derived-state-market-price-restatement",
+        portfolio_count=100,
+        positions_per_portfolio=100,
+        transaction_batch_size=2000,
+        sample_size=5,
+        drain_timeout_seconds=3600,
+        certifying=True,
+        business_date_count=5,
         market_price_correction_multiplier=Decimal("1.05"),
     ),
 }
@@ -117,8 +129,16 @@ def resolve_workload_trade_date(
 ) -> str:
     """Resolve an ISO business date before seeding an empty managed database."""
 
-    candidate = explicit_trade_date or now.astimezone(UTC).date().isoformat()
-    return date.fromisoformat(candidate).isoformat()
+    candidate = (
+        date.fromisoformat(explicit_trade_date)
+        if explicit_trade_date is not None
+        else now.astimezone(UTC).date()
+    )
+    if explicit_trade_date is not None and candidate.weekday() >= 5:
+        raise ValueError("explicit trade date must be a weekday in the synthetic calendar")
+    while candidate.weekday() >= 5:
+        candidate -= timedelta(days=1)
+    return candidate.isoformat()
 
 
 def validate_execution_posture(
@@ -180,6 +200,8 @@ def build_bank_day_command(
         str(profile.transaction_batch_size),
         "--sample-size",
         str(profile.sample_size),
+        "--business-date-count",
+        str(profile.business_date_count),
         "--drain-timeout-seconds",
         str(profile.drain_timeout_seconds),
         "--resource-poll-interval-seconds",

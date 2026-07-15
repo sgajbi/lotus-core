@@ -34,6 +34,7 @@ from scripts.operations.performance.derived_state_resource_monitor import (
 from scripts.operations.performance.market_price_correction import (
     DerivedStateCorrectionEvidence,
     apply_market_price_correction,
+    build_synthetic_business_date_window,
     wait_for_corrected_derived_state,
 )
 from scripts.operations.performance.market_price_correction import (
@@ -1690,6 +1691,10 @@ def _safe_collect_log_evidence(
 
 def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict[str, Any]:
     correction_multiplier = getattr(args, "market_price_correction_multiplier", None)
+    business_dates = build_synthetic_business_date_window(
+        as_of_date=resolved_trade_date,
+        business_date_count=args.business_date_count,
+    )
     return {
         "portfolio_count": args.portfolio_count,
         "transactions_per_portfolio": args.transactions_per_portfolio,
@@ -1699,6 +1704,9 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "max_records_per_minute": args.max_records_per_minute,
         "max_requests_per_minute": args.max_requests_per_minute,
         "trade_date": resolved_trade_date,
+        "business_date_count": args.business_date_count,
+        "window_start_date": business_dates[0],
+        "window_end_date": business_dates[-1],
         "host_database_url": args.host_database_url,
         "ingestion_base_url": args.ingestion_base_url,
         "query_base_url": args.query_base_url,
@@ -1811,6 +1819,7 @@ def main() -> int:
     parser.add_argument("--transaction-batch-size", type=int, default=2000)
     parser.add_argument("--sample-size", type=int, default=5)
     parser.add_argument("--trade-date", default=None)
+    parser.add_argument("--business-date-count", type=int, default=1)
     parser.add_argument("--market-price-correction-multiplier", type=Decimal, default=None)
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-base-url", default=DEFAULT_QUERY_BASE_URL)
@@ -1839,6 +1848,8 @@ def main() -> int:
         raise ValueError("transactions_per_portfolio must be positive.")
     if args.sample_size <= 0:
         raise ValueError("sample_size must be positive.")
+    if args.business_date_count <= 0:
+        raise ValueError("business_date_count must be positive.")
     if args.resource_poll_interval_seconds <= 0:
         raise ValueError("resource_poll_interval_seconds must be positive.")
     if args.market_price_correction_multiplier is not None and (
@@ -1854,6 +1865,11 @@ def main() -> int:
         engine=engine,
         explicit_trade_date=args.trade_date,
     )
+    business_dates = build_synthetic_business_date_window(
+        as_of_date=resolved_trade_date,
+        business_date_count=args.business_date_count,
+    )
+    opening_trade_date = business_dates[0]
     _wait_ready(
         base_urls=[
             args.ingestion_base_url,
@@ -1868,7 +1884,7 @@ def main() -> int:
     portfolios = _build_portfolios(
         run_id=run_id,
         portfolio_count=args.portfolio_count,
-        trade_date=resolved_trade_date,
+        trade_date=opening_trade_date,
     )
     specs = _build_instrument_specs(
         run_id=run_id,
@@ -1917,7 +1933,7 @@ def main() -> int:
                 base_url=args.ingestion_base_url,
                 endpoint="/ingest/business-dates",
                 root_key="business_dates",
-                rows=[{"business_date": resolved_trade_date}],
+                rows=[{"business_date": business_date} for business_date in business_dates],
             )
         )
         ingest_phases.append(
@@ -1970,7 +1986,7 @@ def main() -> int:
                 root_key="fx_rates",
                 rows=_build_fx_rates_payload(
                     currencies=SUPPORTED_CURRENCIES,
-                    rate_date=resolved_trade_date,
+                    rate_date=opening_trade_date,
                 ),
             )
         )
@@ -1983,7 +1999,7 @@ def main() -> int:
               AND from_currency IN ('USD', 'EUR', 'SGD', 'GBP')
               AND to_currency IN ('USD', 'EUR', 'SGD', 'GBP')
             """,
-            params={"trade_date": resolved_trade_date},
+            params={"trade_date": opening_trade_date},
             expected_count=len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1),
             label="fx seed",
             timeout_seconds=args.readiness_timeout_seconds,
@@ -1996,7 +2012,7 @@ def main() -> int:
                 root_key="market_prices",
                 rows=_build_market_prices_payload(
                     specs=specs,
-                    price_date=resolved_trade_date,
+                    price_date=opening_trade_date,
                 ),
             )
         )
@@ -2010,7 +2026,7 @@ def main() -> int:
             """,
             params={
                 "security_pattern": security_pattern["security_pattern"],
-                "trade_date": resolved_trade_date,
+                "trade_date": opening_trade_date,
             },
             expected_count=args.transactions_per_portfolio,
             label="market price seed",
@@ -2024,7 +2040,7 @@ def main() -> int:
                     run_id=run_id,
                     portfolios=portfolios,
                     specs=specs,
-                    trade_date=resolved_trade_date,
+                    trade_date=opening_trade_date,
                     transaction_batch_size=args.transaction_batch_size,
                 ),
                 max_records_per_minute=args.max_records_per_minute,
@@ -2058,7 +2074,7 @@ def main() -> int:
                     root_key="market_prices",
                     rows=_build_market_prices_payload(
                         specs=effective_specs,
-                        price_date=resolved_trade_date,
+                        price_date=opening_trade_date,
                     ),
                     phase="market-price-correction",
                 )
@@ -2066,10 +2082,12 @@ def main() -> int:
             correction_evidence = wait_for_corrected_derived_state(
                 row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
                 run_id=run_id,
-                trade_date=resolved_trade_date,
+                window_start_date=business_dates[0],
+                window_end_date=business_dates[-1],
+                business_date_count=len(business_dates),
                 portfolio_count=args.portfolio_count,
                 transaction_count=(args.portfolio_count * args.transactions_per_portfolio),
-                expected_market_value=expected_total_market_value(
+                expected_daily_market_value=expected_total_market_value(
                     portfolio_count=args.portfolio_count,
                     specs=effective_specs,
                 ),

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -28,6 +28,9 @@ class DerivedStateCorrectionEvidence:
     """Record exact expected and observed correction materialization facts."""
 
     correction_started_at: str
+    window_start_date: str
+    window_end_date: str
+    business_date_count: int
     drain_seconds: float
     expected_snapshots: int
     corrected_snapshots: int
@@ -37,8 +40,8 @@ class DerivedStateCorrectionEvidence:
     corrected_position_timeseries: int
     expected_portfolio_timeseries: int
     corrected_portfolio_timeseries: int
-    expected_market_value: str
-    corrected_market_value: str
+    expected_window_market_value: str
+    corrected_window_market_value: str
 
 
 _CORRECTED_DERIVED_STATE_SQL = """
@@ -51,7 +54,7 @@ SELECT
         SELECT count(*)
         FROM portfolio_valuation_jobs
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND valuation_date = :trade_date
+          AND valuation_date BETWEEN :window_start_date AND :window_end_date
           AND status = 'COMPLETE'
           AND updated_at >= :correction_started_at
     ) AS corrected_valuation_jobs,
@@ -59,14 +62,14 @@ SELECT
         SELECT count(*)
         FROM position_timeseries
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND date = :trade_date
+          AND date BETWEEN :window_start_date AND :window_end_date
           AND updated_at >= :correction_started_at
     ) AS corrected_position_timeseries,
     (
         SELECT count(*)
         FROM portfolio_timeseries
         WHERE portfolio_id LIKE :portfolio_pattern
-          AND date = :trade_date
+          AND date BETWEEN :window_start_date AND :window_end_date
           AND updated_at >= :correction_started_at
     ) AS corrected_portfolio_timeseries,
     (
@@ -95,8 +98,29 @@ SELECT
     ) AS failed_aggregation_jobs
 FROM daily_position_snapshots snapshot
 WHERE snapshot.portfolio_id LIKE :portfolio_pattern
-  AND snapshot.date = :trade_date
+  AND snapshot.date BETWEEN :window_start_date AND :window_end_date
 """
+
+
+def build_synthetic_business_date_window(
+    *,
+    as_of_date: str,
+    business_date_count: int,
+) -> tuple[str, ...]:
+    """Build an inclusive weekday window for an explicitly seeded test calendar."""
+
+    if business_date_count <= 0:
+        raise ValueError("business_date_count must be positive")
+    current_date = date.fromisoformat(as_of_date)
+    if current_date.weekday() >= 5:
+        raise ValueError("as_of_date must be a weekday in the synthetic business calendar")
+
+    business_dates: list[str] = []
+    while len(business_dates) < business_date_count:
+        if current_date.weekday() < 5:
+            business_dates.append(current_date.isoformat())
+        current_date -= timedelta(days=1)
+    return tuple(reversed(business_dates))
 
 
 def apply_market_price_correction(
@@ -121,10 +145,12 @@ def wait_for_corrected_derived_state(
     *,
     row_reader: RowReader,
     run_id: str,
-    trade_date: str,
+    window_start_date: str,
+    window_end_date: str,
+    business_date_count: int,
     portfolio_count: int,
     transaction_count: int,
-    expected_market_value: Decimal,
+    expected_daily_market_value: Decimal,
     correction_started_at: datetime,
     timeout_seconds: int,
 ) -> DerivedStateCorrectionEvidence:
@@ -132,9 +158,17 @@ def wait_for_corrected_derived_state(
 
     started = time.perf_counter()
     deadline = time.time() + timeout_seconds
+    if business_date_count <= 0:
+        raise ValueError("business_date_count must be positive")
+    if date.fromisoformat(window_start_date) > date.fromisoformat(window_end_date):
+        raise ValueError("window_start_date must not be after window_end_date")
+    expected_position_rows = transaction_count * business_date_count
+    expected_portfolio_rows = portfolio_count * business_date_count
+    expected_window_market_value = expected_daily_market_value * business_date_count
     params = {
         "portfolio_pattern": f"LOAD_{run_id}_PF_%",
-        "trade_date": trade_date,
+        "window_start_date": window_start_date,
+        "window_end_date": window_end_date,
         "correction_started_at": correction_started_at,
     }
     while time.time() < deadline:
@@ -146,28 +180,31 @@ def wait_for_corrected_derived_state(
                 f"failed_aggregation_jobs={row['failed_aggregation_jobs']}"
             )
         if (
-            int(row["corrected_snapshots"]) == transaction_count
-            and Decimal(str(row["corrected_market_value"])) == expected_market_value
-            and int(row["corrected_valuation_jobs"]) == transaction_count
-            and int(row["corrected_position_timeseries"]) == transaction_count
-            and int(row["corrected_portfolio_timeseries"]) == portfolio_count
+            int(row["corrected_snapshots"]) == expected_position_rows
+            and Decimal(str(row["corrected_market_value"])) == expected_window_market_value
+            and int(row["corrected_valuation_jobs"]) == expected_position_rows
+            and int(row["corrected_position_timeseries"]) == expected_position_rows
+            and int(row["corrected_portfolio_timeseries"]) == expected_portfolio_rows
             and int(row["open_valuation_jobs"]) == 0
             and int(row["open_aggregation_jobs"]) == 0
         ):
             corrected_market_value = Decimal(str(row["corrected_market_value"]))
             return DerivedStateCorrectionEvidence(
                 correction_started_at=correction_started_at.isoformat(),
+                window_start_date=window_start_date,
+                window_end_date=window_end_date,
+                business_date_count=business_date_count,
                 drain_seconds=round(time.perf_counter() - started, 3),
-                expected_snapshots=transaction_count,
+                expected_snapshots=expected_position_rows,
                 corrected_snapshots=int(row["corrected_snapshots"]),
-                expected_valuation_jobs=transaction_count,
+                expected_valuation_jobs=expected_position_rows,
                 corrected_valuation_jobs=int(row["corrected_valuation_jobs"]),
-                expected_position_timeseries=transaction_count,
+                expected_position_timeseries=expected_position_rows,
                 corrected_position_timeseries=int(row["corrected_position_timeseries"]),
-                expected_portfolio_timeseries=portfolio_count,
+                expected_portfolio_timeseries=expected_portfolio_rows,
                 corrected_portfolio_timeseries=int(row["corrected_portfolio_timeseries"]),
-                expected_market_value=f"{expected_market_value:.10f}",
-                corrected_market_value=f"{corrected_market_value:.10f}",
+                expected_window_market_value=f"{expected_window_market_value:.10f}",
+                corrected_window_market_value=f"{corrected_market_value:.10f}",
             )
         time.sleep(5)
     raise TimeoutError("Market price correction did not fully rematerialize before timeout.")

@@ -270,6 +270,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             portfolio_count=2,
             transactions_per_portfolio=2,
             transaction_batch_size=100,
+            business_date_count=1,
             max_records_per_minute=1000,
             max_requests_per_minute=100,
             host_database_url="postgresql://localhost/test",
