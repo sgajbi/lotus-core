@@ -52,12 +52,15 @@ zero lock waiters, and zero blocked sessions. Its portfolio-stage maximum was `1
 `900s` aggregation lease. This does not certify daily, price/FX burst, backdated, release, or
 rollback behavior, and it does not yet close the fixed-lease versus heartbeat decision.
 
-Daily, price/FX burst, backdated, release, and rollback certification remains required before #714
-closure. Runtime consolidation does not permit position and portfolio workload metrics to lose
-their separate attribution.
+Daily, market-price burst, FX correction, backdated, release, and rollback certification remains
+required before #714 closure. Runtime consolidation does not permit position and portfolio workload
+metrics to lose their separate attribution. FX correction is not covered by the market-price
+profile; #791 tracks the missing source-owned FX revaluation trigger.
 
-Run `make profile-derived-state-daily` and `make profile-derived-state-fan-in` for the two managed
-certifying shapes. `make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
+Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`, and
+`make profile-derived-state-price-burst` for the managed certifying shapes. The price-burst profile
+requires exact post-correction timestamps and values across all affected derived stages.
+`make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
 used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
 with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
 clean reconciliation, and no failures as profile evidence.

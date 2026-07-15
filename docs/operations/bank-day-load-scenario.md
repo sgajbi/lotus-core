@@ -44,11 +44,15 @@ For isolated dynamic-port execution, use the managed profile targets:
 ```powershell
 make profile-derived-state-daily
 make profile-derived-state-fan-in
+make profile-derived-state-price-burst
 make test-derived-state-workload-smoke
 ```
 
 `daily` is the certifying 1,000-portfolio x 100-position profile. `fan-in` is the certifying
-one-portfolio x 1,000-position aggregation profile. The smoke target is always recorded as
+one-portfolio x 1,000-position aggregation profile. `price-burst` first materializes 100 portfolios
+x 100 shared instruments, then applies a 5% same-date price correction and requires all 10,000
+snapshots and position rows plus 100 portfolio rows to carry post-correction timestamps and exact
+corrected values. The smoke target is always recorded as
 `evidence_classification=diagnostic`; it validates orchestration but cannot certify capacity or
 close a #714 workload requirement. Certifying profiles fail fast unless `--build` is active, and
 the repo-native profile targets supply it, so existing/stale local images cannot emit certifying
@@ -72,6 +76,12 @@ The script:
 8. runs reconciliation checks for sampled portfolios,
 9. inspects stable Compose service logs for real error lines using the configured project/file,
 10. writes a machine-readable and human-readable evidence pack.
+
+When `--market-price-correction-multiplier` is supplied, the scenario runs the complete baseline
+cycle first, records a database-clock correction boundary, ingests corrected prices, and waits for
+every affected valuation job, snapshot, position series, and portfolio series row after that
+boundary. The report records the correction phase and its drain duration separately. FX-rate
+correction cannot use this profile as a proxy; automatic FX revaluation remains tracked by #791.
 
 ## Deterministic Dataset Rules
 

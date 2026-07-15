@@ -54,10 +54,17 @@ one complete database-and-runtime sample. Sampling failures retain only bounded 
 artifact, not command output or connection details.
 
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
-`make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Both run through an
-isolated dynamic-port Compose project. `make test-derived-state-workload-smoke` is machine-labelled
+`make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
+`make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
+prove a 5% same-date price correction across every affected snapshot, position series, and
+portfolio series row. All run through an isolated dynamic-port Compose project.
+`make test-derived-state-workload-smoke` is machine-labelled
 `diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile
 execution requires building the exact branch source and fails fast if existing images are selected.
+
+The market-price correction profile does not certify FX corrections. Core currently persists
+accepted FX observations without an equivalent durable revaluation trigger; issue #791 owns that
+correction path and its bounded backdated/burst evidence.
 
 The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
 positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
