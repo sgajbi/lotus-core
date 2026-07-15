@@ -160,6 +160,11 @@ response is not correction proof.
 The report config records `evidence_classification` as `certifying` or `diagnostic`. Do not infer
 certification from a successful exit code or scenario name.
 
+The report records the database backend, host, port, and database name under `database_target`.
+It never records the connection URL, username, password, or URL query parameters. Treat generated
+JSON, Markdown, diagnostics, and logs as security-sensitive evidence even when `output/` is ignored
+by Git; run `make synthetic-fixture-leakage-guard` before retaining or sharing an evidence pack.
+
 The valuation-to-position sample is one completed valuation job joined to its matching
 position-timeseries row. The position-to-portfolio sample is one portfolio, business date, and epoch;
 its clock starts when the last matching position row was updated and stops when the portfolio row was
