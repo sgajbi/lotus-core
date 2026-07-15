@@ -8,6 +8,7 @@ import subprocess
 import sys
 from contextlib import ExitStack
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Protocol, cast
 
@@ -95,6 +96,17 @@ def resolve_workload_profile(
         raise ValueError(
             f"Unsupported workload profile {profile_name!r}; expected {supported}"
         ) from exc
+
+
+def resolve_workload_trade_date(
+    *,
+    explicit_trade_date: str | None,
+    now: datetime,
+) -> str:
+    """Resolve an ISO business date before seeding an empty managed database."""
+
+    candidate = explicit_trade_date or now.astimezone(UTC).date().isoformat()
+    return date.fromisoformat(candidate).isoformat()
 
 
 def build_workload_environment(
@@ -262,7 +274,10 @@ def main() -> int:
             profile=profile,
             output_dir=args.output_dir,
             resource_poll_interval_seconds=args.resource_poll_interval_seconds,
-            trade_date=args.trade_date,
+            trade_date=resolve_workload_trade_date(
+                explicit_trade_date=args.trade_date,
+                now=datetime.now(UTC),
+            ),
         )
         environment = build_workload_environment(
             endpoints=endpoints,

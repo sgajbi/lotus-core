@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from argparse import Namespace
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +12,7 @@ from scripts.operations.performance.derived_state_workload_gate import (
     build_workload_environment,
     prepare_managed_run,
     resolve_workload_profile,
+    resolve_workload_trade_date,
 )
 from scripts.quality.ci_service_sets import DERIVED_STATE_WORKLOAD_GATE_SERVICES
 
@@ -41,6 +43,13 @@ def test_diagnostic_smoke_profile_cannot_be_mistaken_for_capacity_proof() -> Non
     assert profile.name == "diagnostic-derived-state-workload-smoke"
     assert profile.transaction_count == 10
     assert profile.certifying is False
+
+
+def test_workload_trade_date_is_explicit_for_an_empty_managed_database() -> None:
+    now = datetime(2026, 7, 15, 23, 30, tzinfo=UTC)
+
+    assert resolve_workload_trade_date(explicit_trade_date=None, now=now) == "2026-07-15"
+    assert resolve_workload_trade_date(explicit_trade_date="2026-04-10", now=now) == "2026-04-10"
 
 
 def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_path: Path) -> None:
