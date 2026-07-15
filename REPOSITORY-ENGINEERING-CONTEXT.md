@@ -535,8 +535,9 @@ Primary areas:
    Persistence processing.
 5. `src/services/calculators/`
    Position, valuation, and cashflow calculator services.
-6. `src/services/timeseries_generator_service/`
-   Position and portfolio time-series generation.
+6. `src/services/portfolio_derived_state_service/`
+   Position and portfolio time-series materialization through separate application/domain modules
+   in one supervised deployable.
 7. `scripts/`
    quality gates, performance and recovery gates, test-manifest orchestration, and operational tooling.
 8. `tests/`
@@ -1242,7 +1243,7 @@ Most relevant current governance:
     repositories, raw metric functions, system clocks, and transport publication. The
     repo-local standard lives at
     `docs/standards/aggregation-scheduler-boundary-standard.md`.
-    `portfolio_aggregation_service.app.ports.aggregation_scheduler_ports` owns repository-provider,
+    `portfolio_derived_state_service.app.ports.aggregation_scheduler_ports` owns repository-provider,
     repository, metrics-sink, clock, token-generator, and batch-processor contracts;
     `app.infrastructure.aggregation_scheduler_adapters` owns SQLAlchemy, Prometheus, and system-clock
     adapters. `app.application.aggregation_jobs` owns expiry recovery, leased claims, and bounded
@@ -2284,11 +2285,11 @@ Most relevant current governance:
      statement construction. Never move aggregation state into the generator merely because
      historical integration tests live under its test directory.
 157. Portfolio aggregation job queue persistence is owned by
-     `portfolio_aggregation_service.app.infrastructure.PortfolioAggregationRepository`. Keep
+     `portfolio_derived_state_service.app.infrastructure.PortfolioAggregationRepository`. Keep
      eligible-job claiming, `FOR UPDATE SKIP LOCKED`, deterministic claim ordering, dispatch
      recovery, stale retry/failure policy, and queue diagnostics out of `portfolio_common` and
-     timeseries-generator repositories. Aggregation-only tests belong under portfolio-aggregation
-     test paths. Do not restore the generic aggregation `TimeseriesRepository` wrapper or queue
+     position-timeseries repositories. Aggregation tests belong under the target's mirrored
+     application/domain/infrastructure test paths. Do not restore the generic aggregation `TimeseriesRepository` wrapper or queue
      methods on a shared repository; preserve existing metric labels until an intentional
      observability-contract migration is approved and tested.
 158. Timeseries data persistence is service-owned. Use
@@ -2522,14 +2523,14 @@ Most relevant current governance:
 183. Timeseries instrument/FX records shared by generation and aggregation belong under
      `portfolio_common.domain.market_data.timeseries`. The SQL reader remains shared infrastructure
      because both service-owned repositories reuse it. `TimeseriesMarketDataPort` belongs under
-     `portfolio_aggregation_service.app.ports.timeseries_market_data` because portfolio aggregation
+     `portfolio_derived_state_service.app.ports.timeseries_market_data` because portfolio aggregation
      is its only application consumer; shared records or adapters do not justify a shared port.
      Keep generation and aggregation persistence service-owned, and keep #714 open until measured
-     daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence decides runtime
-     topology.
+     daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence certifies the
+     consolidated runtime.
      Position-timeseries Kafka delivery is a transport adapter only. Map
      `DailyPositionSnapshotPersistedEvent` into the framework-neutral command under
-     `timeseries_generator_service.app.application.position_timeseries`; keep current-day and
+     `portfolio_derived_state_service.app.application.position_timeseries`; keep current-day and
      bounded backdated materialization in that application package, immutable records and pure
      calculation policy under `app.domain.position_timeseries`, persistence contracts under
      `app.ports`, and SQLAlchemy transaction/ORM/job-staging behavior under `app.infrastructure`.

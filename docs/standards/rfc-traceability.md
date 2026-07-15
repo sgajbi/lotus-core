@@ -14,7 +14,7 @@ remain active but are not fully closed.
 
 - Epoch fencing and reprocessing consumer evidence:
   - `src/libs/portfolio-common/portfolio_common/reprocessing.py`
-  - `src/services/timeseries_generator_service/app/consumers/position_timeseries_consumer.py`
+  - `src/services/portfolio_derived_state_service/app/delivery/valuation_snapshots/consumer.py`
   - `tests/e2e/E2E_TEST_PLAN.md`
 
 ## RFC-0030 - CI Coverage Gate and lotus-manage Pipeline Parity Phase 2

@@ -37,12 +37,11 @@ Independent deployment and failure isolation therefore have current operational 
 
 ## Post-Unification Runtime Boundary Review
 
-After cost, cashflow, and position code has moved to target-owned packages and the combined runtime
-has production workload evidence, run a separate boundary review for:
+After cost, cashflow, and position code moved to target-owned packages, separate boundary reviews
+were opened for:
 
-- `timeseries_generator_service`;
+- portfolio derived-state materialization (#714);
 - `valuation_orchestrator_service`;
-- `portfolio_aggregation_service`;
 - `position_valuation_calculator`.
 
 Do not assume that these four services should either remain separate or collapse into one runtime.
@@ -63,9 +62,11 @@ The review must test these specific hypotheses:
 3. Valuation job orchestration and valuation execution may share one deployable while retaining
    application/worker modules, but only if scheduling availability and compute saturation do not
    require independent isolation.
-4. Security-level timeseries generation and portfolio aggregation form one derived-state pipeline
-   and may share a deployable, but only if dependency ordering, backfills, and portfolio fan-in can
-   be bounded without coupling their failure recovery.
+4. Security-level timeseries generation and portfolio aggregation now share
+   `portfolio_derived_state_service`. Their application/domain modules, concurrency, and metrics
+   remain separate; `portfolio_aggregation_jobs` preserves durable fan-in and recovery. #714 stays
+   open until load, backfill, failure, rollback, and post-merge release evidence certify the
+   cutover.
 
 Required output is a before/after runtime and data-flow map, dependency and consumer inventory,
 load/backfill evidence, failure-mode analysis, database/table ownership decision, migration and

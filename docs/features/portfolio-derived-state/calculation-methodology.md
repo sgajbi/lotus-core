@@ -1,10 +1,12 @@
 # Methodology Guide: Timeseries Generation and Portfolio Aggregation
 
-This guide details the methodologies used by the split time-series layer to create its two primary data outputs: the `position_timeseries` and `portfolio_timeseries` tables.
+This guide details the separate calculation policies used by the unified derived-state runtime to
+create `position_timeseries` and `portfolio_timeseries`.
 
 ## 1. Position Time-Series Calculation
 
-For each `daily_position_snapshot` event it receives, `timeseries_generator_service` creates a corresponding `position_timeseries` record for that specific day and epoch.
+For each authoritative `daily_position_snapshot` event, the position-timeseries use case creates a
+corresponding record for that business date and epoch.
 
 * **Beginning-of-Day (BOD) Market Value:** This is sourced directly from the **End-of-Day (EOD)** `market_value_local` of the *previous day's* snapshot. If no previous day snapshot exists, it is set to zero.
 * **End-of-Day (EOD) Market Value:** This is sourced directly from the `market_value_local` of the *current day's* snapshot.
@@ -29,7 +31,8 @@ economics and are not converted into internal capital continuity repairs.
 
 ## 2. Portfolio Time-Series Aggregation
 
-The creation of the portfolio-level time-series is a scheduled aggregation process owned by `portfolio_aggregation_service` and runs after the position-level data for a given day has been generated.
+Portfolio time-series creation is a scheduled application capability in
+`portfolio_derived_state_service` and runs only after position-level completeness is established.
 
 * **Beginning-of-Day (BOD) Market Value:** This is aggregated from the effective beginning market values of the position-timeseries rows included in the analytics input contract. The serving path repairs stale position BOD values from prior EOD state before summing them for TWR consumers.
 * **Cash Flows & Fees:** The aggregation service fetches all `position_timeseries` records for the portfolio on the given day and for the correct epoch. It iterates through them, performing the following steps:

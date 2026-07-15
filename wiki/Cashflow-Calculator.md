@@ -170,6 +170,6 @@ Check beyond this service when:
 
 - [System Data Flow](System-Data-Flow)
 - [Outbox Events](Outbox-Events)
-- [Timeseries Generator Service](Timeseries-Generator-Service)
+- [Portfolio Derived State](Timeseries-and-Aggregation)
 - [Operations Runbook](Operations-Runbook)
 - [Mesh Data Products](Mesh-Data-Products)

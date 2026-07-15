@@ -39,7 +39,6 @@
 - [Position Processing](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
-- [Timeseries Generator Service](Timeseries-Generator-Service)
 
 ## Developer workflow
 

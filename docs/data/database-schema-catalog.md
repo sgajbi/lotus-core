@@ -1019,7 +1019,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Position-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per position and epoch for analytics inputs.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`; `security_id` -> `instruments.security_id`
-- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/timeseries_generator_service/app/application/position_timeseries/materialize_position_timeseries.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/calculation.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_derived_state_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_derived_state_service/app/application/position_timeseries/materialize_position_timeseries.py`, `src/services/portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_derived_state_service/app/application/portfolio_timeseries/calculation.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -1043,7 +1043,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Portfolio-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per portfolio and epoch.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/materialize_portfolio_timeseries.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_derived_state_service/app/application/portfolio_timeseries/materialize_portfolio_timeseries.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -1098,7 +1098,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable aggregation work queue.
 - **Description**: Portfolio/date tasks for timeseries aggregation with status tracking.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py`, `src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_aggregation_service/app/main.py`
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_derived_state_service/app/application/aggregation_jobs/scheduler.py`, `src/services/portfolio_derived_state_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_derived_state_service/app/main.py`
 - **Typical access patterns**: Deterministic ready-job polling with `FOR UPDATE SKIP LOCKED`, token-fenced terminal writes, expiry-based recovery, and operator status reads.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.

@@ -73,7 +73,7 @@ flowchart LR
     BankSource[Bank source files and APIs] --> Ingestion[ingestion_service]
     Ingestion --> Persistence[persistence_service]
     Persistence --> CoreDb[(PostgreSQL core domain tables)]
-    CoreDb --> Calculators[calculators and timeseries generators]
+    CoreDb --> Calculators[valuation and portfolio derived state]
     Calculators --> CoreDb
     CoreDb --> Query[query_service operational reads]
     CoreDb --> Control[query_control_plane_service source products]

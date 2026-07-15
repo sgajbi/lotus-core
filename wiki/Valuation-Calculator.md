@@ -87,7 +87,7 @@ Check beyond this service when:
 ## Related references
 
 - [System Data Flow](System-Data-Flow)
-- [Timeseries Generator Service](Timeseries-Generator-Service)
+- [Portfolio Derived State](Timeseries-and-Aggregation)
 - [Operations Runbook](Operations-Runbook)
 - [Data Models](Data-Models)
 - [RFC-0083 Market Reference Data Target Model](../docs/architecture/RFC-0083-market-reference-data-target-model.md)

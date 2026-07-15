@@ -204,8 +204,9 @@ Primary runtime surfaces:
   `portfolio_security_day.valuation.ready` is staged only after all financial effects succeed,
   while `transactions.cost.processed` and `cashflows.calculated` remain compatibility facts with no
   active in-repo consumer; valuation remains independently scalable
-- valuation and generators
-  valuation, position/portfolio time-series, and portfolio aggregation remain separate runtimes
+- valuation and derived state
+  valuation remains independently scalable; position and portfolio time-series materialization run
+  as separate modules in one `portfolio_derived_state_service` deployable
 
 Primary architecture references:
 
@@ -228,8 +229,7 @@ Primary architecture references:
 | `src/services/financial_reconciliation_service/` | Independent reconciliation controls plane. Owns run/finding policy, durable control evidence, and completion/control event staging. |
 | `src/services/calculators/` | Independently deployable position valuation only. Cost, cashflow, and position transaction processing are target-owned modules in `portfolio_transaction_processing_service`. |
 | `src/services/valuation_orchestrator_service/` | Valuation scheduling, job lifecycle, reprocessing state, and dispatch. |
-| `src/services/timeseries_generator_service/` | Position time-series generation and aggregation-job staging. |
-| `src/services/portfolio_aggregation_service/` | Portfolio time-series aggregation and direct reconciliation-request staging. |
+| `src/services/portfolio_derived_state_service/` | Layered position and portfolio time-series materialization, durable aggregation scheduling, and reconciliation-request staging. |
 | `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
 | `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
 | `scripts/` | Gates, guards, manifests, smoke tools, proof generators, and operational scripts. |

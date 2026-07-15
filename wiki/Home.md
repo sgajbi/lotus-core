@@ -63,7 +63,7 @@ tests, contracts, generated evidence, RFC/docs truth, and validation on the corr
 - [Position Processing](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
-- [Timeseries Generator Service](Timeseries-Generator-Service)
+- [Portfolio Derived State](Timeseries-and-Aggregation)
 
 ## Most Useful Commands
 

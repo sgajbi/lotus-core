@@ -1,6 +1,6 @@
-# API Specification: Timeseries Generator
+# Portfolio Derived-State Runtime Contract
 
-The `timeseries_generator_service` is a headless service whose inbound work interface is Apache
+The `portfolio_derived_state_service` is a headless worker whose inbound event interface is Apache
 Kafka. It does not have a traditional REST API for its core logic but exposes standard HTTP
 endpoints for health and metrics monitoring. Its downstream handoff is the durable
 `portfolio_aggregation_jobs` database queue, not a second Kafka topic.
@@ -14,6 +14,7 @@ endpoints for health and metrics monitoring. Its downstream handoff is the durab
 | `GET` | `/health/live` | A liveness probe to confirm the service process is running. Returns `{"status": "alive"}`. |
 | `GET` | `/health/ready` | A readiness probe that checks the service's ability to connect to the database. Returns `{"status": "ready"}` on success or a `503 Service Unavailable` on failure. |
 | `GET` | `/metrics` | Exposes performance and application metrics in Prometheus format. |
+| `GET` | `/version` | Exposes commit, branch, build timestamp, repository, image version/digest, CI run ID, and matching OCI-label metadata. |
 
 ## 2. Kafka Interface
 
@@ -42,7 +43,9 @@ The service listens to one topic:
 ### 2.2. Durable Aggregation Handoff
 
 After position materialization, the service idempotently stages one
-`portfolio_aggregation_jobs` row for every affected portfolio date. The
-`portfolio_aggregation_service` owns claiming that queue and currently publishes and consumes its
-internal `portfolio_day.aggregation.job.requested` command. That topic is not part of the
-`timeseries_generator_service` interface.
+`portfolio_aggregation_jobs` row for every affected portfolio date. Its scheduler leases complete
+jobs directly from PostgreSQL and bounded workers invoke the portfolio-timeseries use case. The
+queue is the durable internal command boundary; there is no private aggregation Kafka topic.
+
+The preserved consumer group is `timeseries_generator_group_positions`. Keeping this identifier is
+an intentional offset-compatibility decision, not a surviving legacy service.

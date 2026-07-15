@@ -119,19 +119,20 @@ Rules:
 | `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, transaction readiness, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules. Its framework-neutral transaction domain owns ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing. | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, framework DTOs inside domain policy, or collapsed financial policies |
 | `valuation_orchestrator_service` | `src/services/valuation_orchestrator_service` | Valuation job scheduling, reprocessing state, dispatch readiness | Valuation compute mutation, read-plane response shaping |
 | `position_valuation_calculator` | `src/services/calculators/position_valuation_calculator` | Valuation job consumption, valuation snapshot mutation, active valuation handoff; concrete session/repository/idempotency/outbox construction is isolated in `app/infrastructure` | Job scheduling ownership, benchmark/performance calculations; processor application move before persistence/metrics/unit-of-work ports exist |
-| `timeseries_generator_service` | `src/services/timeseries_generator_service` | Position-timeseries generation, aggregation job staging | Portfolio aggregation policy, operational API responses |
-| `portfolio_aggregation_service` | `src/services/portfolio_aggregation_service` | Portfolio-timeseries aggregation, aggregation jobs, completion publication, and direct reconciliation-request staging | Position valuation, reconciliation execution, report composition, downstream performance analytics |
+| `portfolio_derived_state_service` | `src/services/portfolio_derived_state_service` | Position-timeseries materialization, durable aggregation scheduling, portfolio-timeseries materialization, completion publication, and reconciliation-request staging through separate layered modules | Position valuation, reconciliation execution, report composition, downstream performance analytics, or collapsing position and portfolio calculation policy |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
 | `query_control_plane_service` | `src/services/query_control_plane_service` | Core snapshots, analytics inputs, portfolio-manager books, CIO affected cohorts, DPM universe populations, client restriction/sustainability/tax/liquidity source products, fail-closed external treasury/OMS posture, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation, external pricing/execution, downstream DPM/advice decisions |
 
 The deployable list is governed by `docs/architecture/runtime-boundary-decision-catalog.json` and
 `docs/architecture/microservice-boundaries-and-trigger-matrix.md`.
 
-Timeseries generation and portfolio aggregation own separate concrete persistence adapters.
+Position-timeseries generation and portfolio aggregation own separate concrete persistence adapters
+inside one derived-state deployable.
 `TimeseriesGenerationRepository` owns snapshot/cashflow/position-timeseries data access;
 `PortfolioAggregationRepository` owns aggregation queue, portfolio, as-of position-timeseries, and
 portfolio-timeseries persistence. They share only typed instrument/FX reads and stateless upsert
-builders. A future runtime merge remains evidence-gated by the end-state runtime vision.
+builders. The durable queue remains the fan-in, replay, coalescing, and recovery boundary; the
+private Kafka command and duplicate runtime shells are retired.
 
 App-local Compose, Compose-backed CI, and image release use the combined transaction processor and
 no longer contain the three legacy transaction workers or the retired pipeline orchestrator.
@@ -163,7 +164,7 @@ registry, normalization, and infrastructure contracts.
 | cashflows and cashflow rules | cashflow domain and infrastructure adapters in `portfolio_transaction_processing_service` | `query_service` | Do not use for financial-planning advice. |
 | position history and snapshots | position domain and infrastructure adapters in `portfolio_transaction_processing_service`, plus `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
 | valuation jobs and reprocessing state | `valuation_orchestrator_service` | support APIs, worker consumers | Job orchestration state, not business output. |
-| position timeseries and portfolio timeseries | `timeseries_generator_service`, `portfolio_aggregation_service` | `query_service`, analytics inputs | Published with source-data product metadata where supported. |
+| position timeseries and portfolio timeseries | `portfolio_derived_state_service` | `query_service`, analytics inputs | Separate materialization modules publish with source-data product metadata where supported. |
 | reconciliation runs/findings and control stages | `financial_reconciliation_service`; shared `pipeline_stage_state` compatibility table | support and reconciliation APIs | Reconciliation owns control decisions; QCP retains read compatibility while table migration remains separately evidence-gated. |
 | outbox events and processed events | shared infrastructure boundary | dispatcher and consumers | All mutating event publication uses outbox/idempotency contracts. |
 
@@ -176,8 +177,7 @@ sequenceDiagram
     participant Txn as portfolio_transaction_processing_service
     participant ValOrch as valuation_orchestrator_service
     participant Val as position_valuation_calculator
-    participant Ts as timeseries_generator_service
-    participant Agg as portfolio_aggregation_service
+    participant Derived as portfolio_derived_state_service
     participant Recon as financial_reconciliation_service
 
     Ingest->>Persist: raw domain topics
@@ -186,11 +186,11 @@ sequenceDiagram
     Txn->>ValOrch: portfolio_security_day.valuation.ready
     Txn-->>Txn: cost/cashflow compatibility facts (no active in-repo consumer)
     ValOrch->>Val: valuation.job.requested
-    Val->>Ts: valuation.snapshot.persisted
-    Ts->>Agg: portfolio_aggregation_jobs (durable database queue)
-    Agg->>Agg: lease durable jobs + bounded workers
-    Agg->>Recon: portfolio_day.reconciliation.requested
-    Agg-->>Agg: portfolio_day.aggregation.completed compatibility fact
+    Val->>Derived: valuation.snapshot.persisted
+    Derived->>Derived: materialize positions + stage durable portfolio jobs
+    Derived->>Derived: lease jobs + bounded portfolio workers
+    Derived->>Recon: portfolio_day.reconciliation.requested
+    Derived-->>Derived: portfolio_day.aggregation.completed compatibility fact
     Recon-->>Recon: portfolio_day.reconciliation.completed compatibility fact
     Recon->>Recon: persist controls + portfolio_day.controls.evaluated atomically
 ```
