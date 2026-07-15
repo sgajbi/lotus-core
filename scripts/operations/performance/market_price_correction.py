@@ -22,6 +22,25 @@ class SyntheticInstrumentSpec:
 
 RowReader = Callable[[str, Mapping[str, Any]], Mapping[str, Any]]
 
+
+@dataclass(frozen=True, slots=True)
+class DerivedStateCorrectionEvidence:
+    """Record exact expected and observed correction materialization facts."""
+
+    correction_started_at: str
+    drain_seconds: float
+    expected_snapshots: int
+    corrected_snapshots: int
+    expected_valuation_jobs: int
+    corrected_valuation_jobs: int
+    expected_position_timeseries: int
+    corrected_position_timeseries: int
+    expected_portfolio_timeseries: int
+    corrected_portfolio_timeseries: int
+    expected_market_value: str
+    corrected_market_value: str
+
+
 _CORRECTED_DERIVED_STATE_SQL = """
 SELECT
     count(*) FILTER (
@@ -108,7 +127,7 @@ def wait_for_corrected_derived_state(
     expected_market_value: Decimal,
     correction_started_at: datetime,
     timeout_seconds: int,
-) -> float:
+) -> DerivedStateCorrectionEvidence:
     """Wait until every affected derived row reflects one accepted correction."""
 
     started = time.perf_counter()
@@ -135,6 +154,20 @@ def wait_for_corrected_derived_state(
             and int(row["open_valuation_jobs"]) == 0
             and int(row["open_aggregation_jobs"]) == 0
         ):
-            return round(time.perf_counter() - started, 3)
+            corrected_market_value = Decimal(str(row["corrected_market_value"]))
+            return DerivedStateCorrectionEvidence(
+                correction_started_at=correction_started_at.isoformat(),
+                drain_seconds=round(time.perf_counter() - started, 3),
+                expected_snapshots=transaction_count,
+                corrected_snapshots=int(row["corrected_snapshots"]),
+                expected_valuation_jobs=transaction_count,
+                corrected_valuation_jobs=int(row["corrected_valuation_jobs"]),
+                expected_position_timeseries=transaction_count,
+                corrected_position_timeseries=int(row["corrected_position_timeseries"]),
+                expected_portfolio_timeseries=portfolio_count,
+                corrected_portfolio_timeseries=int(row["corrected_portfolio_timeseries"]),
+                expected_market_value=f"{expected_market_value:.10f}",
+                corrected_market_value=f"{corrected_market_value:.10f}",
+            )
         time.sleep(5)
     raise TimeoutError("Market price correction did not fully rematerialize before timeout.")

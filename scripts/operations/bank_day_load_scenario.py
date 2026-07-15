@@ -32,11 +32,12 @@ from scripts.operations.performance.derived_state_resource_monitor import (
     capture_resource_sample,
 )
 from scripts.operations.performance.market_price_correction import (
-    SyntheticInstrumentSpec as InstrumentSpec,
-)
-from scripts.operations.performance.market_price_correction import (
+    DerivedStateCorrectionEvidence,
     apply_market_price_correction,
     wait_for_corrected_derived_state,
+)
+from scripts.operations.performance.market_price_correction import (
+    SyntheticInstrumentSpec as InstrumentSpec,
 )
 
 DEFAULT_INGESTION_BASE_URL = "http://localhost:8200"
@@ -193,7 +194,7 @@ class ScenarioReport:
     checks_passed: bool
     failures: list[str]
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
-    correction_drain_seconds: float | None = None
+    correction_evidence: DerivedStateCorrectionEvidence | None = None
 
 
 class HealthMonitor:
@@ -1462,7 +1463,7 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         failures.append("derived-state resource evidence has no samples")
     if (
         report.config.get("market_price_correction_multiplier") is not None
-        and report.correction_drain_seconds is None
+        and report.correction_evidence is None
     ):
         failures.append("market price correction has no completed drain evidence")
     return failures
@@ -1503,11 +1504,21 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             "## Pipeline Health",
             "",
             f"- Drain seconds: {report.drain_seconds}",
-            f"- Market price correction drain seconds: {report.correction_drain_seconds}",
             f"- Peak backlog jobs: {report.peak_backlog_jobs}",
             f"- Peak backlog age seconds: {report.peak_backlog_age_seconds}",
             f"- Peak replay pressure ratio: {report.peak_replay_pressure_ratio}",
             f"- Peak DLQ events in window: {report.peak_dlq_events_in_window}",
+            "",
+            "## Derived-State Correction Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.correction_evidence)
+                if report.correction_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
             "",
             "## Derived-State Resource Evidence",
             "",
@@ -1720,7 +1731,7 @@ def _finalize_report(
     log_evidence: list[LogEvidence],
     initial_failures: list[str],
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
-    correction_drain_seconds: float | None = None,
+    correction_evidence: DerivedStateCorrectionEvidence | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
         scenario_name=args.scenario_name,
@@ -1753,7 +1764,7 @@ def _finalize_report(
         checks_passed=False,
         failures=[],
         derived_state_resource_evidence=derived_state_resource_evidence,
-        correction_drain_seconds=correction_drain_seconds,
+        correction_evidence=correction_evidence,
     )
     failures = initial_failures + _evaluate_report(report_base)
     return ScenarioReport(
@@ -1778,7 +1789,7 @@ def _finalize_report(
         checks_passed=len(failures) == 0,
         failures=failures,
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
-        correction_drain_seconds=report_base.correction_drain_seconds,
+        correction_evidence=report_base.correction_evidence,
     )
 
 
@@ -1887,7 +1898,7 @@ def main() -> int:
     started_monotonic = time.perf_counter()
     terminal_status = "failed"
     partial_failures: list[str] = []
-    correction_drain_seconds: float | None = None
+    correction_evidence: DerivedStateCorrectionEvidence | None = None
 
     def _request_interrupt(signum: int, _frame: Any) -> None:
         signal_name = signal.Signals(signum).name
@@ -2052,7 +2063,7 @@ def main() -> int:
                     phase="market-price-correction",
                 )
             )
-            correction_drain_seconds = wait_for_corrected_derived_state(
+            correction_evidence = wait_for_corrected_derived_state(
                 row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
                 run_id=run_id,
                 trade_date=resolved_trade_date,
@@ -2065,7 +2076,7 @@ def main() -> int:
                 correction_started_at=correction_started_at,
                 timeout_seconds=args.drain_timeout_seconds,
             )
-            drain_seconds += correction_drain_seconds
+            drain_seconds += correction_evidence.drain_seconds
         terminal_status = "complete"
     except (ScenarioInterrupted, KeyboardInterrupt) as exc:
         partial_failures.append(str(exc))
@@ -2118,7 +2129,7 @@ def main() -> int:
         log_evidence=log_evidence,
         initial_failures=partial_failures + sample_failures + tie_out_failures + log_failures,
         derived_state_resource_evidence=resource_monitor.evidence(),
-        correction_drain_seconds=correction_drain_seconds,
+        correction_evidence=correction_evidence,
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
     print(f"Wrote JSON report: {json_path}")
