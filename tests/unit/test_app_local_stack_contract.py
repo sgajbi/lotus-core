@@ -48,6 +48,33 @@ def test_app_local_compose_keeps_local_overlay_services_available() -> None:
         assert service_name in services
 
 
+def test_app_local_stack_declares_measured_outbox_capacity_profile() -> None:
+    compose = _read_yaml(ROOT / "docker-compose.yml")
+    shared_environment = compose["x-shared-python-env"]
+
+    assert shared_environment["OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS"] == (
+        "${OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS:-1}"
+    )
+    assert shared_environment["OUTBOX_DISPATCHER_BATCH_SIZE"] == (
+        "${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}"
+    )
+
+    for service_name in (
+        "persistence_service",
+        "portfolio_transaction_processing_service",
+        "position_valuation_calculator",
+        "portfolio_derived_state_service",
+        "financial_reconciliation_service",
+    ):
+        service_environment = compose["services"][service_name]["environment"]
+        assert service_environment["OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS"] == (
+            "${OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS:-1}"
+        )
+        assert service_environment["OUTBOX_DISPATCHER_BATCH_SIZE"] == (
+            "${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}"
+        )
+
+
 def test_demo_data_loader_uses_internal_service_urls() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     demo_loader = compose["services"]["demo_data_loader"]

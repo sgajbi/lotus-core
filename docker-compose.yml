@@ -14,6 +14,9 @@ x-lotus-stack-contract:
 
 x-shared-python-env: &shared_python_env
   PYTHONPATH: /app/src/libs/portfolio-common
+  # App-local/load profiles must drain durable stage amplification within the bank-day budget.
+  OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS: ${OUTBOX_DISPATCHER_POLL_INTERVAL_SECONDS:-1}
+  OUTBOX_DISPATCHER_BATCH_SIZE: ${OUTBOX_DISPATCHER_BATCH_SIZE:-1000}
 
 services:
   zookeeper:
