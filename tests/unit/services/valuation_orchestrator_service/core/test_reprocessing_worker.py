@@ -308,6 +308,7 @@ async def test_worker_updates_queue_metrics(mock_dependencies):
 
         await worker._update_queue_metrics(mock_repro_job_repo)
 
+    mock_repro_job_repo.get_queue_stats.assert_awaited_once_with()
     mock_set_pending.assert_called_once_with("reprocessing", 6)
     mock_set_failed.assert_called_once_with("reprocessing", 2)
     mock_set_oldest.assert_called_once_with("reprocessing", 600.0)
