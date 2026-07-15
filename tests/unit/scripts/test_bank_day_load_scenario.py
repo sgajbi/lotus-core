@@ -16,6 +16,7 @@ from scripts.operations.bank_day_load_scenario import (
     _build_instruments_payload,
     _evaluate_report,
     _finalize_report,
+    _wait_for_cycle_completion,
     expected_portfolio_market_value,
     iter_transaction_batches,
 )
@@ -98,6 +99,49 @@ def test_iter_transaction_batches_yields_expected_records_and_batches() -> None:
     assert flattened[0]["transaction_id"] == "LOAD_RUN1_TX_00000001"
     assert flattened[-1]["transaction_id"] == "LOAD_RUN1_TX_00000006"
     assert all(item["quantity"] == "1" for item in flattened)
+
+
+def test_cycle_completion_waits_until_durable_outbox_is_empty(monkeypatch) -> None:
+    captured: dict[str, str] = {}
+    complete_row: dict[str, object] = {
+        "portfolios_count": 2,
+        "transactions_count": 4,
+        "failed_valuation_jobs": 0,
+        "failed_aggregation_jobs": 0,
+        "failed_outbox_events": 0,
+        "snapshots_count": 4,
+        "position_timeseries_count": 4,
+        "portfolio_timeseries_count": 2,
+        "pending_valuation_jobs": 0,
+        "processing_valuation_jobs": 0,
+        "pending_aggregation_jobs": 0,
+        "processing_aggregation_jobs": 0,
+        "pending_outbox_events": 0,
+    }
+    rows: list[dict[str, object]] = [
+        {**complete_row, "pending_outbox_events": 1},
+        complete_row,
+    ]
+
+    def fake_db_row(_engine, query: str, _params: dict[str, object]) -> dict[str, object]:
+        captured["query"] = query
+        return rows.pop(0)
+
+    monkeypatch.setattr(bank_day_load_scenario, "_db_row", fake_db_row)
+    monkeypatch.setattr(bank_day_load_scenario.time, "sleep", lambda _seconds: None)
+
+    elapsed = _wait_for_cycle_completion(
+        engine=object(),
+        run_id="RUN1",
+        trade_date="2026-07-15",
+        portfolio_count=2,
+        transaction_count=4,
+        timeout_seconds=1,
+    )
+
+    assert elapsed >= 0
+    assert rows == []
+    assert "pending_outbox_events" in captured["query"]
 
 
 def test_expected_portfolio_market_value_converts_non_usd_prices() -> None:
