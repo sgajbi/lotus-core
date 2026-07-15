@@ -157,6 +157,17 @@ class MaterializePositionTimeseries:
             existing_record
         ) != cls._material_state(new_record)
 
+    @staticmethod
+    def _requires_source_refresh(
+        existing_record: PositionTimeseriesRecord | None,
+        current_snapshot: PositionSnapshotRecord,
+    ) -> bool:
+        if existing_record is None or current_snapshot.source_updated_at is None:
+            return False
+        if existing_record.materialized_at is None:
+            return True
+        return current_snapshot.source_updated_at > existing_record.materialized_at
+
     async def _materialize_day(
         self,
         repository: PositionTimeseriesRepository,
@@ -192,7 +203,9 @@ class MaterializePositionTimeseries:
             epoch=epoch,
         )
         existing_record = cast(PositionTimeseriesRecord | None, existing_timeseries)
-        if not self._has_material_change(existing_record, new_record):
+        if not self._has_material_change(
+            existing_record, new_record
+        ) and not self._requires_source_refresh(existing_record, current_snapshot):
             return False, new_record
 
         await repository.upsert_position_timeseries(new_record)

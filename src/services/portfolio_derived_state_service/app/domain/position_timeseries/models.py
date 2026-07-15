@@ -1,7 +1,7 @@
 """Immutable inputs and outputs for position-timeseries calculation."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -16,6 +16,7 @@ class PositionSnapshotRecord:
     quantity: Decimal
     cost_basis_local: Decimal | None
     market_value_local: Decimal | None
+    source_updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,3 +50,4 @@ class PositionTimeseriesRecord:
     fees: Decimal
     quantity: Decimal
     cost: Decimal
+    materialized_at: datetime | None = None

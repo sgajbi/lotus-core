@@ -2,7 +2,8 @@
 
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import date
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import TypeVar
 
@@ -231,6 +232,46 @@ async def test_materialization_skips_identical_current_business_state() -> None:
     snapshot = _snapshot()
     repository = InMemoryPositionTimeseriesRepository(snapshot)
     repository.existing_by_date[snapshot.date] = _timeseries_record(snapshot)
+
+    result = await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert result.current_day_changed is False
+    assert repository.upserted == []
+    assert repository.staged_dates == []
+
+
+async def test_materialization_refreshes_newer_authoritative_snapshot() -> None:
+    snapshot = replace(
+        _snapshot(),
+        source_updated_at=datetime(2026, 4, 10, 10, 0, tzinfo=UTC),
+    )
+    repository = InMemoryPositionTimeseriesRepository(snapshot)
+    repository.existing_by_date[snapshot.date] = replace(
+        _timeseries_record(snapshot),
+        materialized_at=datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+    )
+
+    result = await MaterializePositionTimeseries(
+        repository_provider=InMemoryRepositoryProvider(repository)
+    ).execute(_command())
+
+    assert result.current_day_changed is True
+    assert [record.date for record in repository.upserted] == [snapshot.date]
+    assert repository.staged_dates == [snapshot.date]
+
+
+async def test_materialization_ignores_duplicate_snapshot_delivery() -> None:
+    snapshot = replace(
+        _snapshot(),
+        source_updated_at=datetime(2026, 4, 10, 10, 0, tzinfo=UTC),
+    )
+    repository = InMemoryPositionTimeseriesRepository(snapshot)
+    repository.existing_by_date[snapshot.date] = replace(
+        _timeseries_record(snapshot),
+        materialized_at=datetime(2026, 4, 10, 10, 1, tzinfo=UTC),
+    )
 
     result = await MaterializePositionTimeseries(
         repository_provider=InMemoryRepositoryProvider(repository)

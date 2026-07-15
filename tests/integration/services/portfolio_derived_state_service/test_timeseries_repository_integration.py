@@ -1,7 +1,9 @@
 """Prove derived-state repository behavior against PostgreSQL."""
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import TypeVar
 
 import pytest
 from portfolio_common.database_models import (
@@ -15,9 +17,14 @@ from portfolio_common.database_models import (
     PositionTimeseries,
     Transaction,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
+    MaterializePositionTimeseries,
+    MaterializePositionTimeseriesCommand,
+)
 from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
     AggregationJobLease,
 )
@@ -25,12 +32,30 @@ from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
     timeseries_generation_repository,
 )
+from src.services.portfolio_derived_state_service.app.ports.position_timeseries import (
+    PositionTimeseriesRepository,
+)
 
 TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGenerationRepository
 
 PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 pytestmark = pytest.mark.asyncio
+T = TypeVar("T")
+
+
+class _SessionPositionTimeseriesRepositoryProvider:
+    """Run integration materialization against the fixture-owned database session."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def run_in_transaction(
+        self,
+        operation: Callable[[PositionTimeseriesRepository], Awaitable[T]],
+    ) -> T:
+        async with self._session.begin():
+            return await operation(TimeseriesGenerationRepository(self._session))
 
 
 def _lease(identity: str) -> AggregationJobLease:
@@ -104,6 +129,115 @@ def _transaction(
         trade_currency="USD",
         currency="USD",
     )
+
+
+async def test_newer_snapshot_refreshes_position_and_rearms_portfolio_day_once(
+    db_engine,
+    clean_db,
+    async_db_session: AsyncSession,
+):
+    portfolio_id = "FX_REFRESH_PORT"
+    security_id = "FX_REFRESH_EUR"
+    valuation_date = date(2026, 7, 9)
+    snapshot_updated_at = datetime.now(UTC)
+    original_materialized_at = snapshot_updated_at - timedelta(hours=1)
+
+    with Session(db_engine) as session:
+        session.add(
+            Portfolio(
+                portfolio_id=portfolio_id,
+                base_currency="USD",
+                open_date=date(2024, 1, 1),
+                risk_exposure="a",
+                investment_time_horizon="b",
+                portfolio_type="c",
+                booking_center_code="d",
+                client_id="e",
+                status="ACTIVE",
+            )
+        )
+        session.add(
+            Instrument(
+                security_id=security_id,
+                name="EUR refresh instrument",
+                isin="FX_REFRESH_EUR_ISIN",
+                currency="EUR",
+                product_type="Equity",
+            )
+        )
+        session.flush()
+        snapshot = _snapshot(portfolio_id, security_id, valuation_date)
+        snapshot.updated_at = snapshot_updated_at
+        session.add(snapshot)
+        session.add(
+            PositionTimeseries(
+                portfolio_id=portfolio_id,
+                security_id=security_id,
+                date=valuation_date,
+                epoch=0,
+                bod_market_value=Decimal("0"),
+                bod_cashflow_position=Decimal("0"),
+                eod_cashflow_position=Decimal("0"),
+                bod_cashflow_portfolio=Decimal("0"),
+                eod_cashflow_portfolio=Decimal("0"),
+                eod_market_value=Decimal("100"),
+                fees=Decimal("0"),
+                quantity=Decimal("10"),
+                cost=Decimal("10"),
+                updated_at=original_materialized_at,
+            )
+        )
+        session.commit()
+        snapshot_id = snapshot.id
+
+    materializer = MaterializePositionTimeseries(
+        repository_provider=_SessionPositionTimeseriesRepositoryProvider(async_db_session)
+    )
+    command = MaterializePositionTimeseriesCommand(
+        snapshot_id=snapshot_id,
+        portfolio_id=portfolio_id,
+        security_id=security_id,
+        valuation_date=valuation_date,
+        epoch=0,
+        correlation_id="corr-fx-refresh",
+    )
+
+    first_result = await materializer.execute(command)
+    refreshed_series = await async_db_session.scalar(
+        select(PositionTimeseries).where(
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id == security_id,
+            PositionTimeseries.date == valuation_date,
+            PositionTimeseries.epoch == 0,
+        )
+    )
+    aggregation_job = await async_db_session.scalar(
+        select(PortfolioAggregationJob).where(
+            PortfolioAggregationJob.portfolio_id == portfolio_id,
+            PortfolioAggregationJob.aggregation_date == valuation_date,
+        )
+    )
+    assert refreshed_series is not None
+    assert aggregation_job is not None
+    first_materialized_at = refreshed_series.updated_at
+    assert first_result.current_day_changed is True
+    assert first_materialized_at > original_materialized_at
+    assert aggregation_job.status == "PENDING"
+    await async_db_session.rollback()
+
+    duplicate_result = await materializer.execute(command)
+    duplicate_series = await async_db_session.scalar(
+        select(PositionTimeseries).where(
+            PositionTimeseries.portfolio_id == portfolio_id,
+            PositionTimeseries.security_id == security_id,
+            PositionTimeseries.date == valuation_date,
+            PositionTimeseries.epoch == 0,
+        )
+    )
+
+    assert duplicate_series is not None
+    assert duplicate_result.current_day_changed is False
+    assert duplicate_series.updated_at == first_materialized_at
 
 
 @pytest.fixture(scope="function")

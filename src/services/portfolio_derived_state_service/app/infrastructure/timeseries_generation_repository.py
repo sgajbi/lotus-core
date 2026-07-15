@@ -1,7 +1,7 @@
 """SQLAlchemy persistence for position timeseries generation."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import cast
 
@@ -342,6 +342,7 @@ def to_position_snapshot_record(
         quantity=cast(Decimal, row.quantity),
         cost_basis_local=cast(Decimal | None, row.cost_basis_local),
         market_value_local=cast(Decimal | None, row.market_value_local),
+        source_updated_at=cast(datetime, row.updated_at),
     )
 
 
@@ -373,4 +374,5 @@ def _position_timeseries_record(row: PositionTimeseries) -> PositionTimeseriesRe
         fees=cast(Decimal, row.fees),
         quantity=cast(Decimal, row.quantity),
         cost=cast(Decimal, row.cost),
+        materialized_at=cast(datetime, row.updated_at),
     )
