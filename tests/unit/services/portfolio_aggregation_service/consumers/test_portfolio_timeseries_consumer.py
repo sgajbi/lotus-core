@@ -138,9 +138,14 @@ async def test_process_message_success(
         mock_complete_or_requeue.assert_called_once_with(
             mock_event.portfolio_id, mock_event.aggregation_date, db_session=ANY
         )
-        mock_outbox_repo.create_outbox_event.assert_awaited_once()
-        assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
-            "test-corr-id"
+        assert mock_outbox_repo.create_outbox_event.await_count == 2
+        assert [
+            call.kwargs["event_type"]
+            for call in mock_outbox_repo.create_outbox_event.await_args_list
+        ] == ["PortfolioAggregationDayCompleted", "FinancialReconciliationRequested"]
+        assert all(
+            call.kwargs["correlation_id"] == "test-corr-id"
+            for call in mock_outbox_repo.create_outbox_event.await_args_list
         )
 
 
@@ -172,8 +177,9 @@ async def test_process_message_uses_header_correlation_on_direct_path(
         correlation_id_var.reset(token)
 
     mock_logic.assert_awaited_once()
-    assert mock_outbox_repo.create_outbox_event.call_args.kwargs["correlation_id"] == (
-        "test-corr-id"
+    assert all(
+        call.kwargs["correlation_id"] == "test-corr-id"
+        for call in mock_outbox_repo.create_outbox_event.await_args_list
     )
 
 

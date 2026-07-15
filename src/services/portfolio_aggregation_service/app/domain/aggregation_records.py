@@ -50,3 +50,12 @@ class AggregationJobRecord:
     portfolio_id: str
     aggregation_date: date
     correlation_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioAggregationCompletion:
+    """Portfolio-day aggregation identity ready for durable event staging."""
+
+    portfolio_id: str
+    aggregation_date: date
+    epoch: int
