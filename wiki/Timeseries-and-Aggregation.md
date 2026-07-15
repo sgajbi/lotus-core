@@ -57,14 +57,22 @@ Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shap
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Use
 `make profile-derived-state-price-burst` to materialize 10,000 shared-instrument positions and then
 prove a 5% same-date price correction across every affected snapshot, position series, and
-portfolio series row. All run through an isolated dynamic-port Compose project.
+portfolio series row. Use `make profile-derived-state-price-restatement` for the five-business-date
+price window and `make profile-derived-state-fx-restatement` for a five-business-date direct
+`EUR/USD` correction with exact market-value and unrealized price/FX/total P&L tie-out. All run
+through an isolated dynamic-port Compose project. The FX profile commits its correction while
+valuation orchestration is stopped, restores the service, and certifies the recovered result.
 `make test-derived-state-workload-smoke` is machine-labelled
 `diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile
 execution requires building the exact branch source and fails fast if existing images are selected.
 
-The market-price correction profile does not certify FX corrections. Core currently persists
-accepted FX observations without an equivalent durable revaluation trigger; issue #791 owns that
-correction path and its bounded backdated/burst evidence.
+The market-price correction profiles do not certify FX corrections. Core publishes each accepted
+FX observation as source-owned persisted evidence and valuation orchestration coalesces bounded
+direct-pair/date replay work. Unsupported inverse or triangulated paths are not inferred. Query
+Control Plane exposes portfolio-scoped `RESET_FX_WATERMARKS` diagnostics. Issue #791 remains open
+until the managed FX profile, restart, concurrency, and exact derived-value evidence pass.
+No-exposure pairs use a bounded visibility retry and complete as observable no-ops instead of
+cycling indefinitely.
 
 The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
 positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
