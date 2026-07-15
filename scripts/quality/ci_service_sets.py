@@ -58,6 +58,7 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
 )
 
 INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = E2E_SMOKE_SERVICES
+DERIVED_STATE_RECOVERY_GATE_SERVICES: tuple[str, ...] = E2E_SMOKE_SERVICES
 
 E2E_RECOVERY_SERVICES: tuple[str, ...] = tuple(
     service
@@ -100,6 +101,7 @@ PREBUILD_GROUPS: dict[str, tuple[str, ...]] = {
     "latency-gate": LATENCY_GATE_SERVICES,
     "performance-gate": PERFORMANCE_GATE_SERVICES,
     "failure-recovery-gate": FAILURE_RECOVERY_GATE_SERVICES,
+    "derived-state-recovery-gate": DERIVED_STATE_RECOVERY_GATE_SERVICES,
     "institutional-completion-gate": INSTITUTIONAL_COMPLETION_GATE_SERVICES,
     "pr-runtime-image-set": PR_RUNTIME_IMAGE_SET_SERVICES,
     "main-runtime-image-set": MAIN_RUNTIME_IMAGE_SET_SERVICES,
