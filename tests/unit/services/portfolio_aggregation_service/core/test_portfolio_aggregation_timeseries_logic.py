@@ -7,6 +7,7 @@ import pytest
 
 from src.services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic import (
     FxRateNotFoundError,
+    InstrumentReferenceNotFoundError,
     PortfolioTimeseriesLogic,
 )
 
@@ -135,3 +136,51 @@ async def test_calculate_daily_record_rejects_non_positive_fx_rate() -> None:
             position_timeseries_list=[_position_timeseries("SEC-EUR")],
             repo=repo,
         )
+
+
+@pytest.mark.asyncio
+async def test_calculate_daily_record_rejects_missing_instrument_reference() -> None:
+    portfolio = SimpleNamespace(portfolio_id="PORT-AGG", base_currency="USD")
+    repo = SimpleNamespace(
+        get_instruments_by_ids=AsyncMock(
+            return_value=[SimpleNamespace(security_id="SEC-USD", currency="USD")]
+        ),
+        get_fx_rate=AsyncMock(),
+    )
+
+    with pytest.raises(
+        InstrumentReferenceNotFoundError,
+        match="Missing instrument reference data for SEC-MISSING",
+    ):
+        await PortfolioTimeseriesLogic.calculate_daily_record(
+            portfolio=portfolio,
+            a_date=date(2026, 3, 8),
+            epoch=2,
+            position_timeseries_list=[
+                _position_timeseries("SEC-USD"),
+                _position_timeseries("SEC-MISSING"),
+            ],
+            repo=repo,
+        )
+
+
+@pytest.mark.asyncio
+async def test_calculate_daily_record_normalizes_security_identity_before_lookup() -> None:
+    portfolio = SimpleNamespace(portfolio_id="PORT-AGG", base_currency="USD")
+    repo = SimpleNamespace(
+        get_instruments_by_ids=AsyncMock(
+            return_value=[SimpleNamespace(security_id=" SEC-USD ", currency="USD")]
+        ),
+        get_fx_rate=AsyncMock(),
+    )
+
+    result = await PortfolioTimeseriesLogic.calculate_daily_record(
+        portfolio=portfolio,
+        a_date=date(2026, 3, 8),
+        epoch=2,
+        position_timeseries_list=[_position_timeseries(" SEC-USD ")],
+        repo=repo,
+    )
+
+    assert result.eod_market_value == Decimal("110")
+    repo.get_instruments_by_ids.assert_awaited_once_with(["SEC-USD"])
