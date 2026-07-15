@@ -907,6 +907,13 @@ Most relevant current governance:
     surfaces. `make architecture-docs-catalog-guard` runs directly and through
     `make architecture-guard`; it fails when a new `docs/architecture` Markdown or JSON document is
     neither explicitly cataloged nor covered by an intentional rule such as `CR-*` review evidence.
+    Compose-backed latency and load evidence must distinguish service health, source-ingestion
+    completion, and downstream data-product readiness. A successful one-shot seed loader does not
+    prove valuation, timeseries, aggregation, or other asynchronous projections are query-ready.
+    Before warmup or timing, preflight the actual measured source-backed contracts and require one
+    bounded all-2xx sweep. Keep permanent HTTP/transport failures fail-closed with endpoint-specific
+    diagnostics; never count convergence requests as latency samples or weaken budgets to hide a
+    readiness race.
 49. GitHub Security automation coverage is governed as repository truth. `.github/dependabot.yml`
     covers GitHub Actions, every governed Python dependency manifest, and every runtime service
     Dockerfile. Routine Dependabot version-update PR churn is currently paused with

@@ -7,6 +7,7 @@ import requests
 
 from scripts.operations import latency_profile
 from scripts.operations.latency_profile import (
+    EndpointCase,
     RuntimeContext,
     _cases,
     _enforce_gate,
@@ -15,7 +16,9 @@ from scripts.operations.latency_profile import (
     _raise_if_compose_service_failed,
     _resolve_runtime_ids,
     _response_error_sample,
+    _run_latency_profile,
     _wait_compose_service_completed_successfully,
+    _wait_profile_cases_ready,
 )
 
 
@@ -311,6 +314,168 @@ def test_response_error_sample_omits_success_body() -> None:
     response._content = b'{"ok":true}'
 
     assert _response_error_sample(response) is None
+
+
+def _latency_response(status_code: int, body: bytes = b"") -> requests.Response:
+    response = requests.Response()
+    response.status_code = status_code
+    response._content = body
+    response.headers["content-type"] = "application/json"
+    return response
+
+
+def _position_timeseries_case() -> EndpointCase:
+    return EndpointCase(
+        name="analytics_position_timeseries",
+        method="POST",
+        url="http://localhost:8202/integration/portfolios/PB-001/analytics/position-timeseries",
+        payload={"as_of_date": "2026-03-31"},
+        p95_budget_ms=420,
+    )
+
+
+def test_wait_profile_cases_ready_allows_transient_source_convergence(monkeypatch) -> None:
+    session = MagicMock()
+    session.post.side_effect = [
+        _latency_response(422, b'{"error_code":"QCP_ANALYTICS_INSUFFICIENT_DATA"}'),
+        _latency_response(200, b'{"items":[]}'),
+    ]
+    progress_checks: list[str] = []
+    timeline = iter([100.0, 101.0, 102.0])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+
+    _wait_profile_cases_ready(
+        session,
+        (_position_timeseries_case(),),
+        timeout_seconds=5,
+        progress_check=lambda: progress_checks.append("checked"),
+    )
+
+    assert session.post.call_count == 2
+    assert progress_checks == ["checked", "checked"]
+
+
+def test_wait_profile_cases_ready_reports_permanent_non_success(monkeypatch) -> None:
+    session = MagicMock()
+    session.post.return_value = _latency_response(
+        422,
+        b'{"error_code":"QCP_ANALYTICS_INSUFFICIENT_DATA"}',
+    )
+    timeline = iter([100.0, 101.0, 106.0])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+
+    try:
+        _wait_profile_cases_ready(
+            session,
+            (_position_timeseries_case(),),
+            timeout_seconds=5,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        assert "analytics_position_timeseries" in message
+        assert "HTTP 422" in message
+        assert "QCP_ANALYTICS_INSUFFICIENT_DATA" in message
+    else:
+        raise AssertionError("Expected source readiness to time out for permanent HTTP 422.")
+
+
+def test_wait_profile_cases_ready_reports_transport_failure(monkeypatch) -> None:
+    session = MagicMock()
+    session.post.side_effect = requests.ConnectionError("connection refused")
+    timeline = iter([100.0, 101.0, 106.0])
+    monkeypatch.setattr("scripts.operations.latency_profile.time.time", lambda: next(timeline))
+    monkeypatch.setattr("scripts.operations.latency_profile.time.sleep", lambda _: None)
+
+    try:
+        _wait_profile_cases_ready(
+            session,
+            (_position_timeseries_case(),),
+            timeout_seconds=5,
+        )
+    except RuntimeError as exc:
+        assert "connection refused" in str(exc)
+    else:
+        raise AssertionError("Expected source readiness to report the transport failure.")
+
+
+def test_wait_profile_cases_ready_propagates_seed_failure() -> None:
+    session = MagicMock()
+
+    def _seed_failure() -> None:
+        raise RuntimeError("demo_data_loader exited with status 1")
+
+    try:
+        _wait_profile_cases_ready(
+            session,
+            (_position_timeseries_case(),),
+            timeout_seconds=5,
+            progress_check=_seed_failure,
+        )
+    except RuntimeError as exc:
+        assert "demo_data_loader exited with status 1" in str(exc)
+    else:
+        raise AssertionError("Expected source readiness to propagate seed failure.")
+    session.post.assert_not_called()
+
+
+def test_run_latency_profile_waits_for_sources_before_measurement(monkeypatch) -> None:
+    calls: list[str] = []
+    runtime_context = RuntimeContext(
+        portfolio_id="PB-001",
+        benchmark_id="BMK-001",
+        as_of_date=date(2026, 3, 31),
+    )
+    args = SimpleNamespace(
+        ingestion_base_url="http://localhost:8200",
+        event_replay_base_url="http://localhost:8209",
+        query_base_url="http://localhost:8201",
+        query_control_plane_base_url="http://localhost:8202",
+        ready_timeout_seconds=180,
+        context_timeout_seconds=300,
+        source_readiness_timeout_seconds=300,
+        portfolio_id="PB-001",
+        benchmark_id="BMK-001",
+        include_protected_ops=False,
+        warmup_runs=5,
+        measured_runs=30,
+        output_dir="output/task-runs",
+        enforce=False,
+    )
+    monkeypatch.setattr(
+        latency_profile,
+        "_wait_ready",
+        lambda **_: calls.append("services-ready"),
+    )
+    monkeypatch.setattr(
+        latency_profile,
+        "_resolve_runtime_ids",
+        lambda *_, **__: calls.append("context-ready") or runtime_context,
+    )
+
+    def _wait_sources(_session, cases, **_kwargs) -> None:
+        assert any(case.name == "analytics_position_timeseries" for case in cases)
+        assert not {"ing_ready", "qry_ready"}.intersection(case.name for case in cases)
+        calls.append("sources-ready")
+
+    monkeypatch.setattr(latency_profile, "_wait_profile_cases_ready", _wait_sources)
+    monkeypatch.setattr(
+        latency_profile,
+        "run_profile",
+        lambda **_: calls.append("measure") or [],
+    )
+    monkeypatch.setattr(
+        latency_profile,
+        "_write_artifacts",
+        lambda **_: (
+            latency_profile.Path("latency-profile.json"),
+            latency_profile.Path("latency-profile.md"),
+        ),
+    )
+
+    assert _run_latency_profile(args=args, run_id="run-001", managed_run=None) == 0
+    assert calls == ["services-ready", "context-ready", "sources-ready", "measure"]
 
 
 def test_context_timeout_must_not_be_shorter_than_ready_timeout() -> None:

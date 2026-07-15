@@ -31,6 +31,8 @@ from tests.test_support.managed_compose_run import (  # noqa: E402
     prepare_managed_compose_run,
 )
 
+_SERVICE_HEALTH_CASES = frozenset({"ing_ready", "qry_ready"})
+
 
 @dataclass(frozen=True)
 class EndpointCase:
@@ -503,6 +505,52 @@ def _call_case(session: requests.Session, case: EndpointCase) -> requests.Respon
     return session.post(case.url, json=case.payload, timeout=case.timeout_seconds)
 
 
+def _readiness_failure(session: requests.Session, case: EndpointCase) -> str | None:
+    try:
+        response = _call_case(session, case)
+    except requests.RequestException as exc:
+        return f"{type(exc).__name__}: {exc}"
+    if 200 <= response.status_code < 300:
+        return None
+    sample = _response_error_sample(response)
+    body = None if sample is None else sample.get("body")
+    body_detail = "" if body is None else f" body={json.dumps(body, sort_keys=True)}"
+    return f"HTTP {response.status_code}{body_detail}"
+
+
+def _wait_profile_cases_ready(
+    session: requests.Session,
+    cases: tuple[EndpointCase, ...],
+    *,
+    timeout_seconds: int,
+    progress_check: Callable[[], None] | None = None,
+) -> None:
+    """Wait until measured source contracts are stable enough to begin timing."""
+
+    deadline = time.time() + timeout_seconds
+    last_failures: dict[str, str] = {}
+    while time.time() < deadline:
+        if progress_check is not None:
+            progress_check()
+        failures = {
+            case.name: failure
+            for case in cases
+            if (failure := _readiness_failure(session, case)) is not None
+        }
+        if not failures:
+            return
+        last_failures = failures
+        time.sleep(2)
+
+    detail = "; ".join(
+        f"{case_name}={failure}" for case_name, failure in sorted(last_failures.items())
+    )
+    raise RuntimeError(
+        "Latency profile source endpoints did not become query-ready before measurement "
+        f"(timeout_seconds={timeout_seconds}, last_failures={detail or 'no readiness sweep'})."
+    )
+
+
 def _response_error_sample(response: requests.Response) -> dict[str, Any] | None:
     if 200 <= response.status_code < 300:
         return None
@@ -681,6 +729,15 @@ def parse_args() -> argparse.Namespace:
             "later than container health."
         ),
     )
+    parser.add_argument(
+        "--source-readiness-timeout-seconds",
+        type=int,
+        default=300,
+        help=(
+            "Maximum time to wait for every measured source-backed endpoint to return 2xx after "
+            "the portfolio context resolves and before latency measurement starts."
+        ),
+    )
     parser.add_argument("--output-dir", default="output/task-runs")
     parser.add_argument("--compose-file", default="docker-compose.yml")
     parser.add_argument(
@@ -721,6 +778,11 @@ def _run_latency_profile(
         )
 
     session = requests.Session()
+    progress_check = (
+        None
+        if managed_run is None
+        else lambda: _raise_if_compose_service_failed("demo_data_loader", managed_run)
+    )
     runtime_context = _resolve_runtime_ids(
         session,
         query_base_url=args.query_base_url,
@@ -728,11 +790,26 @@ def _run_latency_profile(
         portfolio_id=args.portfolio_id,
         benchmark_id=args.benchmark_id,
         timeout_seconds=max(args.context_timeout_seconds, args.ready_timeout_seconds),
-        progress_check=(
-            None
-            if managed_run is None
-            else lambda: _raise_if_compose_service_failed("demo_data_loader", managed_run)
-        ),
+        progress_check=progress_check,
+    )
+
+    source_readiness_cases = tuple(
+        case
+        for case in _cases(
+            args.ingestion_base_url,
+            args.event_replay_base_url,
+            args.query_base_url,
+            args.query_control_plane_base_url,
+            runtime_context,
+            args.include_protected_ops,
+        )
+        if case.name not in _SERVICE_HEALTH_CASES
+    )
+    _wait_profile_cases_ready(
+        session,
+        source_readiness_cases,
+        timeout_seconds=args.source_readiness_timeout_seconds,
+        progress_check=progress_check,
     )
 
     results = run_profile(
