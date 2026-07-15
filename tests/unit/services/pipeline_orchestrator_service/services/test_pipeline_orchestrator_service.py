@@ -3,10 +3,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 
 from src.services.pipeline_orchestrator_service.app.services.pipeline_orchestrator_service import (
     PipelineOrchestratorService,
@@ -55,33 +52,6 @@ class _RepoStub:
 
     async def get_latest_portfolio_control_stage_epoch(self, **kwargs):
         return self.latest_control_epoch
-
-
-@pytest.mark.asyncio
-async def test_portfolio_aggregation_completion_emits_reconciliation_request():
-    repo = _RepoStub()
-    outbox_repo = AsyncMock()
-    service = PipelineOrchestratorService(repo=repo, outbox_repo=outbox_repo)
-
-    await service.register_portfolio_aggregation_completed(
-        PortfolioAggregationDayCompletedEvent(
-            portfolio_id="PORT-1",
-            aggregation_date=date(2026, 3, 7),
-            epoch=2,
-            correlation_id="corr-4",
-        ),
-        correlation_id="corr-4",
-    )
-
-    outbox_repo.create_outbox_event.assert_awaited_once()
-    call = outbox_repo.create_outbox_event.await_args
-    assert call.kwargs["event_type"] == "FinancialReconciliationRequested"
-    assert call.kwargs["aggregate_id"] == "PORT-1:2026-03-07:2"
-    assert call.kwargs["payload"]["reconciliation_types"] == [
-        "transaction_cashflow",
-        "position_valuation",
-        "timeseries_integrity",
-    ]
 
 
 @pytest.mark.asyncio

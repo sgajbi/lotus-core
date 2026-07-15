@@ -4,10 +4,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator, cast
 
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.outbox_repository import OutboxRepository
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,13 +37,6 @@ class SqlAlchemyPipelineStageUnitOfWork:
                 correlation_id,
             ),
         )
-
-    async def register_portfolio_aggregation_completed(
-        self,
-        event: PortfolioAggregationDayCompletedEvent,
-        correlation_id: str | None,
-    ) -> None:
-        await self._service.register_portfolio_aggregation_completed(event, correlation_id)
 
     async def register_reconciliation_completed(
         self,

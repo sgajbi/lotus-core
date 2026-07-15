@@ -1,43 +1,11 @@
 from datetime import date
 
-from portfolio_common.config import (
-    KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-    KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
-)
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.config import KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 
 from src.services.pipeline_orchestrator_service.app.adapters.pipeline_event_factory import (
-    financial_reconciliation_requested_message,
     portfolio_day_controls_evaluated_message,
 )
-
-
-def test_reconciliation_requested_message_preserves_topic_and_payload() -> None:
-    event = PortfolioAggregationDayCompletedEvent(
-        portfolio_id="PORT-1",
-        aggregation_date=date(2026, 3, 7),
-        epoch=2,
-        correlation_id="corr-4",
-    )
-
-    message = financial_reconciliation_requested_message(
-        event=event,
-        correlation_id="corr-4",
-    )
-
-    assert message.aggregate_type == "FinancialReconciliation"
-    assert message.aggregate_id == "PORT-1:2026-03-07:2"
-    assert message.event_type == "FinancialReconciliationRequested"
-    assert message.topic == KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC
-    assert message.payload["reconciliation_types"] == [
-        "transaction_cashflow",
-        "position_valuation",
-        "timeseries_integrity",
-    ]
-    assert message.payload["correlation_id"] == "corr-4"
 
 
 def test_controls_evaluated_message_preserves_topic_and_blocking_payload() -> None:
