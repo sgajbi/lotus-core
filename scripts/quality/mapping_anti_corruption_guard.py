@@ -58,17 +58,6 @@ REQUIRED_SNIPPETS = {
     Path("src/services/persistence_service/app/repositories/transaction_db_repo.py"): (
         "transaction_event_to_record_values",
     ),
-    Path("src/services/pipeline_orchestrator_service/app/adapters/outbox_event_mapper.py"): (
-        "def pipeline_outbox_event_payload",
-        "outbox_event_payload",
-    ),
-    Path("src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py"): (
-        "portfolio_day_controls_evaluated_message",
-        "pipeline_outbox_event_payload",
-    ),
-    Path(
-        "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
-    ): ("portfolio_day_controls_evaluated_message",),
     Path(
         "src/services/portfolio_aggregation_service/app/infrastructure/"
         "aggregation_completion_event_stager.py"
@@ -142,14 +131,6 @@ FORBIDDEN_SNIPPETS = {
     Path("src/services/persistence_service/app/repositories/transaction_db_repo.py"): (
         "_TRANSACTION_EVENT_ONLY_FIELDS",
         "event_business_payload(",
-    ),
-    Path(
-        "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
-    ): (
-        "pipeline_outbox_event_payload",
-        "payload=outbox_event_payload(",
-        "payload = outbox_event_payload(",
-        '.model_dump(mode="json")',
     ),
 }
 

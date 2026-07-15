@@ -338,37 +338,6 @@ services:
     networks:
       - app_network
 
-  pipeline_orchestrator_service:
-    build:
-      context: .
-      dockerfile: ./src/services/pipeline_orchestrator_service/Dockerfile
-    image: lotus-core/pipeline-orchestrator-service:local
-    hostname: pipeline_orchestrator_service
-    ports:
-      - "${LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT:-8086}:8086"
-    environment:
-      <<: *shared_python_env
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-      DATABASE_URL: ${DATABASE_URL:-postgresql://user:password@postgres:5432/portfolio_db}
-    depends_on:
-      kafka-topic-creator:
-        condition: service_completed_successfully
-      migration-runner:
-        condition: service_completed_successfully
-    restart: unless-stopped
-    volumes:
-      - ./src/services/pipeline_orchestrator_service/app:/app/app
-      - ./src/libs/portfolio-common:/app/src/libs/portfolio-common
-    command: ["python", "-m", "app.main"]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8086/health/ready || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - app_network
-
   valuation_orchestrator_service:
     build:
       context: .
@@ -583,7 +552,6 @@ services:
       - event_replay_service
       - persistence_service
       - portfolio_transaction_processing_service
-      - pipeline_orchestrator_service
       - valuation_orchestrator_service
       - position_valuation_calculator
       - timeseries_generator_service

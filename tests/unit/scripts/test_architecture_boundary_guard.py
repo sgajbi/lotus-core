@@ -58,8 +58,8 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
     )
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from src.services.pipeline_orchestrator_service.app.services "
-        "import pipeline_orchestrator_service\n",
+        "from src.services.valuation_orchestrator_service.app.core "
+        "import valuation_scheduler\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
@@ -72,7 +72,7 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
     assert findings == [
         "src/services/calculators/cost_calculator_service/app/consumer.py:1: "
         "calculator modules must not import orchestrator or query internals: disallowed direct "
-        "import 'services.pipeline_orchestrator_service.app.services'"
+        "import 'services.valuation_orchestrator_service.app.core'"
     ]
 
 
@@ -90,8 +90,8 @@ def test_transaction_processing_boundary_rejects_orchestrator_internal_import(
     )
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from src.services.pipeline_orchestrator_service.app.services "
-        "import pipeline_orchestrator_service\n",
+        "from src.services.valuation_orchestrator_service.app.core "
+        "import valuation_scheduler\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
@@ -105,7 +105,7 @@ def test_transaction_processing_boundary_rejects_orchestrator_internal_import(
         "src/services/portfolio_transaction_processing_service/app/application/"
         "process_transaction.py:1: transaction processing must not import orchestrator or query "
         "internals: disallowed direct import "
-        "'services.pipeline_orchestrator_service.app.services'"
+        "'services.valuation_orchestrator_service.app.core'"
     ]
 
 
@@ -114,10 +114,10 @@ def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monk
         tmp_path
         / "src"
         / "services"
-        / "pipeline_orchestrator_service"
+        / "valuation_orchestrator_service"
         / "app"
-        / "services"
-        / "pipeline_orchestrator_service.py"
+        / "core"
+        / "valuation_scheduler.py"
     )
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -133,8 +133,8 @@ def test_orchestrator_boundary_rejects_calculator_internal_import(tmp_path, monk
     )
 
     assert findings == [
-        "src/services/pipeline_orchestrator_service/app/services/"
-        "pipeline_orchestrator_service.py:1: orchestrators must not import calculator or query "
+        "src/services/valuation_orchestrator_service/app/core/"
+        "valuation_scheduler.py:1: valuation orchestrator must not import calculator or query "
         "internals: disallowed direct import "
         "'services.calculators.cost_calculator_service.app.consumer'"
     ]
@@ -147,10 +147,10 @@ def test_orchestrator_boundary_rejects_transaction_processing_internal_import(
         tmp_path
         / "src"
         / "services"
-        / "pipeline_orchestrator_service"
+        / "valuation_orchestrator_service"
         / "app"
-        / "services"
-        / "pipeline_orchestrator_service.py"
+        / "core"
+        / "valuation_scheduler.py"
     )
     source.parent.mkdir(parents=True)
     source.write_text(
@@ -166,8 +166,8 @@ def test_orchestrator_boundary_rejects_transaction_processing_internal_import(
     )
 
     assert findings == [
-        "src/services/pipeline_orchestrator_service/app/services/"
-        "pipeline_orchestrator_service.py:1: orchestrators must not import calculator or query "
+        "src/services/valuation_orchestrator_service/app/core/"
+        "valuation_scheduler.py:1: valuation orchestrator must not import calculator or query "
         "internals: disallowed direct import "
         "'services.portfolio_transaction_processing_service.app.application'"
     ]

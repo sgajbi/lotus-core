@@ -22,7 +22,6 @@ DOCKER_SMOKE_SERVICES: tuple[str, ...] = (
     "event_replay_service",
     "persistence_service",
     "portfolio_transaction_processing_service",
-    "pipeline_orchestrator_service",
     "valuation_orchestrator_service",
     "position_valuation_calculator",
     "timeseries_generator_service",
@@ -41,7 +40,6 @@ PERFORMANCE_GATE_SERVICES: tuple[str, ...] = (
     "event_replay_service",
     "persistence_service",
     "portfolio_transaction_processing_service",
-    "pipeline_orchestrator_service",
 )
 
 FAILURE_RECOVERY_GATE_SERVICES: tuple[str, ...] = PERFORMANCE_GATE_SERVICES
@@ -55,7 +53,6 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
     "query_control_plane_service",
     "persistence_service",
     "portfolio_transaction_processing_service",
-    "pipeline_orchestrator_service",
     "position_valuation_calculator",
     "timeseries_generator_service",
     "valuation_orchestrator_service",
@@ -78,7 +75,6 @@ E2E_RECOVERY_HEALTH_PORT_ENV: dict[str, str] = {
     "query_control_plane_service": "LOTUS_QUERY_CONTROL_PLANE_HOST_PORT",
     "persistence_service": "LOTUS_PERSISTENCE_HOST_PORT",
     "portfolio_transaction_processing_service": "LOTUS_TRANSACTION_PROCESSING_HOST_PORT",
-    "pipeline_orchestrator_service": "LOTUS_PIPELINE_ORCHESTRATOR_HOST_PORT",
     "position_valuation_calculator": "LOTUS_POSITION_VALUATION_HOST_PORT",
     "timeseries_generator_service": "LOTUS_TIMESERIES_GENERATOR_HOST_PORT",
     "valuation_orchestrator_service": "LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT",

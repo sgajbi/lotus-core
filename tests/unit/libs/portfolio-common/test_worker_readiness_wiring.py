@@ -7,11 +7,6 @@ WORKER_READINESS_WIRING = (
         Path("src/services/calculators/position_valuation_calculator/app/consumer_manager.py"),
     ),
     (
-        "pipeline_orchestrator_service_web",
-        Path("src/services/pipeline_orchestrator_service/app/web.py"),
-        Path("src/services/pipeline_orchestrator_service/app/consumer_manager.py"),
-    ),
-    (
         "portfolio_aggregation_service_web",
         Path("src/services/portfolio_aggregation_service/app/web.py"),
         Path("src/services/portfolio_aggregation_service/app/consumer_manager.py"),

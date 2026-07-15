@@ -1024,7 +1024,7 @@ async def get_reconciliation_runs(
     requested_by: Optional[str] = Query(
         None,
         description="Optional reconciliation requester filter.",
-        examples=["pipeline_orchestrator_service"],
+        examples=["system_pipeline"],
     ),
     dedupe_key: Optional[str] = Query(
         None,

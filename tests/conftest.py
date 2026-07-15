@@ -94,7 +94,6 @@ FULL_STACK_SERVICES = [
     "query_control_plane_service",
     "persistence_service",
     "portfolio_transaction_processing_service",
-    "pipeline_orchestrator_service",
     "position_valuation_calculator",
     "timeseries_generator_service",
     "valuation_orchestrator_service",

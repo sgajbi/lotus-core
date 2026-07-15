@@ -243,9 +243,6 @@ def service_schemas() -> dict[str, dict]:
     )
     from src.services.ingestion_service.app.main import app as ingestion_app
     from src.services.persistence_service.app.web import app as persistence_web_app
-    from src.services.pipeline_orchestrator_service.app.web import (
-        app as pipeline_orchestrator_web_app,
-    )
     from src.services.portfolio_aggregation_service.app.web import (
         app as portfolio_aggregation_web_app,
     )
@@ -267,7 +264,6 @@ def service_schemas() -> dict[str, dict]:
         "ingestion_service": ingestion_app.openapi(),
         "event_replay_service": event_replay_app.openapi(),
         "financial_reconciliation_service": financial_reconciliation_app.openapi(),
-        "pipeline_orchestrator_service_web": pipeline_orchestrator_web_app.openapi(),
         "persistence_service_web": persistence_web_app.openapi(),
         "valuation_orchestrator_service_web": valuation_orchestrator_web_app.openapi(),
         "portfolio_aggregation_service_web": portfolio_aggregation_web_app.openapi(),

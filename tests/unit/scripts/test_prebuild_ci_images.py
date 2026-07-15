@@ -47,7 +47,6 @@ def test_prebuild_group_expands_to_named_services(
         "query_service",
         "event_replay_service",
         "portfolio_transaction_processing_service",
-        "pipeline_orchestrator_service",
     ]
     assert tagged == [
         ("kafka-topic-creator", "migration-runner"),

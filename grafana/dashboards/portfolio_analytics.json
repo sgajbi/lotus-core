@@ -107,7 +107,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|pipeline_orchestrator_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"})",
+          "expr": "sum(up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"})",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -173,7 +173,7 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|pipeline_orchestrator_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
+          "expr": "sum(rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -880,7 +880,7 @@
           },
           "editorMode": "code",
           "range": true,
-          "expr": "sum by (job) (rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|pipeline_orchestrator_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
+          "expr": "sum by (job) (rate(http_requests_total{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}[5m]))",
           "legendFormat": "{{job}}",
           "refId": "A"
         }
@@ -970,7 +970,7 @@
           },
           "editorMode": "code",
           "range": true,
-          "expr": "up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|pipeline_orchestrator_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}",
+          "expr": "up{job=~\"ingestion_service|query_service|query_control_plane_service|event_replay_service|financial_reconciliation_service|persistence_service|portfolio_transaction_processing_service|valuation_orchestrator_service|position_valuation_calculator|timeseries_generator_service|portfolio_aggregation_service\"}",
           "legendFormat": "{{job}}",
           "refId": "A"
         }

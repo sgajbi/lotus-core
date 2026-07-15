@@ -151,7 +151,6 @@ def test_prepare_failure_recovery_run_owns_integration_runtime_and_diagnostics(
             "event_replay_service",
             "persistence_service",
             "portfolio_transaction_processing_service",
-            "pipeline_orchestrator_service",
         ),
         "build": True,
         "log_path": (tmp_path / "output/task-runs/diagnostics/failure-recovery-gate-compose.log"),
