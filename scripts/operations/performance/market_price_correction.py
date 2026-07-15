@@ -95,7 +95,17 @@ SELECT
         FROM portfolio_aggregation_jobs
         WHERE portfolio_id LIKE :portfolio_pattern
           AND status = 'FAILED'
-    ) AS failed_aggregation_jobs
+    ) AS failed_aggregation_jobs,
+    (
+        SELECT count(*)
+        FROM outbox_events
+        WHERE status = 'PENDING'
+    ) AS pending_outbox_events,
+    (
+        SELECT count(*)
+        FROM outbox_events
+        WHERE status = 'FAILED'
+    ) AS failed_outbox_events
 FROM daily_position_snapshots snapshot
 WHERE snapshot.portfolio_id LIKE :portfolio_pattern
   AND snapshot.date BETWEEN :window_start_date AND :window_end_date
@@ -173,11 +183,16 @@ def wait_for_corrected_derived_state(
     }
     while time.time() < deadline:
         row = row_reader(_CORRECTED_DERIVED_STATE_SQL, params)
-        if int(row["failed_valuation_jobs"]) > 0 or int(row["failed_aggregation_jobs"]) > 0:
+        if (
+            int(row["failed_valuation_jobs"]) > 0
+            or int(row["failed_aggregation_jobs"]) > 0
+            or int(row["failed_outbox_events"]) > 0
+        ):
             raise RuntimeError(
                 "Price correction entered FAILED state before drain: "
                 f"failed_valuation_jobs={row['failed_valuation_jobs']} "
-                f"failed_aggregation_jobs={row['failed_aggregation_jobs']}"
+                f"failed_aggregation_jobs={row['failed_aggregation_jobs']} "
+                f"failed_outbox_events={row['failed_outbox_events']}"
             )
         if (
             int(row["corrected_snapshots"]) == expected_position_rows
@@ -187,6 +202,7 @@ def wait_for_corrected_derived_state(
             and int(row["corrected_portfolio_timeseries"]) == expected_portfolio_rows
             and int(row["open_valuation_jobs"]) == 0
             and int(row["open_aggregation_jobs"]) == 0
+            and int(row["pending_outbox_events"]) == 0
         ):
             corrected_market_value = Decimal(str(row["corrected_market_value"]))
             return DerivedStateCorrectionEvidence(

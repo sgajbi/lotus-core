@@ -633,6 +633,12 @@ def _wait_for_cycle_completion(
             count(*) FILTER (WHERE status = 'PROCESSING') AS processing_aggregation_jobs
         FROM portfolio_aggregation_jobs
         WHERE portfolio_id LIKE :portfolio_pattern
+    ),
+    outbox_counts AS (
+        SELECT
+            count(*) FILTER (WHERE status = 'PENDING') AS pending_outbox_events,
+            count(*) FILTER (WHERE status = 'FAILED') AS failed_outbox_events
+        FROM outbox_events
     )
     SELECT *
     FROM portfolio_counts,
@@ -643,7 +649,8 @@ def _wait_for_cycle_completion(
          position_timeseries_counts,
          timeseries_counts,
          valuation_job_counts,
-         aggregation_job_counts
+         aggregation_job_counts,
+         outbox_counts
     """
     params = {
         "portfolio_pattern": f"LOAD_{run_id}_PF_%",
@@ -652,11 +659,16 @@ def _wait_for_cycle_completion(
     }
     while time.time() < deadline:
         row = _db_row(engine, sql, params)
-        if int(row["failed_valuation_jobs"]) > 0 or int(row["failed_aggregation_jobs"]) > 0:
+        if (
+            int(row["failed_valuation_jobs"]) > 0
+            or int(row["failed_aggregation_jobs"]) > 0
+            or int(row["failed_outbox_events"]) > 0
+        ):
             raise RuntimeError(
                 "Pipeline entered FAILED state before drain: "
                 f"failed_valuation_jobs={row['failed_valuation_jobs']} "
-                f"failed_aggregation_jobs={row['failed_aggregation_jobs']}"
+                f"failed_aggregation_jobs={row['failed_aggregation_jobs']} "
+                f"failed_outbox_events={row['failed_outbox_events']}"
             )
         if (
             int(row["portfolios_count"]) == portfolio_count
@@ -668,6 +680,7 @@ def _wait_for_cycle_completion(
             and int(row["processing_valuation_jobs"] or 0) == 0
             and int(row["pending_aggregation_jobs"] or 0) == 0
             and int(row["processing_aggregation_jobs"] or 0) == 0
+            and int(row["pending_outbox_events"] or 0) == 0
         ):
             return round(time.perf_counter() - started, 3)
         time.sleep(5)
@@ -1462,6 +1475,18 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         or report.derived_state_resource_evidence.sample_count == 0
     ):
         failures.append("derived-state resource evidence has no samples")
+    if report.derived_state_resource_evidence is not None:
+        outbox_evidence = report.derived_state_resource_evidence
+        if outbox_evidence.final_outbox_pending_events != 0:
+            failures.append(
+                "final outbox pending events "
+                f"{outbox_evidence.final_outbox_pending_events} != expected 0"
+            )
+        if outbox_evidence.final_outbox_failed_events != 0:
+            failures.append(
+                "final outbox failed events "
+                f"{outbox_evidence.final_outbox_failed_events} != expected 0"
+            )
     if (
         report.config.get("market_price_correction_multiplier") is not None
         and report.correction_evidence is None

@@ -90,6 +90,8 @@ def test_wait_requires_every_post_correction_derived_stage() -> None:
             "open_aggregation_jobs": 0,
             "failed_valuation_jobs": 0,
             "failed_aggregation_jobs": 0,
+            "pending_outbox_events": 0,
+            "failed_outbox_events": 0,
         }
 
     evidence = wait_for_corrected_derived_state(
