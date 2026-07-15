@@ -10,15 +10,21 @@ from scripts.operations.failure_recovery_gate import (
     RecoveryMode,
     RecoveryPollingEvidence,
     RecoveryResult,
-    _compose_command,
-    _consumer_lag,
     _evaluate_recovery_result,
     _prepare_failure_recovery_managed_run,
-    _resolve_interruption_container,
     _resolve_runtime_connections,
-    _set_container_pause,
     _wait_for_full_recovery,
     _write_report,
+)
+from scripts.operations.recovery.runtime_support import (
+    compose_command as _compose_command,
+)
+from scripts.operations.recovery.runtime_support import consumer_lag as _consumer_lag
+from scripts.operations.recovery.runtime_support import (
+    resolve_interruption_container as _resolve_interruption_container,
+)
+from scripts.operations.recovery.runtime_support import (
+    set_container_pause as _set_container_pause,
 )
 from scripts.operations.transaction_processing_load_support import TransactionProcessingCounts
 
@@ -255,7 +261,7 @@ def test_resolve_interruption_container_requires_running_compose_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "scripts.operations.failure_recovery_gate._run_capture",
+        "scripts.operations.recovery.runtime_support.run_capture",
         lambda cmd, cwd: "abc123containerid\n",
     )
 
@@ -273,7 +279,7 @@ def test_resolve_interruption_container_fails_closed_when_service_is_not_running
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "scripts.operations.failure_recovery_gate._run_capture",
+        "scripts.operations.recovery.runtime_support.run_capture",
         lambda cmd, cwd: "",
     )
 
@@ -291,7 +297,7 @@ def test_set_container_pause_uses_resolved_container_id(
 ) -> None:
     calls: list[tuple[list[str], Path]] = []
     monkeypatch.setattr(
-        "scripts.operations.failure_recovery_gate._run_capture",
+        "scripts.operations.recovery.runtime_support.run_capture",
         lambda cmd, cwd: calls.append((cmd, cwd)) or "",
     )
     repo_root = Path("/tmp/repo")
@@ -318,7 +324,7 @@ def test_consumer_lag_treats_uncommitted_partition_as_offset_zero() -> None:
     lag = _consumer_lag(
         store=store,
         consumer_group="portfolio_transaction_processing_group",
-        transaction_topic="transactions.persisted.v1",
+        topic="transactions.persisted.v1",
     )
 
     assert lag == 15
