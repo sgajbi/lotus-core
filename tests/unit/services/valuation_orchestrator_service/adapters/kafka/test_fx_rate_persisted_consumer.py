@@ -69,8 +69,7 @@ def dependencies():
         yield session
 
     target = (
-        "src.services.valuation_orchestrator_service.app.adapters.kafka."
-        "fx_rate_persisted_consumer"
+        "src.services.valuation_orchestrator_service.app.adapters.kafka.fx_rate_persisted_consumer"
     )
     with (
         patch(f"{target}.get_async_db_session", new=sessions),

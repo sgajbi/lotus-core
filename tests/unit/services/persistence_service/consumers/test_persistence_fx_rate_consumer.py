@@ -99,9 +99,7 @@ async def test_process_message_success(
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
     mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo.claim_event_processing.return_value = True
-    mock_repo.upsert_fx_rate.return_value = DBFxRate(
-        **event_business_payload(valid_fx_rate_event)
-    )
+    mock_repo.upsert_fx_rate.return_value = DBFxRate(**event_business_payload(valid_fx_rate_event))
 
     with patch.object(
         fx_rate_consumer, "_send_to_dlq_async", new_callable=AsyncMock

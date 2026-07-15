@@ -24,9 +24,7 @@ class FxRateConsumer(GenericPersistenceConsumer):
     def service_name(self) -> str:
         return "persistence-fx-rates"
 
-    async def handle_persistence(
-        self, db_session: AsyncSession, event: FxRateEvent
-    ) -> DBFxRate:
+    async def handle_persistence(self, db_session: AsyncSession, event: FxRateEvent) -> DBFxRate:
         """Persists the FX rate event using its specific repository."""
         repo = FxRateRepository(db_session)
         return await repo.upsert_fx_rate(event)

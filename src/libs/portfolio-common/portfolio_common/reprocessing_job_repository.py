@@ -13,9 +13,7 @@ from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
-EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset(
-    {"RESET_WATERMARKS", "RESET_FX_WATERMARKS"}
-)
+EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset({"RESET_WATERMARKS", "RESET_FX_WATERMARKS"})
 
 
 def _claim_pending_jobs_query(job_type: str):
