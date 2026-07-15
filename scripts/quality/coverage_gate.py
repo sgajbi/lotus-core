@@ -93,6 +93,16 @@ def main() -> int:
         != 0
     ):
         return 1
+    if (
+        run_suite(
+            "ops-contract",
+            with_coverage=True,
+            coverage_sources=coverage_sources,
+            coverage_file=".coverage.ops_contract",
+        )
+        != 0
+    ):
+        return 1
     run(
         [
             sys.executable,

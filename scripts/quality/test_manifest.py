@@ -32,6 +32,8 @@ SUITES: dict[str, list[str]] = {
     "integration-all": ["tests/integration"],
     "ops-contract": [
         "tests/integration/services/ingestion_service/test_ingestion_routers.py",
+        "tests/integration/services/query_control_plane_service/"
+        "test_operations_router_dependency.py",
     ],
     "boundary-mapping-conformance": [
         "tests/unit/boundary_mapping",

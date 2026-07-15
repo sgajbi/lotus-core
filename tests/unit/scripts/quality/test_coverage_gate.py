@@ -92,7 +92,18 @@ def test_coverage_gate_collects_unit_warnings_and_coverage_once(
                 ),
                 "coverage_file": ".coverage.integration_lite",
             },
-        )
+        ),
+        (
+            "ops-contract",
+            {
+                "with_coverage": True,
+                "coverage_sources": (
+                    "src/services/query_service/app",
+                    "src.services.core.domain.cost_basis",
+                ),
+                "coverage_file": ".coverage.ops_contract",
+            },
+        ),
     ]
     assert len(report_calls) == 5
     assert f"--include={coverage_gate.QUERY_SERVICE_INCLUDE}" in report_calls[1]
@@ -118,6 +129,38 @@ def test_coverage_gate_stops_when_unit_warning_evidence_fails(monkeypatch, tmp_p
     monkeypatch.setattr(coverage_gate, "_coverage_sources", lambda _critical_paths: ())
 
     assert coverage_gate.main() == 1
+
+
+def test_coverage_gate_stops_when_operations_contract_coverage_fails(
+    monkeypatch, tmp_path: Path
+) -> None:
+    _redirect_coverage_output(monkeypatch, tmp_path)
+    suite_calls: list[str] = []
+
+    monkeypatch.setattr(
+        warning_budget_gate,
+        "run_suite_with_warning_budget",
+        lambda **_kwargs: 0,
+    )
+
+    def run_suite(name: str, **_kwargs: object) -> int:
+        suite_calls.append(name)
+        return 1 if name == "ops-contract" else 0
+
+    monkeypatch.setattr(test_manifest, "run_suite", run_suite)
+    monkeypatch.setattr(coverage_gate, "run", lambda _command: None)
+    monkeypatch.setattr(coverage_gate, "_changed_critical_paths", lambda: ())
+    monkeypatch.setattr(coverage_gate, "_coverage_sources", lambda _critical_paths: ())
+
+    assert coverage_gate.main() == 1
+    assert suite_calls == ["integration-lite", "ops-contract"]
+
+
+def test_operations_contract_suite_includes_control_plane_router_contracts() -> None:
+    assert (
+        "tests/integration/services/query_control_plane_service/"
+        "test_operations_router_dependency.py" in test_manifest.get_suite("ops-contract")
+    )
 
 
 def test_coverage_scope_adds_current_changed_critical_sources(monkeypatch, tmp_path: Path) -> None:
