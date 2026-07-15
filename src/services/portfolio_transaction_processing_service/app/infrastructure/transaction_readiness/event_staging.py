@@ -50,6 +50,7 @@ class TransactionalTransactionReadinessEventStager:
             topic=KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
             payload=outbox_event_payload(completed_event),
             correlation_id=correlation_id,
+            traceparent=traceparent,
         )
 
         if not stage.security_id:
@@ -72,4 +73,5 @@ class TransactionalTransactionReadinessEventStager:
             topic=KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
             payload=outbox_event_payload(valuation_event),
             correlation_id=correlation_id,
+            traceparent=traceparent,
         )

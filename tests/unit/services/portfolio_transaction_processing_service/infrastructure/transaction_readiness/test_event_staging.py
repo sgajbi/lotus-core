@@ -30,6 +30,9 @@ def _stage(*, security_id: str | None = "SEC-001") -> TransactionStageRecord:
     )
 
 
+TRACEPARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+
 @pytest.mark.asyncio
 async def test_stages_transaction_and_valuation_readiness_events() -> None:
     outbox_repository = AsyncMock()
@@ -38,7 +41,7 @@ async def test_stages_transaction_and_valuation_readiness_events() -> None:
     await stager.stage_transaction_readiness(
         _stage(),
         correlation_id="corr-001",
-        traceparent="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        traceparent=TRACEPARENT,
     )
 
     assert outbox_repository.create_outbox_event.await_count == 2
@@ -49,15 +52,13 @@ async def test_stages_transaction_and_valuation_readiness_events() -> None:
     assert completed_call.kwargs["payload"]["readiness_reason"] == (
         "atomic_transaction_processing_completed"
     )
-    assert completed_call.kwargs["payload"]["traceparent"] == (
-        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-    )
+    assert completed_call.kwargs["payload"]["traceparent"] == TRACEPARENT
+    assert completed_call.kwargs["traceparent"] == TRACEPARENT
     assert valuation_call.kwargs["aggregate_id"] == "PB-001:SEC-001:2026-04-10:4"
     assert valuation_call.kwargs["event_type"] == "PortfolioDayReadyForValuation"
     assert valuation_call.kwargs["topic"] == KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC
-    assert valuation_call.kwargs["payload"]["traceparent"] == (
-        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-    )
+    assert valuation_call.kwargs["payload"]["traceparent"] == TRACEPARENT
+    assert valuation_call.kwargs["traceparent"] == TRACEPARENT
 
 
 @pytest.mark.asyncio
@@ -75,3 +76,4 @@ async def test_stage_without_security_omits_valuation_readiness() -> None:
     assert outbox_repository.create_outbox_event.await_args.kwargs["event_type"] == (
         "TransactionProcessingCompleted"
     )
+    assert outbox_repository.create_outbox_event.await_args.kwargs["traceparent"] is None
