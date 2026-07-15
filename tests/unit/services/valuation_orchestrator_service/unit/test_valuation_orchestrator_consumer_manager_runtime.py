@@ -67,6 +67,7 @@ def _patch_runtime(monkeypatch):
 async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "ValuationReadinessConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(consumer_manager, "PriceEventConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(consumer_manager, "FxRatePersistedConsumer", _FakeSuccessConsumer)
     manager = consumer_manager.ConsumerManager()
 
     run_task = asyncio.create_task(manager.run())
@@ -82,6 +83,7 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
     monkeypatch.setattr(consumer_manager, "ValuationReadinessConsumer", _FakeFailingConsumer)
     monkeypatch.setattr(consumer_manager, "PriceEventConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(consumer_manager, "FxRatePersistedConsumer", _FakeSuccessConsumer)
     manager = consumer_manager.ConsumerManager()
 
     with pytest.raises(RuntimeError, match="Critical service task"):
@@ -96,6 +98,7 @@ async def test_consumer_manager_propagates_typed_topic_verification_failure(
 ):
     monkeypatch.setattr(consumer_manager, "ValuationReadinessConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(consumer_manager, "PriceEventConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(consumer_manager, "FxRatePersistedConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(
         consumer_manager,
         "ensure_topics_exist",
@@ -135,8 +138,15 @@ async def test_consumer_manager_applies_only_valid_merged_runtime_overrides(
         for c in manager.consumers
         if c._consumer_config["group.id"] == "valuation_orchestrator_group_price_events"
     )
+    fx_consumer = next(
+        c
+        for c in manager.consumers
+        if c._consumer_config["group.id"] == "valuation_orchestrator_group_fx_events"
+    )
 
     assert readiness_consumer._consumer_config["session.timeout.ms"] == 30000
     assert readiness_consumer._consumer_config["heartbeat.interval.ms"] == 3000
     assert price_consumer._consumer_config["session.timeout.ms"] == 30000
     assert price_consumer._consumer_config["heartbeat.interval.ms"] == 3000
+    assert fx_consumer.topic == "fx_rates.persisted"
+    assert fx_consumer._consumer_config["session.timeout.ms"] == 30000

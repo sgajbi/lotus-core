@@ -5,6 +5,7 @@ import signal
 import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
+    KAFKA_FX_RATES_PERSISTED_TOPIC,
     KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
@@ -16,6 +17,7 @@ from portfolio_common.runtime_supervision import (
     wait_for_shutdown_or_task_failure,
 )
 
+from .adapters.kafka.fx_rate_persisted_consumer import FxRatePersistedConsumer
 from .consumers.price_event_consumer import PriceEventConsumer
 from .consumers.valuation_readiness_consumer import ValuationReadinessConsumer
 from .core.reprocessing_worker import ReprocessingWorker
@@ -57,6 +59,15 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_MARKET_PRICES_PERSISTED_TOPIC,
                 group_id=f"{group_id}_price_events",
+                dlq_topic=dlq_topic,
+                service_prefix=service_prefix,
+            )
+        )
+        self.consumers.append(
+            FxRatePersistedConsumer(
+                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
+                topic=KAFKA_FX_RATES_PERSISTED_TOPIC,
+                group_id=f"{group_id}_fx_events",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
             )
