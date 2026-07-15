@@ -128,7 +128,9 @@ class ValuationWatermarkAdvancer:
         latest_business_date,
     ) -> None:
         advancable_dates = await repo.find_contiguous_snapshot_dates(
-            lagging_states, first_open_dates
+            lagging_states,
+            first_open_dates,
+            latest_business_date,
         )
         updates_to_commit = self._build_watermark_advance_updates(
             lagging_states,

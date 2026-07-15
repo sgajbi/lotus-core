@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List
 
 from portfolio_common.logging_utils import operation_log_extra
@@ -154,38 +154,34 @@ class ValuationBackfillPlanner:
     def _build_backfill_job_requests(
         self,
         state,
-        first_open_date,
-        latest_business_date,
+        first_open_date: date,
+        valuation_dates: list[date],
     ) -> list[ValuationJobUpsert]:
         start_date = max(state.watermark_date, first_open_date - timedelta(days=1))
-        job_requests: list[ValuationJobUpsert] = []
-        current_date = start_date + timedelta(days=1)
-
-        while current_date <= latest_business_date:
-            job_requests.append(
-                ValuationJobUpsert(
-                    portfolio_id=state.portfolio_id,
-                    security_id=state.security_id,
-                    valuation_date=current_date,
-                    epoch=state.epoch,
-                    correlation_id=self.build_backfill_correlation_id(
-                        state.portfolio_id,
-                        state.security_id,
-                        state.epoch,
-                        current_date,
-                        state.updated_at,
-                    ),
-                )
+        return [
+            ValuationJobUpsert(
+                portfolio_id=state.portfolio_id,
+                security_id=state.security_id,
+                valuation_date=valuation_date,
+                epoch=state.epoch,
+                correlation_id=self.build_backfill_correlation_id(
+                    state.portfolio_id,
+                    state.security_id,
+                    state.epoch,
+                    valuation_date,
+                    state.updated_at,
+                ),
             )
-            current_date += timedelta(days=1)
-
-        return job_requests
+            for valuation_date in valuation_dates
+            if valuation_date > start_date
+        ]
 
     def _iter_backfill_job_chunks(
         self,
         states_to_backfill,
         first_open_dates: Dict[tuple[str, str, int], Any],
         latest_business_date,
+        valuation_dates: list[date],
     ):
         chunk: list[ValuationJobUpsert] = []
         for state in states_to_backfill:
@@ -198,7 +194,7 @@ class ValuationBackfillPlanner:
                 continue
 
             job_requests = self._build_backfill_job_requests(
-                state, first_open_date, latest_business_date
+                state, first_open_date, valuation_dates
             )
             if not job_requests:
                 continue
@@ -252,12 +248,14 @@ class ValuationBackfillPlanner:
         states_to_backfill,
         first_open_dates: Dict[tuple[str, str, int], Any],
         latest_business_date,
+        valuation_dates: list[date],
     ) -> None:
         for chunk_index, job_requests in enumerate(
             self._iter_backfill_job_chunks(
                 states_to_backfill,
                 first_open_dates,
                 latest_business_date,
+                valuation_dates,
             )
         ):
             await self._stage_backfill_job_chunk(
@@ -313,9 +311,26 @@ class ValuationBackfillPlanner:
             latest_business_date,
         )
         self._log_no_history_reprocessing_defer(keys_waiting_for_history)
+        if not first_open_dates:
+            return
+
+        earliest_required_date = min(
+            max(
+                state.watermark_date,
+                first_open_dates[(state.portfolio_id, state.security_id, state.epoch)]
+                - timedelta(days=1),
+            )
+            for state in states_to_backfill
+            if (state.portfolio_id, state.security_id, state.epoch) in first_open_dates
+        )
+        valuation_dates = await repo.get_valuation_dates_between(
+            earliest_required_date,
+            latest_business_date,
+        )
         await self._process_backfill_states(
             job_repo,
             states_to_backfill,
             first_open_dates,
             latest_business_date,
+            valuation_dates,
         )

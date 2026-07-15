@@ -4,7 +4,6 @@ from importlib import import_module
 
 import pytest
 from portfolio_common.database_models import (
-    BusinessDate,
     DailyPositionSnapshot,
     Portfolio,
     PositionState,
@@ -65,12 +64,25 @@ async def test_find_contiguous_snapshot_dates_handles_empty_first_open_dates(
                 watermark_date=date(2025, 8, 10),
                 status="CURRENT",
             ),
-            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 10)),
-            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 11)),
             DailyPositionSnapshot(
                 portfolio_id="P-EMPTY-OPEN-DATES",
                 security_id="S-EMPTY-OPEN-DATES",
                 date=date(2025, 8, 10),
+                epoch=0,
+                quantity=Decimal("10"),
+                cost_basis=Decimal("100"),
+                cost_basis_local=Decimal("100"),
+                market_price=Decimal("10"),
+                market_value=Decimal("100"),
+                market_value_local=Decimal("100"),
+                unrealized_gain_loss=Decimal("0"),
+                unrealized_gain_loss_local=Decimal("0"),
+                valuation_status="VALUED_CURRENT",
+            ),
+            DailyPositionSnapshot(
+                portfolio_id="P-EMPTY-OPEN-DATES",
+                security_id="S-EMPTY-OPEN-DATES",
+                date=date(2025, 8, 11),
                 epoch=0,
                 quantity=Decimal("10"),
                 cost_basis=Decimal("100"),
@@ -98,4 +110,4 @@ async def test_find_contiguous_snapshot_dates_handles_empty_first_open_dates(
 
     contiguous_dates = await repo.find_contiguous_snapshot_dates(states, {})
 
-    assert contiguous_dates == {("P-EMPTY-OPEN-DATES", "S-EMPTY-OPEN-DATES"): date(2025, 8, 10)}
+    assert contiguous_dates == {("P-EMPTY-OPEN-DATES", "S-EMPTY-OPEN-DATES"): date(2025, 8, 11)}

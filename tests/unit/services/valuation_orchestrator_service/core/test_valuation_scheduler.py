@@ -81,6 +81,14 @@ def scheduler(mock_kafka_producer: MagicMock) -> ValuationScheduler:
 @pytest.fixture
 def mock_dependencies():
     mock_repo = AsyncMock(spec=ValuationRepository)
+
+    def calendar_day_dates(after_date: date, through_date: date) -> list[date]:
+        return [
+            date.fromordinal(ordinal)
+            for ordinal in range(after_date.toordinal() + 1, through_date.toordinal() + 1)
+        ]
+
+    mock_repo.get_valuation_dates_between.side_effect = calendar_day_dates
     mock_job_repo = AsyncMock(spec=ValuationJobRepository)
     mock_job_repo.upsert_jobs.return_value = 0
     mock_state_repo = AsyncMock(spec=PositionStateRepository)
@@ -155,6 +163,42 @@ async def test_scheduler_creates_position_aware_backfill_jobs(
         ]
         assert scheduled_jobs[0].correlation_id == "SCHEDULER_BACKFILL:P1:S1:1:2025-08-10"
         mock_lag_set.assert_called_once_with(expected_lag)
+
+
+async def test_scheduler_creates_jobs_only_for_governed_business_dates(
+    scheduler: ValuationScheduler,
+    mock_dependencies: dict,
+):
+    mock_repo = mock_dependencies["repo"]
+    mock_job_repo = mock_dependencies["job_repo"]
+    business_dates = [
+        date(2026, 7, 9),
+        date(2026, 7, 10),
+        date(2026, 7, 13),
+        date(2026, 7, 14),
+        date(2026, 7, 15),
+    ]
+    state = PositionState(
+        portfolio_id="P1",
+        security_id="S1",
+        watermark_date=date(2026, 7, 8),
+        epoch=1,
+    )
+    mock_repo.get_latest_business_date.return_value = business_dates[-1]
+    mock_repo.get_states_needing_backfill.return_value = [state]
+    mock_repo.get_first_open_dates_for_keys.return_value = {("P1", "S1", 1): business_dates[0]}
+    mock_repo.get_valuation_dates_between.side_effect = None
+    mock_repo.get_valuation_dates_between.return_value = business_dates
+    mock_job_repo.upsert_jobs.return_value = len(business_dates)
+
+    await scheduler._create_backfill_jobs(AsyncMock())
+
+    mock_repo.get_valuation_dates_between.assert_awaited_once_with(
+        date(2026, 7, 8),
+        date(2026, 7, 15),
+    )
+    scheduled_jobs = mock_job_repo.upsert_jobs.await_args.args[0]
+    assert [job.valuation_date for job in scheduled_jobs] == business_dates
 
 
 async def test_scheduler_rearms_completed_jobs_after_watermark_reset(
@@ -273,6 +317,10 @@ async def test_backfill_planner_batches_jobs_without_scheduler_loop():
     mock_repo.get_latest_business_date.return_value = latest_business_date
     mock_repo.get_states_needing_backfill.return_value = states_to_backfill
     mock_repo.get_first_open_dates_for_keys.return_value = {("P1", "S1", 1): date(2025, 8, 10)}
+    mock_repo.get_valuation_dates_between.return_value = [
+        date(2025, 8, 11),
+        date(2025, 8, 12),
+    ]
     mock_job_repo.upsert_jobs.return_value = 2
 
     await planner.create_backfill_jobs(
@@ -421,6 +469,7 @@ async def test_scheduler_advances_watermarks(
             ("P2", "S2", 2): date(2025, 8, 11),
             ("P3", "S3", 1): date(2025, 8, 11),
         },
+        latest_business_date,
     )
     mock_state_repo.bulk_update_states.assert_awaited_once()
     updates_arg = mock_state_repo.bulk_update_states.call_args[0][0]
@@ -520,6 +569,7 @@ async def test_watermark_advancer_advances_lagging_states_without_scheduler_loop
     mock_repo.find_contiguous_snapshot_dates.assert_awaited_once_with(
         lagging_states,
         {("P1", "S1", 1): date(2025, 8, 11)},
+        latest_business_date,
     )
     mock_state_repo.bulk_update_states.assert_awaited_once_with(
         [
@@ -568,6 +618,7 @@ async def test_scheduler_advances_from_first_open_date_for_sentinel_watermarks(
     mock_repo.find_contiguous_snapshot_dates.assert_awaited_once_with(
         lagging_states,
         {("P1", "S1", 1): date(2025, 8, 10)},
+        latest_business_date,
     )
     mock_state_repo.bulk_update_states.assert_awaited_once_with(
         [

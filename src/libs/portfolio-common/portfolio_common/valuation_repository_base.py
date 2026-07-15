@@ -246,14 +246,52 @@ class ValuationRepositoryBase:
         self,
         states: List[PositionState],
         first_open_dates: Optional[Dict[Tuple[str, str, int], date]] = None,
+        latest_valuation_date: date | None = None,
     ) -> Dict[Tuple[str, str], date]:
         if not states:
             return {}
 
+        if latest_valuation_date is None:
+            latest_valuation_date = await self.get_latest_business_date()
+        if latest_valuation_date is None:
+            return {}
+
         result = await self.db.execute(
-            build_contiguous_snapshot_dates_stmt(states, first_open_dates or {})
+            build_contiguous_snapshot_dates_stmt(
+                states,
+                first_open_dates or {},
+                latest_valuation_date,
+            )
         )
         return contiguous_snapshot_dates_by_key(result)
+
+    @async_timed(repository="ValuationRepository", method="get_valuation_dates_between")
+    async def get_valuation_dates_between(
+        self,
+        after_date: date,
+        through_date: date,
+    ) -> list[date]:
+        calendar_exists_stmt = select(
+            select(BusinessDate.date)
+            .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
+            .exists()
+        )
+        calendar_exists = bool((await self.db.execute(calendar_exists_stmt)).scalar_one())
+        if not calendar_exists:
+            day_count = (through_date - after_date).days
+            return [after_date + timedelta(days=offset) for offset in range(1, day_count + 1)]
+
+        valuation_dates_stmt = (
+            select(BusinessDate.date)
+            .where(
+                BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+                BusinessDate.date > after_date,
+                BusinessDate.date <= through_date,
+            )
+            .order_by(BusinessDate.date.asc())
+        )
+        result = await self.db.execute(valuation_dates_stmt)
+        return list(result.scalars().all())
 
     @async_timed(repository="ValuationRepository", method="get_states_needing_backfill")
     async def get_states_needing_backfill(

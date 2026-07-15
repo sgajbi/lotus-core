@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from typing import Any, Dict, List, Tuple
 
-from sqlalchemy import Integer, String, cast, column, func, select, tuple_, values
+from sqlalchemy import Integer, String, case, cast, column, exists, func, select, tuple_, values
 from sqlalchemy.orm import aliased
 from sqlalchemy.types import Date
 
@@ -17,11 +17,16 @@ from .database_models import (
 def build_contiguous_snapshot_dates_stmt(
     states: List[PositionState],
     first_open_dates: Dict[Tuple[str, str, int], date],
+    latest_valuation_date: date,
 ):
     state_alias = aliased(PositionState)
     snapshot_alias = aliased(DailyPositionSnapshot)
     first_open_dates_table = _first_open_dates_table(first_open_dates)
-    date_series_subq = _snapshot_date_series_subq(state_alias, first_open_dates_table)
+    date_series_subq = _snapshot_date_series_subq(
+        state_alias,
+        first_open_dates_table,
+        latest_valuation_date,
+    )
     snapshot_quantity_matches_history = _snapshot_quantity_matches_history(snapshot_alias)
     first_gap_subq = _first_snapshot_gap_subq(
         state_alias,
@@ -39,6 +44,7 @@ def build_contiguous_snapshot_dates_stmt(
         _position_state_keys(states),
         first_gap_subq,
         latest_snapshot_subq,
+        latest_valuation_date,
     )
     return _join_first_open_dates_table(stmt, state_alias, first_open_dates_table)
 
@@ -82,20 +88,35 @@ def _first_open_date_rows(
     ]
 
 
-def _snapshot_date_series_subq(state_alias, first_open_dates_table):
-    return (
+def _snapshot_date_series_subq(
+    state_alias,
+    first_open_dates_table,
+    latest_valuation_date: date,
+):
+    expected_start_date = _expected_snapshot_start_date(state_alias, first_open_dates_table)
+    governed_dates = (
+        select(BusinessDate.date.label("expected_date"))
+        .where(
+            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+            BusinessDate.date >= expected_start_date,
+            BusinessDate.date <= latest_valuation_date,
+        )
+        .correlate(*_snapshot_date_series_correlates(state_alias, first_open_dates_table))
+    )
+    fallback_dates = (
         select(
             func.generate_series(
-                _expected_snapshot_start_date(state_alias, first_open_dates_table),
-                _max_business_date_subq(),
+                expected_start_date,
+                latest_valuation_date,
                 timedelta(days=1),
             )
             .cast(Date)
             .label("expected_date")
         )
+        .where(~_governed_calendar_exists())
         .correlate(*_snapshot_date_series_correlates(state_alias, first_open_dates_table))
-        .subquery("date_series")
     )
+    return governed_dates.union_all(fallback_dates).subquery("date_series")
 
 
 def _expected_snapshot_start_date(state_alias, first_open_dates_table):
@@ -117,11 +138,11 @@ def _snapshot_date_series_correlates(state_alias, first_open_dates_table) -> tup
     return (state_alias, first_open_dates_table)
 
 
-def _max_business_date_subq():
-    return (
-        select(func.max(BusinessDate.date))
-        .where(BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE)
-        .scalar_subquery()
+def _governed_calendar_exists():
+    return exists(
+        select(BusinessDate.date).where(
+            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE
+        )
     )
 
 
@@ -211,15 +232,32 @@ def _base_contiguous_snapshot_dates_stmt(
     keys_tuple: tuple[tuple[str, str, int], ...],
     first_gap_subq,
     latest_snapshot_subq,
+    latest_valuation_date: date,
 ):
+    previous_governed_date = (
+        select(func.max(BusinessDate.date))
+        .where(
+            BusinessDate.calendar_code == DEFAULT_BUSINESS_CALENDAR_CODE,
+            BusinessDate.date < first_gap_subq,
+        )
+        .scalar_subquery()
+    )
+    date_before_first_gap = case(
+        (
+            _governed_calendar_exists(),
+            func.coalesce(previous_governed_date, state_alias.watermark_date),
+        ),
+        else_=first_gap_subq - timedelta(days=1),
+    )
+    contiguous_date = case(
+        (first_gap_subq.isnot(None), date_before_first_gap),
+        else_=func.least(latest_snapshot_subq, latest_valuation_date),
+    )
     return (
         select(
             state_alias.portfolio_id,
             state_alias.security_id,
-            cast(
-                func.coalesce(first_gap_subq - timedelta(days=1), latest_snapshot_subq),
-                Date,
-            ).label("contiguous_date"),
+            cast(contiguous_date, Date).label("contiguous_date"),
         )
         .select_from(state_alias)
         .where(
