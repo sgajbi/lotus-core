@@ -6,7 +6,6 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-    KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
@@ -25,7 +24,6 @@ from portfolio_common.runtime_supervision import (
 from .consumers.financial_reconciliation_completion_consumer import (
     FinancialReconciliationCompletionConsumer,
 )
-from .consumers.portfolio_aggregation_stage_consumer import PortfolioAggregationStageConsumer
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
@@ -38,15 +36,6 @@ class ConsumerManager:
         self.tasks = []
         self._shutdown_event = asyncio.Event()
 
-        self.consumers.append(
-            PortfolioAggregationStageConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
-                group_id="pipeline_orchestrator_portfolio_aggregation_group",
-                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-                service_prefix="PIPE",
-            )
-        )
         self.consumers.append(
             FinancialReconciliationCompletionConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,

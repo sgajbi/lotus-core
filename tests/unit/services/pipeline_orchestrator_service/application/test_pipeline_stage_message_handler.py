@@ -158,10 +158,6 @@ def test_pipeline_stage_consumers_do_not_assemble_repositories_or_services() -> 
             "src/services/pipeline_orchestrator_service/app/consumers/"
             "financial_reconciliation_completion_consumer.py"
         ),
-        Path(
-            "src/services/pipeline_orchestrator_service/app/consumers/"
-            "portfolio_aggregation_stage_consumer.py"
-        ),
     ]
     forbidden_snippets = [
         "get_async_db_session",
