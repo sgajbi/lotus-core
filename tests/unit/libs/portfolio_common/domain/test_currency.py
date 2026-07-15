@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 from portfolio_common.domain.currency import (
     normalize_currency_code,
@@ -5,6 +7,7 @@ from portfolio_common.domain.currency import (
 )
 from portfolio_common.events import (
     FxRateEvent,
+    FxRatePersistedEvent,
     InstrumentEvent,
     MarketPriceEvent,
     MarketPricePersistedEvent,
@@ -37,6 +40,52 @@ def test_fx_rate_event_normalizes_currency_codes() -> None:
 
     assert event.from_currency == "EUR"
     assert event.to_currency == "USD"
+
+
+def test_fx_rate_persisted_event_has_deterministic_business_content_hash() -> None:
+    first = FxRatePersistedEvent.from_observation(
+        FxRateEvent(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date="2026-05-28",
+            rate="1.0875000000",
+        ),
+        generated_at=datetime(2026, 5, 28, 10, tzinfo=timezone.utc),
+    )
+    second = FxRatePersistedEvent.from_observation(
+        FxRateEvent(
+            from_currency=" eur ",
+            to_currency=" usd ",
+            rate_date="2026-05-28",
+            rate="1.0875000000",
+        ),
+        generated_at=datetime(2026, 5, 28, 11, tzinfo=timezone.utc),
+    )
+
+    assert first.content_hash == second.content_hash
+    assert first.content_hash.startswith("sha256:")
+    assert first.generated_at.isoformat() == "2026-05-28T10:00:00+00:00"
+
+
+def test_fx_rate_persisted_event_hash_changes_for_correction() -> None:
+    original = FxRatePersistedEvent.from_observation(
+        FxRateEvent(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date="2026-05-28",
+            rate="1.0875000000",
+        )
+    )
+    correction = FxRatePersistedEvent.from_observation(
+        FxRateEvent(
+            from_currency="EUR",
+            to_currency="USD",
+            rate_date="2026-05-28",
+            rate="1.0910000000",
+        )
+    )
+
+    assert original.content_hash != correction.content_hash
 
 
 @pytest.mark.parametrize("rate", ["0", "-0.0001"])

@@ -108,6 +108,9 @@ KAFKA_MARKET_PRICES_PERSISTED_TOPIC = os.getenv(
 KAFKA_FX_RATES_RAW_RECEIVED_TOPIC = os.getenv(
     "KAFKA_FX_RATES_RAW_RECEIVED_TOPIC", "fx_rates.raw.received"
 )
+KAFKA_FX_RATES_PERSISTED_TOPIC = os.getenv(
+    "KAFKA_FX_RATES_PERSISTED_TOPIC", "fx_rates.persisted"
+)
 KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC = os.getenv(
     "KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC", "business_dates.raw.received"
 )
@@ -210,6 +213,13 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="market_price",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="fx_rates.persisted",
+        runtime_name=KAFKA_FX_RATES_PERSISTED_TOPIC,
+        lifecycle_status="active",
+        semantic_type="fact",
+        scope="fx_rate",
     ),
     KafkaTopicDefinition(
         canonical_name="transactions.cost.processed",
