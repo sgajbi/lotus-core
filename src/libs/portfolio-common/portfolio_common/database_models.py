@@ -2077,6 +2077,9 @@ class PortfolioAggregationJob(Base):
     alternate_lookup_key = Column(String, nullable=True)
     failure_reason = Column(Text, nullable=True)
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    lease_owner = Column(String(128), nullable=True)
+    lease_token = Column(String(64), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -2084,6 +2087,12 @@ class PortfolioAggregationJob(Base):
 
     __table_args__ = (
         UniqueConstraint("portfolio_id", "aggregation_date", name="_portfolio_date_uc"),
+        CheckConstraint(
+            "(lease_owner IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL) OR "
+            "(lease_owner IS NOT NULL AND lease_token IS NOT NULL AND "
+            "lease_expires_at IS NOT NULL)",
+            name="ck_portfolio_aggregation_jobs_lease_complete",
+        ),
         Index(
             "ix_portfolio_aggregation_jobs_status_aggregation_date",
             "status",
@@ -2093,6 +2102,11 @@ class PortfolioAggregationJob(Base):
             "ix_portfolio_aggregation_jobs_status_updated_at",
             "status",
             "updated_at",
+        ),
+        Index(
+            "ix_portfolio_aggregation_jobs_status_lease_expiry",
+            "status",
+            "lease_expires_at",
         ),
         Index(
             "ix_portfolio_aggregation_jobs_claim_order",
