@@ -19,8 +19,12 @@ from portfolio_common.runtime_supervision import (
     wait_for_shutdown_or_task_failure,
 )
 
+from .application.portfolio_timeseries import MaterializePortfolioTimeseries
 from .consumers.portfolio_timeseries_consumer import PortfolioTimeseriesConsumer
 from .core.aggregation_scheduler import AggregationScheduler
+from .infrastructure.portfolio_timeseries_unit_of_work_provider import (
+    SqlAlchemyPortfolioTimeseriesUnitOfWorkProvider,
+)
 from .settings import get_aggregation_runtime_settings
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
@@ -41,6 +45,9 @@ class ConsumerManager:
         self.tasks = []
         self._shutdown_event = asyncio.Event()
         runtime_settings = get_aggregation_runtime_settings()
+        materialize_portfolio_timeseries = MaterializePortfolioTimeseries(
+            unit_of_work_provider=SqlAlchemyPortfolioTimeseriesUnitOfWorkProvider()
+        )
 
         for index in range(runtime_settings.portfolio_aggregation_consumer_count):
             self.consumers.append(
@@ -50,6 +57,7 @@ class ConsumerManager:
                     group_id="portfolio_aggregation_group",
                     dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
                     service_prefix=f"PTA{index + 1}",
+                    use_case=materialize_portfolio_timeseries,
                 )
             )
 

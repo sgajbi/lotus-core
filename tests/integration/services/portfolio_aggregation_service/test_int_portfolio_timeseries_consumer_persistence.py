@@ -13,6 +13,9 @@ from portfolio_common.events import PortfolioAggregationRequiredEvent
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.portfolio_aggregation_service.app.application.portfolio_timeseries import (
+    MaterializePortfolioTimeseries,
+)
 from src.services.portfolio_aggregation_service.app.consumers import (
     portfolio_timeseries_consumer as portfolio_timeseries_consumer_module,
 )
@@ -21,6 +24,9 @@ from src.services.portfolio_aggregation_service.app.domain.aggregation_records i
 )
 from src.services.portfolio_aggregation_service.app.infrastructure import (
     portfolio_aggregation_repository as portfolio_aggregation_repository_module,
+)
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_timeseries_unit_of_work_provider as unit_of_work_provider_module,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -61,14 +67,6 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
     msg.key.return_value = event.portfolio_id.encode("utf-8")
     msg.headers.return_value = [("correlation_id", b"corr-agg-int-01")]
 
-    consumer = portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer(
-        bootstrap_servers="mock_server",
-        topic="portfolio_day.aggregation.job.requested",
-        group_id="test_group",
-        dlq_topic="test.dlq",
-    )
-    consumer._send_to_dlq_async = AsyncMock()
-
     async def override_session():
         yield async_db_session
 
@@ -97,20 +95,32 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
         eod_market_value=Decimal("0"),
         fees=Decimal("0"),
     )
+    calculator = AsyncMock()
+    calculator.calculate_daily_record.return_value = deterministic_record
+    use_case = MaterializePortfolioTimeseries(
+        unit_of_work_provider=(
+            unit_of_work_provider_module.SqlAlchemyPortfolioTimeseriesUnitOfWorkProvider()
+        ),
+        calculator=calculator,
+    )
+    consumer = portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer(
+        bootstrap_servers="mock_server",
+        topic="portfolio_day.aggregation.job.requested",
+        group_id="test_group",
+        dlq_topic="test.dlq",
+        use_case=use_case,
+    )
+    consumer._send_to_dlq_async = AsyncMock()
 
     with (
         patch(
-            "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer.get_async_db_session",
+            "src.services.portfolio_aggregation_service.app.infrastructure.portfolio_timeseries_unit_of_work_provider.get_async_db_session",
             new=override_session,
         ),
         patch.object(
             portfolio_aggregation_repository_module.PortfolioAggregationRepository,
             "complete_or_requeue_job",
             new=complete_or_requeue_with_ownership_loss,
-        ),
-        patch(
-            "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer.PortfolioTimeseriesLogic.calculate_daily_record",
-            new=AsyncMock(return_value=deterministic_record),
         ),
     ):
         await consumer.process_message(msg)
