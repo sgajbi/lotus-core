@@ -4,7 +4,12 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, Protocol, TypeVar
 
-from ..domain.aggregation_records import AggregationJobRecord
+from ..domain.aggregation_records import (
+    AggregationJobBatchResult,
+    AggregationJobLease,
+    ClaimedAggregationJob,
+    ExpiredAggregationJobRecovery,
+)
 
 T = TypeVar("T")
 
@@ -12,22 +17,19 @@ T = TypeVar("T")
 class AggregationSchedulerRepository(Protocol):
     async def get_job_queue_stats(self) -> dict[str, Any]: ...
 
-    async def find_and_reset_stale_jobs(
+    async def recover_expired_job_leases(
         self,
         *,
-        timeout_minutes: int,
+        now: datetime,
         max_attempts: int,
-    ) -> int: ...
+    ) -> ExpiredAggregationJobRecovery: ...
 
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[AggregationJobRecord]: ...
-
-    async def recover_dispatch_failed_jobs(
+    async def claim_eligible_jobs(
         self,
-        job_ids: list[int],
         *,
-        max_attempts: int,
-        failure_reason: str,
-    ) -> None: ...
+        batch_size: int,
+        lease: AggregationJobLease,
+    ) -> list[ClaimedAggregationJob]: ...
 
 
 class AggregationSchedulerRepositoryProvider(Protocol):
@@ -47,3 +49,14 @@ class AggregationSchedulerMetricsSink(Protocol):
 
 class AggregationSchedulerClock(Protocol):
     def now_utc(self) -> datetime: ...
+
+
+class AggregationLeaseTokenGenerator(Protocol):
+    def new_hex(self) -> str: ...
+
+
+class AggregationJobBatchProcessor(Protocol):
+    async def process(
+        self,
+        jobs: list[ClaimedAggregationJob],
+    ) -> AggregationJobBatchResult: ...

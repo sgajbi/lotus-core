@@ -51,16 +51,6 @@ class PortfolioTimeseriesRecord:
     fees: Decimal
 
 
-@dataclass(frozen=True, slots=True)
-class AggregationJobRecord:
-    """Claimed aggregation work detached from queue persistence state."""
-
-    id: int
-    portfolio_id: str
-    aggregation_date: date
-    correlation_id: str | None
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AggregationJobLease:
     """Fenced ownership of one or more aggregation jobs for a bounded interval."""
@@ -103,6 +93,29 @@ class ExpiredAggregationJobRecovery:
 
     requeued_count: int
     failed_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AggregationJobBatchResult:
+    """Count durable outcomes from one bounded claimed-job batch."""
+
+    complete_count: int = 0
+    requeued_count: int = 0
+    lost_ownership_count: int = 0
+    failed_count: int = 0
+    execution_error_count: int = 0
+
+    @property
+    def processed_count(self) -> int:
+        """Return the total number of attempted jobs."""
+
+        return (
+            self.complete_count
+            + self.requeued_count
+            + self.lost_ownership_count
+            + self.failed_count
+            + self.execution_error_count
+        )
 
 
 @dataclass(frozen=True, slots=True)

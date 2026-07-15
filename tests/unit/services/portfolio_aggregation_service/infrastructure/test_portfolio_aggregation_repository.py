@@ -39,6 +39,14 @@ def repository(mock_db_session: AsyncMock) -> PortfolioAggregationRepository:
     return PortfolioAggregationRepository(mock_db_session)
 
 
+def _lease() -> AggregationJobLease:
+    return AggregationJobLease(
+        owner="portfolio-aggregation-runtime-1",
+        token="lease-token-1",
+        expires_at=datetime(2026, 7, 15, 8, 30, tzinfo=timezone.utc),
+    )
+
+
 async def test_get_portfolio_trims_portfolio_id(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
@@ -90,10 +98,10 @@ async def test_upsert_portfolio_timeseries(
     assert "ON CONFLICT (portfolio_id, date, epoch) DO UPDATE" in compiled
 
 
-async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day(
+async def test_claim_eligible_jobs_does_not_require_prior_portfolio_day(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
+    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
     compiled_query = str(
@@ -108,10 +116,10 @@ async def test_find_and_claim_eligible_jobs_does_not_require_prior_portfolio_day
     assert "FROM portfolio_timeseries, portfolio_aggregation_jobs" not in compiled_query
 
 
-async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
+async def test_claim_eligible_jobs_completeness_gate_stays_correlated(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
+    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
     compiled_query = str(
@@ -126,10 +134,10 @@ async def test_find_and_claim_eligible_jobs_completeness_gate_stays_correlated(
     )
 
 
-async def test_find_and_claim_eligible_jobs_has_no_legacy_count_window_gate(
+async def test_claim_eligible_jobs_has_no_legacy_count_window_gate(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
+    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
     compiled_query = str(
@@ -140,10 +148,10 @@ async def test_find_and_claim_eligible_jobs_has_no_legacy_count_window_gate(
     assert "row_number() over" not in compiled_query
 
 
-async def test_find_and_claim_eligible_jobs_uses_deterministic_claim_order(
+async def test_claim_eligible_jobs_uses_deterministic_claim_order(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
+    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.call_args_list[0][0][0]
     compiled_query = str(
@@ -157,36 +165,26 @@ async def test_find_and_claim_eligible_jobs_uses_deterministic_claim_order(
     ) in compiled_query
 
 
-async def test_find_and_reset_stale_jobs_refreshes_updated_at(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    stale_result = MagicMock()
-    stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
-    mock_db_session.execute.side_effect = [stale_result, mock_db_session.execute.return_value]
-
-    await repository.find_and_reset_stale_jobs()
-
-    executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-
-    assert "UPDATE portfolio_aggregation_jobs" in compiled_query
-    assert "SET status='PENDING'" in compiled_query
-    assert "updated_at=now()" in compiled_query
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
-
-
-async def test_find_and_claim_eligible_jobs_increments_attempt_count(
+async def test_claim_eligible_jobs_increments_attempt_count(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
     eligible_result.fetchall.return_value = [(1,)]
     claimed_result = MagicMock()
     claimed_result.scalars.return_value.all.return_value = [
-        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 1))
+        MagicMock(
+            id=1,
+            portfolio_id="P1",
+            aggregation_date=date(2025, 1, 1),
+            correlation_id=None,
+            lease_owner=_lease().owner,
+            lease_token=_lease().token,
+            lease_expires_at=_lease().expires_at,
+        )
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
 
-    await repository.find_and_claim_eligible_jobs(batch_size=5)
+    await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
     compiled_query = str(
@@ -198,92 +196,50 @@ async def test_find_and_claim_eligible_jobs_increments_attempt_count(
     assert "attempt_count=(portfolio_aggregation_jobs.attempt_count + 1)" in compiled_query
 
 
-async def test_find_and_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
+async def test_claim_eligible_jobs_returns_claimed_jobs_in_claim_order(
     repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
 ):
     eligible_result = MagicMock()
     eligible_result.fetchall.return_value = [(1,), (2,), (3,)]
     claimed_result = MagicMock()
     claimed_result.scalars.return_value.all.return_value = [
-        MagicMock(portfolio_id="P2", aggregation_date=date(2025, 1, 1), id=2),
-        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 2), id=3),
-        MagicMock(portfolio_id="P1", aggregation_date=date(2025, 1, 1), id=1),
+        MagicMock(
+            portfolio_id="P2",
+            aggregation_date=date(2025, 1, 1),
+            id=2,
+            correlation_id=None,
+            lease_owner=_lease().owner,
+            lease_token=_lease().token,
+            lease_expires_at=_lease().expires_at,
+        ),
+        MagicMock(
+            portfolio_id="P1",
+            aggregation_date=date(2025, 1, 2),
+            id=3,
+            correlation_id=None,
+            lease_owner=_lease().owner,
+            lease_token=_lease().token,
+            lease_expires_at=_lease().expires_at,
+        ),
+        MagicMock(
+            portfolio_id="P1",
+            aggregation_date=date(2025, 1, 1),
+            id=1,
+            correlation_id=None,
+            lease_owner=_lease().owner,
+            lease_token=_lease().token,
+            lease_expires_at=_lease().expires_at,
+        ),
     ]
     mock_db_session.execute.side_effect = [eligible_result, claimed_result]
 
-    claimed_jobs = await repository.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs = await repository.claim_eligible_jobs(batch_size=5, lease=_lease())
 
     assert [(job.portfolio_id, job.aggregation_date, job.id) for job in claimed_jobs] == [
         ("P1", date(2025, 1, 1), 1),
         ("P1", date(2025, 1, 2), 3),
         ("P2", date(2025, 1, 1), 2),
     ]
-
-
-async def test_find_and_reset_stale_jobs_rechecks_stale_processing_state(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    stale_result = MagicMock()
-    stale_result.all.return_value = [MagicMock(id=1, attempt_count=1)]
-    update_result = MagicMock()
-    update_result.rowcount = 0
-    mock_db_session.execute.side_effect = [stale_result, update_result]
-
-    reset_count = await repository.find_and_reset_stale_jobs()
-
-    assert reset_count == 0
-    executed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    compiled_query = str(executed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled_query
-
-
-async def test_find_and_reset_stale_jobs_marks_over_limit_rows_failed(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    stale_result = MagicMock()
-    stale_result.all.return_value = [MagicMock(id=1, attempt_count=3)]
-    failed_result = MagicMock()
-    mock_db_session.execute.side_effect = [stale_result, failed_result]
-
-    reset_count = await repository.find_and_reset_stale_jobs(max_attempts=3)
-
-    assert reset_count == 0
-    failed_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    compiled_query = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    assert "SET status='FAILED'" in compiled_query
-
-
-async def test_recover_dispatch_failed_jobs_requeues_retryable_and_fails_exhausted_rows(
-    repository: PortfolioAggregationRepository, mock_db_session: AsyncMock
-):
-    failed_result = MagicMock()
-    failed_result.rowcount = 1
-    pending_result = MagicMock()
-    pending_result.rowcount = 2
-    mock_db_session.execute.side_effect = [failed_result, pending_result]
-
-    result = await repository.recover_dispatch_failed_jobs(
-        [101, 102, 103],
-        max_attempts=3,
-        failure_reason="Scheduler dispatch publish failed before queueing record keys: key-1",
-    )
-
-    assert result == {"pending_count": 2, "failed_count": 1}
-    failed_stmt = mock_db_session.execute.await_args_list[0].args[0]
-    pending_stmt = mock_db_session.execute.await_args_list[1].args[0]
-    failed_sql = str(failed_stmt.compile(compile_kwargs={"literal_binds": True}))
-    pending_sql = str(pending_stmt.compile(compile_kwargs={"literal_binds": True}))
-
-    assert "UPDATE portfolio_aggregation_jobs" in failed_sql
-    assert "SET status='FAILED'" in failed_sql
-    assert "failure_reason='Scheduler dispatch publish failed" in failed_sql
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in failed_sql
-    assert "portfolio_aggregation_jobs.attempt_count >= 3" in failed_sql
-
-    assert "UPDATE portfolio_aggregation_jobs" in pending_sql
-    assert "SET status='PENDING'" in pending_sql
-    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in pending_sql
-    assert "portfolio_aggregation_jobs.attempt_count < 3" in pending_sql
 
 
 async def test_get_job_queue_stats_returns_pending_failed_and_oldest_pending(
@@ -359,8 +315,8 @@ async def test_complete_or_requeue_job_requeues_late_material_input(
     mock_db_session.execute.return_value = requeued
 
     disposition = await repository.complete_or_requeue_job(
-        "PORT-1",
-        date(2025, 8, 21),
+        job_id=7,
+        lease_token="lease-token-1",
     )
 
     assert disposition is AggregationJobCompletionDisposition.REQUEUED
@@ -373,6 +329,7 @@ async def test_complete_or_requeue_job_requeues_late_material_input(
     )
     assert "status='PENDING'" in compiled
     assert "portfolio_aggregation_jobs.failure_reason = 'REPROCESS_REQUESTED'" in compiled
+    assert "portfolio_aggregation_jobs.lease_token = 'lease-token-1'" in compiled
 
 
 async def test_complete_or_requeue_job_completes_owned_job(
@@ -382,8 +339,8 @@ async def test_complete_or_requeue_job_completes_owned_job(
     mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=1)]
 
     disposition = await repository.complete_or_requeue_job(
-        "PORT-1",
-        date(2025, 8, 21),
+        job_id=7,
+        lease_token="lease-token-1",
     )
 
     assert disposition is AggregationJobCompletionDisposition.COMPLETE
@@ -405,8 +362,8 @@ async def test_complete_or_requeue_job_reports_lost_ownership(
     mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=0)]
 
     disposition = await repository.complete_or_requeue_job(
-        "PORT-1",
-        date(2025, 8, 21),
+        job_id=7,
+        lease_token="lease-token-1",
     )
 
     assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
@@ -418,7 +375,7 @@ async def test_mark_job_failed_only_updates_owned_processing_job(
 ) -> None:
     mock_db_session.execute.return_value = MagicMock(rowcount=1)
 
-    updated = await repository.mark_job_failed("PORT-1", date(2025, 8, 21))
+    updated = await repository.mark_job_failed(job_id=7, lease_token="lease-token-1")
 
     assert updated is True
     compiled = str(
@@ -477,7 +434,7 @@ async def test_complete_or_requeue_claim_fences_terminal_write_and_clears_lease(
 ) -> None:
     mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=1)]
 
-    disposition = await repository.complete_or_requeue_claim(
+    disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="lease-token-1",
     )
@@ -503,7 +460,7 @@ async def test_complete_or_requeue_claim_reports_lost_ownership_after_reclaim(
 ) -> None:
     mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=0)]
 
-    disposition = await repository.complete_or_requeue_claim(
+    disposition = await repository.complete_or_requeue_job(
         job_id=7,
         lease_token="expired-lease-token",
     )
@@ -525,7 +482,7 @@ async def test_mark_claim_failed_fences_terminal_write_and_clears_lease(
 ) -> None:
     mock_db_session.execute.return_value = MagicMock(rowcount=1)
 
-    updated = await repository.mark_claim_failed(job_id=7, lease_token="lease-token-1")
+    updated = await repository.mark_job_failed(job_id=7, lease_token="lease-token-1")
 
     assert updated is True
     compiled = str(

@@ -4,7 +4,7 @@ import logging
 from portfolio_common.logging_utils import setup_logging
 from portfolio_common.worker_runtime import run_instrumented_worker_service
 
-from .consumer_manager import ConsumerManager
+from .runtime import PortfolioAggregationRuntime
 from .web import app as web_app
 
 setup_logging()
@@ -15,7 +15,7 @@ async def main():
     await run_instrumented_worker_service(
         service_name="Portfolio Aggregation Service",
         logger=logger,
-        manager=ConsumerManager(),
+        manager=PortfolioAggregationRuntime(),
         web_app=web_app,
     )
 

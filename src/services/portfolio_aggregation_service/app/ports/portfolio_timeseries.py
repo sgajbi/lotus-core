@@ -36,11 +36,12 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
 
     async def complete_or_requeue_job(
         self,
-        portfolio_id: str,
-        aggregation_date: date,
+        *,
+        job_id: int,
+        lease_token: str,
     ) -> AggregationJobCompletionDisposition: ...
 
-    async def mark_job_failed(self, portfolio_id: str, aggregation_date: date) -> bool: ...
+    async def mark_job_failed(self, *, job_id: int, lease_token: str) -> bool: ...
 
 
 class PortfolioTimeseriesCalculation(Protocol):

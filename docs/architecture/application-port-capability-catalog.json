@@ -69,12 +69,10 @@
       ],
       "consumer_modules": [
         "src/services/ingestion_service/app/services/ingestion_service.py",
-        "src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py",
-        "src/services/portfolio_aggregation_service/app/core/aggregation_job_publisher.py"
+        "src/services/valuation_orchestrator_service/app/core/valuation_job_publisher.py"
       ],
       "guard_scripts": [
-        "scripts/quality/event_publisher_port_guard.py",
-        "scripts/quality/aggregation_scheduler_boundary_guard.py"
+        "scripts/quality/event_publisher_port_guard.py"
       ],
       "standards": [
         "docs/standards/application-port-layer-standard.md",
@@ -92,13 +90,15 @@
         "AggregationSchedulerRepository",
         "AggregationSchedulerRepositoryProvider",
         "AggregationSchedulerMetricsSink",
-        "AggregationSchedulerClock"
+        "AggregationSchedulerClock",
+        "AggregationJobBatchProcessor",
+        "AggregationLeaseTokenGenerator"
       ],
       "adapter_modules": [
         "src/services/portfolio_aggregation_service/app/infrastructure/aggregation_scheduler_adapters.py"
       ],
       "consumer_modules": [
-        "src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py"
+        "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
       ],
       "guard_scripts": [
         "scripts/quality/aggregation_scheduler_boundary_guard.py"

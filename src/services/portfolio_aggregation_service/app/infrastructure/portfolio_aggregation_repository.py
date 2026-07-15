@@ -1,7 +1,7 @@
 """SQLAlchemy persistence for portfolio aggregation data and job queues."""
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 
@@ -26,7 +26,6 @@ from sqlalchemy.orm import aliased
 from ..domain.aggregation_records import (
     AggregationJobCompletionDisposition,
     AggregationJobLease,
-    AggregationJobRecord,
     ClaimedAggregationJob,
     ExpiredAggregationJobRecovery,
     PortfolioAggregationScope,
@@ -67,53 +66,6 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
 
     async def complete_or_requeue_job(
         self,
-        portfolio_id: str,
-        aggregation_date: date,
-    ) -> AggregationJobCompletionDisposition:
-        """Release one claimed job without overwriting a concurrent reprocess request."""
-
-        requeue_result = await self.db.execute(
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == aggregation_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-                PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
-            )
-            .values(status="PENDING", failure_reason=None, updated_at=func.now())
-        )
-        if int(requeue_result.rowcount or 0) == 1:
-            return AggregationJobCompletionDisposition.REQUEUED
-
-        complete_result = await self.db.execute(
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == aggregation_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-            )
-            .values(status="COMPLETE", failure_reason=None, updated_at=func.now())
-        )
-        if int(complete_result.rowcount or 0) == 1:
-            return AggregationJobCompletionDisposition.COMPLETE
-        return AggregationJobCompletionDisposition.LOST_OWNERSHIP
-
-    async def mark_job_failed(self, portfolio_id: str, aggregation_date: date) -> bool:
-        """Fail one aggregation job only while this worker still owns its claim."""
-
-        result = await self.db.execute(
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == aggregation_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-            )
-            .values(status="FAILED", updated_at=func.now())
-        )
-        return int(result.rowcount or 0) == 1
-
-    async def complete_or_requeue_claim(
-        self,
         *,
         job_id: int,
         lease_token: str,
@@ -145,7 +97,7 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             return AggregationJobCompletionDisposition.COMPLETE
         return AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
-    async def mark_claim_failed(self, *, job_id: int, lease_token: str) -> bool:
+    async def mark_job_failed(self, *, job_id: int, lease_token: str) -> bool:
         """Fail one job only when its durable lease token still matches."""
 
         result = await self.db.execute(
@@ -212,14 +164,6 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         rows = cast(list[PositionTimeseries], result.scalars().all())
         return [_position_timeseries_record(row) for row in rows]
 
-    @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[AggregationJobRecord]:
-        eligible_ids = await self._find_eligible_job_ids(batch_size)
-        claimed_rows = await self._claim_eligible_job_rows(eligible_ids)
-        if claimed_rows:
-            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_rows))
-        return [_aggregation_job_record(row) for row in claimed_rows]
-
     async def _find_eligible_job_ids(self, batch_size: int) -> list[int]:
         job = PortfolioAggregationJob
         snapshot = DailyPositionSnapshot
@@ -246,18 +190,11 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         self,
         eligible_ids: list[int],
         *,
-        lease: AggregationJobLease | None = None,
+        lease: AggregationJobLease,
     ) -> list[PortfolioAggregationJob]:
         if not eligible_ids:
             return []
         job = PortfolioAggregationJob
-        lease_values: dict[str, Any] = {}
-        if lease is not None:
-            lease_values = {
-                "lease_owner": lease.owner,
-                "lease_token": lease.token,
-                "lease_expires_at": lease.expires_at,
-            }
         result = await self.db.execute(
             update(job)
             .where(job.id.in_(eligible_ids))
@@ -265,7 +202,9 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 status="PROCESSING",
                 updated_at=func.now(),
                 attempt_count=job.attempt_count + 1,
-                **lease_values,
+                lease_owner=lease.owner,
+                lease_token=lease.token,
+                lease_expires_at=lease.expires_at,
             )
             .returning(job)
         )
@@ -292,62 +231,6 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         if claimed_rows:
             logger.info("Found and leased %s eligible aggregation jobs.", len(claimed_rows))
         return [_claimed_aggregation_job(row) for row in claimed_rows]
-
-    @async_timed(repository="TimeseriesRepository", method="recover_dispatch_failed_jobs")
-    async def recover_dispatch_failed_jobs(
-        self,
-        job_ids: list[int],
-        *,
-        max_attempts: int,
-        failure_reason: str,
-    ) -> dict[str, int]:
-        if not job_ids:
-            return {"pending_count": 0, "failed_count": 0}
-
-        failed_result = await self.db.execute(
-            _dispatch_failed_jobs_statement(
-                job_ids=job_ids,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
-            )
-        )
-        pending_result = await self.db.execute(
-            _dispatch_retryable_jobs_statement(
-                job_ids=job_ids,
-                max_attempts=max_attempts,
-                failure_reason=failure_reason,
-            )
-        )
-        failed_count = int(failed_result.rowcount or 0)
-        pending_count = int(pending_result.rowcount or 0)
-        if failed_count or pending_count:
-            logger.warning(
-                "Recovered aggregation scheduler dispatch failure.",
-                extra={
-                    "job_ids": job_ids,
-                    "pending_count": pending_count,
-                    "failed_count": failed_count,
-                    "max_attempts": max_attempts,
-                },
-            )
-        return {"pending_count": pending_count, "failed_count": failed_count}
-
-    @async_timed(repository="TimeseriesRepository", method="find_and_reset_stale_jobs")
-    async def find_and_reset_stale_jobs(
-        self, timeout_minutes: int = 15, max_attempts: int = 3
-    ) -> int:
-        stale_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
-        stale_rows = cast(
-            list[Any],
-            (await self.db.execute(_stale_jobs_statement(stale_threshold))).all(),
-        )
-        if not stale_rows:
-            return 0
-
-        failed_job_ids = [row.id for row in stale_rows if row.attempt_count >= max_attempts]
-        reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
-        await self._mark_stale_jobs_failed(failed_job_ids, stale_threshold, max_attempts)
-        return await self._reset_stale_jobs(reset_job_ids, stale_threshold)
 
     @async_timed(repository="TimeseriesRepository", method="recover_expired_job_leases")
     async def recover_expired_job_leases(
@@ -398,36 +281,6 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         )
         return int(result.rowcount or 0)
 
-    async def _mark_stale_jobs_failed(
-        self,
-        job_ids: list[int],
-        stale_threshold: datetime,
-        max_attempts: int,
-    ) -> None:
-        if not job_ids:
-            return
-        await self.db.execute(_failed_stale_jobs_statement(job_ids, stale_threshold))
-        logger.warning(
-            "Marked stale aggregation jobs as FAILED after max attempts.",
-            extra={"job_ids": job_ids, "max_attempts": max_attempts},
-        )
-
-    async def _reset_stale_jobs(
-        self,
-        job_ids: list[int],
-        stale_threshold: datetime,
-    ) -> int:
-        if not job_ids:
-            return 0
-        result = await self.db.execute(_reset_stale_jobs_statement(job_ids, stale_threshold))
-        reset_count = int(result.rowcount or 0)
-        if reset_count:
-            logger.warning(
-                "Reset %s stale aggregation jobs from 'PROCESSING' to 'PENDING'.",
-                reset_count,
-            )
-        return reset_count
-
     @async_timed(repository="TimeseriesRepository", method="get_job_queue_stats")
     async def get_job_queue_stats(self) -> dict[str, Any]:
         row = (
@@ -470,15 +323,6 @@ def _position_timeseries_record(row: PositionTimeseries) -> PositionTimeseriesRe
         eod_cashflow_portfolio=cast(Decimal, row.eod_cashflow_portfolio),
         eod_market_value=cast(Decimal, row.eod_market_value),
         fees=cast(Decimal, row.fees),
-    )
-
-
-def _aggregation_job_record(row: PortfolioAggregationJob) -> AggregationJobRecord:
-    return AggregationJobRecord(
-        id=int(row.id),
-        portfolio_id=str(row.portfolio_id),
-        aggregation_date=cast(date, row.aggregation_date),
-        correlation_id=str(row.correlation_id) if row.correlation_id is not None else None,
     )
 
 
@@ -554,16 +398,6 @@ def _missing_position_timeseries_exists(
     )
 
 
-def _stale_jobs_statement(stale_threshold: datetime):
-    return select(
-        PortfolioAggregationJob.id,
-        PortfolioAggregationJob.attempt_count,
-    ).where(
-        PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.updated_at < stale_threshold,
-    )
-
-
 def _expired_job_leases_statement(now: datetime):
     return select(
         PortfolioAggregationJob.id,
@@ -596,57 +430,3 @@ def _cleared_lease_values() -> dict[str, None]:
         "lease_token": None,
         "lease_expires_at": None,
     }
-
-
-def _failed_stale_jobs_statement(job_ids: list[int], stale_threshold: datetime):
-    return (
-        _stale_jobs_update_statement(job_ids, stale_threshold)
-        .values(
-            status="FAILED",
-            failure_reason="Stale processing timeout exceeded max attempts",
-            updated_at=func.now(),
-        )
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _reset_stale_jobs_statement(job_ids: list[int], stale_threshold: datetime):
-    return _stale_jobs_update_statement(job_ids, stale_threshold).values(
-        status="PENDING",
-        updated_at=func.now(),
-    )
-
-
-def _stale_jobs_update_statement(job_ids: list[int], stale_threshold: datetime):
-    return update(PortfolioAggregationJob).where(
-        PortfolioAggregationJob.id.in_(job_ids),
-        PortfolioAggregationJob.status == "PROCESSING",
-        PortfolioAggregationJob.updated_at < stale_threshold,
-    )
-
-
-def _dispatch_failed_jobs_statement(*, job_ids: list[int], max_attempts: int, failure_reason: str):
-    return (
-        _dispatch_recovery_statement(job_ids)
-        .where(PortfolioAggregationJob.attempt_count >= max_attempts)
-        .values(status="FAILED", failure_reason=failure_reason, updated_at=func.now())
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _dispatch_retryable_jobs_statement(
-    *, job_ids: list[int], max_attempts: int, failure_reason: str
-):
-    return (
-        _dispatch_recovery_statement(job_ids)
-        .where(PortfolioAggregationJob.attempt_count < max_attempts)
-        .values(status="PENDING", failure_reason=failure_reason, updated_at=func.now())
-        .execution_options(synchronize_session=False)
-    )
-
-
-def _dispatch_recovery_statement(job_ids: list[int]):
-    return update(PortfolioAggregationJob).where(
-        PortfolioAggregationJob.id.in_(job_ids),
-        PortfolioAggregationJob.status == "PROCESSING",
-    )

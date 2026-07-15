@@ -4,6 +4,10 @@ from scripts.quality.aggregation_scheduler_boundary_guard import (
     find_aggregation_scheduler_boundary_findings,
 )
 
+SCHEDULER_PATH = (
+    "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
+)
+
 
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -12,21 +16,15 @@ def _write(path: Path, text: str) -> None:
 
 def _write_required_boundary(root: Path) -> None:
     _write(
-        root / "src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py",
+        root / SCHEDULER_PATH,
         "AggregationSchedulerRepositoryProvider\n"
         "AggregationSchedulerMetricsSink\n"
         "AggregationSchedulerClock\n"
-        "AggregationJobPublisher\n"
-        "plan_aggregation_job_dispatch\n"
-        "publish_aggregation_dispatch_plan\n"
+        "AggregationJobBatchProcessor\n"
+        "AggregationLeaseTokenGenerator\n"
+        "recover_expired_job_leases\n"
+        "claim_eligible_jobs\n"
         "def _run_poll_once(): pass\n",
-    )
-    _write(
-        root / "src/services/portfolio_aggregation_service/app/core/aggregation_job_publisher.py",
-        "class AggregationJobPublisher: pass\n"
-        "class AggregationJobDispatchMessage: pass\n"
-        "def plan_aggregation_job_dispatch(): pass\n"
-        "def publish_aggregation_dispatch_plan(): pass\n",
     )
     _write(
         root / "src/services/portfolio_aggregation_service/app/infrastructure/"
@@ -43,7 +41,9 @@ def _write_required_boundary(root: Path) -> None:
         "class AggregationSchedulerRepository: pass\n"
         "class AggregationSchedulerRepositoryProvider: pass\n"
         "class AggregationSchedulerMetricsSink: pass\n"
-        "class AggregationSchedulerClock: pass\n",
+        "class AggregationSchedulerClock: pass\n"
+        "class AggregationJobBatchProcessor: pass\n"
+        "class AggregationLeaseTokenGenerator: pass\n",
     )
 
 
@@ -60,13 +60,14 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
 ) -> None:
     _write_required_boundary(tmp_path)
     _write(
-        tmp_path / "src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py",
+        tmp_path / SCHEDULER_PATH,
         "AggregationSchedulerRepositoryProvider\n"
         "AggregationSchedulerMetricsSink\n"
         "AggregationSchedulerClock\n"
-        "AggregationJobPublisher\n"
-        "plan_aggregation_job_dispatch\n"
-        "publish_aggregation_dispatch_plan\n"
+        "AggregationJobBatchProcessor\n"
+        "AggregationLeaseTokenGenerator\n"
+        "recover_expired_job_leases\n"
+        "claim_eligible_jobs\n"
         "def _run_poll_once(): pass\n"
         "get_async_db_session\n"
         "PortfolioAggregationRepository\n"
@@ -94,33 +95,6 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
     ]
 
 
-def test_aggregation_scheduler_boundary_guard_rejects_database_coupled_publisher(
-    tmp_path: Path,
-) -> None:
-    _write_required_boundary(tmp_path)
-    _write(
-        tmp_path
-        / "src/services/portfolio_aggregation_service/app/core/aggregation_job_publisher.py",
-        "class AggregationJobPublisher: pass\n"
-        "class AggregationJobDispatchMessage: pass\n"
-        "def plan_aggregation_job_dispatch(): pass\n"
-        "def publish_aggregation_dispatch_plan(): pass\n"
-        "get_async_db_session\n"
-        "PortfolioAggregationRepository\n"
-        "KafkaProducer\n"
-        "get_kafka_producer\n",
-    )
-
-    findings = find_aggregation_scheduler_boundary_findings(tmp_path)
-
-    assert [finding.snippet for finding in findings] == [
-        "get_async_db_session",
-        "PortfolioAggregationRepository",
-        "KafkaProducer",
-        "get_kafka_producer",
-    ]
-
-
 def test_aggregation_scheduler_boundary_guard_rejects_concrete_dependencies_in_ports(
     tmp_path: Path,
 ) -> None:
@@ -132,6 +106,8 @@ def test_aggregation_scheduler_boundary_guard_rejects_concrete_dependencies_in_p
         "class AggregationSchedulerRepositoryProvider: pass\n"
         "class AggregationSchedulerMetricsSink: pass\n"
         "class AggregationSchedulerClock: pass\n"
+        "class AggregationJobBatchProcessor: pass\n"
+        "class AggregationLeaseTokenGenerator: pass\n"
         "get_async_db_session\n"
         "PortfolioAggregationRepository\n"
         "KafkaProducer\n"

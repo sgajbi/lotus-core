@@ -4,10 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEDULER_MODULE = Path(
-    "src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py"
-)
-PUBLISHER_MODULE = Path(
-    "src/services/portfolio_aggregation_service/app/core/aggregation_job_publisher.py"
+    "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
 )
 ADAPTER_MODULE = Path(
     "src/services/portfolio_aggregation_service/app/infrastructure/"
@@ -21,9 +18,10 @@ REQUIRED_SCHEDULER_SNIPPETS = (
     "AggregationSchedulerRepositoryProvider",
     "AggregationSchedulerMetricsSink",
     "AggregationSchedulerClock",
-    "AggregationJobPublisher",
-    "plan_aggregation_job_dispatch",
-    "publish_aggregation_dispatch_plan",
+    "AggregationJobBatchProcessor",
+    "AggregationLeaseTokenGenerator",
+    "recover_expired_job_leases",
+    "claim_eligible_jobs",
     "def _run_poll_once",
 )
 FORBIDDEN_SCHEDULER_SNIPPETS = {
@@ -34,28 +32,15 @@ FORBIDDEN_SCHEDULER_SNIPPETS = {
     "PortfolioAggregationRepository": (
         "concrete repositories belong behind the scheduler repository port"
     ),
-    "KafkaProducer": "scheduler orchestration must use the aggregation job publisher port",
-    "get_kafka_producer": "Kafka producer creation belongs in runtime composition",
-    "publish_message(": "direct Kafka publication belongs in publisher adapters",
-    ".flush(": "delivery confirmation belongs in publisher adapters",
+    "KafkaProducer": "application scheduling must not depend on Kafka",
+    "get_kafka_producer": "application scheduling must not create Kafka producers",
+    "publish_message(": "application scheduling must not publish transport messages",
+    ".flush(": "application scheduling must not manage broker delivery",
     "set_control_queue_pending": "metric functions belong behind the scheduler metrics sink",
     "set_control_queue_failed_stored": "metric functions belong behind the scheduler metrics sink",
     "set_control_queue_oldest_pending_age_seconds": (
         "metric functions belong behind the scheduler metrics sink"
     ),
-}
-REQUIRED_PUBLISHER_SNIPPETS = (
-    "class AggregationJobPublisher",
-    "class AggregationJobDispatchMessage",
-    "def plan_aggregation_job_dispatch",
-    "def publish_aggregation_dispatch_plan",
-)
-FORBIDDEN_PUBLISHER_SNIPPETS = {
-    "get_async_db_session": "publisher planning must not depend on database sessions",
-    "TimeseriesRepository": "publisher planning must not depend on repositories",
-    "PortfolioAggregationRepository": "publisher planning must not depend on repositories",
-    "KafkaProducer": "publisher adapters should use portfolio_common.event_publisher",
-    "get_kafka_producer": "publisher adapters should use portfolio_common.event_publisher",
 }
 REQUIRED_ADAPTER_SNIPPETS = (
     "class SqlAlchemyAggregationSchedulerRepositoryProvider",
@@ -69,6 +54,8 @@ REQUIRED_PORT_SNIPPETS = (
     "class AggregationSchedulerRepositoryProvider",
     "class AggregationSchedulerMetricsSink",
     "class AggregationSchedulerClock",
+    "class AggregationJobBatchProcessor",
+    "class AggregationLeaseTokenGenerator",
 )
 FORBIDDEN_PORT_SNIPPETS = {
     "get_async_db_session": "scheduler ports must not depend on database session factories",
@@ -102,20 +89,6 @@ def find_aggregation_scheduler_boundary_findings(
             root=root,
             relative_path=SCHEDULER_MODULE,
             snippets=FORBIDDEN_SCHEDULER_SNIPPETS,
-        )
-    )
-    findings.extend(
-        _required_snippet_findings(
-            root=root,
-            relative_path=PUBLISHER_MODULE,
-            snippets=REQUIRED_PUBLISHER_SNIPPETS,
-        )
-    )
-    findings.extend(
-        _forbidden_snippet_findings(
-            root=root,
-            relative_path=PUBLISHER_MODULE,
-            snippets=FORBIDDEN_PUBLISHER_SNIPPETS,
         )
     )
     findings.extend(
