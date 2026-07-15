@@ -8,10 +8,12 @@ from pathlib import Path
 from scripts.operations.performance.derived_state_resource_monitor import (
     DatabaseResourceUsage,
     DerivedStateResourceSample,
+    OutboxResourceUsage,
     RuntimeResourceUsage,
     parse_compose_stats,
     parse_memory_bytes,
     read_database_resource_usage,
+    read_outbox_resource_usage,
     read_runtime_resource_usage,
     summarize_resource_samples,
 )
@@ -135,6 +137,79 @@ def test_read_runtime_resource_usage_targets_exact_compose_service() -> None:
     assert usage.memory_usage_bytes == 32 * 1024**2
 
 
+def test_read_outbox_resource_usage_preserves_backlog_and_topic_cohorts() -> None:
+    class Result:
+        def __init__(self, rows: list[dict[str, object]]) -> None:
+            self._rows = rows
+
+        def mappings(self) -> Result:
+            return self
+
+        def one(self) -> dict[str, object]:
+            return self._rows[0]
+
+        def all(self) -> list[dict[str, object]]:
+            return self._rows
+
+    class Connection:
+        def __init__(self) -> None:
+            self._call_count = 0
+
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def execute(self, _query: object) -> Result:
+            self._call_count += 1
+            if self._call_count == 1:
+                return Result(
+                    [
+                        {
+                            "pending_events": 120,
+                            "processed_events": 880,
+                            "failed_events": 2,
+                            "retry_eligible_pending_events": 115,
+                            "retry_waiting_pending_events": 5,
+                            "oldest_pending_age_seconds": 42.1256789,
+                        }
+                    ]
+                )
+            return Result(
+                [
+                    {
+                        "topic": "transactions.persisted",
+                        "created_events": 700,
+                        "pending_events": 100,
+                    },
+                    {
+                        "topic": "valuation.snapshot.persisted",
+                        "created_events": 300,
+                        "pending_events": 0,
+                    },
+                ]
+            )
+
+    class Engine:
+        def connect(self) -> Connection:
+            return Connection()
+
+    usage = read_outbox_resource_usage(engine=Engine())  # type: ignore[arg-type]
+
+    assert usage.pending_events == 120
+    assert usage.processed_events == 880
+    assert usage.failed_events == 2
+    assert usage.retry_eligible_pending_events == 115
+    assert usage.retry_waiting_pending_events == 5
+    assert usage.oldest_pending_age_seconds == 42.125679
+    assert usage.pending_events_by_topic == (("transactions.persisted", 100),)
+    assert usage.created_events_by_topic == (
+        ("transactions.persisted", 700),
+        ("valuation.snapshot.persisted", 300),
+    )
+
+
 def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
     samples = (
         DerivedStateResourceSample(
@@ -154,6 +229,16 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 memory_limit_bytes=1024**3,
                 memory_utilization_percent=12.5,
             ),
+            outbox=OutboxResourceUsage(
+                pending_events=100,
+                processed_events=300,
+                failed_events=0,
+                retry_eligible_pending_events=90,
+                retry_waiting_pending_events=10,
+                oldest_pending_age_seconds=15.0,
+                pending_events_by_topic=(("transactions.persisted", 100),),
+                created_events_by_topic=(("transactions.persisted", 400),),
+            ),
         ),
         DerivedStateResourceSample(
             captured_at="2026-07-15T09:00:05Z",
@@ -172,6 +257,22 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
                 memory_limit_bytes=1024**3,
                 memory_utilization_percent=31.25,
             ),
+            outbox=OutboxResourceUsage(
+                pending_events=250,
+                processed_events=750,
+                failed_events=1,
+                retry_eligible_pending_events=240,
+                retry_waiting_pending_events=10,
+                oldest_pending_age_seconds=45.0,
+                pending_events_by_topic=(
+                    ("transactions.persisted", 200),
+                    ("valuation.snapshot.persisted", 50),
+                ),
+                created_events_by_topic=(
+                    ("transactions.persisted", 700),
+                    ("valuation.snapshot.persisted", 300),
+                ),
+            ),
         ),
     )
 
@@ -189,6 +290,22 @@ def test_summarize_resource_samples_reports_peak_capacity_pressure() -> None:
     assert evidence.peak_runtime_cpu_percent == 72.5
     assert evidence.peak_runtime_memory_usage_bytes == 320 * 1024**2
     assert evidence.peak_runtime_memory_utilization_percent == 31.25
+    assert evidence.peak_outbox_pending_events == 250
+    assert evidence.peak_outbox_oldest_pending_age_seconds == 45.0
+    assert evidence.peak_outbox_retry_eligible_pending_events == 240
+    assert evidence.peak_outbox_retry_waiting_pending_events == 10
+    assert evidence.peak_outbox_failed_events == 1
+    assert evidence.final_outbox_pending_events == 250
+    assert evidence.final_outbox_processed_events == 750
+    assert evidence.final_outbox_failed_events == 1
+    assert evidence.final_outbox_pending_events_by_topic == (
+        ("transactions.persisted", 200),
+        ("valuation.snapshot.persisted", 50),
+    )
+    assert evidence.final_outbox_created_events_by_topic == (
+        ("transactions.persisted", 700),
+        ("valuation.snapshot.persisted", 300),
+    )
 
 
 def test_summarize_resource_samples_is_explicit_when_no_sample_completed() -> None:
@@ -198,3 +315,6 @@ def test_summarize_resource_samples_is_explicit_when_no_sample_completed() -> No
     assert evidence.sampling_error_count == 1
     assert evidence.peak_database_total_connections is None
     assert evidence.peak_runtime_memory_usage_bytes is None
+    assert evidence.peak_outbox_pending_events is None
+    assert evidence.final_outbox_pending_events is None
+    assert evidence.final_outbox_pending_events_by_topic == ()
