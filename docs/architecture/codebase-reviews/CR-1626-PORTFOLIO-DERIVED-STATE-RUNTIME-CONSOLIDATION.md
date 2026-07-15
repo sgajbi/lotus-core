@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; both materialization boundaries and portfolio calculation ownership fixed locally
+Status: In progress; materialization/calculation ownership and durable lease operations fixed locally
 
 ## Objective
 
@@ -155,6 +155,11 @@ cross-window state.
   fails closed.
 - `74 passed` across the complete portfolio-aggregation unit package after the carry-forward
   correction.
+- Signed commit `1ab0fe400` adds validated lease identity, leased `SKIP LOCKED` claims,
+  token-matched terminal writes, expiry-based requeue/failure, and stale-worker ownership-loss
+  proof without activating the path prematurely.
+- `86 passed` across the complete portfolio-aggregation unit package after the additive lease
+  repository slice.
 - The complete architecture gate and configured MyPy over `235` source files passed after the
   calculation ownership change.
 - The repository documentation/wiki gate, application-port catalog guard, and `18` focused
@@ -175,7 +180,8 @@ and database catalogs, and the timeseries API/developer guides change because de
 source-failure, handoff, and contribution-invariant truth changed. README, wiki, API route inventory,
 OpenAPI, supported-features, and migration material remain explicit no-change decisions because
 deployable topology and public/operator contracts are still unchanged. Runtime-facing surfaces
-must change atomically with the later cutover.
+must change atomically with the later cutover. The additive lease-operation slice changes no
+runtime-facing surface and therefore requires no additional front-door, API, event, or wiki update.
 
 ## Remaining Work
 
