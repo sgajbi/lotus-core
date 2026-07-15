@@ -63,15 +63,19 @@ REQUIRED_SNIPPETS = {
         "outbox_event_payload",
     ),
     Path("src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py"): (
-        "financial_reconciliation_requested_message",
         "portfolio_day_controls_evaluated_message",
         "pipeline_outbox_event_payload",
     ),
     Path(
         "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
+    ): ("portfolio_day_controls_evaluated_message",),
+    Path(
+        "src/services/portfolio_aggregation_service/app/infrastructure/"
+        "aggregation_completion_event_stager.py"
     ): (
-        "financial_reconciliation_requested_message",
-        "portfolio_day_controls_evaluated_message",
+        "FinancialReconciliationRequestedEvent",
+        "PortfolioAggregationDayCompletedEvent",
+        "outbox_event_payload",
     ),
     Path(
         "src/services/portfolio_transaction_processing_service/app/infrastructure/"

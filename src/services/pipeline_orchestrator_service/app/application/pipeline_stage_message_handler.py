@@ -5,10 +5,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Protocol
 
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 
 
 class PipelineStageUnitOfWork(Protocol):
@@ -19,12 +16,6 @@ class PipelineStageUnitOfWork(Protocol):
         service_name: str,
         correlation_id: str | None,
     ) -> bool: ...
-
-    async def register_portfolio_aggregation_completed(
-        self,
-        event: PortfolioAggregationDayCompletedEvent,
-        correlation_id: str | None,
-    ) -> None: ...
 
     async def register_reconciliation_completed(
         self,
@@ -45,24 +36,6 @@ class PipelineStageHandleResult:
 class PipelineStageMessageHandler:
     def __init__(self, unit_of_work_factory: PipelineStageUnitOfWorkFactory) -> None:
         self._unit_of_work_factory = unit_of_work_factory
-
-    async def handle_portfolio_aggregation_completed(
-        self,
-        *,
-        event_id: str,
-        event: PortfolioAggregationDayCompletedEvent,
-        correlation_id: str | None,
-    ) -> PipelineStageHandleResult:
-        return await self._handle(
-            event_id=event_id,
-            portfolio_id=event.portfolio_id,
-            service_name="pipeline-orchestrator-portfolio-aggregation",
-            correlation_id=correlation_id,
-            register=lambda uow: uow.register_portfolio_aggregation_completed(
-                event,
-                correlation_id,
-            ),
-        )
 
     async def handle_reconciliation_completed(
         self,

@@ -1,12 +1,8 @@
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 from portfolio_common.outbox_repository import OutboxRepository
 
 from ..adapters.pipeline_event_factory import (
     PipelineOutboxMessage,
-    financial_reconciliation_requested_message,
     portfolio_day_controls_evaluated_message,
 )
 from ..domain.pipeline_stage_state_machine import (
@@ -23,19 +19,6 @@ class PipelineOrchestratorService:
     def __init__(self, repo: PipelineStageRepository, outbox_repo: OutboxRepository):
         self.repo = repo
         self.outbox_repo = outbox_repo
-
-    async def register_portfolio_aggregation_completed(
-        self,
-        event: PortfolioAggregationDayCompletedEvent,
-        correlation_id: str | None,
-    ) -> None:
-        await self._publish_outbox_message(
-            financial_reconciliation_requested_message(
-                event=event,
-                correlation_id=correlation_id,
-            ),
-            correlation_id=correlation_id,
-        )
 
     async def register_reconciliation_completed(
         self,

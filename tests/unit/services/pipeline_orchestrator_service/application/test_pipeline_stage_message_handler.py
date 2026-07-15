@@ -6,10 +6,7 @@ from types import TracebackType
 from typing import Self
 
 import pytest
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    PortfolioAggregationDayCompletedEvent,
-)
+from portfolio_common.events import FinancialReconciliationCompletedEvent
 from sqlalchemy.exc import IntegrityError
 
 from src.services.pipeline_orchestrator_service.app.application import (
@@ -47,27 +44,12 @@ class FakePipelineStageUnitOfWork:
         self.claims.append((event_id, portfolio_id, service_name, correlation_id))
         return self.claim_result
 
-    async def register_portfolio_aggregation_completed(
-        self,
-        event: PortfolioAggregationDayCompletedEvent,
-        correlation_id: str | None,
-    ) -> None:
-        self.registrations.append(("portfolio_aggregation_completed", event, correlation_id))
-
     async def register_reconciliation_completed(
         self,
         event: FinancialReconciliationCompletedEvent,
         correlation_id: str | None,
     ) -> None:
         self.registrations.append(("reconciliation_completed", event, correlation_id))
-
-
-def _aggregation_event() -> PortfolioAggregationDayCompletedEvent:
-    return PortfolioAggregationDayCompletedEvent(
-        portfolio_id="PORT-PIPE-1",
-        aggregation_date=date(2026, 3, 8),
-        epoch=3,
-    )
 
 
 def _reconciliation_event() -> FinancialReconciliationCompletedEvent:
@@ -90,10 +72,10 @@ async def test_handler_skips_registration_for_duplicate_event_claim() -> None:
     unit_of_work = FakePipelineStageUnitOfWork(claim_result=False)
     handler = handler_module.PipelineStageMessageHandler(unit_of_work_factory=lambda: unit_of_work)
 
-    result = await handler.handle_portfolio_aggregation_completed(
-        event_id="portfolio_day.aggregation.completed-0-8",
-        event=_aggregation_event(),
-        correlation_id="corr-agg",
+    result = await handler.handle_reconciliation_completed(
+        event_id="portfolio_day.reconciliation.completed-0-9",
+        event=_reconciliation_event(),
+        correlation_id="corr-recon",
     )
 
     assert result.processed is False
@@ -102,15 +84,10 @@ async def test_handler_skips_registration_for_duplicate_event_claim() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handler_uses_shared_stage_service_names_for_all_stage_families() -> None:
+async def test_handler_uses_reconciliation_completion_service_identity() -> None:
     unit_of_work = FakePipelineStageUnitOfWork()
     handler = handler_module.PipelineStageMessageHandler(unit_of_work_factory=lambda: unit_of_work)
 
-    await handler.handle_portfolio_aggregation_completed(
-        event_id="portfolio_day.aggregation.completed-0-8",
-        event=_aggregation_event(),
-        correlation_id="corr-agg",
-    )
     await handler.handle_reconciliation_completed(
         event_id="portfolio_day.reconciliation.completed-0-9",
         event=_reconciliation_event(),
@@ -119,12 +96,6 @@ async def test_handler_uses_shared_stage_service_names_for_all_stage_families() 
 
     assert unit_of_work.claims == [
         (
-            "portfolio_day.aggregation.completed-0-8",
-            "PORT-PIPE-1",
-            "pipeline-orchestrator-portfolio-aggregation",
-            "corr-agg",
-        ),
-        (
             "portfolio_day.reconciliation.completed-0-9",
             "PORT-PIPE-1",
             "pipeline-orchestrator-reconciliation-completion",
@@ -132,7 +103,6 @@ async def test_handler_uses_shared_stage_service_names_for_all_stage_families() 
         ),
     ]
     assert unit_of_work.registrations == [
-        ("portfolio_aggregation_completed", _aggregation_event(), "corr-agg"),
         ("reconciliation_completed", _reconciliation_event(), "corr-recon"),
     ]
 
@@ -145,9 +115,9 @@ async def test_handler_propagates_db_errors_for_consumer_retry_policy() -> None:
     )
 
     with pytest.raises(IntegrityError):
-        await handler.handle_portfolio_aggregation_completed(
-            event_id="portfolio_day.aggregation.completed-0-8",
-            event=_aggregation_event(),
+        await handler.handle_reconciliation_completed(
+            event_id="portfolio_day.reconciliation.completed-0-9",
+            event=_reconciliation_event(),
             correlation_id="corr-stage",
         )
 
