@@ -16,7 +16,7 @@ The platform is designed as a two-stage pipeline to transform daily snapshots in
     * The **`AggregationScheduler`** in `portfolio_aggregation_service` is a background process that continuously polls the `portfolio_aggregation_jobs` table for pending work.
     * It has special logic to only claim a job for a given day `D` if the portfolio time-series for day `D-1` already exists, ensuring sequential processing.
     * Once a job is claimed, it publishes a `portfolio_day.aggregation.job.requested` event to Kafka.
-    * The **`PortfolioTimeseriesConsumer`** in `portfolio_aggregation_service` consumes this event, fetches all the necessary `position_timeseries` records for that day, and calls **`PortfolioTimeseriesLogic`** to perform the final aggregation and currency conversion, creating a single `portfolio_timeseries` record.
+    * The **`PortfolioTimeseriesConsumer`** in `portfolio_aggregation_service` validates and maps the event to **`MaterializePortfolioTimeseries`**. The application use case loads the target epoch and position-timeseries inputs through typed ports, invokes the calculation policy, releases the durable job claim, and atomically stages the `portfolio_timeseries` output plus completion/reconciliation events through a SQLAlchemy/outbox unit of work.
 
 ## 2. Adding a New Field to the Time-Series
 

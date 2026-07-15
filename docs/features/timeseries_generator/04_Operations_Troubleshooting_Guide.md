@@ -11,17 +11,18 @@ The health of this service is critical for the availability of all performance a
 * **Consumer Lag:** Monitor consumer lag on both primary topics:
   * `valuation.snapshot.persisted`: High lag here indicates the service is failing to generate the base `position_timeseries` records.
   * `portfolio_day.aggregation.job.requested`: High lag here indicates portfolio aggregation orchestration or consumption is stalled in `portfolio_aggregation_service`.
-* **`events_dlqd_total` (Counter):** An increase in this metric signifies a "poison pill" message that could not be processed, likely due to a persistent error like a missing FX rate.
+* **`events_dlqd_total` (Counter):** An increase means the delivery was malformed or the application could not durably record its failure. Missing governed source data normally leaves the aggregation job in `FAILED` for support-led remediation rather than duplicating failure evidence in the DLQ.
 * **`event_processing_latency_seconds` (Histogram):** A sudden increase in the latency for the `portfolio_day.aggregation.job.requested` consumer can indicate that it is processing portfolios with a very large number of positions.
 
 ## 2. Structured Logging & Tracing
 
 All logs are structured JSON and are tagged with the `correlation_id`. Key log messages can help diagnose issues:
 
-* **`"Processing position snapshot for..."`**: Confirms the `PositionTimeseriesConsumer` is running.
+* **`"Position-timeseries materialization completed."`**: Confirms the position-timeseries application use case finished and reports whether current or dependent days changed.
 * **`"Scheduler claimed ... jobs for processing"`**: Confirms the `AggregationScheduler` in `portfolio_aggregation_service` is active and dispatching aggregation work.
 * **`"Found and claimed ... eligible aggregation jobs"`**: Confirms the portfolio aggregation scheduler in `portfolio_aggregation_service` is claiming portfolio-date jobs.
-* **`"Missing FX rate from..."`**: A critical error from the portfolio aggregation logic that will cause the job to fail and the message to be sent to the DLQ.
+* **`"Missing FX rate from..."`**: A critical source-data error that causes the owned aggregation job to fail without publishing partial output.
+* **`"Portfolio aggregation requires instrument reference data."`**: A position could not be tied to authoritative instrument metadata, so Core rejected the incomplete portfolio aggregate and failed the owned job.
 
 ## 3. Common Failure Scenarios & Resolutions
 
@@ -29,7 +30,7 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 | :--- | :--- | :--- | :--- |
 | **Incorrect Performance/Risk Figures** | TWR or Risk metrics exposed through the query stack are incorrect (e.g., unexpectedly low market value). | Compare `query_control_plane_service` support APIs such as `/support/portfolios/{portfolio_id}/overview` and `/support/portfolios/{portfolio_id}/aggregation-jobs` against logs. | **Cause:** The portfolio aggregation job may have run on incomplete inputs for a business date. <br> **Resolution:** Use control-plane support APIs to identify pending/failed jobs and replay path, then escalate with correlation IDs and support payloads. |
 | **Analytics Data is Stale** | Performance and risk data is not available for the latest business date. | `GET /support/portfolios/{portfolio_id}/aggregation-jobs?status=PROCESSING` or `status=PENDING` returns growing backlog from `query_control_plane_service`. | **Cause:** Scheduler eligibility or upstream data completeness is blocking claims. <br> **Resolution:** Inspect position-timeseries worker and portfolio-aggregation scheduler logs for the affected portfolio and validate lineage progression via control-plane support APIs. |
-| **Aggregation Jobs are Failing** | The `events_dlqd_total` metric is increasing for the portfolio aggregation path. | `FxRateNotFoundError` in the logs. | **Cause:** The portfolio aggregation logic requires an FX rate to convert a position's cash flows, but the rate is not in the database for that day. <br> **Resolution:** Ingest the missing FX rate data. Then replay through the supported remediation path rather than assuming the old monolithic timeseries runtime. |
+| **Aggregation Jobs are Failing** | The support API reports `FAILED` aggregation jobs; DLQ growth occurs only when delivery validation or failure persistence also fails. | `FxRateNotFoundError`, `InstrumentReferenceNotFoundError`, or `Portfolio-timeseries materialization failed; marking the owned job failed.` | **Cause:** Required FX or instrument reference data is absent/invalid, or another calculation dependency failed. Core does not publish a partial portfolio aggregate. <br> **Resolution:** Correct the governed reference data, confirm position-timeseries completeness, and replay through the supported remediation path with the original correlation evidence. |
 
 ## 4. Gaps and Design Considerations
 
