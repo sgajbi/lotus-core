@@ -5,19 +5,22 @@ from datetime import date
 from typing import Optional
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC
 from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import (
-    PortfolioAggregationDayCompletedEvent,
-    PortfolioAggregationRequiredEvent,
-)
+from portfolio_common.events import PortfolioAggregationRequiredEvent
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy import func, update
 
+from ..application.stage_portfolio_aggregation_completion import (
+    StagePortfolioAggregationCompletion,
+)
 from ..core.portfolio_timeseries_logic import PortfolioTimeseriesLogic
+from ..domain.aggregation_records import PortfolioAggregationCompletion
+from ..infrastructure.aggregation_completion_event_stager import (
+    TransactionalAggregationCompletionEventStager,
+)
 from ..infrastructure.portfolio_aggregation_repository import PortfolioAggregationRepository
 
 logger = logging.getLogger(__name__)
@@ -116,19 +119,14 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
 
                     await repo.upsert_portfolio_timeseries(new_portfolio_record)
                     outbox_repo = OutboxRepository(db)
-
-                    completion_event = PortfolioAggregationDayCompletedEvent(
-                        portfolio_id=portfolio_id,
-                        aggregation_date=a_date,
-                        epoch=target_epoch,
-                        correlation_id=correlation_id,
-                    )
-                    await outbox_repo.create_outbox_event(
-                        aggregate_type="PortfolioAggregationStage",
-                        aggregate_id=f"{portfolio_id}:{a_date}:{target_epoch}",
-                        event_type="PortfolioAggregationDayCompleted",
-                        topic=KAFKA_PORTFOLIO_DAY_AGGREGATION_COMPLETED_TOPIC,
-                        payload=completion_event.model_dump(mode="json"),
+                    await StagePortfolioAggregationCompletion(
+                        event_stager=TransactionalAggregationCompletionEventStager(outbox_repo)
+                    ).execute(
+                        PortfolioAggregationCompletion(
+                            portfolio_id=portfolio_id,
+                            aggregation_date=a_date,
+                            epoch=target_epoch,
+                        ),
                         correlation_id=correlation_id,
                     )
 
