@@ -8,6 +8,7 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeVar
 
@@ -112,7 +113,7 @@ def parse_memory_bytes(value: str) -> int:
     if match is None:
         raise ValueError(f"Unsupported Docker memory value: {value!r}")
     amount, unit = match.groups()
-    return int(float(amount) * _MEMORY_UNIT_MULTIPLIERS[unit.upper()])
+    return int(Decimal(amount) * _MEMORY_UNIT_MULTIPLIERS[unit.upper()])
 
 
 def _parse_percent(value: object, *, field_name: str) -> float:
