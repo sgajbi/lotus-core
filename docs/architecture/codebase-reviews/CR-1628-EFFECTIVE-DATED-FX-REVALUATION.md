@@ -42,7 +42,8 @@ retained or shared, so credentials cannot be part of its schema.
 7. The managed FX-restatement profile uses an independent oracle for corrected market value and
    unrealized price, FX, and total P&L, then requires exactly-once source/replay evidence and closed
    queues. It commits the correction while valuation orchestration is stopped and proves recovery
-   after unconditional service restoration.
+   after unconditional service restoration. Measured stop/restore timestamps and outage duration
+   replace caller-asserted recovery flags.
 8. Workload reports retain only a safe database target and exclude URL credentials and parameters;
    generated evidence must pass the leakage guard.
 

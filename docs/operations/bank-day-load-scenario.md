@@ -104,7 +104,9 @@ corrections in one run.
 The certifying FX profile also stops `valuation_orchestrator_service` before correction ingestion,
 restores it with Compose health waiting, and only then starts the exact evidence drain. This proves
 that a committed persisted observation survives consumer interruption. Runtime restoration is
-unconditional, including when correction ingestion fails.
+unconditional, including when correction ingestion fails. The report records measured stop and
+healthy-restore UTC timestamps, outage duration, service identity, and Compose health-wait outcome;
+the profile fails when restart was requested but measured recovery evidence is absent.
 
 ## Deterministic Dataset Rules
 

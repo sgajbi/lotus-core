@@ -126,6 +126,10 @@ def test_restore_can_target_compose_file_without_restarting_unrelated_services()
         ],
     ]
     recovery_services_ready.assert_not_called()
+    assert boundary.recovery_evidence is not None
+    assert boundary.recovery_evidence.faulted_service == "valuation_orchestrator_service"
+    assert boundary.recovery_evidence.compose_health_wait_passed is True
+    assert boundary.recovery_evidence.outage_duration_seconds >= 0
 
 
 def test_context_exit_recovers_after_primary_failure() -> None:

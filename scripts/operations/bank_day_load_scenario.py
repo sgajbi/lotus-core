@@ -49,7 +49,10 @@ from scripts.operations.performance.market_price_correction import (
 from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
 )
-from tests.test_support.runtime.compose_fault_recovery import ComposeFaultRecoveryBoundary
+from tests.test_support.runtime.compose_fault_recovery import (
+    ComposeFaultRecoveryBoundary,
+    ComposeFaultRecoveryEvidence,
+)
 
 DEFAULT_INGESTION_BASE_URL = "http://localhost:8200"
 DEFAULT_QUERY_BASE_URL = "http://localhost:8201"
@@ -207,6 +210,7 @@ class ScenarioReport:
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
     correction_evidence: DerivedStateCorrectionEvidence | None = None
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
+    fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
 
 
 class HealthMonitor:
@@ -1525,6 +1529,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         and report.fx_correction_evidence is None
     ):
         failures.append("FX rate correction has no completed drain evidence")
+    if (
+        bool(report.config.get("restart_valuation_orchestrator_during_fx_correction"))
+        and report.fx_correction_restart_evidence is None
+    ):
+        failures.append("FX rate correction has no measured restart recovery evidence")
     return failures
 
 
@@ -1585,6 +1594,17 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             json.dumps(
                 asdict(report.fx_correction_evidence)
                 if report.fx_correction_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
+            "",
+            "## FX Correction Restart Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.fx_correction_restart_evidence)
+                if report.fx_correction_restart_evidence is not None
                 else None,
                 indent=2,
             ),
@@ -1852,6 +1872,7 @@ def _finalize_report(
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
     correction_evidence: DerivedStateCorrectionEvidence | None = None,
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None,
+    fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
         scenario_name=args.scenario_name,
@@ -1886,6 +1907,7 @@ def _finalize_report(
         derived_state_resource_evidence=derived_state_resource_evidence,
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
+        fx_correction_restart_evidence=fx_correction_restart_evidence,
     )
     failures = initial_failures + _evaluate_report(report_base)
     return ScenarioReport(
@@ -1912,6 +1934,7 @@ def _finalize_report(
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
         correction_evidence=report_base.correction_evidence,
         fx_correction_evidence=report_base.fx_correction_evidence,
+        fx_correction_restart_evidence=report_base.fx_correction_restart_evidence,
     )
 
 
@@ -2036,6 +2059,7 @@ def main() -> int:
     effective_specs = specs
     effective_fx_rate_overrides: dict[tuple[str, str], Decimal] = {}
     fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
+    fx_correction_restart_evidence: ComposeFaultRecoveryEvidence | None = None
     session = requests.Session()
     ingest_phases: list[IngestPhaseResult] = []
     portfolio_pattern = {"portfolio_pattern": f"LOAD_{run_id}_PF_%"}
@@ -2293,6 +2317,8 @@ def main() -> int:
                     ),
                     phase="fx-rate-correction",
                 )
+            if isinstance(fault_boundary, ComposeFaultRecoveryBoundary):
+                fx_correction_restart_evidence = fault_boundary.recovery_evidence
             ingest_phases.append(correction_ingest_phase)
             fx_correction_evidence = wait_for_fx_corrected_derived_state(
                 row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
@@ -2368,6 +2394,7 @@ def main() -> int:
         derived_state_resource_evidence=resource_monitor.evidence(),
         correction_evidence=correction_evidence,
         fx_correction_evidence=fx_correction_evidence,
+        fx_correction_restart_evidence=fx_correction_restart_evidence,
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
     print(f"Wrote JSON report: {json_path}")
