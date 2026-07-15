@@ -3,6 +3,15 @@
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from enum import StrEnum
+
+
+class AggregationJobCompletionDisposition(StrEnum):
+    """Describe the durable result of releasing one claimed aggregation job."""
+
+    COMPLETE = "COMPLETE"
+    REQUEUED = "REQUEUED"
+    LOST_OWNERSHIP = "LOST_OWNERSHIP"
 
 
 @dataclass(frozen=True, slots=True)

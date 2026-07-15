@@ -16,6 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.portfolio_aggregation_service.app.consumers import (
     portfolio_timeseries_consumer as portfolio_timeseries_consumer_module,
 )
+from src.services.portfolio_aggregation_service.app.domain.aggregation_records import (
+    AggregationJobCompletionDisposition,
+)
+from src.services.portfolio_aggregation_service.app.infrastructure import (
+    portfolio_aggregation_repository as portfolio_aggregation_repository_module,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -70,10 +76,8 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
         self,
         portfolio_id,
         a_date,
-        db_session=None,
     ):
-        assert db_session is not None
-        await db_session.execute(
+        await self.db.execute(
             update(PortfolioAggregationJob)
             .where(
                 PortfolioAggregationJob.portfolio_id == portfolio_id,
@@ -81,7 +85,7 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
             )
             .values(status="COMPLETE")
         )
-        return "LOST_OWNERSHIP"
+        return AggregationJobCompletionDisposition.LOST_OWNERSHIP
 
     deterministic_record = PortfolioTimeseries(
         portfolio_id="PORT-AGG-INT-01",
@@ -100,8 +104,8 @@ async def test_aggregation_message_skips_side_effects_after_losing_job_ownership
             new=override_session,
         ),
         patch.object(
-            portfolio_timeseries_consumer_module.PortfolioTimeseriesConsumer,
-            "_complete_or_requeue_job",
+            portfolio_aggregation_repository_module.PortfolioAggregationRepository,
+            "complete_or_requeue_job",
             new=complete_or_requeue_with_ownership_loss,
         ),
         patch(

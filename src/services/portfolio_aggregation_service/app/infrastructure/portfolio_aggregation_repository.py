@@ -24,6 +24,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import aliased
 
 from ..domain.aggregation_records import (
+    AggregationJobCompletionDisposition,
     AggregationJobRecord,
     PortfolioAggregationScope,
     PortfolioTimeseriesRecord,
@@ -31,6 +32,8 @@ from ..domain.aggregation_records import (
 )
 
 logger = logging.getLogger(__name__)
+
+AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
 
 
 class PortfolioAggregationRepository(TimeseriesMarketDataReader):
@@ -58,6 +61,53 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         except Exception as exc:
             logger.error("Failed to stage portfolio time series upsert: %s", exc, exc_info=True)
             raise
+
+    async def complete_or_requeue_job(
+        self,
+        portfolio_id: str,
+        aggregation_date: date,
+    ) -> AggregationJobCompletionDisposition:
+        """Release one claimed job without overwriting a concurrent reprocess request."""
+
+        requeue_result = await self.db.execute(
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == aggregation_date,
+                PortfolioAggregationJob.status == "PROCESSING",
+                PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
+            )
+            .values(status="PENDING", failure_reason=None, updated_at=func.now())
+        )
+        if int(requeue_result.rowcount or 0) == 1:
+            return AggregationJobCompletionDisposition.REQUEUED
+
+        complete_result = await self.db.execute(
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == aggregation_date,
+                PortfolioAggregationJob.status == "PROCESSING",
+            )
+            .values(status="COMPLETE", failure_reason=None, updated_at=func.now())
+        )
+        if int(complete_result.rowcount or 0) == 1:
+            return AggregationJobCompletionDisposition.COMPLETE
+        return AggregationJobCompletionDisposition.LOST_OWNERSHIP
+
+    async def mark_job_failed(self, portfolio_id: str, aggregation_date: date) -> bool:
+        """Fail one aggregation job only while this worker still owns its claim."""
+
+        result = await self.db.execute(
+            update(PortfolioAggregationJob)
+            .where(
+                PortfolioAggregationJob.portfolio_id == portfolio_id,
+                PortfolioAggregationJob.aggregation_date == aggregation_date,
+                PortfolioAggregationJob.status == "PROCESSING",
+            )
+            .values(status="FAILED", updated_at=func.now())
+        )
+        return int(result.rowcount or 0) == 1
 
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None:
