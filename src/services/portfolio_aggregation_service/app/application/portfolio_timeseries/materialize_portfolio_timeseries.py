@@ -67,13 +67,17 @@ class MaterializePortfolioTimeseries:
                 _event_stager: AggregationCompletionEventStager,
             ) -> bool:
                 return await repository.mark_job_failed(
-                    command.portfolio_id,
-                    command.aggregation_date,
+                    job_id=command.job_id,
+                    lease_token=command.lease_token,
                 )
 
             failure_recorded = await self._unit_of_work_provider.run_in_transaction(mark_failed)
             return PortfolioTimeseriesMaterializationResult(
-                status=PortfolioTimeseriesMaterializationStatus.FAILED,
+                status=(
+                    PortfolioTimeseriesMaterializationStatus.FAILED
+                    if failure_recorded
+                    else PortfolioTimeseriesMaterializationStatus.LOST_OWNERSHIP
+                ),
                 failure_recorded=failure_recorded,
             )
 
@@ -103,8 +107,8 @@ class MaterializePortfolioTimeseries:
             repository,
         )
         disposition = await repository.complete_or_requeue_job(
-            command.portfolio_id,
-            command.aggregation_date,
+            job_id=command.job_id,
+            lease_token=command.lease_token,
         )
         if disposition is not AggregationJobCompletionDisposition.COMPLETE:
             return PortfolioTimeseriesMaterializationResult(

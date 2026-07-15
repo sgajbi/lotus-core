@@ -9,6 +9,8 @@ from enum import StrEnum
 class MaterializePortfolioTimeseriesCommand:
     """Identify one claimed portfolio day ready for aggregation."""
 
+    job_id: int
+    lease_token: str
     portfolio_id: str
     aggregation_date: date
     correlation_id: str | None = None

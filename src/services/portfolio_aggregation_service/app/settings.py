@@ -21,10 +21,10 @@ def _env_positive_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class AggregationRuntimeSettings:
-    portfolio_aggregation_consumer_count: int
+    portfolio_aggregation_worker_count: int
     aggregation_scheduler_poll_interval_seconds: int
     aggregation_scheduler_batch_size: int
-    aggregation_scheduler_stale_timeout_minutes: int
+    aggregation_job_lease_duration_seconds: int
     aggregation_scheduler_max_attempts: int
 
 
@@ -34,9 +34,9 @@ def get_aggregation_runtime_settings(
     scheduler_batch_size_default: int = 100,
 ) -> AggregationRuntimeSettings:
     return AggregationRuntimeSettings(
-        portfolio_aggregation_consumer_count=_env_positive_int(
-            "PORTFOLIO_AGGREGATION_CONSUMER_COUNT",
-            1,
+        portfolio_aggregation_worker_count=_env_positive_int(
+            "PORTFOLIO_AGGREGATION_WORKER_COUNT",
+            4,
         ),
         aggregation_scheduler_poll_interval_seconds=_env_positive_int(
             "AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS",
@@ -46,9 +46,9 @@ def get_aggregation_runtime_settings(
             "AGGREGATION_SCHEDULER_BATCH_SIZE",
             scheduler_batch_size_default,
         ),
-        aggregation_scheduler_stale_timeout_minutes=_env_positive_int(
-            "AGGREGATION_SCHEDULER_STALE_TIMEOUT_MINUTES",
-            15,
+        aggregation_job_lease_duration_seconds=_env_positive_int(
+            "AGGREGATION_JOB_LEASE_DURATION_SECONDS",
+            900,
         ),
         aggregation_scheduler_max_attempts=_env_positive_int(
             "AGGREGATION_SCHEDULER_MAX_ATTEMPTS",

@@ -113,8 +113,12 @@ def test_app_local_stack_parallelizes_portfolio_aggregation_drain() -> None:
         == "${KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS:-4}"
     )
     assert (
-        aggregation_env["PORTFOLIO_AGGREGATION_CONSUMER_COUNT"]
-        == "${PORTFOLIO_AGGREGATION_CONSUMER_COUNT:-4}"
+        aggregation_env["PORTFOLIO_AGGREGATION_WORKER_COUNT"]
+        == "${PORTFOLIO_AGGREGATION_WORKER_COUNT:-4}"
+    )
+    assert (
+        aggregation_env["AGGREGATION_JOB_LEASE_DURATION_SECONDS"]
+        == "${AGGREGATION_JOB_LEASE_DURATION_SECONDS:-900}"
     )
     assert (
         aggregation_env["AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS"]

@@ -53,6 +53,14 @@ RETIRED_MODULES = {
     "src.services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
     "services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
     "src.services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
+    "services.portfolio_aggregation_service.app.consumer_manager",
+    "src.services.portfolio_aggregation_service.app.consumer_manager",
+    "services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer",
+    "src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer",
+    "services.portfolio_aggregation_service.app.core.aggregation_job_publisher",
+    "src.services.portfolio_aggregation_service.app.core.aggregation_job_publisher",
+    "services.portfolio_aggregation_service.app.core.aggregation_scheduler",
+    "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler",
 }
 RETIRED_PATHS = {
     PACKAGE_ROOT / "analytics_cashflow_semantics.py",
@@ -81,6 +89,33 @@ RETIRED_PATHS = {
     / "app"
     / "core"
     / "portfolio_timeseries_logic.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "consumer_manager.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "consumers"
+    / "portfolio_timeseries_consumer.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "core"
+    / "aggregation_job_publisher.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "core"
+    / "aggregation_scheduler.py",
     REPO_ROOT
     / "tests"
     / "unit"
