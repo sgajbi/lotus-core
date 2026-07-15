@@ -240,6 +240,15 @@ cross-window state.
   samples database connection capacity, active and idle-in-transaction sessions, lock waiters,
   blocked sessions, and exact-container CPU/memory; peak evidence is additive to the bank-day JSON
   and Markdown reports, and a governed run without a complete sample fails closed.
+- The managed workload driver defines a certifying 100,000-transaction daily profile, a certifying
+  one-portfolio/1,000-position fan-in profile, and a machine-labelled diagnostic smoke. It owns an
+  isolated dynamic-port Compose lifecycle, supplies credential-bearing database configuration via
+  the child environment rather than argv, and tears down run-owned resources.
+- Diagnostic run `20260715T094629Z` completed in `23.081s`: 10 transactions, 10 snapshots, 10
+  position rows, and two portfolio rows reconciled; valuation-to-position p95 was `2.31107555s`,
+  position-to-portfolio p95 was `1.80691335s`, five resource samples completed with no sampling
+  errors, peak DB connections were 19, and no lock waiter or blocked session was observed. This is
+  orchestration evidence only and is not accepted as daily/fan-in capacity proof.
 - Signed commit `dbdd729ed` adds a managed interruption gate that pauses the exact unified
   container, proves source snapshots and committed lag accumulate, then requires exact output
   counts, closed valuation/aggregation queues, baseline lag recovery, zero reconciliation
@@ -283,7 +292,8 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Run daily, burst, backdated, and fan-in profiles and compare both stage p50/p95/p99/max results
+1. Run the managed daily and fan-in profiles plus burst and backdated profiles, then compare both
+   stage p50/p95/p99/max results
    against the configured lease duration. Use those measured job durations to decide whether fixed
    expiry is sufficient or heartbeat renewal is required.
 2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main

@@ -50,3 +50,7 @@ Daily, price/FX burst, backdated, fan-in, release, and rollback certification re
 before #714 closure. Resource sampling is now reusable across those profiles, but source tests do
 not substitute for measured runtime evidence. Runtime consolidation does not permit position and
 portfolio workload metrics to lose their separate attribution.
+
+Run `make profile-derived-state-daily` and `make profile-derived-state-fan-in` for the two managed
+certifying shapes. `make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
+used as daily-volume, fan-in, lease-duration, or production-capacity evidence.

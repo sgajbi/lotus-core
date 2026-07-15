@@ -147,6 +147,8 @@ def build_bank_day_command(
         endpoints.compose_project_name,
         "--scenario-name",
         profile.name,
+        "--evidence-classification",
+        "certifying" if profile.certifying else "diagnostic",
         "--portfolio-count",
         str(profile.portfolio_count),
         "--transactions-per-portfolio",

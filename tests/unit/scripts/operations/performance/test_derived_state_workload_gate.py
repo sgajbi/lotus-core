@@ -16,6 +16,8 @@ from scripts.operations.performance.derived_state_workload_gate import (
 )
 from scripts.quality.ci_service_sets import DERIVED_STATE_WORKLOAD_GATE_SERVICES
 
+ROOT = Path(__file__).resolve().parents[5]
+
 
 def test_daily_profile_models_the_governed_bank_day_volume() -> None:
     profile = resolve_workload_profile(profile_name="daily", diagnostic_smoke=False)
@@ -82,6 +84,7 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
         "--compose-file",
     ]
     assert "derived-state-aggregation-fan-in" in command
+    assert command[command.index("--evidence-classification") + 1] == "certifying"
     assert command[command.index("--portfolio-count") + 1] == "1"
     assert command[command.index("--transactions-per-portfolio") + 1] == "1000"
     assert command[command.index("--transaction-batch-size") + 1] == "1000"
@@ -137,3 +140,14 @@ def test_prepare_managed_run_uses_complete_derived_state_service_set(
     assert captured["services"] == DERIVED_STATE_WORKLOAD_GATE_SERVICES
     assert captured["allocate_dynamic_ports"] is True
     assert captured["enable_demo_data_pack"] is False
+
+
+def test_make_targets_keep_diagnostic_and_certifying_profiles_explicit() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "test-derived-state-workload-smoke:" in makefile
+    assert "--diagnostic-smoke" in makefile
+    assert "profile-derived-state-daily:" in makefile
+    assert "--profile daily" in makefile
+    assert "profile-derived-state-fan-in:" in makefile
+    assert "--profile fan-in" in makefile

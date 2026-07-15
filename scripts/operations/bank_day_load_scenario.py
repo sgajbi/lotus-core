@@ -1674,6 +1674,7 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "transactions_per_portfolio": args.transactions_per_portfolio,
         "transaction_count": args.portfolio_count * args.transactions_per_portfolio,
         "transaction_batch_size": args.transaction_batch_size,
+        "evidence_classification": args.evidence_classification,
         "max_records_per_minute": args.max_records_per_minute,
         "max_requests_per_minute": args.max_requests_per_minute,
         "trade_date": resolved_trade_date,
@@ -1773,6 +1774,11 @@ def main() -> int:
         default=os.getenv("COMPOSE_PROJECT_NAME", "lotus-core-app-local"),
     )
     parser.add_argument("--scenario-name", default="bank-day-average-load")
+    parser.add_argument(
+        "--evidence-classification",
+        choices=("certifying", "diagnostic"),
+        default="certifying",
+    )
     parser.add_argument("--portfolio-count", type=int, default=1000)
     parser.add_argument("--transactions-per-portfolio", type=int, default=100)
     parser.add_argument("--transaction-batch-size", type=int, default=2000)

@@ -262,6 +262,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     report = _finalize_report(
         args=Namespace(
             scenario_name="bank-day-average-load",
+            evidence_classification="diagnostic",
             portfolio_count=2,
             transactions_per_portfolio=2,
             transaction_batch_size=100,
