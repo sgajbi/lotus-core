@@ -1,4 +1,5 @@
 import asyncio
+from inspect import getsource
 
 import pytest
 
@@ -60,7 +61,6 @@ def _patch_runtime(monkeypatch):
 
 
 async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
-    monkeypatch.setattr(consumer_manager, "ProcessedTransactionStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(consumer_manager, "PortfolioAggregationStageConsumer", _FakeSuccessConsumer)
     monkeypatch.setattr(
         consumer_manager,
@@ -68,6 +68,7 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
         _FakeSuccessConsumer,
     )
     manager = consumer_manager.ConsumerManager()
+    assert len(manager.consumers) == 2
 
     run_task = asyncio.create_task(manager.run())
     await asyncio.sleep(0.05)
@@ -78,9 +79,15 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
     assert manager.dispatcher.stop_called is True
 
 
+async def test_consumer_manager_does_not_restore_processed_transaction_hop() -> None:
+    source = getsource(consumer_manager.ConsumerManager)
+
+    assert "ProcessedTransactionStageConsumer" not in source
+    assert "pipeline_orchestrator_processed_txn_group" not in source
+
+
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
-    monkeypatch.setattr(consumer_manager, "ProcessedTransactionStageConsumer", _FakeFailingConsumer)
-    monkeypatch.setattr(consumer_manager, "PortfolioAggregationStageConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(consumer_manager, "PortfolioAggregationStageConsumer", _FakeFailingConsumer)
     monkeypatch.setattr(
         consumer_manager,
         "FinancialReconciliationCompletionConsumer",

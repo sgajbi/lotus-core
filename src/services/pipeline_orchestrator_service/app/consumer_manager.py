@@ -12,7 +12,6 @@ from portfolio_common.config import (
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
-    KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -27,7 +26,6 @@ from .consumers.financial_reconciliation_completion_consumer import (
     FinancialReconciliationCompletionConsumer,
 )
 from .consumers.portfolio_aggregation_stage_consumer import PortfolioAggregationStageConsumer
-from .consumers.processed_transaction_stage_consumer import ProcessedTransactionStageConsumer
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
@@ -40,15 +38,6 @@ class ConsumerManager:
         self.tasks = []
         self._shutdown_event = asyncio.Event()
 
-        self.consumers.append(
-            ProcessedTransactionStageConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_TRANSACTIONS_COST_PROCESSED_TOPIC,
-                group_id="pipeline_orchestrator_processed_txn_group",
-                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-                service_prefix="PIPE",
-            )
-        )
         self.consumers.append(
             PortfolioAggregationStageConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
