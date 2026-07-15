@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; materialization/calculation ownership and durable lease operations fixed locally
+Status: In progress; direct leased aggregation runtime fixed locally, deployable consolidation pending
 
 ## Objective
 
@@ -34,6 +34,11 @@ The extracted application path still delegated to a legacy `app/core/portfolio_t
 module that mixed asynchronous instrument/FX reads, normalization, caching, logging, and portfolio
 arithmetic. The source tree also retained an empty `app/repositories` compatibility package after
 repository ownership had moved to infrastructure.
+
+The scheduler then claimed durable rows, published a same-owner Kafka command, and relied on a
+consumer in the same deployable to invoke materialization. That duplicated the database queue,
+required a private topic, partition tuning, publish recovery, consumer groups, and DLQ handling,
+and still lacked token-fenced ownership after stale recovery.
 
 ## Layering Decision
 
@@ -93,7 +98,11 @@ compatibility package.
 | Framework-free portfolio arithmetic | no | yes |
 | Portfolio/window/duplicate-security contribution validation | no | yes |
 | Obsolete portfolio calculation/repository paths | 2 | 0 |
-| Portfolio-aggregation unit tests | 50 | 74 |
+| Portfolio-aggregation unit tests | 50 | 75 |
+| Same-owner aggregation command topics | 1 | 0 |
+| Aggregation transport/runtime source lines removed | 0 | 576 |
+| Claimed-job worker concurrency | Kafka partition/consumer pool | bounded application workers |
+| Terminal ownership predicate | portfolio/date/status | job id + lease token + status |
 
 The generator test count stayed stable because database-heavy consumer scenarios moved to
 application and infrastructure owners instead of being deleted. The aggregation count increased
@@ -160,6 +169,16 @@ cross-window state.
   proof without activating the path prematurely.
 - `86 passed` across the complete portfolio-aggregation unit package after the additive lease
   repository slice.
+- Signed commit `b5bbff5ba` activates direct bounded workers, token-fenced materialization,
+  expiry-based recovery, runtime-owned lease settings, migrated PostgreSQL proof, and no-return
+  guards while deleting the private publisher, consumer, scheduler, and consumer manager.
+- `80 passed` across aggregation, package-ownership, scheduler-guard, and local-stack unit proof;
+  the replacement PostgreSQL integration test collects successfully. Local DB execution remains
+  deferred to CI because Docker Desktop is unavailable.
+- Signed commit `712e65781` removes the retired request event/topic from shared configuration,
+  supportability inventory, Kafka provisioning, compose settings, and contract tests.
+- `102 passed` across the focused aggregation, ownership, event-supportability, scheduler-guard,
+  and local-stack closure suite after event-contract retirement.
 - The complete architecture gate and configured MyPy over `235` source files passed after the
   calculation ownership change.
 - The repository documentation/wiki gate, application-port catalog guard, and `18` focused
@@ -185,11 +204,11 @@ runtime-facing surface and therefore requires no additional front-door, API, eve
 
 ## Remaining Work
 
-1. Replace the same-owner Kafka aggregation command with bounded durable database workers using
-   `FOR UPDATE SKIP LOCKED` and stale-claim recovery.
+1. Complete observability for lease expiry, reclaim, and lost ownership and evaluate heartbeat
+   renewal for work approaching the configured lease duration.
 2. Compose one `portfolio_derived_state_service` runtime with independently configurable stage
    concurrency and attributable metrics.
-3. Retire the obsolete image, package, health/runtime manager, topic/group, configuration, and
-   deployment inventory only after usage and rollback proof.
+3. Retire the remaining obsolete deployable image/package/deployment inventory only after usage and
+   rollback proof; the private aggregation topic/group/runtime paths are already removed.
 4. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
    reconciliation, load, release, and exact-main validation before closing #714.

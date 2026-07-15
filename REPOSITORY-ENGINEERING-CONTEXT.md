@@ -1239,19 +1239,18 @@ Most relevant current governance:
     deduplication, and correlation header construction do not drift back into the compatibility
     repository adapter.
 78. Portfolio aggregation scheduler policy is split from global database sessions, concrete
-    repositories, raw metric functions, system clocks, and concrete Kafka publication. The
+    repositories, raw metric functions, system clocks, and transport publication. The
     repo-local standard lives at
     `docs/standards/aggregation-scheduler-boundary-standard.md`.
     `portfolio_aggregation_service.app.ports.aggregation_scheduler_ports` owns repository-provider,
-    repository, metrics-sink, and clock contracts; `app.infrastructure.aggregation_scheduler_adapters`
-    owns SQLAlchemy, Prometheus, and system-clock adapters; and `app.core.aggregation_job_publisher`
-    owns aggregation job record-key/header/payload planning plus dispatch failure classification
-    behind an aggregation-job publisher port. `AggregationScheduler` preserves its default runtime
-    constructor while accepting injected settings, repository provider, metrics sink, clock, and
-    publisher for fake-port tests. `make architecture-guard` runs
+    repository, metrics-sink, clock, token-generator, and batch-processor contracts;
+    `app.infrastructure.aggregation_scheduler_adapters` owns SQLAlchemy, Prometheus, and system-clock
+    adapters. `app.application.aggregation_jobs` owns expiry recovery, leased claims, and bounded
+    processing. The database queue is the command boundary; do not restore the same-owner
+    `portfolio_day.aggregation.job.requested` Kafka hop. `make architecture-guard` runs
     `scripts/quality/aggregation_scheduler_boundary_guard.py` so DB session factories, concrete
-    repositories, concrete Kafka producers, direct publish/flush calls, and raw metric functions do
-    not drift back into scheduler orchestration.
+    repositories, Kafka producers/consumers, direct publish/flush calls, and raw metric functions do
+    not drift into scheduler or worker orchestration.
 79. Position calculation rules are split from database sessions, concrete repositories, outbox
     staging, metrics, epoch fencing, and position-history persistence orchestration. The repo-local
     standard lives at `docs/standards/position-reducer-boundary-standard.md`.
@@ -2537,10 +2536,11 @@ Most relevant current governance:
      closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
      Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
      runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
-     Portfolio aggregation delivery follows the same rule: map the internal event into
-     `MaterializePortfolioTimeseries`, coordinate fan-in and typed queue outcomes through
-     application ports, and compose output plus completion/reconciliation outbox evidence through
-     one infrastructure unit of work. Required instrument and FX reference data is fail-closed;
+     Portfolio aggregation delivery follows the same rule: claim durable jobs with lease owner,
+     token, and UTC expiry; map each claim into `MaterializePortfolioTimeseries`; coordinate fan-in
+     and typed queue outcomes through application ports; and compose output plus
+     completion/reconciliation outbox evidence through one infrastructure unit of work. Terminal
+     writes require job id plus lease token. Required instrument and FX reference data is fail-closed;
      never skip a position contribution and publish an incomplete portfolio aggregate.
      Resolve batched instrument data and cached positive FX rates in
      `app.application.portfolio_timeseries.CalculatePortfolioTimeseries`; keep synchronous

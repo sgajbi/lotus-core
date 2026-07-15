@@ -43,8 +43,8 @@ separate Kafka completion topic for position-timeseries generation.
 This service is responsible for:
 
 - claiming eligible `portfolio_aggregation_jobs`
-- dispatching portfolio-day aggregation work onto `portfolio_day.aggregation.job.requested`
-- consuming those job requests
+- recovering expired job leases with a bounded retry ceiling
+- processing leased jobs through bounded in-process workers
 - computing `portfolio_timeseries` from the relevant `position_timeseries` set
 - emitting `portfolio_day.aggregation.completed` after portfolio-level materialization succeeds
 
@@ -59,10 +59,10 @@ The active path is:
 3. `timeseries_generator_service` consumes that event
 4. `timeseries_generator_service` computes or updates `position_timeseries`
 5. if material state changed, it stages `portfolio_aggregation_jobs`
-6. `portfolio_aggregation_service` scheduler claims eligible jobs and publishes
-   `portfolio_day.aggregation.job.requested`
-7. `portfolio_aggregation_service` worker consumes the job request and upserts
-   `portfolio_timeseries`
+6. `portfolio_aggregation_service` recovers expired leases and claims eligible jobs with a
+   durable owner, token, and UTC expiry
+7. bounded workers materialize claimed jobs directly and upsert `portfolio_timeseries`; terminal
+   writes require the same job id and lease token
 8. `portfolio_aggregation_service` atomically stages the
    `portfolio_day.aggregation.completed` compatibility fact and
    `portfolio_day.reconciliation.requested`

@@ -188,7 +188,7 @@ sequenceDiagram
     ValOrch->>Val: valuation.job.requested
     Val->>Ts: valuation.snapshot.persisted
     Ts->>Agg: portfolio_aggregation_jobs (durable database queue)
-    Agg->>Agg: portfolio_day.aggregation.job.requested
+    Agg->>Agg: lease durable jobs + bounded workers
     Agg->>Recon: portfolio_day.reconciliation.requested
     Agg-->>Agg: portfolio_day.aggregation.completed compatibility fact
     Recon-->>Recon: portfolio_day.reconciliation.completed compatibility fact
