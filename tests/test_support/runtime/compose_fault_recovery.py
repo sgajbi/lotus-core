@@ -21,6 +21,7 @@ class ComposeFaultRecoveryBoundary:
     recovery_services: Sequence[str]
     faulted_service_ready: ReadinessProbe
     recovery_services_ready: ReadinessProbe
+    compose_file: str | None = None
     runner: CommandRunner = subprocess.run
     wait_timeout_seconds: int = 60
     _restored: bool = field(default=False, init=False)
@@ -56,8 +57,9 @@ class ComposeFaultRecoveryBoundary:
             self.faulted_service,
         )
         self.faulted_service_ready()
-        self._run("restart", *self.recovery_services)
-        self.recovery_services_ready()
+        if self.recovery_services:
+            self._run("restart", *self.recovery_services)
+            self.recovery_services_ready()
         self._restored = True
 
     def __exit__(
@@ -87,8 +89,10 @@ class ComposeFaultRecoveryBoundary:
             "compose",
             "-p",
             self.project_name,
-            *compose_args,
         ]
+        if self.compose_file is not None:
+            command.extend(("-f", self.compose_file))
+        command.extend(compose_args)
         self.runner(
             command,
             check=True,

@@ -47,6 +47,7 @@ class DerivedStateWorkloadProfile:
     fx_rate_correction_from_currency: str | None = None
     fx_rate_correction_to_currency: str | None = None
     fx_rate_correction_multiplier: Decimal | None = None
+    restart_valuation_orchestrator_during_fx_correction: bool = False
 
     @property
     def transaction_count(self) -> int:
@@ -107,6 +108,7 @@ _CERTIFYING_PROFILES = {
         fx_rate_correction_from_currency="EUR",
         fx_rate_correction_to_currency="USD",
         fx_rate_correction_multiplier=Decimal("1.05"),
+        restart_valuation_orchestrator_during_fx_correction=True,
     ),
 }
 _DIAGNOSTIC_SMOKE_PROFILE = DerivedStateWorkloadProfile(
@@ -262,6 +264,8 @@ def build_bank_day_command(
                 str(profile.fx_rate_correction_multiplier),
             )
         )
+        if profile.restart_valuation_orchestrator_during_fx_correction:
+            command.append("--restart-valuation-orchestrator-during-fx-correction")
     return command
 
 

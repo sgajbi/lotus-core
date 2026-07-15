@@ -81,6 +81,53 @@ def test_restore_reconciles_database_and_restarts_dependents_once() -> None:
     recovery_services_ready.assert_called_once_with()
 
 
+def test_restore_can_target_compose_file_without_restarting_unrelated_services() -> None:
+    runner = MagicMock(side_effect=_successful_run)
+    recovery_services_ready = MagicMock()
+    boundary = ComposeFaultRecoveryBoundary(
+        project_name="lotus-fx-proof",
+        compose_file="C:/repo/docker-compose.yml",
+        faulted_service="valuation_orchestrator_service",
+        recovery_services=(),
+        faulted_service_ready=_ready,
+        recovery_services_ready=recovery_services_ready,
+        runner=runner,
+    )
+
+    with boundary:
+        pass
+
+    commands = [call.args[0] for call in runner.call_args_list]
+    assert commands == [
+        [
+            "docker",
+            "compose",
+            "-p",
+            "lotus-fx-proof",
+            "-f",
+            "C:/repo/docker-compose.yml",
+            "stop",
+            "valuation_orchestrator_service",
+        ],
+        [
+            "docker",
+            "compose",
+            "-p",
+            "lotus-fx-proof",
+            "-f",
+            "C:/repo/docker-compose.yml",
+            "up",
+            "--detach",
+            "--no-deps",
+            "--wait",
+            "--wait-timeout",
+            "60",
+            "valuation_orchestrator_service",
+        ],
+    ]
+    recovery_services_ready.assert_not_called()
+
+
 def test_context_exit_recovers_after_primary_failure() -> None:
     runner = MagicMock(side_effect=_successful_run)
     boundary = _boundary(runner=runner)
