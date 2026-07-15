@@ -26,6 +26,14 @@ class FxRevaluationRepository(Protocol):
     ) -> Sequence[PositionValuationKey]:
         """Return open position epochs using exactly the corrected direct pair."""
 
+    async def find_affected_position_keys(
+        self,
+        *,
+        pair: DirectCurrencyPair,
+        earliest_impacted_date: date,
+    ) -> Sequence[PositionValuationKey]:
+        """Return current epochs held on the date or first opened later."""
+
     async def stage_durable_replay(
         self,
         *,
@@ -48,3 +56,16 @@ class PositionValuationJobWriter(Protocol):
         correlation_id: str,
     ) -> object:
         """Stage one position valuation job."""
+
+
+class PositionWatermarkWriter(Protocol):
+    """Reset current position watermarks for bounded replay."""
+
+    async def update_watermarks_if_older(
+        self,
+        keys: list[tuple[str, str]],
+        new_watermark_date: date,
+        *,
+        touch_if_already_lagging: bool = False,
+    ) -> int:
+        """Mark affected position keys for replay from the supplied watermark."""

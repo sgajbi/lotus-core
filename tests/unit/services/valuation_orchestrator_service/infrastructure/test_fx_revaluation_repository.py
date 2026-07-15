@@ -68,3 +68,29 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert parameters["effective_date"] == date(2026, 4, 10)
     assert parameters["content_hash"] == correction.content_hash
     assert parameters["correlation_id"] == "corr-fx"
+
+
+async def test_affected_keys_include_open_and_later_positions_without_duplicates() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    open_result = MagicMock()
+    open_result.all.return_value = [
+        MagicMock(portfolio_id="P1", security_id="USD-BOND", epoch=0),
+    ]
+    future_result = MagicMock()
+    future_result.all.return_value = [
+        MagicMock(portfolio_id="P1", security_id="USD-BOND", epoch=0),
+        MagicMock(portfolio_id="P2", security_id="USD-EQUITY", epoch=1),
+    ]
+    session.execute.side_effect = [open_result, future_result]
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+
+    keys = await repository.find_affected_position_keys(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+    )
+
+    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == [
+        ("P1", "USD-BOND", 0),
+        ("P2", "USD-EQUITY", 1),
+    ]
+    assert session.execute.await_count == 2

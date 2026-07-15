@@ -192,6 +192,52 @@ async def test_direct_pair_query_returns_open_matching_position_epoch(
     ]
 
 
+async def test_replay_impact_includes_position_first_opened_after_correction(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            _portfolio("P-SGD", "SGD"),
+            _instrument("USD-BOND", "USD"),
+            _transaction("TX-LATER", "P-SGD", "USD-BOND"),
+        ]
+    )
+    await async_db_session.flush()
+    async_db_session.add(
+        PositionState(
+            portfolio_id="P-SGD",
+            security_id="USD-BOND",
+            epoch=0,
+            watermark_date=date(2026, 4, 12),
+            status="CURRENT",
+        )
+    )
+    async_db_session.add(
+        PositionHistory(
+            portfolio_id="P-SGD",
+            security_id="USD-BOND",
+            transaction_id="TX-LATER",
+            position_date=date(2026, 4, 12),
+            epoch=0,
+            quantity=Decimal("10"),
+            cost_basis=Decimal("1000"),
+            cost_basis_local=Decimal("1000"),
+        )
+    )
+    await async_db_session.flush()
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session)
+
+    keys = await repository.find_affected_position_keys(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+    )
+
+    assert [(key.portfolio_id, key.security_id, key.epoch) for key in keys] == [
+        ("P-SGD", "USD-BOND", 0)
+    ]
+
+
 async def test_durable_replay_coalesces_pair_to_earliest_date_and_latest_lineage(
     clean_db,
     async_db_session: AsyncSession,
