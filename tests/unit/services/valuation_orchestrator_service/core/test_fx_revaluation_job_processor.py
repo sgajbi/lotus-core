@@ -31,6 +31,7 @@ def job() -> ClaimedFxRevaluationJob:
         pair=DirectCurrencyPair("USD", "SGD"),
         earliest_impacted_date=date(2026, 4, 10),
         correlation_id="corr-fx-job",
+        attempt_count=1,
     )
 
 
@@ -85,6 +86,36 @@ async def test_readiness_race_requeues_job_without_completing(dependencies: dict
         await FxRevaluationJobProcessor().process(job=job(), **dependencies)
 
     dependencies["jobs"].update_job_status.assert_awaited_once_with(41, "PENDING")
+
+
+async def test_no_affected_positions_complete_after_bounded_visibility_retry(
+    dependencies: dict,
+) -> None:
+    execution = FxReplayExecution(
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        targeted_key_count=0,
+        updated_key_count=0,
+    )
+    bounded_job = ClaimedFxRevaluationJob(
+        job_id=42,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        correlation_id="corr-no-impact",
+        attempt_count=3,
+    )
+    dependencies["jobs"].update_job_status.return_value = True
+    with patch(
+        "src.services.valuation_orchestrator_service.app.core."
+        "fx_revaluation_job_processor.ProcessFxRevaluationJob.execute",
+        return_value=execution,
+    ):
+        await FxRevaluationJobProcessor(no_impact_attempt_limit=3).process(
+            job=bounded_job,
+            **dependencies,
+        )
+
+    dependencies["jobs"].update_job_status.assert_awaited_once_with(42, "COMPLETE")
 
 
 async def test_invalid_payload_fails_job_with_supportable_reason(dependencies: dict) -> None:

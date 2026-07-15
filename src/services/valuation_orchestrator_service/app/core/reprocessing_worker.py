@@ -97,7 +97,9 @@ class ReprocessingWorker:
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
-        self._fx_job_processor = fx_job_processor or FxRevaluationJobProcessor()
+        self._fx_job_processor = fx_job_processor or FxRevaluationJobProcessor(
+            no_impact_attempt_limit=self._max_attempts
+        )
 
     def stop(self):
         logger.info(

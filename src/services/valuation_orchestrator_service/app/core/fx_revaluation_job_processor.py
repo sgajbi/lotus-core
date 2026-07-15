@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 class FxRevaluationJobProcessor:
     """Apply one claimed FX replay job and record its owned terminal transition."""
 
+    def __init__(self, *, no_impact_attempt_limit: int = 3) -> None:
+        if no_impact_attempt_limit <= 0:
+            raise ValueError("no_impact_attempt_limit must be positive")
+        self._no_impact_attempt_limit = no_impact_attempt_limit
+
     async def process(
         self,
         *,
@@ -68,6 +73,26 @@ class FxRevaluationJobProcessor:
         execution: FxReplayExecution,
     ) -> None:
         if execution.requeue_required:
+            if job.attempt_count >= self._no_impact_attempt_limit:
+                observe_reprocessing_worker_jobs_noop(
+                    FX_REVALUATION_JOB_TYPE,
+                    "no_affected_positions_after_bounded_retry",
+                )
+                logger.info(
+                    "FX correction has no affected positions after bounded visibility retry.",
+                    extra=operation_log_extra(
+                        event_name="valuation.fx_reprocessing.no_affected_positions",
+                        operation="valuation.fx_reprocessing.reset_watermarks",
+                        status="complete",
+                        reason_code="no_affected_positions_after_bounded_retry",
+                        job_id=job.job_id,
+                        attempt_count=job.attempt_count,
+                        currency_pair=execution.pair.key,
+                        earliest_impacted_date=execution.earliest_impacted_date.isoformat(),
+                    ),
+                )
+                await self._transition(job=job, jobs=jobs, status="COMPLETE")
+                return
             observe_reprocessing_worker_jobs_noop(
                 FX_REVALUATION_JOB_TYPE,
                 "no_impacted_position_keys",
@@ -80,6 +105,8 @@ class FxRevaluationJobProcessor:
                     status="retrying",
                     reason_code="no_impacted_position_keys",
                     job_id=job.job_id,
+                    attempt_count=job.attempt_count,
+                    attempt_limit=self._no_impact_attempt_limit,
                     currency_pair=execution.pair.key,
                     earliest_impacted_date=execution.earliest_impacted_date.isoformat(),
                 ),
