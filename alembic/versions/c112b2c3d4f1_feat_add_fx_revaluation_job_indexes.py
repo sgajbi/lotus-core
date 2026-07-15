@@ -27,9 +27,7 @@ def upgrade() -> None:
             sa.text("(payload->>'to_currency')"),
         ],
         unique=True,
-        postgresql_where=sa.text(
-            "job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"
-        ),
+        postgresql_where=sa.text("job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"),
     )
     op.create_index(
         "ix_reproc_jobs_pending_fx_priority",
@@ -40,9 +38,7 @@ def upgrade() -> None:
             "id",
         ],
         unique=False,
-        postgresql_where=sa.text(
-            "job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"
-        ),
+        postgresql_where=sa.text("job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"),
     )
 
 
