@@ -884,7 +884,7 @@ async def test_get_first_open_dates_for_keys(
     assert ("P99", "S99", 0) not in first_open_dates
 
 
-async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
+async def test_find_contiguous_snapshot_dates_skips_non_business_dates(
     clean_db, async_db_session: AsyncSession
 ):
     repo = ValuationRepository(async_db_session)
@@ -910,7 +910,7 @@ async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
             portfolio_id="P-CONTIG",
             instrument_id="I-CONTIG",
             security_id="S-CONTIG",
-            transaction_date=date(2025, 8, 10),
+            transaction_date=date(2025, 8, 8),
             transaction_type="BUY",
             quantity=1,
             price=1,
@@ -934,18 +934,18 @@ async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
                 portfolio_id="P-CONTIG",
                 security_id="S-CONTIG",
                 transaction_id="TX-CONTIG-1",
-                position_date=date(2025, 8, 10),
+                position_date=date(2025, 8, 8),
                 quantity=Decimal("10"),
                 cost_basis=Decimal("100"),
                 cost_basis_local=Decimal("100"),
                 epoch=0,
             ),
-            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 10)),
+            BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 8)),
             BusinessDate(calendar_code="GLOBAL", date=date(2025, 8, 11)),
             DailyPositionSnapshot(
                 portfolio_id="P-CONTIG",
                 security_id="S-CONTIG",
-                date=date(2025, 8, 10),
+                date=date(2025, 8, 8),
                 epoch=0,
                 quantity=Decimal("10"),
                 cost_basis=Decimal("100"),
@@ -988,7 +988,7 @@ async def test_find_contiguous_snapshot_dates_respects_first_open_dates(
 
     contiguous_dates = await repo.find_contiguous_snapshot_dates(
         states,
-        {("P-CONTIG", "S-CONTIG", 0): date(2025, 8, 10)},
+        {("P-CONTIG", "S-CONTIG", 0): date(2025, 8, 8)},
     )
 
     assert contiguous_dates == {("P-CONTIG", "S-CONTIG"): date(2025, 8, 11)}
@@ -1609,6 +1609,46 @@ async def test_get_latest_business_date_falls_back_to_processing_dates_when_cale
     latest_date = await repo.get_latest_business_date()
 
     assert latest_date == date(2025, 8, 10)
+
+
+async def test_get_valuation_dates_between_uses_governed_calendar(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+    expected_dates = [date(2026, 7, 9), date(2026, 7, 10), date(2026, 7, 13)]
+    async_db_session.add_all(
+        [BusinessDate(calendar_code="GLOBAL", date=value) for value in expected_dates]
+    )
+    await async_db_session.commit()
+
+    valuation_dates = await repo.get_valuation_dates_between(
+        date(2026, 7, 8),
+        date(2026, 7, 14),
+    )
+    unseeded_range_dates = await repo.get_valuation_dates_between(
+        date(2026, 7, 13),
+        date(2026, 7, 14),
+    )
+
+    assert valuation_dates == expected_dates
+    assert unseeded_range_dates == []
+
+
+async def test_get_valuation_dates_between_falls_back_only_when_calendar_is_empty(
+    clean_db, async_db_session: AsyncSession
+):
+    repo = ValuationRepository(async_db_session)
+
+    valuation_dates = await repo.get_valuation_dates_between(
+        date(2026, 7, 10),
+        date(2026, 7, 13),
+    )
+
+    assert valuation_dates == [
+        date(2026, 7, 11),
+        date(2026, 7, 12),
+        date(2026, 7, 13),
+    ]
 
 
 async def test_get_latest_business_date_prefers_calendar_over_future_processing_residue(
