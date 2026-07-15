@@ -33,6 +33,8 @@ from scripts.operations.performance.derived_state_resource_monitor import (
 )
 from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
+)
+from scripts.operations.performance.market_price_correction import (
     apply_market_price_correction,
     wait_for_corrected_derived_state,
 )
