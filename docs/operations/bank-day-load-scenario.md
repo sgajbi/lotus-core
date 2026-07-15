@@ -50,7 +50,9 @@ make test-derived-state-workload-smoke
 `daily` is the certifying 1,000-portfolio x 100-position profile. `fan-in` is the certifying
 one-portfolio x 1,000-position aggregation profile. The smoke target is always recorded as
 `evidence_classification=diagnostic`; it validates orchestration but cannot certify capacity or
-close a #714 workload requirement.
+close a #714 workload requirement. Certifying profiles fail fast unless `--build` is active, and
+the repo-native profile targets supply it, so existing/stale local images cannot emit certifying
+evidence.
 
 ## Scenario Design
 

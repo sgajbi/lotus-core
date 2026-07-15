@@ -109,6 +109,17 @@ def resolve_workload_trade_date(
     return date.fromisoformat(candidate).isoformat()
 
 
+def validate_execution_posture(
+    *,
+    profile: DerivedStateWorkloadProfile,
+    build: bool,
+) -> None:
+    """Require exact-source images before a workload can emit certifying evidence."""
+
+    if profile.certifying and not build:
+        raise ValueError("Certifying derived-state workload profiles require --build")
+
+
 def build_workload_environment(
     *,
     endpoints: WorkloadConnectionEndpoints,
@@ -252,6 +263,7 @@ def main() -> int:
         profile_name=args.profile,
         diagnostic_smoke=args.diagnostic_smoke,
     )
+    validate_execution_posture(profile=profile, build=args.build)
     managed_run = prepare_managed_run(args=args, repo_root=repo_root)
     managed_run.runtime.export_to(os.environ)
     endpoints = cast(WorkloadConnectionEndpoints, managed_run.runtime.endpoints)

@@ -243,7 +243,8 @@ cross-window state.
 - The managed workload driver defines a certifying 100,000-transaction daily profile, a certifying
   one-portfolio/1,000-position fan-in profile, and a machine-labelled diagnostic smoke. It owns an
   isolated dynamic-port Compose lifecycle, supplies credential-bearing database configuration via
-  the child environment rather than argv, and tears down run-owned resources.
+  the child environment rather than argv, requires exact-source builds for certifying profiles,
+  and tears down run-owned resources.
 - Diagnostic run `20260715T094629Z` completed in `23.081s`: 10 transactions, 10 snapshots, 10
   position rows, and two portfolio rows reconciled; valuation-to-position p95 was `2.31107555s`,
   position-to-portfolio p95 was `1.80691335s`, five resource samples completed with no sampling

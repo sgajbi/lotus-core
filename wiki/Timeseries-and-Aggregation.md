@@ -56,7 +56,8 @@ artifact, not command output or connection details.
 Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
 `make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Both run through an
 isolated dynamic-port Compose project. `make test-derived-state-workload-smoke` is machine-labelled
-`diagnostic`; a successful smoke proves orchestration only, not capacity.
+`diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile
+execution requires building the exact branch source and fails fast if existing images are selected.
 
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
