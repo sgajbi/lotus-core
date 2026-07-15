@@ -2624,6 +2624,13 @@ Most relevant current governance:
      readiness before returning control. Keep reusable lifecycle support under
      `tests/test_support/runtime` with mirrored unit tests. Preserve the original test failure when
      cleanup also fails, attaching cleanup diagnostics instead of replacing root-cause evidence.
+188. A service/package/runtime migration is not integration-tested by successful collection alone.
+     When repository, port, lease, transaction, or session contracts change, scan every migrated
+     integration test for retired symbols and execute the focused suite against real PostgreSQL.
+     Concurrency claimants and application unit-of-work providers must use independent sessions;
+     retain immutable identifiers before rollback rather than reading expired ORM instances outside
+     an async database context. Keep a unit-lane no-return guard when a removed facade can remain
+     syntactically collectable.
 
 ## Context Maintenance Rule
 

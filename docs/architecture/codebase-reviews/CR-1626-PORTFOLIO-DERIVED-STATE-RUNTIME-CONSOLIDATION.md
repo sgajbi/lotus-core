@@ -247,6 +247,12 @@ cross-window state.
   `10`; recovery completed in `3.06s` with lag back to `0`, `10` position rows, one portfolio row,
   zero open valuation/aggregation jobs, zero reconciliation findings, and zero added DLQ events.
   Managed teardown left no run-owned container, network, or volume.
+- Executing the complete migrated PostgreSQL package, rather than collecting it, exposed ten stale
+  integration calls to the retired pre-lease repository facade plus one shared-session unit-of-work
+  fixture. The tests now use `recover_expired_job_leases`, explicit `AggregationJobLease` identities,
+  independent concurrent/UoW sessions, immutable identity across rollback, and current failure
+  reasons. The complete target integration package passes `12` tests in `91.59s`; a unit-lane guard
+  rejects restoration of either retired repository call.
 
 ## Same-Pattern Review
 
@@ -257,6 +263,10 @@ hop, duplicate runtime shells, old packages, old images, and old deployment inve
 and guarded against restoration. Position and portfolio materializers remain separately testable
 modules with independently configured aggregation concurrency and attributable metrics inside the
 target runtime.
+
+The same-pattern integration scan found no remaining `find_and_reset_stale_jobs` or
+`find_and_claim_eligible_jobs` call under the target source, unit, or integration roots. Collection
+remains useful for package closure but is not accepted as behavioral database evidence.
 
 ## Documentation Decision
 
