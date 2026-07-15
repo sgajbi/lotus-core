@@ -53,6 +53,11 @@ idle-in-transaction connections, lock waiters, blocked sessions, and CPU/memory 
 one complete database-and-runtime sample. Sampling failures retain only bounded error types in the
 artifact, not command output or connection details.
 
+Use `make profile-derived-state-daily` for the 100,000-transaction bank-day shape and
+`make profile-derived-state-fan-in` for one portfolio with 1,000 positions. Both run through an
+isolated dynamic-port Compose project. `make test-derived-state-workload-smoke` is machine-labelled
+`diagnostic`; a successful smoke proves orchestration only, not capacity.
+
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
 

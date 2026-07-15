@@ -39,6 +39,19 @@ Artifacts are written to:
 1. `output/task-runs/<run_id>-bank-day-load.json`
 2. `output/task-runs/<run_id>-bank-day-load.md`
 
+For isolated dynamic-port execution, use the managed profile targets:
+
+```powershell
+make profile-derived-state-daily
+make profile-derived-state-fan-in
+make test-derived-state-workload-smoke
+```
+
+`daily` is the certifying 1,000-portfolio x 100-position profile. `fan-in` is the certifying
+one-portfolio x 1,000-position aggregation profile. The smoke target is always recorded as
+`evidence_classification=diagnostic`; it validates orchestration but cannot certify capacity or
+close a #714 workload requirement.
+
 ## Scenario Design
 
 The script:
@@ -102,6 +115,9 @@ The report records:
 12. sampled positions, transaction-window, and support-overview API latencies,
 13. sampled reconciliation results,
 14. log evidence for core processing services.
+
+The report config records `evidence_classification` as `certifying` or `diagnostic`. Do not infer
+certification from a successful exit code or scenario name.
 
 The valuation-to-position sample is one completed valuation job joined to its matching
 position-timeseries row. The position-to-portfolio sample is one portfolio, business date, and epoch;
