@@ -45,6 +45,8 @@ For isolated dynamic-port execution, use the managed profile targets:
 make profile-derived-state-daily
 make profile-derived-state-fan-in
 make profile-derived-state-price-burst
+make profile-derived-state-price-restatement
+make profile-derived-state-fx-restatement
 make test-derived-state-workload-smoke
 ```
 
@@ -57,6 +59,15 @@ corrected values. The smoke target is always recorded as
 close a #714 workload requirement. Certifying profiles fail fast unless `--build` is active, and
 the repo-native profile targets supply it, so existing/stale local images cannot emit certifying
 evidence.
+
+`price-restatement` applies the same price correction across five business dates.
+`fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the
+direct `EUR/USD` rate by 5%, and requires exact affected snapshot, valuation-job,
+position-timeseries, portfolio-timeseries, market-value, and unrealized price/FX/total P&L
+evidence. It also requires one processed source observation, one completed pair replay, closed
+valuation/aggregation/reprocessing/outbox queues, clean reconciliation, and complete resource
+samples. Price and FX corrections intentionally remain separate profiles so one cannot mask the
+other's scope or timing.
 
 ## Scenario Design
 
@@ -80,8 +91,20 @@ The script:
 When `--market-price-correction-multiplier` is supplied, the scenario runs the complete baseline
 cycle first, records a database-clock correction boundary, ingests corrected prices, and waits for
 every affected valuation job, snapshot, position series, and portfolio series row after that
-boundary. The report records the correction phase and its drain duration separately. FX-rate
-correction cannot use this profile as a proxy; automatic FX revaluation remains tracked by #791.
+boundary. The report records the correction phase and its drain duration separately.
+
+When the complete `--fx-rate-correction-from-currency`,
+`--fx-rate-correction-to-currency`, and `--fx-rate-correction-multiplier` set is supplied, the
+scenario accepts only a direct pair into the USD portfolio base, rejects an irrelevant pair with no
+affected instruments, ingests the correction through the public FX endpoint, and independently
+calculates the corrected market value and P&L decomposition. The database evidence then proves the
+source observation and pair replay were each processed exactly once. Do not combine price and FX
+corrections in one run.
+
+The certifying FX profile also stops `valuation_orchestrator_service` before correction ingestion,
+restores it with Compose health waiting, and only then starts the exact evidence drain. This proves
+that a committed persisted observation survives consumer interruption. Runtime restoration is
+unconditional, including when correction ingestion fails.
 
 ## Deterministic Dataset Rules
 
@@ -127,6 +150,12 @@ The report records:
 12. sampled positions, transaction-window, and support-overview API latencies,
 13. sampled reconciliation results,
 14. log evidence for core processing services.
+
+An FX-restatement report also records normalized pair identity, effective date, initial and
+corrected rates, expected and observed affected row counts, exact corrected market values,
+unrealized price/FX/total components, processed-observation count, pair-replay count, and every
+relevant final queue/failure count. Missing evidence fails the report; a successful ingestion
+response is not correction proof.
 
 The report config records `evidence_classification` as `certifying` or `diagnostic`. Do not infer
 certification from a successful exit code or scenario name.

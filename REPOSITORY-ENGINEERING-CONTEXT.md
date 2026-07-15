@@ -2641,6 +2641,22 @@ Most relevant current governance:
      an async database context. Keep a unit-lane no-return guard when a removed facade can remain
      syntactically collectable.
 
+189. Accepted effective-dated FX corrections are source-owned valuation triggers. Persistence must
+     atomically stage the versioned persisted observation with normalized direct pair, effective
+     date, observation identity, UTC generated time, deterministic content hash, and correlation
+     evidence. Valuation orchestration must record durable pair/date work before acknowledging the
+     event, select only positions whose instrument and portfolio currencies match that direct pair,
+     and fail closed for unsupported inverse or triangulated paths. Coalescing preserves the
+     earliest impacted date independently from the newest deterministic source-lineage tuple; never
+     let database conflict arrival order select lineage. A direct pair with no affected positions
+     may retry a bounded visibility race, but must complete as an observable no-op at the configured
+     attempt limit rather than spin in `PENDING`. Use
+     `make profile-derived-state-fx-restatement` to prove exact affected rows, corrected market
+     value, unrealized price/FX/total P&L, exactly-once observation/replay counts, closed queues,
+     reconciliation, and resource evidence. A price-restatement profile is not FX proof.
+     The certifying FX profile must commit the correction while valuation orchestration is stopped,
+     restore the service unconditionally, and prove the recovered result from durable evidence.
+
 ## Context Maintenance Rule
 
 Update this document when:

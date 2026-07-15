@@ -24,6 +24,12 @@ The health of this service is critical for the availability of all performance a
   idle-in-transaction connections, lock waiters, blocked sessions, and the exact combined
   container's CPU/memory. A completed governed run without a successful resource sample fails its
   evidence contract; sampling diagnostics expose bounded error types only.
+* **FX correction replay:** Monitor `RESET_FX_WATERMARKS` through
+  `/support/portfolios/{portfolio_id}/reprocessing-jobs`, including direct pair, earliest impacted
+  date, status, age, correlation, and affected-position count. One pending row is coalesced per
+  direct pair; repeated observations must not create an unbounded queue. A pair with no affected
+  positions retries visibility only to the configured attempt limit and then completes as an
+  observable successful no-op.
 
 ## 2. Structured Logging & Tracing
 
@@ -43,6 +49,7 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 | **Incorrect Performance/Risk Figures** | TWR or Risk metrics exposed through the query stack are incorrect (e.g., unexpectedly low market value). | Compare `query_control_plane_service` support APIs such as `/support/portfolios/{portfolio_id}/overview` and `/support/portfolios/{portfolio_id}/aggregation-jobs` against logs. | **Cause:** The portfolio aggregation job may have run on incomplete inputs for a business date. <br> **Resolution:** Use control-plane support APIs to identify pending/failed jobs and replay path, then escalate with correlation IDs and support payloads. |
 | **Analytics Data is Stale** | Performance and risk data is not available for the latest business date. | `GET /support/portfolios/{portfolio_id}/aggregation-jobs?status=PROCESSING` or `status=PENDING` returns growing backlog from `query_control_plane_service`. | **Cause:** Scheduler eligibility or upstream data completeness is blocking claims. <br> **Resolution:** Inspect position-timeseries worker and portfolio-aggregation scheduler logs for the affected portfolio and validate lineage progression via control-plane support APIs. |
 | **Aggregation Jobs are Failing** | The support API reports `FAILED` aggregation jobs; DLQ growth occurs only when delivery validation or failure persistence also fails. | `FxRateNotFoundError`, `InstrumentReferenceNotFoundError`, or `Portfolio-timeseries materialization failed; marking the owned job failed.` | **Cause:** Required FX or instrument reference data is absent/invalid, or another calculation dependency failed. Core does not publish a partial portfolio aggregate. <br> **Resolution:** Correct the governed reference data, confirm position-timeseries completeness, and replay through the supported remediation path with the original correlation evidence. |
+| **FX correction is not draining** | Corrected rate is durable but affected valuations remain stale or `RESET_FX_WATERMARKS` remains pending/processing. | Inspect pair/date lineage and affected-position count in the reprocessing-job support response, plus valuation and aggregation queue status. | **Cause:** Source event delivery, readiness visibility, replay ownership, or a downstream fail-closed market-data dependency blocked rematerialization. <br> **Resolution:** Preserve the source content hash/correlation ID, correct the blocking source data, and use the governed replay path. Do not schedule a global portfolio scan or substitute an inverse/triangulated pair. |
 
 ## 4. Gaps and Design Considerations
 
@@ -52,14 +59,19 @@ zero lock waiters, and zero blocked sessions. Its portfolio-stage maximum was `1
 `900s` aggregation lease. This does not certify daily, price/FX burst, backdated, release, or
 rollback behavior, and it does not yet close the fixed-lease versus heartbeat decision.
 
-Daily, market-price burst, FX correction, backdated, release, and rollback certification remains
+Daily, market-price burst/restatement, FX restatement, release, and rollback certification remains
 required before #714 closure. Runtime consolidation does not permit position and portfolio workload
 metrics to lose their separate attribution. FX correction is not covered by the market-price
-profile; #791 tracks the missing source-owned FX revaluation trigger.
+profiles. Core now owns a versioned persisted FX event and bounded direct-pair replay; #791 remains
+open until managed runtime, restart, concurrency, and exact corrected-value evidence pass.
 
-Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`, and
-`make profile-derived-state-price-burst` for the managed certifying shapes. The price-burst profile
-requires exact post-correction timestamps and values across all affected derived stages.
+Run `make profile-derived-state-daily`, `make profile-derived-state-fan-in`,
+`make profile-derived-state-price-burst`, `make profile-derived-state-price-restatement`, and
+`make profile-derived-state-fx-restatement` for the managed certifying shapes. Correction profiles
+require exact post-correction timestamps and values across all affected derived stages; the FX
+profile additionally proves exact unrealized price, FX, and total P&L decomposition plus one
+source observation and one direct-pair replay. It pauses valuation orchestration during correction
+ingestion and requires complete recovery after restart.
 `make test-derived-state-workload-smoke` is explicitly diagnostic and must not be
 used as daily-volume, fan-in, lease-duration, or production-capacity evidence. Treat only a report
 with `evidence_classification=certifying`, exact expected row counts, complete resource samples,
