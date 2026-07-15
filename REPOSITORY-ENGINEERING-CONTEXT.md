@@ -2537,6 +2537,11 @@ Most relevant current governance:
      closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
      Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
      runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
+     Portfolio aggregation delivery follows the same rule: map the internal event into
+     `MaterializePortfolioTimeseries`, coordinate fan-in and typed queue outcomes through
+     application ports, and compose output plus completion/reconciliation outbox evidence through
+     one infrastructure unit of work. Required instrument and FX reference data is fail-closed;
+     never skip a position contribution and publish an incomplete portfolio aggregate.
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
      AVCO rebuild planning belongs under `app/application/cost_basis_processing`. Upstream linked
      cash-leg resolution and pairing belongs under `app/application/settlement_processing` and uses
