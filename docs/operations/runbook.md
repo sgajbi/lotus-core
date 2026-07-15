@@ -5,6 +5,10 @@
 This runbook summarizes operator-facing posture for `lotus-core` quality, readiness, and validation.
 Detailed product and scenario-specific runbooks remain under `docs/operations/`.
 
+Runtime interruption procedures are indexed under
+[operations/recovery](./recovery/README.md), including the enforced
+[portfolio derived-state recovery gate](./recovery/portfolio-derived-state-interruption.md).
+
 Executable incident playbooks are maintained in
 `contracts/operations/incident-playbooks.v1.json` and summarized in
 `docs/operations/Incident-Playbooks.md`. They are validated by:

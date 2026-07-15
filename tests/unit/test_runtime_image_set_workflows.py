@@ -16,6 +16,7 @@ PR_RUNTIME_CONSUMERS = (
     "lotus-core-validation-report",
     "latency-gate",
     "performance-load-gate",
+    "derived-state-recovery-gate",
 )
 MAIN_RUNTIME_CONSUMERS = (
     "docker-smoke-contract",
@@ -138,6 +139,7 @@ def test_verified_runtime_image_set_disables_repo_image_rebuild_flags() -> None:
         "latency_profile.py $(RUNTIME_BUILD_ARGUMENT)",
         "performance_load_gate.py $(RUNTIME_BUILD_ARGUMENT)",
         "failure_recovery_gate.py $(RUNTIME_BUILD_ARGUMENT)",
+        "scripts.operations.recovery.derived_state_gate $(RUNTIME_BUILD_ARGUMENT)",
         "certify_lotus_core_app.py $(CERTIFICATION_RUNTIME_BUILD_ARGUMENT)",
     ):
         assert command in makefile
@@ -152,6 +154,9 @@ def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
             "latency-gate": "output/task-runs/diagnostics/latency-gate-compose.log",
             "performance-load-gate": (
                 "output/task-runs/diagnostics/performance-load-gate-compose.log"
+            ),
+            "derived-state-recovery-gate": (
+                "output/task-runs/diagnostics/derived-state-recovery-gate-compose.log"
             ),
         },
         MAIN_WORKFLOW: {
@@ -186,3 +191,19 @@ def test_managed_compose_gates_upload_project_owned_diagnostics() -> None:
                 if str(step.get("uses", "")).startswith("actions/upload-artifact@")
             )
             assert diagnostic_path in upload_paths
+
+
+def test_main_failure_recovery_job_proves_both_runtime_boundaries() -> None:
+    jobs = _workflow(MAIN_WORKFLOW)["jobs"]
+    recovery_job = jobs["failure-recovery-gate"]  # type: ignore[index]
+    commands = _run_commands(recovery_job)
+
+    assert "make test-failure-recovery-gate" in commands
+    assert "make test-derived-state-recovery-gate" in commands
+    assert "output/task-runs/*derived-state-recovery-gate*.json" in str(
+        next(
+            step
+            for step in _steps(recovery_job)
+            if step.get("name") == "Upload failure recovery artifacts"
+        )["with"]["path"]  # type: ignore[index]
+    )

@@ -427,3 +427,42 @@ jobs:
             output/task-runs/diagnostics/performance-load-gate-compose.log
           if-no-files-found: warn
           retention-days: 14
+
+  derived-state-recovery-gate:
+    name: PR Merge Gate / Derived-State Recovery Gate
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+      - name: Download runtime image set
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-runtime-image-set
+          path: output/runtime-image-set
+      - name: Load and verify runtime image set
+        run: |
+          python scripts/release/runtime_image_set.py load-verify \
+            --manifest output/runtime-image-set/manifest.json \
+            --bundle output/runtime-image-set/images.tar \
+            --expected-commit-sha "${GITHUB_SHA}"
+          echo "LOTUS_RUNTIME_IMAGE_SET_VERIFIED=true" >> "${GITHUB_ENV}"
+      - name: Install
+        run: make install-ci
+      - name: Run deterministic derived-state recovery gate
+        run: make test-derived-state-recovery-gate
+      - name: Upload derived-state recovery artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-merge-gate-derived-state-recovery-artifacts
+          path: |
+            output/task-runs/*derived-state-recovery-gate*.json
+            output/task-runs/*derived-state-recovery-gate*.md
+            output/task-runs/diagnostics/derived-state-recovery-gate-compose.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -459,6 +459,8 @@ jobs:
         run: make install-ci
       - name: Run deterministic failure recovery gate
         run: make test-failure-recovery-gate
+      - name: Run deterministic derived-state recovery gate
+        run: make test-derived-state-recovery-gate
       - name: Upload failure recovery artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -468,6 +470,9 @@ jobs:
             output/task-runs/*failure-recovery-gate*.json
             output/task-runs/*failure-recovery-gate*.md
             output/task-runs/diagnostics/failure-recovery-gate-compose.log
+            output/task-runs/*derived-state-recovery-gate*.json
+            output/task-runs/*derived-state-recovery-gate*.md
+            output/task-runs/diagnostics/derived-state-recovery-gate-compose.log
           if-no-files-found: warn
           retention-days: 30
 

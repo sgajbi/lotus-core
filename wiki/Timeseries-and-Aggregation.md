@@ -50,6 +50,12 @@ security-count bias in large portfolios.
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
 
+Run `make test-derived-state-recovery-gate` to pause the combined deployable and prove source
+snapshots continue, committed input lag grows, exact position and portfolio outputs recover, both
+durable queues close, lag returns to baseline, reconciliation remains clean, and no DLQ event is
+added. The governed procedure and artifact contract are documented in the repository
+[Portfolio Derived-State Interruption Recovery](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/recovery/portfolio-derived-state-interruption.md).
+
 Use the Query Control Plane support endpoints to inspect aggregation jobs and source lineage for an
 affected portfolio. Replay through the governed remediation path after correcting source data.
 
