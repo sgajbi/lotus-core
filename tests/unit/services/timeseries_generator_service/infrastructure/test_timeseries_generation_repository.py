@@ -277,3 +277,85 @@ async def test_get_next_snapshots_after_uses_latest_epoch_per_future_date(
     assert "anon_1.rn = 1" in compiled_query
     assert "ORDER BY daily_position_snapshots.date ASC" in compiled_query
     assert "LIMIT 25" in compiled_query
+
+
+async def test_stage_aggregation_jobs_rearms_completed_day_for_late_material_input(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.stage_aggregation_jobs(
+        "PORT_TS_POS_01",
+        [date(2025, 8, 12)],
+        "corr-456",
+    )
+
+    executed_stmt = mock_db_session.execute.await_args.args[0]
+    compiled = executed_stmt.compile(
+        dialect=postgresql.dialect(),
+        compile_kwargs={"literal_binds": True},
+    )
+    compiled_stmt = str(compiled)
+    compiled_values = set(compiled.params.values())
+
+    assert "DO UPDATE SET status" in compiled_stmt
+    assert "correlation_id" in compiled_stmt
+    assert "portfolio_aggregation_jobs.status !=" in compiled_stmt
+    assert "REPROCESS_REQUESTED" in compiled_stmt or "REPROCESS_REQUESTED" in compiled_values
+
+
+async def test_stage_aggregation_jobs_deduplicates_and_orders_dates(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.stage_aggregation_jobs(
+        "PORT_TS_POS_01",
+        [date(2025, 8, 14), date(2025, 8, 13), date(2025, 8, 13)],
+        "corr-789",
+    )
+
+    executed_stmt = mock_db_session.execute.await_args.args[0]
+    compiled_stmt = str(
+        executed_stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert compiled_stmt.count("'2025-08-13'") == 1
+    assert compiled_stmt.count("'2025-08-14'") == 1
+    assert compiled_stmt.index("'2025-08-13'") < compiled_stmt.index("'2025-08-14'")
+
+
+async def test_stage_aggregation_jobs_records_missing_correlation_diagnostics(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.stage_aggregation_jobs(
+        "PORT_TS_POS_01",
+        [date(2025, 8, 12)],
+        None,
+    )
+
+    executed_stmt = mock_db_session.execute.await_args.args[0]
+    compiled_stmt = str(
+        executed_stmt.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+
+    assert "correlation_missing_reason" in compiled_stmt
+    assert "alternate_lookup_key" in compiled_stmt
+    assert "correlation_id_not_supplied" in compiled_stmt
+    assert (
+        "aggregation_job|aggregation_date=2025-08-12|portfolio_id=PORT_TS_POS_01" in compiled_stmt
+    )
+
+
+async def test_stage_aggregation_jobs_skips_empty_date_set(
+    repository: TimeseriesGenerationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    await repository.stage_aggregation_jobs("PORT_TS_POS_01", [], "corr-empty")
+
+    mock_db_session.execute.assert_not_awaited()

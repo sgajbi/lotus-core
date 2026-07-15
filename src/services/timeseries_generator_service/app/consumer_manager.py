@@ -17,7 +17,11 @@ from portfolio_common.runtime_supervision import (
     wait_for_shutdown_or_task_failure,
 )
 
+from .application.position_timeseries import MaterializePositionTimeseries
 from .consumers.position_timeseries_consumer import PositionTimeseriesConsumer
+from .infrastructure.position_timeseries_repository_provider import (
+    SqlAlchemyPositionTimeseriesRepositoryProvider,
+)
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
@@ -41,6 +45,9 @@ class ConsumerManager:
         dlq_topic = KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC
         service_prefix = "TS"
 
+        materialize_position_timeseries = MaterializePositionTimeseries(
+            repository_provider=SqlAlchemyPositionTimeseriesRepositoryProvider()
+        )
         self.consumers.append(
             PositionTimeseriesConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
@@ -48,6 +55,7 @@ class ConsumerManager:
                 group_id="timeseries_generator_group_positions",
                 dlq_topic=dlq_topic,
                 service_prefix=service_prefix,
+                use_case=materialize_position_timeseries,
             )
         )
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
