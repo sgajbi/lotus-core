@@ -1,52 +1,56 @@
 # Aggregation Scheduler Boundary Standard
 
-The portfolio aggregation scheduler must keep polling policy, dispatch planning, repository access,
-metrics, clocks, and event publication behind explicit in-process ports.
+Portfolio aggregation uses the durable `portfolio_aggregation_jobs` queue directly. The scheduler
+must keep lease policy, repository access, bounded processing, metrics, clocks, and token generation
+behind explicit in-process ports. It must not publish a same-owner Kafka command.
 
 ## Responsibilities
 
-`portfolio_aggregation_service.app.core.aggregation_scheduler` owns:
+`portfolio_aggregation_service.app.application.aggregation_jobs.scheduler` owns:
 
-1. poll-loop orchestration,
-2. stale-job reset invocation,
-3. eligible-job claiming invocation,
-4. queue metric update orchestration,
-5. dispatch failure recovery orchestration,
-6. stop/sleep behavior.
+1. poll-loop and shutdown orchestration,
+2. expired-lease recovery invocation,
+3. deterministic eligible-job claim invocation,
+4. UTC lease-expiry construction,
+5. queue metric update orchestration,
+6. handoff to the bounded job processor.
 
-`portfolio_aggregation_service.app.core.aggregation_job_publisher` owns:
+`portfolio_aggregation_service.app.application.aggregation_jobs.processor` owns:
 
-1. aggregation job record-key construction,
-2. aggregation job event payload planning,
-3. correlation header construction,
-4. dispatch plan publication,
-5. partial publish failure classification,
-6. delivery-confirmation timeout classification.
+1. fixed worker concurrency,
+2. lease-bearing materialization command mapping,
+3. per-job unexpected-failure isolation,
+4. typed batch outcome accounting.
 
-`portfolio_aggregation_service.app.ports.aggregation_scheduler_ports` owns scheduler repository,
-repository-provider, metrics-sink, and clock contracts.
+`portfolio_aggregation_service.app.ports.aggregation_scheduler_ports` owns repository-provider,
+repository, metrics-sink, clock, token-generator, and batch-processor contracts.
 
 `portfolio_aggregation_service.app.infrastructure.aggregation_scheduler_adapters` owns concrete
-SQLAlchemy session/repository, Prometheus metric, and system-clock adapters.
+SQLAlchemy session/repository, Prometheus metric, and system-clock adapters. Runtime composition owns
+the UUID token generator and service-instance lease owner.
 
 ## Boundary Rules
 
-The scheduler must not import database session factories, concrete repositories, concrete Kafka
-producer APIs, direct publish or flush calls, or raw Prometheus metric functions.
+The scheduler and processor must not import database session factories, concrete repositories,
+Kafka producer/consumer APIs, direct publish/flush calls, or raw Prometheus metric functions.
 
-The scheduler ports must not import database session factories, concrete repositories, concrete
-Kafka producer APIs, or runtime global providers.
+Claims must use `FOR UPDATE SKIP LOCKED`, persist owner/token/UTC expiry, and increment the attempt
+count in the claim transaction. Completion, requeue, and failure writes must match job id plus lease
+token and clear all lease fields. Expiry recovery must recheck `lease_expires_at` on the write so a
+renewed or reclaimed job cannot be overwritten by stale work.
 
-The event planner/publisher module must not depend on database sessions or concrete repositories.
-Kafka producer creation must stay behind the shared `portfolio_common.event_publisher` adapter.
+One poll may claim only the configured batch size. Processing concurrency must remain bounded by
+`PORTFOLIO_AGGREGATION_WORKER_COUNT`; it must not create an unbounded in-memory backlog.
 
 ## Enforcement
 
-`make architecture-guard` runs `scripts/quality/aggregation_scheduler_boundary_guard.py`.
+`make architecture-guard` runs `scripts/quality/aggregation_scheduler_boundary_guard.py`. Package
+ownership tests prevent restoration of the retired consumer, publisher, `app/core` scheduler, and
+consumer-manager paths.
 
 ## Compatibility
 
-This is an in-process design modularity rule. It preserves `AggregationScheduler()` runtime
-construction, Kafka topic, Kafka key, payload shape, correlation header behavior, stale reset
-behavior, queue metric names, dispatch recovery behavior, poll cadence, database schema, and runtime
-topology.
+Portfolio-timeseries arithmetic, durable queue identity, completion and reconciliation events,
+outbox atomicity, query APIs, and downstream payloads remain unchanged. The intentionally removed
+internal contract is `portfolio_day.aggregation.job.requested`; it had no external producer or
+consumer and duplicated the durable database queue within one deployable.

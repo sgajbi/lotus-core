@@ -1043,7 +1043,7 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Portfolio-level analytical timeseries.
 - **Description**: Daily BOD/EOD rollups per portfolio and epoch.
 - **Relationships**: `portfolio_id` -> `portfolios.portfolio_id`
-- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/materialize_portfolio_timeseries.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`
+- **Usage (modules/features)**: `src/services/query_control_plane_service/app/infrastructure/analytics_timeseries_repository.py`, `src/services/query_control_plane_service/app/contracts/analytics_inputs.py`, `src/services/query_control_plane_service/app/application/analytics/analytics_timeseries_service.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/materialize_portfolio_timeseries.py`
 - **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
 - **Column definitions**:
   - `portfolio_id` (String) (FK `portfolios.portfolio_id`): Canonical portfolio identifier.
@@ -1098,14 +1098,19 @@ This document catalogs all application tables defined in `src/libs/portfolio-com
 - **Purpose**: Durable aggregation work queue.
 - **Description**: Portfolio/date tasks for timeseries aggregation with status tracking.
 - **Relationships**: No explicit foreign-key relationships declared.
-- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_aggregation_service/app/core/aggregation_scheduler.py`, `src/services/portfolio_aggregation_service/app/main.py`
-- **Typical access patterns**: As-of/date-range reads, idempotent upserts for event processing, status-filtered job polling where applicable.
+- **Usage (modules/features)**: `src/services/query_service/app/repositories/operations_repository.py`, `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`, `src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py`, `src/services/timeseries_generator_service/app/infrastructure/timeseries_generation_repository.py`, `src/services/portfolio_aggregation_service/app/main.py`
+- **Typical access patterns**: Deterministic ready-job polling with `FOR UPDATE SKIP LOCKED`, token-fenced terminal writes, expiry-based recovery, and operator status reads.
 - **Column definitions**:
   - `id` (Integer): Surrogate primary key for internal row identity.
   - `portfolio_id` (String): Canonical portfolio identifier.
   - `aggregation_date` (Date): Business/event date or timestamp used for ordering, as-of queries, or lifecycle tracking.
   - `status` (String): Current lifecycle status for the record/work item.
   - `correlation_id` (String): Trace/correlation id used across logs and events.
+  - `attempt_count` (Integer): Number of durable claim attempts.
+  - `failure_reason` (Text): Durable reprocess or terminal-failure context.
+  - `lease_owner` (String): Runtime instance that owns the active claim; nullable when unclaimed.
+  - `lease_token` (String): Opaque fencing token required for terminal writes; nullable when unclaimed.
+  - `lease_expires_at` (DateTime): UTC recovery boundary for the active claim; nullable when unclaimed.
   - `created_at` (DateTime): Server timestamp when row was created.
   - `updated_at` (DateTime): Server timestamp when row was last updated.
 

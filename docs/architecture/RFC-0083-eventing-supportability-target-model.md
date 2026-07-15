@@ -146,7 +146,6 @@ Current governed direct topics are:
 | `transactions.reprocessing.requested` | `ingestion_service`, `event_replay_service` | `cost_calculator_service` | `transaction_id_command` | Transaction reprocessing request |
 | `transactions.persisted` | `event_replay_service` | `cost_calculator_service`, `cashflow_calculator_service` | `TransactionEvent` | Transaction replay back into persisted-stage processing |
 | `valuation.job.requested` | `valuation_orchestrator_service` | `position_valuation_calculator` | `valuation_job_command` | Valuation job dispatch |
-| `portfolio_day.aggregation.job.requested` | `portfolio_aggregation_service` | `portfolio_aggregation_service` | `portfolio_aggregation_job_command` | Portfolio aggregation job dispatch |
 
 ## Runtime Follow-Up
 

@@ -121,7 +121,7 @@ runtime-boundary catalog.
 | `valuation_orchestrator_service` | Valuation orchestration (job creation, scheduling, and reprocessing) | `portfolio_valuation_jobs`, `instrument_reprocessing_state`, `reprocessing_jobs` | `portfolio_security_day.valuation.ready`, `market_prices.persisted` | `valuation.job.requested` | Event + scheduler |
 | `position_valuation_calculator` | Valuation compute worker and active valuation handoff publication | `daily_position_snapshots` (valuation fields) | `valuation.job.requested` | `valuation.snapshot.persisted` | Event |
 | `timeseries_generator_service` | Position-timeseries compute worker and aggregation staging | `position_timeseries`, `portfolio_aggregation_jobs` | `valuation.snapshot.persisted` | no direct Kafka stage-completion topic in current runtime | Event |
-| `portfolio_aggregation_service` | Portfolio aggregation orchestration and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | `portfolio_day.aggregation.job.requested` | `portfolio_day.aggregation.job.requested`, `portfolio_day.aggregation.completed` | Event + scheduler |
+| `portfolio_aggregation_service` | Lease-aware portfolio aggregation scheduling and portfolio-timeseries compute | `portfolio_timeseries`, `portfolio_aggregation_jobs` | durable `portfolio_aggregation_jobs` | `portfolio_day.aggregation.completed`, `portfolio_day.reconciliation.requested` | Durable queue + bounded workers |
 | `query_service` | Core read-plane APIs for canonical portfolio, position, transaction, market-data, and lookup reads | Read-only over canonical/calculator tables | HTTP API | N/A | API |
 | `query_control_plane_service` | Control-plane APIs for integration contracts, operational diagnostics, and simulation workflows | Read-only over canonical/calculator tables plus export/control metadata | HTTP API | N/A | API |
 
@@ -139,7 +139,10 @@ runtime-boundary catalog.
 6. `valuation_orchestrator_service` creates and dispatches `valuation.job.requested` jobs; `position_valuation_calculator` consumes those jobs and persists valuation snapshots.
 7. `timeseries_generator_service` consumes `valuation.snapshot.persisted` as the active valuation-to-timeseries trigger.
 8. `timeseries_generator_service` stages aggregation jobs immediately after position-timeseries persistence.
-9. `portfolio_aggregation_service` claims eligible aggregation jobs, emits `portfolio_day.aggregation.job.requested`, computes portfolio timeseries, and atomically stages both the `portfolio_day.aggregation.completed` compatibility fact and `portfolio_day.reconciliation.requested`.
+9. `portfolio_aggregation_service` recovers expired leases, claims eligible aggregation jobs with
+   fenced ownership, computes portfolio timeseries through bounded workers, and atomically stages
+   both the `portfolio_day.aggregation.completed` compatibility fact and
+   `portfolio_day.reconciliation.requested`.
 10. `financial_reconciliation_service` consumes `portfolio_day.reconciliation.requested`, runs the automatic reconciliation bundle with deterministic dedupe keys per `(reconciliation_type, portfolio_id, business_date, epoch)`, persists monotonic/latest-epoch control evidence, and atomically stages `portfolio_day.reconciliation.completed` plus `portfolio_day.controls.evaluated` for the latest epoch.
 11. `portfolio_day.controls.evaluated` is the canonical portfolio-day controls decision:
     `controls_blocking=true` and `publish_allowed=false` for `FAILED` / `REQUIRES_REPLAY`,
