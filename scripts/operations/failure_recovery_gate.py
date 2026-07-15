@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 import time
 from contextlib import ExitStack
@@ -33,6 +32,17 @@ if TYPE_CHECKING:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.operations.recovery.runtime_support import consumer_lag as _consumer_lag  # noqa: E402
+from scripts.operations.recovery.runtime_support import (  # noqa: E402
+    resolve_interruption_container as _resolve_interruption_container,
+)
+from scripts.operations.recovery.runtime_support import (  # noqa: E402
+    set_container_pause as _set_container_pause,
+)
+from scripts.operations.recovery.runtime_support import (  # noqa: E402
+    wait_for_lag_growth as _wait_for_lag_growth,
+)
 
 try:
     from scripts.operations.transaction_processing_cutover_offsets import KafkaOffsetStore
@@ -238,17 +248,6 @@ def _evaluate_recovery_result(
     return RecoveryMode.FULLY_DRAINED, failed_checks
 
 
-def _run_capture(cmd: list[str], cwd: Path) -> str:
-    completed = subprocess.run(cmd, cwd=cwd, check=False, capture_output=True, text=True)
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"Command failed ({completed.returncode}): {' '.join(cmd)}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-    return completed.stdout
-
-
 def _wait_ready(
     *,
     ingestion_base_url: str,
@@ -288,76 +287,6 @@ def _get_health_snapshot(*, event_replay_base_url: str, ops_token: str) -> dict[
     return cast(dict[str, Any], error_budget.json())
 
 
-def _compose_command(
-    *, compose_file: str, compose_project_name: str | None, arguments: list[str]
-) -> list[str]:
-    command = ["docker", "compose"]
-    if compose_project_name:
-        command.extend(["-p", compose_project_name])
-    command.extend(["-f", compose_file, *arguments])
-    return command
-
-
-def _resolve_interruption_container(
-    *,
-    repo_root: Path,
-    compose_file: str,
-    compose_project_name: str | None,
-    interruption_service: str,
-) -> str:
-    target = interruption_service.strip()
-    if not target:
-        raise ValueError("interruption service cannot be empty")
-    container_id = _run_capture(
-        _compose_command(
-            compose_file=compose_file,
-            compose_project_name=compose_project_name,
-            arguments=["ps", "-q", target],
-        ),
-        cwd=repo_root,
-    ).strip()
-    if not container_id:
-        raise RuntimeError(f"Compose service is not running: {target}")
-    return container_id
-
-
-def _set_container_pause(*, container_id: str, paused: bool, repo_root: Path) -> None:
-    operation = "pause" if paused else "unpause"
-    _run_capture(["docker", operation, container_id], cwd=repo_root)
-
-
-def _consumer_lag(*, store: KafkaOffsetStore, consumer_group: str, transaction_topic: str) -> int:
-    snapshot = store.snapshot(group_id=consumer_group, topic=transaction_topic)
-    return sum(
-        max(partition.high_watermark - max(partition.committed_offset, 0), 0)
-        for partition in snapshot.partitions
-    )
-
-
-def _wait_for_lag_growth(
-    *,
-    store: KafkaOffsetStore,
-    consumer_group: str,
-    transaction_topic: str,
-    baseline_lag: int,
-    expected_growth: int,
-    timeout_seconds: int,
-) -> int:
-    peak_lag = baseline_lag
-    deadline = time.time() + timeout_seconds
-    while time.time() < deadline:
-        current_lag = _consumer_lag(
-            store=store,
-            consumer_group=consumer_group,
-            transaction_topic=transaction_topic,
-        )
-        peak_lag = max(peak_lag, current_lag)
-        if peak_lag - baseline_lag >= expected_growth:
-            return peak_lag
-        time.sleep(1)
-    return peak_lag
-
-
 def _wait_for_full_recovery(
     *,
     store: KafkaOffsetStore,
@@ -393,7 +322,7 @@ def _wait_for_full_recovery(
         consumer_lag = _consumer_lag(
             store=store,
             consumer_group=consumer_group,
-            transaction_topic=transaction_topic,
+            topic=transaction_topic,
         )
         observed_at = utc_now().isoformat()
         poll_count += 1
@@ -678,12 +607,12 @@ def main() -> int:
         baseline_consumer_lag = _consumer_lag(
             store=offset_store,
             consumer_group=args.consumer_group,
-            transaction_topic=args.transaction_topic,
+            topic=args.transaction_topic,
         )
         baseline_replay_consumer_lag = _consumer_lag(
             store=offset_store,
             consumer_group=args.replay_consumer_group,
-            transaction_topic=args.replay_topic,
+            topic=args.replay_topic,
         )
         interruption_container_id = _resolve_interruption_container(
             repo_root=repo_root,
@@ -723,7 +652,7 @@ def main() -> int:
             peak_consumer_lag = _wait_for_lag_growth(
                 store=offset_store,
                 consumer_group=args.consumer_group,
-                transaction_topic=args.transaction_topic,
+                topic=args.transaction_topic,
                 baseline_lag=baseline_consumer_lag,
                 expected_growth=records_submitted,
                 timeout_seconds=args.backlog_build_timeout_seconds,
@@ -770,7 +699,7 @@ def main() -> int:
         replay_consumer_lag_after_recovery = _consumer_lag(
             store=offset_store,
             consumer_group=args.replay_consumer_group,
-            transaction_topic=args.replay_topic,
+            topic=args.replay_topic,
         )
         consumer_lag_growth = max(peak_consumer_lag - baseline_consumer_lag, 0)
         recovery_mode, failed_checks = _evaluate_recovery_result(
