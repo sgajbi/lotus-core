@@ -1,6 +1,9 @@
 # API Specification: Timeseries Generator
 
-The `timeseries_generator_service` is a headless service whose primary interface is Apache Kafka. It does not have a traditional REST API for its core logic but exposes standard HTTP endpoints for health and metrics monitoring.
+The `timeseries_generator_service` is a headless service whose inbound work interface is Apache
+Kafka. It does not have a traditional REST API for its core logic but exposes standard HTTP
+endpoints for health and metrics monitoring. Its downstream handoff is the durable
+`portfolio_aggregation_jobs` database queue, not a second Kafka topic.
 
 ## 1. Health & Metrics API
 
@@ -14,11 +17,11 @@ The `timeseries_generator_service` is a headless service whose primary interface
 
 ## 2. Kafka Interface
 
-The service consumes events, generates time-series data, and produces new events to orchestrate its own workflow.
+The service consumes persisted valuation snapshots and generates position-level time-series data.
 
 ### 2.1. Consumers
 
-The service listens to two topics:
+The service listens to one topic:
 
 #### Topic: `valuation.snapshot.persisted`
 
@@ -36,26 +39,10 @@ The service listens to two topics:
     }
     ```
 
-#### Topic: `portfolio_day.aggregation.job.requested`
+### 2.2. Durable Aggregation Handoff
 
-* **Purpose:** This is the work queue for the portfolio-level aggregation. Each message is a job to aggregate all of a portfolio's position time-series records for a single day.
-* **Producer:** `AggregationScheduler` (within `portfolio_aggregation_service`).
-* **Key:** `portfolio_id`
-* **Payload (`PortfolioAggregationRequiredEvent`):**
-    ```json
-    {
-      "portfolio_id": "PORT_001",
-      "aggregation_date": "2025-08-20",
-      "correlation_id": "SCHEDULER_JOB_XYZ"
-    }
-    ```
-
-### 2.2. Producers
-
-The service's components produce events to orchestrate the aggregation workflow.
-
-#### Topic: `portfolio_day.aggregation.job.requested`
-
-* **Purpose:** The `AggregationScheduler` component of `portfolio_aggregation_service` produces messages to this topic. `timeseries_generator_service` consumes those work assignments but does not own the scheduler.
-* **Key:** `portfolio_id`
-* **Payload (`PortfolioAggregationRequiredEvent`):** (Same as the consumed event).
+After position materialization, the service idempotently stages one
+`portfolio_aggregation_jobs` row for every affected portfolio date. The
+`portfolio_aggregation_service` owns claiming that queue and currently publishes and consumes its
+internal `portfolio_day.aggregation.job.requested` command. That topic is not part of the
+`timeseries_generator_service` interface.

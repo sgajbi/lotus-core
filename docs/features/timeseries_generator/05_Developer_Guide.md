@@ -1,16 +1,16 @@
 # Developer's Guide: Timeseries Generation and Portfolio Aggregation
 
-This guide provides developers with instructions for understanding and extending the split time-series layer.
+This guide explains how to extend the current two-stage derived-state pipeline without crossing its
+delivery, application, domain, port, and infrastructure boundaries.
 
 ## 1. Architecture Overview
 
 The platform is designed as a two-stage pipeline to transform daily snapshots into the final, aggregated time-series data used for analytics.
 
 1.  **Stage 1: Position Time-Series Generation**
-    * The **`PositionTimeseriesConsumer`** in `timeseries_generator_service` listens for `valuation.snapshot.persisted` events.
-    * For each event, it fetches the snapshot, the previous day's snapshot, and all of the day's cash flows for that specific security.
-    * It then calls **`PositionTimeseriesLogic`** to calculate and create a single `position_timeseries` record.
-    * Finally, it idempotently creates a `PortfolioAggregationJob` for that portfolio and date, which acts as a trigger for the next stage.
+    * The **`PositionTimeseriesConsumer`** in `timeseries_generator_service` validates and maps `valuation.snapshot.persisted` events.
+    * **`MaterializePositionTimeseries`** loads immutable source records through a repository port, invokes **`PositionTimeseriesLogic`**, and performs bounded backdated propagation.
+    * Its SQLAlchemy adapter atomically persists `position_timeseries` rows and idempotently stages a portfolio aggregation job for each affected portfolio date.
 
 2.  **Stage 2: Portfolio Time-Series Aggregation**
     * The **`AggregationScheduler`** in `portfolio_aggregation_service` is a background process that continuously polls the `portfolio_aggregation_jobs` table for pending work.
@@ -27,20 +27,24 @@ If a new metric needs to be added to the `portfolio_timeseries` table (e.g., `to
 
 2.  **Generate a DB Migration:** Run the `alembic revision --autogenerate` command to create a migration script for the new column, then apply it with `alembic upgrade head`.
 
-3.  **Update the Aggregation Logic:** Modify the `calculate_daily_record` method in the aggregation logic class to calculate the new value. This might require fetching additional data by adding a new method to the repository.
-    * **File:** `src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py`
+3.  **Update Domain Arithmetic:** Extend the pure `calculate_portfolio_timeseries` function. Keep SQLAlchemy, market-data reads, logging, and framework objects out of this module.
+    * **File:** `src/services/portfolio_aggregation_service/app/domain/portfolio_timeseries/calculator.py`
 
-4.  **Update the Repository:** Add the new field to the `upsert_portfolio_timeseries` method in the repository so that it is correctly written to the database during the `INSERT ... ON CONFLICT` operation.
-    * **File:** `src/services/portfolio_aggregation_service/app/repositories/timeseries_repository.py`
+4.  **Update Source Enrichment When Required:** If the metric requires instrument or FX data, extend the typed port and source-enrichment application service without moving I/O into domain arithmetic.
+    * **File:** `src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/calculation.py`
 
-5.  **Add Tests:** Add unit tests to `tests/unit/services/portfolio_aggregation_service/core/test_portfolio_timeseries_logic.py` to verify the new calculation.
+5.  **Update Persistence:** Add the field to `PortfolioAggregationRepository.upsert_portfolio_timeseries` so it is written by the existing idempotent upsert.
+    * **File:** `src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py`
+
+6.  **Add Tests:** Put pure arithmetic and invariants under the domain test package. Put market-data resolution, normalization, caching, and source-failure cases under the application test package.
 
 ## 3. Testing
 
 To run the unit tests specifically for the time-series logic, use the following commands from the project root:
 ```bash
 # For position-level logic
-pytest tests/unit/services/timeseries_generator_service/timeseries-generator-service/core/test_position_timeseries_logic.py
+python -m pytest tests/unit/services/timeseries_generator_service -q
 
-# For portfolio-level logic
-pytest tests/unit/services/portfolio_aggregation_service/core/test_portfolio_timeseries_logic.py
+# For portfolio aggregation application and domain behavior
+python -m pytest tests/unit/services/portfolio_aggregation_service -q
+```

@@ -123,7 +123,7 @@
         "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py"
       ],
       "consumer_modules": [
-        "src/services/portfolio_aggregation_service/app/core/portfolio_timeseries_logic.py"
+        "src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/calculation.py"
       ],
       "guard_scripts": [
         "scripts/quality/application_port_catalog_guard.py"
