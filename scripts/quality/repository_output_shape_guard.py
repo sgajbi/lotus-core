@@ -60,9 +60,6 @@ TRANSITIONAL_ORM_RETURN_EXCEPTIONS: dict[str, tuple[str, ...]] = {
     "src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py:upsert_portfolio_control_stage_status": (
         "PipelineStageState",
     ),
-    "src/services/pipeline_orchestrator_service/app/repositories/pipeline_stage_repository.py:upsert_stage_flags": (
-        "PipelineStageState",
-    ),
     "src/services/query_service/app/repositories/buy_state_repository.py:get_accrued_offsets": (
         "AccruedIncomeOffsetState",
     ),

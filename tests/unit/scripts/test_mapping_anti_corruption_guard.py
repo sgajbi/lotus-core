@@ -82,17 +82,20 @@ def _write_required_artifacts(root: Path) -> None:
         root / "src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py",
         "financial_reconciliation_requested_message\n"
         "portfolio_day_controls_evaluated_message\n"
-        "portfolio_day_ready_for_valuation_message\n"
-        "transaction_processing_completed_message\n"
         "pipeline_outbox_event_payload\n",
     )
     _write(
         root / "src/services/pipeline_orchestrator_service/app/services/"
         "pipeline_orchestrator_service.py",
-        "decide_transaction_stage_readiness\n"
-        "financial_reconciliation_requested_message\n"
-        "portfolio_day_controls_evaluated_message\n"
-        "transaction_processing_completed_message\n",
+        "financial_reconciliation_requested_message\nportfolio_day_controls_evaluated_message\n",
+    )
+    _write(
+        root / "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "transaction_readiness/event_staging.py",
+        "stage_transaction_readiness\n"
+        "TransactionProcessingCompletedEvent\n"
+        "PortfolioDayReadyForValuationEvent\n"
+        "outbox_event_payload\n",
     )
     _write(
         root / "src/services/query_control_plane_service/app/domain/dpm_source_readiness.py",
@@ -198,10 +201,8 @@ def test_mapping_anti_corruption_guard_rejects_inline_pipeline_outbox_dump(
     _write(
         tmp_path / "src/services/pipeline_orchestrator_service/app/services/"
         "pipeline_orchestrator_service.py",
-        "decide_transaction_stage_readiness\n"
         "financial_reconciliation_requested_message\n"
         "portfolio_day_controls_evaluated_message\n"
-        "transaction_processing_completed_message\n"
         "pipeline_outbox_event_payload\n"
         "payload = outbox_event_payload(event)\n",
     )

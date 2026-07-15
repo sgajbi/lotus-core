@@ -65,17 +65,22 @@ REQUIRED_SNIPPETS = {
     Path("src/services/pipeline_orchestrator_service/app/adapters/pipeline_event_factory.py"): (
         "financial_reconciliation_requested_message",
         "portfolio_day_controls_evaluated_message",
-        "portfolio_day_ready_for_valuation_message",
-        "transaction_processing_completed_message",
         "pipeline_outbox_event_payload",
     ),
     Path(
         "src/services/pipeline_orchestrator_service/app/services/pipeline_orchestrator_service.py"
     ): (
-        "decide_transaction_stage_readiness",
         "financial_reconciliation_requested_message",
         "portfolio_day_controls_evaluated_message",
-        "transaction_processing_completed_message",
+    ),
+    Path(
+        "src/services/portfolio_transaction_processing_service/app/infrastructure/"
+        "transaction_readiness/event_staging.py"
+    ): (
+        "stage_transaction_readiness",
+        "TransactionProcessingCompletedEvent",
+        "PortfolioDayReadyForValuationEvent",
+        "outbox_event_payload",
     ),
     Path("src/services/query_control_plane_service/app/domain/dpm_source_readiness.py"): (
         "class PortfolioTaxLotEvidence",
