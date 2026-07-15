@@ -59,6 +59,13 @@ isolated dynamic-port Compose project. `make test-derived-state-workload-smoke` 
 `diagnostic`; a successful smoke proves orchestration only, not capacity. Certifying profile
 execution requires building the exact branch source and fails fast if existing images are selected.
 
+The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
+positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
+valuation-to-position p95 was `5.6004667s`, portfolio aggregation completed in `1.723829s`, all
+queues closed, reconciliation was clean, and 33 resource samples found no lock waiter or blocked
+session. The `900s` fixed aggregation lease has ample fan-in headroom, but heartbeat policy remains
+open until backdated and failure workloads are certified.
+
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
 
