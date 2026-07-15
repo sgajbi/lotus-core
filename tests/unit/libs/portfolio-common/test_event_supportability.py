@@ -246,7 +246,8 @@ def test_transaction_event_ownership_uses_unified_runtime_boundary() -> None:
 
     assert raw_transaction.consumer_services == ("portfolio_transaction_processing_service",)
     assert processed_transaction.producer_service == ("portfolio_transaction_processing_service")
-    assert processed_transaction.consumer_services == ("pipeline_orchestrator_service",)
+    assert processed_transaction.consumer_services == ()
+    assert processed_transaction.runtime_active is False
     assert cashflow.producer_service == "portfolio_transaction_processing_service"
     assert cashflow.consumer_services == ()
     assert cashflow.runtime_active is False
@@ -263,6 +264,15 @@ def test_runtime_pipeline_events_are_cataloged_with_current_topics() -> None:
 
     for event_type, topic in expected_topics.items():
         assert get_event_family_definition(event_type).topic == topic
+
+    assert (
+        get_event_family_definition("TransactionProcessingCompleted").producer_service
+        == "portfolio_transaction_processing_service"
+    )
+    assert (
+        get_event_family_definition("PortfolioDayReadyForValuation").producer_service
+        == "portfolio_transaction_processing_service"
+    )
 
 
 def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
