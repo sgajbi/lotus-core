@@ -32,9 +32,6 @@ from portfolio_common.valuation_runtime_settings import get_valuation_runtime_se
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from src.services.pipeline_orchestrator_service.app.repositories.pipeline_stage_repository import (
-    PipelineStageRepository,
-)
 from src.services.query_control_plane_service.app.application.operations import (
     service as operations_service_module,
 )
@@ -54,6 +51,15 @@ FIXED_GENERATED_AT = datetime(2025, 8, 30, 12, 0, tzinfo=timezone.utc)
 VALUATION_RUNTIME_SETTINGS = get_valuation_runtime_settings()
 
 
+def _control_stage_transaction_id(
+    *,
+    stage_name: str,
+    portfolio_id: str,
+    business_date: date,
+) -> str:
+    return f"portfolio-stage:{stage_name}:{portfolio_id}:{business_date.isoformat()}"
+
+
 class _FixedDateTime(datetime):
     @classmethod
     def now(cls, tz=None):
@@ -65,12 +71,12 @@ class _FixedDateTime(datetime):
 async def test_support_overview_returns_coherent_snapshot_under_control_churn(
     clean_db, async_db_session: AsyncSession
 ):
-    control_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+    control_transaction_id = _control_stage_transaction_id(
         stage_name="FINANCIAL_RECONCILIATION",
         portfolio_id="P1",
         business_date=date(2025, 8, 30),
     )
-    late_control_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+    late_control_transaction_id = _control_stage_transaction_id(
         stage_name="FINANCIAL_RECONCILIATION",
         portfolio_id="P1",
         business_date=date(2025, 8, 31),
@@ -573,12 +579,12 @@ async def test_reconciliation_findings_return_coherent_snapshot_under_finding_ch
 async def test_portfolio_control_stages_return_coherent_snapshot_under_stage_churn(
     clean_db, async_db_session: AsyncSession
 ):
-    old_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+    old_transaction_id = _control_stage_transaction_id(
         stage_name="FINANCIAL_RECONCILIATION",
         portfolio_id="P5",
         business_date=date(2025, 8, 30),
     )
-    late_transaction_id = PipelineStageRepository.build_portfolio_stage_key(
+    late_transaction_id = _control_stage_transaction_id(
         stage_name="FINANCIAL_RECONCILIATION",
         portfolio_id="P5",
         business_date=date(2025, 8, 31),
