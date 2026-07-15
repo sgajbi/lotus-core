@@ -29,7 +29,7 @@ The current representative families are:
 
 Shared domain records do not make a port shared automatically. For example, generation and
 aggregation reuse timeseries market-data records and a SQL reader, while
-`portfolio_aggregation_service.app.ports.timeseries_market_data` remains service-local because only
+`portfolio_derived_state_service.app.ports.timeseries_market_data` remains service-local because only
 portfolio aggregation depends on that application capability.
 
 Existing runtime-provider ports that predate the `app/ports` convention may remain in dedicated

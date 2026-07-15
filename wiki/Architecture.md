@@ -85,7 +85,8 @@ Control execution and reconciliation run contracts.
   effects succeed in the same unit of work; retained `transactions.cost.processed` and
   `cashflows.calculated` compatibility facts have no active in-repo consumer
 - independently scalable position valuation worker
-- timeseries generator
+- one portfolio derived-state worker with separate position-timeseries and portfolio-timeseries
+  application/domain modules
 
 ## Architecture references
 

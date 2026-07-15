@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; direct leased aggregation runtime fixed locally, deployable consolidation pending
+Status: In progress; deployable consolidation fixed locally, load/recovery/release certification pending
 
 ## Objective
 
@@ -106,6 +106,10 @@ compatibility package.
 | Aggregation transport/runtime source lines removed | 0 | 576 |
 | Claimed-job worker concurrency | Kafka partition/consumer pool | bounded application workers |
 | Terminal ownership predicate | portfolio/date/status | job id + lease token + status |
+| Derived-state deployables | 2 | 1 |
+| Runtime supervisors / health endpoints / outbox dispatchers | 2 / 2 / 2 | 1 / 1 / 1 |
+| Internal aggregation command transports | durable DB queue + private Kafka hop | durable DB queue only |
+| Health ports | 8085 and 8088 | 8085 |
 
 The generator test count initially stayed stable because database-heavy consumer scenarios moved
 to application and infrastructure owners instead of being deleted; it now includes an additional
@@ -135,16 +139,22 @@ contribution invariants gained separate focused coverage.
 
 ## Compatibility
 
-External event schemas, queue identity, calculation fields, query/QCP APIs, OpenAPI schemas, images,
-health endpoints, metrics, and downstream responses remain compatible. The batch intentionally:
+External event schemas, queue/table identity, calculation fields, query/QCP APIs, OpenAPI product
+schemas, and downstream responses remain compatible. The batch intentionally:
 
 1. added nullable lease owner/token/UTC-expiry fields and supporting queue constraints/indexes;
 2. retired the same-owner internal aggregation request topic, producer, and consumer after proving
    there was no external consumer;
 3. retained the valuation-snapshot input and aggregation-completion/reconciliation output events.
+4. replaced two internal deployable/package/image identities with
+   `portfolio_derived_state_service` / `portfolio-derived-state-service`;
+5. retained port `8085`, retired port `8088`, and preserved
+   `timeseries_generator_group_positions` so live offsets do not reset;
+6. replaced two health/metrics targets with one derived-state health/version/metrics surface while
+   preserving separate position and aggregation workload attribution.
 
-The deployable names, images, and health identities have not changed yet; those surfaces move
-atomically with the later combined-runtime cutover.
+No database migration is required: `position_timeseries`, `portfolio_timeseries`, and
+`portfolio_aggregation_jobs` retain their schemas and ownership semantics.
 
 Intentional fail-closed changes apply to:
 
@@ -203,37 +213,39 @@ cross-window state.
 - `43` tests collect in the complete timeseries-generator unit suite; the focused generator plus
   package-ownership run passed `49` tests. Configured MyPy over `235` source files, Ruff,
   architecture, domain-layer, application-dependency, and workflow-policy guards passed.
+- The unified target package, runtime, configuration, deployment, release inventory, and no-return
+  pack passes `163` focused tests.
+- Ruff passes across target source/tests and touched runtime/release scripts; MyPy reports no issues
+  across all `46` target service source files.
+- Runtime-boundary, application-port, aggregation-scheduler, architecture, image-provenance, API
+  route catalog, Compose rendering, and Kubernetes digest/security guards pass.
+- The image-release matrix now builds only `portfolio-derived-state-service`, writes digest, SBOM,
+  vulnerability, signature, and provenance evidence, and renders its Kubernetes deployment from
+  the same digest release manifest used across dev, UAT, and prod.
 
 ## Same-Pattern Review
 
 Both delivery paths are now thin and application-owned. Position and portfolio arithmetic are pure
 domain policies under explicitly named packages, source enrichment is application-owned, and the
 retired legacy paths have no-return coverage. The internal scheduler-to-Kafka-to-consumer command
-hop is already removed. The next same-pattern target is package and runtime composition under
-`portfolio_derived_state_service`; no duplicate issue is required. The position materializer and
-aggregation scheduler/processor must remain separately testable modules with independent
-concurrency and attributable metrics during consolidation.
+hop, duplicate runtime shells, old packages, old images, and old deployment inventory are removed
+and guarded against restoration. Position and portfolio materializers remain separately testable
+modules with independently configured aggregation concurrency and attributable metrics inside the
+target runtime.
 
 ## Documentation Decision
 
-Repository context, this architecture ledger, the current architecture map, the application-port
-and database catalogs, and the timeseries API/developer guides change because dependency,
-source-failure, handoff, and contribution-invariant truth changed. README, wiki, API route inventory,
-OpenAPI, supported-features, and migration material remain explicit no-change decisions because
-deployable topology and public/operator contracts are still unchanged. Runtime-facing surfaces
-must change atomically with the later cutover. The additive lease-operation slice changes no
-runtime-facing surface and therefore requires no additional front-door, API, event, or wiki update.
-The position-domain package move updates only repository context and this review evidence; README,
-wiki, OpenAPI, operator runbooks, schemas, and supported-feature material remain explicit no-change
-decisions because calculation behavior and runtime topology are unchanged.
+README, repository context, this review, current architecture/runtime/port catalogs, schema usage
+catalog, feature docs, operations references, and authored wiki change because deployable and
+operator truth changed. The API route catalog is regenerated for one standard health surface.
+Public business OpenAPI, event schemas, database migrations, and downstream product contracts are
+explicit no-change decisions because this cutover changes internal runtime topology only.
 
 ## Remaining Work
 
 1. Complete observability for lease expiry, reclaim, and lost ownership and evaluate heartbeat
    renewal for work approaching the configured lease duration.
-2. Compose one `portfolio_derived_state_service` runtime with independently configurable stage
-   concurrency and attributable metrics.
-3. Retire the remaining obsolete deployable image/package/deployment inventory only after usage and
-   rollback proof; the private aggregation topic/group/runtime paths are already removed.
-4. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
+2. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
    reconciliation, load, release, and exact-main validation before closing #714.
+3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
+   build and run the combined image against PostgreSQL and Kafka.

@@ -1,6 +1,7 @@
-# Operations & Troubleshooting Guide: Timeseries Generator
+# Portfolio Derived-State Operations Runbook
 
-This guide provides operational instructions for monitoring and troubleshooting the `timeseries_generator_service`.
+This guide covers the position and portfolio materialization modules supervised by
+`portfolio_derived_state_service`.
 
 ## 1. Observability & Monitoring
 
@@ -8,19 +9,23 @@ The health of this service is critical for the availability of all performance a
 
 ### Key Metrics to Watch
 
-* **Consumer Lag:** Monitor consumer lag on both primary topics:
-  * `valuation.snapshot.persisted`: High lag here indicates the service is failing to generate the base `position_timeseries` records.
-  * `portfolio_day.aggregation.job.requested`: High lag here indicates portfolio aggregation orchestration or consumption is stalled in `portfolio_aggregation_service`.
+* **Consumer Lag:** Monitor `valuation.snapshot.persisted` lag for the preserved
+  `timeseries_generator_group_positions` group.
+* **Durable Queue:** Monitor pending, processing, failed, and expired
+  `portfolio_aggregation_jobs`, oldest eligible age, claim throughput, and stale-claim recovery.
 * **`events_dlqd_total` (Counter):** An increase means the delivery was malformed or the application could not durably record its failure. Missing governed source data normally leaves the aggregation job in `FAILED` for support-led remediation rather than duplicating failure evidence in the DLQ.
-* **`event_processing_latency_seconds` (Histogram):** A sudden increase in the latency for the `portfolio_day.aggregation.job.requested` consumer can indicate that it is processing portfolios with a very large number of positions.
+* **Materialization latency:** Attribute position-event handling and portfolio-job execution
+  separately. Rising portfolio latency can indicate large fan-in, missing completeness, FX lookup
+  pressure, or database contention.
 
 ## 2. Structured Logging & Tracing
 
 All logs are structured JSON and are tagged with the `correlation_id`. Key log messages can help diagnose issues:
 
 * **`"Position-timeseries materialization completed."`**: Confirms the position-timeseries application use case finished and reports whether current or dependent days changed.
-* **`"Scheduler claimed ... jobs for processing"`**: Confirms the `AggregationScheduler` in `portfolio_aggregation_service` is active and dispatching aggregation work.
-* **`"Found and claimed ... eligible aggregation jobs"`**: Confirms the portfolio aggregation scheduler in `portfolio_aggregation_service` is claiming portfolio-date jobs.
+* **`"Scheduler claimed ... jobs for processing"`**: Confirms the in-process scheduler is leasing
+  durable portfolio-date work.
+* **`"Found and claimed ... eligible aggregation jobs"`**: Confirms deterministic queue claims.
 * **`"Missing FX rate from..."`**: A critical source-data error that causes the owned aggregation job to fail without publishing partial output.
 * **`"Portfolio aggregation requires instrument reference data."`**: A position could not be tied to authoritative instrument metadata, so Core rejected the incomplete portfolio aggregate and failed the owned job.
 
@@ -34,4 +39,6 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 
 ## 4. Gaps and Design Considerations
 
-* **Missing Metrics:** The service lacks specific metrics for its core functions. There is no visibility into how many position vs. portfolio time-series records are created, or how long the portfolio-level aggregation takes. This makes it difficult to diagnose performance issues.
+Load, backfill, recovery, and rollback certification remains required before #714 closure. Runtime
+consolidation does not permit position and portfolio workload metrics to lose their separate
+attribution.

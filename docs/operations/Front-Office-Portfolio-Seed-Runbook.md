@@ -146,7 +146,7 @@ the RFC-0075 Slice 4 derived-state readiness fix with these outcomes:
     once, and rejects duplicate, empty, or non-terminating continuation pages. This does not prove
     relationship householding, suitability, PM ranking, execution readiness, client workflow, or
     full analytics support for the source-only rows.
-- `lotus-core portfolio_aggregation_service`
+- `lotus-core portfolio_derived_state_service`
   - portfolio aggregation backlog for `PB_SG_GLOBAL_BAL_001`: `0` pending,
     `0` processing, `382` complete
   - portfolio timeseries max date: `2026-04-17`

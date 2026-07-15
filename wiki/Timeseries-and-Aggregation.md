@@ -1,118 +1,63 @@
-# Timeseries and Aggregation
+# Portfolio Derived State
 
 ## Purpose
 
-This page explains the current time-series materialization path in `lotus-core`.
-
-It is grounded in the active runtime split between:
-
-- `timeseries_generator_service`
-  position-timeseries materialization and aggregation-job staging
-- `portfolio_aggregation_service`
-  portfolio-level aggregation dispatch, computation, and completion publication
-
-## What the runtime handles
-
-The current implementation centers on:
-
-- consuming persisted valuation snapshot events
-- materializing or rematerializing `position_timeseries`
-- re-arming `portfolio_aggregation_jobs` when material state changes
-- dispatching eligible aggregation jobs onto the portfolio aggregation worker topic
-- computing and upserting `portfolio_timeseries`
-- publishing `portfolio_day.aggregation.completed` for downstream control workflows
-
-This is a two-service materialization path, not one monolithic time-series worker.
-
-## Service split
-
-### `timeseries_generator_service`
-
-This service consumes `valuation.snapshot.persisted` and is responsible for:
-
-- computing `position_timeseries`
-- detecting whether a new record is materially different from the existing one
-- staging `portfolio_aggregation_jobs` when the portfolio-day aggregate must be recalculated
-- propagating dependent recomputation forward when later rows for the same key are affected
-
-The current consumer logic stages aggregation jobs directly in the database rather than emitting a
-separate Kafka completion topic for position-timeseries generation.
-
-### `portfolio_aggregation_service`
-
-This service is responsible for:
-
-- claiming eligible `portfolio_aggregation_jobs`
-- recovering expired job leases with a bounded retry ceiling
-- processing leased jobs through bounded in-process workers
-- computing `portfolio_timeseries` from the relevant `position_timeseries` set
-- emitting `portfolio_day.aggregation.completed` after portfolio-level materialization succeeds
-
-This keeps portfolio-level rollup execution separate from position-timeseries rematerialization.
+`portfolio_derived_state_service` materializes Core-owned position and portfolio time series after
+valuation. It is one deployable with separate position-timeseries and portfolio-timeseries
+application/domain modules, not one mixed calculation module.
 
 ## Runtime flow
 
-The active path is:
+1. `position_valuation_calculator` persists a daily position snapshot and emits
+   `valuation.snapshot.persisted`.
+2. The position delivery adapter maps that event into `MaterializePositionTimeseries`.
+3. The use case writes current and materially dependent future `position_timeseries` rows and
+   idempotently stages affected `portfolio_aggregation_jobs` in the same transaction.
+4. The aggregation scheduler recovers expired claims and leases eligible jobs in deterministic
+   portfolio/date order using `FOR UPDATE SKIP LOCKED`.
+5. Bounded workers invoke `MaterializePortfolioTimeseries` and write `portfolio_timeseries`.
+6. Successful work atomically stages `portfolio_day.aggregation.completed` and
+   `portfolio_day.reconciliation.requested` through the outbox.
 
-1. valuation computes and persists a `daily_position_snapshot`
-2. `position_valuation_calculator` emits `valuation.snapshot.persisted`
-3. `timeseries_generator_service` consumes that event
-4. `timeseries_generator_service` computes or updates `position_timeseries`
-5. if material state changed, it stages `portfolio_aggregation_jobs`
-6. `portfolio_aggregation_service` recovers expired leases and claims eligible jobs with a
-   durable owner, token, and UTC expiry
-7. bounded workers materialize claimed jobs directly and upsert `portfolio_timeseries`; terminal
-   writes require the same job id and lease token
-8. `portfolio_aggregation_service` atomically stages the
-   `portfolio_day.aggregation.completed` compatibility fact and
-   `portfolio_day.reconciliation.requested`
-9. `financial_reconciliation_service` runs the control bundle, persists monotonic/latest-epoch
-   control evidence, and atomically stages reconciliation completion plus
-   `portfolio_day.controls.evaluated`
+The durable database queue provides coalescing, replay, backdated-restatement, retry, and fan-in
+control. There is no private Kafka command between the two modules.
 
-This sequence matches the current trigger matrix and runtime code. It does not assume the planned
-RFC-081 future topology where more stage transitions are orchestrator-issued.
+## Compatibility
 
-## Why it matters
+- Input topic: `valuation.snapshot.persisted`
+- Preserved consumer group: `timeseries_generator_group_positions`
+- Durable tables: `position_timeseries`, `portfolio_timeseries`,
+  `portfolio_aggregation_jobs`
+- Health, readiness, metrics, and version metadata: port `8085`
+- Image: `portfolio-derived-state-service`, released and deployed only by digest
 
-If this path is stale or incorrect:
+The preserved consumer group retains broker offsets during the runtime cutover. The retired
+`timeseries_generator_service`, `portfolio_aggregation_service`, port `8088`, and private
+aggregation-command transport are not compatibility surfaces.
 
-- analytics-input products for portfolio and position timeseries become incomplete
-- support surfaces can show valuation completion without matching time-series readiness
-- reconciliation can fail because portfolio-level aggregates no longer match the underlying
-  position-timeseries rows
-- downstream performance and risk services can consume lagging or partial source inputs
+## Operations
 
-That is why timeseries and aggregation are part of the core derived-state contract, not just an
-internal convenience layer.
+Monitor valuation-snapshot consumer lag, pending/processing/failed aggregation jobs, oldest queue
+age, claim/recovery counts, position and portfolio materialization latency, DLQ events, database
+pool pressure, and reconciliation outcomes. A missing instrument or FX source fails the owned job;
+Core does not publish a partial portfolio aggregate.
 
-## Boundary rules
+Use the Query Control Plane support endpoints to inspect aggregation jobs and source lineage for an
+affected portfolio. Replay through the governed remediation path after correcting source data.
 
-- valuation snapshot persistence is upstream input
-- `timeseries_generator_service` owns position-timeseries materialization and aggregation-job staging
-- `portfolio_aggregation_service` owns portfolio aggregation dispatch and portfolio-timeseries
-  computation
-- downstream analytics services consume these outputs but do not redefine them
+## Boundaries
 
-## Operational hints
-
-Check this path when:
-
-- `daily_position_snapshots` are current but portfolio or position timeseries are stale
-- support evidence shows aggregation jobs not being re-armed or drained
-- timeseries integrity reconciliation reports missing or mismatched `portfolio_timeseries`
-- portfolio-level readiness lags behind security-level valuation completion
-
-Check beyond this path when:
-
-- valuation itself is incomplete
-- support or replay evidence points to ingestion, replay, or earlier calculator drift
-- downstream analytics interpretation is wrong while core timeseries inputs are already correct
+- Delivery validates and maps Kafka events.
+- Application use cases coordinate transactions and durable effects.
+- Domain modules own pure time-series arithmetic and invariants.
+- Ports define repository, scheduler, market-data, and completion-staging contracts.
+- Infrastructure owns SQLAlchemy, Kafka, Prometheus, clock, and outbox adapters.
+- Downstream performance and risk services consume Core outputs but do not redefine them.
 
 ## Related references
 
-- [Timeseries Generator Service](Timeseries-Generator-Service)
+- [System Data Flow](System-Data-Flow)
 - [Support and Lineage](Support-and-Lineage)
 - [Financial Reconciliation](Financial-Reconciliation)
-- [System Data Flow](System-Data-Flow)
+- [Operations Runbook](Operations-Runbook)
 - [Lotus Core Microservice Boundaries and Trigger Matrix](../docs/architecture/microservice-boundaries-and-trigger-matrix.md)

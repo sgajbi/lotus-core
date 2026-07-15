@@ -60,8 +60,9 @@ Downstream workers consume completion topics and build the supported derived sta
   transaction-processing completion fact plus supported compatibility facts
 - valuation calculator
   combines position and market signals and emits `daily_position_snapshot_persisted`
-- timeseries generator
-  materializes position and portfolio time-series state
+- portfolio derived-state worker
+  materializes position time series, stages durable portfolio-day jobs, and materializes portfolio
+  time series through bounded lease-fenced workers
 
 See also:
 
@@ -70,7 +71,6 @@ See also:
 - [Position Processing](Position-Calculator)
 - [Valuation Calculator](Valuation-Calculator)
 - [Timeseries and Aggregation](Timeseries-and-Aggregation)
-- [Timeseries Generator Service](Timeseries-Generator-Service)
 
 ### 4. Read and support surfaces
 
