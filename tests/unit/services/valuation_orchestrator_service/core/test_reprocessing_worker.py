@@ -9,8 +9,14 @@ from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.valuation_orchestrator_service.app.core import (
+    fx_revaluation_job_processor,
+)
 from src.services.valuation_orchestrator_service.app.core.reprocessing_worker import (
     ReprocessingWorker,
+)
+from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
+    fx_revaluation_repository,
 )
 from src.services.valuation_orchestrator_service.app.repositories.valuation_repository import (
     ValuationRepository,
@@ -24,6 +30,10 @@ def mock_dependencies():
     mock_valuation_repo = AsyncMock(spec=ValuationRepository)
     mock_state_repo = AsyncMock(spec=PositionStateRepository)
     mock_repro_job_repo = AsyncMock(spec=ReprocessingJobRepository)
+    mock_fx_revaluation_repo = AsyncMock(
+        spec=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository
+    )
+    mock_fx_revaluation_repo.claim_pending_jobs.return_value = []
     mock_repro_job_repo.get_queue_stats.return_value = {
         "pending_count": 0,
         "failed_count": 0,
@@ -54,6 +64,10 @@ def mock_dependencies():
             return_value=mock_repro_job_repo,
         ),
         patch(
+            "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.SqlAlchemyFxRevaluationRepository",
+            return_value=mock_fx_revaluation_repo,
+        ),
+        patch(
             "src.services.valuation_orchestrator_service.app.core.reprocessing_worker.observe_reprocessing_worker_jobs_claimed"
         ) as mock_observe_claimed,
         patch(
@@ -78,6 +92,7 @@ def mock_dependencies():
             "valuation_repo": mock_valuation_repo,
             "state_repo": mock_state_repo,
             "repro_job_repo": mock_repro_job_repo,
+            "fx_revaluation_repo": mock_fx_revaluation_repo,
             "observe_claimed": mock_observe_claimed,
             "observe_completed": mock_observe_completed,
             "observe_failed": mock_observe_failed,
@@ -85,6 +100,38 @@ def mock_dependencies():
             "observe_stale_skips": mock_observe_stale_skips,
             "batch_timer": mock_batch_timer,
         }
+
+
+async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_dependencies):
+    processor = AsyncMock(spec=fx_revaluation_job_processor.FxRevaluationJobProcessor)
+    worker = ReprocessingWorker(poll_interval=0.1, fx_job_processor=processor)
+    mock_repro_job_repo = mock_dependencies["repro_job_repo"]
+    mock_fx_revaluation_repo = mock_dependencies["fx_revaluation_repo"]
+    mock_state_repo = mock_dependencies["state_repo"]
+    mock_observe_claimed = mock_dependencies["observe_claimed"]
+    pending_job = ReprocessingJob(
+        id=40,
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+        },
+        status="PROCESSING",
+    )
+    mock_repro_job_repo.find_and_claim_jobs.return_value = []
+    mock_fx_revaluation_repo.claim_pending_jobs.return_value = [pending_job]
+
+    await worker._process_batch()
+
+    mock_fx_revaluation_repo.claim_pending_jobs.assert_awaited_once_with(10)
+    processor.process.assert_awaited_once_with(
+        job=pending_job,
+        jobs=mock_repro_job_repo,
+        watermarks=mock_state_repo,
+        revaluation=mock_fx_revaluation_repo,
+    )
+    mock_observe_claimed.assert_called_once_with("RESET_FX_WATERMARKS", 1)
 
 
 async def test_worker_processes_reset_watermarks_job(mock_dependencies):

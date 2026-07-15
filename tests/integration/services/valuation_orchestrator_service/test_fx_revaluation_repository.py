@@ -12,9 +12,14 @@ from portfolio_common.database_models import (
     ReprocessingJob,
     Transaction,
 )
+from portfolio_common.position_state_repository import PositionStateRepository
+from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.valuation_orchestrator_service.app.core.fx_revaluation_job_processor import (
+    FxRevaluationJobProcessor,
+)
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
     DirectCurrencyPair,
     FxRateCorrection,
@@ -286,3 +291,59 @@ async def test_durable_replay_coalesces_pair_to_earliest_date_and_latest_lineage
         "generated_at": "2026-04-10T09:00:00+00:00",
     }
     assert jobs[0].correlation_id == "corr-latest-correction"
+
+
+async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    async_db_session.add_all(
+        [
+            _portfolio("P-SGD", "SGD"),
+            _instrument("USD-BOND", "USD"),
+            _transaction("TX-MATCH", "P-SGD", "USD-BOND"),
+        ]
+    )
+    await async_db_session.flush()
+    await _seed_position(
+        async_db_session,
+        portfolio_id="P-SGD",
+        security_id="USD-BOND",
+        transaction_id="TX-MATCH",
+        quantity=Decimal("10"),
+    )
+    state = await async_db_session.get(PositionState, ("P-SGD", "USD-BOND"))
+    assert state is not None
+    state.watermark_date = date(2026, 4, 15)
+    claimed_job = ReprocessingJob(
+        job_type="RESET_FX_WATERMARKS",
+        payload={
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "earliest_impacted_date": "2026-04-10",
+            "content_hash": "sha256:" + ("a" * 64),
+            "generated_at": "2026-04-10T08:00:00+00:00",
+        },
+        status="PROCESSING",
+        correlation_id="corr-fx-worker",
+    )
+    async_db_session.add(claimed_job)
+    await async_db_session.flush()
+
+    await FxRevaluationJobProcessor().process(
+        job=claimed_job,
+        jobs=ReprocessingJobRepository(async_db_session),
+        watermarks=PositionStateRepository(async_db_session),
+        revaluation=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(
+            async_db_session
+        ),
+    )
+    await async_db_session.commit()
+
+    refreshed_state = await async_db_session.get(PositionState, ("P-SGD", "USD-BOND"))
+    refreshed_job = await async_db_session.get(ReprocessingJob, claimed_job.id)
+    assert refreshed_state is not None
+    assert refreshed_state.watermark_date == date(2026, 4, 9)
+    assert refreshed_state.status == "REPROCESSING"
+    assert refreshed_job is not None
+    assert refreshed_job.status == "COMPLETE"

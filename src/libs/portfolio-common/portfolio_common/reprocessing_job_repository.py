@@ -13,9 +13,13 @@ from .utils import async_timed
 
 logger = logging.getLogger(__name__)
 
+EARLIEST_IMPACTED_DATE_JOB_TYPES = frozenset(
+    {"RESET_WATERMARKS", "RESET_FX_WATERMARKS"}
+)
+
 
 def _claim_pending_jobs_query(job_type: str):
-    if job_type == "RESET_WATERMARKS":
+    if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
         return text(
             """
             UPDATE reprocessing_jobs
@@ -273,7 +277,7 @@ class ReprocessingJobRepository:
         )
         claimed_jobs = result.mappings().all()
         jobs = [ReprocessingJob(**job) for job in claimed_jobs]
-        if job_type == "RESET_WATERMARKS":
+        if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
             jobs.sort(
                 key=lambda job: (
                     date.fromisoformat(job.payload["earliest_impacted_date"]),
