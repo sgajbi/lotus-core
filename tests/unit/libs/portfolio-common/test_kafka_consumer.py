@@ -493,6 +493,31 @@ async def test_run_loop_failure_does_not_commit_when_dlq_send_fails(
     )
 
 
+async def test_run_loop_does_not_commit_when_dlq_support_evidence_fails(
+    test_consumer: ConcreteTestConsumer,
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+) -> None:
+    mock_msg = create_mock_message("key-evidence-failure", {"data": "invalid"})
+    mock_confluent_consumer.poll.return_value = mock_msg
+
+    async def fail_and_stop(*args, **kwargs):
+        test_consumer.shutdown()
+        raise ValueError("Processing failed!")
+
+    test_consumer.process_message_mock.side_effect = fail_and_stop
+    test_consumer._record_consumer_dlq_event = AsyncMock(
+        side_effect=RuntimeError("support evidence unavailable")
+    )
+
+    await test_consumer.run()
+
+    mock_kafka_producer.publish_message.assert_called_once()
+    mock_kafka_producer.flush.assert_any_call(timeout=5)
+    test_consumer._record_consumer_dlq_event.assert_awaited_once()
+    mock_confluent_consumer.commit.assert_not_called()
+
+
 async def test_run_loop_dlq_failure_budget_exhaustion_fails_fast_without_commit(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):
