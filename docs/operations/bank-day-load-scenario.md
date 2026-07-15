@@ -24,12 +24,13 @@ Use this scenario to answer customer-grade questions:
 Run:
 
 ```powershell
-python scripts\bank_day_load_scenario.py `
+python scripts\operations\bank_day_load_scenario.py `
   --compose-project-name lotus-core-app-local `
   --portfolio-count 1000 `
   --transactions-per-portfolio 100 `
   --transaction-batch-size 2000 `
   --sample-size 5 `
+  --resource-poll-interval-seconds 5 `
   --drain-timeout-seconds 7200
 ```
 
@@ -94,9 +95,13 @@ The report records:
    still have no matching position-timeseries row,
 9. valuation-to-position and position-to-portfolio materialization latency summaries from durable
    facts, including p50, p95, p99, maximum, and sample count for each stage,
-10. sampled positions, transaction-window, and support-overview API latencies,
-11. sampled reconciliation results,
-12. log evidence for core processing services.
+10. peak PostgreSQL connection utilization, active and idle-in-transaction connections, lock
+    waiters, and blocked sessions sampled during the workload,
+11. peak CPU and memory utilization for the exact `portfolio_derived_state_service` Compose
+    container,
+12. sampled positions, transaction-window, and support-overview API latencies,
+13. sampled reconciliation results,
+14. log evidence for core processing services.
 
 The valuation-to-position sample is one completed valuation job joined to its matching
 position-timeseries row. The position-to-portfolio sample is one portfolio, business date, and epoch;
@@ -104,6 +109,9 @@ its clock starts when the last matching position row was updated and stops when 
 updated. Both stages use upsert-aware `updated_at` timestamps and clamp negative database-clock
 differences to zero. The scenario fails when the first-stage sample count differs from the generated
 position count or the second-stage sample count differs from the generated portfolio count.
+The scenario also fails when it cannot complete at least one time-aligned database-and-container
+resource sample. Sampling diagnostics retain bounded exception types only; they do not persist
+command output or connection details.
 
 ## Live Institutional Run Notes
 

@@ -20,6 +20,10 @@ The health of this service is critical for the availability of all performance a
 * **Materialization latency:** Attribute position-event handling and portfolio-job execution
   separately. Rising portfolio latency can indicate large fan-in, missing completeness, FX lookup
   pressure, or database contention.
+* **Workload resources:** Governed bank-day profiles sample PostgreSQL connection use,
+  idle-in-transaction connections, lock waiters, blocked sessions, and the exact combined
+  container's CPU/memory. A completed governed run without a successful resource sample fails its
+  evidence contract; sampling diagnostics expose bounded error types only.
 
 ## 2. Structured Logging & Tracing
 
@@ -42,6 +46,7 @@ All logs are structured JSON and are tagged with the `correlation_id`. Key log m
 
 ## 4. Gaps and Design Considerations
 
-Load, backfill, recovery, and rollback certification remains required before #714 closure. Runtime
-consolidation does not permit position and portfolio workload metrics to lose their separate
-attribution.
+Daily, price/FX burst, backdated, fan-in, release, and rollback certification remains required
+before #714 closure. Resource sampling is now reusable across those profiles, but source tests do
+not substitute for measured runtime evidence. Runtime consolidation does not permit position and
+portfolio workload metrics to lose their separate attribution.

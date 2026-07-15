@@ -47,6 +47,12 @@ valuation-to-position and position-to-portfolio materialization. Portfolio-stage
 once per portfolio, business date, and epoch and start from the final updated position input, avoiding
 security-count bias in large portfolios.
 
+The same report samples peak PostgreSQL connection utilization, active and
+idle-in-transaction connections, lock waiters, blocked sessions, and CPU/memory for the exact
+`portfolio_derived_state_service` Compose container. A governed run cannot pass without at least
+one complete database-and-runtime sample. Sampling failures retain only bounded error types in the
+artifact, not command output or connection details.
+
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
 
