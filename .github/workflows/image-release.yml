@@ -60,9 +60,6 @@ jobs:
           - service: portfolio_transaction_processing_service
             image_name: portfolio-transaction-processing-service
             dockerfile: src/services/portfolio_transaction_processing_service/Dockerfile
-          - service: pipeline_orchestrator_service
-            image_name: pipeline-orchestrator-service
-            dockerfile: src/services/pipeline_orchestrator_service/Dockerfile
           - service: valuation_orchestrator_service
             image_name: valuation-orchestrator-service
             dockerfile: src/services/valuation_orchestrator_service/Dockerfile

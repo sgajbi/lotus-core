@@ -414,7 +414,7 @@ class SupportOverviewResponse(BaseModel):
             "Principal or subsystem that requested the latest reconciliation run on the "
             "same portfolio-day and epoch as the latest control stage."
         ),
-        examples=["pipeline_orchestrator_service"],
+        examples=["system_pipeline"],
     )
     controls_latest_reconciliation_dedupe_key: Optional[str] = Field(
         None,
@@ -2315,7 +2315,7 @@ class ReconciliationRunRecord(BaseModel):
     requested_by: Optional[str] = Field(
         None,
         description="Principal or subsystem that requested the reconciliation run.",
-        examples=["support.ops@lotus.local", "pipeline_orchestrator_service"],
+        examples=["support.ops@lotus.local", "system_pipeline"],
     )
     dedupe_key: Optional[str] = Field(
         None,
@@ -2387,7 +2387,7 @@ class ReconciliationRunListResponse(SourceDataProductRuntimeMetadata):
                     "epoch": 3,
                     "started_at": "2026-03-13T10:15:00Z",
                     "completed_at": "2026-03-13T10:15:09Z",
-                    "requested_by": "pipeline_orchestrator_service",
+                    "requested_by": "system_pipeline",
                     "dedupe_key": "recon:transaction_cashflow:PF-001:2026-03-13:3",
                     "correlation_id": "corr-recon-20260313-001",
                     "failure_reason": None,

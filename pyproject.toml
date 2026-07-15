@@ -52,7 +52,6 @@ pythonpath = [
     "src/services/query_service",
     "src/services/calculators/position_valuation_calculator",
     "src/services/timeseries_generator_service",
-    "src/services/pipeline_orchestrator_service",
 ]
 addopts = "--strict-markers --import-mode=importlib"
 minversion = "6.0"

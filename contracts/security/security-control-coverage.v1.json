@@ -56,15 +56,6 @@
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
-      "service_name": "pipeline_orchestrator_service_web",
-      "app_path": "src/services/pipeline_orchestrator_service/app/web.py",
-      "app_kind": "health_only_worker_api",
-      "auth_audit_control": "health_only_no_business_routes",
-      "payload_limit_control": "not_applicable_health_only",
-      "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
-    },
-    {
       "service_name": "portfolio_aggregation_service_web",
       "app_path": "src/services/portfolio_aggregation_service/app/web.py",
       "app_kind": "health_only_worker_api",

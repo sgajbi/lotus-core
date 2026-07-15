@@ -51,7 +51,6 @@ LOG_SERVICE_NAMES = (
     "position_valuation_calculator",
     "portfolio_aggregation_service",
     "timeseries_generator_service",
-    "pipeline_orchestrator_service",
     "query_service",
     "query_control_plane_service",
     "event_replay_service",

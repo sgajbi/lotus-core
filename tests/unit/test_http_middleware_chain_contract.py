@@ -10,9 +10,6 @@ from src.services.financial_reconciliation_service.app.main import (
 )
 from src.services.ingestion_service.app.main import app as ingestion_service_app
 from src.services.persistence_service.app.web import app as persistence_service_app
-from src.services.pipeline_orchestrator_service.app.web import (
-    app as pipeline_orchestrator_service_app,
-)
 from src.services.portfolio_aggregation_service.app.web import (
     app as portfolio_aggregation_service_app,
 )
@@ -43,7 +40,6 @@ SERVICE_APPS: tuple[tuple[str, FastAPI], ...] = (
     ("financial_reconciliation_service", financial_reconciliation_service_app),
     ("ingestion_service", ingestion_service_app),
     ("persistence_service_web", persistence_service_app),
-    ("pipeline_orchestrator_service_web", pipeline_orchestrator_service_app),
     ("portfolio_aggregation_service_web", portfolio_aggregation_service_app),
     ("query_control_plane_service", query_control_plane_service_app),
     ("query_service", query_service_app),

@@ -25,7 +25,6 @@ def test_app_local_prometheus_scrapes_the_expected_lotus_core_services() -> None
         "financial_reconciliation_service",
         "persistence_service",
         "portfolio_transaction_processing_service",
-        "pipeline_orchestrator_service",
         "valuation_orchestrator_service",
         "position_valuation_calculator",
         "timeseries_generator_service",

@@ -76,7 +76,7 @@ def test_event_service_ownership_rejects_retired_service_alias() -> None:
         direction="internal",
         aggregate_type="portfolio_day",
         topic="valuation.requested",
-        producer_service="pipeline_orchestrator_service",
+        producer_service="missing_producer_service",
         consumer_services=("valuation_service",),
         idempotency_required=True,
         correlation_required=True,
@@ -86,7 +86,7 @@ def test_event_service_ownership_rejects_retired_service_alias() -> None:
     errors = guard.evaluate_event_service_ownership(
         event_definitions=(event_definition,),
         direct_topic_definitions=(),
-        runtime_service_ids=frozenset({"pipeline_orchestrator_service"}),
+        runtime_service_ids=frozenset({"missing_producer_service"}),
     )
 
     assert errors == [
@@ -124,7 +124,7 @@ def test_evaluate_outbox_event_contracts_rejects_invalid_event_catalog() -> None
             aggregate_type="cashflow",
             topic="cashflows.calculated",
             producer_service="portfolio_transaction_processing_service",
-            consumer_services=("pipeline_orchestrator_service",),
+            consumer_services=("query_service",),
             idempotency_required=True,
             correlation_required=True,
             schema_version_required=True,
