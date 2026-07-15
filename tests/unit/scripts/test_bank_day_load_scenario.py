@@ -354,6 +354,16 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             peak_runtime_cpu_percent=40.0,
             peak_runtime_memory_usage_bytes=268435456,
             peak_runtime_memory_utilization_percent=25.0,
+            peak_outbox_pending_events=120,
+            peak_outbox_oldest_pending_age_seconds=30.0,
+            peak_outbox_retry_eligible_pending_events=120,
+            peak_outbox_retry_waiting_pending_events=0,
+            peak_outbox_failed_events=0,
+            final_outbox_pending_events=0,
+            final_outbox_processed_events=500,
+            final_outbox_failed_events=0,
+            final_outbox_pending_events_by_topic=(),
+            final_outbox_created_events_by_topic=(("transactions.persisted", 500),),
         ),
     )
 
@@ -363,6 +373,7 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     assert any("terminal_status is aborted" in failure for failure in report.failures)
     assert report.derived_state_resource_evidence is not None
     assert report.derived_state_resource_evidence.peak_runtime_cpu_percent == 40.0
+    assert report.derived_state_resource_evidence.final_outbox_pending_events == 0
 
 
 def test_database_tie_out_measures_both_materialization_stages_with_upsert_timestamps(

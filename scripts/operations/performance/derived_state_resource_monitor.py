@@ -41,6 +41,43 @@ _DATABASE_RESOURCE_QUERY = text(
     """
 )
 
+_OUTBOX_RESOURCE_QUERY = text(
+    """
+    SELECT
+      count(*) FILTER (WHERE status = 'PENDING') AS pending_events,
+      count(*) FILTER (WHERE status = 'PROCESSED') AS processed_events,
+      count(*) FILTER (WHERE status = 'FAILED') AS failed_events,
+      count(*) FILTER (
+        WHERE status = 'PENDING'
+          AND (next_attempt_at IS NULL OR next_attempt_at <= clock_timestamp())
+      ) AS retry_eligible_pending_events,
+      count(*) FILTER (
+        WHERE status = 'PENDING' AND next_attempt_at > clock_timestamp()
+      ) AS retry_waiting_pending_events,
+      coalesce(
+        extract(
+          epoch FROM clock_timestamp() - (
+            min(created_at) FILTER (WHERE status = 'PENDING')
+          )
+        ),
+        0
+      ) AS oldest_pending_age_seconds
+    FROM outbox_events
+    """
+)
+
+_OUTBOX_TOPIC_QUERY = text(
+    """
+    SELECT
+      topic,
+      count(*) AS created_events,
+      count(*) FILTER (WHERE status = 'PENDING') AS pending_events
+    FROM outbox_events
+    GROUP BY topic
+    ORDER BY topic
+    """
+)
+
 _MEMORY_UNIT_MULTIPLIERS = {
     "B": 1,
     "KB": 1000,
@@ -80,12 +117,27 @@ class RuntimeResourceUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class OutboxResourceUsage:
+    """One durable publication backlog and age observation."""
+
+    pending_events: int
+    processed_events: int
+    failed_events: int
+    retry_eligible_pending_events: int
+    retry_waiting_pending_events: int
+    oldest_pending_age_seconds: float
+    pending_events_by_topic: tuple[tuple[str, int], ...]
+    created_events_by_topic: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class DerivedStateResourceSample:
     """A time-aligned database and derived-state runtime observation."""
 
     captured_at: str
     database: DatabaseResourceUsage
     runtime: RuntimeResourceUsage
+    outbox: OutboxResourceUsage
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +156,16 @@ class DerivedStateResourceEvidence:
     peak_runtime_cpu_percent: float | None
     peak_runtime_memory_usage_bytes: int | None
     peak_runtime_memory_utilization_percent: float | None
+    peak_outbox_pending_events: int | None
+    peak_outbox_oldest_pending_age_seconds: float | None
+    peak_outbox_retry_eligible_pending_events: int | None
+    peak_outbox_retry_waiting_pending_events: int | None
+    peak_outbox_failed_events: int | None
+    final_outbox_pending_events: int | None
+    final_outbox_processed_events: int | None
+    final_outbox_failed_events: int | None
+    final_outbox_pending_events_by_topic: tuple[tuple[str, int], ...]
+    final_outbox_created_events_by_topic: tuple[tuple[str, int], ...]
 
 
 def parse_memory_bytes(value: str) -> int:
@@ -190,6 +252,30 @@ def read_database_resource_usage(*, engine: Engine) -> DatabaseResourceUsage:
     )
 
 
+def read_outbox_resource_usage(*, engine: Engine) -> OutboxResourceUsage:
+    """Read durable publication backlog, retry posture, age, and topic cohorts."""
+
+    with engine.connect() as connection:
+        totals = connection.execute(_OUTBOX_RESOURCE_QUERY).mappings().one()
+        topic_rows = connection.execute(_OUTBOX_TOPIC_QUERY).mappings().all()
+    return OutboxResourceUsage(
+        pending_events=int(totals["pending_events"]),
+        processed_events=int(totals["processed_events"]),
+        failed_events=int(totals["failed_events"]),
+        retry_eligible_pending_events=int(totals["retry_eligible_pending_events"]),
+        retry_waiting_pending_events=int(totals["retry_waiting_pending_events"]),
+        oldest_pending_age_seconds=round(float(totals["oldest_pending_age_seconds"]), 6),
+        pending_events_by_topic=tuple(
+            (str(row["topic"]), int(row["pending_events"]))
+            for row in topic_rows
+            if int(row["pending_events"]) > 0
+        ),
+        created_events_by_topic=tuple(
+            (str(row["topic"]), int(row["created_events"])) for row in topic_rows
+        ),
+    )
+
+
 def read_runtime_resource_usage(
     *,
     repo_root: Path,
@@ -241,6 +327,7 @@ def capture_resource_sample(
             compose_project_name=compose_project_name,
             service_name=service_name,
         ),
+        outbox=read_outbox_resource_usage(engine=engine),
     )
 
 
@@ -260,6 +347,7 @@ def summarize_resource_samples(
 
     sample_values = tuple(samples)
     error_values = tuple(sampling_errors)
+    final_outbox = sample_values[-1].outbox if sample_values else None
     return DerivedStateResourceEvidence(
         sample_count=len(sample_values),
         sampling_error_count=len(error_values),
@@ -290,6 +378,32 @@ def summarize_resource_samples(
         ),
         peak_runtime_memory_utilization_percent=_maximum(
             sample_values, lambda sample: sample.runtime.memory_utilization_percent
+        ),
+        peak_outbox_pending_events=_maximum(
+            sample_values, lambda sample: sample.outbox.pending_events
+        ),
+        peak_outbox_oldest_pending_age_seconds=_maximum(
+            sample_values, lambda sample: sample.outbox.oldest_pending_age_seconds
+        ),
+        peak_outbox_retry_eligible_pending_events=_maximum(
+            sample_values,
+            lambda sample: sample.outbox.retry_eligible_pending_events,
+        ),
+        peak_outbox_retry_waiting_pending_events=_maximum(
+            sample_values,
+            lambda sample: sample.outbox.retry_waiting_pending_events,
+        ),
+        peak_outbox_failed_events=_maximum(
+            sample_values, lambda sample: sample.outbox.failed_events
+        ),
+        final_outbox_pending_events=(final_outbox.pending_events if final_outbox else None),
+        final_outbox_processed_events=(final_outbox.processed_events if final_outbox else None),
+        final_outbox_failed_events=(final_outbox.failed_events if final_outbox else None),
+        final_outbox_pending_events_by_topic=(
+            final_outbox.pending_events_by_topic if final_outbox else ()
+        ),
+        final_outbox_created_events_by_topic=(
+            final_outbox.created_events_by_topic if final_outbox else ()
         ),
     )
 
@@ -324,10 +438,14 @@ class DerivedStateResourceMonitor:
         self._thread.start()
 
     def stop(self) -> None:
-        """Stop sampling and wait for the active observation to finish."""
+        """Stop sampling and append one final observation after the worker exits."""
 
         self._stop_event.set()
         self._thread.join(timeout=max(self._interval_seconds * 2, 5))
+        try:
+            self._samples.append(self._sample_reader())
+        except Exception as exc:
+            self._sampling_errors.append(type(exc).__name__)
 
     def evidence(self) -> DerivedStateResourceEvidence:
         """Return peak evidence and bounded sampling diagnostics."""
