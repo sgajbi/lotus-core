@@ -54,6 +54,24 @@ The gate writes:
 The JSON artifact is the machine-readable result. A source commit, unit test, or static guard is not
 a substitute for a passing managed artifact.
 
+## Current Validation
+
+Managed run `20260715T114232Z` on branch head `bf9203b3c` passed:
+
+- poison support evidence was visible in `0.139s`,
+- the DLQ topic grew from `0` to exactly `1`,
+- exactly one matching support event reported `VALIDATION_ERROR`,
+- the subsequent valid transaction materialized one snapshot, one position row, and one portfolio
+  row in `4.144s`,
+- source-consumer lag returned from baseline `0` to final `0`,
+- valuation and aggregation open-job counts were both `0`,
+- timeseries reconciliation returned `0` findings,
+- managed teardown left `0` containers, networks, and volumes.
+
+The local machine-readable artifact is
+`output/task-runs/20260715T114232Z-derived-state-poison-gate.json`. Mainline certification remains
+pending until the owning PR is merged and the gate is rerun on the exact main SHA.
+
 ## Failure Handling
 
 If the poison message is not visible in support evidence, inspect the exact managed project logs,
