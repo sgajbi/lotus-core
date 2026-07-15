@@ -92,10 +92,18 @@ The report records:
    position-timeseries, portfolio-timeseries, valuation jobs, and aggregation jobs,
 8. count and oldest completion timestamp for valuation jobs that are already `COMPLETE` but
    still have no matching position-timeseries row,
-9. valuation-to-position-timeseries handoff latency summary from durable facts,
+9. valuation-to-position and position-to-portfolio materialization latency summaries from durable
+   facts, including p50, p95, p99, maximum, and sample count for each stage,
 10. sampled positions, transaction-window, and support-overview API latencies,
 11. sampled reconciliation results,
 12. log evidence for core processing services.
+
+The valuation-to-position sample is one completed valuation job joined to its matching
+position-timeseries row. The position-to-portfolio sample is one portfolio, business date, and epoch;
+its clock starts when the last matching position row was updated and stops when the portfolio row was
+updated. Both stages use upsert-aware `updated_at` timestamps and clamp negative database-clock
+differences to zero. The scenario fails when the first-stage sample count differs from the generated
+position count or the second-stage sample count differs from the generated portfolio count.
 
 ## Live Institutional Run Notes
 

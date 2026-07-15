@@ -139,7 +139,13 @@ class DatabaseTieOut:
     valuation_to_position_timeseries_latency_sample_count: int
     valuation_to_position_timeseries_latency_p50_seconds: float | None
     valuation_to_position_timeseries_latency_p95_seconds: float | None
+    valuation_to_position_timeseries_latency_p99_seconds: float | None
     valuation_to_position_timeseries_latency_max_seconds: float | None
+    position_to_portfolio_timeseries_latency_sample_count: int
+    position_to_portfolio_timeseries_latency_p50_seconds: float | None
+    position_to_portfolio_timeseries_latency_p95_seconds: float | None
+    position_to_portfolio_timeseries_latency_p99_seconds: float | None
+    position_to_portfolio_timeseries_latency_max_seconds: float | None
 
 
 @dataclass(frozen=True)
@@ -719,6 +725,43 @@ def _build_database_tie_out(
             WHERE portfolio_id LIKE :portfolio_pattern
               AND date = :trade_date
             GROUP BY security_id
+        ),
+        valuation_to_position_latencies AS (
+            SELECT GREATEST(
+                EXTRACT(EPOCH FROM (pts.updated_at - pvj.updated_at)),
+                0
+            ) AS latency_seconds
+            FROM portfolio_valuation_jobs pvj
+            JOIN position_timeseries pts
+              ON pts.portfolio_id = pvj.portfolio_id
+             AND pts.security_id = pvj.security_id
+             AND pts.date = pvj.valuation_date
+             AND pts.epoch = pvj.epoch
+            WHERE pvj.portfolio_id LIKE :portfolio_pattern
+              AND pvj.valuation_date = :trade_date
+              AND pvj.status = 'COMPLETE'
+        ),
+        position_materialization_completion AS (
+            SELECT
+                portfolio_id,
+                date,
+                epoch,
+                max(updated_at) AS positions_materialized_at
+            FROM position_timeseries
+            WHERE portfolio_id LIKE :portfolio_pattern
+              AND date = :trade_date
+            GROUP BY portfolio_id, date, epoch
+        ),
+        position_to_portfolio_latencies AS (
+            SELECT GREATEST(
+                EXTRACT(EPOCH FROM (pfts.updated_at - pmc.positions_materialized_at)),
+                0
+            ) AS latency_seconds
+            FROM position_materialization_completion pmc
+            JOIN portfolio_timeseries pfts
+              ON pfts.portfolio_id = pmc.portfolio_id
+             AND pfts.date = pmc.date
+             AND pfts.epoch = pmc.epoch
         )
         SELECT
             (
@@ -860,52 +903,56 @@ def _build_database_tie_out(
             ) AS oldest_completed_valuation_without_position_timeseries_at_utc,
             (
                 SELECT count(*)
-                FROM portfolio_valuation_jobs pvj
-                JOIN position_timeseries pts
-                  ON pts.portfolio_id = pvj.portfolio_id
-                 AND pts.security_id = pvj.security_id
-                 AND pts.date = pvj.valuation_date
-                 AND pts.epoch = pvj.epoch
-                WHERE pvj.portfolio_id LIKE :portfolio_pattern
-                  AND pvj.status = 'COMPLETE'
+                FROM valuation_to_position_latencies
             ) AS valuation_to_position_timeseries_latency_sample_count,
             (
                 SELECT percentile_cont(0.5) WITHIN GROUP (
-                    ORDER BY GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0)
+                    ORDER BY latency_seconds
                 )
-                FROM portfolio_valuation_jobs pvj
-                JOIN position_timeseries pts
-                  ON pts.portfolio_id = pvj.portfolio_id
-                 AND pts.security_id = pvj.security_id
-                 AND pts.date = pvj.valuation_date
-                 AND pts.epoch = pvj.epoch
-                WHERE pvj.portfolio_id LIKE :portfolio_pattern
-                  AND pvj.status = 'COMPLETE'
+                FROM valuation_to_position_latencies
             ) AS valuation_to_position_timeseries_latency_p50_seconds,
             (
                 SELECT percentile_cont(0.95) WITHIN GROUP (
-                    ORDER BY GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0)
+                    ORDER BY latency_seconds
                 )
-                FROM portfolio_valuation_jobs pvj
-                JOIN position_timeseries pts
-                  ON pts.portfolio_id = pvj.portfolio_id
-                 AND pts.security_id = pvj.security_id
-                 AND pts.date = pvj.valuation_date
-                 AND pts.epoch = pvj.epoch
-                WHERE pvj.portfolio_id LIKE :portfolio_pattern
-                  AND pvj.status = 'COMPLETE'
+                FROM valuation_to_position_latencies
             ) AS valuation_to_position_timeseries_latency_p95_seconds,
             (
-                SELECT max(GREATEST(EXTRACT(EPOCH FROM (pts.created_at - pvj.updated_at)), 0))
-                FROM portfolio_valuation_jobs pvj
-                JOIN position_timeseries pts
-                  ON pts.portfolio_id = pvj.portfolio_id
-                 AND pts.security_id = pvj.security_id
-                 AND pts.date = pvj.valuation_date
-                 AND pts.epoch = pvj.epoch
-                WHERE pvj.portfolio_id LIKE :portfolio_pattern
-                  AND pvj.status = 'COMPLETE'
-            ) AS valuation_to_position_timeseries_latency_max_seconds
+                SELECT percentile_cont(0.99) WITHIN GROUP (
+                    ORDER BY latency_seconds
+                )
+                FROM valuation_to_position_latencies
+            ) AS valuation_to_position_timeseries_latency_p99_seconds,
+            (
+                SELECT max(latency_seconds)
+                FROM valuation_to_position_latencies
+            ) AS valuation_to_position_timeseries_latency_max_seconds,
+            (
+                SELECT count(*)
+                FROM position_to_portfolio_latencies
+            ) AS position_to_portfolio_timeseries_latency_sample_count,
+            (
+                SELECT percentile_cont(0.5) WITHIN GROUP (
+                    ORDER BY latency_seconds
+                )
+                FROM position_to_portfolio_latencies
+            ) AS position_to_portfolio_timeseries_latency_p50_seconds,
+            (
+                SELECT percentile_cont(0.95) WITHIN GROUP (
+                    ORDER BY latency_seconds
+                )
+                FROM position_to_portfolio_latencies
+            ) AS position_to_portfolio_timeseries_latency_p95_seconds,
+            (
+                SELECT percentile_cont(0.99) WITHIN GROUP (
+                    ORDER BY latency_seconds
+                )
+                FROM position_to_portfolio_latencies
+            ) AS position_to_portfolio_timeseries_latency_p99_seconds,
+            (
+                SELECT max(latency_seconds)
+                FROM position_to_portfolio_latencies
+            ) AS position_to_portfolio_timeseries_latency_max_seconds
         """,
         params,
     )
@@ -1026,9 +1073,37 @@ def _build_database_tie_out(
             if aggregate_row["valuation_to_position_timeseries_latency_p95_seconds"] is not None
             else None
         ),
+        valuation_to_position_timeseries_latency_p99_seconds=(
+            float(aggregate_row["valuation_to_position_timeseries_latency_p99_seconds"])
+            if aggregate_row["valuation_to_position_timeseries_latency_p99_seconds"] is not None
+            else None
+        ),
         valuation_to_position_timeseries_latency_max_seconds=(
             float(aggregate_row["valuation_to_position_timeseries_latency_max_seconds"])
             if aggregate_row["valuation_to_position_timeseries_latency_max_seconds"] is not None
+            else None
+        ),
+        position_to_portfolio_timeseries_latency_sample_count=int(
+            aggregate_row["position_to_portfolio_timeseries_latency_sample_count"] or 0
+        ),
+        position_to_portfolio_timeseries_latency_p50_seconds=(
+            float(aggregate_row["position_to_portfolio_timeseries_latency_p50_seconds"])
+            if aggregate_row["position_to_portfolio_timeseries_latency_p50_seconds"] is not None
+            else None
+        ),
+        position_to_portfolio_timeseries_latency_p95_seconds=(
+            float(aggregate_row["position_to_portfolio_timeseries_latency_p95_seconds"])
+            if aggregate_row["position_to_portfolio_timeseries_latency_p95_seconds"] is not None
+            else None
+        ),
+        position_to_portfolio_timeseries_latency_p99_seconds=(
+            float(aggregate_row["position_to_portfolio_timeseries_latency_p99_seconds"])
+            if aggregate_row["position_to_portfolio_timeseries_latency_p99_seconds"] is not None
+            else None
+        ),
+        position_to_portfolio_timeseries_latency_max_seconds=(
+            float(aggregate_row["position_to_portfolio_timeseries_latency_max_seconds"])
+            if aggregate_row["position_to_portfolio_timeseries_latency_max_seconds"] is not None
             else None
         ),
     )
@@ -1323,6 +1398,20 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         failures.append(f"open_valuation_jobs {tie_out.open_valuation_jobs} != 0")
     if tie_out.open_aggregation_jobs != 0:
         failures.append(f"open_aggregation_jobs {tie_out.open_aggregation_jobs} != 0")
+    expected_position_samples = int(report.config["transaction_count"])
+    if tie_out.valuation_to_position_timeseries_latency_sample_count != expected_position_samples:
+        failures.append(
+            "valuation_to_position_timeseries_latency_sample_count "
+            f"{tie_out.valuation_to_position_timeseries_latency_sample_count} != expected "
+            f"{expected_position_samples}"
+        )
+    expected_portfolio_samples = int(report.config["portfolio_count"])
+    if tie_out.position_to_portfolio_timeseries_latency_sample_count != expected_portfolio_samples:
+        failures.append(
+            "position_to_portfolio_timeseries_latency_sample_count "
+            f"{tie_out.position_to_portfolio_timeseries_latency_sample_count} != expected "
+            f"{expected_portfolio_samples}"
+        )
     for sample in report.sample_portfolios:
         expected_positions = int(report.config["transactions_per_portfolio"])
         if sample.positions_count != expected_positions:
@@ -1474,7 +1563,13 @@ def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> Datab
         valuation_to_position_timeseries_latency_sample_count=0,
         valuation_to_position_timeseries_latency_p50_seconds=None,
         valuation_to_position_timeseries_latency_p95_seconds=None,
+        valuation_to_position_timeseries_latency_p99_seconds=None,
         valuation_to_position_timeseries_latency_max_seconds=None,
+        position_to_portfolio_timeseries_latency_sample_count=0,
+        position_to_portfolio_timeseries_latency_p50_seconds=None,
+        position_to_portfolio_timeseries_latency_p95_seconds=None,
+        position_to_portfolio_timeseries_latency_p99_seconds=None,
+        position_to_portfolio_timeseries_latency_max_seconds=None,
     )
 
 

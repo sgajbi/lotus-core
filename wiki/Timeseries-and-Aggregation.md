@@ -42,6 +42,11 @@ age, claim/recovery counts, position and portfolio materialization latency, DLQ 
 pool pressure, and reconciliation outcomes. A missing instrument or FX source fails the owned job;
 Core does not publish a partial portfolio aggregate.
 
+The governed bank-day report records p50, p95, p99, maximum, and sample count for both
+valuation-to-position and position-to-portfolio materialization. Portfolio-stage samples are grouped
+once per portfolio, business date, and epoch and start from the final updated position input, avoiding
+security-count bias in large portfolios.
+
 `control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
 completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
 
