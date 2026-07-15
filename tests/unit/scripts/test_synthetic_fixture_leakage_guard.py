@@ -165,6 +165,29 @@ def test_synthetic_fixture_guard_rejects_external_service_email_allowlist(
     assert any(finding.rule == "invalid-allowed-service-email" for finding in findings)
 
 
+def test_synthetic_fixture_guard_ignores_java_identity_but_rejects_email(
+    tmp_path: Path,
+) -> None:
+    standard = _minimal_standard(tmp_path)
+    standard_path = _write_standard(tmp_path, standard)
+    _write(
+        tmp_path / "tests/fixtures/runtime.log",
+        (
+            "ServletContext@o.e.j.s.ServletContextHandler is starting\n"
+            "unexpected contact operator@example.com\n"
+        ),
+    )
+
+    findings = guard.evaluate_synthetic_fixture_governance(
+        repo_root=tmp_path,
+        standard_path=standard_path,
+    )
+
+    email_findings = [finding for finding in findings if finding.rule == "personal-email-address"]
+    assert len(email_findings) == 1
+    assert "operator" in email_findings[0].detail
+
+
 def test_synthetic_fixture_guard_rejects_uncataloged_cif_identifier(tmp_path: Path) -> None:
     standard = _minimal_standard(tmp_path)
     standard_path = _write_standard(tmp_path, standard)

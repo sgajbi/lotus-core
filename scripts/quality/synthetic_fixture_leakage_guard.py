@@ -46,6 +46,7 @@ DATABASE_URL_RE = re.compile(
     r"(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s/@]+:[^@\s]+@"
 )
 EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+JAVA_OBJECT_REFERENCE_RE = re.compile(r"[A-Z][A-Za-z0-9_$]*@(?:[a-z]\.){2,}[A-Z][A-Za-z0-9_$]*")
 CLIENT_NAME_JSON_RE = re.compile(
     r'"(?:client_display_name|client_name)"\s*:\s*"'
     r'((?!SYNTH_|Synthetic |Example |Demo )[A-Z][a-z]+ [A-Z][a-z]+)"'
@@ -409,12 +410,16 @@ def _evaluate_file(
     _append_regex_findings(findings, rel, "concrete-bearer-token", BEARER_RE, text)
     _append_regex_findings(findings, rel, "credentialed-database-url", DATABASE_URL_RE, text)
     for match in EMAIL_RE.finditer(text):
-        if match.group(0).lower() not in allowed_service_emails:
+        candidate = match.group(0)
+        if (
+            JAVA_OBJECT_REFERENCE_RE.fullmatch(candidate) is None
+            and candidate.lower() not in allowed_service_emails
+        ):
             findings.append(
                 SyntheticFixtureFinding(
                     path=rel,
                     rule="personal-email-address",
-                    detail=_redact_detail(match.group(0)),
+                    detail=_redact_detail(candidate),
                 )
             )
     _append_regex_findings(findings, rel, "real-looking-client-name", CLIENT_NAME_JSON_RE, text)
