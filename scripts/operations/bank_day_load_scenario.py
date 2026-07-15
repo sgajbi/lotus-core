@@ -16,6 +16,7 @@ import statistics
 import subprocess
 import threading
 import time
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -47,6 +48,7 @@ from scripts.operations.performance.market_price_correction import (
 from scripts.operations.performance.market_price_correction import (
     SyntheticInstrumentSpec as InstrumentSpec,
 )
+from tests.test_support.runtime.compose_fault_recovery import ComposeFaultRecoveryBoundary
 
 DEFAULT_INGESTION_BASE_URL = "http://localhost:8200"
 DEFAULT_QUERY_BASE_URL = "http://localhost:8201"
@@ -1810,6 +1812,11 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "fx_rate_correction_multiplier": (
             str(fx_correction_multiplier) if fx_correction_multiplier is not None else None
         ),
+        "restart_valuation_orchestrator_during_fx_correction": getattr(
+            args,
+            "restart_valuation_orchestrator_during_fx_correction",
+            False,
+        ),
     }
 
 
@@ -1918,6 +1925,10 @@ def main() -> int:
     parser.add_argument("--fx-rate-correction-from-currency", default=None)
     parser.add_argument("--fx-rate-correction-to-currency", default=None)
     parser.add_argument("--fx-rate-correction-multiplier", type=Decimal, default=None)
+    parser.add_argument(
+        "--restart-valuation-orchestrator-during-fx-correction",
+        action="store_true",
+    )
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-base-url", default=DEFAULT_QUERY_BASE_URL)
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
@@ -2242,8 +2253,21 @@ def main() -> int:
                 "SELECT clock_timestamp() AS correction_started_at",
                 {},
             )["correction_started_at"]
-            ingest_phases.append(
-                _ingest_static_payload(
+            fault_boundary = (
+                ComposeFaultRecoveryBoundary(
+                    project_name=args.compose_project_name,
+                    compose_file=args.compose_file,
+                    faulted_service="valuation_orchestrator_service",
+                    recovery_services=(),
+                    faulted_service_ready=lambda: None,
+                    recovery_services_ready=lambda: None,
+                    wait_timeout_seconds=args.readiness_timeout_seconds,
+                )
+                if args.restart_valuation_orchestrator_during_fx_correction
+                else nullcontext()
+            )
+            with fault_boundary:
+                correction_ingest_phase = _ingest_static_payload(
                     session=session,
                     base_url=args.ingestion_base_url,
                     endpoint="/ingest/fx-rates",
@@ -2256,7 +2280,7 @@ def main() -> int:
                     ),
                     phase="fx-rate-correction",
                 )
-            )
+            ingest_phases.append(correction_ingest_phase)
             fx_correction_evidence = wait_for_fx_corrected_derived_state(
                 row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
                 run_id=run_id,

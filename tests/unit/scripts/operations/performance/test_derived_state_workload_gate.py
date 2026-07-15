@@ -73,6 +73,7 @@ def test_fx_restatement_profile_rebuilds_only_the_affected_direct_pair() -> None
     assert profile.fx_rate_correction_from_currency == "EUR"
     assert profile.fx_rate_correction_to_currency == "USD"
     assert profile.fx_rate_correction_multiplier == Decimal("1.05")
+    assert profile.restart_valuation_orchestrator_during_fx_correction is True
     assert profile.certifying is True
 
 
@@ -238,6 +239,7 @@ def test_fx_restatement_command_requests_a_five_day_direct_pair_correction(
     assert command[command.index("--fx-rate-correction-from-currency") + 1] == "EUR"
     assert command[command.index("--fx-rate-correction-to-currency") + 1] == "USD"
     assert command[command.index("--fx-rate-correction-multiplier") + 1] == "1.05"
+    assert "--restart-valuation-orchestrator-during-fx-correction" in command
 
 
 def test_certifying_profile_requires_exact_source_build() -> None:
