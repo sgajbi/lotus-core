@@ -19,6 +19,9 @@ from scripts.operations.bank_day_load_scenario import (
     expected_portfolio_market_value,
     iter_transaction_batches,
 )
+from scripts.operations.performance.derived_state_resource_monitor import (
+    DerivedStateResourceEvidence,
+)
 
 
 def test_log_evidence_uses_the_combined_transaction_processing_runtime() -> None:
@@ -128,6 +131,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "portfolio_count": 2,
             "transactions_per_portfolio": 3,
             "transaction_count": 6,
+            "derived_state_resource_evidence_required": True,
         },
         ingest_phases=[],
         drain_seconds=120.0,
@@ -226,6 +230,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
         ],
         checks_passed=False,
         failures=[],
+        derived_state_resource_evidence=None,
     )
 
     failures = _evaluate_report(report)
@@ -250,6 +255,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("reconciliation findings=1" in failure for failure in failures)
     assert any("API probe failed /broken status=500" in failure for failure in failures)
     assert any("svc logged 2 error/traceback lines" in failure for failure in failures)
+    assert any("derived-state resource evidence has no samples" in failure for failure in failures)
 
 
 def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evidence() -> None:
@@ -267,6 +273,8 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             query_control_base_url="http://localhost:8202",
             event_replay_base_url="http://localhost:8209",
             reconciliation_base_url="http://localhost:8210",
+            resource_poll_interval_seconds=5.0,
+            derived_state_service="portfolio_derived_state_service",
         ),
         run_id="RUN1",
         terminal_status="aborted",
@@ -327,12 +335,28 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
         api_probes=[],
         log_evidence=[],
         initial_failures=["received SIGINT"],
+        derived_state_resource_evidence=DerivedStateResourceEvidence(
+            sample_count=2,
+            sampling_error_count=0,
+            sampling_error_types=(),
+            peak_database_total_connections=12,
+            peak_database_active_connections=5,
+            peak_database_idle_in_transaction_connections=0,
+            peak_database_lock_waiters=0,
+            peak_database_blocked_sessions=0,
+            peak_database_connection_utilization_percent=12.0,
+            peak_runtime_cpu_percent=40.0,
+            peak_runtime_memory_usage_bytes=268435456,
+            peak_runtime_memory_utilization_percent=25.0,
+        ),
     )
 
     assert report.terminal_status == "aborted"
     assert report.checks_passed is False
     assert any("received SIGINT" in failure for failure in report.failures)
     assert any("terminal_status is aborted" in failure for failure in report.failures)
+    assert report.derived_state_resource_evidence is not None
+    assert report.derived_state_resource_evidence.peak_runtime_cpu_percent == 40.0
 
 
 def test_database_tie_out_measures_both_materialization_stages_with_upsert_timestamps(

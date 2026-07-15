@@ -26,6 +26,12 @@ import requests  # type: ignore[import-untyped]
 from portfolio_common.db import get_sync_database_url
 from sqlalchemy import create_engine, text
 
+from scripts.operations.performance.derived_state_resource_monitor import (
+    DerivedStateResourceEvidence,
+    DerivedStateResourceMonitor,
+    capture_resource_sample,
+)
+
 DEFAULT_INGESTION_BASE_URL = "http://localhost:8200"
 DEFAULT_QUERY_BASE_URL = "http://localhost:8201"
 DEFAULT_QUERY_CONTROL_BASE_URL = "http://localhost:8202"
@@ -186,6 +192,7 @@ class ScenarioReport:
     log_evidence: list[LogEvidence]
     checks_passed: bool
     failures: list[str]
+    derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
 
 
 class HealthMonitor:
@@ -1445,6 +1452,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
             failures.append(
                 f"{log.container_name} logged {log.error_line_count} error/traceback lines"
             )
+    if bool(report.config.get("derived_state_resource_evidence_required")) and (
+        report.derived_state_resource_evidence is None
+        or report.derived_state_resource_evidence.sample_count == 0
+    ):
+        failures.append("derived-state resource evidence has no samples")
     return failures
 
 
@@ -1487,6 +1499,17 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             f"- Peak backlog age seconds: {report.peak_backlog_age_seconds}",
             f"- Peak replay pressure ratio: {report.peak_replay_pressure_ratio}",
             f"- Peak DLQ events in window: {report.peak_dlq_events_in_window}",
+            "",
+            "## Derived-State Resource Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.derived_state_resource_evidence)
+                if report.derived_state_resource_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
             "",
             "## Database Tie-Out",
             "",
@@ -1660,6 +1683,9 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "query_control_base_url": args.query_control_base_url,
         "event_replay_base_url": args.event_replay_base_url,
         "reconciliation_base_url": args.reconciliation_base_url,
+        "derived_state_service": args.derived_state_service,
+        "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
+        "derived_state_resource_evidence_required": True,
     }
 
 
@@ -1679,6 +1705,7 @@ def _finalize_report(
     api_probes: list[ApiProbeResult],
     log_evidence: list[LogEvidence],
     initial_failures: list[str],
+    derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
         scenario_name=args.scenario_name,
@@ -1710,6 +1737,7 @@ def _finalize_report(
         log_evidence=log_evidence,
         checks_passed=False,
         failures=[],
+        derived_state_resource_evidence=derived_state_resource_evidence,
     )
     failures = initial_failures + _evaluate_report(report_base)
     return ScenarioReport(
@@ -1733,6 +1761,7 @@ def _finalize_report(
         log_evidence=report_base.log_evidence,
         checks_passed=len(failures) == 0,
         failures=failures,
+        derived_state_resource_evidence=report_base.derived_state_resource_evidence,
     )
 
 
@@ -1759,16 +1788,25 @@ def main() -> int:
     parser.add_argument("--readiness-timeout-seconds", type=int, default=180)
     parser.add_argument("--drain-timeout-seconds", type=int, default=3600)
     parser.add_argument("--health-poll-interval-seconds", type=float, default=5.0)
+    parser.add_argument("--resource-poll-interval-seconds", type=float, default=5.0)
+    parser.add_argument(
+        "--derived-state-service",
+        default="portfolio_derived_state_service",
+    )
     parser.add_argument("--max-records-per-minute", type=int, default=45000)
     parser.add_argument("--max-requests-per-minute", type=int, default=450)
     parser.add_argument("--rate-limit-sleep-seconds", type=int, default=60)
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args()
 
+    if args.portfolio_count <= 0:
+        raise ValueError("portfolio_count must be positive.")
     if args.transactions_per_portfolio <= 0:
         raise ValueError("transactions_per_portfolio must be positive.")
     if args.sample_size <= 0:
         raise ValueError("sample_size must be positive.")
+    if args.resource_poll_interval_seconds <= 0:
+        raise ValueError("resource_poll_interval_seconds must be positive.")
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
@@ -1807,6 +1845,17 @@ def main() -> int:
         ops_token=args.ops_token,
         interval_seconds=args.health_poll_interval_seconds,
     )
+    repo_root = Path(__file__).resolve().parents[2]
+    resource_monitor = DerivedStateResourceMonitor(
+        sample_reader=lambda: capture_resource_sample(
+            engine=engine,
+            repo_root=repo_root,
+            compose_file=args.compose_file,
+            compose_project_name=args.compose_project_name,
+            service_name=args.derived_state_service,
+        ),
+        interval_seconds=args.resource_poll_interval_seconds,
+    )
     started_monotonic = time.perf_counter()
     terminal_status = "failed"
     partial_failures: list[str] = []
@@ -1820,6 +1869,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _request_interrupt)
     signal.signal(signal.SIGTERM, _request_interrupt)
     health_monitor.start()
+    resource_monitor.start()
     try:
         ingest_phases.append(
             _ingest_static_payload(
@@ -1958,6 +2008,7 @@ def main() -> int:
         partial_failures.append(str(exc))
         terminal_status = "failed"
     finally:
+        resource_monitor.stop()
         health_monitor.stop()
         signal.signal(signal.SIGINT, previous_sigint)
         signal.signal(signal.SIGTERM, previous_sigterm)
@@ -2000,6 +2051,7 @@ def main() -> int:
         api_probes=api_probes,
         log_evidence=log_evidence,
         initial_failures=partial_failures + sample_failures + tie_out_failures + log_failures,
+        derived_state_resource_evidence=resource_monitor.evidence(),
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
     print(f"Wrote JSON report: {json_path}")

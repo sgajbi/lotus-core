@@ -113,6 +113,7 @@ compatibility package.
 | Durable valuation-to-position latency evidence | p50 / p95 / max, insert-oriented | p50 / p95 / p99 / max, upsert-aware |
 | Durable position-to-portfolio latency evidence | none | one sample per portfolio/date/epoch |
 | Missing latency evidence posture | report could remain green | stage sample counts fail closed |
+| DB/container workload resource evidence | none | peak connection, lock, CPU, and memory samples |
 
 The generator test count initially stayed stable because database-heavy consumer scenarios moved
 to application and infrastructure owners instead of being deleted; it now includes an additional
@@ -235,6 +236,10 @@ cross-window state.
 - The focused bank-day, reconciliation-report, and institutional-sign-off tooling suite passes
   `25` tests; scenario MyPy, CI-pinned Ruff `0.15.18`, documentation/wiki gates, and diff checks
   pass. PostgreSQL execution and measured percentiles remain runtime evidence, not source proof.
+- Resource evidence is implemented in the organized `scripts/operations/performance` package. It
+  samples database connection capacity, active and idle-in-transaction sessions, lock waiters,
+  blocked sessions, and exact-container CPU/memory; peak evidence is additive to the bank-day JSON
+  and Markdown reports, and a governed run without a complete sample fails closed.
 - Signed commit `dbdd729ed` adds a managed interruption gate that pauses the exact unified
   container, proves source snapshots and committed lag accumulate, then requires exact output
   counts, closed valuation/aggregation queues, baseline lag recovery, zero reconciliation
