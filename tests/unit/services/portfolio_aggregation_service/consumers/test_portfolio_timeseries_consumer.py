@@ -1,7 +1,7 @@
 # tests/unit/services/portfolio_aggregation_service/consumers/test_portfolio_timeseries_consumer.py
 import logging
 from datetime import date
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from portfolio_common.database_models import (
@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.portfolio_aggregation_service.app.consumers.portfolio_timeseries_consumer import (
     PortfolioTimeseriesConsumer,
+)
+from src.services.portfolio_aggregation_service.app.domain.aggregation_records import (
+    AggregationJobCompletionDisposition,
 )
 from src.services.portfolio_aggregation_service.app.infrastructure import (
     portfolio_aggregation_repository,
@@ -118,35 +121,31 @@ async def test_process_message_success(
     mock_repo.get_current_epoch_for_portfolio.return_value = 2  # Simulate current epoch is 2
     mock_repo.get_all_position_timeseries_for_date.return_value = []
 
-    with patch.object(
-        consumer, "_complete_or_requeue_job", new_callable=AsyncMock
-    ) as mock_complete_or_requeue:
-        mock_complete_or_requeue.return_value = "COMPLETE"
-        # ACT
-        await consumer.process_message(mock_kafka_message)
+    mock_repo.complete_or_requeue_job.return_value = AggregationJobCompletionDisposition.COMPLETE
 
-        # ASSERT
-        mock_repo.get_current_epoch_for_portfolio.assert_called_once_with(mock_event.portfolio_id)
-        mock_repo.get_all_position_timeseries_for_date.assert_called_once_with(
-            mock_event.portfolio_id,
-            mock_event.aggregation_date,
-            2,  # Assert it uses the fetched epoch
-        )
-        mock_logic.assert_awaited_once()
-        assert mock_logic.call_args.kwargs["epoch"] == 2
-        mock_repo.upsert_portfolio_timeseries.assert_called_once()
-        mock_complete_or_requeue.assert_called_once_with(
-            mock_event.portfolio_id, mock_event.aggregation_date, db_session=ANY
-        )
-        assert mock_outbox_repo.create_outbox_event.await_count == 2
-        assert [
-            call.kwargs["event_type"]
-            for call in mock_outbox_repo.create_outbox_event.await_args_list
-        ] == ["PortfolioAggregationDayCompleted", "FinancialReconciliationRequested"]
-        assert all(
-            call.kwargs["correlation_id"] == "test-corr-id"
-            for call in mock_outbox_repo.create_outbox_event.await_args_list
-        )
+    await consumer.process_message(mock_kafka_message)
+
+    mock_repo.get_current_epoch_for_portfolio.assert_called_once_with(mock_event.portfolio_id)
+    mock_repo.get_all_position_timeseries_for_date.assert_called_once_with(
+        mock_event.portfolio_id,
+        mock_event.aggregation_date,
+        2,
+    )
+    mock_logic.assert_awaited_once()
+    assert mock_logic.call_args.kwargs["epoch"] == 2
+    mock_repo.upsert_portfolio_timeseries.assert_called_once()
+    mock_repo.complete_or_requeue_job.assert_awaited_once_with(
+        mock_event.portfolio_id,
+        mock_event.aggregation_date,
+    )
+    assert mock_outbox_repo.create_outbox_event.await_count == 2
+    assert [
+        call.kwargs["event_type"] for call in mock_outbox_repo.create_outbox_event.await_args_list
+    ] == ["PortfolioAggregationDayCompleted", "FinancialReconciliationRequested"]
+    assert all(
+        call.kwargs["correlation_id"] == "test-corr-id"
+        for call in mock_outbox_repo.create_outbox_event.await_args_list
+    )
 
 
 async def test_process_message_uses_header_correlation_on_direct_path(
@@ -167,12 +166,10 @@ async def test_process_message_uses_header_correlation_on_direct_path(
 
     token = correlation_id_var.set("<not-set>")
     try:
-        with patch.object(
-            consumer,
-            "_complete_or_requeue_job",
-            new=AsyncMock(return_value="COMPLETE"),
-        ):
-            await consumer.process_message(mock_kafka_message)
+        mock_repo.complete_or_requeue_job.return_value = (
+            AggregationJobCompletionDisposition.COMPLETE
+        )
+        await consumer.process_message(mock_kafka_message)
     finally:
         correlation_id_var.reset(token)
 
@@ -199,18 +196,15 @@ async def test_process_message_skips_completion_side_effects_when_job_ownership_
     mock_repo.get_current_epoch_for_portfolio.return_value = 2
     mock_repo.get_all_position_timeseries_for_date.return_value = []
 
-    with patch.object(
-        consumer,
-        "_complete_or_requeue_job",
-        new=AsyncMock(return_value="LOST_OWNERSHIP"),
-    ) as mock_complete_or_requeue:
-        await consumer.process_message(mock_kafka_message)
+    mock_repo.complete_or_requeue_job.return_value = (
+        AggregationJobCompletionDisposition.LOST_OWNERSHIP
+    )
+    await consumer.process_message(mock_kafka_message)
 
     mock_logic.assert_awaited_once()
-    mock_complete_or_requeue.assert_awaited_once_with(
+    mock_repo.complete_or_requeue_job.assert_awaited_once_with(
         mock_event.portfolio_id,
         mock_event.aggregation_date,
-        db_session=ANY,
     )
     mock_repo.upsert_portfolio_timeseries.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
@@ -232,18 +226,27 @@ async def test_process_message_requeues_late_material_input_without_side_effects
     mock_repo.get_current_epoch_for_portfolio.return_value = 2
     mock_repo.get_all_position_timeseries_for_date.return_value = []
 
-    with patch.object(
-        consumer,
-        "_complete_or_requeue_job",
-        new=AsyncMock(return_value="REQUEUED"),
-    ) as mock_complete_or_requeue:
-        await consumer.process_message(mock_kafka_message)
+    mock_repo.complete_or_requeue_job.return_value = AggregationJobCompletionDisposition.REQUEUED
+    await consumer.process_message(mock_kafka_message)
 
     mock_logic.assert_awaited_once()
-    mock_complete_or_requeue.assert_awaited_once_with(
+    mock_repo.complete_or_requeue_job.assert_awaited_once_with(
         mock_event.portfolio_id,
         mock_event.aggregation_date,
-        db_session=ANY,
     )
     mock_repo.upsert_portfolio_timeseries.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
+
+
+async def test_process_message_routes_missing_payload_to_dlq(
+    consumer: PortfolioTimeseriesConsumer,
+    mock_dependencies: dict,
+) -> None:
+    message = MagicMock()
+    message.value.return_value = None
+    message.headers.return_value = []
+
+    await consumer.process_message(message)
+
+    mock_dependencies["repo"].get_portfolio.assert_not_awaited()
+    consumer._send_to_dlq_async.assert_awaited_once()

@@ -1,31 +1,32 @@
-# src/services/portfolio_aggregation_service/app/consumers/portfolio_timeseries_consumer.py
+"""Kafka delivery and transitional orchestration for portfolio aggregation jobs."""
+
+from __future__ import annotations
+
 import json
 import logging
 from datetime import date
-from typing import Optional
 
 from confluent_kafka import Message
-from portfolio_common.database_models import PortfolioAggregationJob
 from portfolio_common.db import get_async_db_session
 from portfolio_common.events import PortfolioAggregationRequiredEvent
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
-from sqlalchemy import func, update
 
 from ..application.stage_portfolio_aggregation_completion import (
     StagePortfolioAggregationCompletion,
 )
 from ..core.portfolio_timeseries_logic import PortfolioTimeseriesLogic
-from ..domain.aggregation_records import PortfolioAggregationCompletion
+from ..domain.aggregation_records import (
+    AggregationJobCompletionDisposition,
+    PortfolioAggregationCompletion,
+)
 from ..infrastructure.aggregation_completion_event_stager import (
     TransactionalAggregationCompletionEventStager,
 )
 from ..infrastructure.portfolio_aggregation_repository import PortfolioAggregationRepository
 
 logger = logging.getLogger(__name__)
-
-AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
 
 
 class PortfolioTimeseriesConsumer(BaseConsumer):
@@ -34,17 +35,20 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
     record for the correct epoch, and updates the job status upon completion.
     """
 
-    async def process_message(self, msg: Message):
+    async def process_message(self, msg: Message) -> None:
         try:
-            event_data = json.loads(msg.value().decode("utf-8"))
+            event_data = json.loads(_message_value(msg))
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
                 event = PortfolioAggregationRequiredEvent.model_validate(event_data)
 
-                work_key = (event.portfolio_id, event.aggregation_date)
-                logger.info(f"Received aggregation job for {work_key}.")
+                logger.info(
+                    "Received aggregation job for (%s, %s).",
+                    event.portfolio_id,
+                    event.aggregation_date,
+                )
 
                 await self._perform_aggregation(
                     portfolio_id=event.portfolio_id,
@@ -52,28 +56,31 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                     correlation_id=correlation_id,
                 )
 
-        except (json.JSONDecodeError, ValidationError) as e:
+        except (json.JSONDecodeError, ValidationError) as error:
             logger.error(
                 "Message validation for aggregation job failed: %s. Sending to DLQ.",
-                e,
+                error,
                 exc_info=True,
             )
-            await self._send_to_dlq_async(msg, e)
-        except Exception as e:
+            await self._send_to_dlq_async(msg, error)
+        except Exception as error:
             logger.error(
                 "Unexpected error processing aggregation job for %s: %s",
                 msg.key(),
-                e,
+                error,
                 exc_info=True,
             )
             event = locals().get("event")
             if event:
-                await self._update_job_status(event.portfolio_id, event.aggregation_date, "FAILED")
-            await self._send_to_dlq_async(msg, e)
+                await self._mark_job_failed(event.portfolio_id, event.aggregation_date)
+            await self._send_to_dlq_async(msg, error)
 
     async def _perform_aggregation(
-        self, portfolio_id: str, a_date: date, correlation_id: Optional[str]
-    ):
+        self,
+        portfolio_id: str,
+        a_date: date,
+        correlation_id: str | None,
+    ) -> None:
         try:
             async for db in get_async_db_session():
                 async with db.begin():
@@ -98,18 +105,14 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                         repo=repo,
                     )
 
-                    terminal_status = await self._complete_or_requeue_job(
-                        portfolio_id,
-                        a_date,
-                        db_session=db,
-                    )
-                    if terminal_status == "REQUEUED":
+                    disposition = await repo.complete_or_requeue_job(portfolio_id, a_date)
+                    if disposition is AggregationJobCompletionDisposition.REQUEUED:
                         logger.info(
                             "Requeued aggregation job after late material input.",
                             extra={"portfolio_id": portfolio_id, "aggregation_date": str(a_date)},
                         )
                         return
-                    if terminal_status != "COMPLETE":
+                    if disposition is not AggregationJobCompletionDisposition.COMPLETE:
                         logger.warning(
                             "Skipping aggregation completion side effects after losing "
                             "job ownership.",
@@ -143,67 +146,20 @@ class PortfolioTimeseriesConsumer(BaseConsumer):
                 a_date,
                 exc_info=True,
             )
-            await self._update_job_status(portfolio_id, a_date, "FAILED")
+            await self._mark_job_failed(portfolio_id, a_date)
 
-    async def _complete_or_requeue_job(
-        self, portfolio_id: str, a_date: date, db_session=None
-    ) -> str:
-        requeue_stmt = (
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == a_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-                PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED,
-            )
-            .values(status="PENDING", failure_reason=None, updated_at=func.now())
-        )
-        complete_stmt = (
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == a_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-            )
-            .values(status="COMPLETE", failure_reason=None, updated_at=func.now())
-        )
-
-        async def _execute(db) -> str:
-            requeue_result = await db.execute(requeue_stmt)
-            if requeue_result.rowcount == 1:
-                return "REQUEUED"
-            complete_result = await db.execute(complete_stmt)
-            if complete_result.rowcount == 1:
-                return "COMPLETE"
-            return "LOST_OWNERSHIP"
-
-        if db_session:
-            return await _execute(db_session)
-
+    async def _mark_job_failed(self, portfolio_id: str, a_date: date) -> bool:
         async for db in get_async_db_session():
             async with db.begin():
-                return await _execute(db)
-        return "LOST_OWNERSHIP"
-
-    async def _update_job_status(
-        self, portfolio_id: str, a_date: date, status: str, db_session=None
-    ) -> bool:
-        update_stmt = (
-            update(PortfolioAggregationJob)
-            .where(
-                PortfolioAggregationJob.portfolio_id == portfolio_id,
-                PortfolioAggregationJob.aggregation_date == a_date,
-                PortfolioAggregationJob.status == "PROCESSING",
-            )
-            .values(status=status, updated_at=func.now())
-        )
-
-        if db_session:
-            result = await db_session.execute(update_stmt)
-            return int(result.rowcount or 0) == 1
-
-        async for db in get_async_db_session():
-            async with db.begin():
-                result = await db.execute(update_stmt)
-                return int(result.rowcount or 0) == 1
+                return await PortfolioAggregationRepository(db).mark_job_failed(
+                    portfolio_id,
+                    a_date,
+                )
         return False
+
+
+def _message_value(msg: Message) -> str:
+    value = msg.value()
+    if value is None:
+        raise ValueError("Portfolio aggregation job payload is missing")
+    return value.decode("utf-8")

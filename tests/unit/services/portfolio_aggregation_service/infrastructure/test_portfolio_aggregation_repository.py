@@ -9,6 +9,9 @@ from portfolio_common.database_models import PortfolioTimeseries
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.portfolio_aggregation_service.app.domain.aggregation_records import (
+    AggregationJobCompletionDisposition,
+)
 from src.services.portfolio_aggregation_service.app.infrastructure import (
     portfolio_aggregation_repository,
 )
@@ -344,3 +347,83 @@ async def test_get_all_position_timeseries_for_date_returns_immutable_records(
     assert records[0].security_id == "S1"
     assert records[0].eod_market_value == Decimal("110")
     assert records[0] is not row
+
+
+async def test_complete_or_requeue_job_requeues_late_material_input(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    requeued = MagicMock(rowcount=1)
+    mock_db_session.execute.return_value = requeued
+
+    disposition = await repository.complete_or_requeue_job(
+        "PORT-1",
+        date(2025, 8, 21),
+    )
+
+    assert disposition is AggregationJobCompletionDisposition.REQUEUED
+    mock_db_session.execute.assert_awaited_once()
+    compiled = str(
+        mock_db_session.execute.await_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "status='PENDING'" in compiled
+    assert "portfolio_aggregation_jobs.failure_reason = 'REPROCESS_REQUESTED'" in compiled
+
+
+async def test_complete_or_requeue_job_completes_owned_job(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=1)]
+
+    disposition = await repository.complete_or_requeue_job(
+        "PORT-1",
+        date(2025, 8, 21),
+    )
+
+    assert disposition is AggregationJobCompletionDisposition.COMPLETE
+    complete_statement = mock_db_session.execute.await_args_list[1].args[0]
+    compiled = str(
+        complete_statement.compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "status='COMPLETE'" in compiled
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
+
+
+async def test_complete_or_requeue_job_reports_lost_ownership(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.side_effect = [MagicMock(rowcount=0), MagicMock(rowcount=0)]
+
+    disposition = await repository.complete_or_requeue_job(
+        "PORT-1",
+        date(2025, 8, 21),
+    )
+
+    assert disposition is AggregationJobCompletionDisposition.LOST_OWNERSHIP
+
+
+async def test_mark_job_failed_only_updates_owned_processing_job(
+    repository: PortfolioAggregationRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_db_session.execute.return_value = MagicMock(rowcount=1)
+
+    updated = await repository.mark_job_failed("PORT-1", date(2025, 8, 21))
+
+    assert updated is True
+    compiled = str(
+        mock_db_session.execute.await_args.args[0].compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    assert "status='FAILED'" in compiled
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in compiled
