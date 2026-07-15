@@ -42,6 +42,11 @@ renewed or reclaimed job cannot be overwritten by stale work.
 One poll may claim only the configured batch size. Processing concurrency must remain bounded by
 `PORTFOLIO_AGGREGATION_WORKER_COUNT`; it must not create an unbounded in-memory backlog.
 
+The metrics adapter must expose bounded lifecycle outcomes for lease recovery, claims, completion,
+requeue, lost ownership, terminal failure, and unexpected execution failure. Application
+orchestration reports typed counts through `AggregationSchedulerMetricsSink`; it must not import or
+call concrete Prometheus functions.
+
 ## Enforcement
 
 `make architecture-guard` runs `scripts/quality/aggregation_scheduler_boundary_guard.py`. Package

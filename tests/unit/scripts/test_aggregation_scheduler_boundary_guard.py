@@ -77,7 +77,8 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
         ".flush(\n"
         "set_control_queue_pending\n"
         "set_control_queue_failed_stored\n"
-        "set_control_queue_oldest_pending_age_seconds\n",
+        "set_control_queue_oldest_pending_age_seconds\n"
+        "observe_control_queue_outcome\n",
     )
 
     findings = find_aggregation_scheduler_boundary_findings(tmp_path)
@@ -92,6 +93,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_runtime_coupling_in_schedu
         "set_control_queue_pending",
         "set_control_queue_failed_stored",
         "set_control_queue_oldest_pending_age_seconds",
+        "observe_control_queue_outcome",
     ]
 
 

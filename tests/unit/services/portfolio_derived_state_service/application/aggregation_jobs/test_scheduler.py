@@ -64,6 +64,9 @@ class FakeMetrics:
         self.pending = []
         self.failed = []
         self.oldest = []
+        self.recoveries = []
+        self.claimed = []
+        self.processed = []
 
     def set_pending(self, count):
         self.pending.append(count)
@@ -73,6 +76,15 @@ class FakeMetrics:
 
     def set_oldest_pending_age_seconds(self, age_seconds):
         self.oldest.append(age_seconds)
+
+    def observe_recovery(self, recovery):
+        self.recoveries.append(recovery)
+
+    def observe_claimed(self, count):
+        self.claimed.append(count)
+
+    def observe_processed(self, result):
+        self.processed.append(result)
 
 
 class FixedClock:
@@ -131,6 +143,9 @@ async def test_scheduler_recovers_expiry_then_leases_and_processes_ready_batch()
     assert metrics.pending == [2, 2]
     assert metrics.failed == [1, 1]
     assert metrics.oldest == [120.0, 120.0]
+    assert metrics.recoveries == [ExpiredAggregationJobRecovery(requeued_count=1, failed_count=0)]
+    assert metrics.claimed == [1]
+    assert metrics.processed == [AggregationJobBatchResult(complete_count=1)]
 
 
 async def test_scheduler_stop_interrupts_poll_wait() -> None:

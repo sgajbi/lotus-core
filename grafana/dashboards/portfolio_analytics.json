@@ -1708,9 +1708,20 @@
           "legendFormat": "{{queue}} oldest age",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage, outcome) (rate(control_queue_operations_total{queue=\"aggregation\"}[5m]))",
+          "legendFormat": "aggregation {{stage}} {{outcome}}",
+          "range": true,
+          "refId": "D"
         }
       ],
-      "title": "Control Queue Pressure",
+      "title": "Control Queue Pressure and Outcomes",
       "type": "timeseries"
     },
     {

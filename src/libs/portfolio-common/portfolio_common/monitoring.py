@@ -377,6 +377,12 @@ _CONTROL_QUEUE_OLDEST_PENDING_AGE_SECONDS = Gauge(
     labelnames=("queue",),
 )
 
+_CONTROL_QUEUE_OPERATIONS = Counter(
+    "control_queue_operations_total",
+    "Durable control queue operations by bounded stage and outcome.",
+    labelnames=("queue", "stage", "outcome"),
+)
+
 
 def observe_outbox_published(aggregate_type: str, topic: str, count: int = 1) -> None:
     _OUTBOX_PUBLISHED.labels(aggregate_type, topic).inc(count)
@@ -434,6 +440,18 @@ def set_control_queue_failed_stored(queue: str, total_failed: int) -> None:
 
 def set_control_queue_oldest_pending_age_seconds(queue: str, age_seconds: float) -> None:
     _CONTROL_QUEUE_OLDEST_PENDING_AGE_SECONDS.labels(queue).set(age_seconds)
+
+
+def observe_control_queue_outcome(
+    queue: str,
+    stage: str,
+    outcome: str,
+    count: int = 1,
+) -> None:
+    """Count a bounded durable-queue lifecycle outcome."""
+
+    if count > 0:
+        _CONTROL_QUEUE_OPERATIONS.labels(queue, stage, outcome).inc(count)
 
 
 # --------------------------------------------------------------------------------------
