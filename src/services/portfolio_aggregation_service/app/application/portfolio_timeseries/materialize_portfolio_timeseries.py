@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import logging
 
-from ...core.portfolio_timeseries_logic import PortfolioTimeseriesLogic
 from ...domain.aggregation_records import (
     AggregationJobCompletionDisposition,
     PortfolioAggregationCompletion,
 )
 from ...ports.aggregation_completion import AggregationCompletionEventStager
 from ...ports.portfolio_timeseries import (
-    PortfolioTimeseriesCalculator,
+    PortfolioTimeseriesCalculation,
     PortfolioTimeseriesRepository,
     PortfolioTimeseriesUnitOfWorkProvider,
 )
 from ..stage_portfolio_aggregation_completion import StagePortfolioAggregationCompletion
+from .calculation import CalculatePortfolioTimeseries
 from .commands import (
     MaterializePortfolioTimeseriesCommand,
     PortfolioTimeseriesMaterializationResult,
@@ -33,10 +33,10 @@ class MaterializePortfolioTimeseries:
         self,
         *,
         unit_of_work_provider: PortfolioTimeseriesUnitOfWorkProvider,
-        calculator: PortfolioTimeseriesCalculator = PortfolioTimeseriesLogic,
+        calculator: PortfolioTimeseriesCalculation | None = None,
     ) -> None:
         self._unit_of_work_provider = unit_of_work_provider
-        self._calculator = calculator
+        self._calculator = calculator or CalculatePortfolioTimeseries()
 
     async def execute(
         self,
