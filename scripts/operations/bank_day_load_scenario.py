@@ -31,6 +31,11 @@ from scripts.operations.performance.derived_state_resource_monitor import (
     DerivedStateResourceMonitor,
     capture_resource_sample,
 )
+from scripts.operations.performance.market_price_correction import (
+    SyntheticInstrumentSpec as InstrumentSpec,
+    apply_market_price_correction,
+    wait_for_corrected_derived_state,
+)
 
 DEFAULT_INGESTION_BASE_URL = "http://localhost:8200"
 DEFAULT_QUERY_BASE_URL = "http://localhost:8201"
@@ -64,19 +69,12 @@ LOG_SERVICE_NAMES = (
 
 
 @dataclass(frozen=True)
-class InstrumentSpec:
-    security_id: str
-    currency: str
-    trade_price: Decimal
-    market_price: Decimal
-
-
-@dataclass(frozen=True)
 class IngestPhaseResult:
     endpoint: str
     record_count: int
     batch_count: int
     duration_seconds: float
+    phase: str = "initial"
 
 
 @dataclass(frozen=True)
@@ -193,6 +191,7 @@ class ScenarioReport:
     checks_passed: bool
     failures: list[str]
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
+    correction_drain_seconds: float | None = None
 
 
 class HealthMonitor:
@@ -488,6 +487,7 @@ def _ingest_static_payload(
     endpoint: str,
     root_key: str,
     rows: list[dict[str, Any]],
+    phase: str = "initial",
 ) -> IngestPhaseResult:
     started = time.perf_counter()
     _post_payload(
@@ -501,6 +501,7 @@ def _ingest_static_payload(
         record_count=len(rows),
         batch_count=1,
         duration_seconds=round(time.perf_counter() - started, 3),
+        phase=phase,
     )
 
 
@@ -1457,6 +1458,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         or report.derived_state_resource_evidence.sample_count == 0
     ):
         failures.append("derived-state resource evidence has no samples")
+    if (
+        report.config.get("market_price_correction_multiplier") is not None
+        and report.correction_drain_seconds is None
+    ):
+        failures.append("market price correction has no completed drain evidence")
     return failures
 
 
@@ -1495,6 +1501,7 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             "## Pipeline Health",
             "",
             f"- Drain seconds: {report.drain_seconds}",
+            f"- Market price correction drain seconds: {report.correction_drain_seconds}",
             f"- Peak backlog jobs: {report.peak_backlog_jobs}",
             f"- Peak backlog age seconds: {report.peak_backlog_age_seconds}",
             f"- Peak replay pressure ratio: {report.peak_replay_pressure_ratio}",
@@ -1669,6 +1676,7 @@ def _safe_collect_log_evidence(
 
 
 def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict[str, Any]:
+    correction_multiplier = getattr(args, "market_price_correction_multiplier", None)
     return {
         "portfolio_count": args.portfolio_count,
         "transactions_per_portfolio": args.transactions_per_portfolio,
@@ -1687,6 +1695,9 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "derived_state_service": args.derived_state_service,
         "resource_poll_interval_seconds": args.resource_poll_interval_seconds,
         "derived_state_resource_evidence_required": True,
+        "market_price_correction_multiplier": (
+            str(correction_multiplier) if correction_multiplier is not None else None
+        ),
     }
 
 
@@ -1707,6 +1718,7 @@ def _finalize_report(
     log_evidence: list[LogEvidence],
     initial_failures: list[str],
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
+    correction_drain_seconds: float | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
         scenario_name=args.scenario_name,
@@ -1739,6 +1751,7 @@ def _finalize_report(
         checks_passed=False,
         failures=[],
         derived_state_resource_evidence=derived_state_resource_evidence,
+        correction_drain_seconds=correction_drain_seconds,
     )
     failures = initial_failures + _evaluate_report(report_base)
     return ScenarioReport(
@@ -1763,6 +1776,7 @@ def _finalize_report(
         checks_passed=len(failures) == 0,
         failures=failures,
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
+        correction_drain_seconds=report_base.correction_drain_seconds,
     )
 
 
@@ -1784,6 +1798,7 @@ def main() -> int:
     parser.add_argument("--transaction-batch-size", type=int, default=2000)
     parser.add_argument("--sample-size", type=int, default=5)
     parser.add_argument("--trade-date", default=None)
+    parser.add_argument("--market-price-correction-multiplier", type=Decimal, default=None)
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-base-url", default=DEFAULT_QUERY_BASE_URL)
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
@@ -1813,6 +1828,10 @@ def main() -> int:
         raise ValueError("sample_size must be positive.")
     if args.resource_poll_interval_seconds <= 0:
         raise ValueError("resource_poll_interval_seconds must be positive.")
+    if args.market_price_correction_multiplier is not None and (
+        args.market_price_correction_multiplier <= 0 or args.market_price_correction_multiplier == 1
+    ):
+        raise ValueError("market_price_correction_multiplier must be positive and not equal to 1.")
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
@@ -1842,6 +1861,7 @@ def main() -> int:
         run_id=run_id,
         instrument_count=args.transactions_per_portfolio,
     )
+    effective_specs = specs
     session = requests.Session()
     ingest_phases: list[IngestPhaseResult] = []
     portfolio_pattern = {"portfolio_pattern": f"LOAD_{run_id}_PF_%"}
@@ -1865,6 +1885,7 @@ def main() -> int:
     started_monotonic = time.perf_counter()
     terminal_status = "failed"
     partial_failures: list[str] = []
+    correction_drain_seconds: float | None = None
 
     def _request_interrupt(signum: int, _frame: Any) -> None:
         signal_name = signal.Signals(signum).name
@@ -2006,6 +2027,43 @@ def main() -> int:
             transaction_count=args.portfolio_count * args.transactions_per_portfolio,
             timeout_seconds=args.drain_timeout_seconds,
         )
+        if args.market_price_correction_multiplier is not None:
+            effective_specs = apply_market_price_correction(
+                specs=specs,
+                multiplier=args.market_price_correction_multiplier,
+            )
+            correction_started_at = _db_row(
+                engine,
+                "SELECT clock_timestamp() AS correction_started_at",
+                {},
+            )["correction_started_at"]
+            ingest_phases.append(
+                _ingest_static_payload(
+                    session=session,
+                    base_url=args.ingestion_base_url,
+                    endpoint="/ingest/market-prices",
+                    root_key="market_prices",
+                    rows=_build_market_prices_payload(
+                        specs=effective_specs,
+                        price_date=resolved_trade_date,
+                    ),
+                    phase="market-price-correction",
+                )
+            )
+            correction_drain_seconds = wait_for_corrected_derived_state(
+                row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
+                run_id=run_id,
+                trade_date=resolved_trade_date,
+                portfolio_count=args.portfolio_count,
+                transaction_count=(args.portfolio_count * args.transactions_per_portfolio),
+                expected_market_value=expected_total_market_value(
+                    portfolio_count=args.portfolio_count,
+                    specs=effective_specs,
+                ),
+                correction_started_at=correction_started_at,
+                timeout_seconds=args.drain_timeout_seconds,
+            )
+            drain_seconds += correction_drain_seconds
         terminal_status = "complete"
     except (ScenarioInterrupted, KeyboardInterrupt) as exc:
         partial_failures.append(str(exc))
@@ -2026,7 +2084,7 @@ def main() -> int:
         query_control_base_url=args.query_control_base_url,
         reconciliation_base_url=args.reconciliation_base_url,
         portfolios=portfolios,
-        specs=specs,
+        specs=effective_specs,
         trade_date=resolved_trade_date,
         sample_size=min(args.sample_size, len(portfolios)),
     )
@@ -2035,7 +2093,7 @@ def main() -> int:
         run_id=run_id,
         trade_date=resolved_trade_date,
         portfolio_count=args.portfolio_count,
-        specs=specs,
+        specs=effective_specs,
     )
     log_evidence, log_failures = _safe_collect_log_evidence(
         started_at=started_at,
@@ -2058,6 +2116,7 @@ def main() -> int:
         log_evidence=log_evidence,
         initial_failures=partial_failures + sample_failures + tie_out_failures + log_failures,
         derived_state_resource_evidence=resource_monitor.evidence(),
+        correction_drain_seconds=correction_drain_seconds,
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
     print(f"Wrote JSON report: {json_path}")

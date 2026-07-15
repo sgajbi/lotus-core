@@ -9,6 +9,7 @@ import sys
 from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Mapping, Protocol, cast
 
@@ -41,6 +42,7 @@ class DerivedStateWorkloadProfile:
     sample_size: int
     drain_timeout_seconds: int
     certifying: bool
+    market_price_correction_multiplier: Decimal | None = None
 
     @property
     def transaction_count(self) -> int:
@@ -67,6 +69,16 @@ _CERTIFYING_PROFILES = {
         sample_size=1,
         drain_timeout_seconds=3600,
         certifying=True,
+    ),
+    "price-burst": DerivedStateWorkloadProfile(
+        name="derived-state-market-price-correction-burst",
+        portfolio_count=100,
+        positions_per_portfolio=100,
+        transaction_batch_size=2000,
+        sample_size=5,
+        drain_timeout_seconds=3600,
+        certifying=True,
+        market_price_correction_multiplier=Decimal("1.05"),
     ),
 }
 _DIAGNOSTIC_SMOKE_PROFILE = DerivedStateWorkloadProfile(
@@ -189,6 +201,13 @@ def build_bank_day_command(
     ]
     if trade_date is not None:
         command.extend(("--trade-date", trade_date))
+    if profile.market_price_correction_multiplier is not None:
+        command.extend(
+            (
+                "--market-price-correction-multiplier",
+                str(profile.market_price_correction_multiplier),
+            )
+        )
     return command
 
 

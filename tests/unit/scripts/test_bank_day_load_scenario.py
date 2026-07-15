@@ -132,6 +132,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "transactions_per_portfolio": 3,
             "transaction_count": 6,
             "derived_state_resource_evidence_required": True,
+            "market_price_correction_multiplier": "1.05",
         },
         ingest_phases=[],
         drain_seconds=120.0,
@@ -256,6 +257,9 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("API probe failed /broken status=500" in failure for failure in failures)
     assert any("svc logged 2 error/traceback lines" in failure for failure in failures)
     assert any("derived-state resource evidence has no samples" in failure for failure in failures)
+    assert any(
+        "market price correction has no completed drain evidence" in failure for failure in failures
+    )
 
 
 def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evidence() -> None:
