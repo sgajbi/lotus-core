@@ -69,3 +69,15 @@ class PositionWatermarkWriter(Protocol):
         touch_if_already_lagging: bool = False,
     ) -> int:
         """Mark affected position keys for replay from the supplied watermark."""
+
+
+class ReprocessingJobStatusWriter(Protocol):
+    """Persist terminal and retry transitions for claimed replay work."""
+
+    async def update_job_status(
+        self,
+        job_id: int,
+        status: str,
+        failure_reason: str | None = None,
+    ) -> bool:
+        """Apply a transition only while the caller retains job ownership."""

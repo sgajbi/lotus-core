@@ -8,8 +8,10 @@ from portfolio_common.reprocessing_job_repository import ReprocessingJobReposito
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
+    ClaimedFxRevaluationJob,
     DirectCurrencyPair,
     FxRateCorrection,
+    RejectedFxRevaluationJob,
 )
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
@@ -114,3 +116,57 @@ async def test_claim_pending_jobs_uses_fx_queue_type() -> None:
         "RESET_FX_WATERMARKS",
         25,
     )
+
+
+async def test_claim_pending_jobs_maps_orm_payload_to_domain_work() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+    row = MagicMock(
+        id=71,
+        payload={
+            "from_currency": "usd",
+            "to_currency": "sgd",
+            "earliest_impacted_date": "2026-04-10",
+        },
+        correlation_id="corr-71",
+    )
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.infrastructure.repositories."
+        "fx_revaluation_repository.ReprocessingJobRepository",
+        autospec=ReprocessingJobRepository,
+    ) as jobs:
+        jobs.return_value.find_and_claim_jobs.return_value = [row]
+        claimed = await repository.claim_pending_jobs(batch_size=1)
+
+    assert claimed == [
+        ClaimedFxRevaluationJob(
+            job_id=71,
+            pair=DirectCurrencyPair("USD", "SGD"),
+            earliest_impacted_date=date(2026, 4, 10),
+            correlation_id="corr-71",
+        )
+    ]
+
+
+async def test_claim_pending_jobs_returns_rejected_work_for_invalid_payload() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+    row = MagicMock(
+        id=72,
+        payload={"from_currency": "USD"},
+        correlation_id="corr-72",
+    )
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.infrastructure.repositories."
+        "fx_revaluation_repository.ReprocessingJobRepository",
+        autospec=ReprocessingJobRepository,
+    ) as jobs:
+        jobs.return_value.find_and_claim_jobs.return_value = [row]
+        claimed = await repository.claim_pending_jobs(batch_size=1)
+
+    assert len(claimed) == 1
+    assert isinstance(claimed[0], RejectedFxRevaluationJob)
+    assert claimed[0].job_id == 72
+    assert "to_currency" in claimed[0].rejection_reason

@@ -4,7 +4,6 @@ from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
@@ -13,8 +12,10 @@ from src.services.valuation_orchestrator_service.app.core.fx_revaluation_job_pro
     FxRevaluationJobProcessor,
 )
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
+    ClaimedFxRevaluationJob,
     DirectCurrencyPair,
     FxReplayExecution,
+    RejectedFxRevaluationJob,
 )
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
@@ -23,17 +24,12 @@ from src.services.valuation_orchestrator_service.app.infrastructure.repositories
 pytestmark = pytest.mark.asyncio
 
 
-def job() -> ReprocessingJob:
+def job() -> ClaimedFxRevaluationJob:
     """Build one claimed direct-pair replay job."""
-    return ReprocessingJob(
-        id=41,
-        job_type="RESET_FX_WATERMARKS",
-        payload={
-            "from_currency": "USD",
-            "to_currency": "SGD",
-            "earliest_impacted_date": "2026-04-10",
-        },
-        status="PROCESSING",
+    return ClaimedFxRevaluationJob(
+        job_id=41,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
         correlation_id="corr-fx-job",
     )
 
@@ -43,9 +39,7 @@ def dependencies():
     return {
         "jobs": AsyncMock(spec=ReprocessingJobRepository),
         "watermarks": AsyncMock(spec=PositionStateRepository),
-        "revaluation": AsyncMock(
-            spec=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository
-        ),
+        "revaluation": AsyncMock(spec=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository),
     }
 
 
@@ -94,15 +88,18 @@ async def test_readiness_race_requeues_job_without_completing(dependencies: dict
 
 
 async def test_invalid_payload_fails_job_with_supportable_reason(dependencies: dict) -> None:
-    invalid = job()
-    invalid.payload = {"from_currency": "USD"}
+    invalid = RejectedFxRevaluationJob(
+        job_id=41,
+        rejection_reason="invalid_fx_revaluation_job_payload: missing to_currency",
+        correlation_id="corr-fx-job",
+    )
     dependencies["jobs"].update_job_status.return_value = True
 
     await FxRevaluationJobProcessor().process(job=invalid, **dependencies)
 
     args, kwargs = dependencies["jobs"].update_job_status.await_args
     assert args == (41, "FAILED")
-    assert "to_currency" in kwargs["failure_reason"]
+    assert kwargs["failure_reason"] == ("invalid_fx_revaluation_job_payload: missing to_currency")
 
 
 async def test_completion_ownership_loss_is_observed(dependencies: dict) -> None:

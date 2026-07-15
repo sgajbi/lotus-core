@@ -15,6 +15,10 @@ from src.services.valuation_orchestrator_service.app.core import (
 from src.services.valuation_orchestrator_service.app.core.reprocessing_worker import (
     ReprocessingWorker,
 )
+from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
+    ClaimedFxRevaluationJob,
+    DirectCurrencyPair,
+)
 from src.services.valuation_orchestrator_service.app.infrastructure.repositories import (
     fx_revaluation_repository,
 )
@@ -109,15 +113,10 @@ async def test_worker_processes_fx_revaluation_jobs_in_shared_runtime(mock_depen
     mock_fx_revaluation_repo = mock_dependencies["fx_revaluation_repo"]
     mock_state_repo = mock_dependencies["state_repo"]
     mock_observe_claimed = mock_dependencies["observe_claimed"]
-    pending_job = ReprocessingJob(
-        id=40,
-        job_type="RESET_FX_WATERMARKS",
-        payload={
-            "from_currency": "USD",
-            "to_currency": "SGD",
-            "earliest_impacted_date": "2026-04-10",
-        },
-        status="PROCESSING",
+    pending_job = ClaimedFxRevaluationJob(
+        job_id=40,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
     )
     mock_repro_job_repo.find_and_claim_jobs.return_value = []
     mock_fx_revaluation_repo.claim_pending_jobs.return_value = [pending_job]
