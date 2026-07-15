@@ -124,14 +124,34 @@ def test_calculator_rejects_duplicate_security_contribution() -> None:
         )
 
 
+def test_calculator_accepts_latest_contribution_within_target_window() -> None:
+    result = calculate_portfolio_timeseries(
+        portfolio=_scope(),
+        aggregation_date=date(2026, 3, 8),
+        epoch=2,
+        contributions=[
+            PortfolioPositionContribution(
+                position_timeseries=_position(
+                    "SEC-CARRY-FORWARD",
+                    business_date=date(2026, 3, 7),
+                    epoch=1,
+                ),
+                fx_rate_to_portfolio_currency=Decimal("1"),
+            )
+        ],
+    )
+
+    assert result.eod_market_value == Decimal("110")
+
+
 @pytest.mark.parametrize(
     "position",
     [
-        _position("SEC-WRONG-DATE", business_date=date(2026, 3, 7)),
-        _position("SEC-WRONG-EPOCH", epoch=1),
+        _position("SEC-FUTURE-DATE", business_date=date(2026, 3, 9)),
+        _position("SEC-FUTURE-EPOCH", epoch=3),
     ],
 )
-def test_calculator_rejects_contribution_outside_target_window(
+def test_calculator_rejects_future_contribution_outside_target_window(
     position: PositionTimeseriesRecord,
 ) -> None:
     contribution = PortfolioPositionContribution(

@@ -18,7 +18,7 @@ class PortfolioContributionScopeMismatch(PortfolioTimeseriesCalculationError):
 
 
 class PortfolioContributionWindowMismatch(PortfolioTimeseriesCalculationError):
-    """Reject a contribution from another business date or processing epoch."""
+    """Reject a contribution later than the target date or processing epoch."""
 
 
 class DuplicatePortfolioPositionContribution(PortfolioTimeseriesCalculationError):

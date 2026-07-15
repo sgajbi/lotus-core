@@ -45,9 +45,9 @@ def calculate_portfolio_timeseries(
             raise PortfolioContributionScopeMismatch(
                 "Position contribution belongs to a different portfolio scope."
             )
-        if position.date != aggregation_date or position.epoch != epoch:
+        if position.date > aggregation_date or position.epoch > epoch:
             raise PortfolioContributionWindowMismatch(
-                "Position contribution belongs to a different business date or epoch."
+                "Position contribution is later than the target business date or epoch."
             )
         if security_id in seen_security_ids:
             raise DuplicatePortfolioPositionContribution(
