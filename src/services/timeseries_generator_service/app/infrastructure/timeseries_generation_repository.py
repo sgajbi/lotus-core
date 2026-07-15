@@ -23,7 +23,7 @@ from portfolio_common.utils import async_timed
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ..domain.timeseries_records import (
+from ..domain.position_timeseries.models import (
     PositionCashflowRecord,
     PositionSnapshotRecord,
     PositionTimeseriesRecord,

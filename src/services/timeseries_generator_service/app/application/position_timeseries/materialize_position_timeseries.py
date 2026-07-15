@@ -12,8 +12,8 @@ from portfolio_common.timeseries_constants import (
     DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
 )
 
-from ...core.position_timeseries_logic import PositionTimeseriesLogic
-from ...domain.timeseries_records import (
+from ...domain.position_timeseries.calculator import calculate_position_timeseries
+from ...domain.position_timeseries.models import (
     PositionCashflowRecord,
     PositionSnapshotRecord,
     PositionTimeseriesRecord,
@@ -185,7 +185,7 @@ class MaterializePositionTimeseries:
                 epoch,
             )
 
-        new_record = PositionTimeseriesLogic.calculate_daily_record(
+        new_record = calculate_position_timeseries(
             current_snapshot=current_snapshot,
             previous_snapshot=previous_snapshot,
             cashflows=cast(list[PositionCashflowRecord], cashflows),

@@ -18,7 +18,7 @@ from src.services.timeseries_generator_service.app.application.position_timeseri
 from src.services.timeseries_generator_service.app.application.position_timeseries.errors import (
     PositionSnapshotTriggerMismatch,
 )
-from src.services.timeseries_generator_service.app.domain.timeseries_records import (
+from src.services.timeseries_generator_service.app.domain.position_timeseries.models import (
     PositionCashflowRecord,
     PositionSnapshotRecord,
     PositionTimeseriesRecord,
