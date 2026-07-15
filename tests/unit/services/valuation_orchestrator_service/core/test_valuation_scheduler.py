@@ -1137,6 +1137,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
 ):
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_INTERVAL", "9")
     monkeypatch.setenv("VALUATION_SCHEDULER_BATCH_SIZE", "17")
+    monkeypatch.setenv("VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS", "23")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_ROUNDS", "4")
     monkeypatch.setenv("VALUATION_SCHEDULER_POLL_BUDGET_SECONDS", "8")
     monkeypatch.setenv("VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS", "5")
@@ -1150,6 +1151,7 @@ async def test_scheduler_reads_max_attempts_from_environment(
 
     assert scheduler._poll_interval == 9
     assert scheduler._batch_size == 17
+    assert scheduler._max_in_flight_jobs == 23
     assert scheduler._dispatch_rounds_per_poll == 4
     assert scheduler._poll_budget_seconds == 8
     assert scheduler._dispatch_budget_seconds == 5
@@ -1268,6 +1270,7 @@ async def test_dispatch_coordinator_claims_and_dispatches_without_scheduler_loop
 
     coordinator = ValuationDispatchCoordinator(
         batch_size=2,
+        max_in_flight_jobs=5,
         dispatch_rounds_per_poll=10,
         poll_budget_seconds=30,
         max_attempts=5,
@@ -1396,7 +1399,10 @@ async def test_scheduler_claim_loop_stops_before_next_round_when_poll_budget_exh
 
         await scheduler._claim_and_dispatch_ready_jobs()
 
-    mock_repo.find_and_claim_eligible_jobs.assert_awaited_once_with(2)
+    mock_repo.find_and_claim_eligible_jobs.assert_awaited_once_with(
+        2,
+        max_in_flight_jobs=scheduler._max_in_flight_jobs,
+    )
     mock_dispatch_jobs.assert_awaited_once_with(claimed_batch)
     mock_budget_exhausted.assert_called_once_with("poll")
 

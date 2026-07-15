@@ -41,6 +41,7 @@ class ValuationDispatchCoordinator:
         self,
         *,
         batch_size: int,
+        max_in_flight_jobs: int,
         dispatch_rounds_per_poll: int,
         poll_budget_seconds: int,
         max_attempts: int,
@@ -48,6 +49,7 @@ class ValuationDispatchCoordinator:
         repository_factory: ValuationDispatchRepositoryFactory,
     ) -> None:
         self._batch_size = batch_size
+        self._max_in_flight_jobs = max_in_flight_jobs
         self._dispatch_rounds_per_poll = dispatch_rounds_per_poll
         self._poll_budget_seconds = poll_budget_seconds
         self._max_attempts = max_attempts
@@ -120,7 +122,10 @@ class ValuationDispatchCoordinator:
             async for db in self._session_provider():
                 async with db.begin():
                     repo = self._repository_factory.valuation_repository(db)
-                    claimed_jobs = await repo.find_and_claim_eligible_jobs(self._batch_size)
+                    claimed_jobs = await repo.find_and_claim_eligible_jobs(
+                        self._batch_size,
+                        max_in_flight_jobs=self._max_in_flight_jobs,
+                    )
             if not claimed_jobs:
                 break
             observe_valuation_scheduler_jobs_claimed(len(claimed_jobs))

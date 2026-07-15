@@ -23,6 +23,7 @@ def _env_positive_int(name: str, default: int) -> int:
 class ValuationRuntimeSettings:
     valuation_scheduler_poll_interval_seconds: int
     valuation_scheduler_batch_size: int
+    valuation_scheduler_max_in_flight_jobs: int
     valuation_scheduler_dispatch_rounds: int
     valuation_scheduler_poll_budget_seconds: int
     valuation_scheduler_dispatch_budget_seconds: int
@@ -52,6 +53,9 @@ def load_valuation_runtime_settings(
         ),
         valuation_scheduler_batch_size=_env_positive_int(
             "VALUATION_SCHEDULER_BATCH_SIZE", scheduler_batch_size_default
+        ),
+        valuation_scheduler_max_in_flight_jobs=_env_positive_int(
+            "VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS", scheduler_batch_size_default
         ),
         valuation_scheduler_dispatch_rounds=_env_positive_int(
             "VALUATION_SCHEDULER_DISPATCH_ROUNDS", scheduler_dispatch_rounds_default
