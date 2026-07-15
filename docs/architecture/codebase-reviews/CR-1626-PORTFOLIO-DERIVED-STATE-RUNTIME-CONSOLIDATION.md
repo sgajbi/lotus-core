@@ -235,6 +235,14 @@ cross-window state.
 - The focused bank-day, reconciliation-report, and institutional-sign-off tooling suite passes
   `25` tests; scenario MyPy, CI-pinned Ruff `0.15.18`, documentation/wiki gates, and diff checks
   pass. PostgreSQL execution and measured percentiles remain runtime evidence, not source proof.
+- Signed commit `dbdd729ed` adds a managed interruption gate that pauses the exact unified
+  container, proves source snapshots and committed lag accumulate, then requires exact output
+  counts, closed valuation/aggregation queues, baseline lag recovery, zero reconciliation
+  findings, and zero added DLQ events. Its focused gate and service-set suite passes `14` tests;
+  Ruff, MyPy, and diff checks pass.
+- PR and main-releasability workflow wiring is covered by exact-image-set, managed-diagnostics,
+  action-version, and service-set contracts. A live PostgreSQL/Kafka execution remains required
+  before this source-level gate can count as deployed recovery evidence.
 
 ## Same-Pattern Review
 
@@ -259,7 +267,8 @@ explicit no-change decisions because this cutover changes internal runtime topol
 1. Run daily, burst, backdated, and fan-in profiles and compare both stage p50/p95/p99/max results
    against the configured lease duration. Use those measured job durations to decide whether fixed
    expiry is sufficient or heartbeat renewal is required.
-2. Run duplicate, poison, restart, stale-recovery, concurrency, reconciliation, load, release, and
-   exact-main validation before closing #714.
+2. Execute `make test-derived-state-recovery-gate`, retain its machine-readable evidence, and run
+   remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main validation
+   before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
    build and run the combined image against PostgreSQL and Kafka.
