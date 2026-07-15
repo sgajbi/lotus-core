@@ -88,7 +88,6 @@
     {"name": "TransactionReprocessingRequested", "topic": "transactions.reprocessing.requested", "payload_contract": "transaction_id_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "transaction id"},
     {"name": "TransactionReprocessingPersistedReplay", "topic": "transactions.persisted", "payload_contract": "TransactionEvent", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "source transaction or portfolio id"},
     {"name": "ValuationJobRequested", "topic": "valuation.job.requested", "payload_contract": "valuation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio/security/date"},
-    {"name": "PortfolioAggregationJobRequested", "topic": "portfolio_day.aggregation.job.requested", "payload_contract": "portfolio_aggregation_job_command", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "portfolio/date"},
     {"name": "PersistenceServiceDlq", "topic": "dlq.persistence_service", "payload_contract": "base_consumer_dlq_payload", "evidence_profile": "direct_kafka_topic", "partition_key_policy": "original message key or NoKey"}
   ]
 }

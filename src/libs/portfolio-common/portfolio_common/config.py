@@ -120,10 +120,6 @@ KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
 KAFKA_CASHFLOWS_CALCULATED_TOPIC = os.getenv(
     "KAFKA_CASHFLOWS_CALCULATED_TOPIC", "cashflows.calculated"
 )
-KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC = os.getenv(
-    "KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC",
-    "portfolio_day.aggregation.job.requested",
-)
 KAFKA_VALUATION_JOB_REQUESTED_TOPIC = os.getenv(
     "KAFKA_VALUATION_JOB_REQUESTED_TOPIC", "valuation.job.requested"
 )
@@ -270,13 +266,6 @@ KAFKA_TOPIC_DEFINITIONS = (
         lifecycle_status="active",
         semantic_type="fact",
         scope="portfolio_security_day",
-    ),
-    KafkaTopicDefinition(
-        canonical_name="portfolio_day.aggregation.job.requested",
-        runtime_name=KAFKA_PORTFOLIO_DAY_AGGREGATION_JOB_REQUESTED_TOPIC,
-        lifecycle_status="active",
-        semantic_type="command",
-        scope="portfolio_day",
     ),
     KafkaTopicDefinition(
         canonical_name="portfolio_day.aggregation.completed",

@@ -105,13 +105,8 @@ def test_app_local_stack_parallelizes_portfolio_aggregation_drain() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     services = compose["services"]
 
-    topic_creator_env = services["kafka-topic-creator"]["environment"]
     aggregation_env = services["portfolio_aggregation_service"]["environment"]
 
-    assert (
-        topic_creator_env["KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS"]
-        == "${KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS:-4}"
-    )
     assert (
         aggregation_env["PORTFOLIO_AGGREGATION_WORKER_COUNT"]
         == "${PORTFOLIO_AGGREGATION_WORKER_COUNT:-4}"
