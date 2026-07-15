@@ -1,6 +1,7 @@
 from argparse import Namespace
 from decimal import Decimal
 
+from scripts.operations import bank_day_load_scenario
 from scripts.operations.bank_day_load_scenario import (
     LOG_SERVICE_NAMES,
     ApiProbeResult,
@@ -182,7 +183,13 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             valuation_to_position_timeseries_latency_sample_count=1,
             valuation_to_position_timeseries_latency_p50_seconds=120.0,
             valuation_to_position_timeseries_latency_p95_seconds=120.0,
+            valuation_to_position_timeseries_latency_p99_seconds=120.0,
             valuation_to_position_timeseries_latency_max_seconds=120.0,
+            position_to_portfolio_timeseries_latency_sample_count=1,
+            position_to_portfolio_timeseries_latency_p50_seconds=30.0,
+            position_to_portfolio_timeseries_latency_p95_seconds=30.0,
+            position_to_portfolio_timeseries_latency_p99_seconds=30.0,
+            position_to_portfolio_timeseries_latency_max_seconds=30.0,
         ),
         sample_portfolios=[
             SamplePortfolioResult(
@@ -233,6 +240,12 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("summed_snapshot_market_value" in failure for failure in failures)
     assert any("per_security_quantity_min" in failure for failure in failures)
     assert any("open_valuation_jobs" in failure for failure in failures)
+    assert any(
+        "valuation_to_position_timeseries_latency_sample_count" in failure for failure in failures
+    )
+    assert any(
+        "position_to_portfolio_timeseries_latency_sample_count" in failure for failure in failures
+    )
     assert any("positions_count" in failure for failure in failures)
     assert any("reconciliation findings=1" in failure for failure in failures)
     assert any("API probe failed /broken status=500" in failure for failure in failures)
@@ -302,7 +315,13 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             valuation_to_position_timeseries_latency_sample_count=0,
             valuation_to_position_timeseries_latency_p50_seconds=None,
             valuation_to_position_timeseries_latency_p95_seconds=None,
+            valuation_to_position_timeseries_latency_p99_seconds=None,
             valuation_to_position_timeseries_latency_max_seconds=None,
+            position_to_portfolio_timeseries_latency_sample_count=0,
+            position_to_portfolio_timeseries_latency_p50_seconds=None,
+            position_to_portfolio_timeseries_latency_p95_seconds=None,
+            position_to_portfolio_timeseries_latency_p99_seconds=None,
+            position_to_portfolio_timeseries_latency_max_seconds=None,
         ),
         sample_portfolios=[],
         api_probes=[],
@@ -314,3 +333,77 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     assert report.checks_passed is False
     assert any("received SIGINT" in failure for failure in report.failures)
     assert any("terminal_status is aborted" in failure for failure in report.failures)
+
+
+def test_database_tie_out_measures_both_materialization_stages_with_upsert_timestamps(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_db_row(_engine, query: str, params: dict[str, object]) -> dict[str, object]:
+        captured["query"] = query
+        captured["params"] = params
+        return {
+            "portfolios_count": 1,
+            "instruments_count": 1,
+            "transactions_count": 1,
+            "portfolios_with_snapshots": 1,
+            "snapshots_count": 1,
+            "portfolios_with_position_timeseries": 1,
+            "position_timeseries_count": 1,
+            "portfolios_with_portfolio_timeseries": 1,
+            "portfolio_timeseries_count": 1,
+            "summed_snapshot_quantity": Decimal("1"),
+            "summed_snapshot_market_value": Decimal("50.5"),
+            "per_security_quantity_min": Decimal("1"),
+            "per_security_quantity_max": Decimal("1"),
+            "pending_valuation_jobs": 0,
+            "processing_valuation_jobs": 0,
+            "pending_aggregation_jobs": 0,
+            "processing_aggregation_jobs": 0,
+            "latest_snapshot_materialized_at_utc": None,
+            "latest_position_timeseries_materialized_at_utc": None,
+            "latest_portfolio_timeseries_materialized_at_utc": None,
+            "latest_valuation_job_updated_at_utc": None,
+            "latest_aggregation_job_updated_at_utc": None,
+            "completed_valuation_jobs_without_position_timeseries": 0,
+            "oldest_completed_valuation_without_position_timeseries_at_utc": None,
+            "valuation_to_position_timeseries_latency_sample_count": 1,
+            "valuation_to_position_timeseries_latency_p50_seconds": Decimal("0.5"),
+            "valuation_to_position_timeseries_latency_p95_seconds": Decimal("0.9"),
+            "valuation_to_position_timeseries_latency_p99_seconds": Decimal("0.99"),
+            "valuation_to_position_timeseries_latency_max_seconds": Decimal("1.0"),
+            "position_to_portfolio_timeseries_latency_sample_count": 1,
+            "position_to_portfolio_timeseries_latency_p50_seconds": Decimal("0.25"),
+            "position_to_portfolio_timeseries_latency_p95_seconds": Decimal("0.45"),
+            "position_to_portfolio_timeseries_latency_p99_seconds": Decimal("0.49"),
+            "position_to_portfolio_timeseries_latency_max_seconds": Decimal("0.5"),
+        }
+
+    monkeypatch.setattr(bank_day_load_scenario, "_db_row", fake_db_row)
+    specs = _build_instrument_specs(run_id="RUN1", instrument_count=1)
+
+    tie_out = bank_day_load_scenario._build_database_tie_out(
+        engine=object(),
+        run_id="RUN1",
+        trade_date="2026-04-17",
+        portfolio_count=1,
+        specs=specs,
+    )
+
+    query = str(captured["query"])
+    assert "valuation_to_position_latencies AS" in query
+    assert "pts.updated_at - pvj.updated_at" in query
+    assert "position_materialization_completion AS" in query
+    assert "max(updated_at) AS positions_materialized_at" in query
+    assert "pfts.updated_at - pmc.positions_materialized_at" in query
+    assert query.count("percentile_cont(0.99)") == 2
+    assert captured["params"] == {
+        "portfolio_pattern": "LOAD_RUN1_PF_%",
+        "transaction_pattern": "LOAD_RUN1_TX_%",
+        "security_pattern": "LOAD_RUN1_SEC_%",
+        "trade_date": "2026-04-17",
+    }
+    assert tie_out.valuation_to_position_timeseries_latency_p99_seconds == 0.99
+    assert tie_out.position_to_portfolio_timeseries_latency_sample_count == 1
+    assert tie_out.position_to_portfolio_timeseries_latency_p99_seconds == 0.49

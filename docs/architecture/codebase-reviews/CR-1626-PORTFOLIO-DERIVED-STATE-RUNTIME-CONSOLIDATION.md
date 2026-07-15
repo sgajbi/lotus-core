@@ -110,6 +110,9 @@ compatibility package.
 | Runtime supervisors / health endpoints / outbox dispatchers | 2 / 2 / 2 | 1 / 1 / 1 |
 | Internal aggregation command transports | durable DB queue + private Kafka hop | durable DB queue only |
 | Health ports | 8085 and 8088 | 8085 |
+| Durable valuation-to-position latency evidence | p50 / p95 / max, insert-oriented | p50 / p95 / p99 / max, upsert-aware |
+| Durable position-to-portfolio latency evidence | none | one sample per portfolio/date/epoch |
+| Missing latency evidence posture | report could remain green | stage sample counts fail closed |
 
 The generator test count initially stayed stable because database-heavy consumer scenarios moved
 to application and infrastructure owners instead of being deleted; it now includes an additional
@@ -225,6 +228,13 @@ cross-window state.
 - `control_queue_operations_total{queue="aggregation"}` exposes bounded lease-recovery, claim,
   complete, requeue, lost-ownership, terminal-failure, and execution-error outcomes through the
   scheduler metrics port and the app-local Grafana dashboard.
+- The bank-day load report now records p50, p95, p99, maximum, and sample counts for both durable
+  materialization stages. Valuation-to-position samples use matching completed job and position
+  identities; position-to-portfolio samples group once per portfolio/date/epoch and start from the
+  final updated position input so security count cannot bias fan-in percentiles.
+- The focused bank-day, reconciliation-report, and institutional-sign-off tooling suite passes
+  `25` tests; scenario MyPy, CI-pinned Ruff `0.15.18`, documentation/wiki gates, and diff checks
+  pass. PostgreSQL execution and measured percentiles remain runtime evidence, not source proof.
 
 ## Same-Pattern Review
 
@@ -246,9 +256,10 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Decide whether heartbeat renewal is required for work approaching the configured lease duration
-   using measured job-duration evidence; fixed lease expiry remains the current bounded policy.
-2. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
-   reconciliation, load, release, and exact-main validation before closing #714.
+1. Run daily, burst, backdated, and fan-in profiles and compare both stage p50/p95/p99/max results
+   against the configured lease duration. Use those measured job durations to decide whether fixed
+   expiry is sufficient or heartbeat renewal is required.
+2. Run duplicate, poison, restart, stale-recovery, concurrency, reconciliation, load, release, and
+   exact-main validation before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
    build and run the combined image against PostgreSQL and Kafka.
