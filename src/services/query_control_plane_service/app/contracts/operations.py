@@ -1690,13 +1690,19 @@ class SupportJobRecord(BaseModel):
         description="Durable database identifier for this job row.",
         examples=[101],
     )
-    job_type: Literal["VALUATION", "AGGREGATION", "RESET_WATERMARKS"] = Field(
+    job_type: Literal[
+        "VALUATION",
+        "AGGREGATION",
+        "RESET_WATERMARKS",
+        "RESET_FX_WATERMARKS",
+    ] = Field(
         ...,
         description=(
             "Type of support job. RESET_WATERMARKS represents a durable replay job used to "
-            "reset watermarks for valuation/timeseries recomputation."
+            "reset watermarks for valuation/timeseries recomputation; RESET_FX_WATERMARKS "
+            "represents direct currency-pair revaluation work."
         ),
-        examples=["VALUATION", "RESET_WATERMARKS"],
+        examples=["VALUATION", "RESET_WATERMARKS", "RESET_FX_WATERMARKS"],
     )
     business_date: date = Field(
         ...,
@@ -1712,6 +1718,16 @@ class SupportJobRecord(BaseModel):
             "Security identifier for security-scoped work such as valuation or durable replay jobs."
         ),
         examples=["AAPL.OQ", "SEC-US-IBM"],
+    )
+    from_currency: Optional[str] = Field(
+        None,
+        description="Source currency for direct-pair FX revaluation work.",
+        examples=["USD"],
+    )
+    to_currency: Optional[str] = Field(
+        None,
+        description="Portfolio base currency for direct-pair FX revaluation work.",
+        examples=["SGD"],
     )
     epoch: Optional[int] = Field(
         None,

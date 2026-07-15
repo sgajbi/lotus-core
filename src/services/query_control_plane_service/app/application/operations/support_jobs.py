@@ -70,6 +70,8 @@ def build_support_job_record(
     created_at: datetime | None,
     updated_at: datetime | None,
     failure_reason: str | None,
+    from_currency: str | None = None,
+    to_currency: str | None = None,
     reference_now: datetime | None = None,
     stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
 ) -> SupportJobRecord:
@@ -79,6 +81,8 @@ def build_support_job_record(
         business_date=business_date,
         status=status,
         security_id=normalize_security_id(security_id) if security_id is not None else None,
+        from_currency=from_currency,
+        to_currency=to_currency,
         epoch=epoch,
         attempt_count=attempt_count,
         is_retrying=is_support_job_retrying(status, attempt_count),

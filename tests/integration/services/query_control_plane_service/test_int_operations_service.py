@@ -714,19 +714,28 @@ async def test_reprocessing_keys_return_coherent_snapshot_under_key_churn(
 async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
     clean_db, async_db_session: AsyncSession
 ):
-    async_db_session.add(
-        Portfolio(
-            portfolio_id="P7",
-            base_currency="USD",
-            open_date=date(2025, 1, 1),
-            risk_exposure="MODERATE",
-            investment_time_horizon="MEDIUM_TERM",
-            portfolio_type="DISCRETIONARY",
-            booking_center_code="SG",
-            client_id="CLIENT-P7",
-            is_leverage_allowed=False,
-            status="ACTIVE",
-        )
+    async_db_session.add_all(
+        [
+            Portfolio(
+                portfolio_id="P7",
+                base_currency="USD",
+                open_date=date(2025, 1, 1),
+                risk_exposure="MODERATE",
+                investment_time_horizon="MEDIUM_TERM",
+                portfolio_type="DISCRETIONARY",
+                booking_center_code="SG",
+                client_id="CLIENT-P7",
+                is_leverage_allowed=False,
+                status="ACTIVE",
+            ),
+            Instrument(
+                security_id="SEC-JOB-OLD",
+                name="EUR bond",
+                isin="XS000000P701",
+                currency="EUR",
+                product_type="BOND",
+            ),
+        ]
     )
     await async_db_session.flush()
 
@@ -818,6 +827,20 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
                 updated_at=datetime(2025, 8, 30, 10, 0, tzinfo=timezone.utc),
             ),
             ReprocessingJob(
+                job_type="RESET_FX_WATERMARKS",
+                payload={
+                    "from_currency": "EUR",
+                    "to_currency": "USD",
+                    "earliest_impacted_date": "2025-08-18",
+                    "content_hash": "sha256:" + ("a" * 64),
+                    "generated_at": "2025-08-30T09:30:00+00:00",
+                },
+                status="PENDING",
+                correlation_id="corr-fx-job-old",
+                created_at=datetime(2025, 8, 30, 9, 30, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 8, 30, 9, 30, tzinfo=timezone.utc),
+            ),
+            ReprocessingJob(
                 job_type="RESET_WATERMARKS",
                 payload={
                     "security_id": "SEC-JOB-LATE",
@@ -839,13 +862,19 @@ async def test_reprocessing_jobs_return_coherent_snapshot_under_job_churn(
         response = await service.get_reprocessing_jobs("P7", skip=0, limit=20)
 
     assert response.generated_at_utc == FIXED_GENERATED_AT
-    assert response.total == 1
-    assert len(response.items) == 1
+    assert response.total == 2
+    assert len(response.items) == 2
     assert response.items[0].job_type == "RESET_WATERMARKS"
     assert response.items[0].security_id == "SEC-JOB-OLD"
     assert response.items[0].business_date == date(2025, 8, 18)
     assert response.items[0].correlation_id == "corr-job-old"
     assert response.items[0].operational_state == "STALE_PROCESSING"
+    fx_job = next(item for item in response.items if item.job_type == "RESET_FX_WATERMARKS")
+    assert fx_job.security_id is None
+    assert fx_job.from_currency == "EUR"
+    assert fx_job.to_currency == "USD"
+    assert fx_job.business_date == date(2025, 8, 18)
+    assert fx_job.correlation_id == "corr-fx-job-old"
 
 
 async def test_lineage_keys_return_coherent_snapshot_under_key_churn(
