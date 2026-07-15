@@ -58,12 +58,31 @@
         "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
         "tests/integration/tools/test_dlq_replayer.py"
       ]
+    },
+    "fx_rate_persisted_event": {
+      "producer_evidence": [
+        "tests/unit/services/persistence_service/consumers/test_persistence_fx_rate_consumer.py",
+        "tests/unit/libs/portfolio_common/domain/test_currency.py"
+      ],
+      "consumer_evidence": [
+        "tests/unit/services/valuation_orchestrator_service/adapters/kafka/test_fx_rate_persisted_consumer.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py"
+      ],
+      "header_and_lineage_evidence": [
+        "tests/unit/libs/portfolio-common/test_kafka_consumer.py",
+        "tests/unit/libs/portfolio-common/test_event_supportability.py"
+      ],
+      "dlq_replay_evidence": [
+        "tests/unit/services/valuation_orchestrator_service/adapters/kafka/test_fx_rate_persisted_consumer.py",
+        "tests/integration/tools/test_dlq_replayer.py"
+      ]
     }
   },
   "event_families": [
     {"event_type": "PortfolioIngested", "topic": "portfolio.ingested", "schema_model": "PortfolioEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
     {"event_type": "TransactionIngested", "topic": "transaction.ingested", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from transaction or portfolio id"},
     {"event_type": "MarketPricePersisted", "topic": "market_prices.persisted", "schema_model": "MarketPricePersistedEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from security id"},
+    {"event_type": "FxRatePersisted", "topic": "fx_rates.persisted", "schema_model": "FxRatePersistedEvent", "evidence_profile": "fx_rate_persisted_event", "partition_key_policy": "aggregate_id from normalized direct currency pair and effective date"},
     {"event_type": "RawTransactionPersisted", "topic": "transactions.persisted", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
     {"event_type": "ProcessedTransactionPersisted", "topic": "transactions.cost.processed", "schema_model": "TransactionEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from portfolio id"},
     {"event_type": "InstrumentUpserted", "topic": "instruments.received", "schema_model": "InstrumentEvent", "evidence_profile": "governed_outbox_event", "partition_key_policy": "aggregate_id from instrument or security id"},
