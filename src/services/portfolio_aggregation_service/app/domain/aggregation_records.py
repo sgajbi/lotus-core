@@ -1,7 +1,7 @@
 """Immutable inputs and outputs for portfolio aggregation and scheduling."""
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -59,6 +59,50 @@ class AggregationJobRecord:
     portfolio_id: str
     aggregation_date: date
     correlation_id: str | None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AggregationJobLease:
+    """Fenced ownership of one or more aggregation jobs for a bounded interval."""
+
+    owner: str
+    token: str
+    expires_at: datetime
+
+    def __post_init__(self) -> None:
+        owner = self.owner.strip()
+        token = self.token.strip()
+        if not owner:
+            raise ValueError("Aggregation job lease requires an owner.")
+        if len(owner) > 128:
+            raise ValueError("Aggregation job lease owner cannot exceed 128 characters.")
+        if not token:
+            raise ValueError("Aggregation job lease requires a token.")
+        if len(token) > 64:
+            raise ValueError("Aggregation job lease token cannot exceed 64 characters.")
+        if self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None:
+            raise ValueError("Aggregation job lease expiry must be timezone-aware.")
+        object.__setattr__(self, "owner", owner)
+        object.__setattr__(self, "token", token)
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedAggregationJob:
+    """Aggregation work paired with the lease required for terminal writes."""
+
+    id: int
+    portfolio_id: str
+    aggregation_date: date
+    correlation_id: str | None
+    lease: AggregationJobLease
+
+
+@dataclass(frozen=True, slots=True)
+class ExpiredAggregationJobRecovery:
+    """Count expired claims requeued or failed after retry exhaustion."""
+
+    requeued_count: int
+    failed_count: int
 
 
 @dataclass(frozen=True, slots=True)

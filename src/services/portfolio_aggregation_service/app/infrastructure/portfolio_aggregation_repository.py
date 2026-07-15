@@ -25,7 +25,10 @@ from sqlalchemy.orm import aliased
 
 from ..domain.aggregation_records import (
     AggregationJobCompletionDisposition,
+    AggregationJobLease,
     AggregationJobRecord,
+    ClaimedAggregationJob,
+    ExpiredAggregationJobRecovery,
     PortfolioAggregationScope,
     PortfolioTimeseriesRecord,
     PositionTimeseriesRecord,
@@ -109,6 +112,51 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         )
         return int(result.rowcount or 0) == 1
 
+    async def complete_or_requeue_claim(
+        self,
+        *,
+        job_id: int,
+        lease_token: str,
+    ) -> AggregationJobCompletionDisposition:
+        """Release one job only when its durable lease token still matches."""
+
+        requeue_result = await self.db.execute(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token)
+            .where(PortfolioAggregationJob.failure_reason == AGGREGATION_REPROCESS_REQUESTED)
+            .values(
+                status="PENDING",
+                failure_reason=None,
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+        )
+        if int(requeue_result.rowcount or 0) == 1:
+            return AggregationJobCompletionDisposition.REQUEUED
+
+        complete_result = await self.db.execute(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token).values(
+                status="COMPLETE",
+                failure_reason=None,
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+        )
+        if int(complete_result.rowcount or 0) == 1:
+            return AggregationJobCompletionDisposition.COMPLETE
+        return AggregationJobCompletionDisposition.LOST_OWNERSHIP
+
+    async def mark_claim_failed(self, *, job_id: int, lease_token: str) -> bool:
+        """Fail one job only when its durable lease token still matches."""
+
+        result = await self.db.execute(
+            _owned_claim_update(job_id=job_id, lease_token=lease_token).values(
+                status="FAILED",
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+        )
+        return int(result.rowcount or 0) == 1
+
     @async_timed(repository="TimeseriesRepository", method="get_portfolio")
     async def get_portfolio(self, portfolio_id: str) -> PortfolioAggregationScope | None:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
@@ -166,6 +214,13 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
 
     @async_timed(repository="TimeseriesRepository", method="find_and_claim_eligible_jobs")
     async def find_and_claim_eligible_jobs(self, batch_size: int) -> list[AggregationJobRecord]:
+        eligible_ids = await self._find_eligible_job_ids(batch_size)
+        claimed_rows = await self._claim_eligible_job_rows(eligible_ids)
+        if claimed_rows:
+            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_rows))
+        return [_aggregation_job_record(row) for row in claimed_rows]
+
+    async def _find_eligible_job_ids(self, batch_size: int) -> list[int]:
         job = PortfolioAggregationJob
         snapshot = DailyPositionSnapshot
         position_timeseries = PositionTimeseries
@@ -185,10 +240,24 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
             .limit(batch_size)
             .with_for_update(skip_locked=True)
         )
-        eligible_ids = [row[0] for row in result_proxy.fetchall()]
+        return [int(row[0]) for row in result_proxy.fetchall()]
+
+    async def _claim_eligible_job_rows(
+        self,
+        eligible_ids: list[int],
+        *,
+        lease: AggregationJobLease | None = None,
+    ) -> list[PortfolioAggregationJob]:
         if not eligible_ids:
             return []
-
+        job = PortfolioAggregationJob
+        lease_values: dict[str, Any] = {}
+        if lease is not None:
+            lease_values = {
+                "lease_owner": lease.owner,
+                "lease_token": lease.token,
+                "lease_expires_at": lease.expires_at,
+            }
         result = await self.db.execute(
             update(job)
             .where(job.id.in_(eligible_ids))
@@ -196,10 +265,11 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 status="PROCESSING",
                 updated_at=func.now(),
                 attempt_count=job.attempt_count + 1,
+                **lease_values,
             )
             .returning(job)
         )
-        claimed_rows = sorted(
+        return sorted(
             cast(list[PortfolioAggregationJob], result.scalars().all()),
             key=lambda claimed: (
                 claimed.portfolio_id,
@@ -207,9 +277,21 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
                 claimed.id,
             ),
         )
+
+    @async_timed(repository="TimeseriesRepository", method="claim_eligible_jobs")
+    async def claim_eligible_jobs(
+        self,
+        *,
+        batch_size: int,
+        lease: AggregationJobLease,
+    ) -> list[ClaimedAggregationJob]:
+        """Claim one ready batch with durable, fenced lease ownership."""
+
+        eligible_ids = await self._find_eligible_job_ids(batch_size)
+        claimed_rows = await self._claim_eligible_job_rows(eligible_ids, lease=lease)
         if claimed_rows:
-            logger.info("Found and claimed %s eligible aggregation jobs.", len(claimed_rows))
-        return [_aggregation_job_record(row) for row in claimed_rows]
+            logger.info("Found and leased %s eligible aggregation jobs.", len(claimed_rows))
+        return [_claimed_aggregation_job(row) for row in claimed_rows]
 
     @async_timed(repository="TimeseriesRepository", method="recover_dispatch_failed_jobs")
     async def recover_dispatch_failed_jobs(
@@ -266,6 +348,55 @@ class PortfolioAggregationRepository(TimeseriesMarketDataReader):
         reset_job_ids = [row.id for row in stale_rows if row.attempt_count < max_attempts]
         await self._mark_stale_jobs_failed(failed_job_ids, stale_threshold, max_attempts)
         return await self._reset_stale_jobs(reset_job_ids, stale_threshold)
+
+    @async_timed(repository="TimeseriesRepository", method="recover_expired_job_leases")
+    async def recover_expired_job_leases(
+        self,
+        *,
+        now: datetime,
+        max_attempts: int,
+    ) -> ExpiredAggregationJobRecovery:
+        """Requeue or fail expired claims while rechecking expiry on every write."""
+
+        expired_rows = cast(
+            list[Any],
+            (await self.db.execute(_expired_job_leases_statement(now))).all(),
+        )
+        failed_job_ids = [row.id for row in expired_rows if row.attempt_count >= max_attempts]
+        requeued_job_ids = [row.id for row in expired_rows if row.attempt_count < max_attempts]
+        failed_count = await self._fail_expired_job_leases(failed_job_ids, now)
+        requeued_count = await self._requeue_expired_job_leases(requeued_job_ids, now)
+        return ExpiredAggregationJobRecovery(
+            requeued_count=requeued_count,
+            failed_count=failed_count,
+        )
+
+    async def _fail_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
+        if not job_ids:
+            return 0
+        result = await self.db.execute(
+            _expired_job_leases_update(job_ids, now)
+            .values(
+                status="FAILED",
+                failure_reason="Aggregation job lease expired after max attempts",
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        return int(result.rowcount or 0)
+
+    async def _requeue_expired_job_leases(self, job_ids: list[int], now: datetime) -> int:
+        if not job_ids:
+            return 0
+        result = await self.db.execute(
+            _expired_job_leases_update(job_ids, now).values(
+                status="PENDING",
+                updated_at=func.now(),
+                **_cleared_lease_values(),
+            )
+        )
+        return int(result.rowcount or 0)
 
     async def _mark_stale_jobs_failed(
         self,
@@ -351,6 +482,23 @@ def _aggregation_job_record(row: PortfolioAggregationJob) -> AggregationJobRecor
     )
 
 
+def _claimed_aggregation_job(row: PortfolioAggregationJob) -> ClaimedAggregationJob:
+    lease_expires_at = cast(datetime | None, row.lease_expires_at)
+    if row.lease_owner is None or row.lease_token is None or lease_expires_at is None:
+        raise ValueError("Claimed aggregation job is missing durable lease identity.")
+    return ClaimedAggregationJob(
+        id=int(row.id),
+        portfolio_id=str(row.portfolio_id),
+        aggregation_date=cast(date, row.aggregation_date),
+        correlation_id=str(row.correlation_id) if row.correlation_id is not None else None,
+        lease=AggregationJobLease(
+            owner=str(row.lease_owner),
+            token=str(row.lease_token),
+            expires_at=lease_expires_at,
+        ),
+    )
+
+
 def _authoritative_snapshot_scope(job_model, snapshot_model):
     newer_snapshot = aliased(DailyPositionSnapshot)
     newer_snapshot_exists = (
@@ -414,6 +562,40 @@ def _stale_jobs_statement(stale_threshold: datetime):
         PortfolioAggregationJob.status == "PROCESSING",
         PortfolioAggregationJob.updated_at < stale_threshold,
     )
+
+
+def _expired_job_leases_statement(now: datetime):
+    return select(
+        PortfolioAggregationJob.id,
+        PortfolioAggregationJob.attempt_count,
+    ).where(
+        PortfolioAggregationJob.status == "PROCESSING",
+        PortfolioAggregationJob.lease_expires_at <= now,
+    )
+
+
+def _expired_job_leases_update(job_ids: list[int], now: datetime):
+    return update(PortfolioAggregationJob).where(
+        PortfolioAggregationJob.id.in_(job_ids),
+        PortfolioAggregationJob.status == "PROCESSING",
+        PortfolioAggregationJob.lease_expires_at <= now,
+    )
+
+
+def _owned_claim_update(*, job_id: int, lease_token: str):
+    return update(PortfolioAggregationJob).where(
+        PortfolioAggregationJob.id == job_id,
+        PortfolioAggregationJob.status == "PROCESSING",
+        PortfolioAggregationJob.lease_token == lease_token,
+    )
+
+
+def _cleared_lease_values() -> dict[str, None]:
+    return {
+        "lease_owner": None,
+        "lease_token": None,
+        "lease_expires_at": None,
+    }
 
 
 def _failed_stale_jobs_statement(job_ids: list[int], stale_threshold: datetime):
