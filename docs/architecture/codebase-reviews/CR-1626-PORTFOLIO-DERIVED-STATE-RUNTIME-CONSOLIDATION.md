@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; deployable consolidation fixed locally, load/recovery/release certification pending
+Status: In progress; deployable consolidation and interruption recovery fixed locally, load/release certification pending
 
 ## Objective
 
@@ -241,8 +241,12 @@ cross-window state.
   findings, and zero added DLQ events. Its focused gate and service-set suite passes `14` tests;
   Ruff, MyPy, and diff checks pass.
 - PR and main-releasability workflow wiring is covered by exact-image-set, managed-diagnostics,
-  action-version, and service-set contracts. A live PostgreSQL/Kafka execution remains required
-  before this source-level gate can count as deployed recovery evidence.
+  action-version, and service-set contracts.
+- Live managed run `20260715T085053Z` passed against PostgreSQL and Kafka: a `15.109s` pause of the
+  exact combined container produced `10` source snapshots and committed lag growth from `0` to
+  `10`; recovery completed in `3.06s` with lag back to `0`, `10` position rows, one portfolio row,
+  zero open valuation/aggregation jobs, zero reconciliation findings, and zero added DLQ events.
+  Managed teardown left no run-owned container, network, or volume.
 
 ## Same-Pattern Review
 
@@ -267,8 +271,7 @@ explicit no-change decisions because this cutover changes internal runtime topol
 1. Run daily, burst, backdated, and fan-in profiles and compare both stage p50/p95/p99/max results
    against the configured lease duration. Use those measured job durations to decide whether fixed
    expiry is sufficient or heartbeat renewal is required.
-2. Execute `make test-derived-state-recovery-gate`, retain its machine-readable evidence, and run
-   remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main validation
-   before closing #714.
+2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
+   validation before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
    build and run the combined image against PostgreSQL and Kafka.
