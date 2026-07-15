@@ -26,6 +26,7 @@ from typing import Any, Iterable, Mapping
 import requests
 from portfolio_common.db import get_sync_database_url
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 
 from scripts.operations.performance.derived_state_resource_monitor import (
     DerivedStateResourceEvidence,
@@ -1795,7 +1796,7 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "business_date_count": args.business_date_count,
         "window_start_date": business_dates[0],
         "window_end_date": business_dates[-1],
-        "host_database_url": args.host_database_url,
+        "database_target": _safe_database_target(args.host_database_url),
         "ingestion_base_url": args.ingestion_base_url,
         "query_base_url": args.query_base_url,
         "query_control_base_url": args.query_control_base_url,
@@ -1817,6 +1818,18 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
             "restart_valuation_orchestrator_during_fx_correction",
             False,
         ),
+    }
+
+
+def _safe_database_target(database_url: str) -> dict[str, str | int | None]:
+    """Describe the evidence database without retaining credentials or URL parameters."""
+
+    target = make_url(database_url)
+    return {
+        "backend": target.get_backend_name(),
+        "host": target.host,
+        "port": target.port,
+        "database": target.database,
     }
 
 

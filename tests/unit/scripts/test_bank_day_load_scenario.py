@@ -325,7 +325,9 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
             business_date_count=1,
             max_records_per_minute=1000,
             max_requests_per_minute=100,
-            host_database_url="postgresql://localhost/test",
+            host_database_url=(
+                "postgresql://load_user:load_password@localhost:5432/test?sslmode=disable"
+            ),
             ingestion_base_url="http://localhost:8200",
             query_base_url="http://localhost:8201",
             query_control_base_url="http://localhost:8202",
@@ -426,6 +428,15 @@ def test_finalize_report_marks_aborted_runs_as_failed_and_preserves_partial_evid
     assert report.derived_state_resource_evidence is not None
     assert report.derived_state_resource_evidence.peak_runtime_cpu_percent == 40.0
     assert report.derived_state_resource_evidence.final_outbox_pending_events == 0
+    assert report.config["database_target"] == {
+        "backend": "postgresql",
+        "host": "localhost",
+        "port": 5432,
+        "database": "test",
+    }
+    assert "load_user" not in str(report.config)
+    assert "load_password" not in str(report.config)
+    assert "sslmode" not in str(report.config)
 
 
 def test_database_tie_out_measures_both_materialization_stages_with_upsert_timestamps(
