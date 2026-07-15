@@ -15,6 +15,7 @@ from src.services.query_control_plane_service.app.application.operations.service
 from src.services.query_control_plane_service.app.dependencies import get_operations_service
 from src.services.query_control_plane_service.app.main import app
 from src.services.query_control_plane_service.app.routers.operations import (
+    get_load_run_progress,
     parse_required_iso_date,
 )
 
@@ -29,6 +30,24 @@ async def test_parse_required_iso_date_rejects_missing_value():
     assert exc_info.value.detail == "Missing required date filter."
     assert exc_info.value.error_code == "QCP_OPERATIONS_MISSING_DATE"
     assert exc_info.value.metadata["field"] == "business_date"
+
+
+async def test_get_load_run_progress_parses_business_date_before_dispatch():
+    service = AsyncMock()
+    expected_response = object()
+    service.get_load_run_progress.return_value = expected_response
+
+    response = await get_load_run_progress(
+        run_id="20260418T065154Z",
+        business_date="2026-04-17",
+        service=service,
+    )
+
+    assert response is expected_response
+    service.get_load_run_progress.assert_awaited_once_with(
+        run_id="20260418T065154Z",
+        business_date=date(2026, 4, 17),
+    )
 
 
 def _source_data_product_metadata(
@@ -990,6 +1009,15 @@ async def test_get_outbox_recovery_audits_unexpected_maps_to_500(async_test_clie
     assert "recovery audit" in response.json()["detail"].lower()
 
 
+def _outbox_requeue_request() -> dict[str, object]:
+    return {
+        "requested_by": "ops.sre",
+        "reason": "Kafka delivery timeout cleared; payload contract inspected.",
+        "correlation_id": "incident-20260314-outbox-701",
+        "confirm_payload_contract_reviewed": True,
+    }
+
+
 async def test_requeue_failed_outbox_event_success(async_test_client):
     client, mock_service = async_test_client
     mock_service.requeue_failed_outbox_event.return_value = {
@@ -1009,12 +1037,7 @@ async def test_requeue_failed_outbox_event_success(async_test_client):
 
     response = await client.post(
         "/support/outbox/failed-events/701/requeue",
-        json={
-            "requested_by": "ops.sre",
-            "reason": "Kafka delivery timeout cleared; payload contract inspected.",
-            "correlation_id": "incident-20260314-outbox-701",
-            "confirm_payload_contract_reviewed": True,
-        },
+        json=_outbox_requeue_request(),
     )
 
     assert response.status_code == 200
@@ -1059,6 +1082,36 @@ async def test_requeue_failed_outbox_event_rejected_maps_to_409(async_test_clien
     assert body["metadata"]["resource"] == "failed_outbox_requeue"
     assert body["metadata"]["outcome"] == "REJECTED"
     assert body["metadata"]["reason"] == "payload_contract_review_required"
+
+
+async def test_requeue_failed_outbox_event_not_found_maps_to_404(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.requeue_failed_outbox_event.side_effect = ValueError("not found")
+
+    response = await client.post(
+        "/support/outbox/failed-events/701/requeue",
+        json=_outbox_requeue_request(),
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error_code"] == "QCP_OPERATIONS_NOT_FOUND"
+    assert body["metadata"]["resource"] == "failed_outbox_requeue"
+
+
+async def test_requeue_failed_outbox_event_unexpected_maps_to_500(async_test_client):
+    client, mock_service = async_test_client
+    mock_service.requeue_failed_outbox_event.side_effect = RuntimeError("boom")
+
+    response = await client.post(
+        "/support/outbox/failed-events/701/requeue",
+        json=_outbox_requeue_request(),
+    )
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error_code"] == "QCP_OPERATIONS_UNEXPECTED_ERROR"
+    assert body["metadata"]["resource"] == "failed_outbox_requeue"
 
 
 async def test_lineage_keys_unexpected_maps_to_500(async_test_client):
