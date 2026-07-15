@@ -288,7 +288,6 @@ def test_direct_kafka_ingestion_topics_are_cataloged() -> None:
         "transactions.reprocessing.requested",
         "transactions.persisted",
         "valuation.job.requested",
-        "portfolio_day.aggregation.job.requested",
     } <= set(topics)
     assert topics["transactions.raw.received"].payload_contract == "TransactionEvent"
     assert topics["instruments.received"].semantic_type == "mixed_source_and_derived_fact"

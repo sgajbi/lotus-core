@@ -76,7 +76,6 @@ services:
     command: ["python", "-m", "tools.kafka_setup"]
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9093
-      KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS: ${KAFKA_PORTFOLIO_AGGREGATION_JOB_PARTITIONS:-4}
     networks:
       - app_network
 

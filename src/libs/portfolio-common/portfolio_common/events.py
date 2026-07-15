@@ -440,17 +440,6 @@ class PortfolioTimeseriesGeneratedEvent(CoreEventModel):
     date: date
 
 
-class PortfolioAggregationRequiredEvent(CoreEventModel):
-    """
-    Event published by the AggregationScheduler to trigger a portfolio
-    time series calculation for a specific portfolio and date.
-    """
-
-    portfolio_id: str
-    aggregation_date: date
-    correlation_id: Optional[str] = None
-
-
 class PortfolioValuationRequiredEvent(CoreEventModel):
     """
     Event published by the ValuationScheduler to trigger a position valuation

@@ -451,18 +451,6 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         source_data_products=("HoldingsAsOf",),
     ),
     DirectKafkaTopicDefinition(
-        name="PortfolioAggregationJobRequested",
-        topic="portfolio_day.aggregation.job.requested",
-        semantic_type="pipeline_command",
-        producer_service="portfolio_aggregation_service",
-        consumer_services=("portfolio_aggregation_service",),
-        payload_contract="portfolio_aggregation_job_command",
-        idempotency_header_supported=True,
-        correlation_header_supported=True,
-        supportability_evidence=(DATA_QUALITY_COVERAGE_REPORT,),
-        source_data_products=("PortfolioTimeseriesInput",),
-    ),
-    DirectKafkaTopicDefinition(
         name="PersistenceServiceDlq",
         topic="dlq.persistence_service",
         semantic_type="consumer_dlq",
