@@ -122,25 +122,10 @@ async def test_handler_propagates_db_errors_for_consumer_retry_policy() -> None:
         )
 
 
-def test_pipeline_stage_consumers_do_not_assemble_repositories_or_services() -> None:
-    consumer_paths = [
-        Path(
-            "src/services/pipeline_orchestrator_service/app/consumers/"
-            "financial_reconciliation_completion_consumer.py"
-        ),
-    ]
-    forbidden_snippets = [
-        "get_async_db_session",
-        "IdempotencyRepository",
-        "PipelineStageRepository",
-        "OutboxRepository",
-        "PipelineOrchestratorService",
-    ]
+def test_reconciliation_completion_pipeline_consumer_does_not_return() -> None:
+    consumer_path = Path(
+        "src/services/pipeline_orchestrator_service/app/consumers/"
+        "financial_reconciliation_completion_consumer.py"
+    )
 
-    for consumer_path in consumer_paths:
-        source = consumer_path.read_text(encoding="utf-8")
-        for forbidden_snippet in forbidden_snippets:
-            assert forbidden_snippet not in source, (
-                f"{consumer_path} must delegate dependency assembly to the "
-                "pipeline stage message handler boundary"
-            )
+    assert not consumer_path.exists()

@@ -1,6 +1,10 @@
 import asyncio
 
 import pytest
+from portfolio_common.config import (
+    KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
+    KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
+)
 
 from src.services.financial_reconciliation_service.app import consumer_manager
 
@@ -51,12 +55,18 @@ class _FakeFailingConsumer(_FakeSuccessConsumer):
 
 @pytest.fixture
 def _patch_runtime(monkeypatch):
-    monkeypatch.setattr(consumer_manager, "ensure_topics_exist", lambda *_: None)
+    ensured_topics = []
+    monkeypatch.setattr(
+        consumer_manager,
+        "ensure_topics_exist",
+        lambda topics: ensured_topics.extend(topics),
+    )
     monkeypatch.setattr(consumer_manager.signal, "signal", lambda *_: None)
     monkeypatch.setattr(consumer_manager, "get_kafka_producer", lambda: object())
     monkeypatch.setattr(consumer_manager, "OutboxDispatcher", _FakeDispatcher)
     monkeypatch.setattr(consumer_manager.uvicorn, "Config", lambda *args, **kwargs: object())
     monkeypatch.setattr(consumer_manager.uvicorn, "Server", _FakeServer)
+    return ensured_topics
 
 
 async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
@@ -70,6 +80,8 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 
     assert all(c.shutdown_called for c in manager.consumers)
     assert manager.dispatcher.stop_called is True
+    assert KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC in _patch_runtime
+    assert KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC in _patch_runtime
 
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):

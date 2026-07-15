@@ -6,6 +6,7 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+    KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
 )
@@ -46,6 +47,7 @@ class ConsumerManager:
     async def run(self):
         required_topics = [consumer.topic for consumer in self.consumers]
         required_topics.append(KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC)
+        required_topics.append(KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC)
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)
