@@ -37,9 +37,7 @@ def _completion() -> FinancialReconciliationCompletion:
 
 async def test_stages_existing_completion_contract_without_payload_drift() -> None:
     outbox_repository = AsyncMock()
-    stager = event_stager.TransactionalReconciliationCompletionEventStager(
-        outbox_repository
-    )
+    stager = event_stager.TransactionalReconciliationCompletionEventStager(outbox_repository)
 
     await stager.stage_reconciliation_completed(_completion(), correlation_id="corr-1")
 
@@ -55,9 +53,7 @@ async def test_stages_existing_completion_contract_without_payload_drift() -> No
 
 async def test_stages_existing_controls_contract_with_recorded_status() -> None:
     outbox_repository = AsyncMock()
-    stager = event_stager.TransactionalReconciliationCompletionEventStager(
-        outbox_repository
-    )
+    stager = event_stager.TransactionalReconciliationCompletionEventStager(outbox_repository)
 
     await stager.stage_controls_evaluated(
         _completion(),
