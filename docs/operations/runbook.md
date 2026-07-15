@@ -403,6 +403,7 @@ Operational knobs:
 | `VALUATION_SCHEDULER_POLL_BUDGET_SECONDS` | `30` | Maximum valuation scheduler poll work budget before deferring remaining dispatch rounds to a later poll. |
 | `VALUATION_SCHEDULER_DISPATCH_BUDGET_SECONDS` | `10` | Maximum valuation scheduler per-batch dispatch budget before confirming queued work and recovering remaining claimed jobs. |
 | `VALUATION_SCHEDULER_BACKFILL_UPSERT_CHUNK_SIZE` | `100` | Maximum generated valuation backfill jobs written in one scheduler upsert chunk across states. |
+| `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` | Scheduler batch size (`100` by default; Compose uses `1000`) | Maximum durable valuation jobs allowed in `PROCESSING` across scheduler replicas. Claims use a PostgreSQL transaction-scoped lock so concurrent schedulers share the same cap. Size this below the number the active valuation workers can drain within `VALUATION_SCHEDULER_STALE_TIMEOUT_MINUTES`. |
 
 The guard is static contract evidence. Environment-level ingress, IAM, WAF, network policy, and
 penetration-test evidence remain separate higher-lane proof.

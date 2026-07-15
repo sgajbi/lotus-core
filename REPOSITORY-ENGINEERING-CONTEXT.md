@@ -1678,7 +1678,12 @@ Most relevant current governance:
      with scheduler-configured timeout and maximum-attempt policy. `ValuationDispatchCoordinator`
      owns claimed-job polling rounds, poll-budget enforcement, eligible-job claiming, dispatch
      callback orchestration, dispatch failure observation, and recovery repository calls through an
-     explicit session provider and repository factory. `ValuationSchedulerRepositoryFactory` owns
+     explicit session provider and repository factory. Durable valuation claims must also respect
+     `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS`; the repository serializes capacity checks and claims
+     with a PostgreSQL transaction-scoped advisory lock so concurrent schedulers cannot turn broker
+     backlog into unbounded `PROCESSING` rows that later fail the stale-worker policy. Keep this
+     control separate from per-poll batch, round, and time budgets.
+     `ValuationSchedulerRepositoryFactory` owns
      repository construction for scheduler DB steps, and the scheduler accepts an explicit session
      provider so the loop can be tested without real repositories or Kafka. Keep the scheduler as a
      small cadence/compatibility wrapper; do not reintroduce backfill, watermark, reprocessing,

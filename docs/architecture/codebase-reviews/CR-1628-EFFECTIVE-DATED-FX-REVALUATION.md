@@ -25,6 +25,12 @@ The repository-wide leakage guard exposed a fourth defect: bank-day JSON and Mar
 persisted the credentialed host database URL. Ignored local output is still evidence that may be
 retained or shared, so credentials cannot be part of its schema.
 
+The first certifying five-day run exposed a fifth defect: the scheduler could claim and publish
+`batch_size * dispatch_rounds` jobs every two seconds without considering already dispatched work.
+One sequential Kafka partition therefore left about 60,000 database rows in `PROCESSING`; queued
+messages aged past the worker stale timeout and were eventually marked `FAILED` despite never
+having started valuation execution.
+
 ## Implemented Direction
 
 1. Persistence emits a versioned, deterministic, source-owned FX persisted event through the
@@ -46,6 +52,9 @@ retained or shared, so credentials cannot be part of its schema.
    replace caller-asserted recovery flags.
 8. Workload reports retain only a safe database target and exclude URL credentials and parameters;
    generated evidence must pass the leakage guard.
+9. Valuation claims enforce one configurable durable in-flight ceiling across scheduler replicas.
+   A PostgreSQL transaction-scoped advisory lock makes the capacity check and claim mutually
+   exclusive, preventing queue backlog from growing beyond worker drain capacity.
 
 ## Compatibility
 
