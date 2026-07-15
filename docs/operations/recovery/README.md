@@ -7,6 +7,7 @@ evidence, and enforcement command.
 ## Procedures
 
 - [Portfolio derived-state interruption recovery](./portfolio-derived-state-interruption.md)
+- [Portfolio derived-state poison-message recovery](./portfolio-derived-state-poison-message.md)
 
 Transaction processing cutover and interruption recovery remains in the
 [Transaction Processing Cutover Runbook](../Transaction-Processing-Cutover-Runbook.md) until that

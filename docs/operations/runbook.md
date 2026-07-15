@@ -285,6 +285,23 @@ This is controlled fail-fast, not durable local quarantine. Restart only after t
 topic permissions, or producer path is restored, or after a governed service-specific quarantine
 plan is in place.
 
+Service consumers must raise terminal failures to `BaseConsumer`; they must not call the protected
+DLQ publisher themselves. The shared boundary confirms the broker write, persists consumer-DLQ
+support evidence, and only then commits the exact source message. `make event-runtime-contract-guard`
+blocks service-level publication bypasses.
+
+For the portfolio derived-state runtime, run:
+
+```text
+make test-derived-state-poison-gate
+```
+
+The managed gate publishes one uniquely identified malformed valuation snapshot, requires exactly
+one DLQ topic record and one matching support event, then submits one valid transaction. It passes
+only when source lag returns to baseline, the valid position and portfolio rows materialize exactly
+once, durable queues close, and timeseries reconciliation remains clean. See
+[Portfolio Derived-State Poison-Message Recovery](./recovery/portfolio-derived-state-poison-message.md).
+
 ## Kafka Consumer Retryable Failure Budgets
 
 `RetryableConsumerError` keeps the offset uncommitted by default so transient dependency or
