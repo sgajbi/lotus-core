@@ -64,6 +64,18 @@ def test_price_restatement_profile_rebuilds_a_bounded_business_date_window() -> 
     assert profile.certifying is True
 
 
+def test_fx_restatement_profile_rebuilds_only_the_affected_direct_pair() -> None:
+    profile = resolve_workload_profile(profile_name="fx-restatement", diagnostic_smoke=False)
+
+    assert profile.name == "derived-state-fx-rate-restatement"
+    assert profile.transaction_count == 10_000
+    assert profile.business_date_count == 5
+    assert profile.fx_rate_correction_from_currency == "EUR"
+    assert profile.fx_rate_correction_to_currency == "USD"
+    assert profile.fx_rate_correction_multiplier == Decimal("1.05")
+    assert profile.certifying is True
+
+
 def test_diagnostic_smoke_profile_cannot_be_mistaken_for_capacity_proof() -> None:
     profile = resolve_workload_profile(profile_name="daily", diagnostic_smoke=True)
 
@@ -197,6 +209,37 @@ def test_price_restatement_command_requests_a_five_day_correction_window(
     assert command[command.index("--market-price-correction-multiplier") + 1] == "1.05"
 
 
+def test_fx_restatement_command_requests_a_five_day_direct_pair_correction(
+    tmp_path: Path,
+) -> None:
+    profile = resolve_workload_profile(profile_name="fx-restatement", diagnostic_smoke=False)
+    endpoints = SimpleNamespace(
+        compose_project_name="derived-state-fx-restatement-proof",
+        host_database_url="postgresql://user:password@localhost:55001/core",
+        e2e_ingestion_url="http://localhost:55002",
+        e2e_query_url="http://localhost:55003",
+        e2e_query_control_plane_url="http://localhost:55004",
+        e2e_event_replay_url="http://localhost:55005",
+        e2e_financial_reconciliation_url="http://localhost:55006",
+    )
+
+    command = build_bank_day_command(
+        python_executable="python",
+        repo_root=tmp_path,
+        compose_file=tmp_path / "docker-compose.yml",
+        endpoints=endpoints,
+        profile=profile,
+        output_dir="output/task-runs",
+        resource_poll_interval_seconds=5.0,
+        trade_date="2026-07-15",
+    )
+
+    assert command[command.index("--business-date-count") + 1] == "5"
+    assert command[command.index("--fx-rate-correction-from-currency") + 1] == "EUR"
+    assert command[command.index("--fx-rate-correction-to-currency") + 1] == "USD"
+    assert command[command.index("--fx-rate-correction-multiplier") + 1] == "1.05"
+
+
 def test_certifying_profile_requires_exact_source_build() -> None:
     certifying = resolve_workload_profile(profile_name="fan-in", diagnostic_smoke=False)
     diagnostic = resolve_workload_profile(profile_name="daily", diagnostic_smoke=True)
@@ -264,3 +307,5 @@ def test_make_targets_keep_diagnostic_and_certifying_profiles_explicit() -> None
     assert "--profile price-burst" in makefile
     assert "profile-derived-state-price-restatement:" in makefile
     assert "--profile price-restatement" in makefile
+    assert "profile-derived-state-fx-restatement:" in makefile
+    assert "--profile fx-restatement" in makefile

@@ -44,6 +44,9 @@ class DerivedStateWorkloadProfile:
     certifying: bool
     business_date_count: int = 1
     market_price_correction_multiplier: Decimal | None = None
+    fx_rate_correction_from_currency: str | None = None
+    fx_rate_correction_to_currency: str | None = None
+    fx_rate_correction_multiplier: Decimal | None = None
 
     @property
     def transaction_count(self) -> int:
@@ -91,6 +94,19 @@ _CERTIFYING_PROFILES = {
         certifying=True,
         business_date_count=5,
         market_price_correction_multiplier=Decimal("1.05"),
+    ),
+    "fx-restatement": DerivedStateWorkloadProfile(
+        name="derived-state-fx-rate-restatement",
+        portfolio_count=100,
+        positions_per_portfolio=100,
+        transaction_batch_size=2000,
+        sample_size=5,
+        drain_timeout_seconds=3600,
+        certifying=True,
+        business_date_count=5,
+        fx_rate_correction_from_currency="EUR",
+        fx_rate_correction_to_currency="USD",
+        fx_rate_correction_multiplier=Decimal("1.05"),
     ),
 }
 _DIAGNOSTIC_SMOKE_PROFILE = DerivedStateWorkloadProfile(
@@ -228,6 +244,22 @@ def build_bank_day_command(
             (
                 "--market-price-correction-multiplier",
                 str(profile.market_price_correction_multiplier),
+            )
+        )
+    if profile.fx_rate_correction_multiplier is not None:
+        if (
+            profile.fx_rate_correction_from_currency is None
+            or profile.fx_rate_correction_to_currency is None
+        ):
+            raise ValueError("FX correction profile requires a complete currency pair")
+        command.extend(
+            (
+                "--fx-rate-correction-from-currency",
+                profile.fx_rate_correction_from_currency,
+                "--fx-rate-correction-to-currency",
+                profile.fx_rate_correction_to_currency,
+                "--fx-rate-correction-multiplier",
+                str(profile.fx_rate_correction_multiplier),
             )
         )
     return command

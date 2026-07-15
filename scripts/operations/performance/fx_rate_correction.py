@@ -302,6 +302,11 @@ def build_fx_valuation_expectations(
             unrealized_total += market_value_base - cost_basis_base
         total_market_value += spec.market_price * current_rate
 
+    if affected_count == 0:
+        raise ValueError(
+            f"FX correction pair {normalized_from}/{normalized_to} affects no instruments"
+        )
+
     scale = Decimal(portfolio_count)
     return FxValuationExpectations(
         affected_instrument_count=affected_count,
