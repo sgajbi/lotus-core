@@ -113,7 +113,7 @@ class ReprocessingWorker:
         self._stop_event.set()
 
     async def _update_queue_metrics(self, job_repo: ReprocessingJobRepository):
-        queue_stats = await job_repo.get_queue_stats("RESET_WATERMARKS")
+        queue_stats = await job_repo.get_queue_stats()
         set_control_queue_pending("reprocessing", queue_stats["pending_count"])
         set_control_queue_failed_stored("reprocessing", queue_stats["failed_count"])
         oldest_pending_created_at = queue_stats["oldest_pending_created_at"]
