@@ -1,1 +1,0 @@
-"""Pipeline orchestrator adapter modules."""
