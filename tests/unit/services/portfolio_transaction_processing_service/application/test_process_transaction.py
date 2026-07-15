@@ -263,6 +263,8 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
         "position:TX-001-2",
         "cashflow:TX-001-1:0",
         "cashflow:TX-001-2:0",
+        "readiness:TX-001-1:0",
+        "readiness:TX-001-2:0",
         "commit",
     ]
     assert result.status is TransactionProcessingStatus.PROCESSED
@@ -286,6 +288,10 @@ async def test_use_case_processes_cost_cashflow_and_each_position_leg_atomically
         ),
         (
             TransactionProcessingOperation.CASHFLOW,
+            TransactionProcessingOutcome.SUCCEEDED,
+        ),
+        (
+            TransactionProcessingOperation.PIPELINE,
             TransactionProcessingOutcome.SUCCEEDED,
         ),
         (TransactionProcessingOperation.COMMIT, TransactionProcessingOutcome.SUCCEEDED),
@@ -324,10 +330,10 @@ async def test_use_case_stages_cashflows_from_inline_position_rebuild_epoch() ->
         "idempotency",
         "cost:TX-001",
         "position:TX-BACKDATED",
-        "readiness:TX-BACKDATED:3",
-        "readiness:TX-LATER:3",
         "cashflow:TX-BACKDATED:3",
         "cashflow:TX-LATER:3",
+        "readiness:TX-BACKDATED:3",
+        "readiness:TX-LATER:3",
         "commit",
     ]
     assert result.processed_transaction_ids == ("TX-BACKDATED",)
@@ -452,6 +458,7 @@ async def test_use_case_reprocesses_semantic_duplicate_with_canonical_repair_int
         "cost:TX-001",
         "position:TX-001",
         "cashflow:TX-001:0",
+        "readiness:TX-001:0",
         "commit",
     ]
     assert observer.records[0] == (
@@ -646,6 +653,7 @@ async def test_repair_intent_claims_payload_specific_correction_identity() -> No
         "cost:TX-001",
         "position:TX-001",
         "cashflow:TX-001:0",
+        "readiness:TX-001:0",
         "commit",
     ]
     assert unit_of_work.idempotency.claim_kwargs["semantic_key"].startswith(

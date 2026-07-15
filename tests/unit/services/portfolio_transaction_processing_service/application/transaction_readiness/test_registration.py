@@ -75,7 +75,11 @@ async def test_registers_current_epoch_and_stages_claimed_completion() -> None:
         business_date=date(2026, 4, 10),
         epoch=4,
     )
-    events.stage_transaction_readiness.assert_awaited_once_with(_stage(), correlation_id="corr-001")
+    events.stage_transaction_readiness.assert_awaited_once_with(
+        _stage(),
+        correlation_id="corr-001",
+        traceparent="trace-001",
+    )
 
 
 @pytest.mark.asyncio
