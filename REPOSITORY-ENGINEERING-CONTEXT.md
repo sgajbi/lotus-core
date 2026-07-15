@@ -2528,6 +2528,15 @@ Most relevant current governance:
      Keep generation and aggregation persistence service-owned, and keep #714 open until measured
      daily-volume, backfill, fan-in, recovery, isolation, rollback, and SLO evidence decides runtime
      topology.
+     Position-timeseries Kafka delivery is a transport adapter only. Map
+     `DailyPositionSnapshotPersistedEvent` into the framework-neutral command under
+     `timeseries_generator_service.app.application.position_timeseries`; keep current-day and
+     bounded backdated materialization in that application package, calculations in the domain/core
+     policy, persistence contracts under `app.ports`, and SQLAlchemy transaction/ORM/job-staging
+     behavior under `app.infrastructure`. Treat the persisted snapshot as authoritative and fail
+     closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
+     Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
+     runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
      AVCO rebuild planning belongs under `app/application/cost_basis_processing`. Upstream linked
      cash-leg resolution and pairing belongs under `app/application/settlement_processing` and uses
