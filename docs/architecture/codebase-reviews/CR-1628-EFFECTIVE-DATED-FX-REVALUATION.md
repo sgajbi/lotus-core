@@ -21,6 +21,10 @@ Initial reference-data loads exposed a third defect: a pair with no affected pos
 `PENDING` immediately and bypassed stale-processing max-attempt handling, allowing an unbounded
 claim/no-op loop.
 
+The repository-wide leakage guard exposed a fourth defect: bank-day JSON and Markdown evidence
+persisted the credentialed host database URL. Ignored local output is still evidence that may be
+retained or shared, so credentials cannot be part of its schema.
+
 ## Implemented Direction
 
 1. Persistence emits a versioned, deterministic, source-owned FX persisted event through the
@@ -39,6 +43,8 @@ claim/no-op loop.
    unrealized price, FX, and total P&L, then requires exactly-once source/replay evidence and closed
    queues. It commits the correction while valuation orchestration is stopped and proves recovery
    after unconditional service restoration.
+8. Workload reports retain only a safe database target and exclude URL credentials and parameters;
+   generated evidence must pass the leakage guard.
 
 ## Compatibility
 
