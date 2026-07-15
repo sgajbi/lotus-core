@@ -54,6 +54,16 @@ def test_price_burst_profile_revalues_shared_instruments_across_portfolios() -> 
     assert profile.certifying is True
 
 
+def test_price_restatement_profile_rebuilds_a_bounded_business_date_window() -> None:
+    profile = resolve_workload_profile(profile_name="price-restatement", diagnostic_smoke=False)
+
+    assert profile.name == "derived-state-market-price-restatement"
+    assert profile.transaction_count == 10_000
+    assert profile.business_date_count == 5
+    assert profile.market_price_correction_multiplier == Decimal("1.05")
+    assert profile.certifying is True
+
+
 def test_diagnostic_smoke_profile_cannot_be_mistaken_for_capacity_proof() -> None:
     profile = resolve_workload_profile(profile_name="daily", diagnostic_smoke=True)
 
@@ -67,6 +77,20 @@ def test_workload_trade_date_is_explicit_for_an_empty_managed_database() -> None
 
     assert resolve_workload_trade_date(explicit_trade_date=None, now=now) == "2026-07-15"
     assert resolve_workload_trade_date(explicit_trade_date="2026-04-10", now=now) == "2026-04-10"
+
+
+def test_implicit_workload_trade_date_rolls_weekend_back_to_friday() -> None:
+    sunday = datetime(2026, 7, 19, 10, 0, tzinfo=UTC)
+
+    assert resolve_workload_trade_date(explicit_trade_date=None, now=sunday) == "2026-07-17"
+
+
+def test_explicit_workload_trade_date_rejects_weekends() -> None:
+    with pytest.raises(ValueError, match="explicit trade date must be a weekday"):
+        resolve_workload_trade_date(
+            explicit_trade_date="2026-07-19",
+            now=datetime(2026, 7, 15, tzinfo=UTC),
+        )
 
 
 def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_path: Path) -> None:
@@ -106,6 +130,7 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     assert "--host-database-url" not in command
     assert endpoints.host_database_url not in command
     assert command[command.index("--trade-date") + 1] == "2026-07-15"
+    assert command[command.index("--business-date-count") + 1] == "1"
     assert "--derived-state-service" in command
     assert "--market-price-correction-multiplier" not in command
 
@@ -140,6 +165,35 @@ def test_price_burst_command_requests_a_measured_market_price_correction(tmp_pat
         trade_date="2026-07-15",
     )
 
+    assert command[command.index("--market-price-correction-multiplier") + 1] == "1.05"
+
+
+def test_price_restatement_command_requests_a_five_day_correction_window(
+    tmp_path: Path,
+) -> None:
+    profile = resolve_workload_profile(profile_name="price-restatement", diagnostic_smoke=False)
+    endpoints = SimpleNamespace(
+        compose_project_name="derived-state-price-restatement-proof",
+        host_database_url="postgresql://user:password@localhost:55001/core",
+        e2e_ingestion_url="http://localhost:55002",
+        e2e_query_url="http://localhost:55003",
+        e2e_query_control_plane_url="http://localhost:55004",
+        e2e_event_replay_url="http://localhost:55005",
+        e2e_financial_reconciliation_url="http://localhost:55006",
+    )
+
+    command = build_bank_day_command(
+        python_executable="python",
+        repo_root=tmp_path,
+        compose_file=tmp_path / "docker-compose.yml",
+        endpoints=endpoints,
+        profile=profile,
+        output_dir="output/task-runs",
+        resource_poll_interval_seconds=5.0,
+        trade_date="2026-07-15",
+    )
+
+    assert command[command.index("--business-date-count") + 1] == "5"
     assert command[command.index("--market-price-correction-multiplier") + 1] == "1.05"
 
 
@@ -208,3 +262,5 @@ def test_make_targets_keep_diagnostic_and_certifying_profiles_explicit() -> None
     assert "--profile fan-in" in makefile
     assert "profile-derived-state-price-burst:" in makefile
     assert "--profile price-burst" in makefile
+    assert "profile-derived-state-price-restatement:" in makefile
+    assert "--profile price-restatement" in makefile
