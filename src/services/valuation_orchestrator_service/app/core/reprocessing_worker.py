@@ -19,8 +19,13 @@ from portfolio_common.monitoring import (
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 
+from ..infrastructure.repositories.fx_revaluation_repository import (
+    FX_REVALUATION_JOB_TYPE,
+    SqlAlchemyFxRevaluationRepository,
+)
 from ..repositories.valuation_repository import ValuationRepository
 from ..settings import get_valuation_runtime_settings
+from .fx_revaluation_job_processor import FxRevaluationJobProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +81,12 @@ class ReprocessingWorker:
     A background worker that polls for and processes durable reprocessing jobs.
     """
 
-    def __init__(self, poll_interval: int = 10, batch_size: int = 10):
+    def __init__(
+        self,
+        poll_interval: int = 10,
+        batch_size: int = 10,
+        fx_job_processor: FxRevaluationJobProcessor | None = None,
+    ):
         runtime_settings = get_valuation_runtime_settings(
             worker_poll_interval_default=poll_interval,
             worker_batch_size_default=batch_size,
@@ -87,6 +97,7 @@ class ReprocessingWorker:
         self._max_attempts = runtime_settings.reprocessing_worker_max_attempts
         self._running = True
         self._stop_event = asyncio.Event()
+        self._fx_job_processor = fx_job_processor or FxRevaluationJobProcessor()
 
     def stop(self):
         logger.info(
@@ -130,6 +141,21 @@ class ReprocessingWorker:
                             job_repo=job_repo,
                             state_repo=state_repo,
                             valuation_repo=valuation_repo,
+                        )
+
+                    fx_revaluation_repo = SqlAlchemyFxRevaluationRepository(db)
+                    fx_jobs = await fx_revaluation_repo.claim_pending_jobs(self._batch_size)
+                    if fx_jobs:
+                        observe_reprocessing_worker_jobs_claimed(
+                            FX_REVALUATION_JOB_TYPE,
+                            len(fx_jobs),
+                        )
+                    for job in fx_jobs:
+                        await self._fx_job_processor.process(
+                            job=job,
+                            jobs=job_repo,
+                            watermarks=state_repo,
+                            revaluation=fx_revaluation_repo,
                         )
 
     async def _claim_reset_watermark_jobs(self, job_repo: ReprocessingJobRepository):

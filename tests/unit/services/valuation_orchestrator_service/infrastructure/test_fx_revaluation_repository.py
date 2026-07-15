@@ -1,9 +1,10 @@
 """Unit contract tests for the PostgreSQL FX revaluation adapter."""
 
 from datetime import date, datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
@@ -94,3 +95,22 @@ async def test_affected_keys_include_open_and_later_positions_without_duplicates
         ("P2", "USD-EQUITY", 1),
     ]
     assert session.execute.await_count == 2
+
+
+async def test_claim_pending_jobs_uses_fx_queue_type() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+
+    with patch(
+        "src.services.valuation_orchestrator_service.app.infrastructure.repositories."
+        "fx_revaluation_repository.ReprocessingJobRepository",
+        autospec=ReprocessingJobRepository,
+    ) as jobs:
+        jobs.return_value.find_and_claim_jobs.return_value = []
+        claimed = await repository.claim_pending_jobs(batch_size=25)
+
+    assert claimed == []
+    jobs.return_value.find_and_claim_jobs.assert_awaited_once_with(
+        "RESET_FX_WATERMARKS",
+        25,
+    )

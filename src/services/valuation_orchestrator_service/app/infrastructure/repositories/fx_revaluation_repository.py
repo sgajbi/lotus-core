@@ -10,8 +10,10 @@ from portfolio_common.database_models import (
     Portfolio,
     PositionHistory,
     PositionState,
+    ReprocessingJob,
 )
 from portfolio_common.durable_correlation import durable_correlation_diagnostics
+from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy import Date, String, bindparam, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +37,16 @@ class SqlAlchemyFxRevaluationRepository:
     async def latest_business_date(self) -> date | None:
         """Return the valuation runtime's governed business-date horizon."""
         return cast(date | None, await self._valuation_repository.get_latest_business_date())
+
+    async def claim_pending_jobs(self, batch_size: int) -> list[ReprocessingJob]:
+        """Claim the oldest pending FX replay jobs through the shared queue lease."""
+        return cast(
+            list[ReprocessingJob],
+            await ReprocessingJobRepository(self._db).find_and_claim_jobs(
+                FX_REVALUATION_JOB_TYPE,
+                batch_size,
+            ),
+        )
 
     async def find_open_position_keys(
         self,

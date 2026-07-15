@@ -59,6 +59,20 @@ async def test_find_and_claim_jobs_uses_default_created_at_order_for_other_job_t
     assert "(payload->>'earliest_impacted_date')::date ASC" not in query_text
 
 
+async def test_find_and_claim_fx_jobs_prioritizes_earliest_impacted_date(
+    repository: ReprocessingJobRepository,
+    mock_db_session: AsyncMock,
+) -> None:
+    mock_result = MagicMock()
+    mock_result.mappings.return_value.all.return_value = []
+    mock_db_session.execute.return_value = mock_result
+
+    await repository.find_and_claim_jobs("RESET_FX_WATERMARKS", batch_size=10)
+
+    query = mock_db_session.execute.await_args.args[0]
+    assert "(payload->>'earliest_impacted_date') ASC" in str(query)
+
+
 async def test_normalize_pending_reset_watermarks_duplicates_uses_set_based_cleanup(
     repository: ReprocessingJobRepository,
     mock_db_session: AsyncMock,
