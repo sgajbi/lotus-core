@@ -62,3 +62,18 @@ class FxRevaluationPlan:
     effective_date: date
     immediate_job_count: int
     durable_replay_staged: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class FxReplayExecution:
+    """Outcome of applying one durable FX replay job to position watermarks."""
+
+    pair: DirectCurrencyPair
+    earliest_impacted_date: date
+    targeted_key_count: int
+    updated_key_count: int
+
+    @property
+    def requeue_required(self) -> bool:
+        """Keep readiness-race work pending until at least one target is visible."""
+        return self.targeted_key_count == 0

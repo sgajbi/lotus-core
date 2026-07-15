@@ -197,3 +197,50 @@ class SqlAlchemyFxRevaluationRepository:
                 "alternate_lookup_key": diagnostics.alternate_lookup_key,
             },
         )
+
+    async def find_affected_position_keys(
+        self,
+        *,
+        pair: DirectCurrencyPair,
+        earliest_impacted_date: date,
+    ) -> list[PositionValuationKey]:
+        """Return direct-pair current epochs held on the date or opened later."""
+        open_on_date = await self.find_open_position_keys(
+            pair=pair,
+            effective_date=earliest_impacted_date,
+        )
+        future_positions = (
+            select(
+                PositionHistory.portfolio_id.label("portfolio_id"),
+                PositionHistory.security_id.label("security_id"),
+                PositionHistory.epoch.label("epoch"),
+            )
+            .join(
+                PositionState,
+                (PositionState.portfolio_id == PositionHistory.portfolio_id)
+                & (PositionState.security_id == PositionHistory.security_id)
+                & (PositionState.epoch == PositionHistory.epoch),
+            )
+            .join(
+                Instrument,
+                func.trim(Instrument.security_id) == func.trim(PositionHistory.security_id),
+            )
+            .join(
+                Portfolio,
+                func.trim(Portfolio.portfolio_id) == func.trim(PositionHistory.portfolio_id),
+            )
+            .where(
+                PositionHistory.position_date > earliest_impacted_date,
+                PositionHistory.quantity > 0,
+                func.upper(func.trim(Instrument.currency)) == pair.from_currency,
+                func.upper(func.trim(Portfolio.base_currency)) == pair.to_currency,
+            )
+        )
+        future_rows = (await self._db.execute(future_positions.distinct())).all()
+        affected = {
+            (key.portfolio_id, key.security_id, key.epoch): key for key in open_on_date
+        }
+        for row in future_rows:
+            key = PositionValuationKey(row.portfolio_id, row.security_id, row.epoch)
+            affected[(key.portfolio_id, key.security_id, key.epoch)] = key
+        return [affected[key] for key in sorted(affected)]
