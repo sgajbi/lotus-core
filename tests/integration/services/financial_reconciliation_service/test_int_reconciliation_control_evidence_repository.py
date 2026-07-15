@@ -12,7 +12,7 @@ from src.services.financial_reconciliation_service.app.domain.reconciliation_con
     FinancialReconciliationCompletion,
 )
 from src.services.financial_reconciliation_service.app.infrastructure import (
-    reconciliation_control_evidence_repository,
+    reconciliation_control_evidence_repository as control_evidence_repository,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -45,10 +45,8 @@ async def test_record_completion_preserves_monotonic_status(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
-    repository = (
-        reconciliation_control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
-            async_db_session
-        )
+    repository = control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
+        async_db_session
     )
 
     first = await repository.record_completion(
@@ -80,10 +78,8 @@ async def test_record_completion_escalates_control_status_to_failed(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
-    repository = (
-        reconciliation_control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
-            async_db_session
-        )
+    repository = control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
+        async_db_session
     )
 
     await repository.record_completion(
@@ -101,10 +97,8 @@ async def test_record_completion_returns_latest_portfolio_day_epoch(
     async_db_session: AsyncSession,
     clean_db,
 ) -> None:
-    repository = (
-        reconciliation_control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
-            async_db_session
-        )
+    repository = control_evidence_repository.SqlAlchemyReconciliationControlEvidenceRepository(
+        async_db_session
     )
 
     await repository.record_completion(

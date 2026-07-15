@@ -23,9 +23,7 @@ def _completion(*, epoch: int = 3, status: str = "COMPLETED") -> FinancialReconc
         epoch=epoch,
         outcome_status=status,
         reconciliation_types=("transaction_cashflow", "position_valuation"),
-        blocking_reconciliation_types=("transaction_cashflow",)
-        if status != "COMPLETED"
-        else (),
+        blocking_reconciliation_types=("transaction_cashflow",) if status != "COMPLETED" else (),
         run_ids={"transaction_cashflow": "run-1", "position_valuation": "run-2"},
         error_count=1 if status != "COMPLETED" else 0,
         warning_count=1,

@@ -58,8 +58,7 @@ def test_calculator_boundary_rejects_orchestrator_internal_import(tmp_path, monk
     )
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from src.services.valuation_orchestrator_service.app.core "
-        "import valuation_scheduler\n",
+        "from src.services.valuation_orchestrator_service.app.core import valuation_scheduler\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)
@@ -90,8 +89,7 @@ def test_transaction_processing_boundary_rejects_orchestrator_internal_import(
     )
     source.parent.mkdir(parents=True)
     source.write_text(
-        "from src.services.valuation_orchestrator_service.app.core "
-        "import valuation_scheduler\n",
+        "from src.services.valuation_orchestrator_service.app.core import valuation_scheduler\n",
         encoding="utf-8",
     )
     monkeypatch.setattr("scripts.quality.architecture_boundary_guard.ROOT", tmp_path)

@@ -50,9 +50,7 @@ class SqlAlchemyReconciliationControlEvidenceRepository:
                 ready_emitted_at=func.now(),
                 last_source_event_type=FINANCIAL_RECONCILIATION_SOURCE_EVENT,
             )
-            .on_conflict_do_nothing(
-                index_elements=["stage_name", "transaction_id", "epoch"]
-            )
+            .on_conflict_do_nothing(index_elements=["stage_name", "transaction_id", "epoch"])
         )
         await self._db_session.execute(insert_statement)
         stage = (
