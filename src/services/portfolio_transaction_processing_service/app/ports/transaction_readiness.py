@@ -49,4 +49,5 @@ class TransactionReadinessEventStagingPort(Protocol):
         stage: TransactionStageRecord,
         *,
         correlation_id: str | None,
+        traceparent: str | None,
     ) -> None: ...

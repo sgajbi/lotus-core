@@ -1,3 +1,5 @@
+"""Process one booked transaction and commit all derived financial effects atomically."""
+
 from __future__ import annotations
 
 from portfolio_common.domain.transaction_control_codes import (
@@ -30,7 +32,7 @@ from .results import ProcessTransactionResult, TransactionProcessingStatus
 from .settlement_cash_rejection import build_settlement_cash_rejection
 
 
-def _cashflow_stage_transactions(
+def _financial_effect_transactions(
     processed_transactions: tuple[BookedTransaction, ...],
     position_results: list[PositionProcessingResult],
 ) -> tuple[BookedTransaction, ...]:
@@ -195,13 +197,10 @@ class ProcessTransactionUseCase:
                         )
                     )
             rebuilt_transactions = _rebuilt_position_transactions(position_results)
-            if rebuilt_transactions:
-                with self._observer.observe(TransactionProcessingOperation.PIPELINE):
-                    await unit_of_work.readiness.register_processed_transactions(
-                        rebuilt_transactions,
-                        correlation_id=metadata.correlation_id,
-                        traceparent=metadata.traceparent,
-                    )
+            financial_effect_transactions = _financial_effect_transactions(
+                cost_result.processed_transactions,
+                position_results,
+            )
             cashflow_results = []
             rebuilt_cashflow_keys = {
                 (
@@ -211,10 +210,7 @@ class ProcessTransactionUseCase:
                 )
                 for rebuilt_transaction in rebuilt_transactions
             }
-            for cashflow_transaction in _cashflow_stage_transactions(
-                cost_result.processed_transactions,
-                position_results,
-            ):
+            for cashflow_transaction in financial_effect_transactions:
                 with self._observer.observe(TransactionProcessingOperation.CASHFLOW):
                     cashflow_results.append(
                         await unit_of_work.cashflow.process(
@@ -236,6 +232,13 @@ class ProcessTransactionUseCase:
                                 else CashflowCalculationContext.CURRENT_BOOKING
                             ),
                         )
+                    )
+            if financial_effect_transactions:
+                with self._observer.observe(TransactionProcessingOperation.PIPELINE):
+                    await unit_of_work.readiness.register_processed_transactions(
+                        financial_effect_transactions,
+                        correlation_id=metadata.correlation_id,
+                        traceparent=metadata.traceparent,
                     )
             with self._observer.observe(TransactionProcessingOperation.COMMIT):
                 await unit_of_work.commit()

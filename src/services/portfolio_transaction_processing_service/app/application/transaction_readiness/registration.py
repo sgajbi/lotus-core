@@ -36,6 +36,7 @@ class RegisterTransactionReadinessUseCase:
             await self._register_processed_transaction(
                 transaction,
                 correlation_id=correlation_id,
+                traceparent=traceparent,
             )
 
     async def _register_processed_transaction(
@@ -43,6 +44,7 @@ class RegisterTransactionReadinessUseCase:
         transaction: BookedTransaction,
         *,
         correlation_id: str | None,
+        traceparent: str | None,
     ) -> None:
         event_epoch = transaction.epoch or 0
         await self._repository.acquire_stage_lock(
@@ -74,4 +76,5 @@ class RegisterTransactionReadinessUseCase:
         await self._events.stage_transaction_readiness(
             stage,
             correlation_id=correlation_id,
+            traceparent=traceparent,
         )

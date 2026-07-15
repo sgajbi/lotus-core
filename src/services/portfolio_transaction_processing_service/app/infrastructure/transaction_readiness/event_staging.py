@@ -29,6 +29,7 @@ class TransactionalTransactionReadinessEventStager:
         stage: TransactionStageRecord,
         *,
         correlation_id: str | None,
+        traceparent: str | None,
     ) -> None:
         completed_event = TransactionProcessingCompletedEvent(
             transaction_id=stage.transaction_id,
@@ -40,6 +41,7 @@ class TransactionalTransactionReadinessEventStager:
             cashflow_event_seen=True,
             readiness_reason=_READINESS_REASON,
             correlation_id=correlation_id,
+            traceparent=traceparent,
         )
         await self._outbox_repository.create_outbox_event(
             aggregate_type="PipelineStage",
@@ -59,6 +61,7 @@ class TransactionalTransactionReadinessEventStager:
             epoch=stage.epoch,
             readiness_reason=_READINESS_REASON,
             correlation_id=correlation_id,
+            traceparent=traceparent,
         )
         await self._outbox_repository.create_outbox_event(
             aggregate_type="ValuationReadiness",
