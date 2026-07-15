@@ -365,6 +365,15 @@ Current repository posture:
     silently followed migration module. New or changed consumers must declare explicit constructor
     dependencies and base configuration parameters; do not hide delivery contracts behind untyped
     `*args` or `**kwargs` forwarding.
+    Service delivery adapters must not call `_send_to_dlq_async` or commit terminal source offsets.
+    They decode, map, invoke the application boundary, classify retryable infrastructure failures,
+    and raise terminal failures with their original typed identity. Only
+    `BaseConsumer._recover_exhausted_retryable_failure` and
+    `BaseConsumer._handle_terminal_processing_error` may publish and confirm DLQ delivery, persist
+    support evidence, and then commit the exact source message. `make event-runtime-contract-guard`
+    enforces this ownership. For derived-state changes, run
+    `make test-derived-state-poison-gate` to prove one poison record, support-plane visibility,
+    bounded lag recovery, subsequent valid-message progress, and clean reconciliation.
 39. Structured operational logging is governed by
     `portfolio_common.logging_utils.operation_log_extra(...)`, `log_operation_event(...)`, and
     `make structured-log-guard` through `make lint`. Guarded health, Kafka, outbox, ingestion,

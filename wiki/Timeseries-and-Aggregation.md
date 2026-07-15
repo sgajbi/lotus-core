@@ -82,6 +82,14 @@ durable queues close, lag returns to baseline, reconciliation remains clean, and
 added. The governed procedure and artifact contract are documented in the repository
 [Portfolio Derived-State Interruption Recovery](https://github.com/sgajbi/lotus-core/blob/main/docs/operations/recovery/portfolio-derived-state-interruption.md).
 
+Run `make test-derived-state-poison-gate` after changing derived-state delivery or shared Kafka
+recovery behavior. The managed scenario requires one malformed valuation snapshot to produce
+exactly one DLQ record and one matching support-plane event before a subsequent valid transaction
+can materialize exactly one snapshot, position row, and portfolio row. Source lag must return to
+baseline, queues must close, and reconciliation must remain clean. Service delivery adapters raise
+terminal failures; only shared `BaseConsumer` recovery methods may publish, record, and commit a
+terminal outcome. `make event-runtime-contract-guard` prevents local bypasses.
+
 Use the Query Control Plane support endpoints to inspect aggregation jobs and source lineage for an
 affected portfolio. Replay through the governed remediation path after correcting source data.
 
