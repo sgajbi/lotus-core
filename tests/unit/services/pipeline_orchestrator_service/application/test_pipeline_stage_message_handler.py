@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date
 from pathlib import Path
 from types import TracebackType
 from typing import Self
@@ -10,7 +9,6 @@ import pytest
 from portfolio_common.events import (
     FinancialReconciliationCompletedEvent,
     PortfolioAggregationDayCompletedEvent,
-    TransactionEvent,
 )
 from sqlalchemy.exc import IntegrityError
 
@@ -49,13 +47,6 @@ class FakePipelineStageUnitOfWork:
         self.claims.append((event_id, portfolio_id, service_name, correlation_id))
         return self.claim_result
 
-    async def register_processed_transaction(
-        self,
-        event: TransactionEvent,
-        correlation_id: str | None,
-    ) -> None:
-        self.registrations.append(("processed_transaction", event, correlation_id))
-
     async def register_portfolio_aggregation_completed(
         self,
         event: PortfolioAggregationDayCompletedEvent,
@@ -69,23 +60,6 @@ class FakePipelineStageUnitOfWork:
         correlation_id: str | None,
     ) -> None:
         self.registrations.append(("reconciliation_completed", event, correlation_id))
-
-
-def _transaction_event() -> TransactionEvent:
-    return TransactionEvent(
-        transaction_id="TXN-PIPE-HANDLER-1",
-        portfolio_id="PORT-PIPE-1",
-        instrument_id="INST-PIPE-1",
-        security_id="SEC-PIPE-1",
-        transaction_date=datetime(2026, 3, 7, 10, 0, 0),
-        transaction_type="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("100"),
-        gross_transaction_amount=Decimal("1000"),
-        trade_currency="USD",
-        currency="USD",
-        epoch=0,
-    )
 
 
 def _aggregation_event() -> PortfolioAggregationDayCompletedEvent:
@@ -112,51 +86,18 @@ def _reconciliation_event() -> FinancialReconciliationCompletedEvent:
 
 
 @pytest.mark.asyncio
-async def test_handler_claims_and_registers_processed_transaction_stage() -> None:
-    unit_of_work = FakePipelineStageUnitOfWork()
-    handler = handler_module.PipelineStageMessageHandler(unit_of_work_factory=lambda: unit_of_work)
-    event = _transaction_event()
-
-    result = await handler.handle_processed_transaction(
-        event_id="transactions.processed-1-5",
-        event=event,
-        correlation_id="corr-stage",
-    )
-
-    assert result.processed is True
-    assert result.duplicate is False
-    assert unit_of_work.claims == [
-        (
-            "transactions.processed-1-5",
-            "PORT-PIPE-1",
-            "pipeline-orchestrator-processed-txn",
-            "corr-stage",
-        )
-    ]
-    assert unit_of_work.registrations == [("processed_transaction", event, "corr-stage")]
-
-
-@pytest.mark.asyncio
 async def test_handler_skips_registration_for_duplicate_event_claim() -> None:
     unit_of_work = FakePipelineStageUnitOfWork(claim_result=False)
     handler = handler_module.PipelineStageMessageHandler(unit_of_work_factory=lambda: unit_of_work)
 
-    result = await handler.handle_processed_transaction(
-        event_id="transactions.cost.processed-0-7",
-        event=_transaction_event(),
-        correlation_id="corr-stage",
+    result = await handler.handle_portfolio_aggregation_completed(
+        event_id="portfolio_day.aggregation.completed-0-8",
+        event=_aggregation_event(),
+        correlation_id="corr-agg",
     )
 
     assert result.processed is False
     assert result.duplicate is True
-    assert unit_of_work.claims == [
-        (
-            "transactions.cost.processed-0-7",
-            "PORT-PIPE-1",
-            "pipeline-orchestrator-processed-txn",
-            "corr-stage",
-        )
-    ]
     assert unit_of_work.registrations == []
 
 
@@ -204,9 +145,9 @@ async def test_handler_propagates_db_errors_for_consumer_retry_policy() -> None:
     )
 
     with pytest.raises(IntegrityError):
-        await handler.handle_processed_transaction(
-            event_id="transactions.processed-1-5",
-            event=_transaction_event(),
+        await handler.handle_portfolio_aggregation_completed(
+            event_id="portfolio_day.aggregation.completed-0-8",
+            event=_aggregation_event(),
             correlation_id="corr-stage",
         )
 
