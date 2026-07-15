@@ -2530,9 +2530,11 @@ Most relevant current governance:
      Position-timeseries Kafka delivery is a transport adapter only. Map
      `DailyPositionSnapshotPersistedEvent` into the framework-neutral command under
      `timeseries_generator_service.app.application.position_timeseries`; keep current-day and
-     bounded backdated materialization in that application package, calculations in the domain/core
-     policy, persistence contracts under `app.ports`, and SQLAlchemy transaction/ORM/job-staging
-     behavior under `app.infrastructure`. Treat the persisted snapshot as authoritative and fail
+     bounded backdated materialization in that application package, immutable records and pure
+     calculation policy under `app.domain.position_timeseries`, persistence contracts under
+     `app.ports`, and SQLAlchemy transaction/ORM/job-staging behavior under `app.infrastructure`.
+     Do not restore the ambiguous `app.core` package or flat `app.domain.timeseries_records` module.
+     Treat the persisted snapshot as authoritative and fail
      closed before writes when repeated trigger portfolio, security, date, or epoch identity differs.
      Keep the portfolio-timeseries stage separate as a testable module while #714 consolidates the
      runtime; do not move either workflow into Kafka consumers or `portfolio_common`.
