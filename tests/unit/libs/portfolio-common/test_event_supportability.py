@@ -72,6 +72,9 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
             "content_hash": (
                 "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             ),
+            "observation_id": (
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            ),
         },
         "InstrumentEvent": {
             "security_id": "S1",

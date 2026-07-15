@@ -120,6 +120,7 @@ async def test_process_message_success(
     assert outbox_call["topic"] == KAFKA_FX_RATES_PERSISTED_TOPIC
     assert outbox_call["payload"]["generated_at"].endswith("Z")
     assert outbox_call["payload"]["content_hash"].startswith("sha256:")
+    assert outbox_call["payload"]["observation_id"].startswith("sha256:")
     assert outbox_call["correlation_id"] == "test-corr-id"
     mock_send_to_dlq.assert_not_called()
 
