@@ -7,10 +7,9 @@
     "src/services/financial_reconciliation_service",
     "src/services/ingestion_service",
     "src/services/persistence_service",
-    "src/services/portfolio_aggregation_service",
+    "src/services/portfolio_derived_state_service",
     "src/services/query_control_plane_service",
     "src/services/query_service",
-    "src/services/timeseries_generator_service",
     "src/services/valuation_orchestrator_service"
   ],
   "decisionRecords": [
@@ -99,14 +98,14 @@
       "revalidationOwner": "lotus-core engineering"
     },
     {
-      "serviceId": "portfolio_aggregation_service",
-      "servicePath": "src/services/portfolio_aggregation_service",
+      "serviceId": "portfolio_derived_state_service",
+      "servicePath": "src/services/portfolio_derived_state_service",
       "status": "current-state-revalidation-required",
       "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "rationaleSummary": "One supervised derived-state deployable owns separate position-timeseries and portfolio-timeseries modules while a durable lease-fenced database queue preserves fan-in, replay, and recovery isolation.",
       "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
-        "No new runtime split is approved by this catalog entry."
+        "Position and portfolio calculations remain separate framework-neutral application/domain modules with explicit ports and infrastructure adapters.",
+        "The runtime preserves independent aggregation concurrency and workload metrics while removing one image, supervisor, health endpoint, dispatcher, and private Kafka command hop."
       ],
       "runtimeBoundaryDrivers": ["current-state"],
       "revalidationOwner": "lotus-core engineering"
@@ -127,19 +126,6 @@
     {
       "serviceId": "query_service",
       "servicePath": "src/services/query_service",
-      "status": "current-state-revalidation-required",
-      "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
-      "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
-        "No new runtime split is approved by this catalog entry."
-      ],
-      "runtimeBoundaryDrivers": ["current-state"],
-      "revalidationOwner": "lotus-core engineering"
-    },
-    {
-      "serviceId": "timeseries_generator_service",
-      "servicePath": "src/services/timeseries_generator_service",
       "status": "current-state-revalidation-required",
       "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
       "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",

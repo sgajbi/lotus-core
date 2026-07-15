@@ -56,8 +56,8 @@
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },
     {
-      "service_name": "portfolio_aggregation_service_web",
-      "app_path": "src/services/portfolio_aggregation_service/app/web.py",
+      "service_name": "portfolio_derived_state_service_web",
+      "app_path": "src/services/portfolio_derived_state_service/app/web.py",
       "app_kind": "health_only_worker_api",
       "auth_audit_control": "health_only_no_business_routes",
       "payload_limit_control": "not_applicable_health_only",
@@ -97,15 +97,6 @@
       "app_kind": "business_api",
       "auth_audit_control": "enterprise_middleware",
       "payload_limit_control": "enterprise_middleware",
-      "upload_limit_control": "not_applicable",
-      "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
-    },
-    {
-      "service_name": "timeseries_generator_service_web",
-      "app_path": "src/services/timeseries_generator_service/app/web.py",
-      "app_kind": "health_only_worker_api",
-      "auth_audit_control": "health_only_no_business_routes",
-      "payload_limit_control": "not_applicable_health_only",
       "upload_limit_control": "not_applicable",
       "unauthenticated_allowlist": ["/docs", "/health/live", "/health/ready", "/metrics", "/openapi.json", "/redoc", "/version"]
     },

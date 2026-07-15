@@ -1,0 +1,173 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portfolio-derived-state
+  namespace: lotus-core
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-derived-state
+  namespace: lotus-core
+  labels:
+    app.kubernetes.io/name: portfolio-derived-state
+    app.kubernetes.io/component: derived-state
+    app.kubernetes.io/part-of: lotus-core
+  annotations:
+    lotus.io/image-promotion-policy: same-digest
+spec:
+  replicas: 1
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-derived-state
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-derived-state
+        app.kubernetes.io/component: derived-state
+        app.kubernetes.io/part-of: lotus-core
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8085"
+    spec:
+      serviceAccountName: portfolio-derived-state
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: portfolio-derived-state
+      containers:
+        - name: portfolio-derived-state
+          image: ghcr.io/sgajbi/lotus-core/portfolio-derived-state-service@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8085
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: lotus-core-database
+                  key: database-url
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: kafka-bootstrap-servers
+            - name: PORTFOLIO_AGGREGATION_WORKER_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: portfolio-aggregation-worker-count
+            - name: AGGREGATION_JOB_LEASE_DURATION_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: aggregation-job-lease-duration-seconds
+            - name: AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: aggregation-scheduler-poll-interval-seconds
+            - name: AGGREGATION_SCHEDULER_BATCH_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: lotus-core-runtime
+                  key: aggregation-scheduler-batch-size
+            - name: TMPDIR
+              value: /tmp
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+      volumes:
+        - name: temporary-files
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: portfolio-derived-state
+  namespace: lotus-core
+  labels:
+    app.kubernetes.io/name: portfolio-derived-state
+    app.kubernetes.io/part-of: lotus-core
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: portfolio-derived-state
+  ports:
+    - name: http
+      port: 8085
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: portfolio-derived-state
+  namespace: lotus-core
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: portfolio-derived-state

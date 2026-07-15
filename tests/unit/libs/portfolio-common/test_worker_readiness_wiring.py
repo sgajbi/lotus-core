@@ -7,19 +7,14 @@ WORKER_READINESS_WIRING = (
         Path("src/services/calculators/position_valuation_calculator/app/consumer_manager.py"),
     ),
     (
-        "portfolio_aggregation_service_web",
-        Path("src/services/portfolio_aggregation_service/app/web.py"),
-        Path("src/services/portfolio_aggregation_service/app/consumer_manager.py"),
+        "portfolio_derived_state_service_web",
+        Path("src/services/portfolio_derived_state_service/app/web.py"),
+        Path("src/services/portfolio_derived_state_service/app/runtime.py"),
     ),
     (
         "persistence_service_web",
         Path("src/services/persistence_service/app/web.py"),
         Path("src/services/persistence_service/app/consumer_manager.py"),
-    ),
-    (
-        "timeseries_generator_service_web",
-        Path("src/services/timeseries_generator_service/app/web.py"),
-        Path("src/services/timeseries_generator_service/app/consumer_manager.py"),
     ),
     (
         "valuation_orchestrator_service_web",

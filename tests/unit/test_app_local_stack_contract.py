@@ -91,21 +91,33 @@ def test_demo_data_loader_uses_internal_service_urls() -> None:
     assert sorted(depends_on) == [
         "ingestion_service",
         "persistence_service",
-        "portfolio_aggregation_service",
+        "portfolio_derived_state_service",
         "portfolio_transaction_processing_service",
         "position_valuation_calculator",
         "query_control_plane_service",
         "query_service",
-        "timeseries_generator_service",
         "valuation_orchestrator_service",
     ]
 
 
-def test_app_local_stack_parallelizes_portfolio_aggregation_drain() -> None:
+def test_app_local_stack_runs_one_configurable_derived_state_runtime() -> None:
     compose = _read_yaml(ROOT / "docker-compose.yml")
     services = compose["services"]
 
-    aggregation_env = services["portfolio_aggregation_service"]["environment"]
+    target = services["portfolio_derived_state_service"]
+    aggregation_env = target["environment"]
+
+    assert not {
+        "timeseries_generator_service",
+        "portfolio_aggregation_service",
+    }.intersection(services)
+    assert target["build"]["dockerfile"] == (
+        "./src/services/portfolio_derived_state_service/Dockerfile"
+    )
+    assert target["healthcheck"]["test"] == [
+        "CMD-SHELL",
+        "curl -f http://localhost:8085/health/ready || exit 1",
+    ]
 
     assert (
         aggregation_env["PORTFOLIO_AGGREGATION_WORKER_COUNT"]

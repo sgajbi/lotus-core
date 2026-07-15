@@ -95,9 +95,8 @@ FULL_STACK_SERVICES = [
     "persistence_service",
     "portfolio_transaction_processing_service",
     "position_valuation_calculator",
-    "timeseries_generator_service",
+    "portfolio_derived_state_service",
     "valuation_orchestrator_service",
-    "portfolio_aggregation_service",
 ]
 
 DB_ONLY_SERVICES = [
@@ -226,8 +225,8 @@ def docker_services(request):  # noqa: ARG001
                 f"http://localhost:{os.environ['LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT']}"
                 + "/health/ready"
             ),
-            "portfolio_aggregation_service": (
-                f"http://localhost:{os.environ['LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT']}"
+            "portfolio_derived_state_service": (
+                f"http://localhost:{os.environ['LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT']}"
                 + "/health/ready"
             ),
         }
