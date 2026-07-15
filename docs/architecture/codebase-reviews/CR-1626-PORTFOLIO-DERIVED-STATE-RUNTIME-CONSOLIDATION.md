@@ -243,10 +243,18 @@ cross-window state.
   blocked sessions, and exact-container CPU/memory; peak evidence is additive to the bank-day JSON
   and Markdown reports, and a governed run without a complete sample fails closed.
 - The managed workload driver defines a certifying 100,000-transaction daily profile, a certifying
-  one-portfolio/1,000-position fan-in profile, and a machine-labelled diagnostic smoke. It owns an
+  one-portfolio/1,000-position fan-in profile, a certifying 10,000-position market-price correction
+  burst, and a machine-labelled diagnostic smoke. It owns an
   isolated dynamic-port Compose lifecycle, supplies credential-bearing database configuration via
   the child environment rather than argv, requires exact-source builds for certifying profiles,
   and tears down run-owned resources.
+- Market-price correction policy and post-correction SQL evidence live in the named performance
+  module instead of increasing the bank-day runner's policy density. The burst requires all
+  valuation jobs, snapshots, position rows, and portfolio rows after a database-clock boundary and
+  exact corrected market value before it can pass.
+- Same-pattern review found that FX persistence has no equivalent source-owned persisted event or
+  valuation reprocessing trigger. Issue #791 tracks that correctness defect; a market-price run is
+  not accepted as FX correction evidence.
 - Diagnostic run `20260715T094629Z` completed in `23.081s`: 10 transactions, 10 snapshots, 10
   position rows, and two portfolio rows reconciled; valuation-to-position p95 was `2.31107555s`,
   position-to-portfolio p95 was `1.80691335s`, five resource samples completed with no sampling
@@ -309,9 +317,10 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Run the managed daily, burst, and backdated profiles, then compare both stage p50/p95/p99/max
-   results against the configured lease duration. Use the longest measured owned-job duration to
-   finalize whether fixed expiry is sufficient or heartbeat renewal is required.
+1. Run the managed daily, market-price burst, and backdated profiles; fix #791 and run the separate
+   FX correction profile. Compare both stage p50/p95/p99/max results against the configured lease
+   duration and use the longest measured owned-job duration to finalize fixed expiry versus
+   heartbeat renewal.
 2. Run remaining duplicate, poison, stale-lease, concurrency, load, release, and exact-main
    validation before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can
