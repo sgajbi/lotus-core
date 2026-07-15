@@ -49,6 +49,8 @@ def test_parse_compose_stats_accepts_array_and_docker_field_names() -> None:
 
 
 def test_read_database_resource_usage_calculates_connection_capacity() -> None:
+    captured: dict[str, str] = {}
+
     class Result:
         def mappings(self) -> Result:
             return self
@@ -70,7 +72,8 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
         def __exit__(self, *_args: object) -> None:
             return None
 
-        def execute(self, _query: object) -> Result:
+        def execute(self, query: object) -> Result:
+            captured["query"] = str(query)
             return Result()
 
     class Engine:
@@ -84,6 +87,9 @@ def test_read_database_resource_usage_calculates_connection_capacity() -> None:
     assert usage.lock_waiters == 3
     assert usage.blocked_sessions == 1
     assert usage.connection_utilization_percent == 12.5
+    assert "JOIN pg_stat_activity waiting_activity" in captured["query"]
+    assert "waiting_activity.datname = current_database()" in captured["query"]
+    assert "NOT waiting_lock.granted" in captured["query"]
 
 
 def test_read_runtime_resource_usage_targets_exact_compose_service() -> None:
