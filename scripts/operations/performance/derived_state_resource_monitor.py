@@ -26,11 +26,11 @@ _DATABASE_RESOURCE_QUERY = text(
       ) AS idle_in_transaction_connections,
       (
         SELECT count(*)
-        FROM pg_locks
-        WHERE database = (
-          SELECT oid FROM pg_database WHERE datname = current_database()
-        )
-          AND NOT granted
+        FROM pg_locks waiting_lock
+        JOIN pg_stat_activity waiting_activity
+          ON waiting_activity.pid = waiting_lock.pid
+        WHERE waiting_activity.datname = current_database()
+          AND NOT waiting_lock.granted
       ) AS lock_waiters,
       count(*) FILTER (
         WHERE datname = current_database()
