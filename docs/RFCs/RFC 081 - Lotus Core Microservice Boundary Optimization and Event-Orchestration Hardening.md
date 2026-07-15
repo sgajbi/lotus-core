@@ -45,11 +45,16 @@ Current transaction-readiness update as of 2026-07-15:
   succeed in the same database transaction;
 - `transactions.cost.processed` and `cashflows.calculated` remain compatibility facts with no
   active in-repo consumer;
-- the pipeline orchestrator no longer contains a processed-transaction consumer, transaction-stage
-  application/service/domain/repository path, or transaction-readiness event factory;
-- the surviving pipeline runtime coordinates portfolio aggregation-to-reconciliation and
-  reconciliation-to-controls transitions only, pending the remaining retirement decision under
-  GitHub issue #712.
+- `portfolio_aggregation_service` atomically stages the aggregation-completed compatibility fact
+  and the reconciliation request;
+- `financial_reconciliation_service` atomically persists monotonic/latest-epoch control evidence
+  and stages reconciliation completion plus the controls decision;
+- the former pipeline orchestrator consumers, application/domain/infrastructure code, package,
+  image, health API, Compose service, CI inventory, and observability target are retired under
+  GitHub issue #712;
+- event names, topics, payloads, aggregate identities, and QCP support reads remain compatible;
+  `pipeline_stage_state` remains shared until transaction-readiness and QCP retention/migration
+  proof supports a separately reversible schema change.
 
 The service-boundary decomposition remains implemented, but RFC 081 is reopened because
 post-merge heavy-runtime validation exposed unresolved hardening gaps across orchestration,

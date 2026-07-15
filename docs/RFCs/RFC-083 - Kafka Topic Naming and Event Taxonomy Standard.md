@@ -105,10 +105,8 @@ Representative topology from the current codebase:
  - consumes raw topics and publishes persistence-complete events
 3. calculator services
  - consume persistence outputs and publish calculator outputs
-4. `pipeline_orchestrator_service`
- - publishes orchestration and control-stage events
-5. valuation/timeseries/aggregation/reconciliation services
- - consume orchestration events and publish completion facts
+4. valuation/timeseries/aggregation/reconciliation services
+ - own their work requests, completion facts, and control outcomes at the capability boundary
 
 Authoritative sources for the current topology:
  - `tools/kafka_setup.py`
@@ -180,10 +178,10 @@ The table below captures the current runtime topology as implemented in service 
 | `portfolio_security_day.valuation.completed` | no active producer in current runtime | no direct Kafka consumer in current runtime | stage completion fact | Present in the event catalog, but current runtime handoff to timeseries uses `valuation.snapshot.persisted` |
 | `portfolio_security_day.position_timeseries.completed` | no active producer in current runtime | no direct Kafka consumer found in current runtime | stage completion fact | Current runtime stages aggregation directly in the database instead of chaining via Kafka here |
 | `portfolio_day.aggregation.job.requested` | `portfolio_aggregation_service` scheduler | `portfolio_aggregation_service` / `portfolio_aggregation_group` | worker dispatch request | Producer and consumer live in the same service boundary |
-| `portfolio_day.aggregation.completed` | `portfolio_aggregation_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_portfolio_aggregation_group` | stage completion fact | Active downstream trigger to reconciliation |
-| `portfolio_day.reconciliation.requested` | `pipeline_orchestrator_service` | `financial_reconciliation_service` / `portfolio_day.reconciliation.requested_group` | orchestration request | Clear command topic, but grammar differs from `valuation.job.requested` and `portfolio_security_day.valuation.ready` |
-| `portfolio_day.reconciliation.completed` | `financial_reconciliation_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_reconciliation_completion_group` | stage completion fact | Active control-stage input |
-| `portfolio_day.controls.evaluated` | `pipeline_orchestrator_service` | no direct Kafka consumer found in current runtime | support/control evaluation fact | Useful topic, but currently appears to terminate rather than feed another Kafka stage |
+| `portfolio_day.aggregation.completed` | `portfolio_aggregation_service` | no active in-repo consumer | stage completion compatibility fact | Reconciliation request is staged atomically by the aggregation owner; the fact remains for downstream compatibility |
+| `portfolio_day.reconciliation.requested` | `portfolio_aggregation_service` | `financial_reconciliation_service` / `portfolio_day.reconciliation.requested_group` | orchestration request | Clear command topic, but grammar differs from `valuation.job.requested` and `portfolio_security_day.valuation.ready` |
+| `portfolio_day.reconciliation.completed` | `financial_reconciliation_service` | no active in-repo consumer | stage completion compatibility fact | Control evidence and the controls decision are staged atomically by the reconciliation owner |
+| `portfolio_day.controls.evaluated` | `financial_reconciliation_service` | no direct Kafka consumer found in current runtime | support/control evaluation fact | QCP reads the corresponding durable control evidence; the event remains a governed downstream contract |
 | `transactions.reprocessing.requested` | `ingestion_service` retry/reprocess paths | `portfolio_transaction_processing_service` / `portfolio_transaction_replay_request_group` | replay command | Current name is understandable but inconsistent with broader command grammar |
 | `dlq.persistence_service` | shared base-consumer DLQ path across multiple services | consumed operationally, not by an app consumer group | terminal failure sink | Service-named DLQ is workable but not standardized |
 | `positions.valued` | no active producer found in current runtime | no active consumer found in current runtime | configured legacy topic constant | Present in config and topic setup, but not part of the active graph reviewed here |
@@ -420,23 +418,22 @@ Canonical policy should be explicit:
 ### 12.3 Valuation and Day-Level Chain
 1. `portfolio_transaction_processing_service`
  - publishes `portfolio_security_day.valuation.ready`
-2. `pipeline_orchestrator_service`
- - publishes `portfolio_day.reconciliation.requested`
- - publishes `portfolio_day.controls.evaluated`
-3. `valuation_orchestrator_service`
+2. `valuation_orchestrator_service`
  - consumes `portfolio_security_day.valuation.ready`
  - publishes `valuation.job.requested`
-4. `position_valuation_calculator`
+3. `position_valuation_calculator`
  - consumes `valuation.job.requested`
  - publishes `valuation.snapshot.persisted`
-5. `timeseries_generator_service`
+4. `timeseries_generator_service`
  - consumes `valuation.snapshot.persisted`
-6. `portfolio_aggregation_service`
+5. `portfolio_aggregation_service`
  - consumes `portfolio_day.aggregation.job.requested`
  - publishes `portfolio_day.aggregation.completed`
-7. `financial_reconciliation_service`
+ - publishes `portfolio_day.reconciliation.requested`
+6. `financial_reconciliation_service`
  - consumes `portfolio_day.reconciliation.requested`
  - publishes `portfolio_day.reconciliation.completed`
+ - publishes `portfolio_day.controls.evaluated`
 
 ## 13. Migration Strategy
 This RFC explicitly rejects a big-bang rename.

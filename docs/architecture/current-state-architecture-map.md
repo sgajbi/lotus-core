@@ -1,6 +1,6 @@
 # Lotus Core Current-State Architecture Map
 
-Last updated: 2026-07-11
+Last updated: 2026-07-15
 
 Issue: https://github.com/sgajbi/lotus-core/issues/616
 
@@ -35,7 +35,6 @@ flowchart LR
     Ingestion["ingestion_service<br/>write ingress"]
     Persistence["persistence_service<br/>canonical persistence"]
     Store["Core operational database<br/>portfolio/account/transaction/position truth"]
-    Pipeline["pipeline_orchestrator_service<br/>portfolio-day controls"]
     Calculators["transaction, valuation, and derived-state workers"]
     Reconciliation["financial_reconciliation_service<br/>controls and findings"]
     Replay["event_replay_service<br/>replay, DLQ, ops diagnostics"]
@@ -48,8 +47,7 @@ flowchart LR
     Persistence --> Store
     Store --> Calculators
     Calculators --> Store
-    Calculators --> Pipeline
-    Pipeline --> Reconciliation
+    Calculators --> Reconciliation
     Reconciliation --> Store
     Store --> Query
     Store --> Qcp
@@ -105,7 +103,7 @@ Rules:
 | cost | `portfolio_transaction_processing_service`, `query_service` | Cost basis, lot state, accrued-offset evidence, transaction cost state | Tax advice or external cost-estimate methodology |
 | source-data products | `query_control_plane_service`, `query_service`, `portfolio_common.source_data_products` | RFC-0083 product identity, supportability, freshness, lineage, consumer map | Downstream analytics conclusions or duplicated data-mesh certification claims |
 | ingestion/replay | `ingestion_service`, `event_replay_service` | Write ingress, ingestion jobs, replay audit, consumer DLQ evidence | Generic downstream read models or hidden mutation paths |
-| reconciliation | `financial_reconciliation_service`, `pipeline_orchestrator_service` | Control runs, findings, control-stage status, publishability evidence | Calculator mutation or downstream report composition |
+| reconciliation | `financial_reconciliation_service` | Control runs, findings, monotonic control evidence, and publishability decisions | Calculator mutation or downstream report composition |
 | operations/supportability | `query_control_plane_service`, `event_replay_service`, shared health/observability modules | Health, readiness, support overview, lineage, replay diagnostics, runbooks | Business workflow shortcuts that bypass domain services |
 | security/audit | shared enterprise readiness modules plus service-local wrappers | Enterprise auth/audit posture, capability rules, source-data security metadata | Platform ingress/IAM claims without `lotus-platform` proof |
 | platform runtime support | `lotus-platform` for shared runtime; `lotus-core` for app-local compose and service image metadata | App-local stack, CI evidence, image provenance, service health metadata | Shared ingress, platform-wide infrastructure ownership, cross-repo orchestration truth |
@@ -116,14 +114,13 @@ Rules:
 | --- | --- | --- | --- |
 | `ingestion_service` | `src/services/ingestion_service` | Write-ingress routers, upload/component boundaries, ingestion job lifecycle, idempotency, source publication | Operational reads, analytics input products, replay execution, calculator mutation |
 | `event_replay_service` | `src/services/event_replay_service` | Replay/remediation commands, ingestion operations queries, consumer DLQ replay, replay audit, ops control | Source write ingestion, generic query read plane, calculator writes |
-| `financial_reconciliation_service` | `src/services/financial_reconciliation_service` | Reconciliation run orchestration, finding policy, control execution APIs, finding persistence | Calculator mutation, portfolio/position source ownership, report composition |
+| `financial_reconciliation_service` | `src/services/financial_reconciliation_service` | Reconciliation run orchestration, finding policy, control execution APIs, finding persistence, monotonic portfolio-day control evidence, and completion/control outbox contracts | Calculator mutation, portfolio/position source ownership, report composition |
 | `persistence_service` | `src/services/persistence_service` | Raw domain event decoding, canonical persistence writes, idempotency, completion publication | API read shaping, analytics inputs, downstream contract composition |
 | `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, transaction readiness, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules. Its framework-neutral transaction domain owns ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing. | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, framework DTOs inside domain policy, or collapsed financial policies |
 | `valuation_orchestrator_service` | `src/services/valuation_orchestrator_service` | Valuation job scheduling, reprocessing state, dispatch readiness | Valuation compute mutation, read-plane response shaping |
 | `position_valuation_calculator` | `src/services/calculators/position_valuation_calculator` | Valuation job consumption, valuation snapshot mutation, active valuation handoff; concrete session/repository/idempotency/outbox construction is isolated in `app/infrastructure` | Job scheduling ownership, benchmark/performance calculations; processor application move before persistence/metrics/unit-of-work ports exist |
 | `timeseries_generator_service` | `src/services/timeseries_generator_service` | Position-timeseries generation, aggregation job staging | Portfolio aggregation policy, operational API responses |
-| `portfolio_aggregation_service` | `src/services/portfolio_aggregation_service` | Portfolio-timeseries aggregation, aggregation jobs, completion publication | Position valuation, report composition, downstream performance analytics |
-| `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Portfolio-day aggregation-to-reconciliation coordination, reconciliation control-stage status, controls publication, quiescence | Transaction readiness, business calculations, source write ingestion, direct API serving |
+| `portfolio_aggregation_service` | `src/services/portfolio_aggregation_service` | Portfolio-timeseries aggregation, aggregation jobs, completion publication, and direct reconciliation-request staging | Position valuation, reconciliation execution, report composition, downstream performance analytics |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
 | `query_control_plane_service` | `src/services/query_control_plane_service` | Core snapshots, analytics inputs, portfolio-manager books, CIO affected cohorts, DPM universe populations, client restriction/sustainability/tax/liquidity source products, fail-closed external treasury/OMS posture, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation, external pricing/execution, downstream DPM/advice decisions |
 
@@ -136,11 +133,11 @@ Timeseries generation and portfolio aggregation own separate concrete persistenc
 portfolio-timeseries persistence. They share only typed instrument/FX reads and stateless upsert
 builders. A future runtime merge remains evidence-gated by the end-state runtime vision.
 
-App-local Compose, Compose-backed CI, image release, and Kubernetes manifests use the combined
-transaction processor; the three legacy worker shells are absent from those inventories. Registry
-publication, controlled cluster rollout, platform observability publication, canonical QA,
-and downstream stage retirement remain governed prerequisites
-before full production cutover is claimed.
+App-local Compose, Compose-backed CI, and image release use the combined transaction processor and
+no longer contain the three legacy transaction workers or the retired pipeline orchestrator.
+Registry publication, controlled cluster rollout, platform observability publication, canonical QA,
+and downstream compatibility-event retirement remain governed prerequisites before full production
+cutover is claimed.
 
 ## Retired Calculator Roots
 
@@ -167,7 +164,7 @@ registry, normalization, and infrastructure contracts.
 | position history and snapshots | position domain and infrastructure adapters in `portfolio_transaction_processing_service`, plus `position_valuation_calculator` | `query_service`, analytics inputs | Position mutation and valuation mutation stay separate. |
 | valuation jobs and reprocessing state | `valuation_orchestrator_service` | support APIs, worker consumers | Job orchestration state, not business output. |
 | position timeseries and portfolio timeseries | `timeseries_generator_service`, `portfolio_aggregation_service` | `query_service`, analytics inputs | Published with source-data product metadata where supported. |
-| reconciliation runs/findings and control stages | `financial_reconciliation_service`, `pipeline_orchestrator_service` | support and reconciliation APIs | Controls decide supportability/publishability posture. |
+| reconciliation runs/findings and control stages | `financial_reconciliation_service`; shared `pipeline_stage_state` compatibility table | support and reconciliation APIs | Reconciliation owns control decisions; QCP retains read compatibility while table migration remains separately evidence-gated. |
 | outbox events and processed events | shared infrastructure boundary | dispatcher and consumers | All mutating event publication uses outbox/idempotency contracts. |
 
 ## Event/Outbox Flow
@@ -177,7 +174,6 @@ sequenceDiagram
     participant Ingest as ingestion_service
     participant Persist as persistence_service
     participant Txn as portfolio_transaction_processing_service
-    participant Pipe as pipeline_orchestrator_service
     participant ValOrch as valuation_orchestrator_service
     participant Val as position_valuation_calculator
     participant Ts as timeseries_generator_service
@@ -192,10 +188,10 @@ sequenceDiagram
     ValOrch->>Val: valuation.job.requested
     Val->>Ts: valuation.snapshot.persisted
     Ts->>Agg: portfolio_day.aggregation.job.requested
-    Agg->>Pipe: portfolio_day.aggregation.completed
-    Pipe->>Recon: portfolio_day.reconciliation.requested
-    Recon->>Pipe: portfolio_day.reconciliation.completed
-    Pipe->>Pipe: portfolio_day.controls.evaluated
+    Agg->>Recon: portfolio_day.reconciliation.requested
+    Agg-->>Agg: portfolio_day.aggregation.completed compatibility fact
+    Recon-->>Recon: portfolio_day.reconciliation.completed compatibility fact
+    Recon->>Recon: persist controls + portfolio_day.controls.evaluated atomically
 ```
 
 Event and outbox governance is defined by

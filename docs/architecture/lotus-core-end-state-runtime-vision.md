@@ -1,7 +1,7 @@
 # Lotus Core End-State Runtime Vision
 
 Status: Governed target hypothesis; runtime decisions remain evidence-gated
-Date: 2026-07-11
+Date: 2026-07-15
 Issue: #468
 
 ## Purpose
@@ -12,7 +12,7 @@ does not approve a merge solely because two capabilities form a serial pipeline.
 
 ## Runtime Count
 
-The current governed post-calculator-consolidation topology contains 12 deployables. The target
+The current governed post-pipeline-retirement topology contains 11 deployables. The target
 hypothesis is 9 deployables, or 10 when valuation scheduler/compute isolation remains justified.
 
 | End-state deployable | Capability and owned state | Boundary posture |
@@ -27,9 +27,11 @@ hypothesis is 9 deployables, or 10 when valuation scheduler/compute isolation re
 | `query_control_plane_service` | Source products, simulations, lineage, support, exports, capabilities | Keep separate for security, workload, and operator-contract isolation. |
 | `event_replay_service` | Privileged replay, DLQ remediation, diagnostics, audit, controlled recovery | Keep as a privileged operational boundary. |
 
-`pipeline_orchestrator_service` is the primary retirement candidate. Move only valid transition
-ownership to the capability that owns the resulting state; delete obsolete stage waits rather than
-merging the orchestrator wholesale into another runtime.
+The former `pipeline_orchestrator_service` is retired. Transaction readiness belongs to transaction
+processing, aggregation stages reconciliation requests, and financial reconciliation owns control
+evidence and controls publication. The shared control table remains temporarily because transaction
+readiness and QCP support reads still use it; table redesign is not a prerequisite for runtime
+retirement and requires a separately reversible migration decision.
 
 ## End-State Flow
 
@@ -86,7 +88,7 @@ with their service.
 | cost + cashflow + position | One transaction deployable | Complete target source ownership, downstream compatibility retirement, deployed load/recovery, release provenance, and canonical QA. |
 | valuation orchestrator + valuation worker | One valuation deployable | Scheduler availability under compute saturation, independent scaling comparison, backfill load, failure recovery, rollback, and SLO evidence. |
 | timeseries generator + portfolio aggregation | One derived-state deployable | Bounded fan-in/backfill, ordering, queue recovery, load, failure isolation, table ownership, and rollback evidence. |
-| pipeline orchestrator | Retire | Consumer/state inventory proves each surviving transition has one owner; remove obsolete stage rows/events with rollback and downstream proof. |
+| pipeline orchestrator | Retired | Transition ownership is reassigned, the runtime/image/consumer surface is removed, and a regression guard prevents restoration. Compatibility events and the shared support table remain until separate consumer/retention proof permits removal. |
 | ingestion + persistence | Keep separate | Merge only if security isolation, replay, source-validation scaling, and canonical-write protection no longer justify separation. |
 | query + query control plane | Keep separate | Merge only if authorization, operator, simulation, export, and latency workloads have equivalent policy/SLO needs. |
 

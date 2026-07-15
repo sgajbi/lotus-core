@@ -196,7 +196,8 @@ Primary runtime surfaces:
 - `event_replay_service`
   replay, ingestion-health, DLQ, and operations control-plane contracts
 - `financial_reconciliation_service`
-  reconciliation and control execution contracts
+  reconciliation execution, monotonic/latest-epoch control evidence, and atomic completion/control
+  publication; portfolio aggregation stages reconciliation requests directly
 - `portfolio_transaction_processing_service`
   one app-local/CI deployable and one transaction for cost, cashflow, position,
   transaction readiness, semantic idempotency, and compatibility outbox effects;
@@ -224,8 +225,11 @@ Primary architecture references:
 | `src/services/event_replay_service/` | Ingestion operations, DLQ, replay, audit, and remediation control plane. Keep routers thin; put command/query orchestration in `app/application/` and composition providers in `app/dependencies.py`. |
 | `src/services/persistence_service/` | Persistence orchestration. |
 | `src/services/portfolio_transaction_processing_service/` | Active app-local/CI combined cost, cashflow, and position runtime with layered delivery, application, domain/ports, infrastructure, and runtime packages. |
+| `src/services/financial_reconciliation_service/` | Independent reconciliation controls plane. Owns run/finding policy, durable control evidence, and completion/control event staging. |
 | `src/services/calculators/` | Independently deployable position valuation only. Cost, cashflow, and position transaction processing are target-owned modules in `portfolio_transaction_processing_service`. |
-| `src/services/timeseries_generator_service/` | Position and portfolio time-series generation. |
+| `src/services/valuation_orchestrator_service/` | Valuation scheduling, job lifecycle, reprocessing state, and dispatch. |
+| `src/services/timeseries_generator_service/` | Position time-series generation and aggregation-job staging. |
+| `src/services/portfolio_aggregation_service/` | Portfolio time-series aggregation and direct reconciliation-request staging. |
 | `src/libs/portfolio-common/` | Shared domain and contract-support libraries. |
 | `contracts/` | Domain-data product, trust telemetry, and other machine-readable contracts. |
 | `scripts/` | Gates, guards, manifests, smoke tools, proof generators, and operational scripts. |

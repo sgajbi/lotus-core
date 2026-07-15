@@ -173,7 +173,7 @@ Current repository posture:
     Ingestion publish workflows must route API DTO serialization through
     `ingestion_service.app.services.ingestion_event_payloads` before Kafka publication; do not add
     new inline DTO `model_dump()` publish payloads in `IngestionService`.
-    Valuation, pipeline, persistence, and future event-consuming services must use
+    Valuation, persistence, financial-reconciliation, and future event-consuming services must use
     `portfolio_common.event_mapping` or a narrower service adapter around it for Kafka bytes,
     deterministic message identity, governed Pydantic event validation, outbox event payload
     serialization, and explicit correlation/idempotency metadata before opening database units of
@@ -279,6 +279,13 @@ Current repository posture:
     objects in `financial_reconciliation_service.app.domain.reconciliation_policies`; the
     application service must load evidence, invoke the policy, and map domain findings to
     persistence rows through `financial_reconciliation_service.app.adapters`.
+    Portfolio aggregation owns reconciliation-request staging after successful aggregation;
+    financial reconciliation owns monotonic/latest-epoch control evidence and controls-event
+    staging. The former `pipeline_orchestrator_service` runtime, package, image, consumers, health
+    API, and deployment inventory are retired. Do not recreate a generic pipeline coordinator;
+    place each transition with the capability that owns the resulting state. Retain the shared
+    `pipeline_stage_state` table only as active transaction-readiness/QCP compatibility evidence
+    until a separately reversible retention and schema migration is proven.
     Shared private-banking financial amount objects now live in
     `portfolio_common.domain.financial.amounts` for `CurrencyCode`, `MoneyAmount`, `FxRate`,
     `CurrencyBasis`, `Quantity`, `UnitPrice`, and named monetary aliases. New calculation and
