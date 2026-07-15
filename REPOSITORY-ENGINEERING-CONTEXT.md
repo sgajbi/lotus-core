@@ -2656,6 +2656,8 @@ Most relevant current governance:
      reconciliation, and resource evidence. A price-restatement profile is not FX proof.
      The certifying FX profile must commit the correction while valuation orchestration is stopped,
      restore the service unconditionally, and prove the recovered result from durable evidence.
+     Record measured stop/healthy-restore UTC timestamps and outage duration; a requested-restart
+     boolean is not recovery evidence.
      Certification artifacts must not persist credentialed database URLs or raw process
      configuration. Emit only a safe database target (backend, host, port, database), and run the
      synthetic-fixture leakage guard against generated evidence before retaining or sharing it.

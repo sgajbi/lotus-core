@@ -182,6 +182,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "derived_state_resource_evidence_required": True,
             "market_price_correction_multiplier": "1.05",
             "fx_rate_correction_multiplier": "1.05",
+            "restart_valuation_orchestrator_during_fx_correction": True,
         },
         ingest_phases=[],
         drain_seconds=120.0,
@@ -311,6 +312,10 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     )
     assert any(
         "FX rate correction has no completed drain evidence" in failure for failure in failures
+    )
+    assert any(
+        "FX rate correction has no measured restart recovery evidence" in failure
+        for failure in failures
     )
 
 
