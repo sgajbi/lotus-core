@@ -1,366 +1,109 @@
+"""Kafka delivery adapter for authoritative valuation snapshot events."""
+
+from __future__ import annotations
+
 import json
 import logging
-from datetime import date
-from typing import Final, cast
 
 from confluent_kafka import Message
-from portfolio_common.database_models import (
-    DailyPositionSnapshot,
-    PortfolioAggregationJob,
-)
-from portfolio_common.db import get_async_db_session
-from portfolio_common.durable_correlation import durable_correlation_diagnostics
-from portfolio_common.events import (
-    DailyPositionSnapshotPersistedEvent,
-)
+from portfolio_common.events import DailyPositionSnapshotPersistedEvent
 from portfolio_common.kafka_consumer import BaseConsumer
-from portfolio_common.timeseries_constants import (
-    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_BATCH_SIZE,
-    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_MAX_BATCHES_PER_MESSAGE,
-    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP,
-)
+from portfolio_common.kafka_consumer_execution import KafkaConsumerExecutionProfile
 from pydantic import ValidationError
-from sqlalchemy import case, func, or_
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from ..core.position_timeseries_logic import PositionTimeseriesLogic
-from ..domain.timeseries_records import (
-    PositionCashflowRecord,
-    PositionSnapshotRecord,
-    PositionTimeseriesRecord,
-)
-from ..infrastructure.timeseries_generation_repository import (
-    TimeseriesGenerationRepository,
-    to_position_snapshot_record,
-)
+from ..application.position_timeseries import MaterializePositionTimeseries
+from .position_snapshot_event_mapper import map_position_snapshot_event
 
 logger = logging.getLogger(__name__)
 
-AGGREGATION_REPROCESS_REQUESTED = "REPROCESS_REQUESTED"
-MAX_DEPENDENT_PROPAGATION_ROWS = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_BATCH_SIZE
-MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE = (
-    DEPENDENT_POSITION_TIMESERIES_PROPAGATION_MAX_BATCHES_PER_MESSAGE
-)
-MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE = DEPENDENT_POSITION_TIMESERIES_PROPAGATION_ROW_CAP
-_UNSET_PRELOAD: Final = object()
-
 
 class PositionTimeseriesConsumer(BaseConsumer):
-    async def process_message(self, msg: Message):
+    """Map valuation snapshot events to the position-timeseries application use case."""
+
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        topic: str,
+        group_id: str,
+        dlq_topic: str | None = None,
+        service_prefix: str = "SVC",
+        metrics: dict[str, object] | None = None,
+        execution_profile: KafkaConsumerExecutionProfile | None = None,
+        *,
+        use_case: MaterializePositionTimeseries,
+    ) -> None:
+        super().__init__(
+            bootstrap_servers=bootstrap_servers,
+            topic=topic,
+            group_id=group_id,
+            dlq_topic=dlq_topic,
+            service_prefix=service_prefix,
+            metrics=metrics,
+            execution_profile=execution_profile,
+        )
+        self._use_case = use_case
+
+    async def process_message(self, msg: Message) -> None:
+        """Retry transient integrity races and terminally route exhausted delivery."""
+
         retry_config = retry(
             wait=wait_fixed(3),
             stop=stop_after_attempt(15),
             before=before_log(logger, logging.INFO),
             retry=retry_if_exception_type(IntegrityError),
         )
-        retryable_process = retry_config(self._process_message_with_retry)
         try:
-            await retryable_process(msg)
-        except Exception as e:
+            await retry_config(self._process_message_with_retry)(msg)
+        except Exception as error:
             logger.error(
-                "Fatal error after all retries for message %s-%s-%s. Sending to DLQ.",
+                "Position-timeseries delivery exhausted retries for %s-%s-%s.",
                 msg.topic(),
                 msg.partition(),
                 msg.offset(),
                 exc_info=True,
             )
-            await self._send_to_dlq_async(msg, e)
+            await self._send_to_dlq_async(msg, error)
 
-    @staticmethod
-    def _material_state(timeseries_record) -> tuple[object, ...]:
-        return (
-            timeseries_record.bod_market_value,
-            timeseries_record.bod_cashflow_position,
-            timeseries_record.eod_cashflow_position,
-            timeseries_record.bod_cashflow_portfolio,
-            timeseries_record.eod_cashflow_portfolio,
-            timeseries_record.eod_market_value,
-            timeseries_record.fees,
-            timeseries_record.quantity,
-            timeseries_record.cost,
-        )
-
-    @classmethod
-    def _has_material_change(cls, existing_record, new_record) -> bool:
-        if existing_record is None:
-            return True
-        return cls._material_state(existing_record) != cls._material_state(new_record)
-
-    async def _stage_aggregation_job(
-        self, db_session, portfolio_id: str, a_date: date, correlation_id: str | None
-    ):
-        await self._stage_aggregation_jobs(db_session, portfolio_id, [a_date], correlation_id)
-
-    async def _stage_aggregation_jobs(
-        self,
-        db_session,
-        portfolio_id: str,
-        aggregation_dates: list[date],
-        correlation_id: str | None,
-    ) -> None:
-        """
-        Idempotently stage aggregation jobs.
-
-        Material position-timeseries changes for a portfolio-day must re-arm aggregation,
-        even when they arrive under the same correlation id as an earlier partial run.
-        If aggregation is already in flight, mark the job for deterministic reprocessing
-        instead of moving it out from under the worker that owns the PROCESSING claim.
-        Duplicate timeseries writes are filtered before this method is called.
-        """
-        normalized_dates = sorted(set(aggregation_dates))
-        if not normalized_dates:
-            return
-
-        insert_values = []
-        for aggregation_date in normalized_dates:
-            diagnostics = durable_correlation_diagnostics(
-                correlation_id=correlation_id,
-                record_family="aggregation_job",
-                portfolio_id=portfolio_id,
-                aggregation_date=aggregation_date,
-            )
-            insert_values.append(
-                {
-                    "portfolio_id": portfolio_id,
-                    "aggregation_date": aggregation_date,
-                    "status": "PENDING",
-                    "correlation_id": diagnostics.correlation_id,
-                    "correlation_missing_reason": diagnostics.correlation_missing_reason,
-                    "alternate_lookup_key": diagnostics.alternate_lookup_key,
-                }
-            )
-
-        normalized_correlation_id = insert_values[0]["correlation_id"]
-        insert_stmt = pg_insert(PortfolioAggregationJob).values(insert_values)
-        job_stmt = insert_stmt.on_conflict_do_update(
-            index_elements=["portfolio_id", "aggregation_date"],
-            set_={
-                "status": case(
-                    (
-                        PortfolioAggregationJob.status == "PROCESSING",
-                        PortfolioAggregationJob.status,
-                    ),
-                    else_="PENDING",
-                ),
-                "correlation_id": insert_stmt.excluded.correlation_id,
-                "correlation_missing_reason": insert_stmt.excluded.correlation_missing_reason,
-                "alternate_lookup_key": insert_stmt.excluded.alternate_lookup_key,
-                "updated_at": func.now(),
-                "failure_reason": case(
-                    (
-                        PortfolioAggregationJob.status == "PROCESSING",
-                        AGGREGATION_REPROCESS_REQUESTED,
-                    ),
-                    else_=None,
-                ),
-            },
-            where=or_(
-                PortfolioAggregationJob.status != "PENDING",
-                func.coalesce(PortfolioAggregationJob.correlation_id, "")
-                != (normalized_correlation_id or ""),
-            ),
-        )
-        await db_session.execute(job_stmt)
-        logger.info(
-            "Successfully staged %s aggregation job(s) for portfolio %s from %s to %s",
-            len(normalized_dates),
-            portfolio_id,
-            normalized_dates[0],
-            normalized_dates[-1],
-        )
-
-    async def _materialize_position_timeseries(
-        self,
-        repo: TimeseriesGenerationRepository,
-        *,
-        current_snapshot: PositionSnapshotRecord,
-        previous_snapshot: PositionSnapshotRecord | None,
-        epoch: int,
-        require_existing: bool = False,
-        existing_timeseries: PositionTimeseriesRecord | None | object = _UNSET_PRELOAD,
-        cashflows: list[PositionCashflowRecord] | object = _UNSET_PRELOAD,
-    ) -> tuple[bool, object]:
-        if existing_timeseries is _UNSET_PRELOAD:
-            existing_timeseries = await repo.get_position_timeseries(
-                current_snapshot.portfolio_id,
-                current_snapshot.security_id,
-                current_snapshot.date,
-                epoch,
-            )
-        if require_existing and existing_timeseries is None:
-            return False, None
-        if cashflows is _UNSET_PRELOAD:
-            cashflows = await repo.get_all_cashflows_for_security_date(
-                current_snapshot.portfolio_id,
-                current_snapshot.security_id,
-                current_snapshot.date,
-                epoch,
-            )
-
-        new_timeseries_record = PositionTimeseriesLogic.calculate_daily_record(
-            current_snapshot=current_snapshot,
-            previous_snapshot=previous_snapshot,
-            cashflows=cast(list[PositionCashflowRecord], cashflows),
-            epoch=epoch,
-        )
-        if not self._has_material_change(existing_timeseries, new_timeseries_record):
-            return False, new_timeseries_record
-
-        await repo.upsert_position_timeseries(new_timeseries_record)
-        return True, new_timeseries_record
-
-    async def _propagate_dependent_position_timeseries(
-        self,
-        db_session,
-        repo: TimeseriesGenerationRepository,
-        *,
-        current_snapshot: PositionSnapshotRecord,
-        epoch: int,
-        correlation_id: str,
-    ) -> None:
-        previous_snapshot = current_snapshot
-        changed_dates: list[date] = []
-        has_more_future_snapshots = False
-        stop_propagation = False
-
-        for _ in range(MAX_DEPENDENT_PROPAGATION_BATCHES_PER_MESSAGE):
-            next_snapshots = await repo.get_next_snapshots_after(
-                previous_snapshot.portfolio_id,
-                previous_snapshot.security_id,
-                previous_snapshot.date,
-                epoch,
-                MAX_DEPENDENT_PROPAGATION_ROWS + 1,
-            )
-            if not next_snapshots:
-                break
-
-            has_more_future_snapshots = len(next_snapshots) > MAX_DEPENDENT_PROPAGATION_ROWS
-            next_snapshots_to_process = next_snapshots[:MAX_DEPENDENT_PROPAGATION_ROWS]
-            next_dates = [snapshot.date for snapshot in next_snapshots_to_process]
-            existing_timeseries_by_date = await repo.get_position_timeseries_for_dates(
-                previous_snapshot.portfolio_id,
-                previous_snapshot.security_id,
-                next_dates,
-                epoch,
-            )
-            cashflows_by_date = await repo.get_cashflows_for_security_dates(
-                previous_snapshot.portfolio_id,
-                previous_snapshot.security_id,
-                next_dates,
-                epoch,
-            )
-
-            for next_snapshot in next_snapshots_to_process:
-                changed, _ = await self._materialize_position_timeseries(
-                    repo,
-                    current_snapshot=next_snapshot,
-                    previous_snapshot=previous_snapshot,
-                    epoch=epoch,
-                    require_existing=True,
-                    existing_timeseries=existing_timeseries_by_date.get(next_snapshot.date),
-                    cashflows=cashflows_by_date.get(next_snapshot.date, []),
-                )
-                if not changed:
-                    stop_propagation = True
-                    has_more_future_snapshots = False
-                    break
-
-                changed_dates.append(next_snapshot.date)
-                previous_snapshot = next_snapshot
-
-            if stop_propagation or not has_more_future_snapshots:
-                break
-
-        await self._stage_aggregation_jobs(
-            db_session,
-            current_snapshot.portfolio_id,
-            changed_dates,
-            correlation_id,
-        )
-
-        if has_more_future_snapshots:
-            logger.warning(
-                "Stopped dependent position-timeseries propagation after %s rows for %s/%s.",
-                MAX_DEPENDENT_PROPAGATION_ROWS_PER_MESSAGE,
-                current_snapshot.portfolio_id,
-                current_snapshot.security_id,
-            )
-
-    async def _process_message_with_retry(self, msg: Message):
+    async def _process_message_with_retry(self, msg: Message) -> None:
         try:
-            event_data = json.loads(msg.value().decode("utf-8"))
+            event_data = json.loads(_message_value(msg))
             with self._message_correlation_context(
                 msg,
                 fallback_correlation_id=event_data.get("correlation_id"),
             ) as correlation_id:
                 event = DailyPositionSnapshotPersistedEvent.model_validate(event_data)
-
-                logger.info(
-                    "Processing position snapshot for %s on %s for epoch %s",
-                    event.security_id,
-                    event.date,
-                    event.epoch,
+                result = await self._use_case.execute(
+                    map_position_snapshot_event(event, correlation_id=correlation_id)
                 )
-
-                async for db in get_async_db_session():
-                    async with db.begin():
-                        repo = TimeseriesGenerationRepository(db)
-                        current_snapshot = await db.get(DailyPositionSnapshot, event.id)
-                        if not current_snapshot:
-                            logger.warning(
-                                "DailyPositionSnapshot record with id %s not found. Skipping.",
-                                event.id,
-                            )
-                            return
-
-                        current_snapshot_record = to_position_snapshot_record(
-                            current_snapshot,
-                            fallback_epoch=event.epoch,
-                        )
-                        previous_snapshot = await repo.get_last_snapshot_before(
-                            portfolio_id=event.portfolio_id,
-                            security_id=event.security_id,
-                            a_date=event.date,
-                            epoch=event.epoch,
-                        )
-
-                        changed, _ = await self._materialize_position_timeseries(
-                            repo,
-                            current_snapshot=current_snapshot_record,
-                            previous_snapshot=previous_snapshot,
-                            epoch=event.epoch,
-                        )
-
-                        if not changed:
-                            logger.info(
-                                (
-                                    "Position timeseries already up to date for %s on %s epoch %s. "
-                                    "Checking dependent rows before skipping downstream fan-out."
-                                ),
-                                event.security_id,
-                                event.date,
-                                event.epoch,
-                            )
-                        else:
-                            await self._stage_aggregation_job(
-                                db, event.portfolio_id, event.date, correlation_id
-                            )
-                        await self._propagate_dependent_position_timeseries(
-                            db,
-                            repo,
-                            current_snapshot=current_snapshot_record,
-                            epoch=event.epoch,
-                            correlation_id=correlation_id,
-                        )
-
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error("Message validation failed: %s. Sending to DLQ.", e, exc_info=True)
-            await self._send_to_dlq_async(msg, e)
-        except IntegrityError as e:
-            logger.warning(f"A recoverable error occurred: {e}. Retrying...")
+                logger.info(
+                    "Position-timeseries materialization completed.",
+                    extra={
+                        "snapshot_id": event.id,
+                        "portfolio_id": event.portfolio_id,
+                        "security_id": event.security_id,
+                        "valuation_date": event.date.isoformat(),
+                        "epoch": event.epoch,
+                        "snapshot_found": result.snapshot_found,
+                        "current_day_changed": result.current_day_changed,
+                        "dependent_days_changed": result.dependent_days_changed,
+                        "dependent_propagation_truncated": (result.dependent_propagation_truncated),
+                    },
+                )
+        except (json.JSONDecodeError, ValidationError) as error:
+            logger.error("Position snapshot event validation failed.", exc_info=True)
+            await self._send_to_dlq_async(msg, error)
+        except IntegrityError:
+            logger.warning("Position-timeseries persistence raced; retrying.", exc_info=True)
             raise
-        except Exception as e:
-            logger.error(f"Unexpected error processing message: {e}", exc_info=True)
-            await self._send_to_dlq_async(msg, e)
+        except Exception as error:
+            logger.error("Position-timeseries materialization failed.", exc_info=True)
+            await self._send_to_dlq_async(msg, error)
+
+
+def _message_value(msg: Message) -> str:
+    value = msg.value()
+    if value is None:
+        raise ValueError("Position snapshot event payload is missing")
+    return value.decode("utf-8")

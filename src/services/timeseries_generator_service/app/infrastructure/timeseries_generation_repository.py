@@ -8,8 +8,10 @@ from typing import cast
 from portfolio_common.database_models import (
     Cashflow,
     DailyPositionSnapshot,
+    PortfolioAggregationJob,
     PositionTimeseries,
 )
+from portfolio_common.durable_correlation import durable_correlation_diagnostics
 from portfolio_common.identifiers import normalize_lookup_identifier
 from portfolio_common.infrastructure.persistence.timeseries_market_data_reader import (
     TimeseriesMarketDataReader,
@@ -18,7 +20,8 @@ from portfolio_common.infrastructure.persistence.timeseries_upsert_statements im
     build_position_timeseries_upsert_statement,
 )
 from portfolio_common.utils import async_timed
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..domain.timeseries_records import (
     PositionCashflowRecord,
@@ -31,6 +34,21 @@ logger = logging.getLogger(__name__)
 
 class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
     """Persist generated position timeseries and read their source data."""
+
+    async def get_position_snapshot(
+        self,
+        snapshot_id: int,
+        *,
+        fallback_epoch: int,
+    ) -> PositionSnapshotRecord | None:
+        """Load one persisted valuation snapshot as an immutable domain record."""
+
+        row = await self.db.get(DailyPositionSnapshot, snapshot_id)
+        return (
+            to_position_snapshot_record(row, fallback_epoch=fallback_epoch)
+            if row is not None
+            else None
+        )
 
     @async_timed(repository="TimeseriesRepository", method="get_position_timeseries")
     async def get_position_timeseries(
@@ -122,7 +140,11 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
 
     @async_timed(repository="TimeseriesRepository", method="get_last_snapshot_before")
     async def get_last_snapshot_before(
-        self, portfolio_id: str, security_id: str, a_date: date, epoch: int
+        self,
+        portfolio_id: str,
+        security_id: str,
+        a_date: date,
+        epoch: int,
     ) -> PositionSnapshotRecord | None:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
@@ -148,7 +170,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
         security_id: str,
         a_date: date,
         epoch: int,
-        max_rows: int,
+        limit: int,
     ) -> list[PositionSnapshotRecord]:
         normalized_portfolio_id = normalize_lookup_identifier(portfolio_id)
         normalized_security_id = normalize_lookup_identifier(security_id)
@@ -175,7 +197,7 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             .join(ranked_future_snapshots, DailyPositionSnapshot.id == ranked_future_snapshots.c.id)
             .where(ranked_future_snapshots.c.rn == 1)
             .order_by(DailyPositionSnapshot.date.asc())
-            .limit(max_rows)
+            .limit(limit)
         )
         result = await self.db.execute(stmt)
         rows = cast(list[DailyPositionSnapshot], result.scalars().all())
@@ -230,6 +252,79 @@ class TimeseriesGenerationRepository(TimeseriesMarketDataReader):
             cashflow = _position_cashflow_record(row)
             grouped.setdefault(cashflow.cashflow_date, []).append(cashflow)
         return grouped
+
+    async def stage_aggregation_jobs(
+        self,
+        portfolio_id: str,
+        aggregation_dates: list[date],
+        correlation_id: str | None,
+    ) -> None:
+        """Idempotently stage every materially affected portfolio day."""
+
+        normalized_dates = sorted(set(aggregation_dates))
+        if not normalized_dates:
+            return
+
+        insert_values = []
+        for aggregation_date in normalized_dates:
+            diagnostics = durable_correlation_diagnostics(
+                correlation_id=correlation_id,
+                record_family="aggregation_job",
+                portfolio_id=portfolio_id,
+                aggregation_date=aggregation_date,
+            )
+            insert_values.append(
+                {
+                    "portfolio_id": portfolio_id,
+                    "aggregation_date": aggregation_date,
+                    "status": "PENDING",
+                    "correlation_id": diagnostics.correlation_id,
+                    "correlation_missing_reason": diagnostics.correlation_missing_reason,
+                    "alternate_lookup_key": diagnostics.alternate_lookup_key,
+                }
+            )
+
+        normalized_correlation_id = insert_values[0]["correlation_id"]
+        insert_statement = pg_insert(PortfolioAggregationJob).values(insert_values)
+        await self.db.execute(
+            insert_statement.on_conflict_do_update(
+                index_elements=["portfolio_id", "aggregation_date"],
+                set_={
+                    "status": case(
+                        (
+                            PortfolioAggregationJob.status == "PROCESSING",
+                            PortfolioAggregationJob.status,
+                        ),
+                        else_="PENDING",
+                    ),
+                    "correlation_id": insert_statement.excluded.correlation_id,
+                    "correlation_missing_reason": (
+                        insert_statement.excluded.correlation_missing_reason
+                    ),
+                    "alternate_lookup_key": insert_statement.excluded.alternate_lookup_key,
+                    "updated_at": func.now(),
+                    "failure_reason": case(
+                        (
+                            PortfolioAggregationJob.status == "PROCESSING",
+                            "REPROCESS_REQUESTED",
+                        ),
+                        else_=None,
+                    ),
+                },
+                where=or_(
+                    PortfolioAggregationJob.status != "PENDING",
+                    func.coalesce(PortfolioAggregationJob.correlation_id, "")
+                    != (normalized_correlation_id or ""),
+                ),
+            )
+        )
+        logger.info(
+            "Staged %s portfolio aggregation job(s) for %s from %s to %s.",
+            len(normalized_dates),
+            portfolio_id,
+            normalized_dates[0],
+            normalized_dates[-1],
+        )
 
 
 def to_position_snapshot_record(
