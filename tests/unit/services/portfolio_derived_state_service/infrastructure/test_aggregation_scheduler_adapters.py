@@ -14,9 +14,7 @@ def test_scheduler_metrics_map_recovery_claim_and_processing_outcomes(monkeypatc
     monkeypatch.setattr(
         aggregation_scheduler_adapters,
         "observe_control_queue_outcome",
-        lambda queue, stage, outcome, count=1: observed.append(
-            (queue, stage, outcome, count)
-        ),
+        lambda queue, stage, outcome, count=1: observed.append((queue, stage, outcome, count)),
     )
     sink = aggregation_scheduler_adapters.PrometheusAggregationSchedulerMetricsSink()
 
