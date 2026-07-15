@@ -17,10 +17,12 @@ from ..ports.timeseries_market_data import TimeseriesMarketDataPort
 logger = logging.getLogger(__name__)
 
 
-class FxRateNotFoundError(Exception):
+class FxRateNotFoundError(RuntimeError):
     """Raised when a required FX rate for a calculation is not found."""
 
-    pass
+
+class InstrumentReferenceNotFoundError(RuntimeError):
+    """Raised when a position cannot be tied to authoritative instrument data."""
 
 
 class PortfolioTimeseriesLogic:
@@ -53,17 +55,28 @@ class PortfolioTimeseriesLogic:
         # same position-timeseries rows. This keeps portfolio BOD/EOD aligned with
         # the summed position-timeseries contract instead of relying on a separate
         # previous-portfolio carry-forward path.
-        security_ids = list(dict.fromkeys(pt.security_id for pt in position_timeseries_list))
+        security_ids = list(
+            dict.fromkeys(
+                PortfolioTimeseriesLogic._normalize_security_id(position.security_id)
+                for position in position_timeseries_list
+            )
+        )
         instruments_list = await repo.get_instruments_by_ids(security_ids)
-        instruments = {inst.security_id: inst for inst in instruments_list}
+        instruments = {
+            PortfolioTimeseriesLogic._normalize_security_id(instrument.security_id): instrument
+            for instrument in instruments_list
+        }
 
         for pos_ts in position_timeseries_list:
-            instrument = instruments.get(pos_ts.security_id)
+            security_id = PortfolioTimeseriesLogic._normalize_security_id(pos_ts.security_id)
+            instrument = instruments.get(security_id)
             if not instrument:
-                logger.warning(
-                    f"Could not find instrument {pos_ts.security_id}. Skipping its contribution."
+                error_message = f"Missing instrument reference data for {security_id}."
+                logger.error(
+                    "Portfolio aggregation requires instrument reference data.",
+                    extra={"security_id": security_id},
                 )
-                continue
+                raise InstrumentReferenceNotFoundError(error_message)
 
             instrument_currency = PortfolioTimeseriesLogic._normalize_currency(instrument.currency)
             rate = await PortfolioTimeseriesLogic._resolve_fx_rate(
@@ -94,6 +107,10 @@ class PortfolioTimeseriesLogic:
     @staticmethod
     def _normalize_currency(currency: object) -> str:
         return str(currency).strip().upper()
+
+    @staticmethod
+    def _normalize_security_id(security_id: object) -> str:
+        return str(security_id).strip()
 
     @staticmethod
     async def _resolve_fx_rate(
