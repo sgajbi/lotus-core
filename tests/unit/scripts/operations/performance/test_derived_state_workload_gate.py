@@ -7,12 +7,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.operations.performance.derived_state_workload_gate import (
     build_bank_day_command,
     build_workload_environment,
     prepare_managed_run,
     resolve_workload_profile,
     resolve_workload_trade_date,
+    validate_execution_posture,
 )
 from scripts.quality.ci_service_sets import DERIVED_STATE_WORKLOAD_GATE_SERVICES
 
@@ -65,7 +68,6 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
         e2e_event_replay_url="http://localhost:55005",
         e2e_financial_reconciliation_url="http://localhost:55006",
     )
-
     command = build_bank_day_command(
         python_executable="python",
         repo_root=tmp_path,
@@ -100,6 +102,20 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     )
     assert environment["HOST_DATABASE_URL"] == endpoints.host_database_url
     assert environment["PATH"] == "C:/tools"
+
+
+def test_certifying_profile_requires_exact_source_build() -> None:
+    certifying = resolve_workload_profile(profile_name="fan-in", diagnostic_smoke=False)
+    diagnostic = resolve_workload_profile(profile_name="daily", diagnostic_smoke=True)
+
+    validate_execution_posture(profile=certifying, build=True)
+    validate_execution_posture(profile=diagnostic, build=False)
+
+    with pytest.raises(
+        ValueError,
+        match="Certifying derived-state workload profiles require --build",
+    ):
+        validate_execution_posture(profile=certifying, build=False)
 
 
 def test_prepare_managed_run_uses_complete_derived_state_service_set(
