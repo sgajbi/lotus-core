@@ -20,9 +20,9 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
-import requests  # type: ignore[import-untyped]
+import requests
 from portfolio_common.db import get_sync_database_url
 from sqlalchemy import create_engine, text
 
@@ -30,6 +30,13 @@ from scripts.operations.performance.derived_state_resource_monitor import (
     DerivedStateResourceEvidence,
     DerivedStateResourceMonitor,
     capture_resource_sample,
+)
+from scripts.operations.performance.fx_rate_correction import (
+    FxDerivedStateCorrectionEvidence,
+    build_fx_rate_correction_payload,
+    build_fx_valuation_expectations,
+    corrected_direct_fx_rate,
+    wait_for_fx_corrected_derived_state,
 )
 from scripts.operations.performance.market_price_correction import (
     DerivedStateCorrectionEvidence,
@@ -196,6 +203,7 @@ class ScenarioReport:
     failures: list[str]
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None
     correction_evidence: DerivedStateCorrectionEvidence | None = None
+    fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
 
 
 class HealthMonitor:
@@ -296,12 +304,19 @@ def _percentile(samples: list[float], percentile: int) -> float:
     return statistics.quantiles(samples, n=100)[index]
 
 
-def _fx_rate(from_currency: str, to_currency: str) -> Decimal:
-    if from_currency == to_currency:
+def _fx_rate(
+    from_currency: str,
+    to_currency: str,
+    overrides: Mapping[tuple[str, str], Decimal] | None = None,
+) -> Decimal:
+    normalized_pair = (from_currency.strip().upper(), to_currency.strip().upper())
+    if overrides and normalized_pair in overrides:
+        return overrides[normalized_pair]
+    if normalized_pair[0] == normalized_pair[1]:
         return Decimal("1.000000")
-    return (USD_PER_CURRENCY[from_currency] / USD_PER_CURRENCY[to_currency]).quantize(
-        Decimal("0.000001")
-    )
+    return (
+        USD_PER_CURRENCY[normalized_pair[0]] / USD_PER_CURRENCY[normalized_pair[1]]
+    ).quantize(Decimal("0.000001"))
 
 
 def _build_portfolios(
@@ -434,10 +449,13 @@ def iter_transaction_batches(
         yield batch
 
 
-def expected_portfolio_market_value(specs: list[InstrumentSpec]) -> Decimal:
+def expected_portfolio_market_value(
+    specs: list[InstrumentSpec],
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
+) -> Decimal:
     total = Decimal("0")
     for spec in specs:
-        total += spec.market_price * _fx_rate(spec.currency, "USD")
+        total += spec.market_price * _fx_rate(spec.currency, "USD", fx_rate_overrides)
     return total.quantize(Decimal("0.0000000001"))
 
 
@@ -445,10 +463,11 @@ def expected_total_market_value(
     *,
     portfolio_count: int,
     specs: list[InstrumentSpec],
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
 ) -> Decimal:
-    return (expected_portfolio_market_value(specs) * Decimal(portfolio_count)).quantize(
-        Decimal("0.0000000001")
-    )
+    return (
+        expected_portfolio_market_value(specs, fx_rate_overrides) * Decimal(portfolio_count)
+    ).quantize(Decimal("0.0000000001"))
 
 
 def _wait_ready(*, base_urls: list[str], timeout_seconds: int) -> None:
@@ -734,6 +753,7 @@ def _build_database_tie_out(
     trade_date: str,
     portfolio_count: int,
     specs: list[InstrumentSpec],
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
 ) -> DatabaseTieOut:
     params = {
         "portfolio_pattern": f"LOAD_{run_id}_PF_%",
@@ -1031,7 +1051,11 @@ def _build_database_tie_out(
             _parse_decimal(aggregate_row["summed_snapshot_market_value"])
         ),
         expected_total_market_value=_decimal_str(
-            expected_total_market_value(portfolio_count=portfolio_count, specs=specs)
+            expected_total_market_value(
+                portfolio_count=portfolio_count,
+                specs=specs,
+                fx_rate_overrides=fx_rate_overrides,
+            )
         ),
         per_security_quantity_min=(
             _decimal_str(_parse_decimal(aggregate_row["per_security_quantity_min"]))
@@ -1188,6 +1212,7 @@ def _collect_sample_portfolios(
     specs: list[InstrumentSpec],
     trade_date: str,
     sample_size: int,
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
     positions_probe_repetitions: int = 3,
     transactions_probe_repetitions: int = 3,
     support_probe_repetitions: int = 2,
@@ -1195,7 +1220,7 @@ def _collect_sample_portfolios(
     samples: list[SamplePortfolioResult] = []
     probes: list[ApiProbeResult] = []
     portfolio_ids = [portfolio["portfolio_id"] for portfolio in portfolios[:sample_size]]
-    expected_value = expected_portfolio_market_value(specs)
+    expected_value = expected_portfolio_market_value(specs, fx_rate_overrides)
     for portfolio_id in portfolio_ids:
         positions_url = (
             f"{query_base_url}/portfolios/{portfolio_id}/positions?as_of_date={trade_date}"
@@ -1492,6 +1517,11 @@ def _evaluate_report(report: ScenarioReport) -> list[str]:
         and report.correction_evidence is None
     ):
         failures.append("market price correction has no completed drain evidence")
+    if (
+        report.config.get("fx_rate_correction_multiplier") is not None
+        and report.fx_correction_evidence is None
+    ):
+        failures.append("FX rate correction has no completed drain evidence")
     return failures
 
 
@@ -1546,6 +1576,17 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
             ),
             "```",
             "",
+            "## FX Rate Correction Evidence",
+            "",
+            "```json",
+            json.dumps(
+                asdict(report.fx_correction_evidence)
+                if report.fx_correction_evidence is not None
+                else None,
+                indent=2,
+            ),
+            "```",
+            "",
             "## Derived-State Resource Evidence",
             "",
             "```json",
@@ -1590,7 +1631,12 @@ def _write_report(*, report: ScenarioReport, output_dir: Path) -> tuple[Path, Pa
     return json_path, md_path
 
 
-def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> DatabaseTieOut:
+def _zero_tie_out(
+    *,
+    portfolio_count: int,
+    specs: list[InstrumentSpec],
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
+) -> DatabaseTieOut:
     return DatabaseTieOut(
         portfolios_count=0,
         instruments_count=0,
@@ -1612,7 +1658,11 @@ def _zero_tie_out(*, portfolio_count: int, specs: list[InstrumentSpec]) -> Datab
         expected_total_quantity=_decimal_str(Decimal(portfolio_count * len(specs))),
         summed_snapshot_market_value="0.0000000000",
         expected_total_market_value=_decimal_str(
-            expected_total_market_value(portfolio_count=portfolio_count, specs=specs)
+            expected_total_market_value(
+                portfolio_count=portfolio_count,
+                specs=specs,
+                fx_rate_overrides=fx_rate_overrides,
+            )
         ),
         per_security_quantity_min=None,
         per_security_quantity_max=None,
@@ -1649,6 +1699,7 @@ def _safe_build_database_tie_out(
     trade_date: str,
     portfolio_count: int,
     specs: list[InstrumentSpec],
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
 ) -> tuple[DatabaseTieOut, list[str]]:
     try:
         return (
@@ -1658,12 +1709,17 @@ def _safe_build_database_tie_out(
                 trade_date=trade_date,
                 portfolio_count=portfolio_count,
                 specs=specs,
+                fx_rate_overrides=fx_rate_overrides,
             ),
             [],
         )
     except Exception as exc:
         return (
-            _zero_tie_out(portfolio_count=portfolio_count, specs=specs),
+            _zero_tie_out(
+                portfolio_count=portfolio_count,
+                specs=specs,
+                fx_rate_overrides=fx_rate_overrides,
+            ),
             [f"failed to collect database tie-out for partial report: {exc}"],
         )
 
@@ -1678,6 +1734,7 @@ def _safe_collect_sample_portfolios(
     specs: list[InstrumentSpec],
     trade_date: str,
     sample_size: int,
+    fx_rate_overrides: Mapping[tuple[str, str], Decimal] | None = None,
 ) -> tuple[list[SamplePortfolioResult], list[ApiProbeResult], list[str]]:
     try:
         samples, probes = _collect_sample_portfolios(
@@ -1689,6 +1746,7 @@ def _safe_collect_sample_portfolios(
             specs=specs,
             trade_date=trade_date,
             sample_size=sample_size,
+            fx_rate_overrides=fx_rate_overrides,
         )
         return samples, probes, []
     except Exception as exc:
@@ -1716,6 +1774,9 @@ def _safe_collect_log_evidence(
 
 def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict[str, Any]:
     correction_multiplier = getattr(args, "market_price_correction_multiplier", None)
+    fx_from_currency = getattr(args, "fx_rate_correction_from_currency", None)
+    fx_to_currency = getattr(args, "fx_rate_correction_to_currency", None)
+    fx_correction_multiplier = getattr(args, "fx_rate_correction_multiplier", None)
     business_dates = build_synthetic_business_date_window(
         as_of_date=resolved_trade_date,
         business_date_count=args.business_date_count,
@@ -1744,6 +1805,11 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "market_price_correction_multiplier": (
             str(correction_multiplier) if correction_multiplier is not None else None
         ),
+        "fx_rate_correction_from_currency": fx_from_currency,
+        "fx_rate_correction_to_currency": fx_to_currency,
+        "fx_rate_correction_multiplier": (
+            str(fx_correction_multiplier) if fx_correction_multiplier is not None else None
+        ),
     }
 
 
@@ -1765,6 +1831,7 @@ def _finalize_report(
     initial_failures: list[str],
     derived_state_resource_evidence: DerivedStateResourceEvidence | None = None,
     correction_evidence: DerivedStateCorrectionEvidence | None = None,
+    fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None,
 ) -> ScenarioReport:
     report_base = ScenarioReport(
         scenario_name=args.scenario_name,
@@ -1798,6 +1865,7 @@ def _finalize_report(
         failures=[],
         derived_state_resource_evidence=derived_state_resource_evidence,
         correction_evidence=correction_evidence,
+        fx_correction_evidence=fx_correction_evidence,
     )
     failures = initial_failures + _evaluate_report(report_base)
     return ScenarioReport(
@@ -1823,6 +1891,7 @@ def _finalize_report(
         failures=failures,
         derived_state_resource_evidence=report_base.derived_state_resource_evidence,
         correction_evidence=report_base.correction_evidence,
+        fx_correction_evidence=report_base.fx_correction_evidence,
     )
 
 
@@ -1846,6 +1915,9 @@ def main() -> int:
     parser.add_argument("--trade-date", default=None)
     parser.add_argument("--business-date-count", type=int, default=1)
     parser.add_argument("--market-price-correction-multiplier", type=Decimal, default=None)
+    parser.add_argument("--fx-rate-correction-from-currency", default=None)
+    parser.add_argument("--fx-rate-correction-to-currency", default=None)
+    parser.add_argument("--fx-rate-correction-multiplier", type=Decimal, default=None)
     parser.add_argument("--ingestion-base-url", default=DEFAULT_INGESTION_BASE_URL)
     parser.add_argument("--query-base-url", default=DEFAULT_QUERY_BASE_URL)
     parser.add_argument("--query-control-base-url", default=DEFAULT_QUERY_CONTROL_BASE_URL)
@@ -1881,6 +1953,28 @@ def main() -> int:
         args.market_price_correction_multiplier <= 0 or args.market_price_correction_multiplier == 1
     ):
         raise ValueError("market_price_correction_multiplier must be positive and not equal to 1.")
+    fx_correction_arguments = (
+        args.fx_rate_correction_from_currency,
+        args.fx_rate_correction_to_currency,
+        args.fx_rate_correction_multiplier,
+    )
+    if any(value is not None for value in fx_correction_arguments) and not all(
+        value is not None for value in fx_correction_arguments
+    ):
+        raise ValueError("FX correction requires from currency, to currency, and multiplier.")
+    if args.fx_rate_correction_multiplier is not None and (
+        args.fx_rate_correction_multiplier <= 0 or args.fx_rate_correction_multiplier == 1
+    ):
+        raise ValueError("fx_rate_correction_multiplier must be positive and not equal to 1.")
+    if args.fx_rate_correction_to_currency is not None and (
+        str(args.fx_rate_correction_to_currency).strip().upper() != "USD"
+    ):
+        raise ValueError("FX correction target currency must match the USD portfolio base.")
+    if (
+        args.market_price_correction_multiplier is not None
+        and args.fx_rate_correction_multiplier is not None
+    ):
+        raise ValueError("Run market-price and FX corrections as separate evidence profiles.")
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     started_at = _utc_now()
@@ -1916,6 +2010,8 @@ def main() -> int:
         instrument_count=args.transactions_per_portfolio,
     )
     effective_specs = specs
+    effective_fx_rate_overrides: dict[tuple[str, str], Decimal] = {}
+    fx_correction_evidence: FxDerivedStateCorrectionEvidence | None = None
     session = requests.Session()
     ingest_phases: list[IngestPhaseResult] = []
     portfolio_pattern = {"portfolio_pattern": f"LOAD_{run_id}_PF_%"}
@@ -2120,6 +2216,65 @@ def main() -> int:
                 timeout_seconds=args.drain_timeout_seconds,
             )
             drain_seconds += correction_evidence.drain_seconds
+        if args.fx_rate_correction_multiplier is not None:
+            from_currency = str(args.fx_rate_correction_from_currency).strip().upper()
+            to_currency = str(args.fx_rate_correction_to_currency).strip().upper()
+            initial_rate = _fx_rate(from_currency, to_currency)
+            corrected_rate = corrected_direct_fx_rate(
+                initial_rate=initial_rate,
+                multiplier=args.fx_rate_correction_multiplier,
+            )
+            expectations = build_fx_valuation_expectations(
+                specs=specs,
+                rates_to_base={
+                    currency: _fx_rate(currency, to_currency)
+                    for currency in SUPPORTED_CURRENCIES
+                    if currency != to_currency
+                },
+                from_currency=from_currency,
+                to_currency=to_currency,
+                initial_rate=initial_rate,
+                corrected_rate=corrected_rate,
+                portfolio_count=args.portfolio_count,
+            )
+            correction_started_at = _db_row(
+                engine,
+                "SELECT clock_timestamp() AS correction_started_at",
+                {},
+            )["correction_started_at"]
+            ingest_phases.append(
+                _ingest_static_payload(
+                    session=session,
+                    base_url=args.ingestion_base_url,
+                    endpoint="/ingest/fx-rates",
+                    root_key="fx_rates",
+                    rows=build_fx_rate_correction_payload(
+                        from_currency=from_currency,
+                        to_currency=to_currency,
+                        effective_date=opening_trade_date,
+                        corrected_rate=corrected_rate,
+                    ),
+                    phase="fx-rate-correction",
+                )
+            )
+            fx_correction_evidence = wait_for_fx_corrected_derived_state(
+                row_reader=lambda sql, params: _db_row(engine, sql, dict(params)),
+                run_id=run_id,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                effective_date=opening_trade_date,
+                window_start_date=business_dates[0],
+                window_end_date=business_dates[-1],
+                business_date_count=len(business_dates),
+                portfolio_count=args.portfolio_count,
+                expectations=expectations,
+                initial_rate=initial_rate,
+                corrected_rate=corrected_rate,
+                correction_started_at=correction_started_at,
+                timeout_seconds=args.drain_timeout_seconds,
+            )
+            effective_fx_rate_overrides[(from_currency, to_currency)] = corrected_rate
+            drain_seconds += fx_correction_evidence.drain_seconds
         terminal_status = "complete"
     except (ScenarioInterrupted, KeyboardInterrupt) as exc:
         partial_failures.append(str(exc))
@@ -2143,6 +2298,7 @@ def main() -> int:
         specs=effective_specs,
         trade_date=resolved_trade_date,
         sample_size=min(args.sample_size, len(portfolios)),
+        fx_rate_overrides=effective_fx_rate_overrides,
     )
     tie_out, tie_out_failures = _safe_build_database_tie_out(
         engine=engine,
@@ -2150,6 +2306,7 @@ def main() -> int:
         trade_date=resolved_trade_date,
         portfolio_count=args.portfolio_count,
         specs=effective_specs,
+        fx_rate_overrides=effective_fx_rate_overrides,
     )
     log_evidence, log_failures = _safe_collect_log_evidence(
         started_at=started_at,
@@ -2173,6 +2330,7 @@ def main() -> int:
         initial_failures=partial_failures + sample_failures + tie_out_failures + log_failures,
         derived_state_resource_evidence=resource_monitor.evidence(),
         correction_evidence=correction_evidence,
+        fx_correction_evidence=fx_correction_evidence,
     )
     json_path, md_path = _write_report(report=report, output_dir=Path(args.output_dir))
     print(f"Wrote JSON report: {json_path}")

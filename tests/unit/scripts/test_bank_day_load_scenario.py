@@ -161,6 +161,10 @@ def test_expected_portfolio_market_value_converts_non_usd_prices() -> None:
     ]
 
     assert expected_portfolio_market_value(specs) == Decimal("32.3200000000")
+    assert expected_portfolio_market_value(
+        specs,
+        {("EUR", "USD"): Decimal("1.155000")},
+    ) == Decimal("33.4310000000")
 
 
 def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
@@ -177,6 +181,7 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
             "transaction_count": 6,
             "derived_state_resource_evidence_required": True,
             "market_price_correction_multiplier": "1.05",
+            "fx_rate_correction_multiplier": "1.05",
         },
         ingest_phases=[],
         drain_seconds=120.0,
@@ -303,6 +308,9 @@ def test_evaluate_report_flags_tie_out_sample_api_and_log_failures() -> None:
     assert any("derived-state resource evidence has no samples" in failure for failure in failures)
     assert any(
         "market price correction has no completed drain evidence" in failure for failure in failures
+    )
+    assert any(
+        "FX rate correction has no completed drain evidence" in failure for failure in failures
     )
 
 

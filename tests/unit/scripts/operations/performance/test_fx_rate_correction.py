@@ -79,6 +79,19 @@ def test_fx_correction_payload_normalizes_pair_and_precision() -> None:
     ]
 
 
+def test_fx_expectations_reject_pair_without_affected_instruments() -> None:
+    with pytest.raises(ValueError, match="EUR/USD affects no instruments"):
+        build_fx_valuation_expectations(
+            specs=[_spec("USD-1", "USD", "100", "101")],
+            rates_to_base={"EUR": Decimal("1.100000")},
+            from_currency="EUR",
+            to_currency="USD",
+            initial_rate=Decimal("1.100000"),
+            corrected_rate=Decimal("1.155000"),
+            portfolio_count=1,
+        )
+
+
 def test_wait_for_fx_correction_requires_exact_runtime_evidence() -> None:
     expectations = build_fx_valuation_expectations(
         specs=[_spec("EUR-1", "EUR", "100", "101")],
