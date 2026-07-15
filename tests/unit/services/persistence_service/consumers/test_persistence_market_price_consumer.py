@@ -11,6 +11,7 @@ from portfolio_common.events import MarketPriceEvent, event_business_payload
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.persistence_service.app.consumers.market_price_consumer import MarketPriceConsumer
@@ -194,10 +195,10 @@ async def test_process_message_sends_nonpositive_market_price_to_dlq(
     with patch.object(
         market_price_consumer, "_send_to_dlq_async", new_callable=AsyncMock
     ) as mock_send_to_dlq:
-        with pytest.raises(ValueError, match="Poison pill"):
+        with pytest.raises(ValidationError):
             await market_price_consumer.process_message(mock_kafka_message)
 
     mock_idempotency_repo.claim_event_processing.assert_not_called()
     mock_repo.create_market_price.assert_not_called()
     mock_outbox_repo.create_outbox_event.assert_not_called()
-    mock_send_to_dlq.assert_awaited_once()
+    mock_send_to_dlq.assert_not_awaited()

@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from portfolio_common.event_mapping import EventContractValidationError
 from portfolio_common.events import GOVERNED_EVENT_SCHEMA_VERSION, MarketPricePersistedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.valuation_job_repository import ValuationJobRepository
@@ -98,6 +99,18 @@ def mock_dependencies():
             "reprocessing_repo": mock_reprocessing_repo,
             "job_repo": mock_job_repo,
         }
+
+
+async def test_invalid_price_event_is_raised_to_shared_recovery_boundary(
+    consumer: PriceEventConsumer,
+    mock_kafka_message: MagicMock,
+) -> None:
+    mock_kafka_message.value.return_value = b'{"security_id":"SEC_INVALID"}'
+
+    with pytest.raises(EventContractValidationError):
+        await consumer.process_message(mock_kafka_message)
+
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 async def test_backdated_price_flags_instrument_for_reprocessing(

@@ -101,11 +101,11 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                         )
 
         except (json.JSONDecodeError, ValidationError):
-            logger.error("Invalid reconciliation request payload; sending to DLQ.", exc_info=True)
-            await self._send_to_dlq_async(msg, ValueError("invalid payload"))
+            logger.error("Invalid reconciliation request payload.", exc_info=True)
+            raise
         except (DBAPIError, IntegrityError):
             logger.warning("DB error in reconciliation request consumer; retrying.")
             raise
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.error("Unexpected reconciliation consumer error; sending to DLQ.", exc_info=True)
-            await self._send_to_dlq_async(msg, exc)
+        except Exception:  # pragma: no cover - defensive
+            logger.error("Unexpected reconciliation consumer error.", exc_info=True)
+            raise

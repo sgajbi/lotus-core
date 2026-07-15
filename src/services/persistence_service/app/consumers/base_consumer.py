@@ -27,7 +27,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
     - JSON Deserialization and Pydantic Validation
     - Idempotency checks
     - Database transaction and session management
-    - Error handling, retries, and DLQ publishing
+    - Error classification for the shared consumer recovery boundary
     - Optional outbox event creation on success
     """
 
@@ -63,7 +63,7 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
         """
         Processes a single message.
         - For transient DB errors, raises RetryableConsumerError to trigger Kafka redelivery.
-        - For validation/poison-pill errors, sends to DLQ.
+        - For validation/poison-pill errors, raises to the shared DLQ boundary.
         - For unexpected errors, raises them to be handled by the BaseConsumer.
         """
         event = None
@@ -100,13 +100,9 @@ class GenericPersistenceConsumer(BaseConsumer, ABC):
                                 correlation_id=correlation_id, **outbox_details
                             )
 
-        except (json.JSONDecodeError, ValidationError) as e:
-            # This is a non-retryable "poison pill" message. Send to DLQ.
-            logger.error("Message validation failed. Sending to DLQ.", exc_info=True)
-            await self._send_to_dlq_async(msg, e)
-            # IMPORTANT: Re-raise a generic exception so the base consumer commits
-            # the offset for poison-pill messages.
-            raise ValueError("Poison pill message detected")
+        except (json.JSONDecodeError, ValidationError):
+            logger.error("Message validation failed.", exc_info=True)
+            raise
         except (DBAPIError, IntegrityError, OperationalError) as e:
             # This is a transient DB error. Signal the base consumer to retry.
             logger.warning(

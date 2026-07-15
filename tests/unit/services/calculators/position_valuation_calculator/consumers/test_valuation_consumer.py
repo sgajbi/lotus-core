@@ -19,6 +19,7 @@ from portfolio_common.events import (
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.logging_utils import correlation_id_var
 from portfolio_common.outbox_repository import OutboxRepository
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.calculators.position_valuation_calculator.app.consumers.valuation_consumer import (
@@ -108,6 +109,18 @@ def mock_dependencies():
         "dependency_factory": dependency_factory,
         "processor": processor,
     }
+
+
+async def test_invalid_valuation_event_is_raised_to_shared_recovery_boundary(
+    consumer: ValuationConsumer,
+    mock_kafka_message: MagicMock,
+) -> None:
+    mock_kafka_message.value.return_value = b'{"portfolio_id":"PORT_INVALID"}'
+
+    with pytest.raises(ValidationError):
+        await consumer.process_message(mock_kafka_message)
+
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 async def test_valuation_processor_executes_success_path_without_kafka_consumer(
@@ -473,7 +486,7 @@ async def test_process_message_handles_unexpected_error(
     """
     GIVEN a valid job that causes an unexpected error during valuation
     WHEN the consumer processes the message
-    THEN it should mark the job as FAILED and send the message to the DLQ.
+    THEN it marks the job as FAILED and raises to the shared recovery boundary.
     """
     # ARRANGE
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
@@ -495,7 +508,8 @@ async def test_process_message_handles_unexpected_error(
         "services.calculators.position_valuation_calculator.app.valuation_processor.ValuationLogic.calculate_valuation_components",
         side_effect=ValueError("Unexpected logic error"),
     ) as mock_logic:
-        await consumer.process_message(mock_kafka_message)
+        with pytest.raises(ValueError, match="Unexpected logic error"):
+            await consumer.process_message(mock_kafka_message)
 
     # ASSERT
     # Verify the logic was called, triggering the error
@@ -507,8 +521,7 @@ async def test_process_message_handles_unexpected_error(
     assert call_args["status"] == "FAILED"
     assert "Unexpected logic error" in call_args["failure_reason"]
 
-    # Verify the message was sent to the DLQ
-    consumer._send_to_dlq_async.assert_called_once()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
     # Verify no success event was published
     mock_outbox_repo.create_outbox_event.assert_not_called()

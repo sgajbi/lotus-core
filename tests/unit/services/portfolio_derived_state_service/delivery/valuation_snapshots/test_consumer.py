@@ -1,10 +1,12 @@
 """Prove the position-timeseries Kafka delivery boundary."""
 
+import json
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from portfolio_common.events import DailyPositionSnapshotPersistedEvent
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from src.services.portfolio_derived_state_service.app.application.position_timeseries import (
@@ -99,27 +101,33 @@ async def test_process_message_rejects_unsupported_event_shape(
         b'"security_id":"SEC_TS_POS_01","valuation_date":"2025-08-12","epoch":1}'
     )
 
-    await consumer._process_message_with_retry(message)
+    with pytest.raises(ValidationError):
+        await consumer._process_message_with_retry(message)
 
     use_case.execute.assert_not_awaited()
-    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
-@pytest.mark.parametrize("payload", [b"not-json", None])
-async def test_process_message_routes_unreadable_payload_to_dlq(
+@pytest.mark.parametrize(
+    ("payload", "expected_error"),
+    [(b"not-json", json.JSONDecodeError), (None, ValueError)],
+)
+async def test_process_message_rejects_unreadable_payload(
     consumer: PositionTimeseriesConsumer,
     use_case: AsyncMock,
     payload: bytes | None,
+    expected_error: type[Exception],
 ) -> None:
     message = _message(payload)
 
-    await consumer._process_message_with_retry(message)
+    with pytest.raises(expected_error):
+        await consumer._process_message_with_retry(message)
 
     use_case.execute.assert_not_awaited()
-    consumer._send_to_dlq_async.assert_awaited_once()
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
-async def test_process_message_routes_application_failure_to_dlq(
+async def test_process_message_surfaces_application_failure(
     consumer: PositionTimeseriesConsumer,
     use_case: AsyncMock,
     event: DailyPositionSnapshotPersistedEvent,
@@ -128,9 +136,10 @@ async def test_process_message_routes_application_failure_to_dlq(
     use_case.execute.side_effect = failure
     message = _message(event.model_dump_json().encode("utf-8"))
 
-    await consumer._process_message_with_retry(message)
+    with pytest.raises(RuntimeError, match="materialization failed"):
+        await consumer._process_message_with_retry(message)
 
-    consumer._send_to_dlq_async.assert_awaited_once_with(message, failure)
+    consumer._send_to_dlq_async.assert_not_awaited()
 
 
 async def test_process_message_rethrows_integrity_race_for_retry(
