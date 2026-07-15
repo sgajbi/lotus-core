@@ -19,8 +19,8 @@ from portfolio_common.monitoring import (
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 
+from ..domain.fx_revaluation import FX_REVALUATION_JOB_TYPE
 from ..infrastructure.repositories.fx_revaluation_repository import (
-    FX_REVALUATION_JOB_TYPE,
     SqlAlchemyFxRevaluationRepository,
 )
 from ..repositories.valuation_repository import ValuationRepository

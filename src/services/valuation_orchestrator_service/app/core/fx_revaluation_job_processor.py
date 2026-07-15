@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
 
-from portfolio_common.database_models import ReprocessingJob
 from portfolio_common.logging_utils import correlation_id_var, operation_log_extra
 from portfolio_common.monitoring import (
     observe_reprocessing_stale_skips,
@@ -13,14 +11,18 @@ from portfolio_common.monitoring import (
     observe_reprocessing_worker_jobs_failed,
     observe_reprocessing_worker_jobs_noop,
 )
-from portfolio_common.position_state_repository import PositionStateRepository
-from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 
 from ..application.process_fx_revaluation_job import ProcessFxRevaluationJob
-from ..domain.fx_revaluation import DirectCurrencyPair, FxReplayExecution
-from ..infrastructure.repositories.fx_revaluation_repository import (
+from ..domain.fx_revaluation import (
     FX_REVALUATION_JOB_TYPE,
-    SqlAlchemyFxRevaluationRepository,
+    ClaimedFxRevaluationJob,
+    FxReplayExecution,
+    RejectedFxRevaluationJob,
+)
+from ..ports.fx_revaluation import (
+    FxRevaluationRepository,
+    PositionWatermarkWriter,
+    ReprocessingJobStatusWriter,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,27 +34,24 @@ class FxRevaluationJobProcessor:
     async def process(
         self,
         *,
-        job: ReprocessingJob,
-        jobs: ReprocessingJobRepository,
-        watermarks: PositionStateRepository,
-        revaluation: SqlAlchemyFxRevaluationRepository,
+        job: ClaimedFxRevaluationJob | RejectedFxRevaluationJob,
+        jobs: ReprocessingJobStatusWriter,
+        watermarks: PositionWatermarkWriter,
+        revaluation: FxRevaluationRepository,
     ) -> None:
         """Process one job without leaking failure or lineage across jobs."""
         correlation_token = None
         try:
             if job.correlation_id:
                 correlation_token = correlation_id_var.set(job.correlation_id)
+            if isinstance(job, RejectedFxRevaluationJob):
+                raise ValueError(job.rejection_reason)
             execution = await ProcessFxRevaluationJob(
                 repository=revaluation,
                 watermarks=watermarks,
             ).execute(
-                pair=DirectCurrencyPair(
-                    job.payload["from_currency"],
-                    job.payload["to_currency"],
-                ),
-                earliest_impacted_date=date.fromisoformat(
-                    job.payload["earliest_impacted_date"]
-                ),
+                pair=job.pair,
+                earliest_impacted_date=job.earliest_impacted_date,
             )
             await self._record_execution(job=job, jobs=jobs, execution=execution)
         except Exception as exc:
@@ -64,8 +63,8 @@ class FxRevaluationJobProcessor:
     async def _record_execution(
         self,
         *,
-        job: ReprocessingJob,
-        jobs: ReprocessingJobRepository,
+        job: ClaimedFxRevaluationJob,
+        jobs: ReprocessingJobStatusWriter,
         execution: FxReplayExecution,
     ) -> None:
         if execution.requeue_required:
@@ -80,7 +79,7 @@ class FxRevaluationJobProcessor:
                     operation="valuation.fx_reprocessing.reset_watermarks",
                     status="retrying",
                     reason_code="no_impacted_position_keys",
-                    job_id=job.id,
+                    job_id=job.job_id,
                     currency_pair=execution.pair.key,
                     earliest_impacted_date=execution.earliest_impacted_date.isoformat(),
                 ),
@@ -98,11 +97,11 @@ class FxRevaluationJobProcessor:
     @staticmethod
     async def _transition(
         *,
-        job: ReprocessingJob,
-        jobs: ReprocessingJobRepository,
+        job: ClaimedFxRevaluationJob,
+        jobs: ReprocessingJobStatusWriter,
         status: str,
     ) -> None:
-        if await jobs.update_job_status(job.id, status):
+        if await jobs.update_job_status(job.job_id, status):
             if status == "COMPLETE":
                 observe_reprocessing_worker_jobs_completed(FX_REVALUATION_JOB_TYPE)
             return
@@ -117,7 +116,7 @@ class FxRevaluationJobProcessor:
                 operation="valuation.fx_reprocessing.reset_watermarks",
                 status="skipped",
                 reason_code="job_ownership_lost",
-                job_id=job.id,
+                job_id=job.job_id,
                 requested_status=status,
             ),
         )
@@ -125,8 +124,8 @@ class FxRevaluationJobProcessor:
     @staticmethod
     async def _mark_failed(
         *,
-        job: ReprocessingJob,
-        jobs: ReprocessingJobRepository,
+        job: ClaimedFxRevaluationJob | RejectedFxRevaluationJob,
+        jobs: ReprocessingJobStatusWriter,
         exc: Exception,
     ) -> None:
         logger.error(
@@ -137,11 +136,11 @@ class FxRevaluationJobProcessor:
                 operation="valuation.fx_reprocessing.reset_watermarks",
                 status="failed",
                 reason_code="job_processing_error",
-                job_id=job.id,
+                job_id=job.job_id,
                 error_type=type(exc).__name__,
             ),
         )
-        if await jobs.update_job_status(job.id, "FAILED", failure_reason=str(exc)):
+        if await jobs.update_job_status(job.job_id, "FAILED", failure_reason=str(exc)):
             observe_reprocessing_worker_jobs_failed(FX_REVALUATION_JOB_TYPE)
         else:
             observe_reprocessing_stale_skips("fx_revaluation_failed_ownership_lost", 1)

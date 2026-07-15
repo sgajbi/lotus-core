@@ -18,13 +18,14 @@ from sqlalchemy import Date, String, bindparam, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...domain.fx_revaluation import (
+    FX_REVALUATION_JOB_TYPE,
+    ClaimedFxRevaluationJob,
     DirectCurrencyPair,
     FxRateCorrection,
     PositionValuationKey,
+    RejectedFxRevaluationJob,
 )
 from ...repositories.valuation_repository import ValuationRepository
-
-FX_REVALUATION_JOB_TYPE = "RESET_FX_WATERMARKS"
 
 
 class SqlAlchemyFxRevaluationRepository:
@@ -38,15 +39,39 @@ class SqlAlchemyFxRevaluationRepository:
         """Return the valuation runtime's governed business-date horizon."""
         return cast(date | None, await self._valuation_repository.get_latest_business_date())
 
-    async def claim_pending_jobs(self, batch_size: int) -> list[ReprocessingJob]:
-        """Claim the oldest pending FX replay jobs through the shared queue lease."""
-        return cast(
-            list[ReprocessingJob],
-            await ReprocessingJobRepository(self._db).find_and_claim_jobs(
-                FX_REVALUATION_JOB_TYPE,
-                batch_size,
-            ),
+    async def claim_pending_jobs(
+        self,
+        batch_size: int,
+    ) -> list[ClaimedFxRevaluationJob | RejectedFxRevaluationJob]:
+        """Claim and map the oldest pending FX replay jobs to validated work."""
+        claimed_rows = await ReprocessingJobRepository(self._db).find_and_claim_jobs(
+            FX_REVALUATION_JOB_TYPE,
+            batch_size,
         )
+        return [self._map_claimed_job(row) for row in claimed_rows]
+
+    @staticmethod
+    def _map_claimed_job(
+        row: ReprocessingJob,
+    ) -> ClaimedFxRevaluationJob | RejectedFxRevaluationJob:
+        """Keep persistence payload parsing inside the infrastructure boundary."""
+        try:
+            payload = row.payload
+            return ClaimedFxRevaluationJob(
+                job_id=row.id,
+                pair=DirectCurrencyPair(
+                    payload["from_currency"],
+                    payload["to_currency"],
+                ),
+                earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
+                correlation_id=row.correlation_id,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return RejectedFxRevaluationJob(
+                job_id=row.id,
+                rejection_reason=f"invalid_fx_revaluation_job_payload: {exc}",
+                correlation_id=row.correlation_id,
+            )
 
     async def find_open_position_keys(
         self,
@@ -249,9 +274,7 @@ class SqlAlchemyFxRevaluationRepository:
             )
         )
         future_rows = (await self._db.execute(future_positions.distinct())).all()
-        affected = {
-            (key.portfolio_id, key.security_id, key.epoch): key for key in open_on_date
-        }
+        affected = {(key.portfolio_id, key.security_id, key.epoch): key for key in open_on_date}
         for row in future_rows:
             key = PositionValuationKey(row.portfolio_id, row.security_id, row.epoch)
             affected[(key.portfolio_id, key.security_id, key.epoch)] = key

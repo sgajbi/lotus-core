@@ -7,6 +7,8 @@ from datetime import date, datetime
 
 from portfolio_common.domain.currency import normalize_currency_code
 
+FX_REVALUATION_JOB_TYPE = "RESET_FX_WATERMARKS"
+
 
 @dataclass(frozen=True, slots=True)
 class DirectCurrencyPair:
@@ -77,3 +79,22 @@ class FxReplayExecution:
     def requeue_required(self) -> bool:
         """Keep readiness-race work pending until at least one target is visible."""
         return self.targeted_key_count == 0
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimedFxRevaluationJob:
+    """Validated replay work claimed from durable infrastructure."""
+
+    job_id: int
+    pair: DirectCurrencyPair
+    earliest_impacted_date: date
+    correlation_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RejectedFxRevaluationJob:
+    """Claimed replay work whose persisted payload failed validation."""
+
+    job_id: int
+    rejection_reason: str
+    correlation_id: str | None = None

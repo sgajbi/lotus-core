@@ -21,6 +21,7 @@ from src.services.valuation_orchestrator_service.app.core.fx_revaluation_job_pro
     FxRevaluationJobProcessor,
 )
 from src.services.valuation_orchestrator_service.app.domain.fx_revaluation import (
+    ClaimedFxRevaluationJob,
     DirectCurrencyPair,
     FxRateCorrection,
 )
@@ -330,13 +331,18 @@ async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
     async_db_session.add(claimed_job)
     await async_db_session.flush()
 
+    claimed = ClaimedFxRevaluationJob(
+        job_id=claimed_job.id,
+        pair=DirectCurrencyPair("USD", "SGD"),
+        earliest_impacted_date=date(2026, 4, 10),
+        correlation_id="corr-fx-worker",
+    )
+
     await FxRevaluationJobProcessor().process(
-        job=claimed_job,
+        job=claimed,
         jobs=ReprocessingJobRepository(async_db_session),
         watermarks=PositionStateRepository(async_db_session),
-        revaluation=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(
-            async_db_session
-        ),
+        revaluation=fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(async_db_session),
     )
     await async_db_session.commit()
 
