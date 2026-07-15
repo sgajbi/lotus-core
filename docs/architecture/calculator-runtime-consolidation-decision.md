@@ -55,8 +55,10 @@ independent scaling, isolation, or ownership value exceeds its operational cost.
 
 The review must test these specific hypotheses:
 
-1. Unified transaction completion may make parts of `pipeline_orchestrator_service` redundant;
-   delete obsolete stage gates instead of merging a no-longer-needed orchestrator.
+1. Unified transaction completion made the transaction-specific part of
+   `pipeline_orchestrator_service` redundant; that consumer, service, policy, and persistence path
+   is retired. Reassign or retire the remaining portfolio-day transitions before deleting the
+   deployable.
 2. Position valuation is market-data/job driven and currently has a different scale and failure
    profile from booked-transaction processing, so it remains separate unless workload evidence
    disproves that boundary.

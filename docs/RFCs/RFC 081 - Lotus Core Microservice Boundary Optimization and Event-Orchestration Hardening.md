@@ -38,6 +38,19 @@ Implemented under RFC 081 as of 2026-03-08:
 - support/control-plane visibility of the latest portfolio-day controls state
   through support overview APIs
 
+Current transaction-readiness update as of 2026-07-15:
+
+- `portfolio_transaction_processing_service` stages `transaction_processing.ready` and
+  `portfolio_security_day.valuation.ready` directly after cost, position, and cashflow effects
+  succeed in the same database transaction;
+- `transactions.cost.processed` and `cashflows.calculated` remain compatibility facts with no
+  active in-repo consumer;
+- the pipeline orchestrator no longer contains a processed-transaction consumer, transaction-stage
+  application/service/domain/repository path, or transaction-readiness event factory;
+- the surviving pipeline runtime coordinates portfolio aggregation-to-reconciliation and
+  reconciliation-to-controls transitions only, pending the remaining retirement decision under
+  GitHub issue #712.
+
 The service-boundary decomposition remains implemented, but RFC 081 is reopened because
 post-merge heavy-runtime validation exposed unresolved hardening gaps across orchestration,
 idempotency, replay handling, and test isolation. Those gaps are part of the banking-grade

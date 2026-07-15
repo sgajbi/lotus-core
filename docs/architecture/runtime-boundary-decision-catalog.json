@@ -104,9 +104,9 @@
       "servicePath": "src/services/pipeline_orchestrator_service",
       "status": "current-state-revalidation-required",
       "decisionRecordPath": "docs/architecture/microservice-boundaries-and-trigger-matrix.md",
-      "rationaleSummary": "Current deployable listed in the Lotus Core microservice boundary matrix; retained as current-state while future runtime-boundary revalidation is performed.",
+      "rationaleSummary": "Current portfolio-day controls deployable after transaction readiness moved into atomic transaction processing; remaining transitions require retirement revalidation under issue #712.",
       "inProcessBoundaryEvidence": [
-        "Current-state service responsibility is documented in the microservice boundary matrix.",
+        "Only portfolio aggregation-to-reconciliation and reconciliation-to-controls coordination remains.",
         "No new runtime split is approved by this catalog entry."
       ],
       "runtimeBoundaryDrivers": ["current-state"],

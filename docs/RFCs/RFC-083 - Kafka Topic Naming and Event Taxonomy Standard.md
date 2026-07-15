@@ -170,10 +170,10 @@ The table below captures the current runtime topology as implemented in service 
 | `fx_rates` | `ingestion_service` | `persistence_service` / `persistence_group_fx_rates` | inbound raw fact | Active ingress path |
 | `raw_business_dates` | `ingestion_service` | `persistence_service` / `persistence_group_business_dates` | inbound raw fact | Active ingress path |
 | `transactions.persisted` | `persistence_service`; controlled replay tooling | `portfolio_transaction_processing_service` / `portfolio_transaction_processing_group` | persisted booked-transaction fact | One live consumer invokes the atomic cost, cashflow, and position use case. |
-| `transactions.cost.processed` | `portfolio_transaction_processing_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_processed_txn_group` | authoritative atomic transaction-completion fact plus compatibility payload | Visible only after cost, cashflow, position, idempotency, and outbox effects commit together. |
-| `transaction_processing.ready` | `pipeline_orchestrator_service` | no active in-repo consumer | retained transaction-scoped readiness compatibility fact | Target position processing occurs before this event; downstream retirement evidence is still required. |
+| `transactions.cost.processed` | `portfolio_transaction_processing_service` | no active in-repo consumer | retained cost-enriched transaction compatibility fact | Visible only after cost, cashflow, position, readiness, idempotency, and outbox effects commit together; it is not a readiness transport. |
+| `transaction_processing.ready` | `portfolio_transaction_processing_service` | no active in-repo consumer | retained transaction-scoped readiness compatibility fact | Staged directly by transaction processing after financial effects; downstream retirement evidence is still required. |
 | `cashflows.calculated` | `portfolio_transaction_processing_service` | no active in-repo consumer | retained cashflow compatibility fact | No longer a pipeline prerequisite; cashflow rows remain part of the atomic commit. |
-| `portfolio_security_day.valuation.ready` | `pipeline_orchestrator_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_readiness` | readiness fact that causes durable valuation-job upsert | Name reads like state and the payload is actually portfolio-security-day scoped |
+| `portfolio_security_day.valuation.ready` | `portfolio_transaction_processing_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_readiness` | readiness fact that causes durable valuation-job upsert | Staged atomically after transaction financial effects; name reads like state and the payload is portfolio-security-day scoped. |
 | `market_prices.persisted` | `persistence_service` | `valuation_orchestrator_service` / `valuation_orchestrator_group_price_events` | persistence fact | Clearer grammar than many peers |
 | `valuation.job.requested` | `valuation_orchestrator_service` scheduler | `position_valuation_calculator` / `position_valuation_worker_group` | worker dispatch request | This is the real valuation job command topic |
 | `valuation.snapshot.persisted` | `position_valuation_calculator` | `timeseries_generator_service` / `timeseries_generator_group_positions` | persisted valuation artifact fact | Artifact-oriented name rather than event-oriented name |
@@ -184,7 +184,7 @@ The table below captures the current runtime topology as implemented in service 
 | `portfolio_day.reconciliation.requested` | `pipeline_orchestrator_service` | `financial_reconciliation_service` / `portfolio_day.reconciliation.requested_group` | orchestration request | Clear command topic, but grammar differs from `valuation.job.requested` and `portfolio_security_day.valuation.ready` |
 | `portfolio_day.reconciliation.completed` | `financial_reconciliation_service` | `pipeline_orchestrator_service` / `pipeline_orchestrator_reconciliation_completion_group` | stage completion fact | Active control-stage input |
 | `portfolio_day.controls.evaluated` | `pipeline_orchestrator_service` | no direct Kafka consumer found in current runtime | support/control evaluation fact | Useful topic, but currently appears to terminate rather than feed another Kafka stage |
-| `transactions.reprocessing.requested` | `ingestion_service` retry/reprocess paths | `cost_calculator_service` / `cost_reprocessing_group` | replay command | Current name is understandable but inconsistent with broader command grammar |
+| `transactions.reprocessing.requested` | `ingestion_service` retry/reprocess paths | `portfolio_transaction_processing_service` / `portfolio_transaction_replay_request_group` | replay command | Current name is understandable but inconsistent with broader command grammar |
 | `dlq.persistence_service` | shared base-consumer DLQ path across multiple services | consumed operationally, not by an app consumer group | terminal failure sink | Service-named DLQ is workable but not standardized |
 | `positions.valued` | no active producer found in current runtime | no active consumer found in current runtime | configured legacy topic constant | Present in config and topic setup, but not part of the active graph reviewed here |
 | `timeseries.position.generated` | no active producer found in current runtime | no active consumer found in current runtime | configured legacy topic constant | Present in config and topic setup, but appears superseded by `portfolio_security_day.position_timeseries.completed` |
@@ -411,30 +411,30 @@ Canonical policy should be explicit:
 1. `portfolio_transaction_processing_service`
  - consumes `transactions.persisted`
  - commits cost, cashflow, position, idempotency, and outbox effects atomically
- - publishes authoritative `transactions.cost.processed` and retained `cashflows.calculated`
-2. `pipeline_orchestrator_service`
- - consumes only the authoritative `transactions.cost.processed` completion fact
- - publishes `transaction_processing.ready` and `portfolio_security_day.valuation.ready`
-3. No active in-repo consumer waits on `cashflows.calculated` or
-   `transaction_processing.ready`; both remain compatibility facts pending downstream evidence.
+ - stages `transaction_processing.ready` and `portfolio_security_day.valuation.ready` directly
+   after all financial effects succeed
+ - publishes retained `transactions.cost.processed` and `cashflows.calculated` compatibility facts
+2. No active in-repo consumer waits on `transactions.cost.processed`, `cashflows.calculated`, or
+   `transaction_processing.ready`; all three remain compatibility facts pending downstream evidence.
 
 ### 12.3 Valuation and Day-Level Chain
-1. `pipeline_orchestrator_service`
+1. `portfolio_transaction_processing_service`
  - publishes `portfolio_security_day.valuation.ready`
+2. `pipeline_orchestrator_service`
  - publishes `portfolio_day.reconciliation.requested`
  - publishes `portfolio_day.controls.evaluated`
-2. `valuation_orchestrator_service`
+3. `valuation_orchestrator_service`
  - consumes `portfolio_security_day.valuation.ready`
  - publishes `valuation.job.requested`
-3. `position_valuation_calculator`
+4. `position_valuation_calculator`
  - consumes `valuation.job.requested`
  - publishes `valuation.snapshot.persisted`
-4. `timeseries_generator_service`
+5. `timeseries_generator_service`
  - consumes `valuation.snapshot.persisted`
-5. `portfolio_aggregation_service`
+6. `portfolio_aggregation_service`
  - consumes `portfolio_day.aggregation.job.requested`
  - publishes `portfolio_day.aggregation.completed`
-6. `financial_reconciliation_service`
+7. `financial_reconciliation_service`
  - consumes `portfolio_day.reconciliation.requested`
  - publishes `portfolio_day.reconciliation.completed`
 

@@ -1071,19 +1071,18 @@ Most relevant current governance:
     application publisher paths from importing `KafkaProducer` or `get_kafka_producer` directly.
     Runtime dispatchers, consumer managers, aggregation scheduler publishing, and outbox
     publication are separate follow-up slices.
-    Pipeline stage Kafka consumers must remain delivery adapters: decode and validate the event,
-    establish correlation context, delegate to `PipelineStageMessageHandler`, and map invalid
-    payloads, DB retryable errors, or defensive failures to existing retry/DLQ behavior. Keep
-    SQLAlchemy sessions, idempotency repository, pipeline stage repository, outbox repository, and
-    `PipelineOrchestratorService` assembly behind the pipeline stage unit-of-work adapter.
-    Pipeline stage transition policy belongs in
-    `pipeline_orchestrator_service.app.domain.pipeline_stage_state_machine`; outbox topic, event
-    type, aggregate ID, and payload mapping belong in
-    `pipeline_orchestrator_service.app.adapters.pipeline_event_factory`; and
-    `PipelineOrchestratorService` should coordinate repository updates plus returned outbox
-    messages only. Do not reintroduce readiness, blocking, or stale-epoch decisions in outbox event
-    mapping, and do not put event-topic construction inside domain state-machine code. This is
-    in-process design modularity inside the existing deployable, not a runtime service split.
+    The surviving pipeline Kafka consumers are portfolio-day delivery adapters only: decode and
+    validate aggregation/reconciliation events, establish correlation context, delegate to
+    `PipelineStageMessageHandler`, and map invalid payloads, retryable DB errors, or defensive
+    failures to existing retry/DLQ behavior. Keep SQLAlchemy sessions, idempotency, portfolio-control
+    stage persistence, outbox persistence, and `PipelineOrchestratorService` assembly behind the
+    pipeline unit-of-work adapter. Portfolio-control blocking and stale-epoch policy belongs in
+    `pipeline_stage_state_machine`; reconciliation-request and controls-event mapping belongs in
+    `pipeline_event_factory`. Transaction readiness belongs to
+    `portfolio_transaction_processing_service` and is staged after cost, position, and cashflow
+    effects succeed in the same unit of work. Do not restore a `transactions.cost.processed`
+    pipeline consumer, transaction-stage handler/service/repository path, or processed-transaction
+    consumer group.
 65. Application/source-data repository dependencies should use capability-specific ports before
     broad concrete repositories. `PortfolioTaxLotWindow:v1` now depends on
     `PortfolioTaxLotReader`, and financial reconciliation service orchestration now depends on
@@ -1863,11 +1862,12 @@ Most relevant current governance:
      cashflow staging. When position recovery returns rebuilt transactions, cashflow must stage the
      deduplicated rebuilt timeline in the new epoch, including the later suffix; otherwise
      current-epoch income and cashflow reads lose the rebuilt records.
-     The same rebuilt transaction set must register current-epoch cost-stage readiness through the
-     pipeline processing port before cashflow completion signals are staged. Keep that handoff in
-     the combined unit of work so rollback remains atomic. Do not broaden legacy cost-topic
-     publication to every recalculated suffix row: deployed compatibility consumers would treat
-     those rows as new position work and double-apply the inline rebuild.
+     After cost, position, and cashflow effects succeed, the same deduplicated rebuilt transaction
+     set must register current-epoch readiness through the transaction-processing readiness use
+     case and ports before commit. Keep readiness claims and outbox staging in the combined unit of
+     work so any financial-effect or readiness failure rolls back atomically. Do not broaden
+     compatibility cost-topic publication to every recalculated suffix row; the topic has no active
+     in-repo consumer and is not a readiness transport.
      The target health contract is locked by
      `test_web_health_contract.py`: readiness requires database, Kafka, and worker runtime; a failed
      runtime task returns 503; and `/version` must equal readiness build metadata for commit, branch,

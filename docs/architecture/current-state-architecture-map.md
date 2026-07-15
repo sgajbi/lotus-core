@@ -35,8 +35,8 @@ flowchart LR
     Ingestion["ingestion_service<br/>write ingress"]
     Persistence["persistence_service<br/>canonical persistence"]
     Store["Core operational database<br/>portfolio/account/transaction/position truth"]
-    Pipeline["pipeline_orchestrator_service<br/>stage gates"]
-    Calculators["calculator and generator workers<br/>cost, cashflow, position, valuation, timeseries, aggregation"]
+    Pipeline["pipeline_orchestrator_service<br/>portfolio-day controls"]
+    Calculators["transaction, valuation, and derived-state workers"]
     Reconciliation["financial_reconciliation_service<br/>controls and findings"]
     Replay["event_replay_service<br/>replay, DLQ, ops diagnostics"]
     Query["query_service<br/>operational read plane"]
@@ -118,12 +118,12 @@ Rules:
 | `event_replay_service` | `src/services/event_replay_service` | Replay/remediation commands, ingestion operations queries, consumer DLQ replay, replay audit, ops control | Source write ingestion, generic query read plane, calculator writes |
 | `financial_reconciliation_service` | `src/services/financial_reconciliation_service` | Reconciliation run orchestration, finding policy, control execution APIs, finding persistence | Calculator mutation, portfolio/position source ownership, report composition |
 | `persistence_service` | `src/services/persistence_service` | Raw domain event decoding, canonical persistence writes, idempotency, completion publication | API read shaping, analytics inputs, downstream contract composition |
-| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules. Its framework-neutral transaction domain owns ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing. | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, framework DTOs inside domain policy, or collapsed financial policies |
+| `portfolio_transaction_processing_service` | `src/services/portfolio_transaction_processing_service` | Active app-local/CI runtime with one live and one replay-request consumer; atomic cost, cashflow, position, transaction readiness, idempotency, compatibility outbox, aggregate health/version, and module observability through separate internal modules. Its framework-neutral transaction domain owns ordinary BUY, SELL, DIVIDEND, and INTEREST booking metadata, validation, cash-entry policy, generated settlement legs, and upstream pairing. | Coexistence with the three legacy workers, valuation compute, performance/risk analytics, source ingestion, framework DTOs inside domain policy, or collapsed financial policies |
 | `valuation_orchestrator_service` | `src/services/valuation_orchestrator_service` | Valuation job scheduling, reprocessing state, dispatch readiness | Valuation compute mutation, read-plane response shaping |
 | `position_valuation_calculator` | `src/services/calculators/position_valuation_calculator` | Valuation job consumption, valuation snapshot mutation, active valuation handoff; concrete session/repository/idempotency/outbox construction is isolated in `app/infrastructure` | Job scheduling ownership, benchmark/performance calculations; processor application move before persistence/metrics/unit-of-work ports exist |
 | `timeseries_generator_service` | `src/services/timeseries_generator_service` | Position-timeseries generation, aggregation job staging | Portfolio aggregation policy, operational API responses |
 | `portfolio_aggregation_service` | `src/services/portfolio_aggregation_service` | Portfolio-timeseries aggregation, aggregation jobs, completion publication | Position valuation, report composition, downstream performance analytics |
-| `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Stage-gate orchestration, readiness events, control-stage status, quiescence | Business calculations, source write ingestion, direct API serving |
+| `pipeline_orchestrator_service` | `src/services/pipeline_orchestrator_service` | Portfolio-day aggregation-to-reconciliation coordination, reconciliation control-stage status, controls publication, quiescence | Transaction readiness, business calculations, source write ingestion, direct API serving |
 | `query_service` | `src/services/query_service` | Operational read APIs, source-data response builders, repository-output typed records, OpenAPI read metadata | Mutating workflows, analytics methodology, control-plane policy ownership |
 | `query_control_plane_service` | `src/services/query_control_plane_service` | Core snapshots, analytics inputs, portfolio-manager books, CIO affected cohorts, DPM universe populations, client restriction/sustainability/tax/liquidity source products, fail-closed external treasury/OMS posture, support/lineage, policy/capabilities, simulation, export lifecycle | Basic operational read sprawl, write ingestion, calculator mutation, external pricing/execution, downstream DPM/advice decisions |
 
@@ -187,8 +187,8 @@ sequenceDiagram
     Ingest->>Persist: raw domain topics
     Persist->>Txn: transactions.persisted
     Txn->>Txn: atomic cost + cashflow + position
-    Txn->>Pipe: cost/cashflow compatibility events
-    Pipe->>ValOrch: portfolio_security_day.valuation.ready
+    Txn->>ValOrch: portfolio_security_day.valuation.ready
+    Txn-->>Txn: cost/cashflow compatibility facts (no active in-repo consumer)
     ValOrch->>Val: valuation.job.requested
     Val->>Ts: valuation.snapshot.persisted
     Ts->>Agg: portfolio_day.aggregation.job.requested
