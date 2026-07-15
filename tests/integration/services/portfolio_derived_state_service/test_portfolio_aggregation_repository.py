@@ -1,7 +1,7 @@
 """Prove portfolio aggregation job recovery and concurrent claim behavior."""
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -16,6 +16,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Session
 
+from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
+    AggregationJobLease,
+)
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
 )
@@ -27,18 +30,13 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture(scope="function")
 def setup_stale_aggregation_job_data(db_engine, clean_db):
-    """
-    Sets up a variety of aggregation jobs in the database:
-    - One stale 'PROCESSING' job (should be reset).
-    - One recent 'PROCESSING' job (should not be reset).
-    - One stale 'PENDING' job (should not be reset).
-    """
-    with Session(db_engine) as session:
-        now = datetime.now(timezone.utc)
-        stale_time = now - timedelta(minutes=20)
+    """Seed expired, current, and pending aggregation lease states."""
 
-        # --- THIS IS THE FIX ---
-        # Create the prerequisite portfolio records first to satisfy the foreign key constraint.
+    with Session(db_engine) as session:
+        now = datetime.now(UTC)
+        expired_at = now - timedelta(minutes=20)
+        current_expiry = now + timedelta(minutes=5)
+
         portfolios = [
             Portfolio(
                 portfolio_id="P1_STALE",
@@ -76,22 +74,26 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
         ]
         session.add_all(portfolios)
         session.flush()
-        # --- END FIX ---
 
         jobs = [
-            # 1. Stale and PROCESSING -> Should be reset to PENDING
             PortfolioAggregationJob(
                 portfolio_id="P1_STALE",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
+                attempt_count=1,
+                lease_owner="expired-worker",
+                lease_token="expired-token",
+                lease_expires_at=expired_at,
             ),
-            # 2. Recent and PROCESSING -> Should NOT be touched
             PortfolioAggregationJob(
                 portfolio_id="P2_RECENT",
                 aggregation_date=date(2025, 8, 1),
                 status="PROCESSING",
+                attempt_count=1,
+                lease_owner="current-worker",
+                lease_token="current-token",
+                lease_expires_at=current_expiry,
             ),
-            # 3. Stale and PENDING -> Should NOT be touched
             PortfolioAggregationJob(
                 portfolio_id="P3_PENDING",
                 aggregation_date=date(2025, 8, 1),
@@ -99,78 +101,70 @@ def setup_stale_aggregation_job_data(db_engine, clean_db):
             ),
         ]
         session.add_all(jobs)
-        session.flush()
-
-        # Force deterministic staleness at the database layer instead of relying on
-        # ORM constructor-time timestamp persistence across dialect/runtime differences.
-        session.execute(
-            update(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.portfolio_id == "P1_STALE")
-            .values(updated_at=stale_time)
-        )
-        session.execute(
-            update(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.portfolio_id == "P2_RECENT")
-            .values(updated_at=now)
-        )
-        session.execute(
-            update(PortfolioAggregationJob)
-            .where(PortfolioAggregationJob.portfolio_id == "P3_PENDING")
-            .values(updated_at=stale_time)
-        )
         session.commit()
 
 
-async def test_find_and_reset_stale_aggregation_jobs(
+async def test_recover_expired_job_leases_requeues_retryable_claim(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
-    """
-    GIVEN a mix of recent and stale aggregation jobs
-    WHEN find_and_reset_stale_jobs is called
-    THEN it should only reset the single stale 'PROCESSING' job to 'PENDING'.
-    """
-    # ARRANGE
+    """Requeue only an expired processing lease below its retry ceiling."""
+
     repo = PortfolioAggregationRepository(async_db_session)
 
-    # ACT
-    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    recovery = await repo.recover_expired_job_leases(
+        now=datetime.now(UTC),
+        max_attempts=3,
+    )
     await async_db_session.commit()
 
-    # ASSERT
-    assert reset_count == 1
+    assert recovery.requeued_count == 1
+    assert recovery.failed_count == 0
 
     with Session(db_engine) as session:
-        # Verify the stale PROCESSING job was reset
         job1 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P1_STALE").one()
         assert job1.status == "PENDING"
+        assert job1.lease_owner is None
+        assert job1.lease_token is None
+        assert job1.lease_expires_at is None
 
-        # Verify the other jobs were untouched
         job2 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P2_RECENT").one()
         assert job2.status == "PROCESSING"
+        assert job2.lease_token == "current-token"
 
         job3 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P3_PENDING").one()
         assert job3.status == "PENDING"
 
 
-async def test_find_and_reset_stale_aggregation_jobs_marks_over_limit_rows_failed(
+async def test_recover_expired_job_leases_fails_retry_exhausted_claim(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
+    """Fail an expired processing lease that reached its retry ceiling."""
+
     repo = PortfolioAggregationRepository(async_db_session)
 
-    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=0)
+    recovery = await repo.recover_expired_job_leases(
+        now=datetime.now(UTC),
+        max_attempts=1,
+    )
     await async_db_session.commit()
 
-    assert reset_count == 0
+    assert recovery.requeued_count == 0
+    assert recovery.failed_count == 1
 
     with Session(db_engine) as session:
         job1 = session.query(PortfolioAggregationJob).filter_by(portfolio_id="P1_STALE").one()
         assert job1.status == "FAILED"
-        assert job1.failure_reason == "Stale processing timeout exceeded max attempts"
+        assert job1.failure_reason == "Aggregation job lease expired after max attempts"
+        assert job1.lease_owner is None
+        assert job1.lease_token is None
+        assert job1.lease_expires_at is None
 
 
-async def test_find_and_reset_stale_aggregation_jobs_does_not_overwrite_completed_rows(
+async def test_recover_expired_job_leases_does_not_overwrite_completed_rows(
     db_engine, clean_db, setup_stale_aggregation_job_data, async_db_session: AsyncSession
 ):
+    """Do not overwrite a terminal state won by a concurrent worker."""
+
     job_id = (
         (
             await async_db_session.execute(
@@ -195,25 +189,31 @@ async def test_find_and_reset_stale_aggregation_jobs_does_not_overwrite_complete
                 session.execute(
                     update(PortfolioAggregationJob)
                     .where(PortfolioAggregationJob.id == job_id)
-                    .values(status="COMPLETE", updated_at=datetime.now(timezone.utc))
+                    .values(status="COMPLETE", updated_at=datetime.now(UTC))
                 )
                 session.commit()
         return await original_execute(*args, **kwargs)
 
     async_db_session.execute = execute_with_concurrent_completion
-    reset_count = await repo.find_and_reset_stale_jobs(timeout_minutes=15, max_attempts=3)
+    recovery = await repo.recover_expired_job_leases(
+        now=datetime.now(UTC),
+        max_attempts=3,
+    )
     await async_db_session.commit()
 
-    assert reset_count == 0
+    assert recovery.requeued_count == 0
+    assert recovery.failed_count == 0
 
     with Session(db_engine) as session:
         job = session.query(PortfolioAggregationJob).filter_by(id=job_id).one()
         assert job.status == "COMPLETE"
 
 
-async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurrency(
+async def test_claim_eligible_jobs_does_not_double_claim_under_concurrency(
     clean_db, async_db_session: AsyncSession
 ):
+    """Lease one ready job to only one of two concurrent claimers."""
+
     async_db_session.add(
         Portfolio(
             portfolio_id="P-AGG-CLAIM",
@@ -278,14 +278,21 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
 
     session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
 
-    async def claim_one():
+    async def claim_one(claimant: str):
         async with session_factory() as session:
             repo = PortfolioAggregationRepository(session)
-            claimed = await repo.find_and_claim_eligible_jobs(batch_size=1)
+            claimed = await repo.claim_eligible_jobs(
+                batch_size=1,
+                lease=AggregationJobLease(
+                    owner=f"aggregation-runtime-{claimant}",
+                    token=f"lease-token-{claimant}",
+                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                ),
+            )
             await session.commit()
             return claimed
 
-    first_claim, second_claim = await asyncio.gather(claim_one(), claim_one())
+    first_claim, second_claim = await asyncio.gather(claim_one("one"), claim_one("two"))
     all_claimed = [*first_claim, *second_claim]
 
     assert len(all_claimed) == 1
@@ -308,3 +315,4 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
     assert len(jobs) == 1
     assert jobs[0].status == "PROCESSING"
     assert jobs[0].attempt_count == 1
+    assert jobs[0].lease_token in {"lease-token-one", "lease-token-two"}

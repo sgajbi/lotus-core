@@ -1,6 +1,6 @@
 """Prove lease-fenced portfolio materialization against PostgreSQL."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -12,7 +12,7 @@ from portfolio_common.database_models import (
     PortfolioTimeseries,
 )
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.portfolio_derived_state_service.app.application.portfolio_timeseries import (
     MaterializePortfolioTimeseries,
@@ -36,7 +36,7 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
         status="PROCESSING",
         lease_owner="aggregation-runtime-current",
         lease_token="current-lease-token",
-        lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
     async_db_session.add_all(
         [
@@ -57,9 +57,15 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     )
     await async_db_session.commit()
     await async_db_session.refresh(job)
+    job_id = int(job.id)
+    portfolio_id = str(job.portfolio_id)
+    aggregation_date = job.aggregation_date
+    await async_db_session.rollback()
 
     async def override_session():
-        yield async_db_session
+        session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+        async with session_factory() as session:
+            yield session
 
     calculator = AsyncMock()
     calculator.calculate_daily_record.return_value = PortfolioTimeseries(
@@ -86,10 +92,10 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
     ):
         result = await use_case.execute(
             MaterializePortfolioTimeseriesCommand(
-                job_id=job.id,
+                job_id=job_id,
                 lease_token="expired-lease-token",
-                portfolio_id=job.portfolio_id,
-                aggregation_date=job.aggregation_date,
+                portfolio_id=portfolio_id,
+                aggregation_date=aggregation_date,
                 correlation_id="corr-agg-int-01",
             )
         )
@@ -98,8 +104,8 @@ async def test_stale_lease_cannot_persist_portfolio_output_or_completion_event(
         (
             await async_db_session.execute(
                 select(PortfolioTimeseries).where(
-                    PortfolioTimeseries.portfolio_id == job.portfolio_id,
-                    PortfolioTimeseries.date == job.aggregation_date,
+                    PortfolioTimeseries.portfolio_id == portfolio_id,
+                    PortfolioTimeseries.date == aggregation_date,
                     PortfolioTimeseries.epoch == 0,
                 )
             )

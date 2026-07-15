@@ -1,6 +1,6 @@
 """Prove derived-state repository behavior against PostgreSQL."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -18,6 +18,9 @@ from portfolio_common.database_models import (
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
+from src.services.portfolio_derived_state_service.app.domain.aggregation_jobs.models import (
+    AggregationJobLease,
+)
 from src.services.portfolio_derived_state_service.app.infrastructure import (
     portfolio_aggregation_repository,
     timeseries_generation_repository,
@@ -28,6 +31,16 @@ TimeseriesGenerationRepository = timeseries_generation_repository.TimeseriesGene
 PortfolioAggregationRepository = portfolio_aggregation_repository.PortfolioAggregationRepository
 
 pytestmark = pytest.mark.asyncio
+
+
+def _lease(identity: str) -> AggregationJobLease:
+    """Build one durable claim identity for a repository integration scenario."""
+
+    return AggregationJobLease(
+        owner=f"integration-runtime-{identity}",
+        token=f"integration-lease-{identity}",
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
 
 
 def _snapshot(
@@ -183,7 +196,7 @@ def setup_sequential_jobs_with_snapshot_completeness(db_engine, clean_db):
     return {"portfolio_id": portfolio_id, "day1": day1, "day2": day2}
 
 
-async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
+async def test_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     setup_sequential_jobs_with_snapshot_completeness,
     async_db_session: AsyncSession,
     db_engine,
@@ -196,7 +209,10 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
     # Day1 should not claim while input set is incomplete, but complete later
     # dates are independently eligible because portfolio aggregation does not
     # carry prior portfolio rows forward.
-    claimed_jobs_1 = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs_1 = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("completeness-first"),
+    )
     await async_db_session.commit()
     assert [job.aggregation_date for job in claimed_jobs_1] == [day2]
 
@@ -206,12 +222,15 @@ async def test_find_and_claim_eligible_jobs_enforces_snapshot_completeness_gate(
         session.commit()
     await async_db_session.rollback()
 
-    claimed_jobs_2 = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs_2 = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("completeness-second"),
+    )
     await async_db_session.commit()
     assert [job.aggregation_date for job in claimed_jobs_2] == [day1]
 
 
-async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_history(
+async def test_claim_eligible_jobs_claims_first_day_without_portfolio_history(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "FIRST_DAY_PORTFOLIO"
@@ -262,14 +281,17 @@ async def test_find_and_claim_eligible_jobs_claims_first_day_without_portfolio_h
     await async_db_session.rollback()
 
     repo = PortfolioAggregationRepository(async_db_session)
-    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("first-day"),
+    )
     await async_db_session.commit()
 
     assert len(claimed_jobs) == 1
     assert claimed_jobs[0].aggregation_date == first_day
 
 
-async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
+async def test_claim_eligible_jobs_accepts_mixed_latest_epochs_per_security(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "MIXED_EPOCH_PORT"
@@ -352,14 +374,17 @@ async def test_find_and_claim_eligible_jobs_accepts_mixed_latest_epochs_per_secu
         session.commit()
 
     repo = PortfolioAggregationRepository(async_db_session)
-    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("mixed-epochs"),
+    )
     await async_db_session.commit()
 
     assert len(claimed_jobs) == 1
     assert claimed_jobs[0].aggregation_date == a_date
 
 
-async def test_find_and_claim_eligible_jobs_claims_all_complete_days_without_history_dependency(
+async def test_claim_eligible_jobs_claims_all_complete_days_without_history_dependency(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "STRANDED_BOOTSTRAP_PORT"
@@ -433,13 +458,16 @@ async def test_find_and_claim_eligible_jobs_claims_all_complete_days_without_his
         session.commit()
 
     repo = PortfolioAggregationRepository(async_db_session)
-    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("complete-days"),
+    )
     await async_db_session.commit()
 
     assert [job.aggregation_date for job in claimed_jobs] == [early_day, later_day]
 
 
-async def test_find_and_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_has_advanced(
+async def test_claim_eligible_jobs_does_not_need_prior_day_when_current_epoch_has_advanced(
     db_engine, clean_db, async_db_session: AsyncSession
 ):
     portfolio_id = "PRIOR_DAY_MIXED_EPOCH"
@@ -523,7 +551,10 @@ async def test_find_and_claim_eligible_jobs_does_not_need_prior_day_when_current
         session.commit()
 
     repo = PortfolioAggregationRepository(async_db_session)
-    claimed_jobs = await repo.find_and_claim_eligible_jobs(batch_size=5)
+    claimed_jobs = await repo.claim_eligible_jobs(
+        batch_size=5,
+        lease=_lease("advanced-epoch"),
+    )
     await async_db_session.commit()
 
     assert len(claimed_jobs) == 1
