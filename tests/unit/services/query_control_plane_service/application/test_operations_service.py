@@ -1139,6 +1139,8 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
                 "business_date": "2025-08-15",
                 "status": "PROCESSING",
                 "security_id": "S1",
+                "from_currency": None,
+                "to_currency": None,
                 "attempt_count": 2,
                 "correlation_id": "corr-replay-303",
                 "created_at": created_at,
@@ -1191,6 +1193,42 @@ async def test_get_reprocessing_jobs(service: OperationsService, mock_ops_repo: 
         reference_now=response.generated_at_utc,
         as_of=response.generated_at_utc,
     )
+
+
+async def test_get_fx_reprocessing_job_exposes_direct_pair(
+    service: OperationsService,
+    mock_ops_repo: AsyncMock,
+) -> None:
+    timestamp = datetime(2026, 4, 10, 9, tzinfo=timezone.utc)
+    mock_ops_repo.get_reprocessing_jobs_count.return_value = 1
+    mock_ops_repo.get_reprocessing_jobs.return_value = [
+        type(
+            "FxReprocessingJobStub",
+            (),
+            {
+                "id": 404,
+                "job_type": "RESET_FX_WATERMARKS",
+                "business_date": "2026-04-10",
+                "status": "PENDING",
+                "security_id": None,
+                "from_currency": "USD",
+                "to_currency": "SGD",
+                "attempt_count": 0,
+                "correlation_id": "corr-fx-replay-404",
+                "created_at": timestamp,
+                "updated_at": timestamp,
+                "failure_reason": None,
+            },
+        )()
+    ]
+
+    response = await service.get_reprocessing_jobs("P1", skip=0, limit=20)
+
+    assert response.items[0].job_type == "RESET_FX_WATERMARKS"
+    assert response.items[0].security_id is None
+    assert response.items[0].from_currency == "USD"
+    assert response.items[0].to_currency == "SGD"
+    assert response.items[0].operational_state == "PENDING"
 
 
 async def test_support_job_stale_flag_only_marks_old_processing():

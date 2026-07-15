@@ -309,6 +309,8 @@ class OperationsService:
         created_at: datetime | None,
         updated_at: datetime | None,
         failure_reason: str | None,
+        from_currency: str | None = None,
+        to_currency: str | None = None,
         reference_now: datetime | None = None,
         stale_threshold_minutes: int = DEFAULT_SUPPORT_STALE_THRESHOLD_MINUTES,
     ) -> SupportJobRecord:
@@ -324,6 +326,8 @@ class OperationsService:
             created_at=created_at,
             updated_at=updated_at,
             failure_reason=failure_reason,
+            from_currency=from_currency,
+            to_currency=to_currency,
             reference_now=reference_now,
             stale_threshold_minutes=stale_threshold_minutes,
         )
@@ -1508,6 +1512,8 @@ class OperationsService:
                     created_at=job.created_at,
                     updated_at=job.updated_at,
                     failure_reason=job.failure_reason,
+                    from_currency=job.from_currency,
+                    to_currency=job.to_currency,
                     reference_now=generated_at_utc,
                     stale_threshold_minutes=stale_threshold_minutes,
                 )

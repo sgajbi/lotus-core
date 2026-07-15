@@ -21,7 +21,7 @@ from portfolio_common.database_models import (
     ReprocessingJob,
 )
 from portfolio_common.identifiers import normalize_lookup_identifier as normalize_security_id
-from sqlalchemy import and_, func, or_, select, true
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...application.operations.errors import OutboxRecoveryRejected
@@ -95,8 +95,8 @@ from .operations_reconciliation_run_queries import (
 from .operations_reprocessing_queries import (
     apply_reprocessing_job_scope,
     apply_reprocessing_key_scope,
+    reprocessing_job_scope,
     reprocessing_key_priority,
-    reset_watermark_reprocessing_job_scope,
 )
 from .operations_support_job_queries import (
     apply_aggregation_job_scope,
@@ -1570,10 +1570,10 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return 0
-        reset_scope = reset_watermark_reprocessing_job_scope(portfolio_id)
+        job_scope = reprocessing_job_scope(portfolio_id)
         stmt = apply_reprocessing_job_scope(
             select(func.count()).select_from(ReprocessingJob),
-            reset_scope=reset_scope,
+            job_scope=job_scope,
             status=status,
             normalized_security_id=normalized_security_id,
             job_id=job_id,
@@ -1600,23 +1600,31 @@ class OperationsRepository:
         )
         if security_id is not None and not normalized_security_id:
             return []
-        reset_scope = reset_watermark_reprocessing_job_scope(portfolio_id)
+        job_scope = reprocessing_job_scope(portfolio_id)
         reference_now = reference_now or datetime.now(timezone.utc)
         stale_threshold = reference_now - timedelta(minutes=stale_minutes)
         stmt = apply_reprocessing_job_scope(
             select(
                 ReprocessingJob.id,
                 ReprocessingJob.job_type,
-                reset_scope.impacted_date_expr.label("business_date"),
+                job_scope.impacted_date_expr.label("business_date"),
                 ReprocessingJob.status,
-                reset_scope.security_id_expr.label("security_id"),
+                case(
+                    (
+                        ReprocessingJob.job_type == "RESET_WATERMARKS",
+                        job_scope.security_id_expr,
+                    ),
+                    else_=None,
+                ).label("security_id"),
+                job_scope.from_currency_expr.label("from_currency"),
+                job_scope.to_currency_expr.label("to_currency"),
                 ReprocessingJob.attempt_count,
                 ReprocessingJob.correlation_id,
                 ReprocessingJob.created_at,
                 ReprocessingJob.updated_at,
                 ReprocessingJob.failure_reason,
             ),
-            reset_scope=reset_scope,
+            job_scope=job_scope,
             status=status,
             normalized_security_id=normalized_security_id,
             job_id=job_id,
@@ -1630,7 +1638,7 @@ class OperationsRepository:
                     ReprocessingJob.updated_at,
                     stale_threshold,
                 ).asc(),
-                reset_scope.impacted_date_expr.asc(),
+                job_scope.impacted_date_expr.asc(),
                 ReprocessingJob.created_at.asc(),
                 ReprocessingJob.id.asc(),
             )

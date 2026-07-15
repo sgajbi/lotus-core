@@ -729,6 +729,13 @@ async def test_openapi_describes_operations_support_parameters(async_test_client
         "UTC timestamp when this support job listing snapshot was generated."
     )
     support_job_record = components["SupportJobRecord"]
+    assert "RESET_FX_WATERMARKS" in support_job_record["properties"]["job_type"]["enum"]
+    assert support_job_record["properties"]["from_currency"]["description"] == (
+        "Source currency for direct-pair FX revaluation work."
+    )
+    assert support_job_record["properties"]["to_currency"]["description"] == (
+        "Portfolio base currency for direct-pair FX revaluation work."
+    )
     assert support_job_record["properties"]["job_id"]["description"] == (
         "Durable database identifier for this job row."
     )
