@@ -226,11 +226,12 @@ Primary durable outputs include:
 - `average_cost_pool_state`
 - `accrued_income_offset_state`
 - `position_state`
-- `transactions.cost.processed` completion events
+- `transactions.cost.processed` compatibility events
 
 These outputs feed:
 
-- pipeline readiness after the combined transaction commits
+- transaction readiness staged directly in the combined unit of work after all financial effects
+  succeed
 - replay and supportability flows through the combined runtime
 - realized P&L and disposal traceability
 
@@ -265,7 +266,7 @@ Check this service when:
 - cross-currency processing shows unexpected FX query growth or missing-rate retries
 - `cost_processing_execution_total` shows unexpected full-rebuild volume
 - `cost_processing_open_lots_restored` shows growing disposal restore depth
-- `transactions.cost.processed` lag or replay anomalies appear
+- compatibility processed-event outbox dispatch or replay anomalies appear
 
 Check beyond this service when:
 
