@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PACKAGE_ROOT = REPO_ROOT / "src" / "libs" / "portfolio-common" / "portfolio_common"
 SHARED_TIMESERIES_MARKET_DATA_READER = (
@@ -12,6 +14,9 @@ SHARED_TIMESERIES_MARKET_DATA_READER = (
 )
 PORTFOLIO_AGGREGATION_DOMAIN_ROOT = (
     REPO_ROOT / "src" / "services" / "portfolio_aggregation_service" / "app" / "domain"
+)
+TIMESERIES_GENERATOR_DOMAIN_ROOT = (
+    REPO_ROOT / "src" / "services" / "timeseries_generator_service" / "app" / "domain"
 )
 PYTHON_SOURCE_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "tests", REPO_ROOT / "scripts")
 GENERATED_DIRECTORY_NAMES = {".venv", "__pycache__", "build", "dist"}
@@ -51,6 +56,10 @@ RETIRED_MODULES = {
     "src.services.timeseries_generator_service.app.repositories.timeseries_repository",
     "services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
     "src.services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
+    "services.timeseries_generator_service.app.core.position_timeseries_logic",
+    "src.services.timeseries_generator_service.app.core.position_timeseries_logic",
+    "services.timeseries_generator_service.app.domain.timeseries_records",
+    "src.services.timeseries_generator_service.app.domain.timeseries_records",
     "services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
     "src.services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
     "services.portfolio_aggregation_service.app.consumer_manager",
@@ -172,6 +181,14 @@ RETIRED_PATHS = {
     / "app"
     / "core"
     / "portfolio_timeseries_logic.py",
+    REPO_ROOT / "src" / "services" / "timeseries_generator_service" / "app" / "core",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "timeseries_generator_service"
+    / "app"
+    / "domain"
+    / "timeseries_records.py",
     REPO_ROOT
     / "tests"
     / "unit"
@@ -260,10 +277,14 @@ def test_shared_timeseries_reader_exposes_only_common_market_data_methods() -> N
     assert AGGREGATION_QUEUE_METHODS.isdisjoint(class_methods)
 
 
-def test_portfolio_aggregation_domain_is_framework_independent() -> None:
+@pytest.mark.parametrize(
+    "domain_root",
+    [TIMESERIES_GENERATOR_DOMAIN_ROOT, PORTFOLIO_AGGREGATION_DOMAIN_ROOT],
+)
+def test_derived_state_domains_are_framework_independent(domain_root: Path) -> None:
     violations = {
         path.relative_to(REPO_ROOT).as_posix(): sorted(forbidden_dependencies)
-        for path in sorted(PORTFOLIO_AGGREGATION_DOMAIN_ROOT.rglob("*.py"))
+        for path in sorted(domain_root.rglob("*.py"))
         if (
             forbidden_dependencies := DOMAIN_FORBIDDEN_DEPENDENCIES.intersection(
                 _import_roots(path)

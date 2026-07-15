@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import date
 from typing import Protocol, TypeVar
 
-from ..domain.timeseries_records import (
+from ..domain.position_timeseries.models import (
     PositionCashflowRecord,
     PositionSnapshotRecord,
     PositionTimeseriesRecord,

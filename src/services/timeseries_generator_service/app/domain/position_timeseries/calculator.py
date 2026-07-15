@@ -1,3 +1,5 @@
+"""Pure calculation policy for one position-timeseries business day."""
+
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -7,13 +9,7 @@ from portfolio_common.domain.analytics.cashflow_semantics import (
 )
 from portfolio_common.domain.decimal_amount import decimal_or_none
 
-from ..domain.timeseries_records import (
-    PositionCashflowRecord,
-    PositionSnapshotRecord,
-    PositionTimeseriesRecord,
-)
-
-# src/services/timeseries_generator_service/app/core/position_timeseries_logic.py
+from .models import PositionCashflowRecord, PositionSnapshotRecord, PositionTimeseriesRecord
 
 ZERO = Decimal("0")
 
@@ -37,7 +33,7 @@ def _is_expense_cashflow(cashflow: PositionCashflowRecord) -> bool:
     return str(cashflow.classification or "").strip().upper() == "EXPENSE"
 
 
-@dataclass
+@dataclass(slots=True)
 class _CashflowBuckets:
     bod_position: Decimal = ZERO
     eod_position: Decimal = ZERO
@@ -81,40 +77,31 @@ def _cashflow_buckets(cashflows: list[PositionCashflowRecord]) -> _CashflowBucke
     return buckets
 
 
-class PositionTimeseriesLogic:
-    """
-    A stateless calculator for generating a single daily position time series record.
-    """
+def calculate_position_timeseries(
+    *,
+    current_snapshot: PositionSnapshotRecord,
+    previous_snapshot: PositionSnapshotRecord | None,
+    cashflows: list[PositionCashflowRecord],
+    epoch: int,
+) -> PositionTimeseriesRecord:
+    """Calculate one complete position-timeseries record."""
 
-    @staticmethod
-    def calculate_daily_record(
-        current_snapshot: PositionSnapshotRecord,
-        previous_snapshot: PositionSnapshotRecord | None,
-        cashflows: list[PositionCashflowRecord],
-        epoch: int,
-    ) -> PositionTimeseriesRecord:
-        """
-        Calculates a single, complete position time series record for a given day.
-        """
-        bod_market_value = _beginning_market_value(previous_snapshot)
-        eod_market_value = _decimal_or_zero(current_snapshot.market_value_local)
-        eod_quantity = _decimal_or_zero(current_snapshot.quantity)
-        eod_cost_basis = _decimal_or_zero(current_snapshot.cost_basis_local)
-        eod_avg_cost = _average_cost(cost_basis=eod_cost_basis, quantity=eod_quantity)
-        cashflow_buckets = _cashflow_buckets(cashflows)
+    eod_quantity = _decimal_or_zero(current_snapshot.quantity)
+    eod_cost_basis = _decimal_or_zero(current_snapshot.cost_basis_local)
+    cashflow_buckets = _cashflow_buckets(cashflows)
 
-        return PositionTimeseriesRecord(
-            portfolio_id=current_snapshot.portfolio_id,
-            security_id=current_snapshot.security_id,
-            date=current_snapshot.date,
-            epoch=epoch,
-            bod_market_value=bod_market_value,
-            bod_cashflow_position=cashflow_buckets.bod_position,
-            eod_cashflow_position=cashflow_buckets.eod_position,
-            bod_cashflow_portfolio=cashflow_buckets.bod_portfolio,
-            eod_cashflow_portfolio=cashflow_buckets.eod_portfolio,
-            eod_market_value=eod_market_value,
-            fees=cashflow_buckets.fees,
-            quantity=eod_quantity,
-            cost=eod_avg_cost,
-        )
+    return PositionTimeseriesRecord(
+        portfolio_id=current_snapshot.portfolio_id,
+        security_id=current_snapshot.security_id,
+        date=current_snapshot.date,
+        epoch=epoch,
+        bod_market_value=_beginning_market_value(previous_snapshot),
+        bod_cashflow_position=cashflow_buckets.bod_position,
+        eod_cashflow_position=cashflow_buckets.eod_position,
+        bod_cashflow_portfolio=cashflow_buckets.bod_portfolio,
+        eod_cashflow_portfolio=cashflow_buckets.eod_portfolio,
+        eod_market_value=_decimal_or_zero(current_snapshot.market_value_local),
+        fees=cashflow_buckets.fees,
+        quantity=eod_quantity,
+        cost=_average_cost(cost_basis=eod_cost_basis, quantity=eod_quantity),
+    )
