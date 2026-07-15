@@ -89,6 +89,7 @@ class ClaimedFxRevaluationJob:
     pair: DirectCurrencyPair
     earliest_impacted_date: date
     correlation_id: str | None = None
+    attempt_count: int = 1
 
 
 @dataclass(frozen=True, slots=True)

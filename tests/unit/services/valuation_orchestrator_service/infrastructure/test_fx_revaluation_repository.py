@@ -66,6 +66,8 @@ async def test_stage_durable_replay_uses_pair_scoped_pending_upsert() -> None:
     assert "RESET_FX_WATERMARKS" in sql
     assert "ON CONFLICT ((payload->>'from_currency'), (payload->>'to_currency'))" in sql
     assert "LEAST" in sql
+    assert "CAST(:generated_at AS timestamptz)" in sql
+    assert "COALESCE(reprocessing_jobs.payload->>'content_hash', '')" in sql
     assert parameters["from_currency"] == "USD"
     assert parameters["to_currency"] == "SGD"
     assert parameters["effective_date"] == date(2026, 4, 10)
@@ -129,6 +131,7 @@ async def test_claim_pending_jobs_maps_orm_payload_to_domain_work() -> None:
             "earliest_impacted_date": "2026-04-10",
         },
         correlation_id="corr-71",
+        attempt_count=2,
     )
 
     with patch(
@@ -145,6 +148,7 @@ async def test_claim_pending_jobs_maps_orm_payload_to_domain_work() -> None:
             pair=DirectCurrencyPair("USD", "SGD"),
             earliest_impacted_date=date(2026, 4, 10),
             correlation_id="corr-71",
+            attempt_count=2,
         )
     ]
 

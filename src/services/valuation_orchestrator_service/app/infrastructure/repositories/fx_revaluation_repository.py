@@ -65,6 +65,7 @@ class SqlAlchemyFxRevaluationRepository:
                 ),
                 earliest_impacted_date=date.fromisoformat(payload["earliest_impacted_date"]),
                 correlation_id=row.correlation_id,
+                attempt_count=int(row.attempt_count),
             )
         except (KeyError, TypeError, ValueError) as exc:
             return RejectedFxRevaluationJob(
@@ -197,15 +198,74 @@ class SqlAlchemyFxRevaluationRepository:
                         (reprocessing_jobs.payload->>'earliest_impacted_date')::date,
                         CAST(:effective_date AS date)
                     )::text,
-                    'content_hash', :content_hash,
-                    'generated_at', :generated_at
+                    'content_hash', CASE
+                        WHEN ROW(
+                            CAST(:generated_at AS timestamptz),
+                            :content_hash
+                        ) > ROW(
+                            COALESCE(
+                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                                '-infinity'::timestamptz
+                            ),
+                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                        )
+                        THEN :content_hash
+                        ELSE reprocessing_jobs.payload->>'content_hash'
+                    END,
+                    'generated_at', CASE
+                        WHEN ROW(
+                            CAST(:generated_at AS timestamptz),
+                            :content_hash
+                        ) > ROW(
+                            COALESCE(
+                                CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                                '-infinity'::timestamptz
+                            ),
+                            COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                        )
+                        THEN :generated_at
+                        ELSE reprocessing_jobs.payload->>'generated_at'
+                    END
                 )::json,
-                correlation_id = COALESCE(:correlation_id, reprocessing_jobs.correlation_id),
+                correlation_id = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) > ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    )
+                    THEN COALESCE(:correlation_id, reprocessing_jobs.correlation_id)
+                    ELSE reprocessing_jobs.correlation_id
+                END,
                 correlation_missing_reason = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) <= ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    ) THEN reprocessing_jobs.correlation_missing_reason
                     WHEN :correlation_id IS NOT NULL THEN NULL
                     ELSE reprocessing_jobs.correlation_missing_reason
                 END,
                 alternate_lookup_key = CASE
+                    WHEN ROW(
+                        CAST(:generated_at AS timestamptz),
+                        :content_hash
+                    ) <= ROW(
+                        COALESCE(
+                            CAST(reprocessing_jobs.payload->>'generated_at' AS timestamptz),
+                            '-infinity'::timestamptz
+                        ),
+                        COALESCE(reprocessing_jobs.payload->>'content_hash', '')
+                    ) THEN reprocessing_jobs.alternate_lookup_key
                     WHEN :correlation_id IS NOT NULL THEN NULL
                     ELSE reprocessing_jobs.alternate_lookup_key
                 END,
