@@ -42,6 +42,9 @@ age, claim/recovery counts, position and portfolio materialization latency, DLQ 
 pool pressure, and reconciliation outcomes. A missing instrument or FX source fails the owned job;
 Core does not publish a partial portfolio aggregate.
 
+`control_queue_operations_total{queue="aggregation"}` reports bounded claim, lease-recovery,
+completion, requeue, lost-ownership, terminal-failure, and execution-error outcomes.
+
 Use the Query Control Plane support endpoints to inspect aggregation jobs and source lineage for an
 affected portfolio. Replay through the governed remediation path after correcting source data.
 

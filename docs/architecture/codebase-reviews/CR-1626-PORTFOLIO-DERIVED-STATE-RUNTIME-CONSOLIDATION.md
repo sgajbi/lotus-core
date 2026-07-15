@@ -222,6 +222,9 @@ cross-window state.
 - The image-release matrix now builds only `portfolio-derived-state-service`, writes digest, SBOM,
   vulnerability, signature, and provenance evidence, and renders its Kubernetes deployment from
   the same digest release manifest used across dev, UAT, and prod.
+- `control_queue_operations_total{queue="aggregation"}` exposes bounded lease-recovery, claim,
+  complete, requeue, lost-ownership, terminal-failure, and execution-error outcomes through the
+  scheduler metrics port and the app-local Grafana dashboard.
 
 ## Same-Pattern Review
 
@@ -243,8 +246,8 @@ explicit no-change decisions because this cutover changes internal runtime topol
 
 ## Remaining Work
 
-1. Complete observability for lease expiry, reclaim, and lost ownership and evaluate heartbeat
-   renewal for work approaching the configured lease duration.
+1. Decide whether heartbeat renewal is required for work approaching the configured lease duration
+   using measured job-duration evidence; fixed lease expiry remains the current bounded policy.
 2. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
    reconciliation, load, release, and exact-main validation before closing #714.
 3. Execute controlled offset/deployment rollback proof and canonical cross-repo QA after CI can

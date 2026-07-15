@@ -74,10 +74,11 @@ class AggregationScheduler:
     ) -> list[ClaimedAggregationJob]:
         await self._update_queue_metrics(repository)
         now = self._clock.now_utc()
-        await repository.recover_expired_job_leases(
+        recovery = await repository.recover_expired_job_leases(
             now=now,
             max_attempts=self._max_attempts,
         )
+        self._metrics_sink.observe_recovery(recovery)
         jobs = await repository.claim_eligible_jobs(
             batch_size=self._batch_size,
             lease=AggregationJobLease(
@@ -86,6 +87,7 @@ class AggregationScheduler:
                 expires_at=now + timedelta(seconds=self._lease_duration_seconds),
             ),
         )
+        self._metrics_sink.observe_claimed(len(jobs))
         await self._update_queue_metrics(repository)
         return jobs
 
@@ -94,6 +96,7 @@ class AggregationScheduler:
         if not jobs:
             return
         result = await self._job_processor.process(jobs)
+        self._metrics_sink.observe_processed(result)
         logger.info(
             "Processed claimed aggregation job batch.",
             extra={
