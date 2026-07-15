@@ -2547,8 +2547,9 @@ Most relevant current governance:
      portfolio-currency arithmetic in the pure
      `app.domain.portfolio_timeseries.calculate_portfolio_timeseries` function. Reject missing
      portfolio/instrument currencies, blank portfolio identity, cross-portfolio contributions,
-     mismatched business date or epoch, duplicate normalized security contributions, and
-     non-positive FX before persistence. Do not restore
+     future-dated or future-epoch contributions, duplicate normalized security contributions, and
+     non-positive FX before persistence. Prior-date and prior-epoch rows are valid when selected by
+     the repository's latest-state-at-or-before target-window query. Do not restore
      `app/core/portfolio_timeseries_logic.py` or the empty `app/repositories` compatibility package.
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
      AVCO rebuild planning belongs under `app/application/cost_basis_processing`. Upstream linked
