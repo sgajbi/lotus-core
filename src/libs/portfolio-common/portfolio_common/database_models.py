@@ -2491,6 +2491,24 @@ class ReprocessingJob(Base):
             postgresql_where=text("job_type = 'RESET_WATERMARKS' AND status = 'PENDING'"),
         ),
         Index(
+            "uq_reproc_jobs_pending_fx_pair",
+            text("(payload->>'from_currency')"),
+            text("(payload->>'to_currency')"),
+            unique=True,
+            postgresql_where=text(
+                "job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"
+            ),
+        ),
+        Index(
+            "ix_reproc_jobs_pending_fx_priority",
+            text("(payload->>'earliest_impacted_date')"),
+            "created_at",
+            "id",
+            postgresql_where=text(
+                "job_type = 'RESET_FX_WATERMARKS' AND status = 'PENDING'"
+            ),
+        ),
+        Index(
             "ix_reprocessing_jobs_pending_resetwatermarks_priority",
             text("(payload->>'earliest_impacted_date')"),
             "created_at",
