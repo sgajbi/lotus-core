@@ -75,6 +75,7 @@ async def run_instrumented_worker_service(
 async def run_kafka_worker_runtime(
     *,
     consumers: Sequence[Any],
+    published_topics: Sequence[str] = (),
     dispatcher: Any,
     web_app: Any,
     web_port: int,
@@ -89,7 +90,12 @@ async def run_kafka_worker_runtime(
     server_factory: Callable[[Any], Any],
 ) -> None:
     """Run Kafka consumers, one outbox dispatcher, and the worker health server."""
-    required_topics = [str(getattr(consumer, "topic")) for consumer in consumers]
+    required_topics = list(
+        dict.fromkeys(
+            [str(getattr(consumer, "topic")) for consumer in consumers]
+            + [str(topic) for topic in published_topics]
+        )
+    )
     ensure_topics(required_topics)
 
     signal_module.signal(signal_module.SIGINT, signal_handler)

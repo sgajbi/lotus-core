@@ -39,6 +39,7 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
 
     await worker_runtime.run_kafka_worker_runtime(
         consumers=[consumer],
+        published_topics=("transaction_processing.ready", "transactions.persisted"),
         dispatcher=dispatcher,
         web_app="worker-app",
         web_port=8083,
@@ -53,7 +54,9 @@ async def test_run_kafka_worker_runtime_composes_consumers_dispatcher_and_health
         server_factory=server_factory,
     )
 
-    ensure_topics.assert_called_once_with(["transactions.persisted"])
+    ensure_topics.assert_called_once_with(
+        ["transactions.persisted", "transaction_processing.ready"]
+    )
     assert signal_module.signal.call_count == 2
     server_config_factory.assert_called_once_with(
         "worker-app",

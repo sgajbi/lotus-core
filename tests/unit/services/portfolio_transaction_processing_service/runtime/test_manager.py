@@ -3,6 +3,10 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from portfolio_common.config import (
+    KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+)
 
 from src.services.portfolio_transaction_processing_service.app.runtime import manager
 
@@ -22,6 +26,10 @@ async def test_combined_manager_delegates_consumers_to_shared_runtime(monkeypatc
     assert call["dispatcher"] is dispatcher
     assert call["web_port"] == 8085
     assert call["readiness_service_name"] == "portfolio_transaction_processing_service_web"
+    assert call["published_topics"] == (
+        KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
+        KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
+    )
 
 
 def test_combined_manager_defaults_to_final_two_consumer_composition(monkeypatch) -> None:
