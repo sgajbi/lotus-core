@@ -2,12 +2,8 @@ import json
 import logging
 
 from confluent_kafka import Message
-from portfolio_common.config import KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC
 from portfolio_common.db import get_async_db_session
-from portfolio_common.events import (
-    FinancialReconciliationCompletedEvent,
-    FinancialReconciliationRequestedEvent,
-)
+from portfolio_common.events import FinancialReconciliationRequestedEvent
 from portfolio_common.idempotency_repository import IdempotencyRepository
 from portfolio_common.kafka_consumer import BaseConsumer
 from portfolio_common.outbox_repository import OutboxRepository
@@ -16,7 +12,17 @@ from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from tenacity import retry
 
+from ..application.record_reconciliation_completion import (
+    RecordFinancialReconciliationCompletion,
+)
+from ..domain.reconciliation_control import FinancialReconciliationCompletion
 from ..dtos import ReconciliationRunRequest
+from ..infrastructure.reconciliation_completion_event_stager import (
+    TransactionalReconciliationCompletionEventStager,
+)
+from ..infrastructure.reconciliation_control_evidence_repository import (
+    SqlAlchemyReconciliationControlEvidenceRepository,
+)
 from ..repositories import ReconciliationRepository
 from ..services import ReconciliationService
 
@@ -67,25 +73,30 @@ class ReconciliationRequestedConsumer(BaseConsumer):
                             reconciliation_types=event.reconciliation_types,
                         )
                         outcome = service.determine_automatic_bundle_outcome(runs)
-                        await OutboxRepository(db).create_outbox_event(
-                            aggregate_type="FinancialReconciliation",
-                            aggregate_id=f"{event.portfolio_id}:{event.business_date}:{event.epoch}",
-                            event_type="FinancialReconciliationCompleted",
-                            topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
-                            payload=FinancialReconciliationCompletedEvent(
+                        completion_recorder = RecordFinancialReconciliationCompletion(
+                            evidence_repository=SqlAlchemyReconciliationControlEvidenceRepository(
+                                db
+                            ),
+                            event_stager=TransactionalReconciliationCompletionEventStager(
+                                OutboxRepository(db)
+                            ),
+                        )
+                        await completion_recorder.execute(
+                            FinancialReconciliationCompletion(
                                 portfolio_id=event.portfolio_id,
                                 business_date=event.business_date,
                                 epoch=event.epoch,
                                 outcome_status=outcome.outcome_status,
-                                reconciliation_types=event.reconciliation_types,
-                                blocking_reconciliation_types=outcome.blocking_reconciliation_types,
+                                reconciliation_types=tuple(event.reconciliation_types),
+                                blocking_reconciliation_types=tuple(
+                                    outcome.blocking_reconciliation_types
+                                ),
                                 run_ids=outcome.run_ids,
                                 error_count=outcome.error_count,
                                 warning_count=outcome.warning_count,
                                 requested_by=event.requested_by,
                                 trigger_stage=event.trigger_stage,
-                                correlation_id=correlation_id,
-                            ).model_dump(mode="json"),
+                            ),
                             correlation_id=correlation_id,
                         )
 

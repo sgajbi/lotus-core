@@ -4,10 +4,7 @@ import signal
 
 import uvicorn
 from portfolio_common.config import (
-    KAFKA_BOOTSTRAP_SERVERS,
-    KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
     KAFKA_PORTFOLIO_DAY_CONTROLS_EVALUATED_TOPIC,
-    KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
     KAFKA_PORTFOLIO_DAY_RECONCILIATION_REQUESTED_TOPIC,
     KAFKA_PORTFOLIO_SECURITY_DAY_VALUATION_READY_TOPIC,
     KAFKA_TRANSACTION_PROCESSING_READY_TOPIC,
@@ -21,9 +18,6 @@ from portfolio_common.runtime_supervision import (
     wait_for_shutdown_or_task_failure,
 )
 
-from .consumers.financial_reconciliation_completion_consumer import (
-    FinancialReconciliationCompletionConsumer,
-)
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
@@ -35,16 +29,6 @@ class ConsumerManager:
         self.consumers = []
         self.tasks = []
         self._shutdown_event = asyncio.Event()
-
-        self.consumers.append(
-            FinancialReconciliationCompletionConsumer(
-                bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-                topic=KAFKA_PORTFOLIO_DAY_RECONCILIATION_COMPLETED_TOPIC,
-                group_id="pipeline_orchestrator_reconciliation_completion_group",
-                dlq_topic=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
-                service_prefix="PIPE",
-            )
-        )
 
         self.dispatcher = OutboxDispatcher(kafka_producer=get_kafka_producer())
 

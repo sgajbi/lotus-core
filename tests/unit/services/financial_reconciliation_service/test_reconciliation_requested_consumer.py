@@ -14,6 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.financial_reconciliation_service.app.consumers import (
     reconciliation_requested_consumer as consumer_module,
 )
+from src.services.financial_reconciliation_service.app.domain.reconciliation_control import (
+    RecordedReconciliationControl,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,6 +75,15 @@ def mock_dependencies():
     mock_service = AsyncMock()
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_outbox_repo = AsyncMock()
+    mock_control_evidence_repo = AsyncMock()
+
+    async def _record_completion(completion):
+        return RecordedReconciliationControl(
+            status=completion.outcome_status,
+            latest_epoch=completion.epoch,
+        )
+
+    mock_control_evidence_repo.record_completion.side_effect = _record_completion
 
     with (
         patch(
@@ -93,12 +105,17 @@ def mock_dependencies():
             "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.OutboxRepository",
             return_value=mock_outbox_repo,
         ),
+        patch(
+            "src.services.financial_reconciliation_service.app.consumers.reconciliation_requested_consumer.SqlAlchemyReconciliationControlEvidenceRepository",
+            return_value=mock_control_evidence_repo,
+        ),
     ):
         yield {
             "idempotency_repo": mock_idempotency_repo,
             "service": mock_service,
             "db_session": mock_db_session,
             "outbox_repo": mock_outbox_repo,
+            "control_evidence_repo": mock_control_evidence_repo,
         }
 
 
@@ -148,7 +165,12 @@ async def test_reconciliation_request_runs_automatic_bundle_and_marks_idempotenc
     assert request.requested_by == mock_event.requested_by
     assert call.kwargs["reconciliation_types"] == mock_event.reconciliation_types
     mock_service.determine_automatic_bundle_outcome.assert_called_once()
-    outbox_call = mock_outbox_repo.create_outbox_event.await_args
+    outbox_calls = mock_outbox_repo.create_outbox_event.await_args_list
+    assert [call.kwargs["event_type"] for call in outbox_calls] == [
+        "FinancialReconciliationCompleted",
+        "PortfolioDayControlsEvaluated",
+    ]
+    outbox_call = outbox_calls[0]
     assert outbox_call.kwargs["event_type"] == "FinancialReconciliationCompleted"
     payload = FinancialReconciliationCompletedEvent.model_validate(outbox_call.kwargs["payload"])
     assert payload.outcome_status == "REQUIRES_REPLAY"
@@ -222,5 +244,8 @@ async def test_reconciliation_request_preserves_payload_correlation_over_header_
     await consumer.process_message(mock_kafka_message)
 
     assert mock_service.run_automatic_bundle.await_args.kwargs["correlation_id"] == "corr-recon"
-    assert mock_outbox_repo.create_outbox_event.await_args.kwargs["correlation_id"] == "corr-recon"
+    assert {
+        call.kwargs["correlation_id"]
+        for call in mock_outbox_repo.create_outbox_event.await_args_list
+    } == {"corr-recon"}
     assert mock_idempotency_repo.claim_event_processing.await_args.args[3] == "corr-recon"

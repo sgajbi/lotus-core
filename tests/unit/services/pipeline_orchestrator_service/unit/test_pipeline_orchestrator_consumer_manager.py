@@ -31,23 +31,9 @@ class _FakeServer:
             await asyncio.sleep(0.01)
 
 
-class _FakeSuccessConsumer:
-    def __init__(self, **kwargs):
-        self.topic = kwargs["topic"]
-        self.shutdown_called = False
-        self._stop_event = asyncio.Event()
-
+class _FakeFailingDispatcher(_FakeDispatcher):
     async def run(self):
-        await self._stop_event.wait()
-
-    def shutdown(self):
-        self.shutdown_called = True
-        self._stop_event.set()
-
-
-class _FakeFailingConsumer(_FakeSuccessConsumer):
-    async def run(self):
-        raise ValueError("simulated-orchestrator-consumer-failure")
+        raise ValueError("simulated-orchestrator-dispatcher-failure")
 
 
 @pytest.fixture
@@ -61,20 +47,14 @@ def _patch_runtime(monkeypatch):
 
 
 async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
-    monkeypatch.setattr(
-        consumer_manager,
-        "FinancialReconciliationCompletionConsumer",
-        _FakeSuccessConsumer,
-    )
     manager = consumer_manager.ConsumerManager()
-    assert len(manager.consumers) == 1
+    assert manager.consumers == []
 
     run_task = asyncio.create_task(manager.run())
     await asyncio.sleep(0.05)
     manager._shutdown_event.set()
     await asyncio.wait_for(run_task, timeout=2)
 
-    assert all(c.shutdown_called for c in manager.consumers)
     assert manager.dispatcher.stop_called is True
 
 
@@ -85,14 +65,12 @@ async def test_consumer_manager_does_not_restore_processed_transaction_hop() -> 
     assert "pipeline_orchestrator_processed_txn_group" not in source
     assert "PortfolioAggregationStageConsumer" not in source
     assert "pipeline_orchestrator_portfolio_aggregation_group" not in source
+    assert "FinancialReconciliationCompletionConsumer" not in source
+    assert "pipeline_orchestrator_reconciliation_completion_group" not in source
 
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):
-    monkeypatch.setattr(
-        consumer_manager,
-        "FinancialReconciliationCompletionConsumer",
-        _FakeFailingConsumer,
-    )
+    monkeypatch.setattr(consumer_manager, "OutboxDispatcher", _FakeFailingDispatcher)
     manager = consumer_manager.ConsumerManager()
 
     with pytest.raises(RuntimeError, match="Critical service task"):

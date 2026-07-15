@@ -583,7 +583,7 @@ class FinancialReconciliationCompletedEvent(CoreEventModel):
 
 class PortfolioDayControlsEvaluatedEvent(CoreEventModel):
     """
-    Canonical orchestrator-owned control-stage outcome for a portfolio business day.
+    Canonical reconciliation-owned control outcome for a portfolio business day.
     """
 
     portfolio_id: str
