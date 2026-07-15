@@ -1,5 +1,6 @@
 """PostgreSQL integration tests for direct-pair FX correction revaluation."""
 
+import asyncio
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -15,7 +16,7 @@ from portfolio_common.database_models import (
 from portfolio_common.position_state_repository import PositionStateRepository
 from portfolio_common.reprocessing_job_repository import ReprocessingJobRepository
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.services.valuation_orchestrator_service.app.core.fx_revaluation_job_processor import (
     FxRevaluationJobProcessor,
@@ -292,6 +293,71 @@ async def test_durable_replay_coalesces_pair_to_earliest_date_and_latest_lineage
         "generated_at": "2026-04-10T09:00:00+00:00",
     }
     assert jobs[0].correlation_id == "corr-latest-correction"
+
+
+async def test_concurrent_pair_replays_keep_earliest_date_and_newest_lineage(
+    clean_db,
+    async_db_session: AsyncSession,
+) -> None:
+    session_factory = async_sessionmaker(
+        bind=async_db_session.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    pair = DirectCurrencyPair("USD", "SGD")
+    start = asyncio.Event()
+
+    async def stage(correction: FxRateCorrection, correlation_id: str) -> None:
+        await start.wait()
+        async with session_factory() as session:
+            repository = fx_revaluation_repository.SqlAlchemyFxRevaluationRepository(session)
+            await repository.stage_durable_replay(
+                correction=correction,
+                correlation_id=correlation_id,
+            )
+            await session.commit()
+
+    newer_lineage = FxRateCorrection(
+        pair=pair,
+        effective_date=date(2026, 4, 10),
+        content_hash="sha256:" + ("b" * 64),
+        generated_at=datetime(2026, 4, 10, 10, tzinfo=timezone.utc),
+    )
+    earlier_effective_date = FxRateCorrection(
+        pair=pair,
+        effective_date=date(2026, 4, 8),
+        content_hash="sha256:" + ("a" * 64),
+        generated_at=datetime(2026, 4, 10, 9, tzinfo=timezone.utc),
+    )
+    tasks = [
+        asyncio.create_task(stage(newer_lineage, "corr-newest-lineage")),
+        asyncio.create_task(stage(earlier_effective_date, "corr-earliest-date")),
+    ]
+    start.set()
+    await asyncio.gather(*tasks)
+
+    jobs = (
+        (
+            await async_db_session.execute(
+                select(ReprocessingJob).where(
+                    ReprocessingJob.job_type == "RESET_FX_WATERMARKS",
+                    ReprocessingJob.status == "PENDING",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].payload == {
+        "from_currency": "USD",
+        "to_currency": "SGD",
+        "earliest_impacted_date": "2026-04-08",
+        "content_hash": "sha256:" + ("b" * 64),
+        "generated_at": "2026-04-10T10:00:00+00:00",
+    }
+    assert jobs[0].correlation_id == "corr-newest-lineage"
 
 
 async def test_claimed_fx_job_resets_exact_affected_watermark_and_completes(
