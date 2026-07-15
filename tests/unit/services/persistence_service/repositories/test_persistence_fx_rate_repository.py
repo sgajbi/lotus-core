@@ -19,9 +19,8 @@ async def test_upsert_fx_rate_uses_canonical_currency_codes() -> None:
         rate=Decimal("1.0875000000"),
     )
 
-    persisted, status = await repo.upsert_fx_rate(event)
+    persisted = await repo.upsert_fx_rate(event)
 
-    assert status == "upserted"
     assert persisted.from_currency == "EUR"
     assert persisted.to_currency == "USD"
     db.execute.assert_awaited_once()

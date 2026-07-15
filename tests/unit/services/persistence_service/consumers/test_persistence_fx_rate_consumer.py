@@ -5,8 +5,11 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from portfolio_common.events import FxRateEvent
+from portfolio_common.config import KAFKA_FX_RATES_PERSISTED_TOPIC
+from portfolio_common.database_models import FxRate as DBFxRate
+from portfolio_common.events import FxRateEvent, event_business_payload
 from portfolio_common.idempotency_repository import IdempotencyRepository
+from portfolio_common.outbox_repository import OutboxRepository
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +56,7 @@ def mock_kafka_message(valid_fx_rate_event: FxRateEvent) -> MagicMock:
 def mock_dependencies():
     mock_repo = AsyncMock(spec=FxRateRepository)
     mock_idempotency_repo = AsyncMock(spec=IdempotencyRepository)
+    mock_outbox_repo = AsyncMock(spec=OutboxRepository)
 
     mock_db_session = AsyncMock(spec=AsyncSession)
     mock_db_session.begin.return_value = AsyncMock()
@@ -73,10 +77,15 @@ def mock_dependencies():
             "src.services.persistence_service.app.consumers.base_consumer.IdempotencyRepository",
             return_value=mock_idempotency_repo,
         ),
+        patch(
+            "src.services.persistence_service.app.consumers.base_consumer.OutboxRepository",
+            return_value=mock_outbox_repo,
+        ),
     ):
         yield {
             "repo": mock_repo,
             "idempotency_repo": mock_idempotency_repo,
+            "outbox_repo": mock_outbox_repo,
         }
 
 
@@ -88,7 +97,11 @@ async def test_process_message_success(
 ) -> None:
     mock_repo = mock_dependencies["repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
     mock_idempotency_repo.claim_event_processing.return_value = True
+    mock_repo.upsert_fx_rate.return_value = DBFxRate(
+        **event_business_payload(valid_fx_rate_event)
+    )
 
     with patch.object(
         fx_rate_consumer, "_send_to_dlq_async", new_callable=AsyncMock
@@ -102,6 +115,12 @@ async def test_process_message_success(
         "persistence-fx-rates",
         "test-corr-id",
     )
+    outbox_call = mock_outbox_repo.create_outbox_event.call_args.kwargs
+    assert outbox_call["aggregate_id"] == "EUR-USD"
+    assert outbox_call["topic"] == KAFKA_FX_RATES_PERSISTED_TOPIC
+    assert outbox_call["payload"]["generated_at"].endswith("Z")
+    assert outbox_call["payload"]["content_hash"].startswith("sha256:")
+    assert outbox_call["correlation_id"] == "test-corr-id"
     mock_send_to_dlq.assert_not_called()
 
 
@@ -112,6 +131,7 @@ async def test_process_message_sends_nonpositive_fx_rate_to_dlq(
 ) -> None:
     mock_repo = mock_dependencies["repo"]
     mock_idempotency_repo = mock_dependencies["idempotency_repo"]
+    mock_outbox_repo = mock_dependencies["outbox_repo"]
 
     incoming_event_dict = json.loads(mock_kafka_message.value().decode("utf-8"))
     incoming_event_dict["rate"] = "0"
@@ -125,4 +145,5 @@ async def test_process_message_sends_nonpositive_fx_rate_to_dlq(
 
     mock_idempotency_repo.claim_event_processing.assert_not_called()
     mock_repo.upsert_fx_rate.assert_not_called()
+    mock_outbox_repo.create_outbox_event.assert_not_called()
     mock_send_to_dlq.assert_not_awaited()

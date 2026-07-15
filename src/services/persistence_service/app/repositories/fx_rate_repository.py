@@ -1,6 +1,5 @@
 # services/persistence_service/app/repositories/fx_rate_repository.py
 import logging
-from typing import Tuple
 
 from portfolio_common.database_models import FxRate as DBFxRate
 from portfolio_common.events import FxRateEvent
@@ -20,10 +19,10 @@ class FxRateRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def upsert_fx_rate(self, event: FxRateEvent) -> Tuple[DBFxRate, str]:
+    async def upsert_fx_rate(self, event: FxRateEvent) -> DBFxRate:
         """
         Idempotently creates or updates an FX rate using a native PostgreSQL UPSERT.
-        Returns a tuple of the effective object and a status string.
+        Returns the canonical observation staged by the transaction.
         """
         try:
             fx_rate_data = event_business_record_values(event)
@@ -47,8 +46,7 @@ class FxRateRepository:
                 f"on {event.rate_date}."
             )
 
-            # --- FIX: Return a tuple to match the consumer's expectation ---
-            return DBFxRate(**fx_rate_data), "upserted"
+            return DBFxRate(**fx_rate_data)
         except Exception as e:
             logger.error(
                 "Failed to stage UPSERT for FX rate for "

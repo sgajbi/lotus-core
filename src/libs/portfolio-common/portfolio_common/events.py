@@ -126,6 +126,42 @@ class FxRateEvent(CoreEventModel):
         return normalize_currency_code(value)
 
 
+class FxRatePersistedEvent(FxRateEvent):
+    """Source-owned evidence that an effective-dated FX observation was persisted."""
+
+    generated_at: datetime
+    content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @field_validator("generated_at", mode="before")
+    @classmethod
+    def _standardize_generated_at(cls, value: object) -> object:
+        return _standardize_event_datetime_value(value)
+
+    @model_validator(mode="after")
+    def _require_utc_generated_at(self) -> "FxRatePersistedEvent":
+        if self.generated_at.tzinfo is None or self.generated_at.utcoffset() is None:
+            raise ValueError("generated_at must be timezone-aware")
+        self.generated_at = self.generated_at.astimezone(timezone.utc)
+        return self
+
+    @classmethod
+    def from_observation(
+        cls,
+        observation: FxRateEvent,
+        *,
+        generated_at: datetime | None = None,
+    ) -> "FxRatePersistedEvent":
+        """Build persisted evidence with a hash over canonical business content only."""
+        from .source_data_product_metadata import stable_content_hash
+
+        business_content = event_business_payload(observation)
+        return cls(
+            **business_content,
+            generated_at=generated_at or datetime.now(timezone.utc),
+            content_hash=stable_content_hash(business_content),
+        )
+
+
 class MarketPriceEvent(CoreEventModel):
     security_id: str = Field(...)
     price_date: date = Field(...)

@@ -63,6 +63,16 @@ def test_cataloged_event_models_accept_governed_outbox_envelope_metadata() -> No
             "price": "101.25",
             "currency": "USD",
         },
+        "FxRatePersistedEvent": {
+            "from_currency": "USD",
+            "to_currency": "SGD",
+            "rate_date": "2026-04-10",
+            "rate": "1.35",
+            "generated_at": "2026-04-10T10:00:00Z",
+            "content_hash": (
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ),
+        },
         "InstrumentEvent": {
             "security_id": "S1",
             "name": "Instrument One",
@@ -229,6 +239,7 @@ def test_runtime_outbox_events_are_cataloged_with_current_topics() -> None:
         "ProcessedTransactionPersisted": "transactions.cost.processed",
         "InstrumentUpserted": "instruments.received",
         "MarketPricePersisted": "market_prices.persisted",
+        "FxRatePersisted": "fx_rates.persisted",
         "DailyPositionSnapshotPersisted": "valuation.snapshot.persisted",
         "CashflowCalculated": "cashflows.calculated",
     }
