@@ -65,7 +65,7 @@ def test_wait_requires_every_post_correction_derived_stage() -> None:
             "failed_aggregation_jobs": 0,
         }
 
-    elapsed = wait_for_corrected_derived_state(
+    evidence = wait_for_corrected_derived_state(
         row_reader=row_reader,
         run_id="RUN1",
         trade_date="2026-07-15",
@@ -76,7 +76,12 @@ def test_wait_requires_every_post_correction_derived_stage() -> None:
         timeout_seconds=1,
     )
 
-    assert elapsed >= 0
+    assert evidence.drain_seconds >= 0
+    assert evidence.expected_snapshots == evidence.corrected_snapshots == 6
+    assert evidence.expected_valuation_jobs == evidence.corrected_valuation_jobs == 6
+    assert evidence.expected_position_timeseries == evidence.corrected_position_timeseries == 6
+    assert evidence.expected_portfolio_timeseries == evidence.corrected_portfolio_timeseries == 2
+    assert evidence.expected_market_value == evidence.corrected_market_value == "660.0000000000"
     query = str(captured["query"])
     assert query.count("updated_at >= :correction_started_at") == 4
     assert "status IN ('PENDING', 'PROCESSING')" in query
