@@ -314,9 +314,9 @@ def _fx_rate(
         return overrides[normalized_pair]
     if normalized_pair[0] == normalized_pair[1]:
         return Decimal("1.000000")
-    return (
-        USD_PER_CURRENCY[normalized_pair[0]] / USD_PER_CURRENCY[normalized_pair[1]]
-    ).quantize(Decimal("0.000001"))
+    return (USD_PER_CURRENCY[normalized_pair[0]] / USD_PER_CURRENCY[normalized_pair[1]]).quantize(
+        Decimal("0.000001")
+    )
 
 
 def _build_portfolios(
