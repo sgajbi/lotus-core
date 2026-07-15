@@ -1399,6 +1399,78 @@ async def test_find_and_claim_eligible_jobs_does_not_double_claim_under_concurre
     assert jobs[0].attempt_count == 1
 
 
+async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id=f"P-VAL-CAP-{index}",
+                security_id="S-VAL-CAP",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PROCESSING" if index < 3 else "PENDING",
+                correlation_id=f"corr-val-cap-{index}",
+            )
+            for index in range(5)
+        ]
+    )
+    await async_db_session.commit()
+
+    repo = ValuationRepository(async_db_session)
+    first_claim = await repo.find_and_claim_eligible_jobs(
+        batch_size=5,
+        max_in_flight_jobs=4,
+    )
+    await async_db_session.commit()
+    second_claim = await repo.find_and_claim_eligible_jobs(
+        batch_size=5,
+        max_in_flight_jobs=4,
+    )
+    await async_db_session.commit()
+
+    assert len(first_claim) == 1
+    assert second_claim == []
+
+
+async def test_find_and_claim_eligible_jobs_enforces_in_flight_limit_concurrently(
+    async_db_session: AsyncSession, clean_db
+):
+    async_db_session.add_all(
+        [
+            PortfolioValuationJob(
+                portfolio_id=f"P-VAL-CONCURRENT-CAP-{index}",
+                security_id="S-VAL-CONCURRENT-CAP",
+                valuation_date=date(2025, 8, 15),
+                epoch=1,
+                status="PENDING",
+                correlation_id=f"corr-val-concurrent-cap-{index}",
+            )
+            for index in range(10)
+        ]
+    )
+    await async_db_session.commit()
+
+    session_factory = async_sessionmaker(async_db_session.bind, expire_on_commit=False)
+
+    async def claim_up_to_limit():
+        async with session_factory() as session:
+            repo = ValuationRepository(session)
+            claimed = await repo.find_and_claim_eligible_jobs(
+                batch_size=5,
+                max_in_flight_jobs=5,
+            )
+            await session.commit()
+            return claimed
+
+    first_claim, second_claim = await asyncio.gather(
+        claim_up_to_limit(),
+        claim_up_to_limit(),
+    )
+
+    assert len(first_claim) + len(second_claim) == 5
+
+
 async def test_find_and_claim_eligible_jobs_skips_superseded_pending_epochs(
     async_db_session: AsyncSession, clean_db
 ):

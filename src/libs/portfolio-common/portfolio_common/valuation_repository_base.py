@@ -30,6 +30,8 @@ from .valuation_snapshot_contiguity import (
 
 logger = logging.getLogger(__name__)
 
+_VALUATION_JOB_CLAIM_LOCK_ID = 7_611_901
+
 
 class ValuationRepositoryBase:
     """Shared query/claim logic for valuation worker services."""
@@ -388,7 +390,29 @@ class ValuationRepositoryBase:
         return {"pending_count": pending_count, "failed_count": failed_count}
 
     @async_timed(repository="ValuationRepository", method="find_and_claim_eligible_jobs")
-    async def find_and_claim_eligible_jobs(self, batch_size: int) -> List[PortfolioValuationJob]:
+    async def find_and_claim_eligible_jobs(
+        self,
+        batch_size: int,
+        *,
+        max_in_flight_jobs: int | None = None,
+    ) -> List[PortfolioValuationJob]:
+        effective_batch_size = batch_size
+        if max_in_flight_jobs is not None:
+            await self.db.execute(select(func.pg_advisory_xact_lock(_VALUATION_JOB_CLAIM_LOCK_ID)))
+            processing_count = int(
+                (
+                    await self.db.execute(
+                        select(func.count()).where(PortfolioValuationJob.status == "PROCESSING")
+                    )
+                ).scalar_one()
+            )
+            effective_batch_size = min(
+                batch_size,
+                max(max_in_flight_jobs - processing_count, 0),
+            )
+            if effective_batch_size == 0:
+                return []
+
         newer_epoch = aliased(PortfolioValuationJob)
         eligible_ids = (
             select(PortfolioValuationJob.id)
@@ -402,7 +426,7 @@ class ValuationRepositoryBase:
                 PortfolioValuationJob.valuation_date.asc(),
                 PortfolioValuationJob.epoch.desc(),
             )
-            .limit(batch_size)
+            .limit(effective_batch_size)
             .with_for_update(skip_locked=True)
         )
 

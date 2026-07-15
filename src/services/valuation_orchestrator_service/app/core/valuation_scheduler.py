@@ -71,6 +71,7 @@ class ValuationScheduler:
         )
         self._poll_interval = runtime_settings.valuation_scheduler_poll_interval_seconds
         self._batch_size = runtime_settings.valuation_scheduler_batch_size
+        self._max_in_flight_jobs = runtime_settings.valuation_scheduler_max_in_flight_jobs
         self._dispatch_rounds_per_poll = runtime_settings.valuation_scheduler_dispatch_rounds
         self._poll_budget_seconds = runtime_settings.valuation_scheduler_poll_budget_seconds
         self._dispatch_budget_seconds = runtime_settings.valuation_scheduler_dispatch_budget_seconds
@@ -131,6 +132,7 @@ class ValuationScheduler:
             if valuation_dispatch_coordinator is not None
             else ValuationDispatchCoordinator(
                 batch_size=self._batch_size,
+                max_in_flight_jobs=self._max_in_flight_jobs,
                 dispatch_rounds_per_poll=self._dispatch_rounds_per_poll,
                 poll_budget_seconds=self._poll_budget_seconds,
                 max_attempts=self._max_attempts,
