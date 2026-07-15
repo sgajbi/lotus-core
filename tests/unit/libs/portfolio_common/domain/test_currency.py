@@ -63,7 +63,9 @@ def test_fx_rate_persisted_event_has_deterministic_business_content_hash() -> No
     )
 
     assert first.content_hash == second.content_hash
+    assert first.observation_id != second.observation_id
     assert first.content_hash.startswith("sha256:")
+    assert first.observation_id.startswith("sha256:")
     assert first.generated_at.isoformat() == "2026-05-28T10:00:00+00:00"
 
 
@@ -86,6 +88,27 @@ def test_fx_rate_persisted_event_hash_changes_for_correction() -> None:
     )
 
     assert original.content_hash != correction.content_hash
+
+
+def test_fx_rate_persisted_event_replay_has_same_observation_identity() -> None:
+    observation = FxRateEvent(
+        from_currency="EUR",
+        to_currency="USD",
+        rate_date="2026-05-28",
+        rate="1.0875000000",
+    )
+    generated_at = datetime(2026, 5, 28, 10, tzinfo=timezone.utc)
+
+    first = FxRatePersistedEvent.from_observation(
+        observation,
+        generated_at=generated_at,
+    )
+    replay = FxRatePersistedEvent.from_observation(
+        observation,
+        generated_at=generated_at,
+    )
+
+    assert first.observation_id == replay.observation_id
 
 
 @pytest.mark.parametrize("rate", ["0", "-0.0001"])

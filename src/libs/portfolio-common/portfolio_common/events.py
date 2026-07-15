@@ -131,6 +131,7 @@ class FxRatePersistedEvent(FxRateEvent):
 
     generated_at: datetime
     content_hash: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    observation_id: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
     @field_validator("generated_at", mode="before")
     @classmethod
@@ -155,10 +156,20 @@ class FxRatePersistedEvent(FxRateEvent):
         from .source_data_product_metadata import stable_content_hash
 
         business_content = event_business_payload(observation)
+        resolved_generated_at = (generated_at or datetime.now(timezone.utc)).astimezone(
+            timezone.utc
+        )
+        content_hash = stable_content_hash(business_content)
         return cls(
             **business_content,
-            generated_at=generated_at or datetime.now(timezone.utc),
-            content_hash=stable_content_hash(business_content),
+            generated_at=resolved_generated_at,
+            content_hash=content_hash,
+            observation_id=stable_content_hash(
+                {
+                    "content_hash": content_hash,
+                    "generated_at": resolved_generated_at,
+                }
+            ),
         )
 
 
