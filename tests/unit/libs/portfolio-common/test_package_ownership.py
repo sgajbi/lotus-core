@@ -10,14 +10,8 @@ PACKAGE_ROOT = REPO_ROOT / "src" / "libs" / "portfolio-common" / "portfolio_comm
 SHARED_TIMESERIES_MARKET_DATA_READER = (
     PACKAGE_ROOT / "infrastructure" / "persistence" / "timeseries_market_data_reader.py"
 )
-PORTFOLIO_AGGREGATION_LOGIC = (
-    REPO_ROOT
-    / "src"
-    / "services"
-    / "portfolio_aggregation_service"
-    / "app"
-    / "core"
-    / "portfolio_timeseries_logic.py"
+PORTFOLIO_AGGREGATION_DOMAIN_ROOT = (
+    REPO_ROOT / "src" / "services" / "portfolio_aggregation_service" / "app" / "domain"
 )
 PYTHON_SOURCE_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "tests", REPO_ROOT / "scripts")
 GENERATED_DIRECTORY_NAMES = {".venv", "__pycache__", "build", "dist"}
@@ -51,10 +45,14 @@ RETIRED_MODULES = {
     "portfolio_common.transaction_domain.effective_processing_type",
     "services.portfolio_aggregation_service.app.repositories.timeseries_repository",
     "src.services.portfolio_aggregation_service.app.repositories.timeseries_repository",
+    "services.portfolio_aggregation_service.app.repositories",
+    "src.services.portfolio_aggregation_service.app.repositories",
     "services.timeseries_generator_service.app.repositories.timeseries_repository",
     "src.services.timeseries_generator_service.app.repositories.timeseries_repository",
     "services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
     "src.services.timeseries_generator_service.app.core.portfolio_timeseries_logic",
+    "services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
+    "src.services.portfolio_aggregation_service.app.core.portfolio_timeseries_logic",
 }
 RETIRED_PATHS = {
     PACKAGE_ROOT / "analytics_cashflow_semantics.py",
@@ -76,6 +74,27 @@ RETIRED_PATHS = {
     PACKAGE_ROOT / "infrastructure" / "persistence" / "timeseries_repository.py",
     PACKAGE_ROOT / "transaction_domain" / "control_code_normalization.py",
     PACKAGE_ROOT / "transaction_domain" / "effective_processing_type.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "core"
+    / "portfolio_timeseries_logic.py",
+    REPO_ROOT
+    / "tests"
+    / "unit"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "core"
+    / "test_portfolio_aggregation_timeseries_logic.py",
+    REPO_ROOT
+    / "src"
+    / "services"
+    / "portfolio_aggregation_service"
+    / "app"
+    / "repositories"
+    / "__init__.py",
     REPO_ROOT
     / "src"
     / "services"
@@ -206,6 +225,14 @@ def test_shared_timeseries_reader_exposes_only_common_market_data_methods() -> N
     assert AGGREGATION_QUEUE_METHODS.isdisjoint(class_methods)
 
 
-def test_portfolio_aggregation_logic_does_not_import_infrastructure() -> None:
-    imported_modules = _imported_modules(PORTFOLIO_AGGREGATION_LOGIC)
-    assert {module for module in imported_modules if "infrastructure" in module.split(".")} == set()
+def test_portfolio_aggregation_domain_is_framework_independent() -> None:
+    violations = {
+        path.relative_to(REPO_ROOT).as_posix(): sorted(forbidden_dependencies)
+        for path in sorted(PORTFOLIO_AGGREGATION_DOMAIN_ROOT.rglob("*.py"))
+        if (
+            forbidden_dependencies := DOMAIN_FORBIDDEN_DEPENDENCIES.intersection(
+                _import_roots(path)
+            )
+        )
+    }
+    assert violations == {}

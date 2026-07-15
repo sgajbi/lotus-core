@@ -23,7 +23,7 @@ from src.services.portfolio_aggregation_service.app.ports.aggregation_completion
     AggregationCompletionEventStager,
 )
 from src.services.portfolio_aggregation_service.app.ports.portfolio_timeseries import (
-    PortfolioTimeseriesCalculator,
+    PortfolioTimeseriesCalculation,
     PortfolioTimeseriesRepository,
 )
 
@@ -160,7 +160,7 @@ def _use_case(
     repository: InMemoryPortfolioTimeseriesRepository,
     event_stager: RecordingCompletionEventStager,
     *,
-    calculator: PortfolioTimeseriesCalculator | None = None,
+    calculator: PortfolioTimeseriesCalculation | None = None,
 ) -> tuple[MaterializePortfolioTimeseries, InMemoryPortfolioTimeseriesUnitOfWorkProvider]:
     provider = InMemoryPortfolioTimeseriesUnitOfWorkProvider(repository, event_stager)
     return (

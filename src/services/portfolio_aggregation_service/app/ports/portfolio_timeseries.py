@@ -43,8 +43,8 @@ class PortfolioTimeseriesRepository(TimeseriesMarketDataPort, Protocol):
     async def mark_job_failed(self, portfolio_id: str, aggregation_date: date) -> bool: ...
 
 
-class PortfolioTimeseriesCalculator(Protocol):
-    """Calculate one portfolio-day record from domain records and market data."""
+class PortfolioTimeseriesCalculation(Protocol):
+    """Resolve source data and calculate one portfolio-day record."""
 
     async def calculate_daily_record(
         self,
