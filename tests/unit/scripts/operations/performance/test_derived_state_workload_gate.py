@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from argparse import Namespace
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -39,6 +40,17 @@ def test_fan_in_profile_concentrates_positions_in_one_portfolio() -> None:
     assert profile.portfolio_count == 1
     assert profile.positions_per_portfolio == 1000
     assert profile.transaction_count == 1000
+    assert profile.certifying is True
+
+
+def test_price_burst_profile_revalues_shared_instruments_across_portfolios() -> None:
+    profile = resolve_workload_profile(profile_name="price-burst", diagnostic_smoke=False)
+
+    assert profile.name == "derived-state-market-price-correction-burst"
+    assert profile.portfolio_count == 100
+    assert profile.positions_per_portfolio == 100
+    assert profile.transaction_count == 10_000
+    assert profile.market_price_correction_multiplier == Decimal("1.05")
     assert profile.certifying is True
 
 
@@ -95,6 +107,7 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     assert endpoints.host_database_url not in command
     assert command[command.index("--trade-date") + 1] == "2026-07-15"
     assert "--derived-state-service" in command
+    assert "--market-price-correction-multiplier" not in command
 
     environment = build_workload_environment(
         endpoints=endpoints,
@@ -102,6 +115,32 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     )
     assert environment["HOST_DATABASE_URL"] == endpoints.host_database_url
     assert environment["PATH"] == "C:/tools"
+
+
+def test_price_burst_command_requests_a_measured_market_price_correction(tmp_path: Path) -> None:
+    profile = resolve_workload_profile(profile_name="price-burst", diagnostic_smoke=False)
+    endpoints = SimpleNamespace(
+        compose_project_name="derived-state-price-burst-proof",
+        host_database_url="postgresql://user:password@localhost:55001/core",
+        e2e_ingestion_url="http://localhost:55002",
+        e2e_query_url="http://localhost:55003",
+        e2e_query_control_plane_url="http://localhost:55004",
+        e2e_event_replay_url="http://localhost:55005",
+        e2e_financial_reconciliation_url="http://localhost:55006",
+    )
+
+    command = build_bank_day_command(
+        python_executable="python",
+        repo_root=tmp_path,
+        compose_file=tmp_path / "docker-compose.yml",
+        endpoints=endpoints,
+        profile=profile,
+        output_dir="output/task-runs",
+        resource_poll_interval_seconds=5.0,
+        trade_date="2026-07-15",
+    )
+
+    assert command[command.index("--market-price-correction-multiplier") + 1] == "1.05"
 
 
 def test_certifying_profile_requires_exact_source_build() -> None:
@@ -167,3 +206,5 @@ def test_make_targets_keep_diagnostic_and_certifying_profiles_explicit() -> None
     assert "--profile daily" in makefile
     assert "profile-derived-state-fan-in:" in makefile
     assert "--profile fan-in" in makefile
+    assert "profile-derived-state-price-burst:" in makefile
+    assert "--profile price-burst" in makefile
