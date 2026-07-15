@@ -31,6 +31,10 @@ One sequential Kafka partition therefore left about 60,000 database rows in `PRO
 messages aged past the worker stale timeout and were eventually marked `FAILED` despite never
 having started valuation execution.
 
+The same run exposed a sixth bottleneck: app-local Kafka created one partition and the valuation
+runtime constructed one serial consumer. Correctly bounded dispatch would therefore avoid false
+failures but still take several hours to drain the five-day workload.
+
 ## Implemented Direction
 
 1. Persistence emits a versioned, deterministic, source-owned FX persisted event through the
@@ -55,6 +59,9 @@ having started valuation execution.
 9. Valuation claims enforce one configurable durable in-flight ceiling across scheduler replicas.
    A PostgreSQL transaction-scoped advisory lock makes the capacity check and claim mutually
    exclusive, preventing queue backlog from growing beyond worker drain capacity.
+10. Position valuation supports an explicit in-process worker count. App-local Compose creates
+    eight topic partitions and runs eight serial consumers, preserving per-portfolio broker order
+    while allowing different portfolios to value concurrently.
 
 ## Compatibility
 
