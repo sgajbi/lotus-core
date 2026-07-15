@@ -2274,8 +2274,12 @@ Most relevant current governance:
      restore constructors or `get_async_db_session` in the processor or patch those globals in
      tests. The processor is not yet application-layer clean: keep it transitional until valuation
      persistence records, metrics, publication, and transaction ownership are behind typed ports
-     and a unit of work. Position valuation remains a separate deployable unless workload and
-     failure-isolation evidence justifies a boundary change.
+     and a unit of work. `POSITION_VALUATION_WORKER_COUNT` controls in-process Kafka worker count;
+     app-local Compose pre-shards topics and runs eight workers so portfolio-keyed partitions can
+     execute concurrently while each partition remains serial. Keep worker count at or below the
+     available `valuation.job.requested` partitions and keep the publisher key portfolio-owned so
+     one portfolio's valuation dates retain broker ordering. Position valuation remains a separate
+     deployable unless workload and failure-isolation evidence justifies a boundary change.
 155. `portfolio_common` is a shared distribution boundary, not an architecture layer or a default
      home for reusable-looking code. Put framework-independent cross-service domain policy under
      `portfolio_common.domain`; keep FastAPI, Pydantic, SQLAlchemy, Kafka, and HTTP dependencies out

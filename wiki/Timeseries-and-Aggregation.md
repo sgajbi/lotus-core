@@ -74,6 +74,12 @@ until the managed FX profile, restart, concurrency, and exact derived-value evid
 No-exposure pairs use a bounded visibility retry and complete as observable no-ops instead of
 cycling indefinitely.
 
+Valuation dispatch is capped by `VALUATION_SCHEDULER_MAX_IN_FLIGHT_JOBS` across scheduler replicas,
+so Kafka backlog cannot grow into false stale-worker failures. App-local workloads use eight
+portfolio-keyed partitions and eight serial position-valuation workers; different portfolios can
+run concurrently while each portfolio retains ordered valuation processing. Worker count must not
+exceed the available valuation-job partitions.
+
 The local exact-source fan-in certification `20260715T100128Z` proved one portfolio with 1,000
 positions: all 1,000 source transactions, snapshots, and position rows tied to one portfolio row;
 valuation-to-position p95 was `5.6004667s`, portfolio aggregation completed in `1.723829s`, all
