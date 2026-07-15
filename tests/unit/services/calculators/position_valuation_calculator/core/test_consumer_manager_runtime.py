@@ -3,6 +3,9 @@ import asyncio
 import pytest
 
 from src.services.calculators.position_valuation_calculator.app import consumer_manager
+from src.services.calculators.position_valuation_calculator.app.settings import (
+    PositionValuationRuntimeSettings,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -70,6 +73,21 @@ async def test_consumer_manager_graceful_shutdown(_patch_runtime, monkeypatch):
 
     assert all(c.shutdown_called for c in manager.consumers)
     assert manager.dispatcher.stop_called is True
+
+
+async def test_consumer_manager_starts_configured_worker_count(_patch_runtime, monkeypatch):
+    monkeypatch.setattr(consumer_manager, "ValuationConsumer", _FakeSuccessConsumer)
+    manager = consumer_manager.ConsumerManager(
+        settings=PositionValuationRuntimeSettings(worker_count=4)
+    )
+
+    run_task = asyncio.create_task(manager.run())
+    await asyncio.sleep(0.05)
+    manager._shutdown_event.set()
+    await asyncio.wait_for(run_task, timeout=2)
+
+    assert len(manager.consumers) == 4
+    assert all(consumer.shutdown_called for consumer in manager.consumers)
 
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):

@@ -18,6 +18,7 @@ from portfolio_common.runtime_supervision import (
 )
 
 from .consumers.valuation_consumer import ValuationConsumer
+from .settings import PositionValuationRuntimeSettings, get_position_valuation_runtime_settings
 from .web import WORKER_READINESS_SERVICE_NAME
 from .web import app as web_app
 
@@ -33,21 +34,23 @@ class ConsumerManager:
     valuation_orchestrator_service.
     """
 
-    def __init__(self):
-        self.consumers = []
-        self.tasks = []
+    def __init__(self, settings: PositionValuationRuntimeSettings | None = None):
+        self.consumers: list[ValuationConsumer] = []
+        self.tasks: list[asyncio.Task[None]] = []
         self._shutdown_event = asyncio.Event()
+        self._settings = settings or get_position_valuation_runtime_settings()
 
         group_id = "position_valuation_worker_group"
         service_prefix = "VAL"
 
-        self.consumers.append(
+        self.consumers.extend(
             ValuationConsumer(
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
                 group_id=group_id,
                 service_prefix=service_prefix,
             )
+            for _ in range(self._settings.worker_count)
         )
 
         kafka_producer = get_kafka_producer()
