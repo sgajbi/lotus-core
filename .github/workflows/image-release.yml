@@ -66,12 +66,9 @@ jobs:
           - service: position_valuation_calculator
             image_name: position-valuation-calculator
             dockerfile: src/services/calculators/position_valuation_calculator/Dockerfile
-          - service: timeseries_generator_service
-            image_name: timeseries-generator-service
-            dockerfile: src/services/timeseries_generator_service/Dockerfile
-          - service: portfolio_aggregation_service
-            image_name: portfolio-aggregation-service
-            dockerfile: src/services/portfolio_aggregation_service/Dockerfile
+          - service: portfolio_derived_state_service
+            image_name: portfolio-derived-state-service
+            dockerfile: src/services/portfolio_derived_state_service/Dockerfile
           - service: demo_data_loader
             image_name: demo-data-loader
             dockerfile: src/services/persistence_service/Dockerfile
@@ -187,10 +184,11 @@ jobs:
             --kubernetes-deploys-by-digest true \
             --promotion-environments dev uat prod \
             --output "output/build-evidence/${{ matrix.service }}-image-release-manifest.json"
-      - name: Render transaction processing Kubernetes release
-        if: ${{ matrix.service == 'portfolio_transaction_processing_service' }}
+      - name: Render immutable Kubernetes release
+        if: ${{ matrix.service == 'portfolio_transaction_processing_service' || matrix.service == 'portfolio_derived_state_service' }}
         run: |
-          python scripts/release/render_transaction_processing_deployment.py \
+          python scripts/release/render_release_deployment.py \
+            --service "${{ matrix.service }}" \
             --release-manifest "output/build-evidence/${{ matrix.service }}-image-release-manifest.json" \
             --output "output/build-evidence/${{ matrix.service }}-kubernetes.yaml"
       - name: Upload image release evidence

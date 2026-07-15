@@ -243,17 +243,14 @@ def service_schemas() -> dict[str, dict]:
     )
     from src.services.ingestion_service.app.main import app as ingestion_app
     from src.services.persistence_service.app.web import app as persistence_web_app
-    from src.services.portfolio_aggregation_service.app.web import (
-        app as portfolio_aggregation_web_app,
+    from src.services.portfolio_derived_state_service.app.web import (
+        app as portfolio_derived_state_web_app,
     )
     from src.services.portfolio_transaction_processing_service.app.web import (
         app as portfolio_transaction_processing_web_app,
     )
     from src.services.query_control_plane_service.app.main import app as query_control_plane_app
     from src.services.query_service.app.main import app as query_app
-    from src.services.timeseries_generator_service.app.web import (
-        app as timeseries_generator_web_app,
-    )
     from src.services.valuation_orchestrator_service.app.web import (
         app as valuation_orchestrator_web_app,
     )
@@ -266,8 +263,7 @@ def service_schemas() -> dict[str, dict]:
         "financial_reconciliation_service": financial_reconciliation_app.openapi(),
         "persistence_service_web": persistence_web_app.openapi(),
         "valuation_orchestrator_service_web": valuation_orchestrator_web_app.openapi(),
-        "portfolio_aggregation_service_web": portfolio_aggregation_web_app.openapi(),
-        "timeseries_generator_service_web": timeseries_generator_web_app.openapi(),
+        "portfolio_derived_state_service_web": portfolio_derived_state_web_app.openapi(),
         "portfolio_transaction_processing_service_web": (
             portfolio_transaction_processing_web_app.openapi()
         ),

@@ -59,7 +59,7 @@ REQUIRED_SNIPPETS = {
         "transaction_event_to_record_values",
     ),
     Path(
-        "src/services/portfolio_aggregation_service/app/infrastructure/"
+        "src/services/portfolio_derived_state_service/app/infrastructure/"
         "aggregation_completion_event_stager.py"
     ): (
         "FinancialReconciliationRequestedEvent",

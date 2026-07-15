@@ -62,13 +62,9 @@ SERVICE_BUILDS: dict[str, tuple[str, str]] = {
         "lotus-core/position-valuation-calculator:local",
         "src/services/calculators/position_valuation_calculator/Dockerfile",
     ),
-    "timeseries_generator_service": (
-        "lotus-core/timeseries-generator-service:local",
-        "src/services/timeseries_generator_service/Dockerfile",
-    ),
-    "portfolio_aggregation_service": (
-        "lotus-core/portfolio-aggregation-service:local",
-        "src/services/portfolio_aggregation_service/Dockerfile",
+    "portfolio_derived_state_service": (
+        "lotus-core/portfolio-derived-state-service:local",
+        "src/services/portfolio_derived_state_service/Dockerfile",
     ),
     "demo_data_loader": (
         "lotus-core/demo-data-loader:local",

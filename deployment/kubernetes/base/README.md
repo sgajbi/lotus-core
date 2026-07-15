@@ -1,16 +1,23 @@
-# Transaction Processing Kubernetes Base
+# Release-Managed Kubernetes Base
 
-The base contains the hardened `portfolio-transaction-processing` Deployment, ServiceAccount,
-Service, and disruption budget. The checked-in image uses an all-zero digest placeholder and must
-not be applied directly.
+The base contains hardened deployments for `portfolio-transaction-processing` and
+`portfolio-derived-state`. Checked-in images use all-zero digest placeholders and must not be
+applied directly.
 
 Render it from the CI image-release manifest:
 
 ```bash
-python scripts/release/render_transaction_processing_deployment.py \
+python scripts/release/render_release_deployment.py \
+  --service portfolio_transaction_processing_service \
   --release-manifest output/build-evidence/portfolio_transaction_processing_service-image-release-manifest.json \
   --output output/deployment/portfolio-transaction-processing.yaml
 kubectl apply -f output/deployment/portfolio-transaction-processing.yaml
+
+python scripts/release/render_release_deployment.py \
+  --service portfolio_derived_state_service \
+  --release-manifest output/build-evidence/portfolio_derived_state_service-image-release-manifest.json \
+  --output output/deployment/portfolio-derived-state.yaml
+kubectl apply -f output/deployment/portfolio-derived-state.yaml
 ```
 
 The renderer fails unless the manifest proves SBOM generation, passed vulnerability scanning,

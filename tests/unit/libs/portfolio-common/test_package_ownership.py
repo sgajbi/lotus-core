@@ -5,21 +5,17 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PACKAGE_ROOT = REPO_ROOT / "src" / "libs" / "portfolio-common" / "portfolio_common"
 SHARED_TIMESERIES_MARKET_DATA_READER = (
     PACKAGE_ROOT / "infrastructure" / "persistence" / "timeseries_market_data_reader.py"
 )
-PORTFOLIO_AGGREGATION_DOMAIN_ROOT = (
-    REPO_ROOT / "src" / "services" / "portfolio_aggregation_service" / "app" / "domain"
-)
-TIMESERIES_GENERATOR_DOMAIN_ROOT = (
-    REPO_ROOT / "src" / "services" / "timeseries_generator_service" / "app" / "domain"
+DERIVED_STATE_DOMAIN_ROOT = (
+    REPO_ROOT / "src" / "services" / "portfolio_derived_state_service" / "app" / "domain"
 )
 PYTHON_SOURCE_ROOTS = (REPO_ROOT / "src", REPO_ROOT / "tests", REPO_ROOT / "scripts")
 GENERATED_DIRECTORY_NAMES = {".venv", "__pycache__", "build", "dist"}
+GENERATED_PATH_SUFFIXES = {".egg-info"}
 DOMAIN_FORBIDDEN_DEPENDENCIES = {
     "confluent_kafka",
     "fastapi",
@@ -70,6 +66,14 @@ RETIRED_MODULES = {
     "src.services.portfolio_aggregation_service.app.core.aggregation_job_publisher",
     "services.portfolio_aggregation_service.app.core.aggregation_scheduler",
     "src.services.portfolio_aggregation_service.app.core.aggregation_scheduler",
+}
+RETIRED_SOURCE_ROOTS = {
+    REPO_ROOT / "src" / "services" / "portfolio_aggregation_service",
+    REPO_ROOT / "src" / "services" / "timeseries_generator_service",
+    REPO_ROOT / "tests" / "unit" / "services" / "portfolio_aggregation_service",
+    REPO_ROOT / "tests" / "unit" / "services" / "timeseries_generator_service",
+    REPO_ROOT / "tests" / "integration" / "services" / "portfolio_aggregation_service",
+    REPO_ROOT / "tests" / "integration" / "services" / "timeseries_generator_service",
 }
 RETIRED_PATHS = {
     PACKAGE_ROOT / "analytics_cashflow_semantics.py",
@@ -215,6 +219,21 @@ def _python_files() -> list[Path]:
     )
 
 
+def _authored_files(root: Path) -> list[Path]:
+    """Return non-generated files that would revive a retired source root."""
+
+    if not root.exists():
+        return []
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and GENERATED_DIRECTORY_NAMES.isdisjoint(path.parts)
+        and not any(part.endswith(tuple(GENERATED_PATH_SUFFIXES)) for part in path.parts)
+        and path.suffix != ".pyc"
+    )
+
+
 def _imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     imported_modules: set[str] = set()
@@ -236,6 +255,13 @@ def _import_roots(path: Path) -> set[str]:
 
 def test_retired_modules_are_absent() -> None:
     assert {path for path in RETIRED_PATHS if path.exists()} == set()
+    assert {
+        root.relative_to(REPO_ROOT).as_posix(): [
+            path.relative_to(REPO_ROOT).as_posix() for path in _authored_files(root)
+        ]
+        for root in RETIRED_SOURCE_ROOTS
+        if _authored_files(root)
+    } == {}
 
 
 def test_source_does_not_import_retired_modules() -> None:
@@ -277,14 +303,10 @@ def test_shared_timeseries_reader_exposes_only_common_market_data_methods() -> N
     assert AGGREGATION_QUEUE_METHODS.isdisjoint(class_methods)
 
 
-@pytest.mark.parametrize(
-    "domain_root",
-    [TIMESERIES_GENERATOR_DOMAIN_ROOT, PORTFOLIO_AGGREGATION_DOMAIN_ROOT],
-)
-def test_derived_state_domains_are_framework_independent(domain_root: Path) -> None:
+def test_derived_state_domain_is_framework_independent() -> None:
     violations = {
         path.relative_to(REPO_ROOT).as_posix(): sorted(forbidden_dependencies)
-        for path in sorted(domain_root.rglob("*.py"))
+        for path in sorted(DERIVED_STATE_DOMAIN_ROOT.rglob("*.py"))
         if (
             forbidden_dependencies := DOMAIN_FORBIDDEN_DEPENDENCIES.intersection(
                 _import_roots(path)

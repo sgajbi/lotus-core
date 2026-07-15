@@ -57,6 +57,27 @@ def test_compose_runtime_sets_use_only_the_combined_transaction_processor() -> N
         assert not legacy_workers.intersection(group)
 
 
+def test_runtime_sets_and_images_use_one_portfolio_derived_state_service() -> None:
+    target = "portfolio_derived_state_service"
+    retired_services = {
+        "timeseries_generator_service",
+        "portfolio_aggregation_service",
+    }
+
+    for group in (
+        DOCKER_SMOKE_SERVICES,
+        E2E_SMOKE_SERVICES,
+        LATENCY_GATE_SERVICES,
+        INSTITUTIONAL_COMPLETION_GATE_SERVICES,
+        E2E_RECOVERY_SERVICES,
+    ):
+        assert target in group
+        assert not retired_services.intersection(group)
+
+    assert target in SERVICE_BUILDS
+    assert not retired_services.intersection(SERVICE_BUILDS)
+
+
 def test_e2e_recovery_restarts_only_long_running_application_services() -> None:
     assert not set(RUNTIME_BOOTSTRAP_SERVICES).intersection(E2E_RECOVERY_SERVICES)
     assert set(E2E_RECOVERY_SERVICES) == set(INSTITUTIONAL_COMPLETION_GATE_SERVICES).difference(

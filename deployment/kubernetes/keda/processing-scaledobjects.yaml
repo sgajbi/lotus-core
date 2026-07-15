@@ -50,11 +50,11 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: timeseries-position-scaledobject
+  name: portfolio-derived-state
   namespace: lotus-core
 spec:
   scaleTargetRef:
-    name: timeseries-generator
+    name: portfolio-derived-state
   minReplicaCount: 1
   maxReplicaCount: 6
   pollingInterval: 20
@@ -64,27 +64,6 @@ spec:
       metadata:
         bootstrapServers: kafka:9092
         consumerGroup: timeseries_generator_group_positions
-        topic: daily_position_snapshot_persisted
-        lagThreshold: "400"
-        offsetResetPolicy: latest
----
-apiVersion: keda.sh/v1alpha1
-kind: ScaledObject
-metadata:
-  name: timeseries-portfolio-scaledobject
-  namespace: lotus-core
-spec:
-  scaleTargetRef:
-    name: timeseries-generator
-  minReplicaCount: 1
-  maxReplicaCount: 6
-  pollingInterval: 20
-  cooldownPeriod: 240
-  triggers:
-    - type: kafka
-      metadata:
-        bootstrapServers: kafka:9092
-        consumerGroup: timeseries_generator_group_portfolios
-        topic: portfolio_aggregation_required
+        topic: valuation.snapshot.persisted
         lagThreshold: "400"
         offsetResetPolicy: latest

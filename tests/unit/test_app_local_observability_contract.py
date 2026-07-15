@@ -27,8 +27,7 @@ def test_app_local_prometheus_scrapes_the_expected_lotus_core_services() -> None
         "portfolio_transaction_processing_service",
         "valuation_orchestrator_service",
         "position_valuation_calculator",
-        "timeseries_generator_service",
-        "portfolio_aggregation_service",
+        "portfolio_derived_state_service",
     }
 
 

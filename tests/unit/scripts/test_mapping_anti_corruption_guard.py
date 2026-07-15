@@ -75,7 +75,7 @@ def _write_required_artifacts(root: Path) -> None:
         "transaction_event_to_record_values\n",
     )
     _write(
-        root / "src/services/portfolio_aggregation_service/app/infrastructure/"
+        root / "src/services/portfolio_derived_state_service/app/infrastructure/"
         "aggregation_completion_event_stager.py",
         "FinancialReconciliationRequestedEvent\n"
         "PortfolioAggregationDayCompletedEvent\n"

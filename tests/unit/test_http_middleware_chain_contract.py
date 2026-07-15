@@ -10,8 +10,8 @@ from src.services.financial_reconciliation_service.app.main import (
 )
 from src.services.ingestion_service.app.main import app as ingestion_service_app
 from src.services.persistence_service.app.web import app as persistence_service_app
-from src.services.portfolio_aggregation_service.app.web import (
-    app as portfolio_aggregation_service_app,
+from src.services.portfolio_derived_state_service.app.web import (
+    app as portfolio_derived_state_service_app,
 )
 from src.services.portfolio_transaction_processing_service.app.web import (
     app as portfolio_transaction_processing_service_app,
@@ -20,9 +20,6 @@ from src.services.query_control_plane_service.app.main import (
     app as query_control_plane_service_app,
 )
 from src.services.query_service.app.main import app as query_service_app
-from src.services.timeseries_generator_service.app.web import (
-    app as timeseries_generator_service_app,
-)
 from src.services.valuation_orchestrator_service.app.web import (
     app as valuation_orchestrator_service_app,
 )
@@ -40,10 +37,9 @@ SERVICE_APPS: tuple[tuple[str, FastAPI], ...] = (
     ("financial_reconciliation_service", financial_reconciliation_service_app),
     ("ingestion_service", ingestion_service_app),
     ("persistence_service_web", persistence_service_app),
-    ("portfolio_aggregation_service_web", portfolio_aggregation_service_app),
+    ("portfolio_derived_state_service_web", portfolio_derived_state_service_app),
     ("query_control_plane_service", query_control_plane_service_app),
     ("query_service", query_service_app),
-    ("timeseries_generator_service_web", timeseries_generator_service_app),
     ("valuation_orchestrator_service_web", valuation_orchestrator_service_app),
 )
 

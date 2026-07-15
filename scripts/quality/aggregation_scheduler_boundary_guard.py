@@ -4,14 +4,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCHEDULER_MODULE = Path(
-    "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
+    "src/services/portfolio_derived_state_service/app/application/aggregation_jobs/scheduler.py"
 )
 ADAPTER_MODULE = Path(
-    "src/services/portfolio_aggregation_service/app/infrastructure/"
+    "src/services/portfolio_derived_state_service/app/infrastructure/"
     "aggregation_scheduler_adapters.py"
 )
 PORT_MODULE = Path(
-    "src/services/portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py"
+    "src/services/portfolio_derived_state_service/app/ports/aggregation_scheduler_ports.py"
 )
 
 REQUIRED_SCHEDULER_SNIPPETS = (

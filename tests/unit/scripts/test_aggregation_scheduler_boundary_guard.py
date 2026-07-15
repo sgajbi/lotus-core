@@ -5,7 +5,7 @@ from scripts.quality.aggregation_scheduler_boundary_guard import (
 )
 
 SCHEDULER_PATH = (
-    "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
+    "src/services/portfolio_derived_state_service/app/application/aggregation_jobs/scheduler.py"
 )
 
 
@@ -27,7 +27,7 @@ def _write_required_boundary(root: Path) -> None:
         "def _run_poll_once(): pass\n",
     )
     _write(
-        root / "src/services/portfolio_aggregation_service/app/infrastructure/"
+        root / "src/services/portfolio_derived_state_service/app/infrastructure/"
         "aggregation_scheduler_adapters.py",
         "class SqlAlchemyAggregationSchedulerRepositoryProvider: pass\n"
         "class PrometheusAggregationSchedulerMetricsSink: pass\n"
@@ -37,7 +37,7 @@ def _write_required_boundary(root: Path) -> None:
     )
     _write(
         root
-        / "src/services/portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py",
+        / "src/services/portfolio_derived_state_service/app/ports/aggregation_scheduler_ports.py",
         "class AggregationSchedulerRepository: pass\n"
         "class AggregationSchedulerRepositoryProvider: pass\n"
         "class AggregationSchedulerMetricsSink: pass\n"
@@ -101,7 +101,7 @@ def test_aggregation_scheduler_boundary_guard_rejects_concrete_dependencies_in_p
     _write_required_boundary(tmp_path)
     _write(
         tmp_path
-        / "src/services/portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py",
+        / "src/services/portfolio_derived_state_service/app/ports/aggregation_scheduler_ports.py",
         "class AggregationSchedulerRepository: pass\n"
         "class AggregationSchedulerRepositoryProvider: pass\n"
         "class AggregationSchedulerMetricsSink: pass\n"

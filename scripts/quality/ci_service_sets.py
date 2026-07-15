@@ -24,8 +24,7 @@ DOCKER_SMOKE_SERVICES: tuple[str, ...] = (
     "portfolio_transaction_processing_service",
     "valuation_orchestrator_service",
     "position_valuation_calculator",
-    "timeseries_generator_service",
-    "portfolio_aggregation_service",
+    "portfolio_derived_state_service",
 )
 
 LATENCY_GATE_SERVICES: tuple[str, ...] = (
@@ -54,9 +53,8 @@ E2E_SMOKE_SERVICES: tuple[str, ...] = (
     "persistence_service",
     "portfolio_transaction_processing_service",
     "position_valuation_calculator",
-    "timeseries_generator_service",
+    "portfolio_derived_state_service",
     "valuation_orchestrator_service",
-    "portfolio_aggregation_service",
 )
 
 INSTITUTIONAL_COMPLETION_GATE_SERVICES: tuple[str, ...] = E2E_SMOKE_SERVICES
@@ -76,9 +74,8 @@ E2E_RECOVERY_HEALTH_PORT_ENV: dict[str, str] = {
     "persistence_service": "LOTUS_PERSISTENCE_HOST_PORT",
     "portfolio_transaction_processing_service": "LOTUS_TRANSACTION_PROCESSING_HOST_PORT",
     "position_valuation_calculator": "LOTUS_POSITION_VALUATION_HOST_PORT",
-    "timeseries_generator_service": "LOTUS_TIMESERIES_GENERATOR_HOST_PORT",
+    "portfolio_derived_state_service": "LOTUS_PORTFOLIO_DERIVED_STATE_HOST_PORT",
     "valuation_orchestrator_service": "LOTUS_VALUATION_ORCHESTRATOR_HOST_PORT",
-    "portfolio_aggregation_service": "LOTUS_PORTFOLIO_AGGREGATION_HOST_PORT",
 }
 
 PR_RUNTIME_IMAGE_SET_SERVICES: tuple[str, ...] = tuple(

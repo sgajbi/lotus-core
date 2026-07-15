@@ -84,8 +84,8 @@
     {
       "capability_id": "aggregation.scheduler-runtime-ports",
       "capability_family": "scheduler-runtime",
-      "owner_service": "portfolio_aggregation_service",
-      "port_module": "src/services/portfolio_aggregation_service/app/ports/aggregation_scheduler_ports.py",
+      "owner_service": "portfolio_derived_state_service",
+      "port_module": "src/services/portfolio_derived_state_service/app/ports/aggregation_scheduler_ports.py",
       "port_symbols": [
         "AggregationSchedulerRepository",
         "AggregationSchedulerRepositoryProvider",
@@ -95,10 +95,10 @@
         "AggregationLeaseTokenGenerator"
       ],
       "adapter_modules": [
-        "src/services/portfolio_aggregation_service/app/infrastructure/aggregation_scheduler_adapters.py"
+        "src/services/portfolio_derived_state_service/app/infrastructure/aggregation_scheduler_adapters.py"
       ],
       "consumer_modules": [
-        "src/services/portfolio_aggregation_service/app/application/aggregation_jobs/scheduler.py"
+        "src/services/portfolio_derived_state_service/app/application/aggregation_jobs/scheduler.py"
       ],
       "guard_scripts": [
         "scripts/quality/aggregation_scheduler_boundary_guard.py"
@@ -114,16 +114,16 @@
     {
       "capability_id": "aggregation.timeseries-market-data-reader",
       "capability_family": "repository-reader",
-      "owner_service": "portfolio_aggregation_service",
-      "port_module": "src/services/portfolio_aggregation_service/app/ports/timeseries_market_data.py",
+      "owner_service": "portfolio_derived_state_service",
+      "port_module": "src/services/portfolio_derived_state_service/app/ports/timeseries_market_data.py",
       "port_symbols": [
         "TimeseriesMarketDataPort"
       ],
       "adapter_modules": [
-        "src/services/portfolio_aggregation_service/app/infrastructure/portfolio_aggregation_repository.py"
+        "src/services/portfolio_derived_state_service/app/infrastructure/portfolio_aggregation_repository.py"
       ],
       "consumer_modules": [
-        "src/services/portfolio_aggregation_service/app/application/portfolio_timeseries/calculation.py"
+        "src/services/portfolio_derived_state_service/app/application/portfolio_timeseries/calculation.py"
       ],
       "guard_scripts": [
         "scripts/quality/application_port_catalog_guard.py"

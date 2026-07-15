@@ -1,11 +1,14 @@
 # Lotus Core KEDA Scaling Profiles
 
 This folder contains KEDA `ScaledObject` definitions for transaction processing, valuation, and
-timeseries consumer groups.
+portfolio derived-state consumer groups.
 
 ## Intent
 - Scale unified cost/cashflow/position processing from its live and replay consumer-group lag.
-- Keep valuation and timeseries scaling independent because they own different workloads.
+- Keep valuation and portfolio derived-state scaling independent because they own different
+  workloads.
+- Scale the combined derived-state deployment from its preserved position-timeseries consumer
+  group; portfolio aggregation uses its durable leased database queue inside the same deployment.
 - Preserve ordering guarantees per partition/key while increasing throughput.
 - Separate hot-path and heavy-path groups with different min/max bounds.
 
