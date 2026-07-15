@@ -2,7 +2,7 @@
 
 Date: 2026-07-15
 Issue: [#714](https://github.com/sgajbi/lotus-core/issues/714)
-Status: In progress; both materialization application boundaries fixed locally
+Status: In progress; both materialization boundaries and portfolio calculation ownership fixed locally
 
 ## Objective
 
@@ -30,6 +30,11 @@ persistence, outbox composition, and failure writes. Its calculation also logged
 position when instrument reference data was missing, allowing an incomplete portfolio aggregate to
 be published as complete.
 
+The extracted application path still delegated to a legacy `app/core/portfolio_timeseries_logic.py`
+module that mixed asynchronous instrument/FX reads, normalization, caching, logging, and portfolio
+arithmetic. The source tree also retained an empty `app/repositories` compatibility package after
+repository ownership had moved to infrastructure.
+
 ## Layering Decision
 
 Use the governed dependency direction for position-timeseries materialization:
@@ -50,7 +55,8 @@ Apply the same direction to portfolio-timeseries materialization:
 1. map the internal aggregation event to `MaterializePortfolioTimeseriesCommand`;
 2. coordinate fan-in, calculation, typed queue disposition, output, and completion evidence in
    `MaterializePortfolioTimeseries`;
-3. keep calculation behind a typed calculator port and durable effects behind a repository port;
+3. keep source enrichment behind the typed calculation port, pure portfolio arithmetic under
+   `app/domain/portfolio_timeseries`, and durable effects behind a repository port;
 4. compose the repository and completion-event stager through one SQLAlchemy/outbox unit of work;
 5. record expected calculation/source failures on the owned queue job and reserve DLQ handling for
    malformed delivery or failure-persistence errors.
@@ -58,6 +64,13 @@ Apply the same direction to portfolio-timeseries materialization:
 Reject missing instrument reference data instead of skipping a position contribution. Normalize
 security identity before batched instrument lookup so padded historical identifiers do not create a
 false missing-reference failure.
+
+Resolve and cache instrument/FX inputs in `CalculatePortfolioTimeseries`, then pass immutable
+portfolio-currency contributions to the pure `calculate_portfolio_timeseries` domain function.
+Reject blank portfolio or instrument currencies, blank portfolio identity, cross-portfolio rows,
+rows from another business date or epoch, duplicate normalized security rows, and non-positive FX
+rates before derived output. Do not restore the mixed `app/core` module or the empty repository
+compatibility package.
 
 ## Layering Scorecard
 
@@ -74,10 +87,15 @@ false missing-reference failure.
 | Portfolio consumer-owned SQL/outbox/calculation concerns | yes | no |
 | Typed portfolio command/result/repository/calculator/UoW ports | no | yes |
 | Missing-instrument portfolio behavior | silently skip position | fail closed |
-| Portfolio-aggregation unit tests | 50 | 62 |
+| Market-data I/O mixed with portfolio arithmetic | yes | no |
+| Framework-free portfolio arithmetic | no | yes |
+| Portfolio/date/epoch/duplicate-security contribution validation | no | yes |
+| Obsolete portfolio calculation/repository paths | 2 | 0 |
+| Portfolio-aggregation unit tests | 50 | 73 |
 
-The test count is stable because database-heavy consumer scenarios moved to application and
-infrastructure suites instead of being deleted or replaced with superficial coverage.
+The generator test count stayed stable because database-heavy consumer scenarios moved to
+application and infrastructure owners instead of being deleted. The aggregation count increased
+as source resolution and pure contribution invariants gained separate focused coverage.
 
 ## Correctness And Performance
 
@@ -93,6 +111,9 @@ infrastructure suites instead of being deleted or replaced with superficial cove
 - Queue completion/requeue/lost-ownership transitions are typed repository outcomes.
 - Portfolio output and completion/reconciliation events share one transaction.
 - Missing or invalid FX and missing instrument reference data cannot publish partial aggregates.
+- Missing portfolio/instrument currency cannot be mistaken for a valid same-currency pair.
+- Portfolio arithmetic rejects mixed portfolio, date, or epoch input and duplicate security rows.
+- Instrument reads remain batched and positive FX rates remain cached by currency pair and date.
 
 ## Compatibility
 
@@ -102,9 +123,12 @@ OpenAPI schema, image, health endpoint, metric, or downstream response changed i
 Intentional fail-closed changes apply to:
 
 1. a malformed position trigger whose repeated identity disagrees with its persisted snapshot;
-2. a portfolio position whose authoritative instrument reference data is absent.
+2. a portfolio position whose authoritative instrument reference data is absent;
+3. portfolio aggregation with missing currency identity, mixed portfolio/date/epoch contributions,
+   duplicate normalized security contributions, or non-positive FX.
 
-Both cases now fail before derived output instead of risking mixed-identity or understated state.
+These cases now fail before derived output instead of risking mixed-identity, understated, or
+cross-window state.
 
 ## Validation
 
@@ -119,31 +143,39 @@ Both cases now fail before derived output instead of risking mixed-identity or u
 - `62 passed` across the complete portfolio-aggregation unit suite.
 - Signed commits `c91711af6`, `d313c79e8`, and `434b3dcf9` own queue transitions, application
   extraction, and missing-instrument correctness respectively.
+- `73 passed` across the complete portfolio-aggregation unit package after separating enrichment
+  from arithmetic.
+- Signed commit `7c3fa9393` contains the application/domain split, source and contribution
+  invariants, retired-path guard, test redistribution, and empty package removal.
+- The complete architecture gate and configured MyPy over `235` source files passed after the
+  calculation ownership change.
+- The repository documentation/wiki gate, application-port catalog guard, and `18` focused
+  catalog/front-door/wiki guard tests passed after current handoff and ownership docs were aligned.
 
 ## Same-Pattern Review
 
-Both delivery paths are now thin and application-owned. The remaining same-pattern work is the
-legacy `core` placement and mixed market-data orchestration inside portfolio calculation, followed
-by the internal scheduler-to-Kafka-to-consumer command hop. It remains tracked by #714; no duplicate
-issue is required. The aggregation scheduler's typed provider, repository, clock, metric, and
-publication boundaries must not be flattened during consolidation.
+Both delivery paths are now thin and application-owned. Portfolio market-data enrichment and pure
+arithmetic have separate owners, and the retired legacy paths have no-return coverage. The next
+same-pattern target is the internal scheduler-to-Kafka-to-consumer command hop. It remains tracked
+by #714; no duplicate issue is required. The aggregation scheduler's typed provider, repository,
+clock, metric, and publication boundaries must not be flattened during consolidation.
 
 ## Documentation Decision
 
-Repository context, this architecture ledger, and the timeseries developer/operator guides change
-because dependency and failure-handling truth changed. README, wiki, API inventory, OpenAPI,
-supported-features, and migration material remain unchanged because deployable topology and public
-contracts are still unchanged. Runtime-facing surfaces must change atomically with the later cutover.
+Repository context, this architecture ledger, the current architecture map, the application-port
+and database catalogs, and the timeseries API/developer guides change because dependency,
+source-failure, handoff, and contribution-invariant truth changed. README, wiki, API route inventory,
+OpenAPI, supported-features, and migration material remain explicit no-change decisions because
+deployable topology and public/operator contracts are still unchanged. Runtime-facing surfaces
+must change atomically with the later cutover.
 
 ## Remaining Work
 
-1. Move portfolio aggregation calculation and source-enrichment responsibilities out of the legacy
-   `core` folder while keeping pure arithmetic separate from market-data access.
-2. Replace the same-owner Kafka aggregation command with bounded durable database workers using
+1. Replace the same-owner Kafka aggregation command with bounded durable database workers using
    `FOR UPDATE SKIP LOCKED` and stale-claim recovery.
-3. Compose one `portfolio_derived_state_service` runtime with independently configurable stage
+2. Compose one `portfolio_derived_state_service` runtime with independently configurable stage
    concurrency and attributable metrics.
-4. Retire the obsolete image, package, health/runtime manager, topic/group, configuration, and
+3. Retire the obsolete image, package, health/runtime manager, topic/group, configuration, and
    deployment inventory only after usage and rollback proof.
-5. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
+4. Run daily, burst, backdated, fan-in, duplicate, poison, restart, stale-recovery, concurrency,
    reconciliation, load, release, and exact-main validation before closing #714.

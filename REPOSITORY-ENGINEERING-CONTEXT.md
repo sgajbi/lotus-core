@@ -2542,6 +2542,14 @@ Most relevant current governance:
      application ports, and compose output plus completion/reconciliation outbox evidence through
      one infrastructure unit of work. Required instrument and FX reference data is fail-closed;
      never skip a position contribution and publish an incomplete portfolio aggregate.
+     Resolve batched instrument data and cached positive FX rates in
+     `app.application.portfolio_timeseries.CalculatePortfolioTimeseries`; keep synchronous
+     portfolio-currency arithmetic in the pure
+     `app.domain.portfolio_timeseries.calculate_portfolio_timeseries` function. Reject missing
+     portfolio/instrument currencies, blank portfolio identity, cross-portfolio contributions,
+     mismatched business date or epoch, duplicate normalized security contributions, and
+     non-positive FX before persistence. Do not restore
+     `app/core/portfolio_timeseries_logic.py` or the empty `app/repositories` compatibility package.
 184. Cost-basis lot behavior belongs under `app/domain/cost_basis/lot_behavior.py`. Deterministic
      AVCO rebuild planning belongs under `app/application/cost_basis_processing`. Upstream linked
      cash-leg resolution and pairing belongs under `app/application/settlement_processing` and uses

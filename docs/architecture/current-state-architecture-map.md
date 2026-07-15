@@ -187,7 +187,8 @@ sequenceDiagram
     Txn-->>Txn: cost/cashflow compatibility facts (no active in-repo consumer)
     ValOrch->>Val: valuation.job.requested
     Val->>Ts: valuation.snapshot.persisted
-    Ts->>Agg: portfolio_day.aggregation.job.requested
+    Ts->>Agg: portfolio_aggregation_jobs (durable database queue)
+    Agg->>Agg: portfolio_day.aggregation.job.requested
     Agg->>Recon: portfolio_day.reconciliation.requested
     Agg-->>Agg: portfolio_day.aggregation.completed compatibility fact
     Recon-->>Recon: portfolio_day.reconciliation.completed compatibility fact
