@@ -267,6 +267,7 @@ class BaseConsumer(ABC):
         self._active_ordering_keys: set[str] = set()
         self._pending_messages_by_key: dict[str, deque[Message]] = defaultdict(deque)
         self._pending_message_count = 0
+        self._paused_partitions_by_key: dict[str, TopicPartition] = {}
         self._in_flight_tasks: set[asyncio.Task[None]] = set()
         self._in_flight_task_keys: dict[asyncio.Task[None], str] = {}
         self._log_consumer_event(
@@ -660,8 +661,8 @@ class BaseConsumer(ABC):
                 self._record_backlog_pressure("max_in_flight_reached")
                 await self._wait_for_next_processing_task(loop)
                 continue
-            if self._pending_message_count > 0:
-                self._record_backlog_pressure("ordered_pending_messages")
+            if self._at_pending_buffer_capacity():
+                self._record_backlog_pressure("pending_buffer_capacity_reached")
                 await self._wait_for_next_processing_task(loop)
                 continue
 
@@ -709,6 +710,8 @@ class BaseConsumer(ABC):
         if self._can_schedule_ordering_key(ordering_key):
             self._schedule_processing_task(msg, loop, ordering_key)
             return
+        if ordering_key in self._active_ordering_keys:
+            self._pause_ordering_partition(msg, ordering_key)
         self._pending_messages_by_key[ordering_key].append(msg)
         self._pending_message_count += 1
         self._record_backlog_pressure(
@@ -793,6 +796,23 @@ class BaseConsumer(ABC):
             self._active_ordering_keys.discard(ordering_key)
         self._set_in_flight_metric()
         task.result()
+        if ordering_key is not None:
+            self._schedule_next_ordered_message_or_resume(ordering_key, loop)
+
+    def _schedule_next_ordered_message_or_resume(
+        self,
+        ordering_key: str,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        pending = self._pending_messages_by_key.get(ordering_key)
+        if pending:
+            self._pending_message_count -= 1
+            self._schedule_processing_task(pending.popleft(), loop, ordering_key)
+            if not pending:
+                self._pending_messages_by_key.pop(ordering_key, None)
+            return
+        self._pending_messages_by_key.pop(ordering_key, None)
+        self._resume_ordering_partition(ordering_key)
 
     def _message_ordering_key(self, msg: Message) -> str:
         return f"partition:{msg.topic()}:{_message_attr_or_unknown(msg, 'partition')}"
@@ -802,6 +822,28 @@ class BaseConsumer(ABC):
 
     def _at_in_flight_capacity(self) -> bool:
         return len(self._in_flight_tasks) >= self.execution_profile.max_in_flight_messages
+
+    def _at_pending_buffer_capacity(self) -> bool:
+        return self._pending_message_count >= self.execution_profile.max_in_flight_messages
+
+    def _pause_ordering_partition(self, msg: Message, ordering_key: str) -> None:
+        if ordering_key in self._paused_partitions_by_key:
+            return
+        consumer = self._consumer
+        if consumer is None:
+            raise RuntimeError("Kafka consumer must be initialized before pausing a partition.")
+        topic_partition = TopicPartition(msg.topic(), msg.partition())
+        consumer.pause([topic_partition])
+        self._paused_partitions_by_key[ordering_key] = topic_partition
+
+    def _resume_ordering_partition(self, ordering_key: str) -> None:
+        topic_partition = self._paused_partitions_by_key.pop(ordering_key, None)
+        if topic_partition is None:
+            return
+        consumer = self._consumer
+        if consumer is None:
+            raise RuntimeError("Kafka consumer must be initialized before resuming a partition.")
+        consumer.resume([topic_partition])
 
     def _set_in_flight_metric(self) -> None:
         set_kafka_consumer_in_flight(
