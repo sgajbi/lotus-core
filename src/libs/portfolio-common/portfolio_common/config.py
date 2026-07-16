@@ -115,6 +115,9 @@ KAFKA_BUSINESS_DATES_RAW_RECEIVED_TOPIC = os.getenv(
 KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC = os.getenv(
     "KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC", "dlq.persistence_service"
 )
+KAFKA_VALUATION_SERVICE_DLQ_TOPIC = os.getenv(
+    "KAFKA_VALUATION_SERVICE_DLQ_TOPIC", "dlq.valuation_service"
+)
 KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC = os.getenv(
     "KAFKA_VALUATION_SNAPSHOT_PERSISTED_TOPIC", "valuation.snapshot.persisted"
 )
@@ -313,6 +316,13 @@ KAFKA_TOPIC_DEFINITIONS = (
     KafkaTopicDefinition(
         canonical_name="dlq.persistence_service",
         runtime_name=KAFKA_PERSISTENCE_SERVICE_DLQ_TOPIC,
+        lifecycle_status="active",
+        semantic_type="dlq",
+        scope="service",
+    ),
+    KafkaTopicDefinition(
+        canonical_name="dlq.valuation_service",
+        runtime_name=KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
         lifecycle_status="active",
         semantic_type="dlq",
         scope="service",

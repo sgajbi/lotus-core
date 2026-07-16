@@ -7,6 +7,7 @@ import uvicorn
 from portfolio_common.config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
+    KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
 )
 from portfolio_common.health_server import health_probe_bind_host
 from portfolio_common.kafka_admin import ensure_topics_exist
@@ -48,6 +49,7 @@ class ConsumerManager:
                 bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
                 topic=KAFKA_VALUATION_JOB_REQUESTED_TOPIC,
                 group_id=group_id,
+                dlq_topic=KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
                 service_prefix=service_prefix,
             )
             for _ in range(self._settings.worker_count)
@@ -73,7 +75,10 @@ class ConsumerManager:
         """
         The main execution function.
         """
-        required_topics = [consumer.topic for consumer in self.consumers]
+        required_topics = [
+            *(consumer.topic for consumer in self.consumers),
+            KAFKA_VALUATION_SERVICE_DLQ_TOPIC,
+        ]
         ensure_topics_exist(required_topics)
 
         signal.signal(signal.SIGINT, self._signal_handler)

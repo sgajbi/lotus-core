@@ -36,6 +36,7 @@ class _FakeServer:
 class _FakeSuccessConsumer:
     def __init__(self, **kwargs):
         self.topic = kwargs["topic"]
+        self.dlq_topic = kwargs.get("dlq_topic")
         self.shutdown_called = False
         self._stop_event = asyncio.Event()
 
@@ -88,6 +89,27 @@ async def test_consumer_manager_starts_configured_worker_count(_patch_runtime, m
 
     assert len(manager.consumers) == 4
     assert all(consumer.shutdown_called for consumer in manager.consumers)
+
+
+async def test_consumer_manager_wires_dedicated_valuation_dlq(_patch_runtime, monkeypatch):
+    verified_topics: list[str] = []
+    monkeypatch.setattr(consumer_manager, "ValuationConsumer", _FakeSuccessConsumer)
+    monkeypatch.setattr(
+        consumer_manager,
+        "ensure_topics_exist",
+        lambda topics: verified_topics.extend(topics),
+    )
+
+    manager = consumer_manager.ConsumerManager()
+    run_task = asyncio.create_task(manager.run())
+    await asyncio.sleep(0.05)
+    manager._shutdown_event.set()
+    await asyncio.wait_for(run_task, timeout=2)
+
+    assert {consumer.dlq_topic for consumer in manager.consumers} == {
+        consumer_manager.KAFKA_VALUATION_SERVICE_DLQ_TOPIC
+    }
+    assert consumer_manager.KAFKA_VALUATION_SERVICE_DLQ_TOPIC in verified_topics
 
 
 async def test_consumer_manager_fails_fast_on_task_crash(_patch_runtime, monkeypatch):

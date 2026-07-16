@@ -476,6 +476,17 @@ DIRECT_KAFKA_TOPIC_DEFINITIONS: tuple[DirectKafkaTopicDefinition, ...] = (
         correlation_header_supported=True,
         supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
     ),
+    DirectKafkaTopicDefinition(
+        name="ValuationServiceDlq",
+        topic="dlq.valuation_service",
+        semantic_type="consumer_dlq",
+        producer_service="BaseConsumer",
+        consumer_services=("event_replay_service", "ingestion_service"),
+        payload_contract="base_consumer_dlq_payload",
+        idempotency_header_supported=True,
+        correlation_header_supported=True,
+        supportability_evidence=(INGESTION_EVIDENCE_BUNDLE,),
+    ),
 )
 
 
