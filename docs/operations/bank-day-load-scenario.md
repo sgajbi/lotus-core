@@ -66,6 +66,13 @@ startup check, while certifying profiles allow up to 600 seconds for source reco
 durable before transaction submission. Seed timeout failures remain hard failures and do not
 weaken the downstream drain or reconciliation deadlines.
 
+Current-business-date FX and market-price seed facts do not create replay merely because positions
+have not been submitted yet. Later transaction processing emits authoritative valuation readiness
+and reads those committed source facts. Backdated and future source facts still require durable
+replay. A daily run that creates materially more valuation-snapshot events than source position
+keys must be investigated as work amplification rather than accepted by extending the drain
+deadline.
+
 `price-restatement` applies the same price correction across five business dates.
 `fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the
 direct `EUR/USD` rate by 5%, and requires exact affected snapshot, valuation-job,

@@ -50,8 +50,10 @@ portfolio aggregation for the newer authoritative snapshot.
    transactional outbox.
 2. Delivery maps Kafka payloads to application commands; application coordination and direct-pair
    policy remain framework independent.
-3. Valuation orchestration stages immediate affected-position work and one durable pending replay
-   per direct pair without a global portfolio scan.
+3. Valuation orchestration stages immediate affected-position work. Backdated and future
+   observations also stage one durable pending replay per direct pair without a global portfolio
+   scan. Current-date observations do not create replay for positions that do not yet exist because
+   later transaction readiness consumes the already committed rate.
 4. Durable replay preserves the earliest impacted date and deterministic newest source lineage,
    including under independent concurrent database sessions.
 5. No-exposure work retries only for the configured visibility-race limit, then completes as an
@@ -79,6 +81,10 @@ portfolio aggregation for the newer authoritative snapshot.
     time-series materialization timestamp. A newer snapshot refreshes the row and rearms portfolio
     aggregation even when local-currency values are unchanged; duplicate delivery after freshness
     catches up remains a no-op.
+13. Price and FX observations share one temporal scheduling policy. Current-date facts use
+    immediate visible-position jobs and later transaction readiness; backdated and future facts
+    retain durable replay. This prevents reference-data startup from resetting newly created
+    position epochs and amplifying valuation work.
 
 ## Compatibility
 
