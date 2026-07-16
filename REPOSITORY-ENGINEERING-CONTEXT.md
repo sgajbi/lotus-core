@@ -2719,6 +2719,12 @@ Most relevant current governance:
      authoritative price or FX observation is newer than the materialized snapshot. Preserve this
      distinction in PostgreSQL conflict-lifecycle tests and workload evidence; do not infer replay
      intent from correlation inequality.
+193. Transaction raw landing must resolve portfolio, instrument, and optional effective
+     cash-account reference availability as one repository read before transaction upsert. Preserve
+     portfolio visibility retry, provisional instrument/cash reference policy, idempotency, outbox,
+     and event behavior. Do not reintroduce one existence query per reference family on the
+     bank-day hot path; prove the one-read shape in repository tests and the behavior against
+     PostgreSQL.
 
 ## Context Maintenance Rule
 
