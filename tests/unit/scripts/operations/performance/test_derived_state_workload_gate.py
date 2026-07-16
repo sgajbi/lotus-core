@@ -30,6 +30,7 @@ def test_daily_profile_models_the_governed_bank_day_volume() -> None:
     assert profile.portfolio_count == 1000
     assert profile.positions_per_portfolio == 100
     assert profile.transaction_count == 100_000
+    assert profile.seed_materialization_timeout_seconds == 600
     assert profile.certifying is True
 
 
@@ -144,6 +145,7 @@ def test_bank_day_command_uses_managed_endpoints_and_exact_profile_shape(tmp_pat
     assert endpoints.host_database_url not in command
     assert command[command.index("--trade-date") + 1] == "2026-07-15"
     assert command[command.index("--business-date-count") + 1] == "1"
+    assert command[command.index("--seed-materialization-timeout-seconds") + 1] == "600"
     assert "--derived-state-service" in command
     assert "--market-price-correction-multiplier" not in command
 

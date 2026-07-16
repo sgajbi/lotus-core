@@ -42,6 +42,7 @@ class DerivedStateWorkloadProfile:
     sample_size: int
     drain_timeout_seconds: int
     certifying: bool
+    seed_materialization_timeout_seconds: int = 600
     business_date_count: int = 1
     market_price_correction_multiplier: Decimal | None = None
     fx_rate_correction_from_currency: str | None = None
@@ -222,6 +223,8 @@ def build_bank_day_command(
         str(profile.business_date_count),
         "--drain-timeout-seconds",
         str(profile.drain_timeout_seconds),
+        "--seed-materialization-timeout-seconds",
+        str(profile.seed_materialization_timeout_seconds),
         "--resource-poll-interval-seconds",
         str(resource_poll_interval_seconds),
         "--derived-state-service",

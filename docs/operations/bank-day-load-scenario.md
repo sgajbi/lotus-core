@@ -30,6 +30,7 @@ python scripts\operations\bank_day_load_scenario.py `
   --transactions-per-portfolio 100 `
   --transaction-batch-size 2000 `
   --sample-size 5 `
+  --seed-materialization-timeout-seconds 600 `
   --resource-poll-interval-seconds 5 `
   --drain-timeout-seconds 7200
 ```
@@ -59,6 +60,11 @@ corrected values. The smoke target is always recorded as
 close a #714 workload requirement. Certifying profiles fail fast unless `--build` is active, and
 the repo-native profile targets supply it, so existing/stale local images cannot emit certifying
 evidence.
+
+Service readiness and seed materialization use separate deadlines. Readiness remains a short
+startup check, while certifying profiles allow up to 600 seconds for source records to become
+durable before transaction submission. Seed timeout failures remain hard failures and do not
+weaken the downstream drain or reconciliation deadlines.
 
 `price-restatement` applies the same price correction across five business dates.
 `fx-restatement` materializes the same 100 x 100 shape across five business dates, corrects the

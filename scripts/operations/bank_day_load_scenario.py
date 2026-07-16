@@ -1800,6 +1800,11 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
     fx_from_currency = getattr(args, "fx_rate_correction_from_currency", None)
     fx_to_currency = getattr(args, "fx_rate_correction_to_currency", None)
     fx_correction_multiplier = getattr(args, "fx_rate_correction_multiplier", None)
+    seed_materialization_timeout_seconds = getattr(
+        args,
+        "seed_materialization_timeout_seconds",
+        600,
+    )
     business_dates = build_synthetic_business_date_window(
         as_of_date=resolved_trade_date,
         business_date_count=args.business_date_count,
@@ -1810,6 +1815,7 @@ def _build_config(args: argparse.Namespace, *, resolved_trade_date: str) -> dict
         "transaction_count": args.portfolio_count * args.transactions_per_portfolio,
         "transaction_batch_size": args.transaction_batch_size,
         "evidence_classification": args.evidence_classification,
+        "seed_materialization_timeout_seconds": seed_materialization_timeout_seconds,
         "max_records_per_minute": args.max_records_per_minute,
         "max_requests_per_minute": args.max_requests_per_minute,
         "trade_date": resolved_trade_date,
@@ -1973,6 +1979,7 @@ def main() -> int:
     parser.add_argument("--host-database-url", default=DEFAULT_HOST_DATABASE_URL)
     parser.add_argument("--ops-token", default=DEFAULT_OPS_TOKEN)
     parser.add_argument("--readiness-timeout-seconds", type=int, default=180)
+    parser.add_argument("--seed-materialization-timeout-seconds", type=int, default=600)
     parser.add_argument("--drain-timeout-seconds", type=int, default=3600)
     parser.add_argument("--health-poll-interval-seconds", type=float, default=5.0)
     parser.add_argument("--resource-poll-interval-seconds", type=float, default=5.0)
@@ -1996,6 +2003,8 @@ def main() -> int:
         raise ValueError("business_date_count must be positive.")
     if args.resource_poll_interval_seconds <= 0:
         raise ValueError("resource_poll_interval_seconds must be positive.")
+    if args.seed_materialization_timeout_seconds <= 0:
+        raise ValueError("seed_materialization_timeout_seconds must be positive.")
     if args.market_price_correction_multiplier is not None and (
         args.market_price_correction_multiplier <= 0 or args.market_price_correction_multiplier == 1
     ):
@@ -2124,7 +2133,7 @@ def main() -> int:
             params=portfolio_pattern,
             expected_count=args.portfolio_count,
             label="portfolio seed",
-            timeout_seconds=args.readiness_timeout_seconds,
+            timeout_seconds=args.seed_materialization_timeout_seconds,
         )
         ingest_phases.append(
             _ingest_static_payload(
@@ -2145,7 +2154,7 @@ def main() -> int:
             params=security_pattern,
             expected_count=args.transactions_per_portfolio,
             label="instrument seed",
-            timeout_seconds=args.readiness_timeout_seconds,
+            timeout_seconds=args.seed_materialization_timeout_seconds,
         )
         ingest_phases.append(
             _ingest_static_payload(
@@ -2171,7 +2180,7 @@ def main() -> int:
             params={"trade_date": opening_trade_date},
             expected_count=len(SUPPORTED_CURRENCIES) * (len(SUPPORTED_CURRENCIES) - 1),
             label="fx seed",
-            timeout_seconds=args.readiness_timeout_seconds,
+            timeout_seconds=args.seed_materialization_timeout_seconds,
         )
         ingest_phases.append(
             _ingest_static_payload(
@@ -2199,7 +2208,7 @@ def main() -> int:
             },
             expected_count=args.transactions_per_portfolio,
             label="market price seed",
-            timeout_seconds=args.readiness_timeout_seconds,
+            timeout_seconds=args.seed_materialization_timeout_seconds,
         )
         ingest_phases.append(
             _ingest_transaction_batches(
