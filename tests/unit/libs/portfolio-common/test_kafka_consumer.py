@@ -354,6 +354,89 @@ async def test_concurrent_profile_preserves_partition_order(
     assert committed_messages == [first_msg, second_msg]
 
 
+async def test_busy_partition_does_not_starve_an_idle_partition(
+    mock_confluent_consumer: MagicMock,
+    mock_kafka_producer: MagicMock,
+):
+    first_busy_message = create_mock_message(
+        "key-busy-1",
+        {"data": "busy-1"},
+        partition=0,
+        offset=1,
+    )
+    second_busy_message = create_mock_message(
+        "key-busy-2",
+        {"data": "busy-2"},
+        partition=0,
+        offset=2,
+    )
+    idle_partition_message = create_mock_message(
+        "key-idle-1",
+        {"data": "idle-1"},
+        partition=1,
+        offset=1,
+    )
+    polled_messages = [
+        first_busy_message,
+        second_busy_message,
+        idle_partition_message,
+    ]
+
+    def poll(_timeout):
+        return polled_messages.pop(0) if polled_messages else None
+
+    mock_confluent_consumer.poll.side_effect = poll
+    first_busy_started = asyncio.Event()
+    release_first_busy = asyncio.Event()
+    second_busy_started = asyncio.Event()
+    idle_partition_started = asyncio.Event()
+
+    consumer = ConcreteTestConsumer(
+        bootstrap_servers="mock_bs",
+        topic="test-topic",
+        group_id="test-group",
+        execution_profile=KafkaConsumerExecutionProfile(
+            max_in_flight_messages=2,
+            poll_timeout_seconds=0.01,
+        ),
+    )
+
+    async def process_message(msg):
+        if msg is first_busy_message:
+            first_busy_started.set()
+            await release_first_busy.wait()
+            return
+        if msg is second_busy_message:
+            second_busy_started.set()
+            consumer.shutdown()
+            return
+        idle_partition_started.set()
+
+    consumer.process_message_mock.side_effect = process_message
+
+    with (
+        patch("portfolio_common.kafka_consumer.Consumer", return_value=mock_confluent_consumer),
+        patch(
+            "portfolio_common.kafka_consumer.get_kafka_producer",
+            return_value=mock_kafka_producer,
+        ),
+        patch("portfolio_common.kafka_consumer.set_kafka_consumer_in_flight"),
+        patch("portfolio_common.kafka_consumer.observe_kafka_consumer_backlog_pressure"),
+    ):
+        run_task = asyncio.create_task(consumer.run())
+        await asyncio.wait_for(first_busy_started.wait(), timeout=1)
+        await asyncio.wait_for(idle_partition_started.wait(), timeout=1)
+        assert not second_busy_started.is_set()
+
+        release_first_busy.set()
+        await asyncio.wait_for(second_busy_started.wait(), timeout=1)
+        await asyncio.wait_for(run_task, timeout=1)
+
+    assert mock_confluent_consumer.commit.call_count == 3
+    mock_confluent_consumer.pause.assert_called_once()
+    mock_confluent_consumer.resume.assert_called_once()
+
+
 async def test_run_loop_failure_sends_to_dlq_and_commits(
     test_consumer: ConcreteTestConsumer, mock_confluent_consumer: MagicMock
 ):
