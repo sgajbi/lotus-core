@@ -2665,9 +2665,13 @@ Most relevant current governance:
 189. Accepted effective-dated FX corrections are source-owned valuation triggers. Persistence must
      atomically stage the versioned persisted observation with normalized direct pair, effective
      date, observation identity, UTC generated time, deterministic content hash, and correlation
-     evidence. Valuation orchestration must record durable pair/date work before acknowledging the
-     event, select only positions whose instrument and portfolio currencies match that direct pair,
-     and fail closed for unsupported inverse or triangulated paths. Coalescing preserves the
+     evidence. Valuation orchestration must apply one temporal scheduling policy to price and FX
+     observations. Backdated and future observations must record durable pair/date or instrument/date
+     work before acknowledgement. Current-business-date observations must queue currently visible
+     positions without durable replay; positions created later are covered by the transaction-owned
+     valuation-readiness fact and read the already committed source observation. Select only
+     positions whose instrument and portfolio currencies match the direct pair, and fail closed for
+     unsupported inverse or triangulated paths. Coalescing preserves the
      earliest impacted date independently from the newest deterministic source-lineage tuple; never
      let database conflict arrival order select lineage. A direct pair with no affected positions
      may retry a bounded visibility race, but must complete as an observable no-op at the configured
@@ -2691,6 +2695,11 @@ Most relevant current governance:
      Compare source and materialization timestamps so duplicate delivery remains a no-op after the
      derived row catches up. Prove this with weekend/holiday, empty-calendar, PostgreSQL lifecycle,
      and exact FX-restatement tests.
+191. Do not treat a current-date source observation with no visible position as a replay race.
+     Transaction processing is the authoritative creator of later position valuation readiness, so
+     current price and FX facts must not reset position epochs merely because reference data arrived
+     first. Preserve durable replay for backdated/future observations and prove the distinction with
+     domain policy tests plus workload event-amplification evidence.
 
 ## Context Maintenance Rule
 
