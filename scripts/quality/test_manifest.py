@@ -28,6 +28,14 @@ SUITES: dict[str, list[str]] = {
         "tests/unit/libs/portfolio-common/test_position_state_repository.py",
         "tests/unit/services/calculators/position_valuation_calculator/repositories/test_unit_valuation_repo.py",
     ],
+    "critical-db-coverage": [
+        "tests/integration/services/calculators/position_valuation_calculator/"
+        "test_int_reprocessing_job_repository.py",
+        "tests/integration/services/calculators/position_valuation_calculator/"
+        "test_int_valuation_repo.py",
+        "tests/integration/services/calculators/position_valuation_calculator/"
+        "test_int_valuation_repo_empty_open_dates.py",
+    ],
     "integration-lite": _discover_integration_lite(),
     "integration-all": ["tests/integration"],
     "ops-contract": [
@@ -156,6 +164,7 @@ SUITE_PYTEST_ARGS: dict[str, list[str]] = {
 SUITE_ENV_PROFILE: dict[str, str] = {
     "unit": "unit",
     "unit-db": "unit",
+    "critical-db-coverage": "integration",
     "integration-lite": "integration",
     "integration-all": "integration",
     "ops-contract": "integration",
@@ -174,6 +183,7 @@ SUITE_ENV_PROFILE: dict[str, str] = {
 SUITE_RUNTIME_MODE: dict[str, str] = {
     "unit": "unit",
     "unit-db": "db_direct",
+    "critical-db-coverage": "db_direct",
     "integration-lite": "db_direct",
     "integration-all": "db_direct",
     "ops-contract": "db_direct",

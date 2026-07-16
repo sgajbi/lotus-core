@@ -275,6 +275,42 @@ async def test_get_states_needing_backfill_uses_scheduler_order(
     assert "LIMIT 25" in compiled_query
 
 
+async def test_find_contiguous_snapshot_dates_skips_database_for_empty_states(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    contiguous_dates = await repo.find_contiguous_snapshot_dates([])
+
+    assert contiguous_dates == {}
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_find_contiguous_snapshot_dates_returns_empty_without_any_valuation_date(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+    state = MagicMock()
+    repo.get_latest_business_date = AsyncMock(return_value=None)
+
+    contiguous_dates = await repo.find_contiguous_snapshot_dates([state])
+
+    assert contiguous_dates == {}
+    repo.get_latest_business_date.assert_awaited_once_with()
+    mock_db_session.execute.assert_not_awaited()
+
+
+async def test_get_first_open_dates_skips_database_for_empty_keys(
+    mock_db_session: AsyncMock,
+) -> None:
+    repo = ValuationRepository(mock_db_session)
+
+    first_open_dates = await repo.get_first_open_dates_for_keys([])
+
+    assert first_open_dates == {}
+    mock_db_session.execute.assert_not_awaited()
+
+
 async def test_get_fx_rate_normalizes_currency_codes_and_uses_functional_index_predicates(
     mock_db_session: AsyncMock,
 ) -> None:

@@ -66,6 +66,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 DB_ONLY_SCOPES = {
     "unit-db",
+    "critical-db-coverage",
     "integration-lite",
     "ops-contract",
     "transaction-buy-contract",
