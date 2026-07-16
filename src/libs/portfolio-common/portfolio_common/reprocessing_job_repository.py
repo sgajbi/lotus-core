@@ -1,7 +1,7 @@
 # src/libs/portfolio-common/portfolio_common/reprocessing_job_repository.py
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import Date, String, bindparam, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -440,13 +440,7 @@ class ReprocessingJobRepository:
         claimed_jobs = result.mappings().all()
         jobs = [ReprocessingJob(**job) for job in claimed_jobs]
         if job_type in EARLIEST_IMPACTED_DATE_JOB_TYPES:
-            jobs.sort(
-                key=lambda job: (
-                    date.fromisoformat(job.payload["earliest_impacted_date"]),
-                    job.created_at,
-                    job.id,
-                )
-            )
+            jobs.sort(key=_effective_date_job_priority)
         else:
             jobs.sort(key=lambda job: (job.created_at, job.id))
         return jobs
@@ -622,6 +616,17 @@ def _over_limit_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[
 
 def _resettable_stale_job_ids(stale_rows: list[Any], max_attempts: int) -> list[int]:
     return [row.id for row in stale_rows if row.attempt_count < max_attempts]
+
+
+def _effective_date_job_priority(job: ReprocessingJob) -> tuple[bool, str, datetime, int]:
+    payload: dict[str, Any] = job.payload if isinstance(job.payload, dict) else {}
+    raw_effective_date = payload.get("earliest_impacted_date")
+    return (
+        raw_effective_date is None,
+        "" if raw_effective_date is None else str(raw_effective_date),
+        cast(datetime, job.created_at),
+        cast(int, job.id),
+    )
 
 
 def _stale_reprocessing_jobs_stmt(stale_cutoff: datetime):
