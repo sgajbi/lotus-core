@@ -32,6 +32,21 @@ def upgrade() -> None:
         "portfolio_aggregation_jobs",
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
     )
+    aggregation_jobs = sa.table(
+        "portfolio_aggregation_jobs",
+        sa.column("status", sa.String()),
+        sa.column("failure_reason", sa.Text()),
+        sa.column("updated_at", sa.DateTime(timezone=True)),
+    )
+    op.execute(
+        aggregation_jobs.update()
+        .where(aggregation_jobs.c.status == "PROCESSING")
+        .values(
+            status="PENDING",
+            failure_reason=None,
+            updated_at=sa.func.now(),
+        )
+    )
     op.create_check_constraint(
         "ck_portfolio_aggregation_jobs_lease_complete",
         "portfolio_aggregation_jobs",

@@ -18,12 +18,14 @@ MIGRATION = (
 
 def test_aggregation_job_lease_migration_is_reversible(monkeypatch) -> None:
     add_column = MagicMock()
+    execute = MagicMock()
     create_check_constraint = MagicMock()
     create_index = MagicMock()
     drop_index = MagicMock()
     drop_constraint = MagicMock()
     drop_column = MagicMock()
     monkeypatch.setattr(op, "add_column", add_column)
+    monkeypatch.setattr(op, "execute", execute)
     monkeypatch.setattr(op, "create_check_constraint", create_check_constraint)
     monkeypatch.setattr(op, "create_index", create_index)
     monkeypatch.setattr(op, "drop_index", drop_index)
@@ -39,6 +41,13 @@ def test_aggregation_job_lease_migration_is_reversible(monkeypatch) -> None:
         "lease_token",
         "lease_expires_at",
     ]
+    legacy_recovery_sql = str(
+        execute.call_args.args[0].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "UPDATE portfolio_aggregation_jobs" in legacy_recovery_sql
+    assert "status='PENDING'" in legacy_recovery_sql
+    assert "failure_reason=NULL" in legacy_recovery_sql
+    assert "portfolio_aggregation_jobs.status = 'PROCESSING'" in legacy_recovery_sql
     create_check_constraint.assert_called_once()
     create_index.assert_called_once_with(
         "ix_portfolio_aggregation_jobs_status_lease_expiry",
