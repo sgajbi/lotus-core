@@ -3,6 +3,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from src.services.ingestion_service.app.application import (
+    TransactionReprocessingTargetNotFound,
+)
+from src.services.ingestion_service.app.domain import TransactionReprocessingTarget
+from src.services.ingestion_service.app.ports.transaction_reprocessing import (
+    TransactionReprocessingTargetReadError,
+)
 from src.services.ingestion_service.app.services import ingestion_publish_commands
 from src.services.ingestion_service.app.services.ingestion_publish_commands import (
     BatchPublishIngestionCommand,
@@ -35,6 +42,17 @@ def _handler() -> IngestionPublishCommandHandler:
     return IngestionPublishCommandHandler(
         ingestion_service=ingestion_service,
         ingestion_job_service=job_service,
+        resolve_transaction_reprocessing_targets=SimpleNamespace(
+            execute=AsyncMock(
+                side_effect=lambda transaction_ids: tuple(
+                    TransactionReprocessingTarget(
+                        transaction_id=transaction_id,
+                        portfolio_id=f"PORT-{transaction_id}",
+                    )
+                    for transaction_id in transaction_ids
+                )
+            )
+        ),
     )
 
 
@@ -209,12 +227,25 @@ async def test_reprocessing_command_preserves_policy_sequence(
     async def publish_reprocessing_requests(records, *, idempotency_key):
         events.append(f"publish:{len(records)}:{idempotency_key}")
 
+    async def resolve_reprocessing_targets(transaction_ids):
+        events.append(f"resolve:{','.join(transaction_ids)}")
+        return tuple(
+            TransactionReprocessingTarget(
+                transaction_id=transaction_id,
+                portfolio_id=f"PORT-{transaction_id}",
+            )
+            for transaction_id in transaction_ids
+        )
+
     handler.ingestion_job_service.assert_ingestion_writable.side_effect = writable
     handler.ingestion_job_service.assert_reprocessing_publish_allowed.side_effect = (
         reprocessing_allowed
     )
     handler.ingestion_service.publish_reprocessing_requests = AsyncMock(
         side_effect=publish_reprocessing_requests
+    )
+    handler.resolve_transaction_reprocessing_targets.execute.side_effect = (
+        resolve_reprocessing_targets
     )
     monkeypatch.setattr(
         ingestion_publish_commands,
@@ -238,5 +269,60 @@ async def test_reprocessing_command_preserves_policy_sequence(
         "writable",
         "policy:2",
         "rate:/reprocess/transactions:2",
+        "resolve:T1,T2",
         "publish:2:idem-reprocess",
     ]
+
+
+@pytest.mark.asyncio
+async def test_reprocessing_command_rejects_missing_source_before_job_creation() -> None:
+    handler = _handler()
+    handler.resolve_transaction_reprocessing_targets.execute.side_effect = (
+        TransactionReprocessingTargetNotFound(["TXN-404"])
+    )
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_reprocessing_requests(
+            BatchPublishIngestionCommand(
+                endpoint="/reprocess/transactions",
+                entity_type="reprocessing_request",
+                records=["TXN-404"],
+                idempotency_key=None,
+                request_payload={"transaction_ids": ["TXN-404"]},
+                accepted_message="Reprocessing accepted.",
+            )
+        )
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail["code"] == "INGESTION_REPROCESSING_SOURCE_NOT_FOUND"
+    assert exc_info.value.detail["missing_transaction_ids"] == ["TXN-404"]
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reprocessing_command_maps_source_dependency_failure() -> None:
+    handler = _handler()
+    handler.resolve_transaction_reprocessing_targets.execute.side_effect = (
+        TransactionReprocessingTargetReadError(
+            "Transaction reprocessing source lookup is unavailable."
+        )
+    )
+
+    with pytest.raises(IngestionPublishCommandError) as exc_info:
+        await handler.ingest_reprocessing_requests(
+            BatchPublishIngestionCommand(
+                endpoint="/reprocess/transactions",
+                entity_type="reprocessing_request",
+                records=["TXN-1"],
+                idempotency_key=None,
+                request_payload={"transaction_ids": ["TXN-1"]},
+                accepted_message="Reprocessing accepted.",
+            )
+        )
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == {
+        "code": "INGESTION_REPROCESSING_SOURCE_UNAVAILABLE",
+        "message": "Transaction reprocessing source lookup is unavailable.",
+    }
+    handler.ingestion_job_service.create_or_get_job.assert_not_awaited()

@@ -28,6 +28,7 @@ from portfolio_common.logging_utils import (
 )
 from portfolio_common.monitoring import KAFKA_MESSAGES_PUBLISHED_TOTAL
 
+from ..domain import TransactionReprocessingTarget
 from ..DTOs.business_date_dto import BusinessDate
 from ..DTOs.fx_rate_dto import FxRate
 from ..DTOs.instrument_dto import Instrument
@@ -404,17 +405,21 @@ class IngestionService:
 
     async def publish_reprocessing_requests(
         self,
-        transaction_ids: List[str],
+        targets: List[TransactionReprocessingTarget],
         idempotency_key: str | None = None,
     ) -> None:
         """Publishes transaction reprocessing requests with batch failure accounting."""
         headers = self._get_headers(idempotency_key)
-        for idx, txn_id in enumerate(transaction_ids):
+        transaction_ids = [target.transaction_id for target in targets]
+        for idx, target in enumerate(targets):
             try:
                 self._publish_event(
                     topic=KAFKA_TRANSACTIONS_REPROCESSING_REQUESTED_TOPIC,
-                    key=txn_id,
-                    value={"transaction_id": txn_id},
+                    key=portfolio_partition_key(target.portfolio_id).value,
+                    value={
+                        "transaction_id": target.transaction_id,
+                        "portfolio_id": target.portfolio_id,
+                    },
                     headers=headers,
                 )
                 KAFKA_MESSAGES_PUBLISHED_TOTAL.labels(
@@ -424,7 +429,7 @@ class IngestionService:
                 try:
                     self._raise_batch_publish_error(
                         entity_label="reprocessing request",
-                        failed_key=txn_id,
+                        failed_key=target.transaction_id,
                         record_keys=transaction_ids,
                         failure_index=idx,
                     )

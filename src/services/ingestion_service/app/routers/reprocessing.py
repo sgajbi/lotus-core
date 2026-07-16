@@ -52,6 +52,19 @@ REPROCESSING_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
     failed_record_keys=["TRN_002", "TRN_003"],
     job_id="ing_01HZY3W6K8QF5B3Z7R9M2N1P0A",
 )
+REPROCESSING_SOURCE_NOT_FOUND_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPROCESSING_SOURCE_NOT_FOUND",
+        "message": "One or more transactions are not available for reprocessing.",
+        "missing_transaction_ids": ["TRN_404"],
+    }
+}
+REPROCESSING_SOURCE_UNAVAILABLE_EXAMPLE = {
+    "detail": {
+        "code": "INGESTION_REPROCESSING_SOURCE_UNAVAILABLE",
+        "message": "Transaction reprocessing source lookup is unavailable.",
+    }
+}
 
 
 @router.post(
@@ -66,6 +79,13 @@ REPROCESSING_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
             ),
             policy_blocked_example=REPROCESSING_BLOCKED_EXAMPLE,
         ),
+        status.HTTP_404_NOT_FOUND: {
+            "description": (
+                "One or more requested transaction identifiers are absent from the "
+                "authoritative Core transaction ledger."
+            ),
+            "content": {"application/json": {"example": REPROCESSING_SOURCE_NOT_FOUND_EXAMPLE}},
+        },
         status.HTTP_429_TOO_MANY_REQUESTS: {
             "description": "Write-rate protection blocked the reprocessing request.",
             "content": {"application/json": {"example": REPROCESSING_RATE_LIMIT_EXCEEDED_EXAMPLE}},
@@ -73,6 +93,16 @@ REPROCESSING_PUBLISH_FAILED_EXAMPLE = ingestion_publish_failed_example(
         status.HTTP_503_SERVICE_UNAVAILABLE: ingestion_unavailable_response(
             mode_blocked_example=REPROCESSING_MODE_BLOCKED_EXAMPLE,
             publish_failed_example=REPROCESSING_PUBLISH_FAILED_EXAMPLE,
+            additional_examples={
+                "source_unavailable": {
+                    "summary": "Authoritative transaction source lookup failed.",
+                    "value": REPROCESSING_SOURCE_UNAVAILABLE_EXAMPLE,
+                }
+            },
+            description=(
+                "Reprocessing is unavailable because operating mode blocks writes, the "
+                "authoritative transaction source cannot be read, or Kafka publication failed."
+            ),
         ),
     },
     tags=["Reprocessing"],

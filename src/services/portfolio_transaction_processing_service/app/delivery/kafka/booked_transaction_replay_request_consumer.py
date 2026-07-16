@@ -15,6 +15,7 @@ from ...application import (
 from .booked_transaction_replay_request_mapper import (
     map_booked_transaction_replay_request,
     parse_booked_transaction_replay_request,
+    validate_booked_transaction_replay_partition_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,10 @@ class BookedTransactionReplayRequestConsumer(BaseConsumer):
 
     async def process_message(self, msg: Message) -> None:
         request = parse_booked_transaction_replay_request(msg.value())
+        validate_booked_transaction_replay_partition_key(
+            request,
+            partition_key=self._message_key_text(msg),
+        )
         with self._message_correlation_context(
             msg,
             fallback_correlation_id=request.correlation_id,

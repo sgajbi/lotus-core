@@ -28,6 +28,7 @@ pytestmark = pytest.mark.asyncio
 def _message(
     payload: object = None,
     *,
+    key: str = "PB-REPLAY-01",
     partition: int = 1,
     offset: int = 7,
 ) -> MagicMock:
@@ -39,6 +40,7 @@ def _message(
     message = MagicMock()
     message.error.return_value = None
     message.value.return_value = json.dumps(value).encode("utf-8")
+    message.key.return_value = key.encode("utf-8")
     message.headers.return_value = [("correlation_id", b"header-corr")]
     message.topic.return_value = "transactions.reprocessing.requested"
     message.partition.return_value = partition
@@ -68,6 +70,46 @@ async def test_consumer_maps_request_and_prefers_header_correlation() -> None:
     assert command.transaction_id == "TXN-REPLAY-01"
     assert command.correlation_id == "header-corr"
     use_case.execute.assert_awaited_once()
+
+
+async def test_consumer_accepts_enriched_portfolio_ordering_identity() -> None:
+    use_case = AsyncMock()
+    use_case.execute.return_value = ReplayBookedTransactionResult(
+        transaction_id="TXN-REPLAY-01",
+        status=BookedTransactionReplayStatus.REPLAYED,
+    )
+
+    await _consumer(use_case).process_message(
+        _message(
+            {
+                "transaction_id": "TXN-REPLAY-01",
+                "portfolio_id": "PB-REPLAY-01",
+            },
+            key="PB-REPLAY-01",
+        )
+    )
+
+    use_case.execute.assert_awaited_once()
+
+
+async def test_consumer_rejects_portfolio_key_payload_mismatch() -> None:
+    use_case = AsyncMock()
+
+    with pytest.raises(
+        BookedTransactionReplayRequestPayloadError,
+        match="portfolio_id must match the Kafka key",
+    ):
+        await _consumer(use_case).process_message(
+            _message(
+                {
+                    "transaction_id": "TXN-REPLAY-01",
+                    "portfolio_id": "PB-REPLAY-02",
+                },
+                key="PB-REPLAY-01",
+            )
+        )
+
+    use_case.execute.assert_not_awaited()
 
 
 async def test_consumer_uses_payload_correlation_when_header_is_absent() -> None:
@@ -205,7 +247,13 @@ async def test_run_loop_drains_active_replay_before_closing_kafka() -> None:
     kafka_consumer.poll.return_value = message
     replay_started = asyncio.Event()
     release_replay = asyncio.Event()
-    consumer = _consumer(use_case)
+    consumer = BookedTransactionReplayRequestConsumer(
+        bootstrap_servers="mock_server",
+        topic="transactions.reprocessing.requested",
+        group_id="portfolio_transaction_replay_request_group",
+        use_case=use_case,
+        execution_profile=KafkaConsumerExecutionProfile(max_in_flight_messages=1),
+    )
 
     async def execute(command):
         replay_started.set()
@@ -254,6 +302,9 @@ async def test_consumer_propagates_replay_invariant_violation_as_terminal() -> N
         json.dumps(
             {"transaction_id": "TXN-REPLAY-01", "correlation_id": {"unsafe": "shape"}}
         ).encode("utf-8"),
+        json.dumps({"transaction_id": "TXN-REPLAY-01", "portfolio_id": {"unsafe": "shape"}}).encode(
+            "utf-8"
+        ),
         None,
     ],
 )

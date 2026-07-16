@@ -9,7 +9,9 @@ class ReprocessingRequest(BaseModel):
         ...,
         min_length=1,
         description=(
-            "Canonical transaction identifiers to reprocess in the current replay request."
+            "Canonical transaction identifiers to reprocess. Core resolves each identifier "
+            "against the authoritative transaction ledger before publishing a portfolio-ordered "
+            "repair command."
         ),
         examples=[["TRN_001", "TRN_002"]],
     )
