@@ -81,21 +81,25 @@ spec:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: portfolio-aggregation-worker-count
+                  optional: true
             - name: AGGREGATION_JOB_LEASE_DURATION_SECONDS
               valueFrom:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: aggregation-job-lease-duration-seconds
+                  optional: true
             - name: AGGREGATION_SCHEDULER_POLL_INTERVAL_SECONDS
               valueFrom:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: aggregation-scheduler-poll-interval-seconds
+                  optional: true
             - name: AGGREGATION_SCHEDULER_BATCH_SIZE
               valueFrom:
                 configMapKeyRef:
                   name: lotus-core-runtime
                   key: aggregation-scheduler-batch-size
+                  optional: true
             - name: TMPDIR
               value: /tmp
           startupProbe:
